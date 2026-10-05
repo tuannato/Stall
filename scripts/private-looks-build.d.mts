@@ -28,7 +28,8 @@ export declare const PRIVATE_LOOKS_MODULE: 'virtual:stall-private-looks';
 export declare const LOOKS_TARGETS: readonly LooksTarget[];
 export declare const SELECTION_ENV: { readonly target: 'STALL_LOOKS_TARGET'; readonly dir: 'STALL_LOOKS_DIR'; readonly commit: 'STALL_LOOKS_COMMIT' };
 export declare const FIXTURE_LOOKS_DIR: 'layout/fixture-private-looks';
-export declare const MATERIALISED_ROOT: string;
+export declare const MATERIALISED_PREFIX: string;
+export declare const RESOLVED_MODULE: '\0stall:private-looks';
 
 export declare function selectionFromEnv(env: Env): LooksSelection | undefined;
 export declare function includedEntries(index: PrivateIndex, target: LooksTarget, facts: Pick<PublicLookFacts, 'released'>): PrivateIndexEntry[];
@@ -42,6 +43,10 @@ export declare function selectedIndex(input: { root: string; selection: LooksSel
 export declare function readSelectedLooks(
     input: { root: string; selection: LooksSelection; facts: PublicLookFacts; validateLook: ValidateLook } & GitOptions,
 ): { commit: string; index: PrivateIndex; looks: SelectedLook[] };
+export declare function sharedRowClasses(looks: readonly SelectedLook[]): string[];
+export declare function checkSelectedDist(
+    input: { dir: string; selection: LooksSelection | undefined; root: string; facts: PublicLookFacts } & GitOptions,
+): string[];
 export declare function materialise(looks: readonly SelectedLook[], into: string): ModuleEntry[];
 export declare function jsString(value: string): string;
 export declare function privateLooksModuleCode(entries: readonly ModuleEntry[]): string;

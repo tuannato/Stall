@@ -42,15 +42,18 @@ export const THEME_UNKNOWN =
     'This seller chose a look this page does not ship, so it is showing the default one.';
 
 /**
- * A paid look this page does carry, named by a record whose stall holds no
- * licence for it (step 8: no licence check exists yet, so a paid look is
- * never unlocked). Distinct from THEME_UNKNOWN on purpose — the row is not
- * missing, the look is locked — and painted only in a build that carries a
- * paid look; a public build reads the id as unknown. Step 9 replaces it with
- * two sentences: not unlocked for this address, and the check did not finish.
+ * A paid look this page does carry, named by a record (the gate's
+ * `not-unlocked`). **Said about this page, never about the seller** (the
+ * 8b2 critic's item 5): step 8 has no licence check, so "not unlocked for
+ * this stall" would be a stub's answer reported as a fact nobody read. What
+ * is true is that this page does not show the look yet. Distinct from
+ * THEME_UNKNOWN on purpose — the row is not missing — and painted only in a
+ * build that carries a paid look; a public build reads the id as unknown.
+ * Step 9 replaces it with two sentences: not unlocked for this address (a
+ * read), and the check did not finish (a fact about us).
  */
 export const THEME_NOT_UNLOCKED =
-    'This seller chose a look that is not unlocked for this stall, so it is showing the default one.';
+    'This seller chose a look this page does not show yet, so it is showing the default one.';
 
 export const PUBLISH_TITLE = 'Name this stall';
 export const PUBLISH_NAME_LABEL = 'Stall name';
@@ -170,11 +173,12 @@ export const PUBLISH_WALLET_SHOWS_HEX =
     'Your wallet will show these bytes rather than the words above. That is the same record, written the way the chain stores it.';
 
 /**
- * The name sheet over a paid look the stall holds no licence for: the look
- * is tried on, and no record naming it is composed (no bytes, no link, no
- * code). Said in the refusal's slot, `publish-invalid`.
+ * The name sheet over a paid look: the look is tried on, and no record
+ * naming it is composed (no bytes, no link, no code). Said in the refusal's
+ * slot, `publish-invalid`, and about this page — it composes no record for
+ * the look yet — never about the seller.
  */
-export const PUBLISH_LOOK_NOT_UNLOCKED = 'You can try this look on here, but it cannot be published yet.';
+export const PUBLISH_LOOK_NOT_UNLOCKED = 'You can try this look on here, but this page cannot publish it yet.';
 
 export const PUBLISH_NAME_TOO_LONG =
     'Names are up to 32 bytes. Accents and emoji cost more than one byte each.';
@@ -488,8 +492,8 @@ export const STUDIO_TOOL_EMBED_LEDE =
 export const STUDIO_ANNOUNCEMENT_ROW = 'Announcement';
 export const STUDIO_WEARING_ROW = 'Wearing';
 export const STUDIO_WEARING_NONE = 'Nothing worn';
-/** The Wearing row under a locked look: nothing is worn because the look is locked, not because nothing was chosen. */
-export const STUDIO_WEARING_NOT_UNLOCKED = 'Nothing, because this look is not unlocked';
+/** The Wearing row under a look this page does not show yet: nothing is worn because of the page, not because nothing was chosen. */
+export const STUDIO_WEARING_NOT_UNLOCKED = 'Nothing, because this page does not show this look yet';
 /**
  * A row's state, derived from what this load read and nothing else: listed
  * on Agora (from the book, said only when the book answered — an unread

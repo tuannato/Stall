@@ -62,7 +62,7 @@
  * (the kit's place, `layout/workshopLook.test.ts`) and
  * `a-look-is-read-under-the-place-it-is-given` (`lookData.test.ts`).
  */
-import { ATT_CLASS, moodClassProblems } from './moodClass';
+import { ATT_CLASS, moodClassProblems, sameOwner } from './moodClass';
 import {
     ATTACHMENT_BITS,
     SHIPPED_ATTACHMENTS,
@@ -558,6 +558,28 @@ export function lookFromData(json: Json, place: LookPlace): LookData {
         ];
         for (const why of moodClassProblems(row, others)) {
             problems.push(`moods: "${row.label}" — ${why}`);
+        }
+        // A private look's row classes are its own (the 8b2 critic's item 4):
+        // stall.css paints `.stall.att-rainfall`, `.att-hum` and
+        // `.att-horizon` for any look, so a private decoration named after a
+        // shipped one would wear its paint, and the probe's class-keyed
+        // tables would read it as the shipped row. Every shipped row is
+        // checked for a decoration, the shipped moods for a mood (its
+        // decorations are `moodClassProblems`' above). Not the kit's: a
+        // starter copies a shipped look's rows, classes and all, on purpose.
+        if (mintable && row.cls !== undefined) {
+            for (const shipped of SHIPPED_ATTACHMENTS) {
+                if (
+                    shipped.cls !== undefined &&
+                    (row.slot !== 'mood' || shipped.slot === 'mood') &&
+                    sameOwner(row.cls, shipped.cls)
+                ) {
+                    const how = shipped.cls === row.cls ? 'is' : 'shares an owner with';
+                    problems.push(
+                        `class ${row.cls}: ${how} ${shipped.cls} ("${shipped.label}"), a row Stall ships — a private look's row classes are its own`,
+                    );
+                }
+            }
         }
         const word = placeOfSlot.get(row.slot);
         if (word === undefined) {

@@ -677,15 +677,29 @@ export type StallView = WindowState & {
     /** Cashaddr to show in the footer when known. */
     address?: string;
     tokens: SessionTokenCache;
-    theme?: DecodedTheme;
     /**
-     * The decorations this stall is actually wearing: resolved from the
-     * manifest's flags against what the address holds, so the view never has to
-     * re-derive an entitlement. Empty is the ordinary case.
+     * The look the stall's published record names, decoded as the record
+     * wrote it — **never what paints**. A record naming a paid look this
+     * stall holds no licence for paints the default (`paintableLook`,
+     * `lookTable.ts`), so a paint that read this field would put the paid
+     * look on screen around the gate. Named `record…` so every read says what
+     * it is, and read only where the gate, the try-on comparison or a
+     * read-back of the record needs it
+     * (`no-site-paints-the-record-look-around-the-gate`).
+     */
+    recordTheme?: DecodedTheme;
+    /**
+     * The decorations this stall is actually wearing: resolved through the
+     * gate from the record's flags against what the address holds, so the
+     * view never has to re-derive an entitlement. Empty is the ordinary case.
      */
     worn?: readonly ShippedAttachment[];
-    /** The flags this stall's own record set, so the picker opens on them. */
-    attachmentFlags?: number;
+    /**
+     * The flags the stall's published record set — bits of the RECORD's
+     * look's table, never of what paints: under a locked look they name no
+     * row of the default it paints (`recordTheme`'s rule, the same fence).
+     */
+    recordFlags?: number;
     /**
      * A look the seller is trying on, session-only and never persisted:
      * every paint applies it over the record's own look until it is

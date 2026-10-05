@@ -59,6 +59,11 @@ import {
 import { servedFlashReport } from './look-flash.mjs';
 import { readArt, requireCleanKitBuild } from './workshop-build-check.mjs';
 import { lintSheet, rescopeSheet, sheetHasRules } from './workshop-css.mjs';
+import { refuseSelection } from './looks-selection.mjs';
+
+// A harness command measures the public build until 8e2 teaches it a private
+// look (the 8b2 critic's item 2): nothing is built under a selection.
+refuseSelection('workshop');
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 process.chdir(ROOT);

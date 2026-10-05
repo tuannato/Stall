@@ -1,16 +1,18 @@
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkDist, distFiles, distLooksProblems, lookSheetNames } from './check-dist-looks.mjs';
+import { artNamedBy, checkDist, distFiles, distLooksProblems, lookSheetNames } from './check-dist-looks.mjs';
 import { publicLookFacts } from './private-looks.mjs';
 import {
     FIXTURE_LOOKS_DIR,
     LOOKS_TARGETS,
+    MATERIALISED_PREFIX,
     PRIVATE_LOOKS_MODULE,
+    RESOLVED_MODULE,
     SELECTION_ENV,
     includedEntries,
     jsString,
@@ -156,10 +158,13 @@ describe('an-unnamed-selection-carries-no-private-look', () => {
     it('answers an empty module with nothing selected, and under vitest whatever is selected', () => {
         for (const env of [{}, { ...PREVIEW, VITEST: 'true' }]) {
             const plugin = privateLooksPlugin({ facts, validateLook, env });
-            plugin.configResolved({ root: ROOT });
+            plugin.configResolved({ root: ROOT, build: { outDir: 'dist', write: false } });
             try {
                 plugin.buildStart();
                 const id = plugin.resolveId(PRIVATE_LOOKS_MODULE);
+                // A `\0stall:` id, which the notices' module classifier reads as Stall's own.
+                assert.equal(id, RESOLVED_MODULE);
+                assert.equal(id, '\0stall:private-looks');
                 assert.equal(plugin.load(id), 'export const carriesPrivateLooks = false;\nexport const privateLooks = [];\n', JSON.stringify(env));
             } finally {
                 // What a build's close does: a red here leaves nothing written.
@@ -167,7 +172,7 @@ describe('an-unnamed-selection-carries-no-private-look', () => {
             }
         }
         const half = privateLooksPlugin({ facts, validateLook, env: { [SELECTION_ENV.target]: 'preview' } });
-        half.configResolved({ root: ROOT });
+        half.configResolved({ root: ROOT, build: { outDir: 'dist', write: false } });
         assert.throws(() => half.buildStart(), /the selection is not whole/);
     });
 
@@ -243,7 +248,25 @@ describe('a-private-svg-outside-the-element-list-fails-the-build', () => {
         assert.ok(SVG_ELEMENTS.includes('feGaussianBlur') && !SVG_ELEMENTS.includes('script'));
     });
 
-    it('refuses every road §13.4 closes', () => {
+    /**
+     * The 8b2 critic's plant E, as measured: six groups deep, ten `<use>` of
+     * the group before in each — 1,247 bytes, a million instances, and no
+     * screenshot from headless Chrome in 90 s. `use` is off the list; the
+     * plant is kept so a list that grows it back meets the bomb first.
+     */
+    const USE_BOMB = (() => {
+        const groups = ['<g id="g0"><rect width="1" height="1"/></g>'];
+        for (let n = 1; n <= 6; n += 1) {
+            groups.push(`<g id="g${n}">${Array.from({ length: 10 }, () => `<use href="#g${n - 1}"/>`).join('')}</g>`);
+        }
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><defs>${groups.join('')}</defs><use href="#g6"/></svg>`;
+    })();
+
+    it('refuses every road §13.4 closes, and the elements it named and no art uses', () => {
+        assert.ok(USE_BOMB.length < 1_400, `the bomb is small: ${USE_BOMB.length} bytes`);
+        for (const element of ['use', 'feTurbulence', 'feDisplacementMap']) {
+            assert.ok(!SVG_ELEMENTS.includes(element), element);
+        }
         for (const [planted, pattern] of [
             [svg('<script>alert(1)</script>'), /<script> is not an element/],
             [svg('<style>rect{fill:red}</style>'), /<style> is not an element/],
@@ -256,8 +279,11 @@ describe('a-private-svg-outside-the-element-list-fails-the-build', () => {
             [svg('<rect><set attributeName="x"/></rect>'), /<set> is not an element/],
             [svg('<rect onclick="x()"/>'), /onclick: not an attribute/],
             [svg('<rect xml:base="https://x"/>'), /xml:base: not an attribute/],
-            [svg('<use xlink:href="#a"/>'), /xlink:href: not an attribute/],
-            [svg('<use href="https://example.com/a.svg#b"/>'), /href is a reference inside the file/],
+            [svg('<use href="#a"/>'), /<use> is not an element/],
+            [svg('<linearGradient id="b" href="#a"/>'), /href: not an attribute/],
+            [svg('<linearGradient id="b" xlink:href="#a"/>'), /xlink:href: not an attribute/],
+            [svg('<filter id="f"><feTurbulence baseFrequency=".1"/></filter>'), /<feTurbulence> is not an element/],
+            [svg('<filter id="f"><feDisplacementMap scale="9"/></filter>'), /<feDisplacementMap> is not an element/],
             [svg('<rect fill="url(https://example.com/x#a)"/>'), /names something outside the file/],
             [svg('<rect fill="url(data:image/png;base64,AAAA)"/>'), /names something outside the file/],
             [svg('<rect fill="u&#x72;l(http://x)"/>'), /names something outside the file/],
@@ -276,6 +302,7 @@ describe('a-private-svg-outside-the-element-list-fails-the-build', () => {
             [svg('', ' xmlns:xlink="http://www.w3.org/1999/xlink"'), /xmlns:xlink: not an attribute/],
             ['<svg viewBox="0 0 1 1"/>', /carries no xmlns/],
             [svg(Array.from({ length: MAX_SVG_ELEMENTS }, () => '<rect/>').join('')), /more than 4000 elements/],
+            [USE_BOMB, /<use> is not an element/],
         ]) {
             const { svg: out, problems } = sanitizeSvg(planted);
             assert.equal(out, undefined, planted.slice(0, 80));
@@ -339,6 +366,60 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
         assert.deepEqual(read.looks.map((look) => look.entry.cls), ['t-fixture-private']);
         const production = readSelectedLooks({ root: ROOT, selection: { target: 'production', dir: FIXTURE_LOOKS_DIR }, facts, validateLook });
         assert.deepEqual(production.looks, [], 'the fixture is at preview and nothing is released');
+    });
+});
+
+describe('a-private-row-class-is-its-looks-own', () => {
+    /**
+     * The 8b2 critic's item 4, at the build: two included looks may not
+     * share a row class, or one own the other's child — a class one look's
+     * sheet paints would dress the other's row. One id is reserved today, so
+     * the public lists are planted with a second for this case. A shipped
+     * row's class is the validator's to refuse (`lookData.test.ts`).
+     */
+    const twoIds = { ...facts, reserved: [4, 5], paid: [4, 5] };
+    function plantTwo(secondTrim) {
+        const repo = plantRepo((path, text) =>
+            path === 'index.json'
+                ? text.replace(
+                      ']',
+                      ', { "id": 5, "slug": "other", "cls": "t-other-look", "stage": "preview", "paid": true }]',
+                  )
+                : text,
+        );
+        for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/'))) {
+            const to = join(repo.dir, path.replace(/^fixture\//, 'other/'));
+            mkdirSync(dirname(to), { recursive: true });
+            let text = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, path), 'utf8').replaceAll('t-fixture-private', 't-other-look');
+            if (path.endsWith('look.json')) {
+                text = text
+                    .replaceAll('f1f1', 'e1e1')
+                    .replaceAll('f2f2', 'e2e2')
+                    .replace('"att-fixture-trim"', JSON.stringify(secondTrim))
+                    .replace('"att-fixture-crest"', '"att-other-crest"');
+            }
+            writeFileSync(to, text);
+        }
+        repo.git('add', '-A');
+        repo.git('commit', '-q', '-m', 'two looks');
+        return repo;
+    }
+    const read = (repo) =>
+        readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir }, facts: twoIds, validateLook, env: repo.env });
+
+    it('carries two looks whose row classes are their own', () => {
+        assert.deepEqual(read(plantTwo('att-other-trim')).looks.map((look) => look.entry.slug), ['fixture', 'other']);
+    });
+
+    it('fails on a row class two looks share, or one owns the other’s child', () => {
+        for (const trim of ['att-fixture-trim', 'att-fixture-trim-wide', 'att-fixture']) {
+            assert.throws(() => read(plantTwo(trim)), /share an owner — a row class is its look's own/, trim);
+        }
+    });
+
+    it('fails on a decoration named after a shipped row, through the validator', () => {
+        const repo = plantRepo((path, text) => (path.endsWith('look.json') ? text.replace('"att-fixture-trim"', '"att-rainfall"') : text));
+        assert.throws(() => readPlanted(repo), /class att-rainfall: is att-rainfall .* a private look's row classes are its own/);
     });
 });
 
@@ -449,8 +530,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         it('refuses a preview look in a production build, and one missing from a preview build', async () => {
             const asProduction = await checkDist({ dir: previewDist, env: env(PRODUCTION) });
             assert.ok(asProduction.some((p) => /t-fixture-private: a look sheet .* this build's selection does not carry/.test(p)), asProduction.join('\n'));
-            assert.ok(asProduction.some((p) => /fixture: .* holds its class t-fixture-private/.test(p)), asProduction.join('\n'));
-            assert.ok(asProduction.some((p) => /fixture: art\/ground\.svg is in the dist/.test(p)), asProduction.join('\n'));
+            assert.ok(asProduction.some((p) => /fixture: .* carries its module entry \(sheetClass t-fixture-private\)/.test(p)), asProduction.join('\n'));
+            assert.ok(asProduction.some((p) => /fixture: assets\/ground-.*\.svg is one of its files, and this build does not carry the look/.test(p)), asProduction.join('\n'));
             const unselected = await checkDist({ dir: previewDist, env: {} });
             assert.ok(unselected.some((p) => /does not carry/.test(p)), unselected.join('\n'));
             const missing = await checkDist({ dir: publicDist, env: env(PREVIEW) });
@@ -482,6 +563,75 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             assert.ok(problems.some((p) => /its sheet names .* which is not in the dist/.test(p)), problems.join('\n'));
             assert.ok(problems.some((p) => /art\/ground\.svg is named by its sheet and is not in the dist/.test(p)), problems.join('\n'));
             assert.ok(sheetPath.startsWith('assets/'));
+        });
+
+        /**
+         * The 8b2 critic's item 7: a carried sheet's every target — a
+         * `url()` or an `image-set()` entry — is one of the look's own
+         * files, so a stray target the lint missed is red; a private file no
+         * carried sheet names is red; a built stylesheet beside the entry CSS
+         * that is no look's is red; and a look the build does not carry is
+         * matched by its files and its module entry, never by its class
+         * appearing anywhere.
+         */
+        it('holds every target to the look’s own files, and nothing of a private look beside them', () => {
+            const shipped = facts.shippedClasses;
+            const base = distFiles(previewDist);
+            const [sheetPath, sheetBytes] = [...base].find(
+                ([path, bytes]) => path.endsWith('.css') && lookSheetNames(bytes.toString('utf8')).includes('t-fixture-private'),
+            );
+            const ground = Buffer.from(sanitizeSvg(readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/art/ground.svg'), 'utf8')).svg);
+            const look = { cls: 't-fixture-private', slug: 'fixture', art: [{ name: 'ground.svg', bytes: ground }], named: new Set(['ground.svg']) };
+            const check = (files, over = {}) => distLooksProblems({ files, shippedClasses: shipped, included: [look], excluded: [], ...over });
+            const decor = [...base.keys()].find((path) => /^assets\/rain-near-.*\.svg$/.test(path));
+            assert.ok(decor !== undefined, 'a shipped decoration is in the build to stray to');
+            // A stray target, by url() and by image-set().
+            const stray = new Map(base).set(sheetPath, Buffer.from(`${sheetBytes}.x{background:url(/${decor})}`));
+            assert.ok(check(stray).some((p) => p.includes(`its sheet names /${decor}, which is none of the look's own files`)), check(stray).join('\n'));
+            const set = new Map(base).set(sheetPath, Buffer.from(`${sheetBytes}.x{background-image:image-set("/${decor}" 1x)}`));
+            assert.ok(check(set).some((p) => p.includes(`its sheet names /${decor}, which is none of the look's own files`)), check(set).join('\n'));
+            // A piece of its art no carried sheet names.
+            const loose = new Map(base).set('assets/loose.svg', ground);
+            assert.ok(check(loose).some((p) => p === 'fixture: assets/loose.svg is one of its files, and no carried sheet names it'), check(loose).join('\n'));
+            // A built stylesheet that is no look's.
+            const plain = new Map(base).set('assets/extra.css', Buffer.from('.a{color:red}'));
+            assert.ok(check(plain).some((p) => p.startsWith('assets/extra.css: a built stylesheet')), check(plain).join('\n'));
+            // A public file that merely names a class the index holds is not the look.
+            const named = new Map(distFiles(publicDist)).set('assets/sticky.js', Buffer.from('const STICKY = ["t-fixture-private"];'));
+            assert.deepEqual(distLooksProblems({ files: named, shippedClasses: shipped, included: [], excluded: [look] }), []);
+            // The art named by image-set() in a source sheet counts as named.
+            assert.deepEqual([...artNamedBy('.x{background-image:image-set("art/a.svg" 1x, url(./art/b.svg) 2x)}')].sort(), ['a.svg', 'b.svg']);
+        });
+
+        it('fails the build that wrote a dist its selection does not hold, and leaves nothing written', () => {
+            // The plugin runs the check itself on every build that selected
+            // anything and wrote to the disk (the critic's item 7a): planted
+            // here over the public build's dist, under a preview selection.
+            const plugin = privateLooksPlugin({ facts, validateLook, env: PREVIEW });
+            plugin.configResolved({ root: ROOT, build: { outDir: publicDist, write: true } });
+            const writes = [];
+            const write = process.stderr.write;
+            process.stderr.write = (chunk) => writes.push(String(chunk)) > 0;
+            try {
+                plugin.buildStart();
+            } finally {
+                process.stderr.write = write;
+            }
+            assert.ok(writes.some((line) => /^private looks: this preview build carries fixture \(private commit [0-9a-f]{12}\)\n$/.test(line)), writes.join(''));
+            const written = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
+            assert.ok(written.length > 0, 'the build wrote its files to the temporary directory');
+            assert.throws(() => plugin.closeBundle(), /does not hold what its selection carries:\n {2}- fixture: the build carries it, and 0 files name its sheet/);
+            const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
+            assert.ok(after.length < written.length, 'and removed them, failing or not');
+        });
+
+        it('says on stderr which looks a build carries, and says nothing when it carries none', () => {
+            const out = build(tempDir('dist-say'), PREVIEW);
+            assert.equal(out.status, 0, out.stderr);
+            assert.match(out.stderr, /^private looks: this preview build carries fixture \(private commit [0-9a-f]{12}\)$/m);
+            const quiet = build(tempDir('dist-quiet'), PRODUCTION);
+            assert.equal(quiet.status, 0, quiet.stderr);
+            assert.doesNotMatch(quiet.stderr, /private looks/);
         });
     });
 });

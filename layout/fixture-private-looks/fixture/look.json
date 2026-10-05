@@ -1,7 +1,7 @@
 {
     "label": "Fixture private look",
     "base": "modern",
-    "palette": {},
+    "palette": { "bg": [236, 230, 218] },
     "shape": {},
     "tierCeilings": [7, 9, 12],
     "overlayTierCeilings": [5, 7, 9],

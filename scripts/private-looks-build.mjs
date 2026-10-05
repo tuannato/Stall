@@ -4,8 +4,9 @@
  * re-serialised, and handed to the app as `virtual:stall-private-looks`.
  *
  * **A build carries a private look only when it is told to, by name.** The
- * selection is three environment variables, never a directory found on the
- * disk (the step-8 critic's items 4 and 12):
+ * selection is three environment variables (`scripts/looks-selection.mjs`,
+ * which every harness command uses to refuse one until 8e2), never a
+ * directory found on the disk (the step-8 critic's items 4 and 12):
  *
  * - `STALL_LOOKS_TARGET` — `preview` (every look the index names) or
  *   `production` (only the looks whose id `RELEASED_LOOK_IDS` names);
@@ -24,6 +25,8 @@
  * selects nothing whatever the shell says** (`VITEST` is set there): the
  * suite reads the same on every machine, `looks/` on the disk or not, and a
  * test that wants a private look mocks the module with the tracked fixture.
+ * A build that carries a look says so in one line on stderr, whatever the
+ * log level, so a forgotten shell export is on screen.
  *
  * **The public lists decide; the index only agrees** (the critic's item 1,
  * the 8a critic's item 11(i)): `includedEntries` reads `RELEASED_LOOK_IDS`
@@ -42,25 +45,34 @@
  * fails the build, every problem listed. Then the sheet and the art are
  * written — the SVGs as **re-serialised**, never as given, and every file as
  * the commit's blob, never through an eol or attribute filter (the 8a
- * critic's item 11(iii)) — to a directory of this build's own under
- * `node_modules/.cache/stall-private-looks/`, removed when the build closes,
- * and the module imports each sheet from there with `?url`: emitted alone,
- * minified, hashed, its `url()`s rewritten to the built art, never in the
- * entry CSS. The module's data is `JSON.parse` of a string literal
+ * critic's item 11(iii)) — to a directory of this build's own in the OS's
+ * temporary directory (`MATERIALISED_PREFIX`; never under `node_modules/`,
+ * where a module-to-package reader filed the sheet as a package named
+ * `.cache`), removed when the build closes, and the module imports each
+ * sheet from there with `?url`: emitted alone, minified, hashed, its
+ * `url()`s rewritten to the built art, never in the entry CSS. The module
+ * resolves to `\0stall:private-looks`, a Stall virtual module to the
+ * notices' classifier; its data is `JSON.parse` of a string literal
  * (`privateLooksModuleCode`): a key named `__proto__` stays a key the
  * runtime validator refuses, and no character in a label can end the
- * literal.
+ * literal. **A build that selected anything and wrote to the disk checks
+ * what it wrote** (`checkSelectedDist`, `check-dist-looks.mjs`'s core) and
+ * fails on a problem, so a hand-run preview build is held as a deploy's is.
  *
  * What this does not do yet, stated: the pin and the clean check
  * (`deploy/looks.commit`, `STALL_LOOKS_REQUIRED`) are 8c's; a look's faces'
  * notices, its og card and every whole-sheet guard over private sheets are
- * 8e's and 8j's. Node built-ins only; a `.d.mts` beside it. Tests:
+ * 8e's and 8j's. Node built-ins and one pure `src/domain` module
+ * (`moodClass.ts`'s `sameOwner`, loaded by Node's type stripping and by the
+ * config bundler); a `.d.mts` beside it. Tests:
  * `scripts/private-looks-build.test.mjs`.
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
+import { distFiles, distLooksProblems, lookFilesOf } from './check-dist-looks.mjs';
+import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, selectionFromEnv } from './looks-selection.mjs';
 import {
-    FULL_COMMIT,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
     gitBlobAt,
@@ -72,57 +84,28 @@ import {
 } from './private-looks.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 import { lintLookSheet } from './workshop-css.mjs';
+import { sameOwner } from '../src/domain/moodClass.ts';
 
-/** The module a build answers, and its resolved id. */
+export { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, SELECTION_ENV, selectionFromEnv } from './looks-selection.mjs';
+
+/** The module a build answers, as the app imports it. */
 export const PRIVATE_LOOKS_MODULE = 'virtual:stall-private-looks';
-const RESOLVED_MODULE = `\0${PRIVATE_LOOKS_MODULE}`;
-
-/** The two targets a selection may name. */
-export const LOOKS_TARGETS = Object.freeze(['preview', 'production']);
-
-/** The environment variables that select a build's private looks. */
-export const SELECTION_ENV = Object.freeze({
-    target: 'STALL_LOOKS_TARGET',
-    dir: 'STALL_LOOKS_DIR',
-    commit: 'STALL_LOOKS_COMMIT',
-});
-
-/** The tracked fixture's directory, from the checkout's root: the one place inside this checkout a build reads a look from. */
-export const FIXTURE_LOOKS_DIR = 'layout/fixture-private-looks';
-
-/** Where a build writes the files it read from git, under the checkout's root. */
-export const MATERIALISED_ROOT = 'node_modules/.cache/stall-private-looks';
-
-const present = (value) => value !== undefined && value !== '';
 
 /**
- * The selection `env` names: `undefined` when it names none, `{ target,
- * dir, commit? }` when it names one. Throws on half a selection, an unknown
- * target or a commit that is not 40 lower-case hex — a build that guessed
- * would carry the wrong looks to the wrong place.
+ * The id it resolves to: a `\0stall:` virtual module, the shape the notices'
+ * module classifier already reads as Stall's own (`isAllowedVirtual`), so a
+ * build that carries a look is attributed like any other (the 8b2 critic's
+ * item 2).
  */
-export function selectionFromEnv(env) {
-    const target = env[SELECTION_ENV.target];
-    const dir = env[SELECTION_ENV.dir];
-    const commit = env[SELECTION_ENV.commit];
-    if (!present(target) && !present(dir) && !present(commit)) {
-        return undefined;
-    }
-    const problems = [];
-    if (!LOOKS_TARGETS.includes(target)) {
-        problems.push(`${SELECTION_ENV.target} is ${JSON.stringify(target ?? null)}, where a selection names one of ${LOOKS_TARGETS.join(', ')}`);
-    }
-    if (!present(dir)) {
-        problems.push(`${SELECTION_ENV.dir} is not set, where a selection names the private repository's root (or ${FIXTURE_LOOKS_DIR})`);
-    }
-    if (present(commit) && !FULL_COMMIT.test(commit)) {
-        problems.push(`${SELECTION_ENV.commit} is ${JSON.stringify(commit)}, where it is a full commit, 40 lower-case hex`);
-    }
-    if (problems.length > 0) {
-        throw new Error(`private looks: the selection is not whole:\n  - ${problems.join('\n  - ')}`);
-    }
-    return { target, dir, ...(present(commit) ? { commit } : {}) };
-}
+export const RESOLVED_MODULE = '\0stall:private-looks';
+
+/**
+ * Where a build writes the files it read from git: a directory of its own in
+ * the OS's temporary directory, removed when the build closes — never under
+ * the checkout's `node_modules/`, where a module-to-package reader would file
+ * the look's sheet as a package named `.cache` (the 8b2 critic's item 2).
+ */
+export const MATERIALISED_PREFIX = 'stall-private-looks-';
 
 /**
  * The entries of `index` a build for `target` carries — decided by the
@@ -224,10 +207,42 @@ export function readSelectedLooks({ root, selection, facts, validateLook, git, e
         }
         looks.push({ entry, lookText, sheet, art });
     }
+    problems.push(...sharedRowClasses(looks));
     if (problems.length > 0) {
         throw new Error(`private looks at ${commit}:\n  - ${problems.join('\n  - ')}`);
     }
     return { commit, index, looks };
+}
+
+/**
+ * Every row class two included looks share, or one owns the other's child
+ * (`sameOwner`): a row class is its look's own
+ * (`a-private-row-class-is-its-looks-own`; a shipped row's class is the
+ * validator's to refuse). Over each look's `look.json` as parsed JSON; a
+ * file that does not parse has said so already.
+ */
+export function sharedRowClasses(looks) {
+    const rows = looks.flatMap(({ entry, lookText }) => {
+        let json;
+        try {
+            json = JSON.parse(lookText);
+        } catch {
+            return [];
+        }
+        return [...(json?.moods ?? []), ...(json?.decorations ?? [])]
+            .map((row) => row?.cls)
+            .filter((cls) => typeof cls === 'string')
+            .map((cls) => ({ slug: entry.slug, cls }));
+    });
+    const out = [];
+    rows.forEach((a, i) => {
+        for (const b of rows.slice(i + 1)) {
+            if (a.slug !== b.slug && sameOwner(a.cls, b.cls)) {
+                out.push(`${a.slug}/look.json: class ${a.cls} and ${b.slug}/look.json's ${b.cls} share an owner — a row class is its look's own`);
+            }
+        }
+    });
+    return out;
 }
 
 /**
@@ -284,14 +299,43 @@ export function privateLooksModuleCode(entries) {
 }
 
 /**
+ * The dist check, under a build's own selection: `checkDist`'s core
+ * (`check-dist-looks.mjs`) over the index at the selection's commit,
+ * filtered by the target and the public lists as the build filtered it.
+ * Answers every problem, or none.
+ */
+export function checkSelectedDist({ dir, selection, root, facts, git, env }) {
+    const files = distFiles(dir);
+    if (selection === undefined) {
+        return distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [], excluded: [] });
+    }
+    const { read, files: repoFiles, index } = selectedIndex({ root, selection, facts, git, env });
+    const carried = new Set(includedEntries(index, selection.target, facts).map((entry) => entry.slug));
+    const looks = index.looks.map((entry) => lookFilesOf(read, repoFiles, entry));
+    return distLooksProblems({
+        files,
+        shippedClasses: facts.shippedClasses,
+        included: looks.filter((look) => carried.has(look.slug)),
+        excluded: looks.filter((look) => !carried.has(look.slug)),
+    });
+}
+
+/**
  * The Vite plugin: answers `virtual:stall-private-looks`. `facts` are the
  * public lists (`PRIVATE_LOOK_IDS`, `PAID_LOOK_IDS`, `RELEASED_LOOK_IDS`,
  * the shipped classes); `validateLook` the app's validator; `env` where the
  * selection is read (`process.env`). The selection is read in `buildStart`,
- * so each build reads its own.
+ * so each build reads its own; a build that carries a look says so in one
+ * line on stderr, whatever the log level, so a forgotten shell export is on
+ * screen; and a build that selected anything and wrote to the disk runs the
+ * dist check over what it wrote, and fails on a problem
+ * (`the-dist-holds-what-the-index-names`).
  */
 export function privateLooksPlugin({ facts, validateLook, env = process.env, git } = {}) {
     let root = process.cwd();
+    let outDir;
+    let writes = true;
+    let selection;
     let entries = [];
     let written;
     const cleanup = () => {
@@ -305,22 +349,25 @@ export function privateLooksPlugin({ facts, validateLook, env = process.env, git
         enforce: 'pre',
         configResolved(config) {
             root = config.root;
+            outDir = resolve(config.root, config.build.outDir);
+            writes = config.build.write !== false;
         },
         buildStart() {
             cleanup();
             entries = [];
-            const selection = env.VITEST === undefined ? selectionFromEnv(env) : undefined;
+            selection = env.VITEST === undefined ? selectionFromEnv(env) : undefined;
             if (selection === undefined) {
                 return;
             }
-            const { looks } = readSelectedLooks({ root, selection, facts, validateLook, git, env });
+            const { commit, looks } = readSelectedLooks({ root, selection, facts, validateLook, git, env });
             if (looks.length === 0) {
                 return;
             }
-            const parent = join(root, MATERIALISED_ROOT);
-            mkdirSync(parent, { recursive: true });
-            written = mkdtempSync(join(parent, 'build-'));
+            written = mkdtempSync(join(tmpdir(), MATERIALISED_PREFIX));
             entries = materialise(looks, written);
+            process.stderr.write(
+                `private looks: this ${selection.target} build carries ${looks.map((look) => look.entry.slug).join(', ')} (private commit ${commit.slice(0, 12)})\n`,
+            );
         },
         resolveId(id) {
             return id === PRIVATE_LOOKS_MODULE ? RESOLVED_MODULE : null;
@@ -334,8 +381,16 @@ export function privateLooksPlugin({ facts, validateLook, env = process.env, git
             }
         },
         closeBundle() {
-            cleanup();
+            try {
+                if (selection !== undefined && writes && outDir !== undefined) {
+                    const problems = checkSelectedDist({ dir: outDir, selection, root, facts, git, env });
+                    if (problems.length > 0) {
+                        throw new Error(`private looks: ${outDir} does not hold what its selection carries:\n  - ${problems.join('\n  - ')}`);
+                    }
+                }
+            } finally {
+                cleanup();
+            }
         },
     };
 }
-

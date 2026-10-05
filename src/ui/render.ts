@@ -510,11 +510,13 @@ const NO_HOLDINGS: ReadonlySet<string> = new Set();
  * what the published record paints — its own look, or, for a paid look this
  * stall holds no licence for, the default wearing nothing — and why when it
  * is not its own. The sign's note, the Wearing row and the frame read this,
- * never `view.theme` alone; the worn set itself is the app's (`view.worn`,
- * through the same gate).
+ * never `view.recordTheme` alone; the worn set itself is the app's
+ * (`view.worn`, through the same gate). One of the few functions that may
+ * read the record's look or flags at all
+ * (`no-site-paints-the-record-look-around-the-gate`).
  */
 function recordLook(view: StallView): PaintedLook {
-    return paintableLook(view.theme ?? DEFAULT_THEME, view.attachmentFlags ?? 0, view.heldTokens ?? NO_HOLDINGS);
+    return paintableLook(view.recordTheme ?? DEFAULT_THEME, view.recordFlags ?? 0, view.heldTokens ?? NO_HOLDINGS);
 }
 
 /**
@@ -528,7 +530,27 @@ function recordAsPainted(view: StallView): { themeId: number; attachmentFlags: n
     const painted = recordLook(view);
     return painted.why === 'not-unlocked'
         ? { themeId: painted.theme.id, attachmentFlags: 0 }
-        : { themeId: (view.theme ?? DEFAULT_THEME).id, attachmentFlags: view.attachmentFlags ?? 0 };
+        : { themeId: (view.recordTheme ?? DEFAULT_THEME).id, attachmentFlags: view.recordFlags ?? 0 };
+}
+
+/**
+ * The record's look read back as words — the Studio's look row: its row's
+ * label, or the number for an id this build ships no row for. A string, so
+ * it paints nothing; the look on screen is `paintedTheme`'s.
+ */
+function recordLookLabel(view: StallView): string {
+    return lookLabel(view.recordTheme ?? DEFAULT_THEME);
+}
+
+/**
+ * The words for look `id` on the name sheet's "Publishes:" line: the
+ * record's own look object while the choice is still that look, so a look
+ * handed to the renderer as a row names itself; any other choice is a
+ * picker row, decoded. A string, like `recordLookLabel`.
+ */
+function lookLabelOf(view: StallView, id: number): string {
+    const record = view.recordTheme ?? DEFAULT_THEME;
+    return lookLabel(id === record.id ? record : decodeLook(id));
 }
 
 /**
@@ -562,7 +584,7 @@ export function paintedThemeId(view: StallView): number {
  *
  * The sparse-shop chrome is exactly that: `theme.sparse.kind` chooses which
  * children the motif mounts, and each look's sheet styles only its own kind.
- * Those four call sites read `view.theme` — the record's look — so a seller
+ * Those four call sites read the record's look (`view.recordTheme` now) — so a seller
  * trying Modern on over a published Rural stall got Rural's PLANKS markup
  * under Modern's stylesheet: the planks and carvings had no rules, and the
  * one child that carries its own colours, the Stall mark, was left hanging
@@ -2431,7 +2453,9 @@ function settingsNotes(body: HTMLElement, view: StallView): void {
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
     }
-    const why = view.theme === undefined ? undefined : recordLook(view).why;
+    // No record is the default's look, which the gate lets through with no
+    // `why`: a stall that never published says nothing here.
+    const why = recordLook(view).why;
     if (why === 'unknown') {
         // The record was fine. The missing row is ours, and saying so keeps
         // this apart from a record we could not read.
@@ -7865,14 +7889,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (input.value !== '') {
             parts.push({ label: copy.SUMMARY_NAME, value: input.value });
         }
-        // The record's own look object while the choice is still that look,
-        // so a look handed to the renderer as a row names itself; any other
-        // choice is a picker row, decoded.
-        const recordLook = view.theme ?? DEFAULT_THEME;
-        parts.push({
-            label: copy.SUMMARY_LOOK,
-            value: lookLabel(chosenTheme === recordLook.id ? recordLook : decodeLook(chosenTheme)),
-        });
+        parts.push({ label: copy.SUMMARY_LOOK, value: lookLabelOf(view, chosenTheme) });
         if (extras.tagline !== undefined) {
             parts.push({ label: copy.SUMMARY_TAGLINE });
         }
@@ -7958,9 +7975,9 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     const reportPreview = (themeId: number, chosenFlags: number): void => {
         // Against what the record paints (`recordAsPainted`), as the paint
         // compares: under a locked look that is the default.
-        const { themeId: recordTheme, attachmentFlags: recordFlags } = recordAsPainted(view);
+        const painted = recordAsPainted(view);
         handlers.onPreviewLook?.(
-            themeId === recordTheme && chosenFlags === recordFlags
+            themeId === painted.themeId && chosenFlags === painted.attachmentFlags
                 ? undefined
                 : { themeId, attachmentFlags: chosenFlags },
         );
@@ -9516,11 +9533,7 @@ function paintStudio(
         row.append(value);
         name.card.append(row);
     }
-    const look = kvRow(
-        copy.STUDIO_LOOK_ROW,
-        lookLabel(view.theme ?? DEFAULT_THEME),
-        'studio-look-row',
-    );
+    const look = kvRow(copy.STUDIO_LOOK_ROW, recordLookLabel(view), 'studio-look-row');
     look.classList.add('kv-top');
     name.card.append(look);
     name.card.append(wearingRow(view));
@@ -9738,7 +9751,7 @@ function wearingRow(view: StallView): HTMLElement {
     row.setAttribute('data-role', 'studio-wearing-row');
     row.append(el('span', undefined, copy.STUDIO_WEARING_ROW));
     const value = el('span', 'kv-chips');
-    if (view.theme !== undefined && recordLook(view).why === 'not-unlocked') {
+    if (recordLook(view).why === 'not-unlocked') {
         // Nothing is worn because the look is locked, not because the
         // seller chose nothing: "Nothing worn" here would be our refusal
         // reported as their choice.
@@ -11319,8 +11332,8 @@ function recordFingerprint(view: StallView): string {
         view.stallName ?? '',
         view.tagline ?? '',
         view.announcement ?? '',
-        String(view.theme?.id ?? ''),
-        String(view.attachmentFlags ?? 0),
+        String(view.recordTheme?.id ?? ''),
+        String(view.recordFlags ?? 0),
     ].join('\u0000');
 }
 

@@ -15,27 +15,40 @@
  *   look's, in the entry CSS, or an included private look's, in a file of
  *   its own and never the entry CSS — each named by the `--look-sheet` it
  *   declares (`every-look-sheet-names-itself`), once across `dist`;
- * - **every included look is there whole**: its sheet, and every `url()` the
- *   built sheet names resolves to a file in `dist`, which holds the bytes of
- *   every piece of art the look's source sheet names (the SVGs as the build
- *   re-serialised them);
- * - **nothing of a look the build does not carry is anywhere in `dist`**: no
- *   file holds its class, and no file is any of its art, as given or as
- *   re-serialised — so a `preview` look in a `production` build is red, by
- *   the index and not by a count of sheets.
+ * - **every included look is there whole, and nothing beside it**: its
+ *   sheet; every target its built sheet names — a `url()` or an
+ *   `image-set()` entry — resolves to a file in `dist` that IS one of the
+ *   look's own files (the SVGs as the build re-serialised them), so a stray
+ *   target the lint missed is red; and every piece of art the source sheet
+ *   names is there;
+ * - **nothing of a private look's beside what a carried sheet names**: a
+ *   built stylesheet (`assets/*.css`) that is not the entry CSS is an
+ *   included look's sheet, and a file
+ *   that is any private look's file — given or re-serialised — is a target
+ *   of an included look's sheet, so an unnamed piece of art, or any file of
+ *   a look the build does not carry, is red;
+ * - **nothing of a look the build does not carry names it**: no sheet
+ *   declares its `--look-sheet`, no script carries the module's
+ *   `sheetClass` literal for it — matched by the naming rule and the
+ *   module's own shape, never by the class appearing anywhere, so a public
+ *   file that names a reserved class (a sticky-sign table, say) does not
+ *   turn every production check red (the 8b2 critic's item 7) — and none of
+ *   its files is in `dist`.
  *
  * No selection: the build carried no private look, and `dist` may hold no
- * look sheet but the shipped ones. Not checked yet, stated: a look's og card
- * (8j) and its faces' notices (8e). Pure core (`distLooksProblems`) over a
- * map of files, so the test plants on it; the CLI reads the disk and git.
- * Test: `the-dist-holds-what-the-index-names`
+ * look sheet but the shipped ones. Run by the build itself whenever it
+ * selected anything and wrote to the disk (`privateLooksPlugin`'s
+ * `closeBundle`), and by hand with the selection the build had. Not checked
+ * yet, stated: a look's og card (8j) and its faces' notices (8e). Pure core
+ * (`distLooksProblems`) over a map of files, so the test plants on it; the
+ * CLI reads the disk and git. Test: `the-dist-holds-what-the-index-names`
  * (`scripts/private-looks-build.test.mjs`).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { selectionFromEnv } from './looks-selection.mjs';
 import { PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
-import { includedEntries, selectedIndex, selectionFromEnv } from './private-looks-build.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,17 +86,37 @@ export function entryCss(files) {
     );
 }
 
-/** The art names a source sheet's `url()`s reach, `./art/<name>` or `art/<name>`. */
+/** Every file a stylesheet's text names: each `url()` target, and each quoted `image-set()` entry. */
+export function cssTargets(css) {
+    const out = [];
+    for (const m of css.matchAll(/url\(\s*(['"]?)([^'")\s]+)\1\s*\)/g)) {
+        out.push(m[2]);
+    }
+    for (const m of css.matchAll(/image-set\(([^;{}]*)\)/g)) {
+        for (const q of m[1].matchAll(/(['"])([^'"]+)\1/g)) {
+            out.push(q[2]);
+        }
+    }
+    return out;
+}
+
+/** The art names a source sheet reaches, `./art/<name>` or `art/<name>`, by `url()` or `image-set()`. */
 export function artNamedBy(sheet) {
-    return new Set([...sheet.matchAll(/url\(\s*['"]?(?:\.\/)?art\/([a-z0-9-]+\.(?:svg|woff2))['"]?\s*\)/g)].map((m) => m[1]));
+    return new Set(
+        cssTargets(sheet).flatMap((target) => {
+            const m = /^(?:\.\/)?art\/([a-z0-9-]+\.(?:svg|woff2))$/.exec(target);
+            return m === null ? [] : [m[1]];
+        }),
+    );
 }
 
 /**
  * Every problem `files` (a built `dist`, path → bytes) has against what its
  * selection carries. `shippedClasses`: the shipped looks' classes;
  * `included` and `excluded`: the index's looks the build carries and does
- * not, each `{ cls, slug, art: [{ name, bytes }], named: Set<name> }` — its
- * art as the build writes it, and the art its source sheet names.
+ * not, each `{ cls, slug, art: [{ name, bytes, given? }], named: Set<name> }`
+ * — its art as the build writes it (and as given, for an SVG the build
+ * re-serialises), and the art its source sheet names.
  */
 export function distLooksProblems({ files, shippedClasses, included, excluded }) {
     const problems = [];
@@ -115,7 +148,10 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
             problems.push(`${cls}: no shipped look's sheet in the entry CSS — is this the dist the build wrote?`);
         }
     }
-    const holds = (bytes) => [...files.values()].some((file) => file.equals(bytes));
+    const sameBytes = (a, b) => a.length === b.length && a.equals(b);
+    const isFileOf = (bytes, look) => look.art.some((art) => sameBytes(bytes, art.bytes) || (art.given !== undefined && sameBytes(bytes, art.given)));
+    const sheets = new Set();
+    const targeted = new Set();
     for (const look of included) {
         const paths = declared.get(look.cls) ?? [];
         if (paths.length !== 1) {
@@ -123,33 +159,55 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
             continue;
         }
         const [path] = paths;
+        sheets.add(path);
         if (entry.has(path)) {
             problems.push(`${look.slug}: its sheet is in the entry CSS (${path}), where a private look's sheet is its own file`);
         }
-        const css = files.get(path).toString('utf8');
-        for (const m of css.matchAll(/url\(\s*['"]?([^'")\s]+)['"]?\s*\)/g)) {
-            const target = m[1];
+        for (const target of cssTargets(files.get(path).toString('utf8'))) {
             const resolved = target.startsWith('/') ? target.slice(1) : posix.normalize(posix.join(posix.dirname(path), target));
-            if (!files.has(resolved)) {
+            const bytes = files.get(resolved);
+            if (bytes === undefined) {
                 problems.push(`${look.slug}: its sheet names ${target}, which is not in the dist`);
+            } else if (!isFileOf(bytes, look)) {
+                problems.push(`${look.slug}: its sheet names ${target}, which is none of the look's own files`);
+            } else {
+                targeted.add(resolved);
             }
         }
         for (const art of look.art) {
-            if (look.named.has(art.name) && !holds(art.bytes)) {
+            if (look.named.has(art.name) && ![...files.values()].some((file) => sameBytes(file, art.bytes))) {
                 problems.push(`${look.slug}: art/${art.name} is named by its sheet and is not in the dist as the build writes it`);
             }
         }
     }
-    for (const look of excluded) {
-        const needle = Buffer.from(look.cls, 'utf8');
-        for (const [path, bytes] of files) {
-            if (bytes.includes(needle)) {
-                problems.push(`${look.slug}: ${path} holds its class ${look.cls}, and this build does not carry it`);
+    for (const [path, bytes] of files) {
+        // Vite emits every stylesheet it builds under `assets/`; the root's
+        // are `public/`'s documents, copied as they are.
+        if (
+            path.startsWith('assets/') &&
+            path.endsWith('.css') &&
+            !entry.has(path) &&
+            !sheets.has(path) &&
+            lookSheetNames(bytes.toString('utf8')).length === 0
+        ) {
+            problems.push(`${path}: a built stylesheet outside the entry CSS that is no carried look's sheet`);
+        }
+        if (targeted.has(path)) {
+            continue;
+        }
+        for (const look of [...included, ...excluded]) {
+            if (isFileOf(bytes, look)) {
+                problems.push(
+                    `${look.slug}: ${path} is one of its files, and ${carried.has(look.cls) ? 'no carried sheet names it' : 'this build does not carry the look'}`,
+                );
             }
         }
-        for (const art of look.art) {
-            if (holds(art.bytes) || (art.given !== undefined && holds(art.given))) {
-                problems.push(`${look.slug}: art/${art.name} is in the dist, and this build does not carry the look`);
+        if (path.endsWith('.js')) {
+            const text = bytes.toString('utf8');
+            for (const look of excluded) {
+                if (new RegExp(`sheetClass:\\s*["'\`]${look.cls}["'\`]`).test(text)) {
+                    problems.push(`${look.slug}: ${path} carries its module entry (sheetClass ${look.cls}), and this build does not carry it`);
+                }
             }
         }
     }
@@ -157,7 +215,7 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
 }
 
 /** One index entry's art and sheet, as the build reads and writes them, from git at the selection's commit. */
-function lookFilesOf(read, files, entry) {
+export function lookFilesOf(read, files, entry) {
     const at = (path) => `${entry.slug}/${path}`;
     const art = files
         .filter((file) => file.mode === PRIVATE_FILE_MODE && file.path.startsWith(at('art/')) && !file.path.endsWith('.txt'))
@@ -175,26 +233,17 @@ function lookFilesOf(read, files, entry) {
     return { cls: entry.cls, slug: entry.slug, art, named };
 }
 
-/** The problems of the dist at `dir` against `env`'s selection. */
+/**
+ * The problems of the dist at `dir` against `env`'s selection: the core over
+ * the index at the selection's commit (`checkSelectedDist`, which the build
+ * runs itself), with the public lists read from the theme table.
+ */
 export async function checkDist({ dir, env = process.env, root = ROOT }) {
-    const facts = await publicLookFacts();
-    const files = distFiles(dir);
-    const selection = selectionFromEnv(env);
-    if (selection === undefined) {
-        return distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [], excluded: [] });
-    }
-    const { read, files: repoFiles, index } = selectedIndex({ root, selection, facts, env });
-    const carried = new Set(includedEntries(index, selection.target, facts).map((entry) => entry.slug));
-    const looks = index.looks.map((entry) => lookFilesOf(read, repoFiles, entry));
-    return distLooksProblems({
-        files,
-        shippedClasses: facts.shippedClasses,
-        included: looks.filter((look) => carried.has(look.slug)),
-        excluded: looks.filter((look) => !carried.has(look.slug)),
-    });
+    const { checkSelectedDist } = await import('./private-looks-build.mjs');
+    return checkSelectedDist({ dir, selection: selectionFromEnv(env), root, facts: await publicLookFacts(), env });
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+async function main() {
     const dir = resolve(process.argv[2] ?? 'dist');
     const problems = await checkDist({ dir });
     if (problems.length > 0) {
@@ -202,4 +251,11 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(
         process.exit(1);
     }
     process.stdout.write(`check-dist-looks: ${dir} holds what its selection carries\n`);
+}
+
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main().catch((error) => {
+        process.stderr.write(`check-dist-looks: ${error.message}\n`);
+        process.exit(1);
+    });
 }

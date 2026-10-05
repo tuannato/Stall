@@ -277,3 +277,63 @@ describe('an-unlicensed-look-wears-none-of-the-default-looks-rows', () => {
         expect(painted.theme.bg).toEqual(DEFAULT_THEME.bg);
     });
 });
+
+/**
+ * Two private looks may not share a row class (the 8b2 critic's item 4): a
+ * class one look's sheet paints would dress the other's row too. Today one
+ * id is reserved, so the theme table is planted with a second for this case.
+ * Both looks go when they share (or one is the other's child); both stay
+ * when they do not. A shipped row's class is the validator's to refuse
+ * (`lookData.test.ts`), which drops the look the same way.
+ */
+describe('a-private-row-class-is-its-looks-own', () => {
+    async function tableWithTwo(second: { cls: string; trim: string }) {
+        const base = (await import('../../layout/fixturePrivateLooks')).fixturePrivateLooks()[0]!;
+        const look = structuredClone(base.look) as {
+            moods: { tokenId?: string; cls?: string }[];
+            decorations: { tokenId?: string; cls?: string }[];
+        };
+        look.decorations[0]!.tokenId = 'e1'.repeat(32);
+        look.decorations[0]!.cls = second.trim;
+        look.decorations[1]!.cls = 'att-other-crest';
+        look.moods[0]!.tokenId = 'e2'.repeat(32);
+        vi.resetModules();
+        vi.doMock('./theme', async (importOriginal) => ({
+            ...(await importOriginal<typeof import('./theme')>()),
+            PRIVATE_LOOK_IDS: Object.freeze([0x04, 0x05]),
+            PAID_LOOK_IDS: Object.freeze([0x04, 0x05]),
+        }));
+        vi.doMock('virtual:stall-private-looks', () => ({
+            carriesPrivateLooks: true,
+            privateLooks: [base, { id: 0x05, sheetClass: second.cls, sheetUrl: '/assets/other.css', look }],
+        }));
+        try {
+            return await import('./lookTable');
+        } finally {
+            vi.doUnmock('./theme');
+            vi.doUnmock('virtual:stall-private-looks');
+        }
+    }
+
+    it('admits two looks whose row classes are their own', async () => {
+        const t = await tableWithTwo({ cls: 't-other-look', trim: 'att-other-trim' });
+        expect(t.decodeLook(0x04).known).toBe(true);
+        expect(t.decodeLook(0x05).known).toBe(true);
+    });
+
+    it('drops both when they share a look class under two reserved ids', async () => {
+        // The shared-class half of the place check, which one reserved id
+        // could only test together with a shared id.
+        const t = await tableWithTwo({ cls: 't-fixture-private', trim: 'att-other-trim' });
+        expect(t.decodeLook(0x04).known).toBe(false);
+        expect(t.decodeLook(0x05).known).toBe(false);
+    });
+
+    it('drops both when a row class is shared, or one is the other’s child', async () => {
+        for (const trim of ['att-fixture-trim', 'att-fixture-trim-wide', 'att-fixture']) {
+            const t = await tableWithTwo({ cls: 't-other-look', trim });
+            expect(t.decodeLook(0x04).known, trim).toBe(false);
+            expect(t.decodeLook(0x05).known, trim).toBe(false);
+        }
+    });
+});

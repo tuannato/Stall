@@ -3856,8 +3856,8 @@ export function boot(
             view.tagline = manifest.tagline;
             view.fiatHint = manifest.fiatHint;
             view.announcement = manifest.announcement;
-            view.theme = manifest.theme;
-            view.attachmentFlags = flags;
+            view.recordTheme = manifest.theme;
+            view.recordFlags = flags;
             // Recomputed here and not left to the holdings read below, because a
             // bit means a different row under a different theme: carrying the
             // old `worn` across a theme change would paint one look's decoration
@@ -3886,8 +3886,8 @@ export function boot(
      * decoration the seller opted into in their own record can appear at all.
      */
     const refreshHoldings = async (claimed: number, address: string): Promise<void> => {
-        const themeId = state.view.theme?.id ?? DEFAULT_THEME_ID;
-        const flags = state.view.attachmentFlags ?? 0;
+        const themeId = state.view.recordTheme?.id ?? DEFAULT_THEME_ID;
+        const flags = state.view.recordFlags ?? 0;
         let held: ReadonlySet<string> | undefined;
         try {
             held = await loadHeldTokens(
@@ -3907,8 +3907,8 @@ export function boot(
         // question nobody is asking any more. Whoever changed them is reading
         // the holdings again.
         if (
-            (state.view.theme?.id ?? DEFAULT_THEME_ID) !== themeId ||
-            (state.view.attachmentFlags ?? 0) !== flags
+            (state.view.recordTheme?.id ?? DEFAULT_THEME_ID) !== themeId ||
+            (state.view.recordFlags ?? 0) !== flags
         ) {
             return;
         }
@@ -3917,7 +3917,7 @@ export function boot(
             view: {
                 ...state.view,
                 heldTokens: held,
-                worn: paintableLook(state.view.theme ?? DEFAULT_THEME, flags, held).worn,
+                worn: paintableLook(state.view.recordTheme ?? DEFAULT_THEME, flags, held).worn,
             },
         };
         livePaint();
@@ -5118,8 +5118,8 @@ async function loadCurrent(): Promise<AppState> {
             genesis: genesisFor(route.pubkeyHex, descriptionLookup.prices.keys()),
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
-            theme,
-            attachmentFlags,
+            recordTheme: theme,
+            recordFlags: attachmentFlags,
             heldTokens,
             mintedHere,
             // Fails closed: with no holdings answer — a read that failed, or a

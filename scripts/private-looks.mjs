@@ -332,13 +332,26 @@ export const GIT_LOCATION_VARS = Object.freeze([
 /** A path inside a commit's tree that names a subtree: lower-case words and hyphens, slash-separated. */
 export const TREE_PREFIX = /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/;
 
-function gitRunner({ dir, git = 'git', env = process.env }) {
-    const clean = { ...env };
+/**
+ * The environment a read runs in: the location variables dropped, and
+ * replace objects off (`GIT_NO_REPLACE_OBJECTS`, with `--no-replace-objects`
+ * on every command): a local `refs/replace/*` in the clone would make
+ * `cat-file blob <commit>:<path>` answer another blob while `rev-parse HEAD`
+ * still equals the pin (the 8b2 critic's item 8,
+ * `a-replace-ref-does-not-change-what-a-commit-holds`).
+ */
+function gitEnv(env) {
+    const clean = { ...env, GIT_NO_REPLACE_OBJECTS: '1' };
     for (const name of GIT_LOCATION_VARS) {
         delete clean[name];
     }
+    return clean;
+}
+
+function gitRunner({ dir, git = 'git', env = process.env }) {
+    const clean = gitEnv(env);
     const run = (args, encoding = 'utf8') =>
-        execFileSync(git, ['-C', dir, ...args], {
+        execFileSync(git, ['--no-replace-objects', '-C', dir, ...args], {
             env: clean,
             encoding,
             maxBuffer: 256 * 1024 * 1024,
@@ -433,12 +446,8 @@ export function gitCommitOf({ dir, ref = 'HEAD', git, env }) {
  * with the inherited location variables dropped, as every read here does.
  */
 export function gitTopOf({ dir, git = 'git', env = process.env }) {
-    const clean = { ...env };
-    for (const name of GIT_LOCATION_VARS) {
-        delete clean[name];
-    }
-    return execFileSync(git, ['-C', dir, 'rev-parse', '--show-toplevel'], {
-        env: clean,
+    return execFileSync(git, ['--no-replace-objects', '-C', dir, 'rev-parse', '--show-toplevel'], {
+        env: gitEnv(env),
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();

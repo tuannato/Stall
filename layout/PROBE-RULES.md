@@ -104,8 +104,8 @@ nothing.
 - **The viewport comes from CDP, not `--window-size`.** New headless clamps
   below ~500px: asking for 390 measured 500 while the runner printed 390.
   The runner fails when the page's own measurement disagrees with the ask.
-- **The door only wears the default look.** The apex paints
-  `view.theme ?? DEFAULT_THEME` and never fetches, so door-under-Neo is a
+- **The door only wears the default look.** The apex paints the default
+  look (it has no record) and never fetches, so door-under-Neo is a
   screen no visitor can reach — its red was a false alarm (Neo's mini ink
   over the door's light ground) and its green was budget spent on nothing.
 - **The name column never collapses under the price** (`.item-b` ≥ 64px).

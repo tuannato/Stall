@@ -20,6 +20,8 @@ const { renderStall } = await import('./render');
 const copy = await import('./copy');
 const { decodeLook, mintedLookTokens, paintableLook } = await import('../domain/lookTable');
 const { DEFAULT_THEME, DEFAULT_THEME_ID, themeVars } = await import('../domain/theme');
+const { attachmentsForTheme } = await import('../domain/attachments');
+const { encodeManifestHex } = await import('../domain/manifest');
 
 const FIXTURE_ID = 0x04;
 /** Nobody holds this key: a byte pattern, not a wallet. */
@@ -56,8 +58,8 @@ function locked(over: Partial<StallView> = {}): StallView {
         address: ADDR,
         fetch: { kind: 'empty' },
         stallName: 'Locked look',
-        theme,
-        attachmentFlags: 0xffff,
+        recordTheme: theme,
+        recordFlags: 0xffff,
         heldTokens: held,
         worn: paintableLook(theme, 0xffff, held).worn,
         ...over,
@@ -67,7 +69,7 @@ function locked(over: Partial<StallView> = {}): StallView {
 const stallOf = (root: HTMLElement) => root.querySelector('.stall') as HTMLElement;
 const notes = (root: HTMLElement) => [...root.querySelectorAll('.stall-body > p.fine')].map((p) => p.textContent);
 
-describe('a-locked-look-paints-the-default-and-says-it-is-not-unlocked', () => {
+describe('a-locked-look-paints-the-default-and-says-this-page-does-not-show-it', () => {
     it('paints the default look whole, wears nothing, and says why — never the unknown-look sentence', () => {
         expect(decodeLook(FIXTURE_ID).known, 'the fixture is in this build').toBe(true);
         for (const panel of [undefined, 'studio' as const]) {
@@ -83,7 +85,32 @@ describe('a-locked-look-paints-the-default-and-says-it-is-not-unlocked', () => {
         }
     });
 
-    it('says on the Wearing row that the look is not unlocked, never that nothing was chosen', () => {
+    it('paints the default on the wall and on the stream overlay too', () => {
+        // The two unattended surfaces (the 8b2 critic's item 1, plant A): a
+        // branch that painted the record's look there would wear the paid
+        // look's class and its own ground.
+        const fixtureBg = themeVars(decodeLook(FIXTURE_ID))['--s-bg'];
+        expect(fixtureBg, 'the fixture look has a ground of its own').not.toBe(themeVars(DEFAULT_THEME)['--s-bg']);
+        for (const [what, over, selector] of [
+            ['the wall', { window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false } }, '.stall.shop-window'],
+            [
+                'the overlay',
+                { broadcast: { preset: 'corner', mode: 'rail', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' }, broadcastState: 'live' },
+                '.stall.broadcast',
+            ],
+        ] as const) {
+            const { root } = paint(locked(over as Partial<StallView>));
+            const stall = root.querySelector(selector) as HTMLElement | null;
+            expect(stall, `${what} painted`).not.toBeNull();
+            expect(stall!.classList.contains('t-modern'), what).toBe(true);
+            expect(stall!.classList.contains('t-fixture-private'), what).toBe(false);
+            expect([...stall!.classList].filter((cls) => cls.startsWith('att-')), what).toEqual([]);
+            expect(stall!.style.getPropertyValue('--s-bg'), what).toBe(themeVars(DEFAULT_THEME)['--s-bg']);
+            root.remove();
+        }
+    });
+
+    it('says on the Wearing row that this page does not show the look yet, never that nothing was chosen', () => {
         const { root } = paint(locked({ panel: 'studio' }));
         const row = root.querySelector('[data-role="studio-wearing-row"]')!;
         expect(row.textContent).toContain(copy.STUDIO_WEARING_NOT_UNLOCKED);
@@ -101,8 +128,36 @@ describe('a-locked-look-paints-the-default-and-says-it-is-not-unlocked', () => {
         const held = mintedLookTokens();
         const worn = paintableLook(theme, 0xffff, held).worn;
         expect(worn.length).toBeGreaterThan(0);
-        const { root } = paint(locked({ theme, worn }));
+        const { root } = paint(locked({ recordTheme: theme, worn }));
         expect(notes(root)).toEqual([]);
+        root.remove();
+    });
+});
+
+/**
+ * A locked record's flags are bits of the PAID look's table, and the sheet
+ * opens on the default that record paints (the 8b2 critic's item 1, plant C;
+ * PROPOSAL §6.3): seeded from the record's flags, the chips would press the
+ * default's rows those bits happen to name — bit 1 is Modern's Pinstripe —
+ * and a republish would sign a permanent default record wearing a
+ * decoration the seller never chose. So no chip is pressed, and the record
+ * composed carries no flags field at all.
+ */
+describe('a-locked-record-lends-no-bit-to-the-default-it-paints', () => {
+    it('opens with no chip pressed and composes the default with no flags', () => {
+        const modern = attachmentsForTheme(DEFAULT_THEME_ID);
+        const flags = modern.reduce((all, row) => all | (1 << row.bit), 0);
+        expect(flags, 'the default has rows those bits name').not.toBe(0);
+        const { root } = paint(
+            locked({ recordFlags: flags, stallName: 'Locked look', overlay: { kind: 'publish-name' } }),
+        );
+        const pressed = root.querySelector('[data-role="theme-picker"] [aria-pressed="true"]');
+        expect(pressed?.getAttribute('data-theme-id')).toBe(String(DEFAULT_THEME_ID));
+        expect(root.querySelectorAll('[data-role^="decor-"] [aria-pressed="true"]').length, 'no chip pressed').toBe(0);
+        const input = root.querySelector('[data-role="publish-name"]') as HTMLInputElement;
+        expect(input.value).toBe('Locked look');
+        const hex = (root.querySelector('[data-role="publish-hex"]') as HTMLElement).textContent;
+        expect(hex).toBe(encodeManifestHex('Locked look', DEFAULT_THEME_ID, 0));
         root.remove();
     });
 });
@@ -163,7 +218,7 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
 
     it('opens on the default a locked record paints, and the locked look is a try-on from there', () => {
         const theme = decodeLook(FIXTURE_ID);
-        const { root, h } = sheet({ theme, attachmentFlags: 0b11, heldTokens: mintedLookTokens(), worn: [] });
+        const { root, h } = sheet({ recordTheme: theme, recordFlags: 0b11, heldTokens: mintedLookTokens(), worn: [] });
         const pressed = root.querySelector('[data-role="theme-picker"] [aria-pressed="true"]');
         expect(pressed?.getAttribute('data-theme-id'), 'the pressed look is the painted one').toBe(String(DEFAULT_THEME_ID));
         expect(parts(root).web.hasAttribute('href'), 'republishing the default composes').toBe(true);
@@ -183,7 +238,7 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
         // stall stayed on the default under the seller's press.
         const theme = decodeLook(FIXTURE_ID);
         const { root } = paint(
-            locked({ attachmentFlags: 0b1, previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 } }),
+            locked({ recordFlags: 0b1, previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 } }),
         );
         const stall = stallOf(root);
         expect(theme.known).toBe(true);

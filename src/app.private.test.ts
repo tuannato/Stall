@@ -169,8 +169,8 @@ async function publishLockedRecord(): Promise<void> {
 
 function expectLocked(root: HTMLElement): void {
     const view = painted.get(root)!;
-    expect(view.theme?.id, 'the record names the fixture look').toBe(0x04);
-    expect(view.theme?.known, 'which this build carries').toBe(true);
+    expect(view.recordTheme?.id, 'the record names the fixture look').toBe(0x04);
+    expect(view.recordTheme?.known, 'which this build carries').toBe(true);
     expect(view.heldTokens?.has('f1'.repeat(32)), 'the stall holds its tokens').toBe(true);
     expect(view.worn).toEqual([]);
     const stall = root.querySelector('.stall') as HTMLElement;

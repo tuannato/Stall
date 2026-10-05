@@ -598,7 +598,7 @@ describe('asked-amount-not-covered', () => {
                 [TOKEN_ID, BEANS],
                 [OTHER_TOKEN, { ...TEA, tokenType: BEANS.tokenType }],
             ]),
-            theme: decodeTheme(RURAL_THEME_ID),
+            recordTheme: decodeTheme(RURAL_THEME_ID),
         });
         const { root } = paint(view);
         const stall = root.querySelector('.stall') as HTMLElement;
@@ -1747,7 +1747,7 @@ describe('unknown-theme-id-is-not-silent-default', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(0xfe),
+                recordTheme: decodeTheme(0xfe),
             }),
         );
         const stall = root.querySelector('.stall') as HTMLElement;
@@ -1766,7 +1766,7 @@ describe('unknown-theme-id-is-not-silent-default', () => {
             idlePubkey({
                 fetch: { kind: 'empty' },
                 stallName: "Nato's Corner",
-                theme: decodeTheme(0xfe),
+                recordTheme: decodeTheme(0xfe),
             }),
         );
         const stall = root.querySelector('.stall') as HTMLElement;
@@ -1789,7 +1789,7 @@ describe('theme-unknown-is-not-settings-unreadable', () => {
         const { root } = paint(
             idlePubkey({
                 fetch: { kind: 'empty' },
-                theme: decodeTheme(0xfe),
+                recordTheme: decodeTheme(0xfe),
             }),
         );
         const text = root.textContent ?? '';
@@ -1805,7 +1805,7 @@ describe('shipped-theme-id-says-nothing', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(DEFAULT_THEME_ID),
+                recordTheme: decodeTheme(DEFAULT_THEME_ID),
             }),
         ).root;
         expect(settingsFineCopy(offers)).toEqual([]);
@@ -1814,7 +1814,7 @@ describe('shipped-theme-id-says-nothing', () => {
         const empty = paint(
             idlePubkey({
                 fetch: { kind: 'empty' },
-                theme: decodeTheme(DEFAULT_THEME_ID),
+                recordTheme: decodeTheme(DEFAULT_THEME_ID),
             }),
         ).root;
         expect(settingsFineCopy(empty)).toEqual([]);
@@ -2303,7 +2303,7 @@ describe('publish-sheet', () => {
     });
 
     it('picker-follows-a-published-theme-and-drops-the-note-on-a-change', () => {
-        const { root } = open({ theme: decodeTheme(NEO_CITY_THEME_ID) });
+        const { root } = open({ recordTheme: decodeTheme(NEO_CITY_THEME_ID) });
         expect(pressedLook(root)).toBe(NEO_CITY_THEME_ID);
         const note = root.querySelector('[data-role="publish-same-look"]') as HTMLElement;
         expect(note.hidden).toBe(false);
@@ -2602,7 +2602,7 @@ describe('the-sellers-sign-carries-no-brand-mark', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(NEO_CITY_THEME_ID),
+                recordTheme: decodeTheme(NEO_CITY_THEME_ID),
                 stallName: 'Riverside Goods',
             }),
         ).root;
@@ -2627,7 +2627,7 @@ describe('theme ornament is data, not per-theme code', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme,
+                recordTheme: theme,
             }),
         );
         return root.querySelector('.stall .orn') as HTMLElement | null;
@@ -2655,7 +2655,7 @@ describe('theme ornament is data, not per-theme code', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(NEO_CITY_THEME_ID),
+                recordTheme: decodeTheme(NEO_CITY_THEME_ID),
             }),
         );
         const stall = root.querySelector('.stall') as HTMLElement;
@@ -3610,7 +3610,7 @@ describe('picker-previews-the-look-without-publishing-it', () => {
                 tokens: new Map([[TOKEN_ID, BEANS]]),
                 overlay: { kind: 'publish-name' },
                 stallName: 'Riverside Goods',
-                theme,
+                recordTheme: theme,
             }),
         );
         // Rewritten 2026-09-04 against the behaviour: the look is chosen by
@@ -4414,7 +4414,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
                 fetch: { kind: 'offers', offers: [OFFER] },
                 overlay: { kind: 'publish-name' },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(RURAL_THEME_ID),
+                recordTheme: decodeTheme(RURAL_THEME_ID),
                 ...over,
             }),
         );
@@ -4445,13 +4445,13 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('opens the look picker on every look, not just the second one', () => {
         for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
-            const root = sheet({ theme: decodeTheme(id) });
+            const root = sheet({ recordTheme: decodeTheme(id) });
             expect(pressedLook(root), `painted ${id}`).toBe(id);
         }
     });
 
     it('opens on what the record already set', () => {
-        const root = sheet({ attachmentFlags: 1 });
+        const root = sheet({ recordFlags: 1 });
         expect(pressedDecor(root, 'yard')).toEqual([0]);
     });
 
@@ -4480,7 +4480,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     it('says on the row that this stall does not hold it, and offers the way to get one', () => {
         // An empty set is "holds none of them", which is a fact about the
         // stall — the read answered.
-        const root = sheet({ attachmentFlags: 1, heldTokens: new Set<string>() });
+        const root = sheet({ recordFlags: 1, heldTokens: new Set<string>() });
         expect(stateOf(root, 'yard', 0)).toBe(copy.DECOR_ROW_NOT_HELD);
         const beetle = SHIPPED_ATTACHMENTS.find(
             (r) => r.themeId === RURAL_THEME_ID && r.bit === 0,
@@ -4498,7 +4498,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
          * unanswered question filed as a fact about the seller, the §4
          * collapse on the one screen where a seller decides whether to buy.
          */
-        const root = sheet({ attachmentFlags: 1 });
+        const root = sheet({ recordFlags: 1 });
         expect(stateOf(root, 'yard', 0)).toBe(copy.DECOR_ROW_UNKNOWN);
         expect(stateOf(root, 'yard', 0)).not.toBe(copy.DECOR_ROW_NOT_HELD);
         // Unknown is not held: the way to buy one stays offered.
@@ -4508,7 +4508,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     it('says the stall holds it, and stops selling it', () => {
         const held = SHIPPED_ATTACHMENTS.find((r) => r.themeId === RURAL_THEME_ID && r.bit === 0);
         const root = sheet({
-            attachmentFlags: 1,
+            recordFlags: 1,
             heldTokens: new Set([held!.tokenId!]),
         });
         expect(stateOf(root, 'yard', 0)).toBe(copy.DECOR_ROW_HELD);
@@ -4517,7 +4517,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
 
     it('says a row nothing can hold is not on sale, and offers no way to buy it', () => {
         // Modern bit 3 is the catalogue's one unminted row.
-        const root = sheet({ theme: decodeTheme(DEFAULT_THEME_ID) });
+        const root = sheet({ recordTheme: decodeTheme(DEFAULT_THEME_ID) });
         const unminted = SHIPPED_ATTACHMENTS.find((r) => r.tokenId === undefined);
         if (unminted === undefined) {
             // Every row is minted today; the shape still has to hold, so this
@@ -4543,7 +4543,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(DEFAULT_THEME_ID),
+                recordTheme: decodeTheme(DEFAULT_THEME_ID),
                 previewLook: { themeId: NEO_CITY_THEME_ID, attachmentFlags: 0b10 },
                 stallName: 'Riverside Goods',
                 panel: 'studio',
@@ -4574,7 +4574,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(RURAL_THEME_ID),
+                recordTheme: decodeTheme(RURAL_THEME_ID),
                 previewLook: { themeId: RURAL_THEME_ID, attachmentFlags: 0b1 },
             }),
         );
@@ -4585,7 +4585,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(RURAL_THEME_ID),
+                recordTheme: decodeTheme(RURAL_THEME_ID),
                 previewLook: { themeId: RURAL_THEME_ID, attachmentFlags: 0b1000 },
             }),
         );
@@ -4612,7 +4612,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
                 idlePubkey({
                     fetch: { kind: 'offers', offers: [OFFER] },
                     tokens: new Map([[TOKEN_ID, BEANS]]),
-                    theme: decodeTheme(themeId),
+                    recordTheme: decodeTheme(themeId),
                     previewLook: { themeId: previewId, attachmentFlags: 0 },
                 }),
             ).root;
@@ -4654,7 +4654,7 @@ describe('a-decoration-is-chosen-where-the-look-is', () => {
     });
 
     it('drops the flags when the look changes, rather than re-aiming them', () => {
-        const root = sheet({ attachmentFlags: 1 });
+        const root = sheet({ recordFlags: 1 });
         document.body.append(root);
         pickLook(root, NEO_CITY_THEME_ID);
         // Neo has no mood row; bit 0 there is a different row, so carrying
@@ -4793,7 +4793,7 @@ describe('a-worn-decoration-says-where-it-came-from', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(RURAL_THEME_ID),
+                recordTheme: decodeTheme(RURAL_THEME_ID),
                 worn: wornAttachments(RURAL_THEME_ID, 0b1),
             }),
         );
@@ -4822,7 +4822,7 @@ describe('a-worn-decoration-says-where-it-came-from', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(DEFAULT_THEME_ID),
+                recordTheme: decodeTheme(DEFAULT_THEME_ID),
                 worn: [{ ...SHIPPED_ATTACHMENTS[0]!, tokenId: undefined, label: 'Unminted row' }],
             }),
         );
@@ -4838,7 +4838,7 @@ describe('a-worn-decoration-reaches-the-stall', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(RURAL_THEME_ID),
+                recordTheme: decodeTheme(RURAL_THEME_ID),
                 worn: wornAttachments(RURAL_THEME_ID, 1),
             }),
         );
@@ -4855,7 +4855,7 @@ describe('a-worn-decoration-reaches-the-stall', () => {
             idlePubkey({
                 fetch: { kind: 'offers', offers: [OFFER] },
                 tokens: new Map([[TOKEN_ID, BEANS]]),
-                theme: decodeTheme(DEFAULT_THEME_ID),
+                recordTheme: decodeTheme(DEFAULT_THEME_ID),
                 worn: wornAttachments(DEFAULT_THEME_ID, 1),
             }),
         );
@@ -4893,7 +4893,7 @@ describe('a-mood-class-reaches-the-stall-root', () => {
         for (const mood of MOODS_WITH_A_CLASS) {
             const theme = decodeTheme(mood.themeId);
             const { root } = paint(
-                idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]), theme, worn: [mood] }),
+                idlePubkey({ fetch: { kind: 'offers', offers: [OFFER] }, tokens: new Map([[TOKEN_ID, BEANS]]), recordTheme: theme, worn: [mood] }),
             );
             const stall = root.querySelector<HTMLElement>('.stall')!;
             expect([...stall.classList], mood.label).toEqual(['stall', theme.sheetClass, mood.cls]);
@@ -4916,7 +4916,7 @@ describe('a-mood-class-reaches-the-stall-root', () => {
                 idlePubkey({
                     fetch: { kind: 'offers', offers: [OFFER] },
                     tokens: new Map([[TOKEN_ID, BEANS]]),
-                    theme: decodeTheme(NEO_CITY_THEME_ID),
+                    recordTheme: decodeTheme(NEO_CITY_THEME_ID),
                     previewLook: { themeId: DEFAULT_THEME_ID, attachmentFlags: 1 << row.bit },
                 }),
             );
@@ -4933,7 +4933,7 @@ describe('a-mood-class-reaches-the-stall-root', () => {
                 idlePubkey({
                     fetch: { kind: 'offers', offers: [OFFER] },
                     tokens: new Map([[TOKEN_ID, BEANS]]),
-                    theme: decodeTheme(mood.themeId),
+                    recordTheme: decodeTheme(mood.themeId),
                     worn: [mood],
                     window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
                 }),
@@ -4967,7 +4967,7 @@ describe('a-mood-class-never-reaches-the-overlay', () => {
             const fetches: FetchStatus[] = [{ kind: 'offers', offers: [OFFER] }, { kind: 'empty' }, { kind: 'opening' }];
             for (const fetch of fetches) {
                 const { root } = paint(
-                    idlePubkey({ broadcast: BROADCAST, fetch, tokens: new Map([[TOKEN_ID, BEANS]]), theme, worn: [mood] }),
+                    idlePubkey({ broadcast: BROADCAST, fetch, tokens: new Map([[TOKEN_ID, BEANS]]), recordTheme: theme, worn: [mood] }),
                 );
                 const stall = root.querySelector<HTMLElement>('.stall.broadcast')!;
                 expect(stall, `${mood.label} / ${fetch.kind}`).not.toBeNull();
@@ -4985,7 +4985,7 @@ describe('a-mood-class-never-reaches-the-overlay', () => {
         const all = wornAttachments(NEO_CITY_THEME_ID, 0xffff);
         expect(all.some((row) => row.paint === 'root')).toBe(true);
         const { root } = paint(
-            idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'offers', offers: [OFFER] }, theme: decodeTheme(NEO_CITY_THEME_ID), worn: all }),
+            idlePubkey({ broadcast: BROADCAST, fetch: { kind: 'offers', offers: [OFFER] }, recordTheme: decodeTheme(NEO_CITY_THEME_ID), worn: all }),
         );
         const stall = root.querySelector<HTMLElement>('.stall.broadcast')!;
         expect([...stall.classList].filter((c) => c.startsWith('att-'))).toEqual([]);
@@ -5262,7 +5262,7 @@ describe('the-browser-chrome-joins-the-look', () => {
         meta.setAttribute('name', 'theme-color');
         document.head.append(meta);
         try {
-            paint(offersView([OFFER], undefined, { theme: decodeTheme(NEO_CITY_THEME_ID) }));
+            paint(offersView([OFFER], undefined, { recordTheme: decodeTheme(NEO_CITY_THEME_ID) }));
             const neo = decodeTheme(NEO_CITY_THEME_ID).bg;
             expect(meta.getAttribute('content')).toBe(
                 `rgb(${neo.r}, ${neo.g}, ${neo.b})`,
@@ -6420,7 +6420,7 @@ describe('a-broadcast-url-never-paints-the-shop-chrome', () => {
 
     it('Neo ships no ornament strip on the overlay', () => {
         const { root } = paint(
-            broadcastView({ theme: decodeTheme(NEO_CITY_THEME_ID) }),
+            broadcastView({ recordTheme: decodeTheme(NEO_CITY_THEME_ID) }),
         );
         expect(root.querySelector('.orn')).toBeNull();
         expect(root.querySelector('.stall')?.classList.contains('t-neo')).toBe(true);
@@ -7218,7 +7218,7 @@ describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
         const everyday = (theme: ReturnType<typeof decodeTheme>) =>
             paint(
                 broadcastView({
-                    theme,
+                    recordTheme: theme,
                     broadcastState: 'live',
                 }),
             ).root.querySelector('.bc-p');
@@ -7237,7 +7237,7 @@ describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
         for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
             const { root } = paint(
                 broadcastView({
-                    theme: decodeTheme(id),
+                    recordTheme: decodeTheme(id),
                     broadcastState: 'live',
                     fetch: { kind: 'offers', offers: [longOffer()] },
                 }),
@@ -7250,7 +7250,7 @@ describe('a-long-figure-on-the-overlay-steps-down-before-it-spills', () => {
 
         const noFromLong = paint(
             broadcastView({
-                theme: decodeTheme(RURAL_THEME_ID),
+                recordTheme: decodeTheme(RURAL_THEME_ID),
                 broadcastState: 'live',
                 fetch: { kind: 'offers', offers: [longOffer({ askedAtoms: OFFER.atoms })] },
             }),
@@ -7316,30 +7316,30 @@ describe('a-look-is-painted-from-its-row', () => {
     const UNKNOWN = decodeTheme(0xfe);
     const quoteCards = { ...BROADCAST, cards: 'quotes', side: 'right', edge: 'bottom' } as const;
     const studioLook = (theme: DecodedTheme): string | null | undefined =>
-        paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio', theme }))
+        paint(idlePubkey({ fetch: { kind: 'empty' }, panel: 'studio', recordTheme: theme }))
             .root.querySelector('[data-role="studio-look-row"]')
             ?.children[1]?.textContent;
     const summary = (theme: DecodedTheme): string | null | undefined =>
         paint(
-            quoteView({ theme, panel: 'studio', overlay: { kind: 'publish-name' } }),
+            quoteView({ recordTheme: theme, panel: 'studio', overlay: { kind: 'publish-name' } }),
         ).root.querySelector('[data-role="publish-summary"]')?.textContent;
 
     it('paints its own class, its own ladders and its own name', () => {
-        const shop = paint(offersView([OFFER], undefined, { theme: ROW })).root;
+        const shop = paint(offersView([OFFER], undefined, { recordTheme: ROW })).root;
         const stall = shop.querySelector('.stall')!;
         expect(stall.classList.contains('t-x')).toBe(true);
         expect([...stall.classList].filter((c) => c.startsWith('t-'))).toEqual(['t-x']);
         // `from 1,200` is seven characters: past this row's last ceiling.
         expect(shop.querySelector('.item-head')?.getAttribute('data-price-tier')).toBe('3');
-        const quote = paint(payView({ theme: ROW })).root;
+        const quote = paint(payView({ recordTheme: ROW })).root;
         expect(
             quote.querySelector('[data-role="pay-row"] .item-head')?.getAttribute('data-price-tier'),
         ).toBe('3');
-        const card = paint(broadcastView({ theme: ROW })).root;
+        const card = paint(broadcastView({ recordTheme: ROW })).root;
         expect(card.querySelector('.stall')?.classList.contains('t-x')).toBe(true);
         expect(card.querySelector('.bc-p')?.getAttribute('data-tier')).toBe('3');
         const quoteCard = paint(
-            quoteView({ theme: ROW, broadcast: quoteCards, broadcastState: 'live' }),
+            quoteView({ recordTheme: ROW, broadcast: quoteCards, broadcastState: 'live' }),
         ).root;
         expect(quoteCard.querySelector('.bc-q-item .bc-p')?.getAttribute('data-tier')).toBe('3');
         expect(studioLook(ROW)).toBe('Test look');
@@ -7347,21 +7347,21 @@ describe('a-look-is-painted-from-its-row', () => {
     });
 
     it('an id with no row still paints Modern, and names its number', () => {
-        const shop = paint(offersView([OFFER], undefined, { theme: UNKNOWN })).root;
+        const shop = paint(offersView([OFFER], undefined, { recordTheme: UNKNOWN })).root;
         expect([...shop.querySelector('.stall')!.classList].filter((c) => c.startsWith('t-'))).toEqual([
             't-modern',
         ]);
         expect(shop.querySelector('.item-head')?.hasAttribute('data-price-tier')).toBe(false);
         expect(
-            paint(payView({ theme: UNKNOWN }))
+            paint(payView({ recordTheme: UNKNOWN }))
                 .root.querySelector('[data-role="pay-row"] .item-head')
                 ?.getAttribute('data-price-tier'),
         ).toBe('1');
         expect(
-            paint(broadcastView({ theme: UNKNOWN })).root.querySelector('.bc-p')?.getAttribute('data-tier'),
+            paint(broadcastView({ recordTheme: UNKNOWN })).root.querySelector('.bc-p')?.getAttribute('data-tier'),
         ).toBe('1');
         expect(
-            paint(quoteView({ theme: UNKNOWN, broadcast: quoteCards, broadcastState: 'live' }))
+            paint(quoteView({ recordTheme: UNKNOWN, broadcast: quoteCards, broadcastState: 'live' }))
                 .root.querySelector('.bc-q-item .bc-p')
                 ?.hasAttribute('data-tier'),
         ).toBe(false);
@@ -8598,8 +8598,8 @@ describe('the-summary-says-what-the-record-carries', () => {
                 tagline: 'Fresh from the river bend',
                 announcement: 'Back on the 10th',
                 fiatHint: 'vnd',
-                theme: decodeTheme(RURAL_THEME_ID),
-                attachmentFlags: 0b1,
+                recordTheme: decodeTheme(RURAL_THEME_ID),
+                recordFlags: 0b1,
             }),
         );
         const hex = encodeManifestHex('Riverside Goods', RURAL_THEME_ID, 0b1, {

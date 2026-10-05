@@ -100,6 +100,11 @@ import {
     stopOnSignals,
     waitUntil,
 } from './process-groups.mjs';
+import { refuseSelection } from './looks-selection.mjs';
+
+// A harness command measures the public build until 8e2 teaches it a private
+// look (the 8b2 critic's item 2): nothing is built under a selection.
+refuseSelection('looks:diff');
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 process.chdir(ROOT);

@@ -553,7 +553,7 @@ function sheetClassesOn(root: ParentNode): string[] {
 /** Paint one combination. A look is an object from `looks.ts`, never an id. */
 function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
-    const view = { ...SCREENS[screen]!, theme: look.theme, worn };
+    const view = { ...SCREENS[screen]!, recordTheme: look.theme, worn };
     renderStall(root, view, handlers);
     for (const cls of sheetClassesOn(root)) {
         sheetClassesPainted.add(cls);
@@ -5238,7 +5238,7 @@ window.__cspRefusals = () => cspRefusals();
  */
 window.__wornSheetJob = async (missing: string) => {
     const root = document.getElementById('app')!;
-    renderStall(root, { ...SCREENS[NEUTRAL_SCREEN]!, theme: FIXTURE_LOOK.theme, worn: [] }, handlers);
+    renderStall(root, { ...SCREENS[NEUTRAL_SCREEN]!, recordTheme: FIXTURE_LOOK.theme, worn: [] }, handlers);
     const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
     const named = (): string =>
         stall === null ? '(no stall)' : getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();

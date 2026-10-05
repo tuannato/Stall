@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { SELECTION_ENV } from './looks-selection.mjs';
 import { kitBaseline, kitBuildProblems, requireCleanKitBuild } from './workshop-build-check.mjs';
 
 /**
@@ -25,6 +26,12 @@ import { kitBaseline, kitBuildProblems, requireCleanKitBuild } from './workshop-
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONFIG = join(ROOT, 'vite.workshop.config.ts');
+
+// The kit's builds are the public app's beside the kit: a private-look
+// selection in the shell running the suite is not this test's subject.
+for (const name of Object.values(SELECTION_ENV)) {
+    delete process.env[name];
+}
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="4" height="4"/></svg>\n';
 const REDUCE = '@media (prefers-reduced-motion: reduce) {}\n';
 

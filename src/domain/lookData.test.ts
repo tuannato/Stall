@@ -37,9 +37,13 @@ describe('a-look-is-read-under-the-place-it-is-given', () => {
         expect(look.theme.known).toBe(true);
         expect(look.theme.sheetClass).toBe('t-fixture-private');
         expect(look.theme.label).toBe('Fixture private look');
-        // Nothing restated: every other field is the base row's (Modern).
-        const { id: _i, known: _k, sheetClass: _c, label: _l, ...rest } = look.theme;
-        const { id: _i2, known: _k2, sheetClass: _c2, label: _l2, ...modern } = DEFAULT_THEME;
+        // Its own ground, so a paint that used it under the gate shows
+        // (`a-locked-look-paints-the-default-and-says-this-page-does-not-show-it`);
+        // nothing else restated: every other field is the base row's (Modern).
+        expect(look.theme.bg).toEqual({ r: 236, g: 230, b: 218 });
+        expect(look.theme.bg).not.toEqual(DEFAULT_THEME.bg);
+        const { id: _i, known: _k, sheetClass: _c, label: _l, bg: _b, ...rest } = look.theme;
+        const { id: _i2, known: _k2, sheetClass: _c2, label: _l2, bg: _b2, ...modern } = DEFAULT_THEME;
         expect(rest).toEqual(modern);
         // Its rows carry the id, and a minted row its token; an unminted one none.
         expect(look.rows.map((row) => [row.bit, row.themeId, row.tokenId])).toEqual([
@@ -131,5 +135,40 @@ describe('a-private-look-row-names-its-token-or-none', () => {
         expect(lookDataProblems(JSON.stringify(lookWith([row(0, { tokenId: 'ab'.repeat(32) })])), kitLike)).toEqual([
             'decorations[0].tokenId: unknown field — a kit row is never minted (allowed: bit, slot, label, place, cls, paint, palette, motion)',
         ]);
+    });
+});
+
+/**
+ * A private look's row classes are its own (the 8b2 critic's item 4):
+ * `stall.css` paints `.stall.att-rainfall`, `.att-hum` and `.att-horizon` for
+ * any look, so a private decoration named after a shipped row would wear its
+ * paint, and the probe's class-keyed tables would read it as the shipped
+ * row. Refused under a private (mintable) place, the child-class rule
+ * included; the kit's place keeps taking a shipped class, because a starter
+ * copies a shipped look's rows on purpose. Red by the critic's plant D.
+ */
+describe('a-private-row-class-is-its-looks-own', () => {
+    const lookWith = (decorations: readonly object[], moods: readonly object[] = []) =>
+        JSON.stringify({
+            label: 'Classes',
+            base: 'modern',
+            tierCeilings: [7, 9, 12],
+            overlayTierCeilings: [5, 7, 9],
+            moods,
+            decorations,
+        });
+    const row = (cls: string, bit = 0) => ({ bit, slot: 'trim', label: `Row ${bit}`, place: 'behind', cls, paint: 'root', motion: false });
+
+    it('refuses a decoration named after a shipped row, or after its child', () => {
+        for (const cls of ['att-rainfall', 'att-hum', 'att-horizon-moon', 'att-beetle']) {
+            const problems = lookDataProblems(lookWith([row(cls)]), FIXTURE_PLACE);
+            expect(problems.some((p) => p.startsWith(`class ${cls}: `) && p.endsWith("a private look's row classes are its own")), cls).toBe(true);
+        }
+        expect(lookDataProblems(lookWith([row('att-fixture-own')]), FIXTURE_PLACE)).toEqual([]);
+    });
+
+    it('lets the kit take a shipped class, as a starter copies one', () => {
+        const { mintable: _m, ...kitLike } = FIXTURE_PLACE;
+        expect(lookDataProblems(lookWith([row('att-rainfall')]), kitLike)).toEqual([]);
     });
 });

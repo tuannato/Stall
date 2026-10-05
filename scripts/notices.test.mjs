@@ -4,6 +4,14 @@ import { dirname, join } from 'node:path';
 import { before, describe, it } from 'node:test';
 import { FONTS, NOTICES_PATH, ROOT, bundleInventory, composeNotices } from './notices.mjs';
 import { LICENCE_ALLOW as NOTICES_ALLOW } from './notices-lib.mjs';
+import { SELECTION_ENV } from './looks-selection.mjs';
+
+// The notices are the public build's, which `bundleInventory` refuses to
+// build under a private-look selection: the suite measures the public build
+// whatever the shell running it names.
+for (const name of Object.values(SELECTION_ENV)) {
+    delete process.env[name];
+}
 
 /**
  * `public/licenses.txt` against what the bundle actually ships.

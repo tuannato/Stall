@@ -388,6 +388,13 @@ function wornOutsideTheGate(files: ReadonlyMap<string, string>): string[] {
                 out.push(`${rel}: ${call} — only the look table and the try-on in render.ts call wornForLook`);
             } else if (args !== 2) {
                 out.push(`${rel}: ${call} — a try-on passes a look and its flags, never a holdings set; a record's worn set is the gate's`);
+            } else if (/\bview\.|\brecord/.test(call)) {
+                out.push(`${rel}: ${call} — a try-on's look and flags are the try-on's, never the view's record`);
+            }
+        }
+        for (const { call } of callsOf(text, 'attachmentsForLook')) {
+            if (/\bview\.|\brecord/.test(call)) {
+                out.push(`${rel}: ${call} — the record's rows are the gate's to read`);
             }
         }
     }
@@ -429,6 +436,117 @@ describe('no-app-site-wears-a-look-around-the-gate', () => {
         expect(planted('app.ts', '            view.worn = wornForLook(manifest.theme.id, flags, held);')).toHaveLength(2);
         expect(planted('app.ts', '                worn: wornFrom(rows, flags, held),')).toHaveLength(1);
         expect(planted('app.ts', '            view.worn = paintableLook(manifest.theme, flags, held).worn;')).toEqual([]);
+        // The critic's plant B: two arguments, both the record's.
+        expect(planted('ui/render.ts', 'const w = wornForLook((view.recordTheme ?? DEFAULT_THEME).id, view.recordFlags ?? 0);')).toHaveLength(1);
+        expect(planted('ui/render.ts', 'const rows = attachmentsForLook(view.recordTheme!.id);')).toHaveLength(1);
+        expect(planted('ui/render.ts', 'const rows = attachmentsForLook(themeId);')).toEqual([]);
+    });
+});
+
+/**
+ * Where the record's own look and flags may be read, by file and by the
+ * function a read sits in — each with the reason it paints nothing around
+ * the gate. `render.ts`'s are top-level functions; `app.ts`'s are the three
+ * writers inside `boot` and `loadCurrent`.
+ */
+const MAY_READ_THE_RECORD: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
+    [
+        'ui/render.ts',
+        new Map([
+            ['recordLook', 'the gate itself: what the record paints and wears, and why'],
+            ['recordAsPainted', "the try-on's comparison: the gate's look and flags, never the record's under a lock"],
+            ['recordLookLabel', "the Studio's read-back of the record, as words"],
+            ['lookLabelOf', 'the "Publishes:" line\'s label, as words'],
+            ['recordFingerprint', "the name sheet's draft key, as a string"],
+        ]),
+    ],
+    [
+        'app.ts',
+        new Map([
+            ['applyManifest', 'writes the record, and its worn set through the gate'],
+            ['refreshHoldings', 'compares the record to the one it asked about, and wears through the gate'],
+            ['loadCurrent', 'writes the record, and its worn set through the gate'],
+        ]),
+    ],
+]);
+
+/** The declaration lines of `text`: top-level ones (column 0), or every named function and arrow at any depth. */
+function declarationsOf(text: string, depth: 'top' | 'any'): { line: number; name: string }[] {
+    const TOP = /^(?:export\s+)?(?:async\s+)?function\s+(\w+)|^(?:export\s+)?(?:const|let)\s+(\w+)\b/;
+    const ANY = /^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*[(<]|^\s*const\s+(\w+)\s*=\s*(?:async\s*)?\(/;
+    return text.split('\n').flatMap((line, i) => {
+        const m = (depth === 'top' ? TOP : ANY).exec(line);
+        return m === null ? [] : [{ line: i, name: (m[1] ?? m[2])! }];
+    });
+}
+
+/** Every read or write of the record's look or flags in `files` outside the functions listed for it, as sentences. */
+function recordReadsAroundTheGate(files: ReadonlyMap<string, string>): string[] {
+    const out: string[] = [];
+    for (const [rel, text] of files) {
+        if (rel === 'domain/state.ts') {
+            continue;
+        }
+        const allowed = MAY_READ_THE_RECORD.get(rel) ?? new Map<string, string>();
+        const declarations = declarationsOf(text, rel === 'app.ts' ? 'any' : 'top');
+        text.split('\n').forEach((line, i) => {
+            if (!/\brecord(?:Theme|Flags)\b/.test(line)) {
+                return;
+            }
+            const within = declarations.filter((d) => d.line <= i).at(-1)?.name ?? '(top level)';
+            if (!allowed.has(within)) {
+                out.push(`${rel}: ${line.trim()} — in ${within}, which may not read the record's look or flags (paint what paintableLook answers)`);
+            }
+        });
+    }
+    return out;
+}
+
+/**
+ * The paid gate cannot be read around (the 8b2 critic's item 1): the record's
+ * look and flags are `recordTheme` and `recordFlags` on the view — named so
+ * every read says what it is — and a read of either is allowed only in the
+ * functions listed with their reasons: the gate (`recordLook`), the try-on's
+ * comparison, two read-backs as words, the draft key, and in `app.ts` the
+ * three writers. Every paint reads `paintedTheme`, so a branch that painted
+ * the record's look directly — the wall or the overlay painting
+ * `view.recordTheme ?? theme` (the critic's plant A), a worn set built from
+ * the record's flags (plant B), or the name sheet seeding its chips from
+ * them under a lock (plant C) — is refused here, beside the behaviour each
+ * breaks (`a-locked-look-paints-the-default-and-says-this-page-does-not-show-it`,
+ * `a-locked-record-lends-no-bit-to-the-default-it-paints`).
+ */
+describe('no-site-paints-the-record-look-around-the-gate', () => {
+    it('finds the record read only where the list says, and every listed function is there', () => {
+        const files = appFiles();
+        expect(recordReadsAroundTheGate(files)).toEqual([]);
+        for (const [rel, names] of MAY_READ_THE_RECORD) {
+            const declared = declarationsOf(files.get(rel)!, rel === 'app.ts' ? 'any' : 'top').map((d) => d.name);
+            for (const name of names.keys()) {
+                expect(declared, `${rel} declares ${name}`).toContain(name);
+            }
+        }
+    });
+
+    it('refuses the critic’s three plants and a read in any other file', () => {
+        const render = (body: string) =>
+            new Map([['ui/render.ts', `export function renderStall(root, view) {\n${body}\n}\n`]]);
+        // Plant A: the wall or the overlay painting the record's look.
+        expect(recordReadsAroundTheGate(render('    applyTheme(stall, view.recordTheme ?? theme, worn);'))).toHaveLength(1);
+        // Plant B: a worn set from the record's flags.
+        expect(
+            recordReadsAroundTheGate(render('    const w = wornForLook((view.recordTheme ?? DEFAULT_THEME).id, view.recordFlags ?? 0);')),
+        ).toHaveLength(1);
+        // Plant C: the name sheet's chips seeded from the record.
+        expect(
+            recordReadsAroundTheGate(new Map([['ui/render.ts', 'function nameSheet(view) {\n    let flags = view.recordFlags ?? 0;\n}\n']])),
+        ).toHaveLength(1);
+        expect(recordReadsAroundTheGate(new Map([['ui/window.ts', 'const t = view.recordTheme;']]))).toHaveLength(1);
+        expect(recordReadsAroundTheGate(new Map([['app.ts', '    const paint = () => {\n        applyTheme(state.view.recordTheme);\n    };']]))).toHaveLength(1);
+        // The gate itself may.
+        expect(
+            recordReadsAroundTheGate(new Map([['ui/render.ts', 'function recordLook(view) {\n    return paintableLook(view.recordTheme);\n}\n']])),
+        ).toEqual([]);
     });
 });
 

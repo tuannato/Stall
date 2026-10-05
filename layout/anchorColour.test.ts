@@ -67,7 +67,7 @@ describe('every-anchor-the-app-builds-sets-its-own-colour', () => {
         let anchors = 0;
         for (const [name, screen] of Object.entries(SCREENS)) {
             for (const look of shippedLooks()) {
-                renderStall(root, { ...screen, theme: look.theme, worn: [] }, handlers);
+                renderStall(root, { ...screen, recordTheme: look.theme, worn: [] }, handlers);
                 for (const a of root.querySelectorAll('a')) {
                     anchors += 1;
                     if (colouredBy(a, selectors) === undefined) {

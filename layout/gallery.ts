@@ -86,7 +86,7 @@ let flags = numberParam(params.get('flags')) ?? 0;
 
 function paint(): string {
     const worn = wornOf(look, flags);
-    const view = { ...SCREENS[screen]!, theme: look.theme, worn };
+    const view = { ...SCREENS[screen]!, recordTheme: look.theme, worn };
     renderStall(app, view, handlers);
     return `${screen} · theme ${look.id} · flags ${flags} · worn [${worn
         .map((w) => w.label)

@@ -57,7 +57,9 @@
  * or a class another source also names (every source sharing it is dropped —
  * an ambiguity has no winner), or a row's token that a shipped row or
  * another private look's row also names
- * (`a-private-source-that-shadows-a-shipped-id-or-class-is-dropped`). The
+ * (`a-private-source-that-shadows-a-shipped-id-or-class-is-dropped`), or a
+ * row class a shipped row or another private look's row owns
+ * (`a-private-row-class-is-its-looks-own`). The
  * harness's classes (the kit's, the skeleton's, the step-6 fixture look's)
  * are refused by the build (`privateIndexProblems`) and not spelt here: the
  * served bundle must not carry them, which is how `gallery-is-not-served`
@@ -75,8 +77,12 @@
  * one and nothing paid is ever licensed; step 9 fills it. Every site that
  * puts a record's look on screen goes through the gate — `view.worn` in
  * `app.ts`, `paintedTheme`, the sign's note and the Wearing row in
- * `render.ts` — and `wornForLook` itself is refused anywhere but here and
- * the try-on road, which shows a look without claiming it
+ * `render.ts` — and the record's look and flags (`recordTheme`,
+ * `recordFlags` on the view, named so every read says what it is) are read
+ * only in the functions a list names with their reasons, never by a paint
+ * (`no-site-paints-the-record-look-around-the-gate`, the 8b2 critic's item
+ * 1); `wornForLook` itself is refused anywhere but here and the try-on road,
+ * which shows a look without claiming it and is handed no record
  * (`no-app-site-wears-a-look-around-the-gate`). Only a look this build
  * carries is gated: a public build reads a paid id as unknown, exactly as
  * before (`THEME_UNKNOWN`), and `THEME_NOT_UNLOCKED` paints only where the
@@ -87,6 +93,7 @@
 import { carriesPrivateLooks, privateLooks } from 'virtual:stall-private-looks';
 import { SHIPPED_ATTACHMENTS, wornFrom, type ShippedAttachment } from './attachments';
 import { lookFromData, type LookData, type PrivateLookSource } from './lookData';
+import { sameOwner } from './moodClass';
 import {
     DEFAULT_THEME,
     PAID_LOOK_IDS,
@@ -146,10 +153,21 @@ function admitted(sources: readonly PrivateLookSource[]): readonly LookData[] {
         read.flatMap((look) => look.rows.flatMap((row) => (row.tokenId === undefined ? [] : [row.tokenId]))),
         (token) => token,
     );
-    return read.filter((look) =>
+    const tokenOwn = read.filter((look) =>
         look.rows.every(
             (row) => row.tokenId === undefined || (!shippedTokens.has(row.tokenId) && tokens.get(row.tokenId) === 1),
         ),
+    );
+    // A row class two looks share (or one is the other's child) is no
+    // look's own: both go (`a-private-row-class-is-its-looks-own`; a shipped
+    // row's class is `lookFromData`'s to refuse, under the mintable place).
+    const classesOf = (look: LookData): string[] => look.rows.flatMap((row) => (row.cls === undefined ? [] : [row.cls]));
+    return tokenOwn.filter(
+        (look) =>
+            !tokenOwn.some(
+                (other) =>
+                    other !== look && classesOf(look).some((a) => classesOf(other).some((b) => sameOwner(a, b))),
+            ),
     );
 }
 

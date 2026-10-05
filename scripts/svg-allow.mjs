@@ -22,18 +22,26 @@
  * not whitespace (no element on the list holds text), a namespaced element,
  * a duplicate attribute or id, more than one root, a root that is not `svg`.
  *
- * The elements are §13.4's list — the elements the first private look's
- * art and the shipped decorations use — plus `svg`, `clipPath` and
- * `radialGradient`, which that art uses and the list omitted. Refused by not being listed: `script`, `style`,
- * `foreignObject`, `image`, `feImage`, `a`, `text`, `tspan`, `textPath`,
- * every SMIL element (`animate`, `set`, `animateTransform`, `animateMotion`)
- * and anything else. The attributes are geometry, paint and filter
- * attributes; refused by not being listed: every `on*`, `xml:base`,
- * `xlink:href`, `class`. A reference is local or nothing: `href` is `#id`,
- * and every `url(` in a value is `url(#id)`; no other value may hold a `:`
- * (so no scheme reaches a value — `javascript:`, `data:`, `https:`), except
- * the root's `xmlns`, which is exactly the SVG namespace, and `style`, which
- * takes `property:value` pairs from a three-property list and nothing else.
+ * The elements are the ones the first private look's art and the shipped
+ * decorations actually use (an element census of both sets): `svg`, `g`,
+ * `defs`, the four shapes, `mask`, `clipPath`, the two gradients and `stop`,
+ * `filter` and four filter primitives. **Not §13.4's list**: it named `use`,
+ * `feTurbulence` and `feDisplacementMap` as used, and neither set holds one
+ * (the 8b2 critic's item 3) — and `use` with a local reference is an
+ * exponential expansion: ten `<use>` of the group before, six groups deep,
+ * is 1,247 bytes and a million instances, which stopped headless Chrome
+ * painting it at all. A smaller list is the stronger one; nothing here names
+ * another element, so no `href` is read either. Refused by not being listed:
+ * `use`, `script`, `style`, `foreignObject`, `image`, `feImage`, `a`, `text`,
+ * `tspan`, `textPath`, every SMIL element (`animate`, `set`,
+ * `animateTransform`, `animateMotion`) and anything else. The attributes are
+ * geometry, paint and filter attributes; refused by not being listed: every
+ * `on*`, `href`, `xlink:href`, `xml:base`, `class`. A reference is local or
+ * nothing: every `url(` in a value is `url(#id)`; no other value may hold a
+ * `:` (so no scheme reaches a value — `javascript:`, `data:`, `https:`),
+ * except the root's `xmlns`, which is exactly the SVG namespace, and
+ * `style`, which takes `property:value` pairs from a three-property list and
+ * nothing else.
  * Budgets per file: `MAX_SVG_ELEMENTS` elements, `MAX_SVG_FILTERS` filters,
  * `MAX_SVG_DEPTH` levels, each well above what the art it was set against
  * holds.
@@ -53,7 +61,6 @@ export const SVG_ELEMENTS = Object.freeze([
     'rect',
     'circle',
     'ellipse',
-    'use',
     'mask',
     'clipPath',
     'linearGradient',
@@ -62,10 +69,8 @@ export const SVG_ELEMENTS = Object.freeze([
     'filter',
     'feGaussianBlur',
     'feColorMatrix',
-    'feTurbulence',
     'feMorphology',
     'feComposite',
-    'feDisplacementMap',
 ]);
 
 /** The attributes those elements may carry: geometry, paint, filter and structure, nothing that loads or runs. */
@@ -80,7 +85,6 @@ export const SVG_ATTRIBUTES = Object.freeze([
     'x',
     'y',
     'transform',
-    'href',
     // geometry
     'd',
     'cx',
@@ -139,13 +143,6 @@ export const SVG_ATTRIBUTES = Object.freeze([
     'k2',
     'k3',
     'k4',
-    'baseFrequency',
-    'numOctaves',
-    'seed',
-    'stitchTiles',
-    'scale',
-    'xChannelSelector',
-    'yChannelSelector',
     'edgeMode',
 ]);
 
@@ -241,11 +238,6 @@ function attributeValue(element, name, value, root) {
     }
     if (name === 'style') {
         return styleValue(value);
-    }
-    if (name === 'href') {
-        return /^#[A-Za-z_][A-Za-z0-9_.-]*$/.test(value)
-            ? { value }
-            : { why: `href is a reference inside the file (#id), not ${shown(value)}` };
     }
     if (name === 'id') {
         return ID.test(value) ? { value } : { why: `id ${shown(value)} is not a plain name` };
