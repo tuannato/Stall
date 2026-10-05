@@ -1,7 +1,16 @@
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import { ICON_HOST } from './src/domain/icons';
+import { lookDataProblems } from './src/domain/lookData';
+import {
+    PAID_LOOK_IDS,
+    PRIVATE_LOOK_IDS,
+    RELEASED_LOOK_IDS,
+    SHIPPED_THEMES,
+    decodeTheme,
+} from './src/domain/theme';
 import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST, SECOND_FEED } from './src/net/hosts';
+import { privateLooksPlugin } from './scripts/private-looks-build.mjs';
 
 /**
  * Key derivation must not reach the bundle.
@@ -284,13 +293,35 @@ export const CSP = [
 const DEV_CSP = CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline'")
     .replace("worker-src 'none'", "worker-src 'self' blob:");
 
+/**
+ * The private-look join (step 8b2, `scripts/private-looks-build.mjs`): the
+ * plugin that answers `virtual:stall-private-looks`. A build carries a
+ * private look only when `STALL_LOOKS_TARGET` and `STALL_LOOKS_DIR` name
+ * one — never because a directory is on the disk — and with neither it is
+ * the public build, byte for byte. The public lists it decides by are the
+ * theme table's literals, and every included look's `look.json` is read by
+ * the app's own validator, imported here because this file is TypeScript the
+ * config bundler compiles and the plugin is plain Node.
+ */
+function privateLooks(): Plugin {
+    return privateLooksPlugin({
+        facts: {
+            reserved: PRIVATE_LOOK_IDS,
+            paid: PAID_LOOK_IDS,
+            released: RELEASED_LOOK_IDS,
+            shippedClasses: SHIPPED_THEMES.map(({ id }) => decodeTheme(id).sheetClass),
+        },
+        validateLook: (text, place) => lookDataProblems(text, { ...place, sheetClass: place.sheetClass as `t-${string}` }),
+    });
+}
+
 // Deployed copies already send no-referrer: a stall path is the seller's
 // key or address. Preview is the production rehearsal and must match.
 const REFERRER_POLICY = 'no-referrer';
 
 export default defineConfig({
     appType: 'spa',
-    plugins: [noKeyDerivation(), chronikRequestTimeout()],
+    plugins: [noKeyDerivation(), chronikRequestTimeout(), privateLooks()],
     build: {
         // The polyfill is emitted as an inline <script>, which this policy has
         // no 'unsafe-inline' and no hash for. Disabling it keeps the built

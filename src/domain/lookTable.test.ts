@@ -22,6 +22,7 @@ import {
     decodeLook,
     lookAttachmentByTokenId,
     mintedLookTokens,
+    paintableLook,
     publishableLookFlags,
     wornForLook,
 } from './lookTable';
@@ -315,15 +316,18 @@ describe('the-app-takes-from-the-public-table-only-what-reads-no-catalogue', () 
  * Where the decodes are: every site that used to read the public table
  * reads its merged view. Paired with the allow-list above, which keeps the
  * public names out of every app file; this one says the walk saw the sites
- * the merge is for. 8b2's paid gate routes the `view.worn` sites through one
- * function (the step-8 critic's item 3), and this list moves with them.
+ * the merge is for. Since 8b2 the record's worn set reaches the view through
+ * the paid gate (`paintableLook`, the step-8 critic's item 3), so the sites
+ * that once read `wornForLook` in `app.ts` read the gate, and
+ * `no-app-site-wears-a-look-around-the-gate` below holds the rest.
  */
 describe('no-app-site-decodes-against-the-shipped-table-alone', () => {
     it('walked the sites that decode, and they read the merged view', () => {
         const files = appFiles();
         const sites: ReadonlyArray<readonly [string, RegExp]> = [
-            ['app.ts', /\bwornForLook\(/],
+            ['app.ts', /\bpaintableLook\(/],
             ['app.ts', /\bmintedLookTokens\(/],
+            ['ui/render.ts', /\bpaintableLook\(/],
             ['ui/render.ts', /\bdecodeLook\(/],
             ['ui/render.ts', /\bLOOK_ROWS\b/],
             ['ui/render.ts', /\bLOOK_ATTACHMENTS\b/],
@@ -342,6 +346,92 @@ describe('no-app-site-decodes-against-the-shipped-table-alone', () => {
     });
 });
 
+/**
+ * The text of each call to `name` in `text`, from its name to its closing
+ * parenthesis, and how many arguments it passes (top-level commas plus one).
+ */
+function callsOf(text: string, name: string): { call: string; args: number }[] {
+    const out: { call: string; args: number }[] = [];
+    for (const m of text.matchAll(new RegExp(`\\b${name}\\(`, 'g'))) {
+        let depth = 0;
+        let commas = 0;
+        let empty = true;
+        for (let i = m.index + name.length; i < text.length; i += 1) {
+            const c = text[i]!;
+            if (c === '(' || c === '[' || c === '{') {
+                depth += 1;
+            } else if (c === ')' || c === ']' || c === '}') {
+                depth -= 1;
+                if (depth === 0) {
+                    out.push({ call: text.slice(m.index, i + 1), args: empty ? 0 : commas + 1 });
+                    break;
+                }
+            } else if (c === ',' && depth === 1) {
+                commas += 1;
+            } else if (depth === 1 && !/\s/.test(c)) {
+                empty = false;
+            }
+        }
+    }
+    return out;
+}
+
+/** Every call to `wornForLook` an app file makes that is not a try-on, as sentences. */
+function wornOutsideTheGate(files: ReadonlyMap<string, string>): string[] {
+    const out: string[] = [];
+    for (const [rel, text] of files) {
+        if (rel === 'domain/lookTable.ts') {
+            continue;
+        }
+        for (const { call, args } of callsOf(text, 'wornForLook')) {
+            if (rel !== 'ui/render.ts') {
+                out.push(`${rel}: ${call} — only the look table and the try-on in render.ts call wornForLook`);
+            } else if (args !== 2) {
+                out.push(`${rel}: ${call} — a try-on passes a look and its flags, never a holdings set; a record's worn set is the gate's`);
+            }
+        }
+    }
+    const app = files.get('app.ts') ?? '';
+    for (const m of app.matchAll(/(?:\bview\.worn\s*=|^\s*worn\s*:)([^\n]*)/gm)) {
+        if (!/\bpaintableLook\(/.test(m[1]!)) {
+            out.push(`app.ts: ${m[0].trim()} — the view's worn set is the gate's (paintableLook)`);
+        }
+    }
+    return out;
+}
+
+/**
+ * The paid gate cannot be walked around (the 8b1 critic's item 6; the
+ * step-8 critic's item 3): once `paintableLook` decides what a record wears,
+ * an exported `wornForLook` handed a holdings set is a road around it — a
+ * paid look's own rows, mood included, on a stall that holds no licence. So
+ * no app file but the look table calls it, except the try-on in `render.ts`,
+ * which shows a look without claiming it and so passes a look and its flags
+ * and never a holdings set; and every write of the view's worn set in
+ * `app.ts` reads the gate. Proved red by restoring 8b1's
+ * `view.worn = wornForLook(manifest.theme.id, flags, held)` in `app.ts`.
+ */
+describe('no-app-site-wears-a-look-around-the-gate', () => {
+    it('finds the try-on calls and the gate, and nothing else', () => {
+        const files = appFiles();
+        expect(wornOutsideTheGate(files)).toEqual([]);
+        // The walk saw what it is about: the try-on calls and the app's three writes.
+        expect(callsOf(files.get('ui/render.ts')!, 'wornForLook').length).toBeGreaterThanOrEqual(5);
+        expect([...files.get('app.ts')!.matchAll(/\bpaintableLook\(/g)].length).toBe(3);
+    });
+
+    it('refuses a holdings set outside the gate, a call outside render.ts, and an app write around it', () => {
+        const planted = (rel: string, text: string) => wornOutsideTheGate(new Map([[rel, text]]));
+        expect(planted('ui/render.ts', 'const w = wornForLook(previewed.themeId, previewed.attachmentFlags);')).toEqual([]);
+        expect(planted('ui/render.ts', 'const w = wornForLook(id, flags, view.heldTokens ?? new Set());')).toHaveLength(1);
+        expect(planted('ui/render.ts', 'const w = wornForLook(f(a, b), g([c, d]));')).toEqual([]);
+        expect(planted('ui/window.ts', 'const w = wornForLook(id, flags);')).toHaveLength(1);
+        expect(planted('app.ts', '            view.worn = wornForLook(manifest.theme.id, flags, held);')).toHaveLength(2);
+        expect(planted('app.ts', '                worn: wornFrom(rows, flags, held),')).toHaveLength(1);
+        expect(planted('app.ts', '            view.worn = paintableLook(manifest.theme, flags, held).worn;')).toEqual([]);
+    });
+});
+
 /** The documented merged views (`lookTable.ts`'s table), and nothing else. */
 const MERGED_VIEWS = [
     'decodeLook',
@@ -354,15 +444,20 @@ const MERGED_VIEWS = [
     'lookAttachmentByTokenId',
 ] as const;
 
+/** The one gate every record's look passes before it paints (8b2). */
+const GATE = 'paintableLook';
+
 /**
- * The look table's runtime exports are exactly its eight merged views (the
- * 8b1 critic's item 2): a ninth is a view no parity test reads, and a
- * missing one is a site with nowhere to go. 8b2 keeps this and enumerates
- * the same list in its fixture test.
+ * The look table's runtime exports are exactly its eight merged views and
+ * the gate (the 8b1 critic's item 2; the gate is 8b2's, the step-8 critic's
+ * item 3): a tenth is a view no parity test reads, and a missing one is a
+ * site with nowhere to go. `every-merged-view-answers-the-fixture-look`
+ * (`lookTable.private.test.ts`) enumerates the same exports and owes each a
+ * case.
  */
 describe('the-look-table-exports-exactly-its-merged-views', () => {
-    it('exports the eight, and no other name', () => {
-        expect(Object.keys(table).sort()).toEqual([...MERGED_VIEWS].sort());
+    it('exports the eight and the gate, and no other name', () => {
+        expect(Object.keys(table).sort()).toEqual([...MERGED_VIEWS, GATE].sort());
     });
 });
 
@@ -429,24 +524,36 @@ describe('every-merged-view-answers-a-public-id-as-the-public-table-does', () =>
 });
 
 /**
- * Step 8b1 is behaviour-neutral: no build includes a private look until the
- * plugin lands (8b2), so the merge of the public table with nothing IS the
- * public table, and each merged view is its public counterpart re-exported
- * under the merged name — the same function, the same array, the reserved
- * ids included. That is what keeps the served bundle the bytes it was. 8b2
- * deletes this by design (its identities must break) and adds the fixture
- * look's own test beside the parity above.
+ * A build that selects no private look — every public build, and every
+ * vitest run, which never selects one — carries none: the merged views ARE
+ * the public table's answers, and a paid id reads as unknown, never as
+ * locked, so `THEME_UNKNOWN` and not `THEME_NOT_UNLOCKED` is what a public
+ * stall says about a `0x04` record (byte-identical behaviour to step 8b1;
+ * `a-build-with-no-released-look-is-the-public-build` holds the bytes). The
+ * fixture's own test (`lookTable.private.test.ts`) is the other half.
  */
-describe('the-merged-views-are-the-public-table-while-no-private-look-is-included', () => {
-    it('re-exports each public name under its merged name', () => {
-        expect(decodeLook).toBe(decodeTheme);
-        expect(LOOK_ROWS).toBe(SHIPPED_THEMES);
-        expect(LOOK_ATTACHMENTS).toBe(SHIPPED_ATTACHMENTS);
-        expect(attachmentsForLook).toBe(attachmentsForTheme);
-        expect(wornForLook).toBe(wornAttachments);
-        expect(publishableLookFlags).toBe(publishableFlags);
-        expect(mintedLookTokens).toBe(mintedAttachmentTokens);
-        expect(lookAttachmentByTokenId).toBe(attachmentByTokenId);
+describe('a-build-with-no-private-look-is-the-public-table', () => {
+    it('lists the shipped looks and rows alone, and reads every reserved id as unknown', () => {
+        expect(LOOK_ROWS).toEqual(SHIPPED_THEMES);
+        sameRows(LOOK_ATTACHMENTS, SHIPPED_ATTACHMENTS, 'LOOK_ATTACHMENTS');
+        for (const id of PRIVATE_LOOK_IDS) {
+            expect(decodeLook(id)).toEqual(decodeTheme(id));
+            expect(decodeLook(id).known).toBe(false);
+            expect(attachmentsForLook(id)).toEqual([]);
+            const painted = paintableLook(decodeLook(id), 0xffff, mintedAttachmentTokens());
+            expect(painted).toEqual({ theme: decodeTheme(id), worn: [], why: 'unknown' });
+        }
+    });
+
+    it('lets a free look through the gate unchanged, holdings checked', () => {
+        for (const { id } of SHIPPED_THEMES) {
+            const minted = mintedAttachmentTokens();
+            const painted = paintableLook(decodeLook(id), 0xffff, minted);
+            expect(painted.why).toBeUndefined();
+            expect(painted.theme).toEqual(decodeTheme(id));
+            sameRows(painted.worn, wornAttachments(id, 0xffff, minted), `gate(${id})`);
+            expect(paintableLook(decodeLook(id), 0xffff, new Set()).worn).toEqual([]);
+        }
     });
 });
 
@@ -500,7 +607,8 @@ describe('the-private-looks-module-is-the-look-tables-alone', () => {
  * declaring `privateLooks` as `readonly string[]`.
  */
 describe('the-private-looks-module-declares-what-the-table-reads', () => {
-    it('exports one list of private look sources', () => {
+    it('exports one list of private look sources, and the switch that says whether it holds any', () => {
         expectTypeOf<typeof PrivateLooksModule.privateLooks>().toEqualTypeOf<readonly PrivateLookSource[]>();
+        expectTypeOf<typeof PrivateLooksModule.carriesPrivateLooks>().toEqualTypeOf<boolean>();
     });
 });

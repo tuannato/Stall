@@ -83,10 +83,12 @@ import {
 import {
     attachmentsForLook,
     decodeLook,
+    paintableLook,
     publishableLookFlags,
     wornForLook,
     LOOK_ATTACHMENTS,
     LOOK_ROWS,
+    type PaintedLook,
 } from '../domain/lookTable';
 import type {
     SelectionAsk,
@@ -500,6 +502,35 @@ function announce(doc: Document, message: string): void {
     region.textContent = region.textContent === message ? `${message} ` : message;
 }
 
+/** No holdings: the gate's `held` where only the look it paints is asked, never what it wears. */
+const NO_HOLDINGS: ReadonlySet<string> = new Set();
+
+/**
+ * The record's look through the gate (`paintableLook`, `lookTable.ts`):
+ * what the published record paints — its own look, or, for a paid look this
+ * stall holds no licence for, the default wearing nothing — and why when it
+ * is not its own. The sign's note, the Wearing row and the frame read this,
+ * never `view.theme` alone; the worn set itself is the app's (`view.worn`,
+ * through the same gate).
+ */
+function recordLook(view: StallView): PaintedLook {
+    return paintableLook(view.theme ?? DEFAULT_THEME, view.attachmentFlags ?? 0, view.heldTokens ?? NO_HOLDINGS);
+}
+
+/**
+ * The look and flags the record paints, as the try-on compares against
+ * them: the record's own, or — under a paid look not unlocked — the
+ * default's with no flag, because that is what is on screen. So a seller
+ * whose record names a locked look can try that look on (it differs from
+ * what paints), and choosing the default back is no try-on at all.
+ */
+function recordAsPainted(view: StallView): { themeId: number; attachmentFlags: number } {
+    const painted = recordLook(view);
+    return painted.why === 'not-unlocked'
+        ? { themeId: painted.theme.id, attachmentFlags: 0 }
+        : { themeId: (view.theme ?? DEFAULT_THEME).id, attachmentFlags: view.attachmentFlags ?? 0 };
+}
+
 /**
  * A look being tried on outranks the record's own on every paint — that is
  * what lets the seller walk to the Shop tab and see the candidate
@@ -507,18 +538,20 @@ function announce(doc: Document, message: string): void {
  * regardless of holding (looking is free); only a published record ever
  * needs the entitlement. One rule, one place: the frame and every card
  * that must know which look is painting it (`priceTier`'s per-look
- * ceilings) read it here.
+ * ceilings) read it here. A preview is a try-on only where it differs from
+ * what the record paints (`recordAsPainted`).
  */
 function activePreview(view: StallView): { themeId: number; attachmentFlags: number } | undefined {
+    const record = recordAsPainted(view);
     return view.previewLook !== undefined &&
-        (view.previewLook.themeId !== (view.theme ?? DEFAULT_THEME).id ||
-            view.previewLook.attachmentFlags !== (view.attachmentFlags ?? 0))
+        (view.previewLook.themeId !== record.themeId ||
+            view.previewLook.attachmentFlags !== record.attachmentFlags)
         ? view.previewLook
         : undefined;
 }
 
 export function paintedThemeId(view: StallView): number {
-    return activePreview(view)?.themeId ?? (view.theme ?? DEFAULT_THEME).id;
+    return activePreview(view)?.themeId ?? paintedTheme(view).id;
 }
 
 /**
@@ -541,7 +574,7 @@ export function paintedThemeId(view: StallView): number {
  */
 export function paintedTheme(view: StallView): DecodedTheme {
     const previewed = activePreview(view);
-    return previewed !== undefined ? decodeLook(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+    return previewed !== undefined ? decodeLook(previewed.themeId) : recordLook(view).theme;
 }
 
 /**
@@ -2398,10 +2431,17 @@ function settingsNotes(body: HTMLElement, view: StallView): void {
         // Without this the shipped default reads as a choice the seller made.
         body.append(el('p', 'fine', copy.SETTINGS_TRUNCATED));
     }
-    if (view.theme !== undefined && !view.theme.known) {
+    const why = view.theme === undefined ? undefined : recordLook(view).why;
+    if (why === 'unknown') {
         // The record was fine. The missing row is ours, and saying so keeps
         // this apart from a record we could not read.
         body.append(el('p', 'fine', copy.THEME_UNKNOWN));
+    } else if (why === 'not-unlocked') {
+        // A paid look this stall holds no licence for: the record read
+        // perfectly and names a look this build carries, so it is neither
+        // of the sentences above — and the default on screen is not the
+        // seller's choice either (the gate, `paintableLook`).
+        body.append(el('p', 'fine', copy.THEME_NOT_UNLOCKED));
     }
 }
 
@@ -7659,10 +7699,11 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * stall, the "Publishes:" line named the look that was not on screen, and
      * the next chip press silently reverted the try-on. `painted` is still
      * what the same-look note compares against, and `reportPreview` still
-     * compares against the RECORD, which is what decides whether a preview
-     * is active at all.
+     * compares against the RECORD — as it paints (`recordAsPainted`), which
+     * under a paid look not unlocked is the default — which is what decides
+     * whether a preview is active at all.
      */
-    const painted = view.previewLook?.themeId ?? view.theme?.id ?? DEFAULT_THEME.id;
+    const painted = view.previewLook?.themeId ?? recordAsPainted(view).themeId;
     let chosenTheme = painted;
     const themeGroup = sheetGroup(copy.PUBLISH_THEME_LABEL);
     themeGroup.setAttribute('data-role', 'theme-picker');
@@ -7785,7 +7826,13 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // The record never names an unminted row's bit — previewing one is
         // free, signing it would pin a row nothing can hold yet (§6).
         const signable = publishableLookFlags(chosenTheme, flags);
-        const hex = encodeManifestHex(input.value, chosenTheme, signable, extras);
+        // Nor a paid look this stall holds no licence for: trying it on is
+        // free, and the sheet composes no record naming it — no bytes, no
+        // link, no code — and says why in the refusal's own slot
+        // (`a-paid-look-composes-no-record-until-it-can-be-bought`). The gate
+        // decides, as it decides what a record paints.
+        const locked = paintableLook(decodeLook(chosenTheme), signable, NO_HOLDINGS).why === 'not-unlocked';
+        const hex = locked ? undefined : encodeManifestHex(input.value, chosenTheme, signable, extras);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
         const ready = cashtab !== undefined && pay !== undefined;
@@ -7797,14 +7844,16 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             ...extras,
             announcement: undefined,
         });
-        err.hidden = ready || input.value === '';
-        err.textContent = ready
-            ? ''
-            : nameAlone === undefined
-              ? copy.PUBLISH_NAME_TOO_LONG
-              : sansAnnouncement !== undefined
-                ? copy.PUBLISH_ANNOUNCEMENT_INVALID
-                : copy.PUBLISH_TAGLINE_INVALID;
+        err.hidden = !locked && (ready || input.value === '');
+        err.textContent = locked
+            ? copy.PUBLISH_LOOK_NOT_UNLOCKED
+            : ready
+              ? ''
+              : nameAlone === undefined
+                ? copy.PUBLISH_NAME_TOO_LONG
+                : sansAnnouncement !== undefined
+                  ? copy.PUBLISH_ANNOUNCEMENT_INVALID
+                  : copy.PUBLISH_TAGLINE_INVALID;
         /*
          * The meter and the "Publishes:" line, over the record the encoder
          * just built: the size is that record's own byte length and every part
@@ -7907,8 +7956,9 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     announceInput.addEventListener('input', typed);
 
     const reportPreview = (themeId: number, chosenFlags: number): void => {
-        const recordTheme = view.theme?.id ?? DEFAULT_THEME.id;
-        const recordFlags = view.attachmentFlags ?? 0;
+        // Against what the record paints (`recordAsPainted`), as the paint
+        // compares: under a locked look that is the default.
+        const { themeId: recordTheme, attachmentFlags: recordFlags } = recordAsPainted(view);
         handlers.onPreviewLook?.(
             themeId === recordTheme && chosenFlags === recordFlags
                 ? undefined
@@ -7949,7 +7999,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
      * they own nothing. What holding decides is what actually paints, and the
      * note under the chips says which of the three states this choice is in.
      */
-    let flags = view.previewLook?.attachmentFlags ?? view.attachmentFlags ?? 0;
+    let flags = view.previewLook?.attachmentFlags ?? recordAsPainted(view).attachmentFlags;
     const decorWrap = el('div', 'decor');
     decorWrap.setAttribute('data-role', 'decor');
 
@@ -9688,7 +9738,12 @@ function wearingRow(view: StallView): HTMLElement {
     row.setAttribute('data-role', 'studio-wearing-row');
     row.append(el('span', undefined, copy.STUDIO_WEARING_ROW));
     const value = el('span', 'kv-chips');
-    if (view.heldTokens === undefined) {
+    if (view.theme !== undefined && recordLook(view).why === 'not-unlocked') {
+        // Nothing is worn because the look is locked, not because the
+        // seller chose nothing: "Nothing worn" here would be our refusal
+        // reported as their choice.
+        value.append(copy.STUDIO_WEARING_NOT_UNLOCKED);
+    } else if (view.heldTokens === undefined) {
         value.append(copy.DECOR_ROW_UNKNOWN);
     } else if ((view.worn ?? []).length === 0) {
         value.append(copy.STUDIO_WEARING_NONE);

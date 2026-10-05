@@ -355,16 +355,19 @@ export const WORKSHOP_THEME_ID = 0xff;
  * behind an opaque pin bump, would ship it to production as a free look, and
  * "a free id can never become paid" (PROPOSAL §13.1) is irreversible.
  * `scripts/private-looks.mjs` holds a private index to these lists and
- * refuses one that disagrees; no build reads a private index yet — the build
- * refuses it from 8b. A release is a reviewable diff of this file.
+ * refuses one that disagrees, and a build that selects a private repository
+ * fails on it (`scripts/private-looks-build.mjs`, from 8b2), carrying to
+ * production only the ids `RELEASED_LOOK_IDS` names and never the index's
+ * own `stage`. The paid gate in the app reads `PAID_LOOK_IDS`
+ * (`paintableLook`, `lookTable.ts`). A release is a reviewable diff of this
+ * file.
  *
  * - **Paid by default**: every reserved id is in `PAID_LOOK_IDS` unless
  *   `FREE_PRIVATE_LOOK_IDS` names it, never both and never neither
  *   (`theme-table-ids-are-pinned`), so an id added to `PRIVATE_LOOK_IDS` and
  *   forgotten anywhere else turns the suite red rather than shipping free. A
  *   free private look is the owner's decision, written here; there is none.
- *   Literals rather than one derived from the other, so the production
- *   bundle, which reads none of them, stays the bytes it was.
+ *   Literals rather than one derived from the other, pinned by value.
  * - `RELEASED_LOOK_IDS` stays empty for the whole of step 8; step 9 adds
  *   `0x04` beside its price row.
  *

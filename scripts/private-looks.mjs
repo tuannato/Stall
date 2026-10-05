@@ -337,10 +337,10 @@ function gitRunner({ dir, git = 'git', env = process.env }) {
     for (const name of GIT_LOCATION_VARS) {
         delete clean[name];
     }
-    const run = (args) =>
+    const run = (args, encoding = 'utf8') =>
         execFileSync(git, ['-C', dir, ...args], {
             env: clean,
-            encoding: 'utf8',
+            encoding,
             maxBuffer: 256 * 1024 * 1024,
             stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -398,6 +398,50 @@ export function gitFilesAt({ dir, commit, prefix, git, env }) {
 export function gitTextAt({ dir, commit, prefix, path, git, env }) {
     const { under } = treeOf(commit, prefix);
     return gitRunner({ dir, git, env })(['cat-file', 'blob', `${commit}:${under}${path}`]);
+}
+
+/**
+ * The bytes of `path` in the tree of `commit` (or its `prefix` subtree), as
+ * git stores them — no eol or attribute filter between the object and the
+ * build (the step-8a critic's item 11(iii)): a face is binary, and a sheet
+ * read through `core.autocrlf` would be a different sheet from the one the
+ * commit names.
+ */
+export function gitBlobAt({ dir, commit, prefix, path, git, env }) {
+    const { under } = treeOf(commit, prefix);
+    return gitRunner({ dir, git, env })(['cat-file', 'blob', `${commit}:${under}${path}`], 'buffer');
+}
+
+/**
+ * The full commit `ref` names in the repository whose root is `dir`
+ * (`HEAD` by default), as 40 lower-case hex — the commit a build reads when
+ * its selection names none. Throws when git cannot run or `dir` is not a
+ * repository's root, never an empty answer.
+ */
+export function gitCommitOf({ dir, ref = 'HEAD', git, env }) {
+    if (typeof ref !== 'string' || !/^[A-Za-z0-9_./-]+$/.test(ref) || ref.startsWith('-')) {
+        throw new TypeError(`a ref is a plain name, not ${JSON.stringify(ref)}`);
+    }
+    const commit = gitRunner({ dir, git, env })(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).trim();
+    requireCommit(commit);
+    return commit;
+}
+
+/**
+ * The repository root git finds from `dir` — `dir` itself for a private
+ * clone, the checkout for a directory inside one (the tracked fixture) —
+ * with the inherited location variables dropped, as every read here does.
+ */
+export function gitTopOf({ dir, git = 'git', env = process.env }) {
+    const clean = { ...env };
+    for (const name of GIT_LOCATION_VARS) {
+        delete clean[name];
+    }
+    return execFileSync(git, ['-C', dir, 'rev-parse', '--show-toplevel'], {
+        env: clean,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
 }
 
 /**

@@ -1,0 +1,209 @@
+// @vitest-environment happy-dom
+import { encodeCashAddress } from 'ecashaddrjs';
+import { fromHex, shaRmd160, toHex } from 'ecash-lib';
+import { describe, expect, it, vi } from 'vitest';
+import type { StallView } from '../domain/state';
+
+/**
+ * The paid gate on screen (step 8b2, the step-8 critic's item 3), over the
+ * tracked private-look fixture: the module a build hands the app when it
+ * selects `layout/fixture-private-looks` at `preview`, mocked because a
+ * vitest run never selects one. The fixture is the real reserved, paid id
+ * `0x04`, with a minted trim, a minted mood and an unminted crest. Step 8
+ * has no licence check, so no stall is ever licensed for it.
+ */
+vi.mock('virtual:stall-private-looks', async () =>
+    (await import('../../layout/fixturePrivateLooks')).fixturePrivateLooksModule(),
+);
+
+const { renderStall } = await import('./render');
+const copy = await import('./copy');
+const { decodeLook, mintedLookTokens, paintableLook } = await import('../domain/lookTable');
+const { DEFAULT_THEME, DEFAULT_THEME_ID, themeVars } = await import('../domain/theme');
+
+const FIXTURE_ID = 0x04;
+/** Nobody holds this key: a byte pattern, not a wallet. */
+const PK = `02${'11'.repeat(32)}`;
+const ADDR = encodeCashAddress('ecash', 'p2pkh', toHex(shaRmd160(fromHex(PK))));
+
+function handlers() {
+    return new Proxy({} as Record<string, ReturnType<typeof vi.fn>>, {
+        get: (target, name: string) => (target[name] ??= vi.fn()),
+    });
+}
+
+function paint(view: StallView) {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const h = handlers();
+    renderStall(root, view, h as never);
+    return { root, h };
+}
+
+/**
+ * A stall whose published record names the fixture look with every flag
+ * set, and whose address holds every token the merged catalogue can be
+ * entitled by — the fixture's own and every shipped one — with `worn` as
+ * the app computes it, through the gate.
+ */
+function locked(over: Partial<StallView> = {}): StallView {
+    const theme = decodeLook(FIXTURE_ID);
+    const held = mintedLookTokens();
+    return {
+        route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+        overlay: { kind: 'idle' },
+        tokens: new Map(),
+        address: ADDR,
+        fetch: { kind: 'empty' },
+        stallName: 'Locked look',
+        theme,
+        attachmentFlags: 0xffff,
+        heldTokens: held,
+        worn: paintableLook(theme, 0xffff, held).worn,
+        ...over,
+    };
+}
+
+const stallOf = (root: HTMLElement) => root.querySelector('.stall') as HTMLElement;
+const notes = (root: HTMLElement) => [...root.querySelectorAll('.stall-body > p.fine')].map((p) => p.textContent);
+
+describe('a-locked-look-paints-the-default-and-says-it-is-not-unlocked', () => {
+    it('paints the default look whole, wears nothing, and says why — never the unknown-look sentence', () => {
+        expect(decodeLook(FIXTURE_ID).known, 'the fixture is in this build').toBe(true);
+        for (const panel of [undefined, 'studio' as const]) {
+            const { root } = paint(locked(panel === undefined ? {} : { panel }));
+            const stall = stallOf(root);
+            expect(stall.classList.contains('t-modern')).toBe(true);
+            expect(stall.classList.contains('t-fixture-private')).toBe(false);
+            expect([...stall.classList].filter((cls) => cls.startsWith('att-'))).toEqual([]);
+            expect(stall.style.getPropertyValue('--s-bg')).toBe(themeVars(DEFAULT_THEME)['--s-bg']);
+            expect(notes(root)).toContain(copy.THEME_NOT_UNLOCKED);
+            expect(root.textContent).not.toContain(copy.THEME_UNKNOWN);
+            root.remove();
+        }
+    });
+
+    it('says on the Wearing row that the look is not unlocked, never that nothing was chosen', () => {
+        const { root } = paint(locked({ panel: 'studio' }));
+        const row = root.querySelector('[data-role="studio-wearing-row"]')!;
+        expect(row.textContent).toContain(copy.STUDIO_WEARING_NOT_UNLOCKED);
+        expect(row.textContent).not.toContain(copy.STUDIO_WEARING_NONE);
+        expect(row.textContent).not.toContain(copy.DECOR_ROW_UNKNOWN);
+        // The record is read back as written: it names the fixture look.
+        expect(root.querySelector('[data-role="studio-look-row"]')?.textContent).toContain('Fixture private look');
+        root.remove();
+    });
+
+    it('lets the same look painted from a licence-free row through, as a free look', () => {
+        // The gate is the paid list's: the default look with every flag is
+        // a free look and wears what it holds, as before.
+        const theme = decodeLook(DEFAULT_THEME_ID);
+        const held = mintedLookTokens();
+        const worn = paintableLook(theme, 0xffff, held).worn;
+        expect(worn.length).toBeGreaterThan(0);
+        const { root } = paint(locked({ theme, worn }));
+        expect(notes(root)).toEqual([]);
+        root.remove();
+    });
+});
+
+describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
+    const sheet = (over: Partial<StallView> = {}) =>
+        paint({
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            tokens: new Map(),
+            address: ADDR,
+            fetch: { kind: 'empty' },
+            stallName: 'A stall',
+            overlay: { kind: 'publish-name' },
+            ...over,
+        });
+    const parts = (root: HTMLElement) => ({
+        web: root.querySelector('[data-role="publish-cashtab"]') as HTMLAnchorElement,
+        pay: root.querySelector('[data-role="publish-pay"]') as HTMLAnchorElement,
+        hex: root.querySelector('[data-role="publish-hex"]') as HTMLElement,
+        summary: root.querySelector('[data-role="publish-summary"]') as HTMLElement,
+        err: root.querySelector('[data-role="publish-invalid"]') as HTMLElement,
+        qr: root.querySelector('[data-role="publish-qr"]') as HTMLElement,
+    });
+    const press = (root: HTMLElement, id: number) =>
+        root.querySelector<HTMLButtonElement>(`[data-role="look-${id}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const composesNothing = (root: HTMLElement) => {
+        const p = parts(root);
+        for (const link of [p.web, p.pay]) {
+            expect(link.hasAttribute('href'), 'no link carries a record').toBe(false);
+            expect(link.getAttribute('aria-disabled')).toBe('true');
+        }
+        expect(p.hex.textContent).toBe('');
+        expect(p.summary.hidden).toBe(true);
+        expect(p.qr.querySelector('svg')).toBeNull();
+        expect(p.err.hidden).toBe(false);
+        expect(p.err.textContent).toBe(copy.PUBLISH_LOOK_NOT_UNLOCKED);
+    };
+
+    it('offers the paid look, tries it on, and composes nothing that names it', () => {
+        const { root, h } = sheet();
+        expect(root.querySelector(`[data-role="look-${FIXTURE_ID}"]`)?.textContent).toBe('Fixture private look');
+        expect(parts(root).web.hasAttribute('href'), 'the default composes').toBe(true);
+        press(root, FIXTURE_ID);
+        // Tried on: the stall behind wears the look, and the app is told.
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(true);
+        expect(h['onPreviewLook']).toHaveBeenLastCalledWith({ themeId: FIXTURE_ID, attachmentFlags: 0 });
+        composesNothing(root);
+        // Its decorations are offered and tried on too, and still nothing composes.
+        root.querySelector<HTMLButtonElement>('[data-role="decor-trim-0"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(stallOf(root).classList.contains('att-fixture-trim')).toBe(true);
+        composesNothing(root);
+        // Back to a free look: it composes again.
+        press(root, DEFAULT_THEME_ID);
+        expect(parts(root).web.hasAttribute('href')).toBe(true);
+        expect(parts(root).err.hidden).toBe(true);
+        root.remove();
+    });
+
+    it('opens on the default a locked record paints, and the locked look is a try-on from there', () => {
+        const theme = decodeLook(FIXTURE_ID);
+        const { root, h } = sheet({ theme, attachmentFlags: 0b11, heldTokens: mintedLookTokens(), worn: [] });
+        const pressed = root.querySelector('[data-role="theme-picker"] [aria-pressed="true"]');
+        expect(pressed?.getAttribute('data-theme-id'), 'the pressed look is the painted one').toBe(String(DEFAULT_THEME_ID));
+        expect(parts(root).web.hasAttribute('href'), 'republishing the default composes').toBe(true);
+        press(root, FIXTURE_ID);
+        expect(h['onPreviewLook']).toHaveBeenLastCalledWith({ themeId: FIXTURE_ID, attachmentFlags: 0 });
+        composesNothing(root);
+        press(root, DEFAULT_THEME_ID);
+        // Choosing what the record paints is no try-on.
+        expect(h['onPreviewLook']).toHaveBeenLastCalledWith(undefined);
+        root.remove();
+    });
+
+    it('paints a try-on of the very look and flags a locked record names', () => {
+        // What the record paints is the default with no flag, so a try-on
+        // that names the record's own look and flags is a try-on — compared
+        // against the record's id instead, it read as "no try-on" and the
+        // stall stayed on the default under the seller's press.
+        const theme = decodeLook(FIXTURE_ID);
+        const { root } = paint(
+            locked({ attachmentFlags: 0b1, previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 } }),
+        );
+        const stall = stallOf(root);
+        expect(theme.known).toBe(true);
+        expect(stall.classList.contains('t-fixture-private')).toBe(true);
+        expect(stall.classList.contains('att-fixture-trim')).toBe(true);
+        root.remove();
+    });
+
+    it('paints a try-on of the locked look on every later paint, decorations included', () => {
+        const { root } = paint({
+            route: { kind: 'pubkey', pubkeyHex: PK, address: ADDR },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+            address: ADDR,
+            fetch: { kind: 'empty' },
+            previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 },
+        });
+        const stall = stallOf(root);
+        expect(stall.classList.contains('t-fixture-private')).toBe(true);
+        expect(stall.classList.contains('att-fixture-trim')).toBe(true);
+        root.remove();
+    });
+});

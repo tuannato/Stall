@@ -1,0 +1,53 @@
+/** Types for `private-looks-build.mjs` — see that file for what a build's private-look selection is. */
+import type { Plugin } from 'vite';
+import type { PrivateIndex, PrivateIndexEntry, PrivateFile, PublicLookFacts } from './private-looks.mjs';
+
+export type LooksTarget = 'preview' | 'production';
+
+export type LooksSelection = { readonly target: LooksTarget; readonly dir: string; readonly commit?: string };
+
+type Env = Readonly<Record<string, string | undefined>>;
+type GitOptions = { readonly git?: string; readonly env?: Env };
+
+/** A look's place as the app's validator reads it (`LookPlace` in `src/domain/lookData.ts`). */
+export type LookPlaceForBuild = { readonly id: number; readonly sheetClass: string; readonly file: string; readonly mintable: true };
+
+/** The app's own validator over a `look.json`'s text: every problem, or none. */
+export type ValidateLook = (text: string, place: LookPlaceForBuild) => readonly string[];
+
+export type SelectedLook = {
+    readonly entry: PrivateIndexEntry;
+    readonly lookText: string;
+    readonly sheet: string;
+    readonly art: readonly { readonly name: string; readonly bytes: Buffer }[];
+};
+
+export type ModuleEntry = { readonly id: number; readonly sheetClass: string; readonly sheetPath: string; readonly lookText: string };
+
+export declare const PRIVATE_LOOKS_MODULE: 'virtual:stall-private-looks';
+export declare const LOOKS_TARGETS: readonly LooksTarget[];
+export declare const SELECTION_ENV: { readonly target: 'STALL_LOOKS_TARGET'; readonly dir: 'STALL_LOOKS_DIR'; readonly commit: 'STALL_LOOKS_COMMIT' };
+export declare const FIXTURE_LOOKS_DIR: 'layout/fixture-private-looks';
+export declare const MATERIALISED_ROOT: string;
+
+export declare function selectionFromEnv(env: Env): LooksSelection | undefined;
+export declare function includedEntries(index: PrivateIndex, target: LooksTarget, facts: Pick<PublicLookFacts, 'released'>): PrivateIndexEntry[];
+export declare function selectedTree(input: { root: string; selection: LooksSelection } & GitOptions): { dir: string; prefix: string | undefined; fixture: boolean };
+export declare function selectedIndex(input: { root: string; selection: LooksSelection; facts: PublicLookFacts } & GitOptions): {
+    commit: string;
+    read: { dir: string; commit: string; prefix: string | undefined } & GitOptions;
+    files: PrivateFile[];
+    index: PrivateIndex;
+};
+export declare function readSelectedLooks(
+    input: { root: string; selection: LooksSelection; facts: PublicLookFacts; validateLook: ValidateLook } & GitOptions,
+): { commit: string; index: PrivateIndex; looks: SelectedLook[] };
+export declare function materialise(looks: readonly SelectedLook[], into: string): ModuleEntry[];
+export declare function jsString(value: string): string;
+export declare function privateLooksModuleCode(entries: readonly ModuleEntry[]): string;
+export declare function privateLooksPlugin(options: {
+    facts: PublicLookFacts;
+    validateLook: ValidateLook;
+    env?: Env;
+    git?: string;
+}): Plugin;
