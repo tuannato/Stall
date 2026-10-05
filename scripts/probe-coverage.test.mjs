@@ -184,7 +184,13 @@ describe('a-worn-only-sheet-loads-under-the-production-policy', () => {
         sameOrigin: true,
         after: 't-fixture-worn',
         art: [200],
+        state: 'ready',
+        askedAgain: true,
+        links: 1,
         missingRejected: true,
+        missingState: 'failed',
+        missingAgainRejected: true,
+        missingLinks: 1,
         inEntryCss: false,
         refusals: [],
     };
@@ -204,6 +210,13 @@ describe('a-worn-only-sheet-loads-under-the-production-policy', () => {
             [{ art: [] }, /never fetched/],
             [{ art: [404] }, /answered 404/],
             [{ missingRejected: false }, /did not reject/],
+            [{ state: 'pending' }, /holds the loaded sheet as "pending"/],
+            [{ askedAgain: false }, /did not answer the same link/],
+            [{ links: 2 }, /2 links on the page for one sheet/],
+            [{ links: 0 }, /0 links on the page for one sheet/],
+            [{ missingState: 'ready' }, /does not exist as "ready"/],
+            [{ missingAgainRejected: false }, /asked again, a sheet that does not exist did not reject/],
+            [{ missingLinks: 2 }, /2 links on the page for a sheet that does not exist/],
             [{ refusals: [{ directive: 'style-src-elem', blocked: 'inline', source: '' }] }, /refused inline under style-src-elem/],
         ]) {
             const faults = wornSheetJobFaults({ ...held, ...change });

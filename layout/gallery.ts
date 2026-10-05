@@ -28,8 +28,9 @@
  *   __lookSheets()                  — each painted stall's `t-*` class and the name its sheet gives it
  *   __galleryReady                  — true once the module has evaluated
  *
- * A worn-only look's sheet is appended before the first paint, the way the
- * probe's page does (`wornSheet.ts`) — none today: no row is worn only — and
+ * A worn-only look's sheet is loaded before the first paint, through the
+ * app's loader (`src/ui/lookSheets.ts`), the way the probe's page does
+ * (`wornSheet.ts`) — the kit's, which loads the worn-only way (8d1) — and
  * `pnpm looks:diff` refuses a shot whose painted look its sheet did not
  * name (`looks-diff-refuses-a-look-painted-without-its-sheet`).
  */
@@ -38,11 +39,10 @@ import { WORKSHOP_THEME_ID } from '../src/domain/theme';
 import { SCREENS, handlers } from './fixtures';
 import { galleryLooks, kitLook, lookById, registerWorkshopLook, shippedLooks, wornOf, type Look } from './looks';
 import { diffPlan, shotPlan, type DiffJob, type ShotJob } from './shotPlan';
+import { loadLookSheet } from '../src/ui/lookSheets';
 import { loadKitLook } from './workshopKit';
-import { loadWornSheet, lookSheetReads, wornSheetsOf, type LookSheetRead } from './wornSheet';
-// After the app's own sheets (imported through `render`), so the kit's sheet
-// lands where a shipped look's does: last among equals in the cascade.
-import '../workshop/theme-workshop.css';
+import { KIT_SHEET_URL } from './workshopKitSheet';
+import { lookSheetReads, wornSheetsOf, type LookSheetRead } from './wornSheet';
 
 const app = document.getElementById('app')!;
 const ui = document.getElementById('gallery-ui')!;
@@ -55,13 +55,15 @@ const params = new URLSearchParams(location.search);
  */
 let kitProblem: string | undefined;
 try {
-    registerWorkshopLook(loadKitLook());
+    registerWorkshopLook(loadKitLook(), KIT_SHEET_URL);
 } catch (err) {
     kitProblem = (err as Error).message;
 }
 
-// Every worn-only look this showroom offers, its sheet on the page before the first paint.
-await Promise.all(wornSheetsOf(galleryLooks()).map(({ url, cls }) => loadWornSheet(url, cls)));
+// Every worn-only look this showroom offers, its sheet on the page before
+// the first paint — through the app's loader, after every sheet the page
+// links: the kit's lands where a private look's does in the app.
+await Promise.all(wornSheetsOf(galleryLooks()).map(({ url, cls }) => loadLookSheet(url, cls)));
 
 function numberParam(raw: string | null): number | undefined {
     if (raw === null || raw === '') {

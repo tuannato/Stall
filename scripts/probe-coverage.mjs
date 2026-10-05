@@ -252,7 +252,12 @@ function sliverLine(slivers) {
  * - `after` is the fixture's class: the loaded sheet names the look;
  * - its own art was fetched and answered 200 (`art`, one status per fetch;
  *   under `img-src 'self'`);
- * - a sheet URL that does not exist `missingRejected` rather than loading;
+ * - the app's loader (`src/ui/lookSheets.ts`, 8d1, which the page loaded
+ *   it through) holds it as `ready`, answered a second ask with the same
+ *   link (`askedAgain`) and put one link for it on the page (`links`);
+ * - a sheet URL that does not exist `missingRejected` rather than loading,
+ *   is held as `failed`, rejected again when asked again and is linked
+ *   once (`missingLinks`): a failure is sticky, never a second fetch;
  * - the policy refused nothing (`refusals`).
  */
 export function wornSheetJobFaults(job, { lookClass = 't-fixture-worn' } = {}) {
@@ -267,7 +272,13 @@ export function wornSheetJobFaults(job, { lookClass = 't-fixture-worn' } = {}) {
     for (const status of job.art ?? []) {
         if (status !== 200) faults.push(`the look's own art answered ${status}`);
     }
+    if (job.loaded && job.state !== 'ready') faults.push(`the loader holds the loaded sheet as "${job.state}", not ready`);
+    if (job.loaded && !job.askedAgain) faults.push('asked again, the loader did not answer the same link');
+    if (job.links !== 1) faults.push(`${job.links} links on the page for one sheet — a sheet is fetched once per page`);
     if (!job.missingRejected) faults.push('a sheet URL that does not exist did not reject');
+    if (job.missingState !== 'failed') faults.push(`the loader holds a sheet that does not exist as "${job.missingState}", not failed`);
+    if (!job.missingAgainRejected) faults.push('asked again, a sheet that does not exist did not reject');
+    if (job.missingLinks !== 1) faults.push(`${job.missingLinks} links on the page for a sheet that does not exist — a failure is not fetched again`);
     for (const r of job.refusals ?? []) {
         faults.push(`the policy refused ${r.blocked || '(inline)'} under ${r.directive}`);
     }

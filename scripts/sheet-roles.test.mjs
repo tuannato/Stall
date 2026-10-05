@@ -168,8 +168,8 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
             }
         }
         assert.deepEqual(
-            sheetsWithRole('kit').map((s) => s.path),
-            ['workshop/theme-workshop.css'],
+            sheetsWithRole('kit').map((s) => [s.path, s.lookClass, s.load, s.artDir]),
+            [['workshop/theme-workshop.css', 't-workshop', 'worn', 'workshop/art']],
         );
         // The harness's worn-only look: one sheet, under `layout/`, which the
         // production build never reaches (`gallery-is-not-served`).
@@ -197,8 +197,9 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
      * look's `load` in this table is its theme row's `sheetLoad`, so the
      * weight guard (which reads the table) and the renderer (which reads the
      * row) cannot disagree about which sheet every visitor downloads. The
-     * kit is loaded with the showroom and the probe, bundled, until step 8;
-     * the fixture is the one worn-only sheet, and it is no row.
+     * kit loads the worn-only way since 8d1 (the app's loader on its two
+     * pages), and the fixture is the probe's worn-only sheet; neither is a
+     * row.
      */
     it('every-look-row-loads-its-sheet-the-way-its-role-says', async () => {
         const theme = await import('../src/domain/theme.ts');
@@ -209,7 +210,7 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
             assert.equal(sheet.load, row.sheetLoad, `${row.sheetClass}: the table says ${sheet.load}, the row ${row.sheetLoad}`);
         }
         assert.deepEqual(lookSheets().map((s) => s.role).sort(), ['fixture', 'kit', 'look', 'look', 'look']);
-        assert.deepEqual(wornSheets().map((s) => s.path), ['layout/fixture-look.css']);
+        assert.deepEqual(wornSheets().map((s) => s.path).sort(), ['layout/fixture-look.css', 'workshop/theme-workshop.css']);
         const shippedClasses = theme.SHIPPED_THEMES.map(({ id }) => theme.decodeTheme(id).sheetClass);
         assert.ok(!shippedClasses.includes('t-fixture-worn'), 'the fixture is never a row');
     });

@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -51,7 +51,10 @@ after(() => {
 
 /** A scratch kit folder holding `art/a.svg` and the sheet `sheetFor(dir)` writes. */
 function kit(sheetFor) {
-    const dir = mkdtempSync(join(tmpdir(), 'stall-kit-plant-'));
+    // The real path: Vite resolves the sheet's `?transform-only` twin to it
+    // (macOS's temporary directory sits behind the `/var` link), and the
+    // `?url` import must name the same module or its CSS is not found.
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-kit-plant-')));
     scratch.push(dir);
     mkdirSync(join(dir, 'art'));
     writeFileSync(join(dir, 'art', 'a.svg'), SVG);
@@ -73,7 +76,11 @@ async function plantedBuild(dir, outDir) {
                 name: 'test:plant-sheet',
                 enforce: 'pre',
                 resolveId(source) {
-                    return /[/\\]workshop[/\\]theme-workshop\.css$/.test(source) ? sheet : undefined;
+                    // The kit's pages import the sheet with `?url` (8d1): the
+                    // query rides on to the planted file.
+                    const [path, query] = source.split('?');
+                    if (!/[/\\]workshop[/\\]theme-workshop\.css$/.test(path)) return undefined;
+                    return query === undefined ? sheet : `${sheet}?${query}`;
                 },
             },
         ],

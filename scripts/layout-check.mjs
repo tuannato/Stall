@@ -1334,7 +1334,8 @@ try {
      * The worn-only road, once, under the production policy
      * (`a-worn-only-sheet-loads-under-the-production-policy`, step 6): the
      * harness's fixture look (`layout/fixtureLook.ts`) painted, then its
-     * sheet appended as a same-origin link (`window.__wornSheetJob`). The
+     * sheet put on the page by the app's own loader, `src/ui/lookSheets.ts`
+     * (`window.__wornSheetJob`). The
      * ordinary run only: the kit's page is built from the same probe, and
      * the road is the app's, not the look's.
      */
@@ -1363,8 +1364,9 @@ try {
             const faults = wornSheetJobFaults(job);
             if (faults.length === 0) {
                 console.log(
-                    `✓ ${label}: ${job.url} loaded last, same origin, named itself (${job.after}); its art ${job.art.join(', ')}; ` +
-                        `a missing sheet (answered ${job.missingStatus}) rejected: ${job.missingWhy}; no refusal`,
+                    `✓ ${label}: ${job.url} loaded by the app's loader, last, same origin, named itself (${job.after}), ` +
+                        `held ${job.state} and linked once; its art ${job.art.join(', ')}; ` +
+                        `a missing sheet (answered ${job.missingStatus}) rejected and held ${job.missingState}: ${job.missingWhy}; no refusal`,
                 );
             } else {
                 failed = true;

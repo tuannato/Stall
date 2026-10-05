@@ -3959,11 +3959,12 @@ no name for a look it measures (`probe-coverage.mjs`, every pass).
 Why now: from Ink wash on (step 8) a look's sheet is its own file, fetched
 only for a stall that wears it, and a sheet that did not load leaves the
 stall painted by the base sheets alone — which every other rule here would
-measure green. Until then no look is worn only, so the probe page appends
-every worn-only sheet of `measuredLooks()` before its first paint
-(`wornSheetsOf`, `loadWornSheet`) — none — and a worn-only row reaching a
-measured page with no sheet URL fails the page rather than being measured
-bare. `pnpm looks:diff` holds the same line on every shot
+measure green. So the probe page loads every worn-only sheet of
+`measuredLooks()` before its first paint, through the app's own loader
+(`wornSheetsOf`, `loadLookSheet` in `src/ui/lookSheets.ts`, since 8d1) —
+none on the ordinary probe, the kit's on the workshop probe, which loads the
+worn-only way since 8d1 — and a worn-only row reaching a measured page with
+no sheet URL fails the page rather than being measured bare. `pnpm looks:diff` holds the same line on every shot
 (`looks-diff-refuses-a-look-painted-without-its-sheet`; the showroom's
 `window.__lookSheets()`, a ref predating the hook exempt). The name paints
 nothing: `pnpm looks:diff main` compared every shot of the three looks with
@@ -4001,12 +4002,17 @@ ordinary run (`window.__wornSheetJob`, judged by `wornSheetJobFaults`): the
 harness's fixture look (`FIXTURE_LOOK` in `looks.ts`, `t-fixture-worn`,
 `0xfd`, never a row, never served) is painted on the neutral screen, then its
 sheet — `layout/fixture-look.css` built by `?url` as its own asset
-(`fixtureLook.ts`) — appended as a same-origin `<link>`, the road step 8's
-loader takes. Held: the look named no sheet before (the sheet is not in the
-entry CSS), the link loaded, landed last among the page's sheets and was
-same-origin, the look then named itself, its own art was fetched with a 200
-(`img-src 'self'`), a sheet URL that does not exist rejected, and the policy
-refused nothing.
+(`fixtureLook.ts`) — put on the page by the app's own loader,
+`src/ui/lookSheets.ts`'s `loadLookSheet` (since 8d1; the harness carried a
+copy, `loadWornSheet`, until then). Held: the look named no sheet before
+(the sheet is not in the entry CSS), the link loaded, landed last among the
+page's sheets and was same-origin, the look then named itself, its own art
+was fetched with a 200 (`img-src 'self'`), the loader holds the sheet as
+`ready`, answers a second ask with the same link and put one link on the
+page for it, a sheet URL that does not exist rejected, is held `failed`,
+rejected again when asked again and was linked once (a failure is sticky,
+never a second fetch), and the policy refused nothing. Proved red, the judge
+(`probe-coverage.test.mjs`): each new field changed alone.
 
 **`load` is not "loaded"** — found by this job's first run, which failed on
 "a sheet URL that does not exist did not reject": `vite preview` answers a
@@ -4016,10 +4022,19 @@ Chrome fired `load`, not `error`, on the link (whether it then applied
 anything was not read; the sheet did not name the look). So
 the harness's `loadWornSheet` resolves only when the loaded sheet's own
 CSSOM holds `.<class> { --look-sheet: <class>; }` (`sheetNamesItself`), and
-the job prints the status the missing URL was answered with. Step 8's
-production loader must keep that rule: a Pages 404 fires `error`, but a
-proxy or a stale deploy that answers with HTML would not. Not held here,
-stated: Pages itself, OBS's browser, Safari and Firefox.
+the job prints the status the missing URL was answered with. The production
+loader keeps that rule (it is the same code since 8d1): a Pages 404 fires
+`error`, but a proxy or a stale deploy that answers with HTML would not. Not
+held here, stated: Pages itself, OBS's browser, Safari and Firefox; and the
+renderer's ask for a private look's sheet (`applyTheme` → `lookSheetOf` →
+the loader), which needs a build carrying a private look — the harness
+refuses a selection until 8e2 — and is held in happy-dom
+(`a-try-on-asks-for-its-sheet-and-a-locked-look-for-none`), measured in
+Chrome by hand once (8d1, a scratch page over a preview build of the
+fixture under the production policy: the locked record asked nothing; the
+try-on painted the class at once, named nothing until its sheet landed,
+then `ready`, named itself, landed last, one link across repaints, its art
+200, no refusal).
 
 ## No word is clipped by a file (step 6, 2026-09-27)
 

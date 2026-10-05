@@ -39,25 +39,48 @@ export type Look = {
     readonly theme: DecodedTheme;
     /** This look's decoration rows, in catalogue order. */
     readonly rows: readonly ShippedAttachment[];
+    /**
+     * A worn-only look's built sheet, which the page loads through the app's
+     * loader before it paints the look (`wornSheetsOf`): the kit's
+     * (`registerWorkshopLook`). Absent for a bundled look, whose sheet is in
+     * the entry CSS.
+     */
+    readonly sheetUrl?: string;
 };
 
 let kit: Look | undefined;
 
 /**
- * Make the workshop look paintable on this page. Once only: a page that
- * registered two kit looks would measure whichever came last under one id.
+ * Make the workshop look paintable on this page, with the URL of its built
+ * sheet. Once only: a page that registered two kit looks would measure
+ * whichever came last under one id.
+ *
+ * **The kit loads the worn-only way** (8d1; STEP-6-PLAN v2 item 6.8): its
+ * sheet is its own file (`layout/workshopKitSheet.ts`, `?url`), loaded by
+ * the app's loader before the page paints (`wornSheetsOf`), the road a
+ * private look's sheet takes in the app — never in a kit page's entry CSS.
+ * So its row is `sheetLoad: 'worn'` whatever its base's was.
  */
-export function registerWorkshopLook(look: {
-    theme: DecodedTheme;
-    rows: readonly ShippedAttachment[];
-}): void {
+export function registerWorkshopLook(
+    look: {
+        theme: DecodedTheme;
+        rows: readonly ShippedAttachment[];
+    },
+    sheetUrl: string,
+): void {
     if (look.theme.id !== WORKSHOP_THEME_ID || look.rows.some((row) => row.themeId !== WORKSHOP_THEME_ID)) {
         throw new Error(`a workshop look carries id ${WORKSHOP_THEME_ID} on its row and every decoration`);
     }
     if (kit !== undefined) {
         throw new Error('the workshop look is already registered on this page');
     }
-    kit = { id: look.theme.id, label: look.theme.label, theme: look.theme, rows: look.rows };
+    kit = {
+        id: look.theme.id,
+        label: look.theme.label,
+        theme: { ...look.theme, sheetLoad: 'worn' },
+        rows: look.rows,
+        sheetUrl,
+    };
 }
 
 /** The workshop look, when this page registered one. */
@@ -117,7 +140,8 @@ const SKELETON: Look = {
  * default row under `t-fixture-worn`, `sheetLoad: 'worn'`, whose sheet
  * (`layout/fixture-look.css`, its art in `layout/fixture-look/`) is its own
  * built file — `fixtureLook.ts` holds its URL, and only the probe imports
- * that. **Never a row and never measured**: `0xfd` is the harness's address
+ * that, handing it to the app's loader (`src/ui/lookSheets.ts`) in its one
+ * job. **Never a row and never measured**: `0xfd` is the harness's address
  * for it like the skeleton's `0xfe`, it is in neither `measuredLooks()` nor
  * `galleryLooks()`, and nothing under `src/` reaches it, so the production
  * build carries neither the class nor the sheet (`gallery-is-not-served`).
