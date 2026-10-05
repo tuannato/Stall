@@ -33,24 +33,28 @@ export declare const PRIVATE_SLUG_MAX: number;
 export declare const PRIVATE_LOOK_CLASS: RegExp;
 export declare const PRIVATE_LOOK_CLASS_MAX: number;
 export declare const HARNESS_LOOK_CLASSES: readonly string[];
+export declare const FIXTURE_PRIVATE_LOOK_CLASS: 't-fixture-private';
 export declare const PRIVATE_ROOT_FILES: readonly string[];
 export declare const PRIVATE_LOOK_FILES: readonly string[];
 export declare const PRIVATE_LOOK_REQUIRED: readonly string[];
 export declare const PRIVATE_FACE_LICENCE: RegExp;
 export declare const PRIVATE_FILE_MODE: '100644';
 export declare const FULL_COMMIT: RegExp;
+export declare const GIT_LOCATION_VARS: readonly string[];
+export declare const TREE_PREFIX: RegExp;
 
 export declare function privateFileProblems(files: readonly PrivateFile[]): string[];
 export declare function parsePrivateIndex(text: string): { index: PrivateIndex | undefined; problems: string[] };
-export declare function privateIndexProblems(index: PrivateIndex, facts: PublicLookFacts): string[];
+export declare function privateIndexProblems(index: PrivateIndex, facts: PublicLookFacts, options?: { fixture?: boolean }): string[];
 export declare function privateLooksProblems(input: {
     files: readonly PrivateFile[];
     indexText: string | undefined;
     facts: PublicLookFacts;
+    fixture?: boolean;
 }): string[];
 export declare function publicLookFacts(): Promise<PublicLookFacts>;
-export declare function gitFilesAt(input: { dir: string; commit: string } & GitOptions): PrivateFile[];
-export declare function gitTextAt(input: { dir: string; commit: string; path: string } & GitOptions): string;
+export declare function gitFilesAt(input: { dir: string; commit: string; prefix?: string } & GitOptions): PrivateFile[];
+export declare function gitTextAt(input: { dir: string; commit: string; prefix?: string; path: string } & GitOptions): string;
 export declare function readPrivateLooksAt(
-    input: { dir: string; commit: string; facts: PublicLookFacts } & GitOptions,
+    input: { dir: string; commit: string; prefix?: string; facts: PublicLookFacts; fixture?: boolean } & GitOptions,
 ): { files: PrivateFile[]; indexText: string | undefined; problems: string[] };

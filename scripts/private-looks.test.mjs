@@ -6,7 +6,9 @@ import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+    FIXTURE_PRIVATE_LOOK_CLASS,
     FULL_COMMIT,
+    GIT_LOCATION_VARS,
     HARNESS_LOOK_CLASSES,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
@@ -35,11 +37,11 @@ const FIXTURE = 'layout/fixture-private-looks';
 
 const facts = await publicLookFacts();
 
-/** An index text over `looks`, each entry `{ id, slug, cls, stage, paid }` with the fixture's fields as defaults. */
+/** An index text over `looks`, each entry `{ id, slug, cls, stage, paid }` with a neutral look's fields as defaults. */
 const indexOf = (...looks) =>
     JSON.stringify({
         schema: 1,
-        looks: looks.map((look) => ({ id: 4, slug: 'ink-wash', cls: 't-inkwash', stage: 'preview', paid: true, ...look })),
+        looks: looks.map((look) => ({ id: 4, slug: 'some-look', cls: 't-some-look', stage: 'preview', paid: true, ...look })),
     });
 const plain = (...paths) => paths.map((path) => ({ path, mode: PRIVATE_FILE_MODE }));
 /** A whole repository: the index, and every look it names with its two required files. */
@@ -73,11 +75,12 @@ after(() => {
 
 /**
  * A repository outside this checkout holding a copy of the tracked fixture,
- * committed; no global or system config, and no user exclude file (git reads
+ * committed — at its root, or `under` a subdirectory beside a file of its
+ * own; no global or system config, and no user exclude file (git reads
  * `$XDG_CONFIG_HOME/git/ignore` whatever `GIT_CONFIG_GLOBAL` says, and a Mac's
- * often names `.DS_Store`).
+ * often names `.DS_Store`). `read` reads it as the fixture it is.
  */
-function plantPrivateRepo() {
+function plantPrivateRepo({ under } = {}) {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-private-looks-')));
     const xdg = realpathSync(mkdtempSync(join(tmpdir(), 'stall-private-looks-xdg-')));
     scratch.push(dir, xdg);
@@ -93,14 +96,19 @@ function plantPrivateRepo() {
     };
     const git = (...args) => execFileSync('git', args, { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     git('init', '-q', '-b', 'main', '.');
+    const at = under === undefined ? dir : join(dir, under);
     for (const { path } of trackedFixture().files) {
-        mkdirSync(join(dir, dirname(path)), { recursive: true });
-        copyFileSync(join(ROOT, FIXTURE, path), join(dir, path));
+        mkdirSync(join(at, dirname(path)), { recursive: true });
+        copyFileSync(join(ROOT, FIXTURE, path), join(at, path));
+    }
+    if (under !== undefined) {
+        writeFileSync(join(dir, 'app.ts'), 'export {};\n');
     }
     git('add', '-A');
     git('commit', '-q', '-m', 'fixture');
-    const read = () => readPrivateLooksAt({ dir, commit: git('rev-parse', 'HEAD'), facts, env });
-    return { dir, git, env, read };
+    const head = () => git('rev-parse', 'HEAD');
+    const read = (options = {}) => readPrivateLooksAt({ dir, commit: head(), facts, fixture: true, env, ...options });
+    return { dir, git, env, head, read };
 }
 
 describe('a-private-file-outside-the-allow-list-fails', () => {
@@ -116,13 +124,13 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
         'index.json',
         'README.md',
         'LOG.md',
-        'ink-wash/look.json',
-        'ink-wash/sheet.css',
-        'ink-wash/og.png',
-        'ink-wash/art/m-mass.svg',
-        'ink-wash/art/t-inkwash-serif-latin.woff2',
-        'ink-wash/art/LICENSE-OFL.txt',
-        'ink-wash/art/LICENSE-OFL-noto-serif.txt',
+        'some-look/look.json',
+        'some-look/sheet.css',
+        'some-look/og.png',
+        'some-look/art/mark.svg',
+        'some-look/art/face-latin.woff2',
+        'some-look/art/LICENSE-OFL.txt',
+        'some-look/art/LICENSE-OFL-face.txt',
         'a/look.json',
     ];
 
@@ -132,34 +140,34 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
 
     it('refuses code, pages, other files and other places, one problem each', () => {
         for (const path of [
-            'ink-wash/look.ts',
-            'ink-wash/look.js',
-            'ink-wash/build.mjs',
-            'ink-wash/page.html',
-            'ink-wash/art/ink.mjs',
-            'ink-wash/art/m-mass.svg.js',
-            'ink-wash/extra.css',
-            'ink-wash/README.md',
-            'ink-wash/og.jpg',
-            'ink-wash/art/shot.png',
-            'ink-wash/art/face.ttf',
-            'ink-wash/art/face.woff',
-            'ink-wash/art/sub/m.svg',
-            'ink-wash/art/M-Mass.svg',
-            'ink-wash/art/m mass.svg',
-            'ink-wash/LICENSE-OFL.txt',
-            'Ink-Wash/look.json',
-            'ink_wash/look.json',
-            '-ink/look.json',
+            'some-look/look.ts',
+            'some-look/look.js',
+            'some-look/script.mjs',
+            'some-look/page.html',
+            'some-look/art/tool.mjs',
+            'some-look/art/mark.svg.js',
+            'some-look/extra.css',
+            'some-look/README.md',
+            'some-look/og.jpg',
+            'some-look/art/shot.png',
+            'some-look/art/face.ttf',
+            'some-look/art/face.woff',
+            'some-look/art/sub/mark.svg',
+            'some-look/art/Mark.svg',
+            'some-look/art/a mark.svg',
+            'some-look/LICENSE-OFL.txt',
+            'Some-Look/look.json',
+            'some_look/look.json',
+            '-look/look.json',
             'look.json',
             'sheet.css',
             'package.json',
             '.gitignore',
             '.gitmodules',
             '.DS_Store',
-            'ink-wash/.DS_Store',
+            'some-look/.DS_Store',
             'notes/plan.md',
-            'ink-wash/art/../look.json',
+            'some-look/art/../look.json',
             `${'a'.repeat(33)}/look.json`,
         ]) {
             assert.equal(privateFileProblems(plain(path)).length, 1, path);
@@ -168,7 +176,7 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
 
     it('refuses a symlink, a gitlink and an executable bit on a path it allows', () => {
         for (const mode of ['120000', '160000', '100755']) {
-            const problems = privateFileProblems([{ path: 'ink-wash/art/m-mass.svg', mode }]);
+            const problems = privateFileProblems([{ path: 'some-look/art/mark.svg', mode }]);
             assert.equal(problems.length, 1, mode);
             assert.match(problems[0], /plain files only/);
         }
@@ -194,12 +202,15 @@ describe('a-private-look-id-is-reserved-and-unshared', () => {
         assert.deepEqual(facts.shippedClasses.sort(), ['t-modern', 't-neo', 't-rural']);
     });
 
-    it('passes the tracked fixture whole: its index, its id and its files', () => {
-        assert.deepEqual(privateLooksProblems({ ...trackedFixture(), facts }), []);
+    it('passes the tracked fixture whole, read as the fixture: its index, its id and its files', () => {
+        assert.deepEqual(privateLooksProblems({ ...trackedFixture(), facts, fixture: true }), []);
         const { index } = parsePrivateIndex(trackedFixture().indexText);
         // The fixture is the real reserved, paid id (the critic's item 14),
-        // under a class of its own that no shipped or harness look wears.
-        assert.deepEqual(index.looks, [{ id: 4, slug: 'fixture', cls: 't-fixture-private', stage: 'preview', paid: true }]);
+        // under the class reserved for it, which no other private look may take.
+        assert.deepEqual(index.looks, [{ id: 4, slug: 'fixture', cls: FIXTURE_PRIVATE_LOOK_CLASS, stage: 'preview', paid: true }]);
+        assert.equal(FIXTURE_PRIVATE_LOOK_CLASS, 't-fixture-private');
+        // Not read as the fixture, it is refused for taking that class.
+        assert.equal(privateLooksProblems({ ...trackedFixture(), facts }).length, 1);
     });
 
     it('refuses an id that is not reserved', () => {
@@ -219,15 +230,18 @@ describe('a-private-look-id-is-reserved-and-unshared', () => {
             assert.match(problems[0], pattern);
         };
         shared({ id: 4 }, /id 4 is looks\[0\]'s too/);
-        shared({ slug: 'ink-wash' }, /slug "ink-wash" is looks\[0\]'s too/);
-        shared({ cls: 't-inkwash' }, /cls "t-inkwash" is looks\[0\]'s too/);
+        shared({ slug: 'some-look' }, /slug "some-look" is looks\[0\]'s too/);
+        shared({ cls: 't-some-look' }, /cls "t-some-look" is looks\[0\]'s too/);
     });
 
-    it("refuses a shipped look's class and the harness's", () => {
-        for (const cls of [...facts.shippedClasses, ...HARNESS_LOOK_CLASSES]) {
+    it("refuses a shipped look's class, the harness's and the fixture's", () => {
+        for (const cls of [...facts.shippedClasses, ...HARNESS_LOOK_CLASSES, FIXTURE_PRIVATE_LOOK_CLASS]) {
             const problems = privateLooksProblems({ ...repoOf({ cls }), facts });
-            assert.deepEqual(problems, [`${PRIVATE_INDEX}: looks[0] (ink-wash): cls ${cls} is a shipped or harness look's class`]);
+            assert.deepEqual(problems, [`${PRIVATE_INDEX}: looks[0] (some-look): cls ${cls} is a shipped, harness or fixture look's class`]);
         }
+        // Read as the fixture on purpose, the fixture's class is its own.
+        assert.deepEqual(privateLooksProblems({ ...repoOf({ cls: FIXTURE_PRIVATE_LOOK_CLASS }), facts, fixture: true }), []);
+        assert.equal(privateLooksProblems({ ...repoOf({ cls: 't-modern' }), facts, fixture: true }).length, 1);
     });
 
     it('refuses an index that is not one: not JSON, another schema, a missing or unknown field, a bad slug or class', () => {
@@ -238,23 +252,23 @@ describe('a-private-look-id-is-reserved-and-unshared', () => {
         assert.equal(parsePrivateIndex('{"schema":1}').problems.length, 1);
         assert.deepEqual(parsePrivateIndex('{"schema":1,"looks":[]}').problems, []);
         const one = (entry) => parsePrivateIndex(JSON.stringify({ schema: 1, looks: [entry] }));
-        const good = { id: 4, slug: 'ink-wash', cls: 't-inkwash', stage: 'preview', paid: true };
+        const good = { id: 4, slug: 'some-look', cls: 't-some-look', stage: 'preview', paid: true };
         assert.deepEqual(one(good).problems, []);
         for (const field of Object.keys(good)) {
             const { [field]: _, ...missing } = good;
             assert.equal(one(missing).problems.length, 1, `missing ${field}`);
         }
         for (const bad of [
-            { label: 'Ink wash' },
+            { label: 'Some look' },
             { id: 256 },
             { id: '4' },
             { id: 4.5 },
-            { slug: 'Ink-Wash' },
+            { slug: 'Some-Look' },
             { slug: '../x' },
             { slug: 'a'.repeat(33) },
-            { cls: 'inkwash' },
-            { cls: 't-ink wash' },
-            { cls: 't-ink.wash' },
+            { cls: 'somelook' },
+            { cls: 't-some look' },
+            { cls: 't-some.look' },
             { stage: 'draft' },
             { paid: 'true' },
         ]) {
@@ -271,8 +285,8 @@ describe('a-private-look-id-is-reserved-and-unshared', () => {
             ['stray/: a directory the index does not name'],
         );
         assert.deepEqual(
-            privateLooksProblems({ files: files.filter((f) => f.path !== 'ink-wash/sheet.css'), indexText, facts }),
-            ['ink-wash/sheet.css: the index names the look and the file is not there'],
+            privateLooksProblems({ files: files.filter((f) => f.path !== 'some-look/sheet.css'), indexText, facts }),
+            ['some-look/sheet.css: the index names the look and the file is not there'],
         );
         assert.deepEqual(privateLooksProblems({ files: plain('README.md'), indexText: undefined, facts }), [
             `no ${PRIVATE_INDEX} at the root: nothing names a look`,
@@ -333,14 +347,14 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         );
         writeFileSync(join(repo.dir, '.DS_Store'), 'x');
         writeFileSync(join(repo.dir, 'fixture', 'art', 'new.svg'), '<svg/>');
-        writeFileSync(join(repo.dir, 'fixture', 'build.mjs'), 'export {};\n');
+        writeFileSync(join(repo.dir, 'fixture', 'script.mjs'), 'export {};\n');
         assert.deepEqual(repo.read(), clean, 'nothing untracked is read');
     });
 
     it('refuses what a commit holds: a .DS_Store, a script, a symlink, a gitlink', () => {
         const repo = plantPrivateRepo();
         writeFileSync(join(repo.dir, '.DS_Store'), 'x');
-        writeFileSync(join(repo.dir, 'fixture', 'build.mjs'), 'export {};\n');
+        writeFileSync(join(repo.dir, 'fixture', 'script.mjs'), 'export {};\n');
         symlinkSync('ground.svg', join(repo.dir, 'fixture', 'art', 'linked.svg'));
         repo.git('add', '-A');
         const blob = repo.git('hash-object', '-w', join(repo.dir, 'index.json'));
@@ -349,7 +363,7 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         const problems = repo.read().problems;
         assert.equal(problems.length, 4, problems.join('\n'));
         assert.ok(problems.some((p) => p.startsWith('".DS_Store": not a file')));
-        assert.ok(problems.some((p) => p.startsWith('"fixture/build.mjs": not a file')));
+        assert.ok(problems.some((p) => p.startsWith('"fixture/script.mjs": not a file')));
         assert.ok(problems.some((p) => p.startsWith('"fixture/art/linked.svg": a symlink')));
         assert.ok(problems.some((p) => p.startsWith('"fixture/art/sub.svg": a gitlink')));
     });
@@ -376,6 +390,37 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
             assert.throws(() => gitFilesAt({ dir: repo.dir, commit, env: repo.env }), TypeError, commit);
         }
         assert.throws(() => gitFilesAt({ dir: repo.dir, commit: '0'.repeat(40), env: repo.env }));
+    });
+
+    it("reads a repository's root only, whatever the inherited environment points at", () => {
+        const repo = plantPrivateRepo();
+        // A directory inside it: git would read the enclosing repository.
+        assert.throws(() => gitFilesAt({ dir: join(repo.dir, 'fixture'), commit: repo.head(), env: repo.env }), /not a repository's root/);
+        // A directory in no repository of its own, inside another: the same.
+        const other = plantPrivateRepo({ under: 'layout/fixture-private-looks' });
+        assert.throws(() => repo.read({ dir: join(other.dir, 'layout') }), /not a repository's root/);
+        // Location variables a hook would carry, naming the other repository:
+        // dropped, so the read is the planted one's.
+        const pointed = { ...repo.env, GIT_DIR: join(other.dir, '.git'), GIT_WORK_TREE: other.dir, GIT_INDEX_FILE: join(other.dir, '.git', 'index') };
+        assert.deepEqual(repo.read({ env: pointed }).problems, []);
+        assert.deepEqual(GIT_LOCATION_VARS.filter((name) => ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'].includes(name)).length, 3);
+    });
+
+    it('reads a subtree of a commit, which is how a build reads the tracked fixture', () => {
+        const repo = plantPrivateRepo({ under: 'layout/fixture-private-looks' });
+        const read = repo.read({ prefix: 'layout/fixture-private-looks' });
+        assert.deepEqual(read.problems, []);
+        assert.deepEqual(read.files.map((f) => f.path).sort(), trackedFixture().files.map((f) => f.path).sort());
+        // The whole tree is not a private look repository: it holds app.ts.
+        assert.ok(repo.read().problems.some((p) => p.startsWith('"app.ts": not a file')));
+        for (const prefix of ['../x', 'layout//fixture-private-looks', '/layout', 'Layout', '', 'layout/']) {
+            assert.throws(() => repo.read({ prefix }), TypeError, prefix);
+        }
+        // This checkout's own fixture, at HEAD: the road 8b's public-CI join takes.
+        const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim();
+        const own = readPrivateLooksAt({ dir: ROOT, commit: head, prefix: FIXTURE, facts, fixture: true });
+        assert.ok(own.files.length >= 4);
+        assert.deepEqual(own.problems, []);
     });
 });
 

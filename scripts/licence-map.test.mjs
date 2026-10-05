@@ -25,6 +25,7 @@ import {
     kitProblems,
     licenceFileProblems,
     lookArtProblems,
+    refusedIgnored,
     refusedPath,
     rowFor,
     vendorNoticeProblems,
@@ -46,7 +47,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
  * What git says about a checkout: the tracked files, the tree (tracked plus
- * untracked and not ignored), the index's gitlinks (mode 160000), whether
+ * untracked and not ignored), the ignored entries, the index's gitlinks
+ * (mode 160000), whether
  * the clone is shallow, `origin/main`, and every commit a push could publish
  * — reachable from a local branch, a tag or HEAD and from no `origin/*` ref,
  * so `push --all` and `push --tags` are covered as well as HEAD's own — with
@@ -68,10 +70,21 @@ function readGitFacts(root, git = 'git', env = process.env) {
     const shallow = run(['rev-parse', '--is-shallow-repository']).trim() === 'true';
     const tracked = list(['ls-files', '-z', '--cached']);
     const tree = list(['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
-    // "<mode> <object> <stage>\t<path>" per index entry.
+    // What every exclude source hides, a wholly ignored directory as one
+    // `dir/` entry: a nested .gitignore, .git/info/exclude or a user's
+    // excludes file could hide src/looks/ from the tree above.
+    const ignored = list(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory']);
+    // "<mode> <object> <stage>\t<path>" per index entry; a line this reader
+    // does not know throws, like the log's.
     const gitlinks = list(['ls-files', '-z', '--stage'])
-        .map((entry) => /^(\d+) [0-9a-f]+ \d\t(.*)$/s.exec(entry))
-        .filter((m) => m !== null && m[1] === GITLINK_MODE)
+        .map((entry) => {
+            const m = /^(\d{6}) [0-9a-f]+ \d\t(.+)$/s.exec(entry);
+            if (m === null) {
+                throw new Error(`git ls-files --stage: an entry this reader does not know: ${JSON.stringify(entry)}`);
+            }
+            return m;
+        })
+        .filter((m) => m[1] === GITLINK_MODE)
         .map((m) => m[2]);
     let upstream;
     try {
@@ -83,15 +96,24 @@ function readGitFacts(root, git = 'git', env = process.env) {
             throw error;
         }
     }
-    // One record per commit (and per parent of a merge, -m): "\x01<hash>",
-    // then per path a raw header ":<old mode> <new mode> <old> <new> <status>"
-    // and the path, each NUL-terminated, the first header after a newline git
-    // adds. --no-renames keeps every status to one path.
+    // One record per commit (and per parent of a merge): "\x01<hash>", then
+    // per path a raw header ":<old mode> <new mode> <old> <new> <status>" and
+    // the path, each NUL-terminated, the first header after a newline git
+    // adds. --no-renames keeps every status to one path. The options that a
+    // repository's or a user's config would otherwise decide are stated:
+    // --root (log.showRoot false hides a root commit's files),
+    // --ignore-submodules=none (diff.ignoreSubmodules all hides every
+    // gitlink), --diff-merges=separate (log.diffMerges narrows or combines a
+    // merge's diff), --no-show-signature (log.showSignature prints lines this
+    // reader does not know).
     const unpushed = [];
     const out = run([
         'log',
         '-z',
-        '-m',
+        '--root',
+        '--diff-merges=separate',
+        '--ignore-submodules=none',
+        '--no-show-signature',
         '--full-history',
         '--no-renames',
         '--raw',
@@ -130,7 +152,7 @@ function readGitFacts(root, git = 'git', env = process.env) {
             throw new Error(`git log --raw: an unexpected token ${JSON.stringify(token)}`);
         }
     }
-    return { tracked, tree, gitlinks, shallow, upstream, unpushed };
+    return { tracked, tree, ignored, gitlinks, shallow, upstream, unpushed };
 }
 
 /**
@@ -304,7 +326,7 @@ describe('every-licence-file-is-on-the-map', () => {
         assert.equal(rowFor('src/ui/fonts/inter-latin.woff2').kind, 'fonts');
         assert.equal(rowFor('vendor/ecash-lib-4.13.0.tgz').kind, 'third-party');
         assert.equal(rowFor('src/app.ts').kind, 'repository');
-        assert.equal(rowFor('looks/ink-wash/sheet.css').kind, 'private');
+        assert.equal(rowFor('looks/some-look/sheet.css').kind, 'private');
         assert.equal(rowFor('Looks/index.json').kind, 'private');
         assert.equal(rowFor('layout/fixture-private-looks/index.json').kind, 'repository');
         assert.equal(rowFor('deploy/looks.commit').kind, 'repository');
@@ -321,15 +343,31 @@ describe('every-licence-file-is-on-the-map', () => {
  * A throwaway repository, outside this checkout, with no global or system
  * config and no user exclude file (`$XDG_CONFIG_HOME/git/ignore`, which git
  * reads whatever `GIT_CONFIG_GLOBAL` says). `gitignore`, when given, is
- * committed with the base, which `origin/main` then holds.
+ * committed with the base, which `origin/main` then holds; `config` is set in
+ * the repository's own `.git/config`.
  */
+
+/**
+ * Config that hid a commit or a gitlink from the reader, or broke it, before
+ * it stated its options (the 8a critic's P2-1): `diff.ignoreSubmodules all`
+ * drops every gitlink from `--raw`, `log.showRoot false` a root commit's
+ * files, and `log.diffMerges combined` turns `-m` into the combined format
+ * this reader refuses. (`first-parent`, the critic's third, narrows a merge's
+ * diff but hid nothing in these plants: an evil merge's own file still shows
+ * against its first parent.)
+ */
+const HOSTILE_CONFIG = Object.freeze({
+    'diff.ignoreSubmodules': 'all',
+    'log.showRoot': 'false',
+    'log.diffMerges': 'combined',
+});
 const scratch = [];
 after(() => {
     for (const dir of scratch) {
         rmSync(dir, { recursive: true, force: true });
     }
 });
-function plantRepo({ gitignore } = {}) {
+function plantRepo({ gitignore, config = {} } = {}) {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-licence-map-')));
     const xdg = realpathSync(mkdtempSync(join(tmpdir(), 'stall-licence-map-xdg-')));
     scratch.push(dir, xdg);
@@ -352,6 +390,10 @@ function plantRepo({ gitignore } = {}) {
         git('config', '--unset', 'core.ignorecase');
     } catch {
         // Not set on a case-sensitive disk.
+    }
+    // A repository's own config the reader must not depend on.
+    for (const [key, value] of Object.entries(config)) {
+        git('config', key, value);
     }
     writeFileSync(join(dir, 'a.txt'), 'a\n');
     git('add', 'a.txt');
@@ -391,7 +433,7 @@ function plantRepo({ gitignore } = {}) {
 }
 
 describe('look-art-waits-for-its-licence', () => {
-    const clean = { tree: ['src/app.ts'], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
+    const clean = { tree: ['src/app.ts'], ignored: [], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
 
     it('refuses a file under the directory, in any case, and every file is listed', () => {
         assert.deepEqual(lookArtProblems(clean), []);
@@ -517,7 +559,7 @@ describe('a-path-that-folds-to-src-looks-is-refused', () => {
     // U+017F LATIN SMALL LETTER LONG S: APFS folds it to "s", lower-casing
     // and git's :(icase) do not.
     const folded = 'src/look\u017f/a.svg';
-    const clean = { tree: ['src/app.ts'], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
+    const clean = { tree: ['src/app.ts'], ignored: [], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
 
     it('refuses a path that is not printable ASCII, in the tree and in a commit', () => {
         assert.equal(folded.toLowerCase().startsWith(LOOK_ART_ROOT), false, 'lower-casing does not see it');
@@ -552,13 +594,15 @@ describe('the-private-looks-directory-is-ignored-and-still-guarded', () => {
      * of `git add -A`; the guard keeps it out of every push anyway, because
      * `git add -f looks` stages a gitlink, `git add -f looks/x` stages the
      * file, and `git submodule add` writes a `.gitmodules` carrying the
-     * private address — none of which an ignore rule stops.
+     * private address — none of which an ignore rule stops. A clone made
+     * under any other name is an embedded repository, refused before it is
+     * staged; and no exclude source may hide `src/looks/`.
      */
-    const clean = { tree: ['src/app.ts'], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
+    const clean = { tree: ['src/app.ts'], ignored: [], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
     const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8');
 
-    it('refuses the clone, a .gitmodules and a gitlink, in any case and at any depth', () => {
-        for (const path of ['looks', 'looks/', 'looks/index.json', 'Looks/ink-wash/sheet.css', 'LOOKS/a.svg']) {
+    it('refuses the clone, a .gitmodules, a gitlink and an embedded repository, in any case and at any depth', () => {
+        for (const path of ['looks', 'looks/', 'looks/index.json', 'Looks/some-look/sheet.css', 'LOOKS/a.svg']) {
             assert.ok(isPrivateLooks(path), path);
             assert.equal(lookArtProblems({ ...clean, tree: [path] }).length, 1, path);
         }
@@ -571,34 +615,89 @@ describe('the-private-looks-directory-is-ignored-and-still-guarded', () => {
             assert.equal(lookArtProblems({ ...clean, unpushed: [{ commit: 'c1', paths: [path], gitlinks: [] }] }).length, 1, path);
         }
         assert.ok(!isGitmodules('docs/gitmodules.md') && !isGitmodules('a.gitmodules'));
+        // An untracked directory entry is an embedded repository, by any name.
+        for (const path of ['other-looks/', 'look/', 'vendor/sub/']) {
+            assert.match(refusedPath(path), /an embedded repository/, path);
+            assert.equal(lookArtProblems({ ...clean, tree: [path] }).length, 1, path);
+        }
         // A gitlink anywhere: in the index, and in a commit a push would carry.
         assert.equal(lookArtProblems({ ...clean, gitlinks: ['vendor/sub'] }).length, 1);
         assert.equal(lookArtProblems({ ...clean, unpushed: [{ commit: 'c1', paths: ['vendor/sub'], gitlinks: ['vendor/sub'] }] }).length, 1);
         // A fact left out is a throw, never a pass over nothing.
-        assert.throws(() => lookArtProblems({ tree: [], shallow: false, upstream: 'abc', unpushed: [] }), /gitlinks/);
+        const { gitlinks: _g, ...noGitlinks } = clean;
+        const { ignored: _i, ...noIgnored } = clean;
+        assert.throws(() => lookArtProblems(noGitlinks), /gitlinks/);
         assert.throws(() => lookArtProblems({ ...clean, unpushed: [{ commit: 'c1', paths: [] }] }), /gitlinks/);
+        assert.throws(() => lookArtProblems(noIgnored), /ignored/);
     });
 
-    it('lets an ignored clone pass, and refuses it forced in as a gitlink', () => {
-        const repo = plantRepo({ gitignore });
+    it('refuses src/looks hidden by an exclude rule, and nothing else that is ignored', () => {
+        for (const path of ['src/looks/', 'src/looks/a.svg', 'src/Looks/a.svg', 'SRC/LOOKS/x', 'src/', 'src/lookſ/', 'src/café.log']) {
+            assert.ok(refusedIgnored(path) !== undefined, path);
+            assert.equal(lookArtProblems({ ...clean, ignored: [path] }).length, 1, path);
+        }
+        for (const path of ['looks/', 'node_modules/', 'dist/', 'private/', '.DS_Store', 'src/ui/a.log', 'private/café.md', 'src/lookshop.log']) {
+            assert.equal(refusedIgnored(path), undefined, path);
+        }
+    });
+
+    /** Force the clone in and take it out again: the problems at each step. */
+    function forcedAndRemoved(repo) {
         repo.nested('looks');
-        assert.deepEqual(repo.facts().tree.sort(), ['.gitignore', 'a.txt'], 'the clone is ignored');
-        assert.deepEqual(lookArtProblems(repo.facts()), []);
+        const counts = { ignored: lookArtProblems(repo.facts()).length };
         repo.git('add', '-f', 'looks');
         const staged = repo.facts();
         assert.deepEqual(staged.gitlinks, ['looks'], 'git add -f stages a gitlink');
-        assert.equal(lookArtProblems(staged).length, 2, 'in the tree, and as a gitlink');
+        counts.staged = lookArtProblems(staged).length;
         repo.git('commit', '-q', '-m', 'forced');
         const committed = repo.facts();
         assert.deepEqual(committed.unpushed.map((c) => c.gitlinks), [['looks']]);
-        assert.equal(lookArtProblems(committed).length, 4, 'the tree, the index, and the commit by its path and by its mode');
-        // Removed again: the tree is clean and both commits would still go out.
+        counts.committed = lookArtProblems(committed).length;
         repo.git('rm', '-q', '--cached', 'looks');
         repo.git('commit', '-q', '-m', 'unforced');
         const removed = repo.facts();
         assert.deepEqual(removed.gitlinks, []);
         assert.deepEqual(removed.unpushed.map((c) => c.gitlinks), [['looks'], ['looks']]);
-        assert.equal(lookArtProblems(removed).length, 4, 'two commits, each by its path and by its mode');
+        counts.removed = lookArtProblems(removed).length;
+        return counts;
+    }
+
+    it('lets an ignored clone pass, and refuses it forced in as a gitlink', () => {
+        const repo = plantRepo({ gitignore });
+        repo.nested('looks');
+        assert.deepEqual(repo.facts().tree.sort(), ['.gitignore', 'a.txt'], 'the clone is ignored');
+        assert.deepEqual(repo.facts().ignored, ['looks/'], 'and the ignored list holds it, which is expected');
+        // The ignored clone: nothing. Staged: the tree and the index. Then the
+        // commit by its path and by its mode; removed again, both commits.
+        assert.deepEqual(forcedAndRemoved(plantRepo({ gitignore })), { ignored: 0, staged: 2, committed: 4, removed: 4 });
+    });
+
+    it('reads the same under config that hid a gitlink, a root commit or a merge', () => {
+        assert.deepEqual(forcedAndRemoved(plantRepo({ gitignore, config: HOSTILE_CONFIG })), { ignored: 0, staged: 2, committed: 4, removed: 4 });
+        // A root commit on an orphan branch, carrying the private art.
+        const orphan = plantRepo({ gitignore, config: HOSTILE_CONFIG });
+        orphan.git('checkout', '-q', '--orphan', 'art');
+        orphan.git('rm', '-rq', '--cached', '.');
+        orphan.plant('looks/some-look/art/a.svg');
+        orphan.git('commit', '-q', '-m', 'art');
+        orphan.git('checkout', '-q', '-f', 'main');
+        const root = orphan.facts();
+        assert.deepEqual(root.unpushed.map((c) => c.paths), [['looks/some-look/art/a.svg']]);
+        assert.equal(lookArtProblems(root).length, 1, 'the root commit');
+        // An evil merge: the merge itself adds the file neither parent has.
+        const merge = plantRepo({ gitignore, config: HOSTILE_CONFIG });
+        merge.git('checkout', '-q', '-b', 'side');
+        merge.git('commit', '-q', '--allow-empty', '-m', 'side');
+        merge.git('checkout', '-q', 'main');
+        merge.git('commit', '-q', '--allow-empty', '-m', 'main');
+        merge.git('merge', '-q', '--no-ff', '--no-commit', 'side');
+        merge.plant('looks/some-look/sheet.css');
+        merge.git('commit', '-q', '-m', 'merge');
+        merge.git('update-index', '--force-remove', 'looks/some-look/sheet.css');
+        merge.git('commit', '-q', '-m', 'gone');
+        const evil = merge.facts();
+        assert.equal(evil.unpushed.filter((c) => c.paths.includes('looks/some-look/sheet.css')).length, 2, 'the merge, per parent, and the removal');
+        assert.equal(lookArtProblems(evil).length, 2);
     });
 
     it('refuses a file forced in under it, a gitlink elsewhere, and a .gitmodules at any depth', () => {
@@ -625,21 +724,63 @@ describe('the-private-looks-directory-is-ignored-and-still-guarded', () => {
         assert.equal(lookArtProblems(other.facts()).length, 3, 'the tree, and the commit by a path and by a mode');
     });
 
-    it('sees the clone when nothing ignores it, or when it is spelled another way', () => {
+    it('refuses a clone made under another name, before it is staged', () => {
+        for (const name of ['other-looks', 'look', 'tools/looks']) {
+            const repo = plantRepo({ gitignore });
+            repo.nested(name);
+            assert.ok(repo.facts().tree.includes(`${name}/`), name);
+            const problems = lookArtProblems(repo.facts());
+            assert.equal(problems.length, 1, `${name}: ${problems.join('; ')}`);
+            assert.match(problems[0], /an embedded repository/);
+        }
+    });
+
+    it('refuses src/looks hidden by a nested .gitignore or by .git/info/exclude', () => {
+        const nested = plantRepo({ gitignore });
+        mkdirSync(join(nested.dir, 'src', 'looks'), { recursive: true });
+        writeFileSync(join(nested.dir, 'src', 'looks', 'a.svg'), '<svg/>');
+        writeFileSync(join(nested.dir, 'src', '.gitignore'), 'looks/\n');
+        assert.ok(!nested.facts().tree.some(isLookArt), 'the tree half alone is blind to it');
+        assert.equal(lookArtProblems(nested.facts()).length, 1);
+        const exclude = plantRepo({ gitignore });
+        mkdirSync(join(exclude.dir, 'src', 'Looks'), { recursive: true });
+        writeFileSync(join(exclude.dir, 'src', 'Looks', 'a.svg'), '<svg/>');
+        writeFileSync(join(exclude.dir, '.git', 'info', 'exclude'), 'a.svg\n');
+        assert.ok(!exclude.facts().tree.some(isLookArt));
+        // Here src/ holds nothing but ignored files, so git may list the
+        // directories that hold the file as well as the file (2.50 lists
+        // all three): each is refused.
+        const problems = lookArtProblems(exclude.facts());
+        assert.ok(exclude.facts().ignored.length > 0);
+        assert.equal(problems.length, exclude.facts().ignored.length);
+        assert.ok(problems.every((p) => p.includes('an exclude rule is hiding it')));
+    });
+
+    it('sees the clone when nothing ignores it, and refuses it forced in whatever core.ignorecase says', () => {
         const bare = plantRepo();
         bare.nested('looks');
         assert.deepEqual(bare.facts().tree.sort(), ['a.txt', 'looks/']);
         assert.equal(lookArtProblems(bare.facts()).length, 1, 'with no rule, the clone is in the tree and refused');
-        const capital = plantRepo({ gitignore });
-        capital.nested('Looks');
-        assert.ok(capital.facts().tree.includes('Looks/'), 'the rule is case-sensitive here');
-        assert.equal(lookArtProblems(capital.facts()).length, 1);
+        // core.ignorecase unset (this checkout): /looks/ does not hide Looks/,
+        // which the tree half then refuses.
+        const unset = plantRepo({ gitignore });
+        unset.nested('Looks');
+        assert.ok(unset.facts().tree.includes('Looks/'));
+        assert.equal(lookArtProblems(unset.facts()).length, 1);
+        // core.ignorecase true (a fresh clone on a case-insensitive disk):
+        // /looks/ hides Looks/ as it hides looks/, and forced in it is refused.
+        const set = plantRepo({ gitignore, config: { 'core.ignorecase': 'true' } });
+        set.nested('Looks');
+        assert.deepEqual(lookArtProblems(set.facts()), []);
+        set.git('add', '-f', 'Looks');
+        assert.equal(lookArtProblems(set.facts()).length, 2, 'in the tree, and as a gitlink');
     });
 
-    it('finds no gitlink, no .gitmodules and nothing under looks/ in this checkout or a commit a push would publish', () => {
+    it('finds no gitlink, no .gitmodules, no embedded repository and nothing under looks/ in this checkout or a commit a push would publish', () => {
         assert.deepEqual(facts.gitlinks, []);
         assert.ok(facts.unpushed.every((c) => c.gitlinks.length === 0));
-        assert.deepEqual(facts.tree.filter((path) => isPrivateLooks(path) || isGitmodules(path)), []);
+        assert.deepEqual(facts.tree.filter((path) => isPrivateLooks(path) || isGitmodules(path) || path.endsWith('/')), []);
+        assert.deepEqual(facts.ignored.filter((path) => refusedIgnored(path) !== undefined), []);
     });
 });
 
@@ -649,7 +790,8 @@ describe('the-ignore-rule-for-private-looks-is-exact', () => {
      * directory. Anything wider (`looks/`, `looks`, a glob) would also hide
      * an untracked `src/looks/` from the guard's tree half — the directory
      * that half exists for. Read by `git check-ignore` in a planted
-     * repository holding the `.gitignore` under test and no other exclude.
+     * repository holding the `.gitignore` under test and no other exclude,
+     * and again in this checkout, through every exclude source it has.
      */
     const base = 'node_modules\n.DS_Store\n';
     const all = [...PRIVATE_LOOKS_HIDDEN, ...PRIVATE_LOOKS_SEEN];
@@ -672,6 +814,32 @@ describe('the-ignore-rule-for-private-looks-is-exact', () => {
 
     it("holds this checkout's .gitignore to it", () => {
         assert.deepEqual(problemsOf(readFileSync(join(ROOT, '.gitignore'), 'utf8')), []);
+    });
+
+    it('finds no exclude source in this checkout hiding a path the guard watches', () => {
+        // Index-aware, and every source this checkout reads: nested
+        // .gitignore files, .git/info/exclude, the user's excludes file. The
+        // clone's own spellings are left out: a looks/ clone on this disk is
+        // meant to be ignored.
+        const watched = PRIVATE_LOOKS_SEEN.filter((path) => !isPrivateLooks(path));
+        assert.ok(watched.includes('src/looks/a.svg'));
+        let hidden = [];
+        try {
+            hidden = execFileSync('git', ['check-ignore', '--stdin', '-z'], {
+                cwd: ROOT,
+                input: watched.map((path) => `${path}\0`).join(''),
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            })
+                .split('\0')
+                .filter((path) => path !== '');
+        } catch (error) {
+            // Exit 1: none of them is ignored. Anything else is not an answer.
+            if (error?.status !== 1) {
+                throw error;
+            }
+        }
+        assert.deepEqual(hidden, []);
     });
 });
 

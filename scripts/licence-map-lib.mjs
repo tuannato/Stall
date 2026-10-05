@@ -147,9 +147,13 @@ export function isGitmodules(path) {
  * A path the guard refuses, and why: anything that is not printable ASCII
  * (APFS folds more than capitals — `src/lookſ/` with U+017F is `src/looks/`
  * to the disk, and neither lower-casing nor git's `:(icase)` sees it),
- * anything under `src/looks` or the top-level `looks` in any case, and a
+ * anything under `src/looks` or the top-level `looks` in any case, a
  * `.gitmodules` anywhere — `git submodule add` writes one, and it carries the
- * address of the repository it names.
+ * address of the repository it names — and an embedded repository: without
+ * `--directory`, `git ls-files --others` prints a directory (`dir/`) only for
+ * one, which `git add -A` stages as a gitlink, so a private clone made under
+ * another name (the repository's own, by `git clone <url>` from the root) or
+ * a mistyped one fails before it is staged, not after.
  */
 export function refusedPath(path) {
     if (!/^[\x20-\x7e]+$/.test(path)) {
@@ -164,6 +168,30 @@ export function refusedPath(path) {
     if (isGitmodules(path)) {
         return 'a .gitmodules file names another repository, and a push would publish its address';
     }
+    if (path.endsWith('/')) {
+        return `an embedded repository, which \`git add -A\` stages as a gitlink — a private look's clone goes at ${PRIVATE_LOOKS_ROOT} and nowhere else`;
+    }
+    return undefined;
+}
+
+/**
+ * An ignored entry the guard refuses: one under `src/looks` in any case, an
+ * ignored directory that holds it, or a name that is not printable ASCII
+ * under `src/` (which a folding disk could read as `src/looks`). The tree
+ * half lists untracked files through every exclude source — a nested
+ * `.gitignore`, `.git/info/exclude`, a user's `core.excludesFile` — so any
+ * of them could hide `src/looks/` from it; the ignored list is read for
+ * exactly that. The top-level `looks/` is meant to be ignored, and is not
+ * refused here.
+ */
+export function refusedIgnored(path) {
+    const lower = path.toLowerCase();
+    if (isLookArt(path) || (lower.endsWith('/') && LOOK_ART_ROOT.startsWith(lower))) {
+        return `ignored, and ${LOOK_ART_ROOT} is reserved, empty until LICENSE maps it: an exclude rule is hiding it from the guard`;
+    }
+    if (lower.startsWith('src/') && !/^[\x20-\x7e]+$/.test(path)) {
+        return 'ignored, and a path under src/ that is not printable ASCII (a disk that folds case may fold it into src/looks/)';
+    }
     return undefined;
 }
 
@@ -176,24 +204,35 @@ const GITLINK_WHY = `a gitlink (mode ${GITLINK_MODE}): another repository's comm
  * no gitlink is anywhere; and no path anywhere is one a case-folding disk
  * could turn into another.
  *
- * `facts`: `{ tree: string[], gitlinks: string[], shallow: boolean,
- * upstream: string | undefined, unpushed: { commit: string, paths:
- * string[], gitlinks: string[] }[] }`. `gitlinks` is every index entry of
- * mode 160000; an unpushed commit's `gitlinks` is every path it touches with
- * that mode on either side. `unpushed` is every commit reachable from a local
+ * `facts`: `{ tree: string[], ignored: string[], gitlinks: string[],
+ * shallow: boolean, upstream: string | undefined, unpushed: { commit:
+ * string, paths: string[], gitlinks: string[] }[] }`. `ignored` is every
+ * untracked entry an exclude source hides (`git ls-files --others --ignored
+ * --exclude-standard --directory`, read by `refusedIgnored`). `gitlinks` is
+ * every index entry of mode 160000; an unpushed commit's `gitlinks` is every
+ * path it touches with that mode on either side. `unpushed` is every commit reachable from a local
  * branch, a tag or HEAD and from no `origin/*` ref, with EVERY path it
  * touches: the test is applied here, not by a git pathspec. `upstream`
  * undefined means there is no `origin/main`, which fails rather than passing
- * on an empty list. A missing `gitlinks` list throws: a fact left out is a
- * check that passes over nothing.
+ * on an empty list. A missing `gitlinks` or `ignored` list throws: a fact
+ * left out is a check that passes over nothing.
  */
-export function lookArtProblems({ tree, gitlinks, shallow, upstream, unpushed }) {
+export function lookArtProblems({ tree, ignored, gitlinks, shallow, upstream, unpushed }) {
     if (!Array.isArray(gitlinks) || unpushed.some((entry) => !Array.isArray(entry.gitlinks))) {
         throw new TypeError('lookArtProblems: the gitlinks were not read (the index and every unpushed commit carry a list)');
+    }
+    if (!Array.isArray(ignored)) {
+        throw new TypeError('lookArtProblems: the ignored entries were not read');
     }
     const problems = [];
     for (const path of tree) {
         const why = refusedPath(path);
+        if (why !== undefined) {
+            problems.push(`${JSON.stringify(path)}: ${why}`);
+        }
+    }
+    for (const path of ignored) {
+        const why = refusedIgnored(path);
         if (why !== undefined) {
             problems.push(`${JSON.stringify(path)}: ${why}`);
         }
@@ -231,7 +270,7 @@ export function lookArtProblems({ tree, gitlinks, shallow, upstream, unpushed })
  * `looks*`, a `**` glob) would hide an untracked `src/looks/` from the tree
  * half of the guard, which is exactly the directory it watches.
  */
-export const PRIVATE_LOOKS_HIDDEN = Object.freeze(['looks/index.json', 'looks/README.md', 'looks/ink-wash/sheet.css', 'looks/ink-wash/art/a.svg']);
+export const PRIVATE_LOOKS_HIDDEN = Object.freeze(['looks/index.json', 'looks/README.md', 'looks/some-look/sheet.css', 'looks/some-look/art/a.svg']);
 export const PRIVATE_LOOKS_SEEN = Object.freeze([
     'looks',
     'Looks/index.json',

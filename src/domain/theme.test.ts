@@ -8,6 +8,7 @@ import {
     FONT_STACKS,
     DEFAULT_THEME_ID,
     MIN_CONTRAST,
+    FREE_PRIVATE_LOOK_IDS,
     NEO_CITY_THEME_ID,
     PAID_LOOK_IDS,
     PRIVATE_LOOK_IDS,
@@ -175,6 +176,9 @@ describe('theme-table-ids-are-pinned', () => {
         // release one behind an opaque pin bump. Pinned by value, because
         // every other assertion reads its expectation from the list it tests.
         expect(PRIVATE_LOOK_IDS).toEqual([0x04]);
+        // Paid by default: no free private look exists, so every reserved id
+        // is paid.
+        expect(FREE_PRIVATE_LOOK_IDS).toEqual([]);
         expect(PAID_LOOK_IDS).toEqual([0x04]);
         // Empty for the whole of step 8: step 9 adds 0x04 beside its price row.
         expect(RELEASED_LOOK_IDS).toEqual([]);
@@ -184,15 +188,22 @@ describe('theme-table-ids-are-pinned', () => {
             expect(SHIPPED_ATTACHMENTS.filter((row) => row.themeId === id)).toEqual([]);
         }
         expect(SHIPPED_THEMES.map((row) => row.id).filter((id) => PRIVATE_LOOK_IDS.includes(id))).toEqual([]);
-        // Every paid or released id is a reserved one; no reserved id twice.
+        // Every reserved id is paid or named free, never both; every free or
+        // released id is a reserved one; no reserved id twice.
+        for (const id of PRIVATE_LOOK_IDS) {
+            expect(PAID_LOOK_IDS.includes(id) !== FREE_PRIVATE_LOOK_IDS.includes(id), `0x0${id.toString(16)}`).toBe(true);
+        }
         expect(PAID_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
+        expect(FREE_PRIVATE_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
         expect(RELEASED_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
         expect(new Set(PRIVATE_LOOK_IDS).size).toBe(PRIVATE_LOOK_IDS.length);
         // The workshop's scratch id is no private look's (the skeleton's and
         // the fixture's are pinned beside them, `layout/looks.test.ts`).
         expect(PRIVATE_LOOK_IDS).not.toContain(WORKSHOP_THEME_ID);
         // Frozen: a reader cannot widen the list at run time.
-        expect(Object.isFrozen(PRIVATE_LOOK_IDS) && Object.isFrozen(PAID_LOOK_IDS) && Object.isFrozen(RELEASED_LOOK_IDS)).toBe(true);
+        for (const list of [PRIVATE_LOOK_IDS, FREE_PRIVATE_LOOK_IDS, PAID_LOOK_IDS, RELEASED_LOOK_IDS]) {
+            expect(Object.isFrozen(list)).toBe(true);
+        }
     });
 
     it('ships no id whose own palette hides the asked amount', () => {
@@ -213,14 +224,19 @@ describe('theme-table-ids-are-pinned', () => {
 describe('a-paid-look-is-released-only-with-its-price-row', () => {
     /**
      * A paid look reaches production only beside the price a seller pays for
-     * it (the step-8 critic's item 1, keyed on `PAID_LOOK_IDS`). No price
-     * table exists in step 8, so the rule reads: no paid id is released. Step
-     * 9's commit that adds `0x04` to `RELEASED_LOOK_IDS` changes this test to
-     * look the id up in its price table — a reviewed public diff, never a
-     * private one.
+     * it (the step-8 critic's item 1). **A tripwire until step 9**: no price
+     * table exists yet, so the rule reads "no released id is a paid one", and
+     * it reads the reserved list rather than the paid one — every reserved id
+     * not named free is paid, so a released id passes only when
+     * `FREE_PRIVATE_LOOK_IDS` names it. Step 9's commit that adds `0x04` to
+     * `RELEASED_LOOK_IDS` turns this into a lookup in its price table — a
+     * reviewed public diff, never a private one.
      */
-    it('releases no paid id while no price table exists', () => {
-        expect(RELEASED_LOOK_IDS.filter((id) => PAID_LOOK_IDS.includes(id))).toEqual([]);
+    it('releases no reserved id but a free one while no price table exists', () => {
+        for (const id of RELEASED_LOOK_IDS) {
+            expect(PRIVATE_LOOK_IDS, `0x0${id.toString(16)} is released and not reserved`).toContain(id);
+            expect(FREE_PRIVATE_LOOK_IDS, `0x0${id.toString(16)} is released, paid, and has no price row`).toContain(id);
+        }
     });
 });
 

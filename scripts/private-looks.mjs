@@ -22,8 +22,13 @@
  * **Read from git, never the disk** (the critic's item 25): the files are
  * the tree of one commit (`gitFilesAt`), so a `.DS_Store` Finder drops into
  * the clone, or anything else untracked there, is not a file of the look.
- * The pin that names that commit (`deploy/looks.commit`) and the clean check
- * arrive with the deploy road (8c); the reader here takes the commit as an
+ * The reader reads a repository's own root and nothing above it, with the
+ * inherited `GIT_DIR`-style variables dropped (`GIT_LOCATION_VARS`); a
+ * `prefix` reads one subtree of a commit instead, which is how this
+ * repository's tracked fixture is read (`{ dir: <checkout>, commit,
+ * prefix: 'layout/fixture-private-looks', fixture: true }`). The pin that
+ * names the private commit (`deploy/looks.commit`) and the clean check arrive
+ * with the deploy road (8c); the reader here takes the commit as an
  * argument.
  *
  * Pure checks over facts the caller reads, plus the two git readers — Node
@@ -32,9 +37,11 @@
  * `a-private-file-outside-the-allow-list-fails`,
  * `a-private-look-id-is-reserved-and-unshared`,
  * `a-private-index-cannot-free-a-reserved-id`, `a-release-is-a-public-diff`,
- * `private-files-are-read-from-git-at-a-commit` (`scripts/private-looks.test.mjs`).
+ * `private-files-are-read-from-git-at-a-commit`,
+ * `the-private-fixture-sheet-obeys-the-look-rules` (`scripts/private-looks.test.mjs`).
  */
 import { execFileSync } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { OWN_ART_NAME } from './workshop-css.mjs';
 
 /** The index at the repository's root. */
@@ -64,6 +71,15 @@ export const PRIVATE_LOOK_CLASS_MAX = 40;
  * looks' classes come from the theme table (`publicLookFacts`).
  */
 export const HARNESS_LOOK_CLASSES = Object.freeze(['t-workshop', 't-skeleton', 't-fixture-worn']);
+
+/**
+ * The tracked fixture's class (`layout/fixture-private-looks/`, held to its
+ * index by `a-private-look-id-is-reserved-and-unshared`): taken by no private
+ * look but the fixture's, so a real index can never be mistaken for the
+ * fixture, nor the fixture for it. Lifted only by a caller that reads the
+ * fixture on purpose (`{ fixture: true }`).
+ */
+export const FIXTURE_PRIVATE_LOOK_CLASS = 't-fixture-private';
 
 /** Files at the repository's root: the index, what the repository is, and the design log. */
 export const PRIVATE_ROOT_FILES = Object.freeze([PRIVATE_INDEX, 'README.md', 'LOG.md']);
@@ -197,11 +213,12 @@ export function parsePrivateIndex(text) {
  *   whether `PAID_LOOK_IDS` names the id, and `stage` is `release` exactly
  *   when `RELEASED_LOOK_IDS` does — both directions, so the public list and
  *   the private index move in one reviewed pair.
- * - **Its own class**: never a shipped look's or the harness's.
+ * - **Its own class**: never a shipped look's, the harness's or — unless
+ *   `fixture` says this is the tracked fixture — the fixture's.
  */
-export function privateIndexProblems(index, { reserved, paid, released, shippedClasses }) {
+export function privateIndexProblems(index, { reserved, paid, released, shippedClasses }, { fixture = false } = {}) {
     const problems = [];
-    const taken = new Set([...shippedClasses, ...HARNESS_LOOK_CLASSES]);
+    const taken = new Set([...shippedClasses, ...HARNESS_LOOK_CLASSES, ...(fixture ? [] : [FIXTURE_PRIVATE_LOOK_CLASS])]);
     const seen = { id: new Map(), slug: new Map(), cls: new Map() };
     index.looks.forEach((entry, at) => {
         const where = `${PRIVATE_INDEX}: looks[${at}] (${entry.slug})`;
@@ -219,7 +236,7 @@ export function privateIndexProblems(index, { reserved, paid, released, shippedC
             );
         }
         if (taken.has(entry.cls)) {
-            problems.push(`${where}: cls ${entry.cls} is a shipped or harness look's class`);
+            problems.push(`${where}: cls ${entry.cls} is a shipped, harness or fixture look's class`);
         }
         for (const field of ['id', 'slug', 'cls']) {
             const first = seen[field].get(entry[field]);
@@ -238,11 +255,11 @@ export function privateIndexProblems(index, { reserved, paid, released, shippedC
  * index there and valid (`parsePrivateIndex`, `privateIndexProblems`), every
  * look directory one the index names, and every look the index names with
  * its `look.json` and `sheet.css`. `files`: `{ path, mode }[]`; `indexText`:
- * the index's text, or undefined when there is none; `facts`: as
- * `privateIndexProblems` takes them. What `look.json` and `sheet.css` say is
- * read by the look's own validators, not here.
+ * the index's text, or undefined when there is none; `facts` and `fixture`:
+ * as `privateIndexProblems` takes them. What `look.json` and `sheet.css` say
+ * is read by the look's own validators, not here.
  */
-export function privateLooksProblems({ files, indexText, facts }) {
+export function privateLooksProblems({ files, indexText, facts, fixture = false }) {
     const problems = privateFileProblems(files);
     const paths = new Set(files.map((file) => file.path));
     if (!paths.has(PRIVATE_INDEX) || indexText === undefined) {
@@ -254,7 +271,7 @@ export function privateLooksProblems({ files, indexText, facts }) {
     if (index === undefined) {
         return problems;
     }
-    problems.push(...privateIndexProblems(index, facts));
+    problems.push(...privateIndexProblems(index, facts, { fixture }));
     const named = new Set(index.looks.map((entry) => entry.slug));
     const dirs = new Set([...paths].filter((path) => path.includes('/')).map((path) => path.slice(0, path.indexOf('/'))));
     for (const dir of [...dirs].sort()) {
@@ -296,24 +313,72 @@ function requireCommit(commit) {
     }
 }
 
-const gitRun = (dir, args, { git = 'git', env = process.env } = {}) =>
-    execFileSync(git, ['-C', dir, ...args], {
-        env,
-        encoding: 'utf8',
-        maxBuffer: 256 * 1024 * 1024,
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
+/**
+ * The variables that tell git where a repository is. Inherited — a hook runs
+ * with some of them set — they override `-C`, so the reader drops them and
+ * names the repository by its directory alone.
+ */
+export const GIT_LOCATION_VARS = Object.freeze([
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_COMMON_DIR',
+    'GIT_NAMESPACE',
+    'GIT_PREFIX',
+]);
+
+/** A path inside a commit's tree that names a subtree: lower-case words and hyphens, slash-separated. */
+export const TREE_PREFIX = /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/;
+
+function gitRunner({ dir, git = 'git', env = process.env }) {
+    const clean = { ...env };
+    for (const name of GIT_LOCATION_VARS) {
+        delete clean[name];
+    }
+    const run = (args) =>
+        execFileSync(git, ['-C', dir, ...args], {
+            env: clean,
+            encoding: 'utf8',
+            maxBuffer: 256 * 1024 * 1024,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+    // `-C dir` finds the repository that holds `dir`, which is the Stall
+    // checkout itself when `dir` has no `.git` of its own: the reader reads a
+    // repository's root, or nothing.
+    const top = run(['rev-parse', '--show-toplevel']).trim();
+    if (top !== realpathSync(dir)) {
+        throw new Error(`${dir} is not a repository's root (git reads ${top}): a private look repository is read from its own root`);
+    }
+    return run;
+}
+
+/** The tree-ish and the path prefix a read names: the commit, or one subtree of it. */
+function treeOf(commit, prefix) {
+    requireCommit(commit);
+    if (prefix === undefined) {
+        return { tree: commit, under: '' };
+    }
+    if (typeof prefix !== 'string' || !TREE_PREFIX.test(prefix)) {
+        throw new TypeError(`a subtree is named by lower-case words and hyphens, slash-separated, not ${JSON.stringify(prefix)}`);
+    }
+    return { tree: `${commit}:${prefix}`, under: `${prefix}/` };
+}
 
 /**
- * Every file in the tree of `commit` in the repository at `dir`, with its
- * mode: `git ls-tree -r -z --full-tree`, so what the disk holds beside the
- * commit — untracked, ignored or uncommitted — is not a file of the look.
- * Throws when git cannot run or the commit is not there; never an empty
- * list for a failure.
+ * Every file in the tree of `commit` in the repository whose root is `dir`
+ * — or, with `prefix`, in that subtree of it, with paths from the subtree's
+ * root (how a repository that carries a private look's files in one
+ * directory, like this one's tracked fixture, is read) — with its mode: `git
+ * ls-tree -r -z --full-tree`, so what the disk holds beside the commit —
+ * untracked, ignored or uncommitted — is not a file of the look. Throws when
+ * git cannot run, `dir` is not a repository's root or the commit is not
+ * there; never an empty list for a failure.
  */
-export function gitFilesAt({ dir, commit, git, env }) {
-    requireCommit(commit);
-    const out = gitRun(dir, ['ls-tree', '-r', '-z', '--full-tree', commit], { git, env });
+export function gitFilesAt({ dir, commit, prefix, git, env }) {
+    const { tree } = treeOf(commit, prefix);
+    const out = gitRunner({ dir, git, env })(['ls-tree', '-r', '-z', '--full-tree', tree]);
     const files = [];
     for (const entry of out.split('\0')) {
         if (entry === '') {
@@ -329,20 +394,21 @@ export function gitFilesAt({ dir, commit, git, env }) {
     return files;
 }
 
-/** The text of `path` in the tree of `commit`: `git cat-file blob <commit>:<path>`. */
-export function gitTextAt({ dir, commit, path, git, env }) {
-    requireCommit(commit);
-    return gitRun(dir, ['cat-file', 'blob', `${commit}:${path}`], { git, env });
+/** The text of `path` in the tree of `commit` (or its `prefix` subtree): `git cat-file blob <commit>:<prefix/><path>`. */
+export function gitTextAt({ dir, commit, prefix, path, git, env }) {
+    const { under } = treeOf(commit, prefix);
+    return gitRunner({ dir, git, env })(['cat-file', 'blob', `${commit}:${under}${path}`]);
 }
 
 /**
- * The private look repository at `dir`, at `commit`: its files and the
- * problems `privateLooksProblems` finds with `facts`. The index is read only
- * when the tree holds one as a plain file.
+ * The private look repository at `dir`, at `commit` (or its `prefix`
+ * subtree): its files and the problems `privateLooksProblems` finds with
+ * `facts` and `fixture`. The index is read only when the tree holds one as a
+ * plain file.
  */
-export function readPrivateLooksAt({ dir, commit, facts, git, env }) {
-    const files = gitFilesAt({ dir, commit, git, env });
+export function readPrivateLooksAt({ dir, commit, prefix, facts, fixture = false, git, env }) {
+    const files = gitFilesAt({ dir, commit, prefix, git, env });
     const index = files.find((file) => file.path === PRIVATE_INDEX && file.mode === PRIVATE_FILE_MODE);
-    const indexText = index === undefined ? undefined : gitTextAt({ dir, commit, path: PRIVATE_INDEX, git, env });
-    return { files, indexText, problems: privateLooksProblems({ files, indexText, facts }) };
+    const indexText = index === undefined ? undefined : gitTextAt({ dir, commit, prefix, path: PRIVATE_INDEX, git, env });
+    return { files, indexText, problems: privateLooksProblems({ files, indexText, facts, fixture }) };
 }
