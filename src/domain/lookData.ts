@@ -205,11 +205,15 @@ export class LookDataError extends Error {
  * `virtual:stall-private-looks` exports (`src/private-looks.d.ts`, step 8).
  * The index's facts the app needs (the look's reserved id and its class),
  * the URL of its built sheet, and its `look.json` as parsed JSON —
- * `unknown`, because the look table validates it again at runtime with
- * `lookFromData` under `{ id, sheetClass }` and drops a look that fails: the
- * build's validation is the loud one, the runtime's only fails safe. Whether
- * the id is paid or released is never carried here — the public lists in
- * `theme.ts` decide (the step-8 critic's item 1).
+ * `unknown`, because 8b2's look table is to validate it again at runtime
+ * with `lookFromData` under `{ id, sheetClass }` and drop a look that fails:
+ * the build's validation is the loud one, the runtime's only fails safe.
+ * **The place is checked there too, not here**: `lookFromData` copies
+ * `place.id` and `place.sheetClass` onto the row unchecked (the kit's place
+ * is a literal), so a source naming a shipped id or class, an unreserved id,
+ * or an id or class another source has, is the table's to drop (the 8b1
+ * critic's item 4). Whether the id is paid or released is never carried
+ * here — the public lists in `theme.ts` decide (the step-8 critic's item 1).
  *
  * **No build produces it yet**: the plugin that does, and the table's merge
  * that reads it, are step 8b2's. Until then the module is declared and

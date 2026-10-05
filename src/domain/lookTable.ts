@@ -12,8 +12,12 @@
  * the looks a seller can choose, reads the merged view here instead. A site
  * left on the public table would paint the default look under a private
  * look's id (the kit's P1 shape, `the-harness-chooses-looks-in-one-place`),
- * so `no-app-site-decodes-against-the-shipped-table-alone` refuses the public
- * names anywhere in the app outside this module and the two that define them.
+ * so an app file takes from `theme.ts` and `attachments.ts` only the names
+ * that read no catalogue — an allow-list, each name with its reason, so a
+ * new catalogue reader is refused before anyone has classified it
+ * (`the-app-takes-from-the-public-table-only-what-reads-no-catalogue`) — and
+ * the sites themselves are pinned to their merged views
+ * (`no-app-site-decodes-against-the-shipped-table-alone`).
  *
  * | merged view               | public table it reads today |
  * |---------------------------|-----------------------------|
@@ -26,9 +30,13 @@
  * | `mintedLookTokens`        | `mintedAttachmentTokens`    |
  * | `lookAttachmentByTokenId` | `attachmentByTokenId`       |
  *
- * The readers that take a worn set rather than an id (`wornFrom`,
- * `withMood`, `attachmentClasses`, `attachmentNodesWanted`) consult no
- * catalogue and stay where they are.
+ * These eight are the module's whole runtime export
+ * (`the-look-table-exports-exactly-its-merged-views`), and each answers a
+ * public id exactly as its public counterpart does, rows by reference
+ * (`every-merged-view-answers-a-public-id-as-the-public-table-does`). The
+ * readers that take a worn set rather than an id (`wornFrom`, `withMood`,
+ * `attachmentClasses`, `attachmentNodesWanted`) consult no catalogue and
+ * stay where they are.
  *
  * **Step 8b1: the private half is empty, so each merged view IS its public
  * counterpart, re-exported under the merged name.** No build includes a
@@ -38,11 +46,15 @@
  * than as a merge over an empty list keeps the served bundle the bytes it
  * was (measured: `dist` identical to the previous `main`'s): a merge
  * function, however inert, is code the minifier keeps. 8b2 replaces each
- * re-export with the merge over `privateLooks`, validated at runtime by
- * `lookFromData` (a look that fails is dropped and its id reads as unknown,
- * never a thrown boot), and makes this module the virtual module's one
- * importer (`the-private-looks-module-is-the-look-tables-alone` holds that
- * nothing else imports it today).
+ * re-export with the merge over `privateLooks` — all eight, the derived
+ * readers as well as the obvious ones, over one merged `LOOK_ATTACHMENTS`
+ * with its rows by reference — validated at runtime (not built yet: a look
+ * whose JSON fails `lookFromData`, or whose id is not reserved, or whose
+ * class is a shipped or harness one, or that repeats an id or a class, is to
+ * be dropped and its id read as unknown, never a thrown boot), and makes
+ * this module the virtual module's one importer
+ * (`the-private-looks-module-is-the-look-tables-alone` holds that nothing
+ * else imports it today).
  */
 export { decodeTheme as decodeLook, SHIPPED_THEMES as LOOK_ROWS } from './theme';
 export {
