@@ -207,11 +207,21 @@ describe('no-harness-look-is-a-private-look', () => {
         expect([...HARNESS_LOOK_CLASSES].sort()).toEqual([WORKSHOP_SHEET_CLASS, SKELETON_SHEET_CLASS, FIXTURE_SHEET_CLASS].sort());
     });
 
-    it('carries a tracked private fixture whose look.json the kit reads as a look', () => {
-        // The fixture's look.json is written in the kit's shape, which the
-        // join's validator widens (8b1); read here by today's.
+    it('carries a tracked private fixture whose look.json is the kit’s shape plus the tokens a private row may name', () => {
+        // The fixture's look.json is written in the kit's shape, widened by
+        // one field: a private look's row may name the token that entitles
+        // it (8b2, `mintable`). The kit refuses exactly that field and
+        // nothing else, so the fixture is a kit look once its tokens go.
         const source = readFileSync(join(LAYOUT, 'fixture-private-looks', 'fixture', 'look.json'), 'utf8');
-        expect(workshopLookProblems(source)).toEqual([]);
-        expect(parseWorkshopLook(source).theme.label).toBe('Fixture private look');
+        expect(workshopLookProblems(source)).toEqual([
+            'moods[0].tokenId: unknown field — a kit row is never minted (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+            'decorations[0].tokenId: unknown field — a kit row is never minted (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+        ]);
+        const json = JSON.parse(source) as { moods: { tokenId?: string }[]; decorations: { tokenId?: string }[] };
+        for (const row of [...json.moods, ...json.decorations]) {
+            delete row.tokenId;
+        }
+        expect(workshopLookProblems(JSON.stringify(json))).toEqual([]);
+        expect(parseWorkshopLook(JSON.stringify(json)).theme.label).toBe('Fixture private look');
     });
 });

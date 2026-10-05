@@ -5,6 +5,36 @@
     "shape": {},
     "tierCeilings": [7, 9, 12],
     "overlayTierCeilings": [5, 7, 9],
-    "moods": [],
-    "decorations": []
+    "moods": [
+        {
+            "bit": 1,
+            "slot": "mood",
+            "label": "Fixture dusk",
+            "place": "The whole stall",
+            "palette": { "bg": [34, 36, 44], "text": [240, 240, 236] },
+            "motion": false,
+            "tokenId": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2"
+        }
+    ],
+    "decorations": [
+        {
+            "bit": 0,
+            "slot": "trim",
+            "label": "Fixture trim",
+            "place": "Behind the page",
+            "cls": "att-fixture-trim",
+            "paint": "root",
+            "motion": false,
+            "tokenId": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1"
+        },
+        {
+            "bit": 2,
+            "slot": "crest",
+            "label": "Fixture crest",
+            "place": "On the sign",
+            "cls": "att-fixture-crest",
+            "paint": "root",
+            "motion": false
+        }
+    ]
 }

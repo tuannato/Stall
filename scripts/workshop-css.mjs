@@ -1226,6 +1226,9 @@ function fontFamiliesOf(body) {
         .map((decl) => decl.value.replace(/^(["'])([\s\S]*)\1$/, '$2').trim());
 }
 
+/** The `font-display` values a look's face may take: text paints at once, in the fallback, while the face loads. */
+export const FACE_DISPLAY = Object.freeze(['swap', 'fallback']);
+
 /**
  * A worn-only sheet may carry its own face (v2 of the step-6 plan, item 8):
  * an `@font-face` for a family namespaced to the look — `<class>-…`, so it
@@ -1235,6 +1238,15 @@ function fontFamiliesOf(body) {
  * nothing a reader's machine supplies: `local()` paints a face installed
  * there, which differs per machine. The file is the look's own art
  * directory's, checked with every other `url()`.
+ *
+ * **And it never hides a figure while it loads** (the step-8 critic's item
+ * 9, step 8b2): every face states `font-display: swap` or `fallback`, as
+ * each of `stall.css`'s own faces states `swap`. A face that says nothing
+ * takes the browser's `auto`, which in Chrome blocks — text in a face still
+ * loading is invisible for up to three seconds — and a look that sets its
+ * figures in its own face would paint the asked amount blank on a slow line,
+ * after the loader's hold had already let the stall paint
+ * (`a-look-face-never-hides-a-figure-while-it-loads`).
  */
 function fontFaceProblems(body, scope) {
     const out = [];
@@ -1251,6 +1263,12 @@ function fontFaceProblems(body, scope) {
         if (decl.prop === 'src' && /(?<![\w-])local\(/i.test(decl.value)) {
             out.push("@font-face src takes no local() — a face on the reader's machine paints differently per machine");
         }
+    }
+    const display = declarationsOf(body).filter((decl) => decl.prop === 'font-display');
+    if (display.length !== 1 || !FACE_DISPLAY.includes(display[0].value.trim().toLowerCase())) {
+        out.push(
+            `@font-face states font-display: ${FACE_DISPLAY.join(' or ')}, once — any other paints no text while the face loads, and a figure set in it is blank on a slow line`,
+        );
     }
     return out;
 }

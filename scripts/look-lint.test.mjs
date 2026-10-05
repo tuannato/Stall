@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { servedFlashReport, servedSheets, themeVarValues } from './look-flash.mjs';
 import { SERVED_SHEETS, appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import {
+    FACE_DISPLAY,
     GENERATED_TEXT,
     LOOK_MEDIA,
     MAX_FLASHES_PER_SECOND,
@@ -564,19 +565,59 @@ describe('a-worn-only-sheet-replaces-no-keyframes', () => {
     it('lets a worn-only sheet carry its own namespaced face, from its own directory, and nothing else', () => {
         const art = { dir: FIXTURE_ART.dir, files: [...FIXTURE_ART.files, 'serif.woff2'] };
         assert.deepEqual(
-            lintFixture(plantedFixture('@font-face { font-family: "t-fixture-worn-serif"; src: url(./fixture-look/serif.woff2) format("woff2"); }'), art),
+            lintFixture(plantedFixture('@font-face { font-family: "t-fixture-worn-serif"; src: url(./fixture-look/serif.woff2) format("woff2"); font-display: swap; }'), art),
             [],
         );
         for (const [face, pattern] of [
-            ['@font-face { font-family: Inter; src: url(./fixture-look/serif.woff2) format("woff2"); }', /not namespaced to the look/],
-            ['@font-face { font-family: t-fixture-worn-serif; src: local("Georgia"), url(./fixture-look/serif.woff2); }', /no local\(\)/],
-            ['@font-face { font-family: t-fixture-worn-serif; src: url(../src/ui/fonts/inter-latin.woff2); }', /names only its own art/],
+            ['@font-face { font-family: Inter; src: url(./fixture-look/serif.woff2) format("woff2"); font-display: swap; }', /not namespaced to the look/],
+            ['@font-face { font-family: t-fixture-worn-serif; src: local("Georgia"), url(./fixture-look/serif.woff2); font-display: swap; }', /no local\(\)/],
+            ['@font-face { font-family: t-fixture-worn-serif; src: url(../src/ui/fonts/inter-latin.woff2); font-display: swap; }', /names only its own art/],
         ]) {
             const problems = lintFixture(plantedFixture(face), art);
             assert.ok(problems.some((p) => pattern.test(p)), `${face}:\n  ${problems.join('\n  ') || '(no problem)'}`);
         }
         // A bundled look carries no face at all, as before.
         plant('@font-face { font-family: t-neo-serif; src: url(./x.woff2); }', /@font-face is not allowed/);
+    });
+});
+
+describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
+    /**
+     * The step-8 critic's item 9 (step 8b2): a face that does not say
+     * `font-display` takes the browser's `auto`, which in Chrome hides text
+     * in a face still loading for up to three seconds — and a look that sets
+     * its figures in its own face paints the asked amount blank on a slow
+     * line, after the loader has let the stall paint. Every look face states
+     * `swap` or `fallback`, once, as `stall.css`'s own faces state `swap`.
+     * Red by plants in the fixture's worn-only sheet and in the private-look
+     * fixture's (the subject the build lints, `private-looks-build.mjs`).
+     */
+    const art = { dir: FIXTURE_ART.dir, files: [...FIXTURE_ART.files, 'serif.woff2'] };
+    const face = (display) =>
+        `@font-face { font-family: t-fixture-worn-serif; src: url(./fixture-look/serif.woff2) format("woff2");${display} }`;
+
+    it('takes swap or fallback, once', () => {
+        assert.deepEqual(FACE_DISPLAY, ['swap', 'fallback']);
+        for (const display of [' font-display: swap;', ' font-display: fallback;', ' font-display: SWAP;']) {
+            assert.deepEqual(lintFixture(plantedFixture(face(display)), art), [], display);
+        }
+    });
+
+    it('refuses a face that says nothing, or blocks, or hides text another way, or says it twice', () => {
+        for (const display of ['', ' font-display: auto;', ' font-display: block;', ' font-display: optional;', ' font-display: swap; font-display: block;']) {
+            const problems = lintFixture(plantedFixture(face(display)), art);
+            assert.ok(problems.some((p) => /font-display: swap or fallback, once/.test(p)), `${display}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('refuses it in the private-look fixture, the sheet a build lints', () => {
+        const path = 'layout/fixture-private-looks/fixture/sheet.css';
+        const css = read(path);
+        const reduce = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
+        const planted = `${css.slice(0, reduce)}@font-face { font-family: t-fixture-private-serif; src: url(./art/serif.woff2) format("woff2"); }\n\n${css.slice(reduce)}`;
+        const problems = lintLookSheet(planted, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'serif.woff2'] } });
+        assert.deepEqual(problems.filter((p) => /font-display/.test(p)).length, 1, problems.join('\n'));
+        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg'] } }), []);
     });
 });
 
