@@ -19,6 +19,7 @@ const table = await import('./lookTable');
 const { SHIPPED_ATTACHMENTS, mintedAttachmentTokens, attachmentsForTheme } = await import('./attachments');
 const { DEFAULT_THEME, DEFAULT_THEME_ID, PAID_LOOK_IDS, SHIPPED_THEMES, decodeTheme } = await import('./theme');
 const { isPriceable, rowCategoryOf } = await import('./category');
+const { fixturePrivateLooks } = await import('../../layout/fixturePrivateLooks');
 
 const FIXTURE_ID = 0x04;
 const TRIM_TOKEN = 'f1'.repeat(32);
@@ -93,6 +94,26 @@ describe('every-merged-view-answers-the-fixture-look', () => {
         lookAttachmentByTokenId: () => {
             expect(table.lookAttachmentByTokenId(TRIM_TOKEN)).toBe(FIXTURE_ROWS()[0]);
             expect(table.lookAttachmentByTokenId(DUSK_TOKEN)).toBe(FIXTURE_ROWS()[1]);
+        },
+        lookSheetOf: () => {
+            // The fixture's row, as the table admits it: its built sheet
+            // and its class — what the renderer hands the loader.
+            expect(table.lookSheetOf(table.decodeLook(FIXTURE_ID))).toEqual({
+                url: fixturePrivateLooks()[0]!.sheetUrl,
+                cls: 't-fixture-private',
+            });
+            // What a locked record paints is the default: a shipped row, in
+            // the entry CSS, so nothing to load.
+            const locked = table.paintableLook(table.decodeLook(FIXTURE_ID), 0, table.mintedLookTokens());
+            expect(table.lookSheetOf(locked.theme)).toBeUndefined();
+            // Only the table's own row: the fixture's id under another class
+            // (a harness row), or not worn-only, is handed no sheet.
+            expect(table.lookSheetOf({ ...table.decodeLook(FIXTURE_ID), sheetClass: 't-skeleton' })).toBeUndefined();
+            expect(table.lookSheetOf({ ...table.decodeLook(FIXTURE_ID), sheetLoad: 'bundled' })).toBeUndefined();
+            expect(table.lookSheetOf({ ...table.decodeLook(FIXTURE_ID), known: false })).toBeUndefined();
+            for (const { id } of SHIPPED_THEMES) {
+                expect(table.lookSheetOf(table.decodeLook(id))).toBeUndefined();
+            }
         },
         paintableLook: () => {
             const held = table.mintedLookTokens();
@@ -175,6 +196,7 @@ describe('a-private-source-that-shadows-a-shipped-id-or-class-is-dropped', () =>
     it('admits the fixture as it is', async () => {
         const t = await tableOver([await fixture()]);
         expect(t.decodeLook(FIXTURE_ID).known).toBe(true);
+        expect(t.lookSheetOf(t.decodeLook(FIXTURE_ID))?.cls).toBe('t-fixture-private');
     });
 
     it('drops an unreserved id, a shipped id and a malformed or shipped class', async () => {
@@ -191,6 +213,9 @@ describe('a-private-source-that-shadows-a-shipped-id-or-class-is-dropped', () =>
             const t = await tableOver([source]);
             expect(t.LOOK_ROWS, JSON.stringify(source)).toEqual(SHIPPED_THEMES);
             expect(t.decodeLook(FIXTURE_ID).known).toBe(false);
+            // A dropped look loads nothing: its id paints the default's row.
+            expect(t.lookSheetOf(t.decodeLook(FIXTURE_ID))).toBeUndefined();
+            expect(t.lookSheetOf({ ...t.decodeLook(FIXTURE_ID), known: true, sheetLoad: 'worn', sheetClass: base.sheetClass })).toBeUndefined();
             expect(t.decodeLook(DEFAULT_THEME_ID)).toEqual(decodeTheme(DEFAULT_THEME_ID));
             expect(t.LOOK_ATTACHMENTS).toHaveLength(SHIPPED_ATTACHMENTS.length);
         }

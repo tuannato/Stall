@@ -14,9 +14,11 @@
  *
  * — and reads the fixture as the working tree holds it (`?raw`), the same
  * bytes a build of the committed fixture reads from git. The sheet URL is the
- * shape a build's is and names no file: nothing here loads a sheet. Imported
- * by tests alone (`gallery-is-not-served` holds the production build clean
- * of `layout/`).
+ * shape a build's is and names no file: a test that tries the look on, where
+ * the renderer asks the loader for that sheet (8d1), records the ask rather
+ * than sending it (`render.private.test.ts`), since a connected stylesheet
+ * link is a request. Imported by tests alone (`gallery-is-not-served` holds
+ * the production build clean of `layout/`).
  */
 import type { PrivateLookSource } from '../src/domain/lookData';
 import indexText from './fixture-private-looks/index.json?raw';
