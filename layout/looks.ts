@@ -176,7 +176,7 @@ export function lookById(id: number): Look {
 /**
  * The measured looks a screen can actually wear.
  *
- * The apex paints `view.theme ?? DEFAULT_THEME` and never fetches, so the
+ * The apex paints the default look (no record) and never fetches, so the
  * door can only ever wear the default look. A door-under-Neo combination is
  * a screen no visitor can reach: its red is a false alarm (measured — the
  * Neo mini ink over the door's light ground), and its green is budget spent

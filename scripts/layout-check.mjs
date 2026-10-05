@@ -41,6 +41,11 @@ import {
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
+import { refuseSelection } from './looks-selection.mjs';
+
+// A harness command measures the public build until 8e2 teaches it a private
+// look (the 8b2 critic's item 2): nothing is built under a selection.
+refuseSelection('test:layout');
 
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the

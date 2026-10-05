@@ -374,7 +374,7 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'publish-name' },
         // A held decoration, so the chips paint pressed and unpressed rather
         // than one state of the control the probe never sees.
-        attachmentFlags: 0b1,
+        recordFlags: 0b1,
         announcement: 'Back on the 10th — orders ship then',
     }),
     describe: base({

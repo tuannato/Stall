@@ -18,10 +18,10 @@
  * (`directory-walls`) and the app's look table needs it; it imports nothing
  * but `src/domain`, so the kit's scripts still reach it through Vite's
  * `runnerImport` (Node's own type stripping cannot load an extensionless
- * import). It reads the kit's shape and nothing wider yet: the fields a
- * first-party look needs beyond it (its sparse voice, a decoration's token,
- * mount and guard) arrive with the step that paints them, and until then a
- * private look's `look.json` is the kit's shape too.
+ * import). It reads the kit's shape plus one field: a private look's row may
+ * name the token that entitles it (`mintable`, 8b2). The other fields a
+ * first-party look needs beyond the kit's (its sparse voice, a decoration's
+ * mount and guard) arrive with the step that paints them.
  *
  * What the file may say, and nothing else:
  *
@@ -44,8 +44,11 @@
  * - `tierCeilings`, `overlayTierCeilings` — the two price ladders, required:
  *   they pair with the tier sizes the look's own sheet declares.
  * - `moods`, `decorations` — rows in the `ShippedAttachment` shape without
- *   `tokenId` (a kit row is never minted) and without `themeId` (the loader
- *   gives every row the place's id). A mood may name one `cls` since D11
+ *   `themeId` (the loader gives every row the place's id), and without
+ *   `tokenId` unless the place is `mintable`: a kit row is never minted,
+ *   while a private look's row names the token that entitles it once that
+ *   token exists (64 lower-case hex, one token per row) and omits it until
+ *   then. A mood may name one `cls` since D11
  *   (step 5c) and never a `paint`: its class lands on the stall root while it
  *   is worn and never on the stream overlay, it takes the decorations' `att-`
  *   shape, and no decoration of the look and no row Stall ships may own it
@@ -59,7 +62,7 @@
  * (the kit's place, `layout/workshopLook.test.ts`) and
  * `a-look-is-read-under-the-place-it-is-given` (`lookData.test.ts`).
  */
-import { ATT_CLASS, moodClassProblems } from './moodClass';
+import { ATT_CLASS, moodClassProblems, sameOwner } from './moodClass';
 import {
     ATTACHMENT_BITS,
     SHIPPED_ATTACHMENTS,
@@ -163,6 +166,8 @@ const TOP_KEYS = [
     'decorations',
 ] as const;
 const ROW_KEYS = ['bit', 'slot', 'label', 'place', 'cls', 'paint', 'palette', 'motion'] as const;
+/** The token that entitles a minted row: its genesis txid, as chronik writes it. */
+const TOKEN_ID = /^[0-9a-f]{64}$/;
 const LABEL_MAX = 32;
 const PLACE_MAX = 40;
 const SOFTNESS_MAX = 64;
@@ -179,6 +184,12 @@ export type LookPlace = {
     readonly id: number;
     readonly sheetClass: `t-${string}`;
     readonly file: string;
+    /**
+     * Whether a row may name its token (`tokenId`): a private look's place
+     * (`lookTable.ts` at runtime, the build's plugin), never the kit's — a
+     * kit row is never minted, and its file is refused for trying.
+     */
+    readonly mintable?: true;
 };
 
 /** A look this build can paint: its row and its decoration rows. */
@@ -205,20 +216,17 @@ export class LookDataError extends Error {
  * `virtual:stall-private-looks` exports (`src/private-looks.d.ts`, step 8).
  * The index's facts the app needs (the look's reserved id and its class),
  * the URL of its built sheet, and its `look.json` as parsed JSON —
- * `unknown`, because 8b2's look table is to validate it again at runtime
- * with `lookFromData` under `{ id, sheetClass }` and drop a look that fails:
- * the build's validation is the loud one, the runtime's only fails safe.
- * **The place is checked there too, not here**: `lookFromData` copies
- * `place.id` and `place.sheetClass` onto the row unchecked (the kit's place
- * is a literal), so a source naming a shipped id or class, an unreserved id,
- * or an id or class another source has, is the table's to drop (the 8b1
- * critic's item 4). Whether the id is paid or released is never carried
- * here — the public lists in `theme.ts` decide (the step-8 critic's item 1).
- *
- * **No build produces it yet**: the plugin that does, and the table's merge
- * that reads it, are step 8b2's. Until then the module is declared and
- * imported by nothing, and every merged view in `lookTable.ts` is the public
- * table's.
+ * `unknown`, because the look table validates it again at runtime with
+ * `lookFromData` under `{ id, sheetClass, mintable }` and drops a look that
+ * fails: the build's validation (`scripts/private-looks-build.mjs`) is the
+ * loud one, the runtime's only fails safe. **The place is checked there
+ * too, not here**: `lookFromData` copies `place.id` and `place.sheetClass`
+ * onto the row unchecked (the kit's place is a literal), so a source naming
+ * a shipped id or class, an unreserved id, or an id, a class or a token
+ * another source has, is the table's to drop (the 8b1 critic's item 4,
+ * `a-private-source-that-shadows-a-shipped-id-or-class-is-dropped`). Whether
+ * the id is paid or released is never carried here — the public lists in
+ * `theme.ts` decide (the step-8 critic's item 1).
  */
 export type PrivateLookSource = {
     readonly id: number;
@@ -351,6 +359,7 @@ function rows(
     at: 'moods' | 'decorations',
     value: Json,
     problems: string[],
+    mintable: boolean,
 ): Omit<ShippedAttachment, 'themeId'>[] {
     if (!Array.isArray(value)) {
         problems.push(`${at}: must be a list (write [] for none)`);
@@ -364,10 +373,14 @@ function rows(
             return;
         }
         const before = problems.length;
-        unknownKeys(here, raw, ROW_KEYS, problems, {
+        unknownKeys(here, raw, mintable ? [...ROW_KEYS, 'tokenId'] : ROW_KEYS, problems, {
             tokenId: 'a kit row is never minted',
             themeId: 'the kit gives every row its own id',
         });
+        const tokenId = raw['tokenId'];
+        if (mintable && tokenId !== undefined && (typeof tokenId !== 'string' || !TOKEN_ID.test(tokenId))) {
+            problems.push(`${here}.tokenId: must be the token's genesis txid, 64 lower-case hex — or left out until it is minted`);
+        }
         const bit = wholeIn(`${here}.bit`, raw['bit'], 0, ATTACHMENT_BITS - 1, problems);
         const label = text(`${here}.label`, raw['label'], LABEL_MAX, problems);
         const place = text(`${here}.place`, raw['place'], PLACE_MAX, problems);
@@ -424,6 +437,7 @@ function rows(
             label: label!,
             place: place!,
             motion: raw['motion'] as boolean,
+            ...(mintable && typeof tokenId === 'string' ? { tokenId } : {}),
             ...(at === 'moods'
                 ? { palette: moodPalette!, ...(raw['cls'] === undefined ? {} : { cls: raw['cls'] as string }) }
                 : { cls: raw['cls'] as string, paint: raw['paint'] as 'root' | 'node' }),
@@ -494,13 +508,15 @@ export function lookFromData(json: Json, place: LookPlace): LookData {
         json['overlayTierCeilings'] === undefined
             ? undefined
             : ladder('overlayTierCeilings', json['overlayTierCeilings'], problems);
-    const moods = json['moods'] === undefined ? [] : rows('moods', json['moods'], problems);
+    const mintable = place.mintable === true;
+    const moods = json['moods'] === undefined ? [] : rows('moods', json['moods'], problems, mintable);
     const decorations =
-        json['decorations'] === undefined ? [] : rows('decorations', json['decorations'], problems);
+        json['decorations'] === undefined ? [] : rows('decorations', json['decorations'], problems, mintable);
 
     const all = [...moods, ...decorations];
     const byBit = new Map<number, string>();
     const byCls = new Map<string, string>();
+    const byToken = new Map<string, string>();
     const placeOfSlot = new Map<AttachmentSlot, string>();
     for (const row of all) {
         const seen = byBit.get(row.bit);
@@ -508,6 +524,14 @@ export function lookFromData(json: Json, place: LookPlace): LookData {
             problems.push(`bit ${row.bit}: carried by both "${seen}" and "${row.label}" — a bit names one row`);
         } else {
             byBit.set(row.bit, row.label);
+        }
+        if (row.tokenId !== undefined) {
+            const other = byToken.get(row.tokenId);
+            if (other !== undefined) {
+                problems.push(`token ${row.tokenId}: entitles both "${other}" and "${row.label}" — a token names one row`);
+            } else {
+                byToken.set(row.tokenId, row.label);
+            }
         }
         if (row.cls !== undefined) {
             const other = byCls.get(row.cls);
@@ -534,6 +558,28 @@ export function lookFromData(json: Json, place: LookPlace): LookData {
         ];
         for (const why of moodClassProblems(row, others)) {
             problems.push(`moods: "${row.label}" — ${why}`);
+        }
+        // A private look's row classes are its own (the 8b2 critic's item 4):
+        // stall.css paints `.stall.att-rainfall`, `.att-hum` and
+        // `.att-horizon` for any look, so a private decoration named after a
+        // shipped one would wear its paint, and the probe's class-keyed
+        // tables would read it as the shipped row. Every shipped row is
+        // checked for a decoration, the shipped moods for a mood (its
+        // decorations are `moodClassProblems`' above). Not the kit's: a
+        // starter copies a shipped look's rows, classes and all, on purpose.
+        if (mintable && row.cls !== undefined) {
+            for (const shipped of SHIPPED_ATTACHMENTS) {
+                if (
+                    shipped.cls !== undefined &&
+                    (row.slot !== 'mood' || shipped.slot === 'mood') &&
+                    sameOwner(row.cls, shipped.cls)
+                ) {
+                    const how = shipped.cls === row.cls ? 'is' : 'shares an owner with';
+                    problems.push(
+                        `class ${row.cls}: ${how} ${shipped.cls} ("${shipped.label}"), a row Stall ships — a private look's row classes are its own`,
+                    );
+                }
+            }
         }
         const word = placeOfSlot.get(row.slot);
         if (word === undefined) {

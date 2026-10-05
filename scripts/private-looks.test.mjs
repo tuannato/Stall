@@ -13,6 +13,7 @@ import {
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
     gitFilesAt,
+    gitTextAt,
     parsePrivateIndex,
     privateFileProblems,
     privateIndexProblems,
@@ -404,6 +405,27 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         const pointed = { ...repo.env, GIT_DIR: join(other.dir, '.git'), GIT_WORK_TREE: other.dir, GIT_INDEX_FILE: join(other.dir, '.git', 'index') };
         assert.deepEqual(repo.read({ env: pointed }).problems, []);
         assert.deepEqual(GIT_LOCATION_VARS.filter((name) => ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'].includes(name)).length, 3);
+    });
+
+    it('a-replace-ref-does-not-change-what-a-commit-holds', () => {
+        // The 8b2 critic's item 8: a `refs/replace/*` in the clone would make
+        // `cat-file blob <commit>:<path>` answer another blob while the
+        // commit — and so the pin — stays the same. The reader turns replace
+        // objects off; red without `--no-replace-objects` and
+        // `GIT_NO_REPLACE_OBJECTS`.
+        const repo = plantPrivateRepo();
+        const original = repo.git('rev-parse', `${repo.head()}:fixture/sheet.css`);
+        const planted = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+            cwd: repo.dir,
+            env: repo.env,
+            input: '.t-fixture-private { --look-sheet: t-fixture-private; }\n/* replaced */\n',
+            encoding: 'utf8',
+        }).trim();
+        repo.git('replace', original, planted);
+        assert.match(repo.git('cat-file', 'blob', `${repo.head()}:fixture/sheet.css`), /replaced/, 'the plant takes');
+        const text = gitTextAt({ dir: repo.dir, commit: repo.head(), path: 'fixture/sheet.css', env: repo.env });
+        assert.doesNotMatch(text, /replaced/);
+        assert.equal(text, readFileSync(join(ROOT, FIXTURE, 'fixture', 'sheet.css'), 'utf8'));
     });
 
     it('reads a subtree of a commit, which is how a build reads the tracked fixture', () => {

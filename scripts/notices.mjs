@@ -24,6 +24,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { selectionRefusal } from './looks-selection.mjs';
 import { classifyModule, noticesText } from './notices-lib.mjs';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -97,6 +98,14 @@ const FONT_FILE = /\.(woff2?|ttf|otf|eot)$/i;
  * every emitted asset with the source files it came from.
  */
 export async function bundleInventory() {
+    // The notices are the public build's: a selected private look's faces
+    // are its own look's to name (8e), never this file's (the 8b2 critic's
+    // item 2). Refused here, where the build starts, not at the module's top:
+    // tests import FONTS from this file.
+    const refusal = selectionRefusal('notices', process.env);
+    if (refusal !== undefined) {
+        throw new Error(refusal);
+    }
     const modules = [];
     const assets = [];
     await build({

@@ -30,6 +30,11 @@ import {
     stopOnSignals,
     waitUntil,
 } from './process-groups.mjs';
+import { refuseSelection } from './looks-selection.mjs';
+
+// A harness command measures the public build until 8e2 teaches it a private
+// look (the 8b2 critic's item 2): nothing is built under a selection.
+refuseSelection('print-measure');
 
 const PORT = process.env.LAYOUT_PORT ?? '4321';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9341';

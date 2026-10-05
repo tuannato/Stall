@@ -8,6 +8,7 @@ import { attachmentsForTheme } from '../src/domain/attachments';
 import { decodeTheme } from '../src/domain/theme';
 import { KIT_BASES, parseWorkshopLook, type KitBase } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
+import { withoutSelection } from '../scripts/looks-selection.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const scratch: string[] = [];
@@ -26,6 +27,9 @@ function start(base: string, dir: string) {
     return spawnSync('node', ['scripts/workshop.mjs', 'start', base, '--dir', dir], {
         cwd: ROOT,
         encoding: 'utf8',
+        // The workshop refuses a private-look selection until 8e2; the
+        // starter reads none, whatever the shell running the suite names.
+        env: withoutSelection(process.env),
     });
 }
 

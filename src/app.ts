@@ -13,8 +13,8 @@ import {
     stallPath,
 } from './domain/route';
 import { ATTACHMENT_FLAGS_TAG, decodeAttachmentFlags } from './domain/attachments';
-import { mintedLookTokens, wornForLook } from './domain/lookTable';
-import { DEFAULT_THEME_ID } from './domain/theme';
+import { mintedLookTokens, paintableLook } from './domain/lookTable';
+import { DEFAULT_THEME, DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
 import {
@@ -350,7 +350,10 @@ const TXID = /^[0-9a-f]{64}$/;
  * that affordance is for the picker's preview, where a seller looking at a
  * decoration has not claimed to own it. On a visitor's screen it must fail
  * closed: §7 says a flag set over a token the address does not hold paints
- * nothing, so until a holdings read has answered, nothing is worn.
+ * nothing, so until a holdings read has answered, nothing is worn. Every
+ * `view.worn` here goes through the look table's gate (`paintableLook`),
+ * which takes a definite set and never skips the check, and which wears
+ * nothing at all under a paid look this stall holds no licence for.
  */
 const NOTHING_HELD: ReadonlySet<string> = new Set();
 
@@ -3853,13 +3856,16 @@ export function boot(
             view.tagline = manifest.tagline;
             view.fiatHint = manifest.fiatHint;
             view.announcement = manifest.announcement;
-            view.theme = manifest.theme;
-            view.attachmentFlags = flags;
+            view.recordTheme = manifest.theme;
+            view.recordFlags = flags;
             // Recomputed here and not left to the holdings read below, because a
             // bit means a different row under a different theme: carrying the
             // old `worn` across a theme change would paint one look's decoration
             // on another's stall for as long as the entitlement read takes.
-            view.worn = wornForLook(manifest.theme.id, flags, view.heldTokens ?? NOTHING_HELD);
+            // Through the gate: a paid look this stall holds no licence for
+            // paints the default and wears nothing, its own rows and the
+            // default's alike (`paintableLook`).
+            view.worn = paintableLook(manifest.theme, flags, view.heldTokens ?? NOTHING_HELD).worn;
             const pubkeyHex = state.pubkeyHex;
             if (pubkeyHex !== undefined) {
                 sessionNames.set(pubkeyHex, manifest.name);
@@ -3880,8 +3886,8 @@ export function boot(
      * decoration the seller opted into in their own record can appear at all.
      */
     const refreshHoldings = async (claimed: number, address: string): Promise<void> => {
-        const themeId = state.view.theme?.id ?? DEFAULT_THEME_ID;
-        const flags = state.view.attachmentFlags ?? 0;
+        const themeId = state.view.recordTheme?.id ?? DEFAULT_THEME_ID;
+        const flags = state.view.recordFlags ?? 0;
         let held: ReadonlySet<string> | undefined;
         try {
             held = await loadHeldTokens(
@@ -3901,8 +3907,8 @@ export function boot(
         // question nobody is asking any more. Whoever changed them is reading
         // the holdings again.
         if (
-            (state.view.theme?.id ?? DEFAULT_THEME_ID) !== themeId ||
-            (state.view.attachmentFlags ?? 0) !== flags
+            (state.view.recordTheme?.id ?? DEFAULT_THEME_ID) !== themeId ||
+            (state.view.recordFlags ?? 0) !== flags
         ) {
             return;
         }
@@ -3911,7 +3917,7 @@ export function boot(
             view: {
                 ...state.view,
                 heldTokens: held,
-                worn: wornForLook(themeId, flags, held),
+                worn: paintableLook(state.view.recordTheme ?? DEFAULT_THEME, flags, held).worn,
             },
         };
         livePaint();
@@ -5112,8 +5118,8 @@ async function loadCurrent(): Promise<AppState> {
             genesis: genesisFor(route.pubkeyHex, descriptionLookup.prices.keys()),
             nftGroups: nftLookup.groups,
             nftGroupsTruncated: nftLookup.truncated,
-            theme,
-            attachmentFlags,
+            recordTheme: theme,
+            recordFlags: attachmentFlags,
             heldTokens,
             mintedHere,
             // Fails closed: with no holdings answer — a read that failed, or a
@@ -5121,11 +5127,7 @@ async function loadCurrent(): Promise<AppState> {
             // `undefined` here would be the picker's skip-the-check affordance
             // on a visitor's screen, painting a decoration this stall cannot
             // prove it holds.
-            worn: wornForLook(
-                theme?.id ?? DEFAULT_THEME_ID,
-                attachmentFlags,
-                heldTokens ?? NOTHING_HELD,
-            ),
+            worn: paintableLook(theme ?? DEFAULT_THEME, attachmentFlags, heldTokens ?? NOTHING_HELD).worn,
             settingsTruncated,
             settingsUnreadable,
             settingsUnaddressed,

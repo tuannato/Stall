@@ -420,11 +420,12 @@ describe('a-full-load-wears-nothing-it-cannot-prove', () => {
     })();
 
     it('the view\'s worn list is computed against a definite holdings set', () => {
-        // The merged view since step 8b1 (`lookTable.ts`): the site moved, the
-        // rule did not. An anchor that is not found is a failure, never a
-        // one-character slice from the end of the body.
-        const at = body.indexOf('worn: wornForLook(');
-        expect(at, 'loadCurrent no longer computes worn').toBeGreaterThanOrEqual(0);
+        // Through the look table's gate since step 8b2 (`paintableLook`,
+        // which takes a definite set and never skips the check): the site
+        // moved twice, the rule did not. An anchor that is not found is a
+        // failure, never a one-character slice from the end of the body.
+        const at = body.indexOf('worn: paintableLook(');
+        expect(at, 'loadCurrent no longer computes worn through the gate').toBeGreaterThanOrEqual(0);
         expect(body.slice(at, at + 200)).toMatch(/heldTokens \?\? NOTHING_HELD/);
     });
 });

@@ -55,6 +55,9 @@ export declare function privateLooksProblems(input: {
 export declare function publicLookFacts(): Promise<PublicLookFacts>;
 export declare function gitFilesAt(input: { dir: string; commit: string; prefix?: string } & GitOptions): PrivateFile[];
 export declare function gitTextAt(input: { dir: string; commit: string; prefix?: string; path: string } & GitOptions): string;
+export declare function gitBlobAt(input: { dir: string; commit: string; prefix?: string; path: string } & GitOptions): Buffer;
+export declare function gitCommitOf(input: { dir: string; ref?: string } & GitOptions): string;
+export declare function gitTopOf(input: { dir: string } & GitOptions): string;
 export declare function readPrivateLooksAt(
     input: { dir: string; commit: string; prefix?: string; facts: PublicLookFacts; fixture?: boolean } & GitOptions,
 ): { files: PrivateFile[]; indexText: string | undefined; problems: string[] };
