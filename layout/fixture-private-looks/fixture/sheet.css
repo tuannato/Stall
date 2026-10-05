@@ -1,0 +1,26 @@
+/*
+ * The tracked fixture of a private look (`layout/fixture-private-looks/`,
+ * step 8): a whole private look repository in miniature — an index naming
+ * one look at the reserved, paid id 0x04, and that look's `look.json`, this
+ * sheet and its art — so every check of a private look runs in public CI
+ * over a subject, never over nothing (`scripts/private-looks.test.mjs`).
+ *
+ * Joined only when a run selects this directory. It is no row of the theme
+ * table, no served sheet (`every-served-sheet-is-on-the-guard-list` reads it
+ * through its index), and never in the production bundle
+ * (`gallery-is-not-served`). Deliberately small, like the step-6 fixture
+ * look whose art it copies: it names itself, paints one piece of its own art
+ * and keeps the look rules' reduce block last.
+ */
+
+.t-fixture-private {
+    --look-sheet: t-fixture-private;
+}
+
+.stall.t-fixture-private {
+    background-image: url(./art/ground.svg);
+    background-size: 24px 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+}

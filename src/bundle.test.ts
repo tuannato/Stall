@@ -534,6 +534,9 @@ describe('gallery-is-not-served', () => {
         expect(text, 'the kit class is in the served files').not.toContain('t-workshop');
         // The harness's worn-only look (`layout/fixture-look.css`): never served.
         expect(text, 'the fixture look is in the served files').not.toContain('t-fixture-worn');
+        // The tracked private-look fixture (`layout/fixture-private-looks/`,
+        // step 8): joined only when a run selects it, never by this build.
+        expect(text, 'the private fixture look is in the served files').not.toContain('t-fixture-private');
     }, 120_000);
 });
 

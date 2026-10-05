@@ -17,6 +17,22 @@
 export const LOOK_ART_ROOT = 'src/looks/';
 
 /**
+ * The top-level directory a private look repository is cloned into, on a
+ * machine that builds a look this repository does not publish (step 8).
+ * Ignored by exactly `PRIVATE_LOOKS_IGNORE` (`the-ignore-rule-for-private-looks-is-exact`),
+ * and refused like `src/looks/` wherever git could publish it: tracked,
+ * untracked and not ignored, or in a commit a push would carry
+ * (`the-private-looks-directory-is-ignored-and-still-guarded`).
+ */
+export const PRIVATE_LOOKS_ROOT = 'looks/';
+
+/** The `.gitignore` line that hides the clone: anchored, a directory, and nothing wider. */
+export const PRIVATE_LOOKS_IGNORE = '/looks/';
+
+/** A gitlink's mode: another repository's commit pinned in this tree, which `git add -f looks` makes. */
+export const GITLINK_MODE = '160000';
+
+/**
  * Each row: the path prefix it covers (`''` is everything no longer prefix
  * covers), what the files there are, and the licence-looking files that row
  * may carry. The fonts row's licence files are the ones `FONTS` in
@@ -45,6 +61,12 @@ export const LICENCE_MAP = [
         path: LOOK_ART_ROOT,
         kind: 'reserved',
         terms: 'Reserved, empty until LICENSE maps it.',
+        licenceFiles: [],
+    },
+    {
+        path: PRIVATE_LOOKS_ROOT,
+        kind: 'private',
+        terms: 'Private: joined at build from a private repository, never tracked here.',
         licenceFiles: [],
     },
     {
@@ -106,10 +128,32 @@ export function isLookArt(path) {
 }
 
 /**
+ * The private look clone: the top-level `looks`, file or directory, in any
+ * case — the disk folds `Looks/` into `looks/` while `PRIVATE_LOOKS_IGNORE`,
+ * read case-sensitively with `core.ignorecase` unset, does not hide it.
+ * `deploy/looks.commit` and `layout/fixture-private-looks/` are not it.
+ */
+export function isPrivateLooks(path) {
+    const lower = path.toLowerCase();
+    return lower === PRIVATE_LOOKS_ROOT.slice(0, -1) || lower.startsWith(PRIVATE_LOOKS_ROOT);
+}
+
+/** A `.gitmodules` file, at any depth and in any case. */
+export function isGitmodules(path) {
+    return baseName(path).toLowerCase() === '.gitmodules';
+}
+
+/**
  * A path the guard refuses, and why: anything that is not printable ASCII
  * (APFS folds more than capitals — `src/lookſ/` with U+017F is `src/looks/`
- * to the disk, and neither lower-casing nor git's `:(icase)` sees it), and
- * anything under `src/looks` in any case.
+ * to the disk, and neither lower-casing nor git's `:(icase)` sees it),
+ * anything under `src/looks` or the top-level `looks` in any case, a
+ * `.gitmodules` anywhere — `git submodule add` writes one, and it carries the
+ * address of the repository it names — and an embedded repository: without
+ * `--directory`, `git ls-files --others` prints a directory (`dir/`) only for
+ * one, which `git add -A` stages as a gitlink, so a private clone made under
+ * another name (the repository's own, by `git clone <url>` from the root) or
+ * a mistyped one fails before it is staged, not after.
  */
 export function refusedPath(path) {
     if (!/^[\x20-\x7e]+$/.test(path)) {
@@ -118,22 +162,68 @@ export function refusedPath(path) {
     if (isLookArt(path)) {
         return `${LOOK_ART_ROOT} is reserved, empty until LICENSE maps it`;
     }
+    if (isPrivateLooks(path)) {
+        return `${PRIVATE_LOOKS_ROOT} is a private look repository's clone, joined at build and never tracked here`;
+    }
+    if (isGitmodules(path)) {
+        return 'a .gitmodules file names another repository, and a push would publish its address';
+    }
+    if (path.endsWith('/')) {
+        return `an embedded repository, which \`git add -A\` stages as a gitlink — a private look's clone goes at ${PRIVATE_LOOKS_ROOT} and nowhere else`;
+    }
     return undefined;
 }
 
 /**
- * `src/looks` stays empty — in the tree (tracked, or untracked and not
- * ignored) and in every commit a push would publish — until LICENSE maps it,
- * and no path anywhere is one a case-folding disk could turn into it.
- *
- * `facts`: `{ tree: string[], shallow: boolean, upstream: string | undefined,
- * unpushed: { commit: string, paths: string[] }[] }`. `unpushed` is every
- * commit reachable from a local branch, a tag or HEAD and from no
- * `origin/*` ref, with EVERY path it touches: the test is applied here, not
- * by a git pathspec. `upstream` undefined means there is no `origin/main`,
- * which fails rather than passing on an empty list.
+ * An ignored entry the guard refuses: one under `src/looks` in any case, an
+ * ignored directory that holds it, or a name that is not printable ASCII
+ * under `src/` (which a folding disk could read as `src/looks`). The tree
+ * half lists untracked files through every exclude source — a nested
+ * `.gitignore`, `.git/info/exclude`, a user's `core.excludesFile` — so any
+ * of them could hide `src/looks/` from it; the ignored list is read for
+ * exactly that. The top-level `looks/` is meant to be ignored, and is not
+ * refused here.
  */
-export function lookArtProblems({ tree, shallow, upstream, unpushed }) {
+export function refusedIgnored(path) {
+    const lower = path.toLowerCase();
+    if (isLookArt(path) || (lower.endsWith('/') && LOOK_ART_ROOT.startsWith(lower))) {
+        return `ignored, and ${LOOK_ART_ROOT} is reserved, empty until LICENSE maps it: an exclude rule is hiding it from the guard`;
+    }
+    if (lower.startsWith('src/') && !/^[\x20-\x7e]+$/.test(path)) {
+        return 'ignored, and a path under src/ that is not printable ASCII (a disk that folds case may fold it into src/looks/)';
+    }
+    return undefined;
+}
+
+const GITLINK_WHY = `a gitlink (mode ${GITLINK_MODE}): another repository's commit, which \`git add -f looks\` stages and a push would publish`;
+
+/**
+ * `src/looks` stays empty — in the tree (tracked, or untracked and not
+ * ignored) and in every commit a push would publish — until LICENSE maps it;
+ * the private look clone at `looks/` and any `.gitmodules` never enter git;
+ * no gitlink is anywhere; and no path anywhere is one a case-folding disk
+ * could turn into another.
+ *
+ * `facts`: `{ tree: string[], ignored: string[], gitlinks: string[],
+ * shallow: boolean, upstream: string | undefined, unpushed: { commit:
+ * string, paths: string[], gitlinks: string[] }[] }`. `ignored` is every
+ * untracked entry an exclude source hides (`git ls-files --others --ignored
+ * --exclude-standard --directory`, read by `refusedIgnored`). `gitlinks` is
+ * every index entry of mode 160000; an unpushed commit's `gitlinks` is every
+ * path it touches with that mode on either side. `unpushed` is every commit reachable from a local
+ * branch, a tag or HEAD and from no `origin/*` ref, with EVERY path it
+ * touches: the test is applied here, not by a git pathspec. `upstream`
+ * undefined means there is no `origin/main`, which fails rather than passing
+ * on an empty list. A missing `gitlinks` or `ignored` list throws: a fact
+ * left out is a check that passes over nothing.
+ */
+export function lookArtProblems({ tree, ignored, gitlinks, shallow, upstream, unpushed }) {
+    if (!Array.isArray(gitlinks) || unpushed.some((entry) => !Array.isArray(entry.gitlinks))) {
+        throw new TypeError('lookArtProblems: the gitlinks were not read (the index and every unpushed commit carry a list)');
+    }
+    if (!Array.isArray(ignored)) {
+        throw new TypeError('lookArtProblems: the ignored entries were not read');
+    }
     const problems = [];
     for (const path of tree) {
         const why = refusedPath(path);
@@ -141,18 +231,79 @@ export function lookArtProblems({ tree, shallow, upstream, unpushed }) {
             problems.push(`${JSON.stringify(path)}: ${why}`);
         }
     }
+    for (const path of ignored) {
+        const why = refusedIgnored(path);
+        if (why !== undefined) {
+            problems.push(`${JSON.stringify(path)}: ${why}`);
+        }
+    }
+    for (const path of gitlinks) {
+        problems.push(`${JSON.stringify(path)}: ${GITLINK_WHY}`);
+    }
     if (shallow) {
         problems.push('a shallow clone: the commits a push would publish cannot all be read');
     }
     if (upstream === undefined) {
         problems.push('no origin/main to compare with: the commits a push would publish are unknown');
     }
-    for (const { commit, paths } of unpushed) {
+    for (const { commit, paths, gitlinks: links } of unpushed) {
         const refused = [...new Set(paths)].filter((path) => refusedPath(path) !== undefined);
         if (refused.length > 0) {
             problems.push(
                 `commit ${commit}, on no origin/* ref, touches ${refused.map((p) => JSON.stringify(p)).join(', ')}: ${refusedPath(refused[0])}`,
             );
+        }
+        const linked = [...new Set(links)];
+        if (linked.length > 0) {
+            problems.push(`commit ${commit}, on no origin/* ref, touches ${linked.map((p) => JSON.stringify(p)).join(', ')}: ${GITLINK_WHY}`);
+        }
+    }
+    return problems;
+}
+
+/**
+ * `PRIVATE_LOOKS_IGNORE` is in `.gitignore`, exactly, and what git ignores
+ * is the clone and nothing the guard must still see. `text` is
+ * `.gitignore`'s; `ignored` the set of `PRIVATE_LOOKS_HIDDEN` and
+ * `PRIVATE_LOOKS_SEEN` paths `git check-ignore --no-index` answers for, in
+ * a repository with no other exclude file. A wider pattern (`looks/`,
+ * `looks*`, a `**` glob) would hide an untracked `src/looks/` from the tree
+ * half of the guard, which is exactly the directory it watches.
+ */
+export const PRIVATE_LOOKS_HIDDEN = Object.freeze(['looks/index.json', 'looks/README.md', 'looks/some-look/sheet.css', 'looks/some-look/art/a.svg']);
+export const PRIVATE_LOOKS_SEEN = Object.freeze([
+    'looks',
+    'Looks/index.json',
+    'LOOKS/a.svg',
+    'looks.json',
+    'looksmith/a.svg',
+    'src/looks/a.svg',
+    'src/Looks/a.svg',
+    'src/looks',
+    'src/lookshop.ts',
+    'layout/looks/a.svg',
+    'a/looks/b.svg',
+    'deploy/looks.commit',
+    'layout/fixture-private-looks/index.json',
+    'layout/fixture-private-looks/fixture/sheet.css',
+    '.gitmodules',
+]);
+
+export function ignoreRuleProblems({ text, ignored }) {
+    const problems = [];
+    const lines = text.split(/\r?\n/);
+    const exact = lines.filter((line) => line === PRIVATE_LOOKS_IGNORE).length;
+    if (exact !== 1) {
+        problems.push(`.gitignore carries the line ${PRIVATE_LOOKS_IGNORE} ${exact} times, not once`);
+    }
+    for (const path of PRIVATE_LOOKS_HIDDEN) {
+        if (!ignored.has(path)) {
+            problems.push(`${path}: inside the private clone, and git does not ignore it`);
+        }
+    }
+    for (const path of PRIVATE_LOOKS_SEEN) {
+        if (ignored.has(path)) {
+            problems.push(`${path}: ignored, so an untracked one is hidden from the guard`);
         }
     }
     return problems;

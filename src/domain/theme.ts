@@ -341,6 +341,45 @@ export const RURAL_THEME_ID = 0x03;
 export const WORKSHOP_THEME_ID = 0xff;
 
 /**
+ * The ids a private look may take (step 8): a look whose files live in a
+ * private repository and join the build from there (`scripts/private-looks.mjs`
+ * validates that repository's index against these lists). **Never a row of
+ * this table**, so a public build reads a record naming one as an id it
+ * ships no row for, like any other; and never a harness id (`0xff` the kit,
+ * `0xfe` the skeleton, `0xfd` the fixture look). Two private looks may not
+ * share one.
+ *
+ * **Whether a reserved id is paid, and whether it may reach production, are
+ * decided here, in public, and never by the private index** (the step-8
+ * critic's item 1): a private commit that marked a look free or released,
+ * behind an opaque pin bump, would ship it to production as a free look, and
+ * "a free id can never become paid" (PROPOSAL §13.1) is irreversible.
+ * `scripts/private-looks.mjs` holds a private index to these lists and
+ * refuses one that disagrees; no build reads a private index yet — the build
+ * refuses it from 8b. A release is a reviewable diff of this file.
+ *
+ * - **Paid by default**: every reserved id is in `PAID_LOOK_IDS` unless
+ *   `FREE_PRIVATE_LOOK_IDS` names it, never both and never neither
+ *   (`theme-table-ids-are-pinned`), so an id added to `PRIVATE_LOOK_IDS` and
+ *   forgotten anywhere else turns the suite red rather than shipping free. A
+ *   free private look is the owner's decision, written here; there is none.
+ *   Literals rather than one derived from the other, so the production
+ *   bundle, which reads none of them, stays the bytes it was.
+ * - `RELEASED_LOOK_IDS` stays empty for the whole of step 8; step 9 adds
+ *   `0x04` beside its price row.
+ *
+ * Literals, because this module imports nothing (`scripts/look-flash.mjs`
+ * and `scripts/sheet-roles.test.mjs` load it by Node's type stripping).
+ * Tests: `theme-table-ids-are-pinned`,
+ * `a-paid-look-is-released-only-with-its-price-row`,
+ * `a-private-look-id-is-reserved-and-unshared`.
+ */
+export const PRIVATE_LOOK_IDS: readonly number[] = Object.freeze([0x04]);
+export const FREE_PRIVATE_LOOK_IDS: readonly number[] = Object.freeze([]);
+export const PAID_LOOK_IDS: readonly number[] = Object.freeze([0x04]);
+export const RELEASED_LOOK_IDS: readonly number[] = Object.freeze([]);
+
+/**
  * The default look. An id with no shipped row wears all of it — palette,
  * sheet class and both ceiling ladders — so it tiers like it too.
  */

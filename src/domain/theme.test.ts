@@ -8,7 +8,11 @@ import {
     FONT_STACKS,
     DEFAULT_THEME_ID,
     MIN_CONTRAST,
+    FREE_PRIVATE_LOOK_IDS,
     NEO_CITY_THEME_ID,
+    PAID_LOOK_IDS,
+    PRIVATE_LOOK_IDS,
+    RELEASED_LOOK_IDS,
     RURAL_THEME_ID,
     SHIPPED_THEMES,
     WORKSHOP_THEME_ID,
@@ -166,6 +170,42 @@ describe('theme-table-ids-are-pinned', () => {
         expect(rural.bg).not.toEqual(neo.bg);
     });
 
+    it('pins the reserved, paid and released ids by value, and no reserved id is a row', () => {
+        // Step 8, the critic's item 1: whether an id is private, paid or
+        // released is a public literal, so a private commit cannot free or
+        // release one behind an opaque pin bump. Pinned by value, because
+        // every other assertion reads its expectation from the list it tests.
+        expect(PRIVATE_LOOK_IDS).toEqual([0x04]);
+        // Paid by default: no free private look exists, so every reserved id
+        // is paid.
+        expect(FREE_PRIVATE_LOOK_IDS).toEqual([]);
+        expect(PAID_LOOK_IDS).toEqual([0x04]);
+        // Empty for the whole of step 8: step 9 adds 0x04 beside its price row.
+        expect(RELEASED_LOOK_IDS).toEqual([]);
+        for (const id of PRIVATE_LOOK_IDS) {
+            expect(isShippedThemeId(id), `0x0${id.toString(16)} is a shipped row`).toBe(false);
+            expect(decodeTheme(id).known).toBe(false);
+            expect(SHIPPED_ATTACHMENTS.filter((row) => row.themeId === id)).toEqual([]);
+        }
+        expect(SHIPPED_THEMES.map((row) => row.id).filter((id) => PRIVATE_LOOK_IDS.includes(id))).toEqual([]);
+        // Every reserved id is paid or named free, never both; every free or
+        // released id is a reserved one; no reserved id twice.
+        for (const id of PRIVATE_LOOK_IDS) {
+            expect(PAID_LOOK_IDS.includes(id) !== FREE_PRIVATE_LOOK_IDS.includes(id), `0x0${id.toString(16)}`).toBe(true);
+        }
+        expect(PAID_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
+        expect(FREE_PRIVATE_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
+        expect(RELEASED_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
+        expect(new Set(PRIVATE_LOOK_IDS).size).toBe(PRIVATE_LOOK_IDS.length);
+        // The workshop's scratch id is no private look's (the skeleton's and
+        // the fixture's are pinned beside them, `layout/looks.test.ts`).
+        expect(PRIVATE_LOOK_IDS).not.toContain(WORKSHOP_THEME_ID);
+        // Frozen: a reader cannot widen the list at run time.
+        for (const list of [PRIVATE_LOOK_IDS, FREE_PRIVATE_LOOK_IDS, PAID_LOOK_IDS, RELEASED_LOOK_IDS]) {
+            expect(Object.isFrozen(list)).toBe(true);
+        }
+    });
+
     it('ships no id whose own palette hides the asked amount', () => {
         // The synthetic case below proves the correction works. This proves we
         // never needed it: a shipped look that had to be lifted would be a look
@@ -177,6 +217,25 @@ describe('theme-table-ids-are-pinned', () => {
             expect(rgbOf(vars['--s-text']!)).toEqual(theme.text);
             expect(rgbOf(vars['--s-accent']!)).toEqual(theme.accent);
             expect(rgbOf(vars['--s-muted']!)).toEqual(theme.muted);
+        }
+    });
+});
+
+describe('a-paid-look-is-released-only-with-its-price-row', () => {
+    /**
+     * A paid look reaches production only beside the price a seller pays for
+     * it (the step-8 critic's item 1). **A tripwire until step 9**: no price
+     * table exists yet, so the rule reads "no released id is a paid one", and
+     * it reads the reserved list rather than the paid one — every reserved id
+     * not named free is paid, so a released id passes only when
+     * `FREE_PRIVATE_LOOK_IDS` names it. Step 9's commit that adds `0x04` to
+     * `RELEASED_LOOK_IDS` turns this into a lookup in its price table — a
+     * reviewed public diff, never a private one.
+     */
+    it('releases no reserved id but a free one while no price table exists', () => {
+        for (const id of RELEASED_LOOK_IDS) {
+            expect(PRIVATE_LOOK_IDS, `0x0${id.toString(16)} is released and not reserved`).toContain(id);
+            expect(FREE_PRIVATE_LOOK_IDS, `0x0${id.toString(16)} is released, paid, and has no price row`).toContain(id);
         }
     });
 });
