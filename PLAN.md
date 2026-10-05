@@ -449,6 +449,17 @@ that is still true:
   traded at) that refuses only a unit-scale error, said in its own
   sentence (`CLAUDE.md` §8); the glance is not judged. The same evening a
   second feed took the first-open check (D9(b), § Decided).
+- **A payee named by an NFT** (owner, 2026-10-05) — the look rail paying
+  whoever holds a role's NFT instead of a pinned address, so a wallet
+  changes by moving the NFT. No payment this app composes takes its
+  destination from the index today; this would, and the three hosts are one
+  operator, so one lying answer sends the whole price to the wrong party,
+  and the licence then fails on every honest node. It also stands against
+  "Licences are transactions, not tokens" and "not by an NFT" above, adds a
+  holder-at-height read to every licence check, and lets one burn or one
+  Agora listing stop a look selling. The rotation it wanted is met by pinned
+  addresses (a primary and a cold standby per role is the recommended shape,
+  not yet decided).
 
 ---
 
