@@ -1,0 +1,4 @@
+{
+    "schema": 1,
+    "looks": [{ "id": 4, "slug": "fixture", "cls": "t-fixture-private", "stage": "preview", "paid": true }]
+}

@@ -7,6 +7,11 @@ dist
 .workshop-dist
 # `pnpm looks:diff <ref>`: its builds and its before / after / diff PNGs.
 .looks-diff
+# A private look repository's clone (step 8): joined at build, never tracked
+# here. Exactly this line, anchored and a directory, so it hides nothing the
+# look-art guard watches; the guard refuses the clone forced in anyway — as a
+# gitlink, as a file or by a .gitmodules (scripts/licence-map.test.mjs).
+/looks/
 # `pnpm test:layout`'s per-box contrast record, one file per run
 # (`scripts/contrast-dump.mjs`).
 .layout-dump

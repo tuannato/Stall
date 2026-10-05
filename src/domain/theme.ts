@@ -341,6 +341,32 @@ export const RURAL_THEME_ID = 0x03;
 export const WORKSHOP_THEME_ID = 0xff;
 
 /**
+ * The ids a private look may take (step 8): a look whose files live in a
+ * private repository and join the build from there (`scripts/private-looks.mjs`
+ * validates that repository's index against these lists). **Never a row of
+ * this table**, so a public build reads a record naming one as an id it
+ * ships no row for, like any other; and never a harness id (`0xff` the kit,
+ * `0xfe` the skeleton, `0xfd` the fixture look). Two private looks may not
+ * share one.
+ *
+ * **Whether a reserved id is paid, and whether it may reach production, are
+ * decided here, in public, and never by the private index** (the step-8
+ * critic's item 1): a private commit that marked a look free or released,
+ * behind an opaque pin bump, would ship it to production as a free look, and
+ * "a free id can never become paid" (PROPOSAL §13.1) is irreversible. So the
+ * index must agree with `PAID_LOOK_IDS` and `RELEASED_LOOK_IDS` or the
+ * repository is refused, and a release is a reviewable diff of this file.
+ * `RELEASED_LOOK_IDS` stays empty for the whole of step 8; step 9 adds `0x04`
+ * beside its price row. Literals, because this module imports nothing
+ * (`scripts/look-flash.mjs` and `scripts/sheet-roles.test.mjs` load it by
+ * Node's type stripping). Tests: `theme-table-ids-are-pinned`,
+ * `a-private-look-id-is-reserved-and-unshared`.
+ */
+export const PRIVATE_LOOK_IDS: readonly number[] = Object.freeze([0x04]);
+export const PAID_LOOK_IDS: readonly number[] = Object.freeze([0x04]);
+export const RELEASED_LOOK_IDS: readonly number[] = Object.freeze([]);
+
+/**
  * The default look. An id with no shipped row wears all of it — palette,
  * sheet class and both ceiling ladders — so it tiers like it too.
  */

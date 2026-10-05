@@ -3,8 +3,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { attachmentsForTheme } from '../src/domain/attachments';
-import { DEFAULT_THEME_ID, SHIPPED_THEMES, WORKSHOP_THEME_ID, decodeTheme } from '../src/domain/theme';
+import { DEFAULT_THEME_ID, PRIVATE_LOOK_IDS, SHIPPED_THEMES, WORKSHOP_THEME_ID, decodeTheme } from '../src/domain/theme';
+import { HARNESS_LOOK_CLASSES } from '../scripts/private-looks.mjs';
 import {
+    FIXTURE_LOOK_ID,
+    FIXTURE_SHEET_CLASS,
     SKELETON_LOOK_ID,
     SKELETON_SHEET_CLASS,
     galleryLooks,
@@ -16,7 +19,7 @@ import {
     shippedLooks,
 } from './looks';
 import { loadKitLook } from './workshopKit';
-import { parseWorkshopLook } from './workshopLook';
+import { WORKSHOP_SHEET_CLASS, parseWorkshopLook, workshopLookProblems } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
 
 const LAYOUT = dirname(fileURLToPath(import.meta.url));
@@ -183,5 +186,32 @@ describe('the-skeleton-is-the-default-row-under-a-class-no-sheet-styles', () => 
         expect(at).toBeGreaterThan(-1);
         const statement = runner.slice(at, runner.indexOf(';', at));
         expect(statement).toContain(`'${SKELETON_SHEET_CLASS}'`);
+    });
+});
+
+/**
+ * A private look (step 8, `scripts/private-looks.mjs`) takes an id
+ * `PRIVATE_LOOK_IDS` reserves and a class of its own. The harness's
+ * addresses and classes live here, out of `src/`, so this is where they are
+ * held apart from it: no harness address is a reserved id, and the list of
+ * harness classes the private index refuses is exactly the harness's.
+ */
+describe('no-harness-look-is-a-private-look', () => {
+    it('keeps the kit, skeleton and fixture addresses out of the reserved ids', () => {
+        for (const id of [WORKSHOP_THEME_ID, SKELETON_LOOK_ID, FIXTURE_LOOK_ID]) {
+            expect(PRIVATE_LOOK_IDS, `0x${id.toString(16)}`).not.toContain(id);
+        }
+    });
+
+    it('names exactly the harness classes the private index refuses', () => {
+        expect([...HARNESS_LOOK_CLASSES].sort()).toEqual([WORKSHOP_SHEET_CLASS, SKELETON_SHEET_CLASS, FIXTURE_SHEET_CLASS].sort());
+    });
+
+    it('carries a tracked private fixture whose look.json the kit reads as a look', () => {
+        // The fixture's look.json is written in the kit's shape, which the
+        // join's validator widens (8b1); read here by today's.
+        const source = readFileSync(join(LAYOUT, 'fixture-private-looks', 'fixture', 'look.json'), 'utf8');
+        expect(workshopLookProblems(source)).toEqual([]);
+        expect(parseWorkshopLook(source).theme.label).toBe('Fixture private look');
     });
 });

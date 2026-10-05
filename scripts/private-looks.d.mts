@@ -1,0 +1,56 @@
+/** Types for `private-looks.mjs` — see that file for what a private look repository may hold. */
+export type PrivateLookStage = 'preview' | 'release';
+
+export type PrivateIndexEntry = {
+    readonly id: number;
+    readonly slug: string;
+    readonly cls: string;
+    readonly stage: PrivateLookStage;
+    readonly paid: boolean;
+};
+
+export type PrivateIndex = { readonly schema: 1; readonly looks: readonly PrivateIndexEntry[] };
+
+/** One file of a commit's tree: its path from the root, forward slashes, and its git mode. */
+export type PrivateFile = { readonly path: string; readonly mode: string };
+
+/** The public lists a private index is held to. */
+export type PublicLookFacts = {
+    readonly reserved: readonly number[];
+    readonly paid: readonly number[];
+    readonly released: readonly number[];
+    readonly shippedClasses: readonly string[];
+};
+
+type GitOptions = { readonly git?: string; readonly env?: Readonly<Record<string, string | undefined>> };
+
+export declare const PRIVATE_INDEX: 'index.json';
+export declare const PRIVATE_INDEX_SCHEMA: 1;
+export declare const PRIVATE_LOOK_STAGES: readonly PrivateLookStage[];
+export declare const PRIVATE_INDEX_FIELDS: readonly string[];
+export declare const PRIVATE_SLUG: RegExp;
+export declare const PRIVATE_SLUG_MAX: number;
+export declare const PRIVATE_LOOK_CLASS: RegExp;
+export declare const PRIVATE_LOOK_CLASS_MAX: number;
+export declare const HARNESS_LOOK_CLASSES: readonly string[];
+export declare const PRIVATE_ROOT_FILES: readonly string[];
+export declare const PRIVATE_LOOK_FILES: readonly string[];
+export declare const PRIVATE_LOOK_REQUIRED: readonly string[];
+export declare const PRIVATE_FACE_LICENCE: RegExp;
+export declare const PRIVATE_FILE_MODE: '100644';
+export declare const FULL_COMMIT: RegExp;
+
+export declare function privateFileProblems(files: readonly PrivateFile[]): string[];
+export declare function parsePrivateIndex(text: string): { index: PrivateIndex | undefined; problems: string[] };
+export declare function privateIndexProblems(index: PrivateIndex, facts: PublicLookFacts): string[];
+export declare function privateLooksProblems(input: {
+    files: readonly PrivateFile[];
+    indexText: string | undefined;
+    facts: PublicLookFacts;
+}): string[];
+export declare function publicLookFacts(): Promise<PublicLookFacts>;
+export declare function gitFilesAt(input: { dir: string; commit: string } & GitOptions): PrivateFile[];
+export declare function gitTextAt(input: { dir: string; commit: string; path: string } & GitOptions): string;
+export declare function readPrivateLooksAt(
+    input: { dir: string; commit: string; facts: PublicLookFacts } & GitOptions,
+): { files: PrivateFile[]; indexText: string | undefined; problems: string[] };

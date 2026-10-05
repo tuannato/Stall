@@ -18,6 +18,18 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (path) => relative(ROOT, path).replaceAll('\\', '/');
 const inTable = new Set(SERVED_SHEETS.map((sheet) => sheet.path));
 
+/**
+ * The tracked fixture of a private look repository (step 8,
+ * `scripts/private-looks.mjs`): its sheets are a private look's, served by
+ * no build until a run selects that directory, so they are no row of this
+ * table. Exactly the `<slug>/sheet.css` its index names — any other
+ * stylesheet under it is one the table must name, and is not.
+ */
+const PRIVATE_FIXTURE = 'layout/fixture-private-looks';
+const privateFixtureSheets = JSON.parse(readFileSync(join(ROOT, PRIVATE_FIXTURE, 'index.json'), 'utf8')).looks.map(
+    (entry) => `${PRIVATE_FIXTURE}/${entry.slug}/sheet.css`,
+);
+
 function walk(dir, keep) {
     const out = [];
     if (!existsSync(dir)) return out;
@@ -74,8 +86,12 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
             .flatMap((dir) => walk(join(ROOT, dir), (p) => p.endsWith('.css')))
             .map(rel);
         assert.ok(sheets.includes('src/ui/stall.css'), 'the walk found the base sheet');
+        // The private fixture's own sheet is in the walk, or the exception
+        // below is an exception for nothing.
+        assert.ok(privateFixtureSheets.length > 0 && privateFixtureSheets.every((path) => sheets.includes(path)), 'the walk found the private fixture sheet');
+        assert.ok(privateFixtureSheets.every((path) => !inTable.has(path)), 'a private look sheet is not a served one');
         assert.deepEqual(
-            sheets.filter((path) => !inTable.has(path)),
+            sheets.filter((path) => !inTable.has(path) && !privateFixtureSheets.includes(path)),
             [],
             'a stylesheet the role table does not name',
         );
