@@ -1,10 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { servedFlashReport, servedSheets, themeVarValues } from './look-flash.mjs';
-import { SERVED_SHEETS, appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
+import { flashSheets, servedFlashReport, themeVarValues } from './look-flash.mjs';
+import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private-looks-plant.mjs';
+import { guardSheets, privateRows, servedSheets } from './served-sheets.mjs';
+import { appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import {
     FACE_DISPLAY,
     GENERATED_TEXT,
@@ -35,6 +37,15 @@ import {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOOKS = sheetsWithRole('look');
+/**
+ * Every sheet a run serves (`scripts/served-sheets.mjs`): the role table's,
+ * and every private look's the run reads — the tracked fixture always, the
+ * selection when the environment names one — so each rule over every sheet
+ * below reads a private look's sheet too (step 8e1).
+ */
+const SERVED = await guardSheets();
+const PRIVATE = privateRows(SERVED);
+after(removePlants);
 const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 
 const NEO = LOOKS.find((sheet) => sheet.lookClass === 't-neo');
@@ -194,6 +205,32 @@ describe('a-look-cannot-target-one-seller', () => {
     });
 });
 
+describe('a-look-never-hands-a-link-its-browser-colour', () => {
+    /**
+     * The 8e1 critic's item 10: `color: revert` (or `revert-layer`, or
+     * either on `all`) in a look sheet gives a link the browser's blue and
+     * visited purple back, the defect `every-anchor-the-app-builds-sets-its-own-colour`
+     * exists for and cannot see in a look's sheet. Refused for every look,
+     * shipped, kit or private; `unset` and `inherit` keep an author colour.
+     */
+    it('refuses revert and revert-layer on color and all, in the shipped sheet and its starter', () => {
+        for (const rule of [
+            '.t-neo .cashtab-link { color: revert; }',
+            '.t-neo .guide-link { color: revert-layer; }',
+            '.t-neo a { all: revert; }',
+            '.t-neo .x a { all: REVERT-LAYER; }',
+        ]) {
+            plant(rule, /reverting the colour hands a link back to the browser/);
+        }
+    });
+
+    it('accepts an inherited or unset colour, and revert on another property', () => {
+        accepts('.t-neo .cashtab-link { color: inherit; }');
+        accepts('.t-neo .cashtab-link { color: unset; }');
+        accepts('.t-neo .cashtab-link { text-decoration: revert; }');
+    });
+});
+
 describe('generated-text-in-a-look-is-listed', () => {
     /**
      * G2. A stylesheet can print text — a "5" beside a figure reads as the
@@ -342,7 +379,7 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
      * ~0.22 s of a 7 s cycle, exactly three.
      */
     it('finds no served keyframe over three flashes a second, and no flashing one it cannot time', async () => {
-        const { report, problems } = await servedFlashReport();
+        const { report, problems } = await servedFlashReport({ sheets: SERVED });
         assert.deepEqual(problems, []);
         assert.ok(report.length > 10, 'the report read the served keyframes');
         const worst = Math.max(...report.map((row) => row.flashes));
@@ -352,7 +389,7 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
     });
 
     it('reads att-hum at the boundary: three flashes, six changes, at its shipped 7 s', async () => {
-        const { report } = await servedFlashReport();
+        const { report } = await servedFlashReport({ sheets: SERVED });
         const hum = report.filter((row) => row.name === 'att-hum-gutter');
         assert.deepEqual(
             hum.map((row) => [row.seconds, row.iterations, row.alternate, row.changes, row.flashes]),
@@ -360,10 +397,26 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
         );
     });
 
+    it('reads every private look a run reads beside the served sheets, and goes red on a strobe in one', async () => {
+        assert.ok(PRIVATE.length > 0, 'a private look sheet is read');
+        const names = (await flashSheets({ sheets: SERVED })).map((sheet) => sheet.name);
+        for (const row of PRIVATE) {
+            assert.ok(names.includes(row.path), `${row.path} is read by the flash rule`);
+        }
+        // A planted look whose sheet strobes: red through the served sheets.
+        const strobe =
+            `@keyframes ${PLANTED_CLASS}-strobe { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n` +
+            `.${PLANTED_CLASS} .stall-name { animation: ${PLANTED_CLASS}-strobe 1s steps(1) infinite; }`;
+        const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, strobe) : text));
+        const sheets = await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env });
+        const { problems } = await servedFlashReport({ sheets });
+        assert.ok(problems.some((p) => new RegExp(`${PLANTED_CLASS}-strobe .* flashes 5 times`).test(p)), problems.join('\n'));
+    });
+
     it('refuses a strobe, a re-timed lamp, and a flashing keyframe run for a time it cannot read', async () => {
         const vars = await themeVarValues();
-        const withNeo = (css) =>
-            servedSheets().map((sheet) => (sheet.name === NEO.path ? { name: sheet.name, css } : sheet));
+        const served = await flashSheets({ sheets: SERVED });
+        const withNeo = (css) => served.map((sheet) => (sheet.name === NEO.path ? { name: sheet.name, css } : sheet));
         for (const [rule, pattern] of [
             [
                 '@keyframes t-neo-strobe { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
@@ -444,15 +497,43 @@ const plantedFixture = (rule) => `${FIXTURE_CSS.slice(0, FIXTURE_REDUCE)}${rule}
 const lintFixture = (css, ownArt = FIXTURE_ART) =>
     lintLookSheet(css, { lookClass: FIXTURE.lookClass, load: 'worn', ownArt });
 
-/** Every served sheet as `wornSheetProblems` reads it, with `swap` replacing one path's text. */
-function servedWith(swap = {}) {
-    return SERVED_SHEETS.map((sheet) => ({
+/** Every served sheet — a private look's among them — as `wornSheetProblems` reads it, with `swap` replacing one path's text. */
+function servedWith(swap = {}, sheets = SERVED) {
+    return sheets.map((sheet) => ({
         path: sheet.path,
-        css: swap[sheet.path] ?? read(sheet.path),
+        css: swap[sheet.path] ?? sheet.css,
         load: sheet.load,
         lookClass: sheet.lookClass,
     }));
 }
+
+describe('every-private-look-sheet-passes-the-look-rules', () => {
+    /**
+     * A private look's sheet is a worn-only look sheet like the fixture
+     * look's: under its own class, naming itself, its `url()`s reaching only
+     * its own `art/`, its faces stating `font-display`, its reduce block last
+     * — every look rule, read over every private look a run reads (the
+     * tracked fixture always, the selection when one is named), from git at
+     * the commit, as the build lints it before Vite reads a byte
+     * (`private-looks-build.mjs`). Red over a planted look whose rule
+     * reaches outside its class.
+     */
+    it('passes every private look sheet a run reads, the tracked fixture among them', () => {
+        assert.ok(PRIVATE.some((row) => row.look.source === 'fixture'), 'the fixture is read');
+        for (const row of PRIVATE) {
+            assert.deepEqual(lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt }), [], row.path);
+        }
+    });
+
+    it('goes red on a planted look whose rule reaches outside its class', async () => {
+        const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, '.stall .item-n { color: red; }') : text));
+        const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+        const row = rows.find((r) => r.lookClass === PLANTED_CLASS);
+        assert.ok(row !== undefined, 'the planted look is read');
+        const problems = lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt });
+        assert.ok(problems.some((p) => new RegExp(`is not under \\.${PLANTED_CLASS}`).test(p)), problems.join('\n'));
+    });
+});
 
 describe('every-look-sheet-names-itself', () => {
     /**
@@ -544,8 +625,17 @@ describe('a-worn-only-sheet-replaces-no-keyframes', () => {
      * sheet lands after the entry CSS: a name it shares with any other sheet
      * replaces that sheet's on every stall of the page once it loads.
      */
-    it('passes every served sheet', () => {
+    it('passes every served sheet, the private looks a run reads among them', () => {
+        assert.ok(servedWith().some((sheet) => PRIVATE.some((row) => row.path === sheet.path)), 'a private look sheet is read');
         assert.deepEqual(wornSheetProblems(servedWith()), []);
+    });
+
+    it('refuses a private look that declares a keyframe another sheet declares, and a public sheet that names its class', () => {
+        const [row] = PRIVATE;
+        const kf = wornSheetProblems(servedWith({ [row.path]: beforeReduce(row.css, '@keyframes om-flick { from { rotate: 0deg; } to { rotate: 1deg; } }') }));
+        assert.ok(kf.some((p) => p.startsWith(`${row.path}: @keyframes om-flick is also declared in src/ui/stall.css`)), kf.join('\n'));
+        const named = wornSheetProblems(servedWith({ 'src/ui/broadcast.css': `${read('src/ui/broadcast.css')}\n.${row.lookClass} .bc-card { color: red; }\n` }));
+        assert.ok(named.some((p) => p.startsWith('src/ui/broadcast.css: ') && p.includes(`names .${row.lookClass}, a worn-only look`)), named.join('\n'));
     });
 
     it('refuses a keyframe name or a face family another sheet declares', () => {
@@ -611,8 +701,8 @@ describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
     });
 
     it('refuses it in the private-look fixture, the sheet a build lints', () => {
-        const path = 'layout/fixture-private-looks/fixture/sheet.css';
-        const css = read(path);
+        // As HEAD holds it, which is what a build and every guard read.
+        const css = PRIVATE.find((row) => row.look.source === 'fixture').css;
         const reduce = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
         const planted = `${css.slice(0, reduce)}@font-face { font-family: t-fixture-private-serif; src: url(./art/serif.woff2) format("woff2"); }\n\n${css.slice(reduce)}`;
         const problems = lintLookSheet(planted, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'serif.woff2'] } });

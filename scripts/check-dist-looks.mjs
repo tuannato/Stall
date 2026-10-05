@@ -33,13 +33,15 @@
  *   module's own shape, never by the class appearing anywhere, so a public
  *   file that names a reserved class (a sticky-sign table, say) does not
  *   turn every production check red (the 8b2 critic's item 7) — and none of
- *   its files is in `dist`.
+ *   its files is in `dist`;
+ * - **every face a carried look serves is in the notices**: `licenses.txt`
+ *   names its file and carries its licence text whole (step 8e1).
  *
  * No selection: the build carried no private look, and `dist` may hold no
  * look sheet but the shipped ones. Run by the build itself whenever it
  * selected anything and wrote to the disk (`privateLooksPlugin`'s
  * `closeBundle`), and by hand with the selection the build had. Not checked
- * yet, stated: a look's og card (8j) and its faces' notices (8e). Pure core
+ * yet, stated: a look's og card (8j). Pure core
  * (`distLooksProblems`) over a map of files, so the test plants on it; the
  * CLI reads the disk and git. Test: `the-dist-holds-what-the-index-names`
  * (`scripts/private-looks-build.test.mjs`).
@@ -47,8 +49,10 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LOOK_FONTS_FILE, lookFontNotices } from './look-faces.mjs';
 import { selectionFromEnv } from './looks-selection.mjs';
-import { PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
+import { noticedLicence } from './notices-lib.mjs';
+import { PRIVATE_FACE_LICENCE, PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -114,9 +118,15 @@ export function artNamedBy(sheet) {
  * Every problem `files` (a built `dist`, path → bytes) has against what its
  * selection carries. `shippedClasses`: the shipped looks' classes;
  * `included` and `excluded`: the index's looks the build carries and does
- * not, each `{ cls, slug, art: [{ name, bytes, given? }], named: Set<name> }`
- * — its art as the build writes it (and as given, for an SVG the build
- * re-serialises), and the art its source sheet names.
+ * not, each `{ cls, slug, art: [{ name, bytes, given? }], named: Set<name>,
+ * fonts? }` — its art as the build writes it (and as given, for an SVG the
+ * build re-serialises), the art its source sheet names, and what the
+ * notices say of its faces (`lookFontNotices`).
+ *
+ * **A carried look's faces are named in the notices it serves** (step 8e1,
+ * `a-deploy-build-names-every-face-it-serves`): `licenses.txt` names every
+ * face file of every included look and carries each face's licence text
+ * whole, as the build writes it (`noticesWithLookFonts`).
  */
 export function distLooksProblems({ files, shippedClasses, included, excluded }) {
     const problems = [];
@@ -179,6 +189,22 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
                 problems.push(`${look.slug}: art/${art.name} is named by its sheet and is not in the dist as the build writes it`);
             }
         }
+        const notices = files.get('licenses.txt')?.toString('utf8');
+        const flat = (text) => text.replace(/\s+/g, ' ');
+        for (const font of look.fonts ?? []) {
+            if (notices === undefined) {
+                problems.push(`${look.slug}: it serves ${font.name} and the dist holds no licenses.txt`);
+                continue;
+            }
+            for (const file of font.files) {
+                if (!notices.includes(file)) {
+                    problems.push(`${look.slug}: it serves art/${file} and licenses.txt does not name it`);
+                }
+            }
+            if (!flat(notices).includes(flat(noticedLicence(font.licenceText)))) {
+                problems.push(`${look.slug}: it serves ${font.name} and licenses.txt does not carry its licence whole`);
+            }
+        }
     }
     for (const [path, bytes] of files) {
         // Vite emits every stylesheet it builds under `assets/`; the root's
@@ -230,7 +256,18 @@ export function lookFilesOf(read, files, entry) {
         });
     const sheetFile = files.find((file) => file.path === at('sheet.css'));
     const named = sheetFile === undefined ? new Set() : artNamedBy(gitTextAt({ ...read, path: at('sheet.css') }));
-    return { cls: entry.cls, slug: entry.slug, art, named };
+    const plain = (path) => files.some((file) => file.path === path && file.mode === PRIVATE_FILE_MODE);
+    const fontsText = plain(at(LOOK_FONTS_FILE)) ? gitTextAt({ ...read, path: at(LOOK_FONTS_FILE) }) : undefined;
+    const licences = files
+        .filter((file) => file.mode === PRIVATE_FILE_MODE && file.path.startsWith(at('art/')) && PRIVATE_FACE_LICENCE.test(file.path.slice(at('art/').length)))
+        .map((file) => ({ name: file.path.slice(at('art/').length), bytes: gitBlobAt({ ...read, path: file.path }) }));
+    let fonts = [];
+    try {
+        fonts = lookFontNotices({ fontsText, art: [...art, ...licences] });
+    } catch {
+        // A fonts.json the build refused never reached a dist; nothing to hold it to.
+    }
+    return { cls: entry.cls, slug: entry.slug, art, named, fonts };
 }
 
 /**

@@ -9,8 +9,11 @@
  * table, no served sheet (`every-served-sheet-is-on-the-guard-list` reads it
  * through its index), and never in the production bundle
  * (`gallery-is-not-served`). Deliberately small, like the step-6 fixture
- * look whose art it copies: it names itself, paints one piece of its own art
- * and keeps the look rules' reduce block last.
+ * look whose art it copies: it names itself, paints one piece of its own art,
+ * reads its mood's class under its own (so the decor gate's mood-class rule
+ * has a private subject), gives each decoration a token-coloured paint of
+ * its own (so the gate's per-row rules judge a private row) and keeps the
+ * look rules' reduce block last.
  */
 
 .t-fixture-private {
@@ -20,6 +23,25 @@
 .stall.t-fixture-private {
     background-image: url(./art/ground.svg);
     background-size: 24px 24px;
+}
+
+/* Its mood's own class (D11): read under the look, in one compound. */
+.t-fixture-private.att-fixture-dusk .item-n {
+    letter-spacing: 0.01em;
+}
+
+/*
+ * Its decorations: one paint of their own each, in the tokens, so the decor
+ * gate's rules for a private row (a rule of its own that paints, colours
+ * that follow the palette, no art, no motion) judge them rather than refuse
+ * them.
+ */
+.t-fixture-private.att-fixture-trim .stall-tagline {
+    color: var(--s-accent);
+}
+
+.t-fixture-private.att-fixture-crest .stall-name {
+    color: var(--s-text);
 }
 
 @media (prefers-reduced-motion: reduce) {

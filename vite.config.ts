@@ -8,6 +8,7 @@ import {
     RELEASED_LOOK_IDS,
     SHIPPED_THEMES,
     decodeTheme,
+    themeVars,
 } from './src/domain/theme';
 import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST, SECOND_FEED } from './src/net/hosts';
 import { privateLooksPlugin } from './scripts/private-looks-build.mjs';
@@ -304,6 +305,15 @@ const DEV_CSP = CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline
  * config bundler compiles and the plugin is plain Node.
  */
 function privateLooks(): Plugin {
+    // The theme table's values, for the flash rule the build runs over every
+    // sheet it serves when it carries a look (the `--s-*-anim` the base sheet
+    // runs): `themeVarValues` in `scripts/look-flash.mjs`, read here directly.
+    const vars: Record<string, string[]> = {};
+    for (const { id } of SHIPPED_THEMES) {
+        for (const [name, value] of Object.entries(themeVars(decodeTheme(id)))) {
+            (vars[name] ??= []).push(value);
+        }
+    }
     return privateLooksPlugin({
         facts: {
             reserved: PRIVATE_LOOK_IDS,
@@ -312,6 +322,7 @@ function privateLooks(): Plugin {
             shippedClasses: SHIPPED_THEMES.map(({ id }) => decodeTheme(id).sheetClass),
         },
         validateLook: (text, place) => lookDataProblems(text, { ...place, sheetClass: place.sheetClass as `t-${string}` }),
+        vars,
     });
 }
 

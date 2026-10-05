@@ -10,7 +10,10 @@
  * list, no other text or ink road, `@media` on the probe's conditions only,
  * no `!important`, no fixed or sticky box, no prefixed property without its
  * twin), then the flash rule over this sheet read in the kit's place beside
- * every sheet the app serves (`look-flash.mjs`). What needs a browser is
+ * every sheet the app serves (`look-flash.mjs`, from the disk: no git, so it
+ * runs in a copy with no repository, `the-kit-lint-runs-without-a-git-repository`).
+ * A private-look selection is refused, as every kit command refuses one
+ * (`refuseSelection`). What needs a browser is
  * `pnpm workshop:probe`. Every kit command that builds runs the same read
  * first and refuses to build on any problem (`scripts/workshop.mjs`).
  *
@@ -21,8 +24,13 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { servedFlashReport } from './look-flash.mjs';
+import { refuseSelection } from './looks-selection.mjs';
 import { readArt } from './workshop-build-check.mjs';
 import { lintSheet } from './workshop-css.mjs';
+
+// The kit reads the public sheets beside a creator's, as every kit command
+// does until 8e2: a private-look selection is refused, never read here.
+refuseSelection('workshop:lint');
 
 const file = process.argv[2] ?? 'workshop/theme-workshop.css';
 let css;

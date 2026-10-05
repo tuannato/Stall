@@ -45,3 +45,8 @@ export declare function lookArtBudget(input: {
     readonly slots: Readonly<Record<string, { readonly cls: string; readonly gzip: number }>>;
     readonly total: number;
 };
+export declare function privateLookArtBudget(look: import('./served-sheets.mjs').PrivateLookRead): {
+    readonly bare: number;
+    readonly slots: Readonly<Record<string, { readonly cls: string; readonly gzip: number }>>;
+    readonly total: number;
+};

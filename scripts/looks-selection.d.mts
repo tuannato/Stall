@@ -5,6 +5,9 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 export declare const SELECTION_ENV: { readonly target: 'STALL_LOOKS_TARGET'; readonly dir: 'STALL_LOOKS_DIR'; readonly commit: 'STALL_LOOKS_COMMIT' };
 export declare const LOOKS_TARGETS: readonly LooksTarget[];
+export declare const REQUIRED_ENV: 'STALL_LOOKS_REQUIRED';
+export declare const LOOKS_ENV: readonly string[];
+export declare function selectionRequired(env: Env): boolean;
 export declare const FIXTURE_LOOKS_DIR: 'layout/fixture-private-looks';
 export declare function selectionFromEnv(env: Env): LooksSelection | undefined;
 export declare function withoutSelection<T extends Env>(env: T): T;

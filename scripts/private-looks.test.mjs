@@ -21,7 +21,6 @@ import {
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
-import { lintLookSheet } from './workshop-css.mjs';
 
 /**
  * A private look repository's shape (`scripts/private-looks.mjs`), over
@@ -115,7 +114,8 @@ function plantPrivateRepo({ under } = {}) {
 describe('a-private-file-outside-the-allow-list-fails', () => {
     /**
      * A private look repository is data: the index, its README and design
-     * log, and per look a `look.json`, a `sheet.css`, an `og.png` and an
+     * log, and per look a `look.json`, a `sheet.css`, an `og.png`, a
+     * `fonts.json` naming its faces and an
      * `art/` of SVGs, faces and the faces' OFL texts. Nothing else, nothing
      * nested deeper, and nothing that is not a plain file — a script, a page,
      * a symlink, a gitlink or an executable bit is refused, because nothing in
@@ -128,6 +128,7 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
         'some-look/look.json',
         'some-look/sheet.css',
         'some-look/og.png',
+        'some-look/fonts.json',
         'some-look/art/mark.svg',
         'some-look/art/face-latin.woff2',
         'some-look/art/LICENSE-OFL.txt',
@@ -443,21 +444,5 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         const own = readPrivateLooksAt({ dir: ROOT, commit: head, prefix: FIXTURE, facts, fixture: true });
         assert.ok(own.files.length >= 4);
         assert.deepEqual(own.problems, []);
-    });
-});
-
-describe('the-private-fixture-sheet-obeys-the-look-rules', () => {
-    /**
-     * The fixture's sheet is a worn-only look sheet like any private look's:
-     * it names itself, its `url()`s reach only its own `art/`, and its reduce
-     * block is last. Read here until the static guards read private sheets
-     * through the join (8e1), so the fixture is a valid subject from the day
-     * it lands.
-     */
-    it('passes the look rules as a worn-only sheet over its own art', () => {
-        const { files } = trackedFixture();
-        const css = readFileSync(join(ROOT, FIXTURE, 'fixture', 'sheet.css'), 'utf8');
-        const art = files.filter((f) => f.path.startsWith('fixture/art/')).map((f) => f.path.slice('fixture/art/'.length));
-        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: art } }), []);
     });
 });

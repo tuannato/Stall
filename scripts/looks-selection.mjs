@@ -28,6 +28,21 @@ export const SELECTION_ENV = Object.freeze({
     commit: 'STALL_LOOKS_COMMIT',
 });
 
+/**
+ * Set by a run that must carry private looks — the deploy job (8c), on the
+ * job, so its build and its tests share it: a build that selects none fails,
+ * and the static guards refuse to read anything but the selection the build
+ * carries (`guardSheets`, `scripts/served-sheets.mjs`). Any value but empty
+ * or `0` sets it.
+ */
+export const REQUIRED_ENV = 'STALL_LOOKS_REQUIRED';
+
+/** Whether `env` requires a private-look selection. */
+export function selectionRequired(env) {
+    const value = env[REQUIRED_ENV];
+    return value !== undefined && value !== '' && value !== '0';
+}
+
 /** The two targets a selection may name. */
 export const LOOKS_TARGETS = Object.freeze(['preview', 'production']);
 
@@ -66,22 +81,25 @@ export function selectionFromEnv(env) {
     return { target, dir, ...(present(commit) ? { commit } : {}) };
 }
 
-/** `env` with the three selection variables taken out: what a test hands a command it starts, or a build it runs. */
+/** Every variable a selection run carries: the three that name it, and the one that requires it. */
+export const LOOKS_ENV = Object.freeze([...Object.values(SELECTION_ENV), REQUIRED_ENV]);
+
+/** `env` with the selection's variables taken out, `STALL_LOOKS_REQUIRED` included: what a test hands a command it starts, or a build it runs. */
 export function withoutSelection(env) {
     const out = { ...env };
-    for (const name of Object.values(SELECTION_ENV)) {
+    for (const name of LOOKS_ENV) {
         delete out[name];
     }
     return out;
 }
 
-/** Why `command` will not run under `env`, or undefined: any of the three variables set, whole or not. */
+/** Why `command` will not run under `env`, or undefined: any of the selection's variables set, whole or not, or the one that requires one. */
 export function selectionRefusal(command, env) {
-    const set = Object.values(SELECTION_ENV).filter((name) => present(env[name]));
+    const set = LOOKS_ENV.filter((name) => present(env[name]));
     if (set.length === 0) {
         return undefined;
     }
-    return `${command}: ${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} set — until 8e2 this command measures the public build only; run it with none of ${Object.values(SELECTION_ENV).join(', ')} set`;
+    return `${command}: ${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} set — until 8e2 this command measures the public build only; run it with none of ${LOOKS_ENV.join(', ')} set`;
 }
 
 /** Stop `command` here, before it builds anything, when `env` selects a private look. */

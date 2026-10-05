@@ -303,3 +303,43 @@ export function noticesText({ packages, fonts, overrides }) {
     }
     return text;
 }
+
+/** A licence text as the notices carry it: tidied, no mailbox, ASCII — what a reader compares a served file against. */
+export function noticedLicence(licenceText) {
+    return ascii(stripMailboxes(tidy(licenceText)));
+}
+
+/** The heading a deploy build's notices give the faces of the private looks it carries. */
+export const LOOK_FONTS_HEADING = '== Fonts of the looks this build carries, under the SIL Open Font License 1.1 ==';
+
+/**
+ * The notices a build that carries private looks serves (step 8e1): the
+ * public file's text first and unchanged — `public/licenses.txt`, which
+ * stays the public build's and is what `scripts/notices.mjs` writes — then
+ * one section naming every face the carried looks serve, each with its
+ * licence text whole, in the tracked faces' own shape. `looks`: `{ fonts:
+ * [{ name, files, subsets, licenceText }] }` per carried look
+ * (`lookFontNotices`). A build whose looks serve no face serves the public
+ * text as it is, byte for byte (`a-build-with-no-released-look-is-the-public-build`).
+ */
+export function noticesWithLookFonts(publicText, looks) {
+    const fonts = looks.flatMap((look) => look.fonts);
+    if (fonts.length === 0) {
+        return publicText;
+    }
+    if (!publicText.endsWith('\n') || publicText.endsWith('\n\n')) {
+        throw new Error('notices: the public notices do not end with one newline — is this the file scripts/notices.mjs writes?');
+    }
+    const out = ['', LOOK_FONTS_HEADING];
+    for (const font of [...fonts].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+        out.push('');
+        out.push(`- ${font.name}, the ${font.subsets} this site serves for a look it carries (${font.files.join(', ')})`);
+        out.push('');
+        out.push(stripMailboxes(tidy(font.licenceText)));
+    }
+    const text = ascii(`${publicText}${out.join('\n')}\n`);
+    if (text.includes('/home/') || text.includes('/Users/') || text.includes('.pnpm')) {
+        throw new Error('notices: a local path reached the text');
+    }
+    return text;
+}

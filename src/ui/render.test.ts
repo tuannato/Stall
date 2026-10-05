@@ -6243,41 +6243,6 @@ describe('the-head-wears-the-tier-the-figure-earned', () => {
     });
 });
 
-describe('every-shipped-look-sizes-every-price-tier', () => {
-    /**
-     * The tier sizes live in each theme sheet, next to that look's own
-     * `.item-x` literal. stall.css carries a base ladder too — tiers derived
-     * from `--s-price-size` (0.81 and 0.65) — but it is written at (0,1,0)
-     * under `:where()` so that **any sheet that sizes `.item-x` at all
-     * out-ranks it, tiers included**: it is the floor for a look with no
-     * sheet (the skeleton, an untouched kit), not a default a look inherits.
-     * So a shipped look owns its whole ladder, and one that forgot a tier
-     * would paint its full-size figure into that tier's column with nothing
-     * underneath to catch it; this is what notices.
-     */
-    const LOOKS = ['modern', 'neo', 'rural'] as const;
-
-    it.each(LOOKS)('theme-%s sizes tiers 1, 2 and 3', (look) => {
-        const css = readFileSync(join(UI_DIR, `theme-${look}.css`), 'utf8')
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            // Unwrap at-rule blocks: the tier rules live inside the phone
-            // media query, and a flat rule scan must not glue the first
-            // selector inside a block onto the block's own prelude.
-            .replace(/@media[^{]*\{/g, '');
-        const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)];
-        for (const tier of ['1', '2', '3']) {
-            const sized = rules.some(
-                ([, selector, body]) =>
-                    selector!.includes(`.t-${look}`) &&
-                    selector!.includes(`[data-price-tier='${tier}']`) &&
-                    selector!.includes('.item-x') &&
-                    body!.includes('font-size'),
-            );
-            expect(sized, `theme-${look}.css sizes tier ${tier}`).toBe(true);
-        }
-    });
-});
-
 describe('a-full-door-scrolls-its-pins-not-the-page', () => {
     /**
      * Twelve pins is the cap and over half a phone screen of rows: the

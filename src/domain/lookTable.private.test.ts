@@ -297,6 +297,7 @@ describe('a-private-row-class-is-its-looks-own', () => {
         look.decorations[0]!.cls = second.trim;
         look.decorations[1]!.cls = 'att-other-crest';
         look.moods[0]!.tokenId = 'e2'.repeat(32);
+        look.moods[0]!.cls = 'att-other-dusk';
         vi.resetModules();
         vi.doMock('./theme', async (importOriginal) => ({
             ...(await importOriginal<typeof import('./theme')>()),

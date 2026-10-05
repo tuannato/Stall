@@ -911,6 +911,17 @@ function declarationProblems(decls, selectors) {
         ) {
             out.push(`${shown} — a background clipped to the text paints the text's ink where the contrast pass reads color`);
         }
+        /*
+         * The browser's own link colour (the 8e1 critic's item 10): `revert`
+         * or `revert-layer` on `color` — or on `all`, which carries it —
+         * rolls a link back to the user agent's blue and its `:visited`
+         * purple, which no pass can see (a browser never tells script a
+         * visited link's colour); `every-anchor-the-app-builds-sets-its-own-colour`
+         * reads only that some sheet colours each anchor.
+         */
+        if ((prop === 'color' || prop === 'all') && /(?<![\w-])revert(?:-layer)?(?![\w-])/i.test(keywords)) {
+            out.push(`${shown} — reverting the colour hands a link back to the browser's own blue and visited purple, which no pass can see`);
+        }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
             out.push(
                 `${shown} — a fixed or sticky box follows the scroll, and can stand over a figure at a position the probe never scrolled to`,

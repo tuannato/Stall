@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { withoutSelection } from './looks-selection.mjs';
 import { readArt } from './workshop-build-check.mjs';
 import {
     echo,
@@ -275,7 +277,7 @@ describe('the-kit-lint-reads-the-flash-rule-beside-the-served-sheets', () => {
         try {
             const file = join(dir, 'theme-workshop.css');
             writeFileSync(file, css);
-            return spawnSync('node', ['scripts/workshop-lint.mjs', file], { encoding: 'utf8' });
+            return spawnSync('node', ['scripts/workshop-lint.mjs', file], { encoding: 'utf8', env: withoutSelection(process.env) });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -295,5 +297,31 @@ describe('the-kit-lint-reads-the-flash-rule-beside-the-served-sheets', () => {
         assert.match(lamp.stderr, /@keyframes att-hum-gutter \(src\/ui\/stall\.css\) flashes 4 times/);
         const skeleton = run(readFileSync('workshop/theme-workshop.css', 'utf8'));
         assert.equal(skeleton.status, 0, skeleton.stdout + skeleton.stderr);
+    });
+});
+
+/**
+ * `the-kit-lint-runs-without-a-git-repository` (the 8e1 critic's item 4): a
+ * creator's copy of the kit may not be a clone, and the lint's flash rule
+ * reads the sheets a build serves from the disk — no git with nothing
+ * selected (`servedSheets`). Run with a `git` that answers "not a
+ * repository" first on the path, and discovery cut off above `layout/`
+ * (the critic's reproduction): the skeleton still passes.
+ */
+describe('the-kit-lint-runs-without-a-git-repository', () => {
+    it('passes the skeleton when no git repository can be found', () => {
+        const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+        const bin = mkdtempSync(join(tmpdir(), 'stall-no-git-'));
+        try {
+            writeFileSync(join(bin, 'git'), '#!/bin/sh\necho "fatal: not a git repository (or any of the parent directories): .git" >&2\nexit 128\n', { mode: 0o755 });
+            const env = { ...withoutSelection(process.env), PATH: `${bin}:${process.env.PATH ?? ''}`, GIT_CEILING_DIRECTORIES: join(root, 'layout') };
+            const git = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, env, encoding: 'utf8' });
+            assert.equal(git.status, 128, 'the git on the path finds no repository');
+            const out = spawnSync(process.execPath, ['scripts/workshop-lint.mjs'], { cwd: root, env, encoding: 'utf8' });
+            assert.equal(out.status, 0, out.stdout + out.stderr);
+            assert.match(out.stdout, /✓ workshop:lint: workshop\/theme-workshop\.css/);
+        } finally {
+            rmSync(bin, { recursive: true, force: true });
+        }
     });
 });

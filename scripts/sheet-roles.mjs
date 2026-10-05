@@ -3,9 +3,12 @@
  * static guards read, so a sheet added to the app is a sheet the guards see
  * the day it lands rather than the day somebody remembers a hand-kept list.
  *
- * Read by `src/ui/theme-sheets.test.ts` (its `SHEETS`), by
- * `scripts/audit-shadowing.mjs` (its base and look lists), and by the
- * shipped-sheet lints in `scripts/look-lint.test.mjs`. A `.mjs` with a
+ * **The public table, and only that**: the sheets this repository holds.
+ * Every static guard reads the sheets a run serves through
+ * `scripts/served-sheets.mjs` — this table, each row with its text, then
+ * one row per private look the run reads (role `private`, step 8e1) — and
+ * a file that reads this table alone says why
+ * (`every-whole-sheet-guard-reads-the-served-sheets`). A `.mjs` with a
  * `.d.mts` beside it, because a TypeScript test importing an untyped `.mjs`
  * breaks `pnpm build`'s `tsc` (TS7016) while vitest, which never
  * type-checks, stays green.
