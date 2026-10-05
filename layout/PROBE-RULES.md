@@ -1998,8 +1998,8 @@ old rule is now three guards, none of them in the browser:
   handed no worn rows anyway.
 - **It is look-scoped**: one `att-` class with no `paint`, owned by no other
   row in either direction of the child-class rule (`moodClassProblems`,
-  `layout/moodClass.ts`, read by the catalogue's pin and the kit's
-  `look.json`), and every served rule naming it names its look's class in
+  `src/domain/moodClass.ts` since step 8b1, read by the catalogue's pin and
+  the look data validator), and every served rule naming it names its look's class in
   the same compound — a kit sheet's own `t-workshop` counts, since
   `workshop:start` copies a shipped mood's rules re-scoped — through no
   functional pseudo-class (`:is(.t-neo, .t-rural).att-x` names the look as

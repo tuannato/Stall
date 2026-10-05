@@ -1,7 +1,8 @@
 import { toHex } from 'ecash-lib';
 import { encodeAttachmentFlags } from './attachments';
 import { isLegibleText } from './text';
-import { decodeTheme, THEME_ID_BYTES, type DecodedTheme } from './theme';
+import { THEME_ID_BYTES, type DecodedTheme } from './theme';
+import { decodeLook } from './lookTable';
 
 export const STL1_ASCII = 'STL1';
 export const STL1_HEX = '53544c31';
@@ -170,7 +171,7 @@ export function decodeManifestPushes(pushes: Uint8Array[]): StallManifest {
     );
     return {
         name,
-        theme: decodeTheme(themeBytes[0]!),
+        theme: decodeLook(themeBytes[0]!),
         extras,
         ...(tagline === undefined ? {} : { tagline }),
         ...(fiatHint === undefined ? {} : { fiatHint }),

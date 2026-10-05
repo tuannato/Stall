@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME, FONT_STACKS, WORKSHOP_THEME_ID, decodeTheme } from '../src/domain/theme';
+import { LookDataError } from '../src/domain/lookData';
 import { WorkshopLookError, lookFromJson, parseWorkshopLook, workshopLookProblems } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
 
@@ -169,6 +170,28 @@ describe('a-kit-look-json-is-validated-and-every-fault-listed', () => {
         expect(problems).toEqual([
             'slot yard: named "on the ground" and "the floor" — rows sharing a slot share its place word',
         ]);
+    });
+
+    it('the-kit-error-keeps-its-name', () => {
+        // The validator moved into `src/domain` (step 8b1) and throws its own
+        // `LookDataError`; the kit's reads hand it back as the kit's error,
+        // by name and by kind, with the header the kit has always printed.
+        for (const read of [() => parseWorkshopLook('[]'), () => lookFromJson({ label: 'x' }), () => parseWorkshopLook('{')]) {
+            let error: unknown;
+            try {
+                read();
+            } catch (err) {
+                error = err;
+            }
+            expect(error).toBeInstanceOf(WorkshopLookError);
+            expect(error).toBeInstanceOf(LookDataError);
+            expect((error as Error).name).toBe('WorkshopLookError');
+            expect((error as Error).message).toMatch(/^workshop\/look\.json has \d+ problems?:\n {2}- /);
+        }
+        const made = new WorkshopLookError(['one']);
+        expect(made.name).toBe('WorkshopLookError');
+        expect(made.message).toBe('workshop/look.json has 1 problem:\n  - one');
+        expect(made.problems).toEqual(['one']);
     });
 
     it('says a file that is not JSON is not JSON, and a list is not a look', () => {

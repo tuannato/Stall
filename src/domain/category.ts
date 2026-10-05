@@ -1,29 +1,28 @@
-import { SHIPPED_ATTACHMENTS, attachmentByTokenId } from './attachments';
-import { SHIPPED_THEMES } from './theme';
+import { LOOK_ATTACHMENTS, LOOK_ROWS, lookAttachmentByTokenId } from './lookTable';
 import type { StallOffer, TokenMeta } from './state';
 
 /**
- * The shipped catalogue's answer, which is the one production uses. Injectable
+ * The look table's answer, which is the one production uses. Injectable
  * so a test can describe a shop without minting a token — the same seam
  * `groupOf` already is.
  */
 export type DecorPlace = {
-    /** The look this decoration fits, named by the shipped table. */
+    /** The look this decoration fits, named by the look table. */
     readonly label: string;
     /** Its position in the catalogue, which is the order the runs print in. */
     readonly order: number;
 };
 
 function defaultLookOf(tokenId: string): DecorPlace | undefined {
-    const row = attachmentByTokenId(tokenId);
+    const row = lookAttachmentByTokenId(tokenId);
     if (row === undefined) {
         return undefined;
     }
-    const label = SHIPPED_THEMES.find((t) => t.id === row.themeId)?.label;
+    const label = LOOK_ROWS.find((t) => t.id === row.themeId)?.label;
     if (label === undefined) {
         return undefined;
     }
-    return { label, order: SHIPPED_ATTACHMENTS.indexOf(row) };
+    return { label, order: LOOK_ATTACHMENTS.indexOf(row) };
 }
 
 /**

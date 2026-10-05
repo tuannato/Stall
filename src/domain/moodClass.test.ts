@@ -5,7 +5,7 @@
  * shown to refuse something.
  */
 import { describe, expect, it } from 'vitest';
-import { SHIPPED_ATTACHMENTS, type ShippedAttachment } from '../src/domain/attachments';
+import { SHIPPED_ATTACHMENTS, type ShippedAttachment } from './attachments';
 import { ATT_CLASS, moodClassProblems, sameOwner } from './moodClass';
 
 const mood = (cls: string | undefined, extra: Partial<ShippedAttachment> = {}): ShippedAttachment => ({
