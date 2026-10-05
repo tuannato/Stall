@@ -32,6 +32,7 @@ describe('every-face-is-loaded-before-the-probe-measures', () => {
 
     it('reads the faces from stall.css, never a list written here', () => {
         const families = new Set(declared.map((face) => face.family));
+        assert.ok(declared.every((face) => /^\.\/fonts\/[a-z-]+\.woff2$/.test(face.src)), 'every face names its file');
         assert.deepEqual([...families].sort(), ['Inter', 'JetBrains Mono', 'Stall Serif']);
         // Each family ships a Latin and a Vietnamese subset, Stall Serif an italic pair too.
         assert.equal(declared.length, 8);
@@ -76,13 +77,6 @@ describe('every-face-is-loaded-before-the-probe-measures', () => {
         assert.match(faults[0], /^Inter normal 400 700 \[U\+0-ff,…\], declared in stall.css, is not among the page's faces$/);
     });
 
-    it('refuses a face that was not loaded, or not declared, by the verdict', () => {
-        const late = [{ family: 'Inter', style: 'normal', weight: '400 700', unicodeRange: 'U+0-FF', status: 'loading' }];
-        const faults = facesFaults(echoOf(declared), declared, late);
-        assert.equal(faults.length, 1);
-        assert.match(faults[0], /was loading at the verdict, or arrived after measuring began/);
-    });
-
     it('counts what it waited for on the pass line', () => {
         assert.equal(
             facesLine(echoOf(declared)),
@@ -125,8 +119,8 @@ describe('a face is the same face however its range is spelled', () => {
             @font-face { font-family: "Two"; font-style: italic; font-weight: 700; }
         `;
         assert.deepEqual(declaredFaces(css), [
-            { family: 'One Face', style: 'normal', weight: 'normal', unicodeRange: 'U+0000-00FF,\n                    U+0131' },
-            { family: 'Two', style: 'italic', weight: '700', unicodeRange: '' },
+            { family: 'One Face', style: 'normal', weight: 'normal', unicodeRange: 'U+0000-00FF,\n                    U+0131', src: './a.woff2' },
+            { family: 'Two', style: 'italic', weight: '700', unicodeRange: '', src: '' },
         ]);
     });
 });

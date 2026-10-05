@@ -32,6 +32,16 @@
  * one is not `loaded`, or where a face `stall.css` declares is missing from
  * the page. The wait is bounded (`FACE_WAIT_MS`), so a face that never loads
  * is a named failure rather than a probe that never reports.
+ *
+ * **A status, never a glyph** (the probe-fonts critic's P2-1). Every face is
+ * asked to load whether or not a line uses it, so `loaded` says the file
+ * arrived — not that any line was drawn in it. A family name no face
+ * declares, and a code point no face's file holds, still paint in the
+ * machine's own fonts with every face `loaded`; those are held statically
+ * (`every-font-family-opens-with-a-served-face`,
+ * `every-glyph-the-app-prints-is-in-its-face`, `a-look-names-only-a-served-face`).
+ * And the fallback state a visitor meets on a slow line or a blocked face
+ * is measured by no pass.
  */
 
 /** One face as the page holds it: what selects it, and its status. */

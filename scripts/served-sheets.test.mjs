@@ -192,6 +192,7 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
         'scripts/look-faces.test.mjs',
         'scripts/look-flash.mjs',
         'scripts/look-lint.test.mjs',
+        'scripts/served-faces.test.mjs',
         'scripts/sheet-roles.test.mjs',
         'src/bundle.test.ts',
         'src/ui/decor-gate.test.ts',

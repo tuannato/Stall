@@ -39,7 +39,7 @@ import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
-import { faceStates, loadEveryFace, type FaceEcho } from './faces';
+import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -5375,23 +5375,12 @@ const verdict = {
         .matches,
     screensMeasured: measured,
     /*
-     * Every face's status when the measuring began, and every face that is
-     * not loaded now or was not declared then — a face a sheet brought in
-     * mid-pass was measured in its fallback (`layout/faces.ts`; the runner
-     * holds both, `scripts/probe-faces.mjs`).
+     * Every face's status when the measuring began (`layout/faces.ts`; the
+     * runner holds it, `scripts/probe-faces.mjs`). Read once: the loop and
+     * this verdict are one task, in which no sheet becomes active and no
+     * loaded face unloads.
      */
     faces: facesAtStart,
-    facesLate: faceStates(document.fonts).filter(
-        (late) =>
-            late.status !== 'loaded' ||
-            !facesAtStart.faces.some(
-                (face) =>
-                    face.family === late.family &&
-                    face.style === late.style &&
-                    face.weight === late.weight &&
-                    face.unicodeRange === late.unicodeRange,
-            ),
-    ),
     /*
      * Every `t-*` class a painted `.stall` wore — the look this page
      * actually measured, not the one it was asked for. The runner refuses

@@ -41,8 +41,19 @@ function normalWeight(value) {
  * An absent range is every code point.
  */
 export function normalRange(value) {
+    const pairs = rangePairs(value);
+    return pairs === undefined
+        ? `unreadable: ${String(value).trim()}`
+        : pairs.map(([lo, hi]) => (lo === hi ? lo.toString(16) : `${lo.toString(16)}-${hi.toString(16)}`)).join(',');
+}
+
+/**
+ * A `unicode-range` as sorted, merged `[lo, hi]` code point pairs, or
+ * undefined when a token is unreadable. An absent range is every code point.
+ */
+export function rangePairs(value) {
     const text = (value ?? '').trim();
-    if (text === '') return '0-10ffff';
+    if (text === '') return [[0, 0x10ffff]];
     const ranges = [];
     for (const raw of text.split(',')) {
         const token = raw.trim().replace(/^u\+/i, '');
@@ -59,7 +70,7 @@ export function normalRange(value) {
         } else {
             lo = hi = Number.parseInt(token, 16);
         }
-        if (!Number.isFinite(lo) || !Number.isFinite(hi)) return `unreadable: ${text}`;
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) return undefined;
         ranges.push([lo, hi]);
     }
     ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -69,7 +80,7 @@ export function normalRange(value) {
         if (last !== undefined && lo <= last[1] + 1) last[1] = Math.max(last[1], hi);
         else merged.push([lo, hi]);
     }
-    return merged.map(([lo, hi]) => (lo === hi ? lo.toString(16) : `${lo.toString(16)}-${hi.toString(16)}`)).join(',');
+    return merged;
 }
 
 /** What selects a face, as one string: family, style, weight and range. */
@@ -92,8 +103,8 @@ export function faceName(face) {
 
 /**
  * The `@font-face` rules of a stylesheet, as `{ family, style, weight,
- * unicodeRange }` — comments stripped, a missing descriptor at its initial
- * value.
+ * unicodeRange, src }` — comments stripped, a missing descriptor at its
+ * initial value, `src` the first `url()` it names (or '').
  */
 export function declaredFaces(css) {
     const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -110,6 +121,7 @@ export function declaredFaces(css) {
             style: descriptors.get('font-style') ?? 'normal',
             weight: descriptors.get('font-weight') ?? 'normal',
             unicodeRange: descriptors.get('unicode-range') ?? '',
+            src: /url\(\s*(['"]?)([^'")]+)\1\s*\)/.exec(descriptors.get('src') ?? '')?.[2] ?? '',
         });
     }
     return out;
@@ -121,12 +133,12 @@ export function declaredStallFaces() {
 }
 
 /**
- * Why a pass was not measured in the faces it owes, or nothing. `echo` is
- * the page's `faces` (`FaceEcho`); `declared` the faces it must hold;
- * `late` the faces the page found not loaded, or not declared at the
- * start, when it wrote its verdict.
+ * Why a page did not have every face it owes loaded when it began
+ * measuring, or nothing. `echo` is the page's `faces` (`FaceEcho`);
+ * `declared` the faces it must hold. A status, never a glyph: which face a
+ * line was drawn in is not read here.
  */
-export function facesFaults(echo, declared, late = []) {
+export function facesFaults(echo, declared) {
     if (echo === undefined || echo === null || !Array.isArray(echo.faces)) {
         return ['the page did not say which faces it measured in — a probe that never waited for them'];
     }
@@ -147,9 +159,6 @@ export function facesFaults(echo, declared, late = []) {
         if (!onPage.has(faceKey(face))) {
             out.push(`${faceName(face)}, declared in stall.css, is not among the page's faces`);
         }
-    }
-    for (const face of late) {
-        out.push(`${faceName(face)} was ${face.status} at the verdict, or arrived after measuring began`);
     }
     return out;
 }

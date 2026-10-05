@@ -105,10 +105,15 @@ const EXPECTED_SHEET_CLASSES =
  * contrast and transparency page before its first job.
  */
 const DECLARED_FACES = declaredStallFaces();
+if (DECLARED_FACES.length === 0) {
+    // A list read as empty would hold every page to nothing.
+    console.error('layout-check: src/ui/stall.css declares no @font-face — the faces every page owes cannot be read');
+    process.exit(1);
+}
 
 /** The face faults of a page's echo, as the probe's own failure records. */
-function faceFailures(echo, late = []) {
-    return facesFaults(echo, DECLARED_FACES, late).map((detail) => ({
+function faceFailures(echo) {
+    return facesFaults(echo, DECLARED_FACES).map((detail) => ({
         screen: 'probe page',
         theme: '-',
         check: FACES_CHECK,
@@ -280,7 +285,7 @@ async function readVerdict(cdp, sessionId, url) {
             report.failures.push(...(await lateRefusals(cdp, sessionId, report)));
             // Measured in the faces it owes, or the pass is refused — every
             // pass that reads a verdict, the reduced-motion ones included.
-            report.failures.push(...faceFailures(report.faces, report.facesLate ?? []));
+            report.failures.push(...faceFailures(report.faces));
             return report;
         }
         await sleep(100);

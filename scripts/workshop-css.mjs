@@ -997,6 +997,129 @@ const REFUSED_AT_RULES = Object.freeze({
 });
 
 /**
+ * The families Stall serves itself: the `font-family` of every `@font-face`
+ * its own sheets declare (`stall.css`: Inter, JetBrains Mono and Stall
+ * Serif, each in Latin and Vietnamese subsets). Held to the sheets by
+ * `every-font-family-opens-with-a-served-face` (`scripts/served-faces.test.mjs`),
+ * so a face renamed on one side — Lora's rename to Stall Serif was one —
+ * turns that test red rather than leaving a look painted in whatever the
+ * reader's machine has.
+ */
+export const SERVED_FAMILIES = Object.freeze(['Inter', 'JetBrains Mono', 'Stall Serif']);
+
+/** The first family of a family list, unquoted, its escapes decoded and its whitespace collapsed; undefined for an empty list. */
+export function firstFamily(list) {
+    const first = splitTopLevel(String(list), ',')[0];
+    if (first === undefined) return undefined;
+    const quoted = /^(["'])([\s\S]*)\1$/.exec(first);
+    return decodeEscapes(quoted === null ? first : quoted[2])
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/** A token of a `font` shorthand before its size: a style, a variant, a weight or a stretch. */
+const FONT_PREFIX = /^(?:normal|italic|oblique|small-caps|bold|bolder|lighter|\d+(?:\.\d+)?|(?:ultra-|extra-|semi-)?(?:condensed|expanded))$/i;
+/** A `font` shorthand's size: a keyword, a length or percentage, or a math function. */
+const FONT_SIZE = /^(?:xx-small|x-small|small|medium|large|x-large|xx-large|xxx-large|larger|smaller|-?[\d.]+(?:[a-z]+|%)|(?:calc|clamp|min|max)\([\s\S]*\))$/i;
+
+/**
+ * The family list of a `font` shorthand — what follows its size and line
+ * height — or undefined when this reader finds no size followed by a list.
+ */
+export function shorthandFamilies(value) {
+    const tokens = splitTopLevel(String(value), ' ');
+    for (let i = 0; i < tokens.length; i += 1) {
+        if (FONT_PREFIX.test(tokens[i])) continue;
+        const [size, lineHeight] = tokens[i].split('/');
+        if (!FONT_SIZE.test(size)) return undefined;
+        let next = i + 1;
+        if (lineHeight === '') next += 1;
+        else if (lineHeight === undefined && tokens[next] === '/') next += 2;
+        else if (lineHeight === undefined && tokens[next]?.startsWith('/')) next += 1;
+        const rest = tokens.slice(next).join(' ');
+        return rest === '' ? undefined : rest;
+    }
+    return undefined;
+}
+
+/**
+ * Why a family list may not stand in a look sheet, or nothing
+ * (`a-look-names-only-a-served-face`): it opens with `inherit` (alone), a
+ * `var(--s-font…)`, a family Stall serves (`SERVED_FAMILIES`), or — in a
+ * worn-only sheet — a family the sheet's own `@font-face` declares. Anything
+ * else paints in whatever the reader's machine has, which the probe, run on
+ * one machine, measures as that machine's: a misspelt name (`"Stal Serif"`),
+ * a system face (`Georgia`), or a stack of generics alone (`serif`).
+ */
+export function familyListProblem(list, ownFamilies = []) {
+    const first = firstFamily(list);
+    if (first === undefined) return 'names no family';
+    if (/^var\(\s*--s-font[\w-]*\s*(?:,[\s\S]*)?\)$/i.test(first)) return undefined;
+    if (first.toLowerCase() === 'inherit') {
+        return splitTopLevel(String(list), ',').length === 1 ? undefined : 'inherit stands alone or not at all';
+    }
+    const allowed = [...SERVED_FAMILIES, ...ownFamilies];
+    if (allowed.some((family) => family.toLowerCase() === first.toLowerCase())) return undefined;
+    return (
+        `opens with "${echo(first)}", a family no served sheet declares — it paints in whatever the reader's machine has, ` +
+        `and the probe measures this machine's; open with ${allowed.map((family) => `"${family}"`).join(', ')}, var(--s-font) or inherit`
+    );
+}
+
+/** The font declarations of one block that name a face this page may not have (`a-look-names-only-a-served-face`). */
+function fontProblems(decls, ownFamilies) {
+    const out = [];
+    for (const { prop, value } of decls) {
+        const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
+        const shown = `${prop}: ${echo(clean, 48)}`;
+        if (prop === 'font-family' || /^--s-font[\w-]*$/.test(prop)) {
+            const why = familyListProblem(clean, ownFamilies);
+            if (why !== undefined) out.push(`${shown} — ${why} (a-look-names-only-a-served-face)`);
+        } else if (prop === 'font' && clean.toLowerCase() !== 'inherit') {
+            const families = shorthandFamilies(clean);
+            const why =
+                families === undefined
+                    ? 'a font shorthand whose family this lint cannot read — write the family in font-family'
+                    : familyListProblem(families, ownFamilies);
+            if (why !== undefined) out.push(`${shown} — ${why} (a-look-names-only-a-served-face)`);
+        }
+    }
+    return out;
+}
+
+/**
+ * Every font declaration of a whole sheet that names a face this page may
+ * not have — its rules, its `@media` blocks and its keyframes, never an
+ * `@font-face`'s own descriptor — as `line N: …` sentences. `worn` reads
+ * the sheet's own `@font-face` families as its own faces. The look lint
+ * applies the same rule (`a-look-names-only-a-served-face`); this is the
+ * form `every-font-family-opens-with-a-served-face` reads every served
+ * sheet with, base and screen sheets included.
+ */
+export function sheetFontProblems(css, { worn = false } = {}) {
+    const { text, nodes } = parseSheet(css);
+    const ownFamilies = worn ? declaredNames(css).families : [];
+    const out = [];
+    const visit = (list, offset) => {
+        for (const node of list) {
+            const line = lineOf(text, offset + node.start);
+            if (node.kind === 'rule') {
+                for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) out.push(`line ${line}: ${why}`);
+            } else if (node.name === 'keyframes') {
+                for (const stop of parseSheet(node.body ?? '').nodes) {
+                    if (stop.kind !== 'rule') continue;
+                    for (const why of fontProblems(declarationsOf(stop.body), ownFamilies)) out.push(`line ${line}: ${why}`);
+                }
+            } else if (node.name !== 'font-face' && node.children !== undefined) {
+                visit(node.children, offset);
+            }
+        }
+    };
+    visit(nodes, 0);
+    return out;
+}
+
+/**
  * One look sheet's static rules — `kit` adds the kit's own (art, `src()`,
  * `wk-` keyframes) to what every look sheet obeys. Shared by `lintSheet` and
  * `lintLookSheet`, so a rule the shipped looks obey is a rule the kit obeys.
@@ -1005,6 +1128,8 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
     const { text, nodes, errors } = parseSheet(css);
     const problems = errors.map((e) => `line ${lineOf(text, e.at)}: ${e.message}`);
     const at = (index, message) => problems.push(`line ${lineOf(text, index)}: ${message}`);
+    // A worn-only sheet may name its own face (`fontFaceProblems`); no other sheet declares one.
+    const ownFamilies = load === 'worn' ? declaredNames(css).families : [];
 
     const walk = (list) => {
         for (const node of list) {
@@ -1019,6 +1144,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                     for (const why of selectorProblems(selector)) at(node.start, why);
                 }
                 for (const why of declarationProblems(declarationsOf(node.body), selectors)) at(node.start, why);
+                for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
                 continue;
             }
             if (node.name === 'keyframes') {
@@ -1030,6 +1156,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const stop of parseList(node.body ?? '', 0, (node.body ?? '').length, stopErrors)) {
                     if (stop.kind === 'rule') {
                         for (const why of declarationProblems(declarationsOf(stop.body), undefined)) at(node.start, why);
+                        for (const why of fontProblems(declarationsOf(stop.body), ownFamilies)) at(node.start, why);
                     }
                 }
             } else if (node.name === 'font-face' && load === 'worn' && !node.statement) {
@@ -1108,7 +1235,8 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
  * 6. Every rule a shipped look obeys (`lintLookSheet`): attribute selectors
  *    from the state lists, generated text from `GENERATED_TEXT` on
  *    `::before` / `::after` alone, no other text road, no `!important`, no
- *    fixed or sticky box, no prefixed property without its twin, no ink road.
+ *    fixed or sticky box, no prefixed property without its twin, no ink road,
+ *    and no font family Stall does not serve (`a-look-names-only-a-served-face`).
  *
  * The flash rule reads every sheet at once and is `flashReport`'s.
  */
