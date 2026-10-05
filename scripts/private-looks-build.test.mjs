@@ -390,7 +390,9 @@ describe('a-private-row-class-is-its-looks-own', () => {
         for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/'))) {
             const to = join(repo.dir, path.replace(/^fixture\//, 'other/'));
             mkdirSync(dirname(to), { recursive: true });
-            let text = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, path), 'utf8').replaceAll('t-fixture-private', 't-other-look');
+            let text = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, path), 'utf8')
+                .replaceAll('t-fixture-private', 't-other-look')
+                .replaceAll('att-fixture-dusk', 'att-other-dusk');
             if (path.endsWith('look.json')) {
                 text = text
                     .replaceAll('f1f1', 'e1e1')
