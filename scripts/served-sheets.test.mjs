@@ -134,6 +134,7 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
     const GUARDS = [
         'scripts/audit-shadowing.mjs',
         'scripts/fonts.test.mjs',
+        'scripts/look-faces.test.mjs',
         'scripts/look-flash.mjs',
         'scripts/look-lint.test.mjs',
         'scripts/sheet-roles.test.mjs',

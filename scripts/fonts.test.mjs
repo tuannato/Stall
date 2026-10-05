@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { brotliDecompressSync } from 'node:zlib';
+import { woff2NameRecords } from './look-faces.mjs';
 import { guardSheets, privateRows } from './served-sheets.mjs';
 
 /**
@@ -15,81 +15,17 @@ import { guardSheets, privateRows } from './served-sheets.mjs';
  * name table out of every served woff2 and holds both halves — so a Lora file
  * copied in again by hand, or a CSS family that says 'Lora', turns red.
  *
- * `node --test`, like the other scripts' tests: WOFF2 is parsed here with
- * Node's own brotli, and nothing else. The stylesheets are the ones a run
- * serves (`guardSheets`): a private look's sheet names no Lora either.
+ * `node --test`, like the other scripts' tests: WOFF2 is parsed with Node's
+ * own brotli, and nothing else (`woff2NameRecords`, `scripts/look-faces.mjs`,
+ * which a private look's faces are read with too). The stylesheets are the
+ * ones a run serves (`guardSheets`): a private look's sheet names no Lora
+ * either.
  */
+
+const nameRecords = (file) => woff2NameRecords(readFileSync(file));
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FONTS = join(ROOT, 'src', 'ui', 'fonts');
-
-/** WOFF2 UIntBase128 (the spec's §4.1). */
-function base128(buf, at) {
-    let value = 0;
-    for (let i = 0; i < 5; i += 1) {
-        const byte = buf[at.i];
-        at.i += 1;
-        value = value * 128 + (byte & 0x7f);
-        if ((byte & 0x80) === 0) {
-            return value;
-        }
-    }
-    throw new Error('bad UIntBase128');
-}
-
-/** Every name record of a single-font WOFF2, as { id, platform, text }. */
-function nameRecords(file) {
-    const buf = readFileSync(file);
-    assert.equal(buf.toString('latin1', 0, 4), 'wOF2', `${file} is not WOFF2`);
-    const numTables = buf.readUInt16BE(12);
-    const compressedSize = buf.readUInt32BE(20);
-    const at = { i: 48 };
-    const tables = [];
-    for (let t = 0; t < numTables; t += 1) {
-        const flags = buf[at.i];
-        at.i += 1;
-        const known = flags & 0x3f;
-        let tag = known;
-        if (known === 0x3f) {
-            tag = buf.toString('latin1', at.i, at.i + 4);
-            at.i += 4;
-        }
-        const version = (flags >> 6) & 3;
-        const origLength = base128(buf, at);
-        // glyf (10) and loca (11) are transformed at version 0; every other
-        // table is transformed at any other version.
-        const transformed = known === 10 || known === 11 ? version === 0 : version !== 0;
-        const length = transformed ? base128(buf, at) : origLength;
-        tables.push({ tag, length });
-    }
-    const stream = brotliDecompressSync(buf.subarray(at.i, at.i + compressedSize));
-    let offset = 0;
-    let name;
-    for (const table of tables) {
-        if (table.tag === 5) {
-            name = stream.subarray(offset, offset + table.length);
-        }
-        offset += table.length;
-    }
-    assert.ok(name !== undefined, `${file} has no name table`);
-    const count = name.readUInt16BE(2);
-    const strings = name.readUInt16BE(4);
-    const out = [];
-    for (let r = 0; r < count; r += 1) {
-        const rec = 6 + r * 12;
-        const platform = name.readUInt16BE(rec);
-        const id = name.readUInt16BE(rec + 6);
-        const length = name.readUInt16BE(rec + 8);
-        const start = strings + name.readUInt16BE(rec + 10);
-        const raw = name.subarray(start, start + length);
-        const text =
-            platform === 3 || platform === 0
-                ? Buffer.from(raw).swap16().toString('utf16le')
-                : raw.toString('latin1');
-        out.push({ id, platform, text });
-    }
-    return out;
-}
 
 describe('stall-serif-carries-no-reserved-name', () => {
     const serif = readdirSync(FONTS).filter((f) => f.startsWith('stall-serif-') && f.endsWith('.woff2'));

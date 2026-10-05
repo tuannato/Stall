@@ -19,6 +19,8 @@ export type PrivateLookRead = {
     readonly look: unknown;
     /** Every plain file of the look's `art/`, as git holds it. */
     readonly art: readonly { readonly name: string; readonly bytes: Buffer }[];
+    /** Its `fonts.json` (the faces it serves, `scripts/look-faces.mjs`), or undefined when it has none. */
+    readonly fontsText: string | undefined;
 };
 
 /** A served sheet with its text; a private look's row carries its read. */

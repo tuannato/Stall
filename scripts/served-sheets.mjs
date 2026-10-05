@@ -41,6 +41,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LOOK_FONTS_FILE } from './look-faces.mjs';
 import { FIXTURE_LOOKS_DIR, selectionFromEnv } from './looks-selection.mjs';
 import { PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
 import { includedEntries, selectedIndex, selectedTree } from './private-looks-build.mjs';
@@ -89,6 +90,7 @@ function readLooks({ root, selection, facts, source, git, gitEnv }) {
             lookText,
             look,
             art,
+            fontsText: plain.some((file) => file.path === at(LOOK_FONTS_FILE)) ? text(at(LOOK_FONTS_FILE)) : undefined,
         });
     });
 }

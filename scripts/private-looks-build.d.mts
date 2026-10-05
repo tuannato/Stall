@@ -1,5 +1,6 @@
 /** Types for `private-looks-build.mjs` — see that file for what a build's private-look selection is. */
 import type { Plugin } from 'vite';
+import type { FontNotice } from './look-faces.mjs';
 import type { PrivateIndex, PrivateIndexEntry, PrivateFile, PublicLookFacts } from './private-looks.mjs';
 
 export type LooksTarget = 'preview' | 'production';
@@ -20,6 +21,8 @@ export type SelectedLook = {
     readonly lookText: string;
     readonly sheet: string;
     readonly art: readonly { readonly name: string; readonly bytes: Buffer }[];
+    /** What the notices say of the faces it serves (`lookFontNotices`); none for a look that serves none. */
+    readonly fonts: readonly FontNotice[];
 };
 
 export type ModuleEntry = { readonly id: number; readonly sheetClass: string; readonly sheetPath: string; readonly lookText: string };

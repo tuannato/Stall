@@ -23,6 +23,8 @@ import {
     selectionFromEnv,
 } from './private-looks-build.mjs';
 import { MAX_SVG_ELEMENTS, SVG_ELEMENTS, sanitizeSvg } from './svg-allow.mjs';
+import { LOOK_FONTS_HEADING, noticedLicence } from './notices-lib.mjs';
+import { PLANTED_CLASS, beforeReduce, oflText, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
 
 /**
  * The private-look join at build time (`scripts/private-looks-build.mjs`,
@@ -425,6 +427,102 @@ describe('a-private-row-class-is-its-looks-own', () => {
     });
 });
 
+describe('a-deploy-build-names-every-face-it-serves', () => {
+    /**
+     * Step 8e1. `public/licenses.txt` stays the public build's notices — what
+     * `scripts/notices.mjs` writes, byte for byte — and a build that carries
+     * a private look serving a face writes `dist/licenses.txt` as that file,
+     * unchanged and first, followed by the face and its licence text whole
+     * (`noticesWithLookFonts`); the dist check holds the same
+     * (`check-dist-looks.mjs`). Before Vite reads a byte the face is checked
+     * (`lookFaceProblems`): named in the look's `fonts.json`, its OFL text
+     * beside it, served by its sheet, presenting no name its licence
+     * reserves. No real font is tracked for this: the face is a synthetic
+     * WOFF2 holding a name table, in a repository planted from the fixture
+     * (`scripts/private-looks-plant.mjs`). Real `vite build`s, ~1 s each.
+     */
+    after(removePlants);
+    const FACE = 'plant-serif-latin.woff2';
+    const LICENCE = 'LICENSE-OFL-plant-serif.txt';
+    const PUBLIC_NOTICES = readFileSync(join(ROOT, 'public', 'licenses.txt'));
+    const face = (family = 'Plant Serif') =>
+        syntheticWoff2([
+            { id: 0, text: 'Copyright 2024 The Plant Type Authors' },
+            { id: 1, text: family },
+        ]);
+    const fontFace = `@font-face { font-family: ${PLANTED_CLASS}-serif; src: url(./art/${FACE}) format("woff2"); font-display: swap; }`;
+    /** A planted look serving one synthetic face; `licence` the OFL text beside it, or `null` for none. */
+    const plantFace = ({ licence = oflText('The Plant Type Authors'), family } = {}) =>
+        plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, fontFace) : text), {
+            [`fixture/art/${FACE}`]: face(family),
+            ...(licence === null ? {} : { [`fixture/art/${LICENCE}`]: licence }),
+            'fixture/fonts.json': JSON.stringify({ fonts: [{ name: 'Plant Serif', files: { [FACE]: 'Latin' }, licence: LICENCE }] }),
+        });
+
+    let repo;
+    let dist;
+    before(() => {
+        repo = plantFace();
+        dist = tempDir('dist-face');
+        const { status, stderr } = build(dist, repo.selection);
+        assert.equal(status, 0, stderr);
+    });
+
+    it('serves the public notices first and unchanged, then the face and its licence whole', () => {
+        const served = readFileSync(join(dist, 'licenses.txt'));
+        assert.ok(served.subarray(0, PUBLIC_NOTICES.length).equals(PUBLIC_NOTICES), 'the public notices come first, byte for byte');
+        const added = served.subarray(PUBLIC_NOTICES.length).toString('utf8');
+        assert.match(added, new RegExp(`^\n${LOOK_FONTS_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n`));
+        assert.ok(added.includes(`- Plant Serif, the Latin subset this site serves for a look it carries (${FACE})`), added);
+        assert.ok(added.includes(noticedLicence(oflText('The Plant Type Authors'))), 'the licence text, whole');
+        assert.match(served.toString('latin1'), /^[\x00-\x7f]*$/, 'ASCII, as the public notices are');
+        assert.ok(served.toString('utf8').endsWith('\n') && !served.toString('utf8').endsWith('\n\n'));
+        // The tracked file is untouched by the build.
+        assert.ok(readFileSync(join(ROOT, 'public', 'licenses.txt')).equals(PUBLIC_NOTICES));
+    });
+
+    it('emits the face it names, and every emitted face is named', () => {
+        const files = distFiles(dist);
+        const faces = [...files].filter(([path]) => path.endsWith('.woff2'));
+        assert.ok(faces.some(([, bytes]) => bytes.equals(face())), 'the planted face is emitted');
+        const notices = files.get('licenses.txt').toString('utf8');
+        for (const [path, bytes] of faces) {
+            if (bytes.equals(face())) {
+                assert.ok(notices.includes(FACE), `${path} is the planted face and the notices name it`);
+            }
+        }
+    });
+
+    it('passes the dist check, which goes red when the notices drop the face', async () => {
+        assert.deepEqual(await checkDist({ dir: dist, env: repo.selection }), []);
+        const files = distFiles(dist).set('licenses.txt', PUBLIC_NOTICES);
+        const look = (await import('./check-dist-looks.mjs')).lookFilesOf(
+            { dir: repo.dir, commit: repo.head(), prefix: undefined },
+            execFileSync('git', ['ls-tree', '-r', '--full-tree', 'HEAD'], { cwd: repo.dir, encoding: 'utf8' })
+                .trim()
+                .split('\n')
+                .map((line) => /^(\d{6}) \w+ [0-9a-f]+\t(.*)$/.exec(line))
+                .map((m) => ({ path: m[2], mode: m[1] })),
+            { id: 4, slug: 'fixture', cls: PLANTED_CLASS },
+        );
+        assert.equal(look.fonts.length, 1, 'the dist check reads the face');
+        const problems = distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [look], excluded: [] });
+        assert.ok(problems.some((p) => p === `fixture: it serves art/${FACE} and licenses.txt does not name it`), problems.join('\n'));
+        assert.ok(problems.some((p) => p === 'fixture: it serves Plant Serif and licenses.txt does not carry its licence whole'), problems.join('\n'));
+    });
+
+    it('fails the build on a face with no licence beside it, and on one presenting a name its licence reserves', () => {
+        const bare = plantFace({ licence: null });
+        const out = build(tempDir('dist-face-bare'), bare.selection);
+        assert.notEqual(out.status, 0, 'a face with no licence built');
+        assert.match(out.stderr, /fixture\/fonts\.json: fonts\[0\] \(Plant Serif\): its licence art\/LICENSE-OFL-plant-serif\.txt is not beside its faces/);
+        const reserved = plantFace({ licence: oflText('The Plant Type Authors', 'Plant Serif') });
+        const out2 = build(tempDir('dist-face-reserved'), reserved.selection);
+        assert.notEqual(out2.status, 0, 'a face presenting its reserved name built');
+        assert.match(out2.stderr, /fixture\/art\/plant-serif-latin\.woff2: name ID 1 presents "Plant Serif", a Reserved Font Name/);
+    });
+});
+
 describe('the-private-looks-module-is-json-and-nothing-else', () => {
     /**
      * The step-8 critic's item 8: the module's data is `JSON.parse` of a
@@ -512,6 +610,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         const sheets = [...files].filter(([path, bytes]) => path.endsWith('.css') && lookSheetNames(bytes.toString('utf8')).includes('t-fixture-private'));
         assert.equal(sheets.length, 1);
         assert.ok(!distFiles(publicDist).has(sheets[0][0]));
+        // The fixture serves no face, so the notices are the public file as it is.
+        assert.ok(files.get('licenses.txt').equals(readFileSync(join(ROOT, 'public', 'licenses.txt'))), 'a look with no face leaves the notices alone');
     });
 
     describe('the-dist-holds-what-the-index-names', () => {

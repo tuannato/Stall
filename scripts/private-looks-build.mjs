@@ -59,20 +59,29 @@
  * what it wrote** (`checkSelectedDist`, `check-dist-looks.mjs`'s core) and
  * fails on a problem, so a hand-run preview build is held as a deploy's is.
  *
+ * **The faces a carried look serves are named in the notices it serves**
+ * (step 8e1): each is checked before the build (`lookFaceProblems`: named in
+ * the look's `fonts.json`, its OFL text beside it, served, presenting no
+ * name its licence reserves), and the build writes `dist/licenses.txt` as
+ * the public file followed by those faces (`noticesWithLookFonts`) — the
+ * tracked `public/licenses.txt` stays the public build's.
+ *
  * What this does not do yet, stated: the pin and the clean check
- * (`deploy/looks.commit`, `STALL_LOOKS_REQUIRED`) are 8c's; a look's faces'
- * notices, its og card and every whole-sheet guard over private sheets are
- * 8e's and 8j's. Node built-ins and one pure `src/domain` module
+ * (`deploy/looks.commit`, `STALL_LOOKS_REQUIRED`) are 8c's; a look's og card
+ * is 8j's. Node built-ins and one pure `src/domain` module
  * (`moodClass.ts`'s `sameOwner`, loaded by Node's type stripping and by the
  * config bundler); a `.d.mts` beside it. Tests:
  * `scripts/private-looks-build.test.mjs`.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
-import { distFiles, distLooksProblems, lookFilesOf } from './check-dist-looks.mjs';
+import { artNamedBy, distFiles, distLooksProblems, lookFilesOf } from './check-dist-looks.mjs';
+import { LOOK_FONTS_FILE, lookFaceProblems, lookFontNotices } from './look-faces.mjs';
 import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, selectionFromEnv } from './looks-selection.mjs';
+import { noticesWithLookFonts } from './notices-lib.mjs';
 import {
+    PRIVATE_FACE_LICENCE,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
     gitBlobAt,
@@ -205,7 +214,22 @@ export function readSelectedLooks({ root, selection, facts, validateLook, git, e
                 art.push({ name, bytes: gitBlobAt({ ...read, path: at(`art/${name}`) }) });
             }
         }
-        looks.push({ entry, lookText, sheet, art });
+        // Its faces: each named in fonts.json with the OFL text beside it,
+        // served, and presenting no name its licence reserves
+        // (`scripts/look-faces.mjs`) — what the deploy build's notices say.
+        const fontsText = files.some((file) => file.path === at(LOOK_FONTS_FILE) && file.mode === PRIVATE_FILE_MODE)
+            ? gitTextAt({ ...read, path: at(LOOK_FONTS_FILE) })
+            : undefined;
+        const faceArt = [
+            ...art.filter((file) => file.name.endsWith('.woff2')),
+            ...artFiles.filter((name) => PRIVATE_FACE_LICENCE.test(name)).map((name) => ({ name, bytes: gitBlobAt({ ...read, path: at(`art/${name}`) }) })),
+        ];
+        const faceProblems = lookFaceProblems({ fontsText, art: faceArt, named: artNamedBy(sheet) });
+        for (const why of faceProblems) {
+            problems.push(`${entry.slug}/${why}`);
+        }
+        const fonts = faceProblems.length === 0 ? lookFontNotices({ fontsText, art: faceArt }) : [];
+        looks.push({ entry, lookText, sheet, art, fonts });
     }
     problems.push(...sharedRowClasses(looks));
     if (problems.length > 0) {
@@ -337,6 +361,8 @@ export function privateLooksPlugin({ facts, validateLook, env = process.env, git
     let writes = true;
     let selection;
     let entries = [];
+    let carried = [];
+    let publicDir;
     let written;
     const cleanup = () => {
         if (written !== undefined) {
@@ -351,20 +377,28 @@ export function privateLooksPlugin({ facts, validateLook, env = process.env, git
             root = config.root;
             outDir = resolve(config.root, config.build.outDir);
             writes = config.build.write !== false;
+            publicDir = config.publicDir;
         },
         buildStart() {
             cleanup();
             entries = [];
-            selection = env.VITEST === undefined ? selectionFromEnv(env) : undefined;
-            if (selection === undefined) {
+            carried = [];
+            selection = undefined;
+            const wanted = env.VITEST === undefined ? selectionFromEnv(env) : undefined;
+            if (wanted === undefined) {
                 return;
             }
-            const { commit, looks } = readSelectedLooks({ root, selection, facts, validateLook, git, env });
+            const { commit, looks } = readSelectedLooks({ root, selection: wanted, facts, validateLook, git, env });
+            // Held at the close only once read whole: a build that fails on
+            // a look's check says why, not the dist check's complaint over a
+            // dist it never wrote (which is what it said until 8e1).
+            selection = wanted;
             if (looks.length === 0) {
                 return;
             }
             written = mkdtempSync(join(tmpdir(), MATERIALISED_PREFIX));
             entries = materialise(looks, written);
+            carried = looks.map((look) => ({ fonts: look.fonts }));
             process.stderr.write(
                 `private looks: this ${selection.target} build carries ${looks.map((look) => look.entry.slug).join(', ')} (private commit ${commit.slice(0, 12)})\n`,
             );
@@ -377,8 +411,24 @@ export function privateLooksPlugin({ facts, validateLook, env = process.env, git
         },
         buildEnd(error) {
             if (error !== undefined) {
+                selection = undefined;
                 cleanup();
             }
+        },
+        writeBundle() {
+            // The notices this build serves name every face its looks serve
+            // (`a-deploy-build-names-every-face-it-serves`): the public file,
+            // which Vite copied before writing, unchanged and first, then the
+            // carried faces. A build whose looks serve no face leaves the
+            // public file as it is.
+            if (!carried.some((look) => look.fonts.length > 0) || outDir === undefined) {
+                return;
+            }
+            const source = publicDir ? join(publicDir, 'licenses.txt') : undefined;
+            if (source === undefined || !existsSync(source)) {
+                throw new Error('private looks: this build serves a look\'s faces and has no public/licenses.txt to name them beside');
+            }
+            writeFileSync(join(outDir, 'licenses.txt'), noticesWithLookFonts(readFileSync(source, 'utf8'), carried));
         },
         closeBundle() {
             try {
