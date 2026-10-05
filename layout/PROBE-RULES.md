@@ -4061,47 +4061,96 @@ in a keyframe is refused statically by the look lint instead
 (`a-file-mask-arrives-at-rest`); a `url()` carried in by `var()` is not
 seen there, stated.
 
-## The geometry passes measure whatever face is loaded — a gap, not a rule (8d1's critic, 2026-10-06)
+## Every face is loaded before the probe measures (2026-10-06)
 
-Not a rule: a measured gap, written down so nobody reads the passes as
-measuring the shipped faces. **The geometry passes (mobile, desktop,
-canvas, portrait, tablet) are one synchronous task** — the module body
-paints and measures every screen with no `await` — so a web face that is
-not already loaded when the body starts stays `loading` for the whole pass,
-and the pass lays out and measures every line in the fallback face. The
-contrast passes are the exception: their prepare awaits
-`document.fonts.ready`.
+**`every-face-is-loaded-before-the-probe-measures`.** Before the geometry
+loop, the page asks every face in `document.fonts` that is not loaded to
+load — every `@font-face` of every sheet on the page, each subset included,
+after the worn-only sheets so their faces are declared too — and waits for
+each to settle and for `document.fonts.ready`, bounded at 10 s
+(`loadEveryFace`, `layout/faces.ts`). Then it echoes each face's status at
+that moment (`faces`, and `window.__faces`) and, at its verdict, every face
+not loaded or not declared at the start (`facesLate`). The runner
+(`scripts/probe-faces.mjs`) refuses a page whose echo is missing, whose
+wait ran out, any of whose faces is not `loaded`, or that lacks a face
+`src/ui/stall.css` declares — the list is read from that sheet's
+`@font-face` rules (eight today: Inter, Stall Serif and its italic,
+JetBrains Mono, each Latin and Vietnamese), never written in the runner. It
+is held on every pass that reads a verdict (mobile, desktop, canvas,
+portrait, tablet, both reduced-motion passes) and on every contrast and
+transparency page before its first job, and each pass prints what it waited
+for: `faces: 8 of 8 loaded before measuring (Inter 2, Stall Serif 4,
+JetBrains Mono 2); 8 asked, 13 ms`. **No warm-up paint**: a paint before
+the loop would hand the marquee's runs and the renderer's scroll and focus
+memory to the first measured screen, which is not the faces, and loading
+every declared face already asks for every face a paint would. A subset no
+fixture uses is loaded too: its `unicode-range` keeps it off every line
+outside its range, so it moves no layout.
 
-Measured (an instrumented probe, `document.fonts` read per screen and
-variant, every pass, never committed):
+**The incident (8d1's critic, measured with an instrumented probe, never
+committed).** The geometry passes are one synchronous task — the module
+body paints and measures every screen with no `await` — so a face not
+loaded when the body started stayed `loading` for the whole pass. On
+`main`, the mobile pass, the first navigation of a run, measured all 455
+of its paints with Inter and JetBrains Mono `loading`; the desktop pass, a
+later navigation in the same tab, measured all 526 with them `loaded` —
+**the phone's geometry, the money pass at 390, was measured in the fallback
+faces**, decided by Chrome's cache and not by any rule. The critic read
+the workshop probe on 8d1 as measuring every pass in the fallback faces
+(the kit's sheet loads worn-only, so the body yields once before its first
+paint). Re-read here with the wait removed and nothing asked, faces read at
+each verdict: on the skeleton, the three faces it uses were `loading` at
+the 390 pass's verdict and `loaded` at every later pass's — so which passes
+the cache rescued depends on what yielded and on Chrome's cache, and that
+is the defect; with the wait, no pass depends on either. The Rural
+starter's names lay out 1–2 px apart between the two faces (`Roasted
+Beans` 131 / 133 px at 1280), which moved the marquee's travel (7267 / 7167
+ms on `long-item-name`) and the hit-test points that land behind a clip.
+The contrast passes were never exposed: their prepare awaits
+`document.fonts.ready` and re-reads its boxes after.
 
-- **The ordinary probe on `main`:** the mobile pass, the first navigation of
-  the run, measured all 455 of its screen paints with Inter and JetBrains
-  Mono `loading`; the desktop pass, a later navigation in the same tab,
-  measured all 526 with them `loaded`. So **the phone's geometry — the
-  money pass at 390 — is measured in the fallback faces**, the desktop's in
-  the shipped ones, decided by the browser's cache and not by any rule.
-- **The workshop probe:** the same on `main` for the Rural starter (390
-  fallback; 1280, 1920, 1080×1920, 768×1024 and the second 390 loaded). On
-  8d1 every pass measured fallback faces: the kit's sheet now loads
-  worn-only, so the module body yields once before its first paint — and a
-  yield alone does it (planted: a 50 ms timer in the sheet's place, no
-  sheet appended, gave the same `loading` everywhere). A web face resolved
-  from the memory cache becomes `loaded` within the task that first uses it
-  only when nothing yielded before; why, in Chrome's loader, was not read.
-- **What moved:** the Rural starter's names lay out 1–2 px apart between
-  the two faces (`Roasted Beans` 131 / 133 px at 1280), so the marquee's
-  travel differs (7267 / 7167 ms on `long-item-name`; 3348 / 3087 and
-  5261 / 5022 ms on `shop-window-browse`) and so do the hit-test points that
-  land behind a clip: desktop 518 / 4446 → 531 / 4453, canvas 30 / 1135 →
-  29 / 1131 (`crowded`, `item-unbuyable-fold`, `long-item-name`,
-  `shop-window-browse`). Every verdict held. The critic measured the
-  skeleton's and the Modern starter's counts unchanged and the Neo
-  starter's canvas moved the same way (1051 / 31 → 1048 / 30); only the
-  Rural starter was instrumented here.
+**What measuring in the real faces moved, 2026-10-06** (this Mac, the same
+tree with and without the wait): the mobile pass's hit-test points went
+from 926 of 11034 behind a clip to 912 of 10922, and every verdict held —
+`pnpm test:layout` green, no stylesheet or threshold touched. The desktop,
+canvas, portrait and tablet counts are unchanged (1723/13780, 119/3214, and
+the same `compared:` lines): those passes already had the faces from the
+cache. The contrast dump is **bitwise identical**, 9737 of 9737 boxes
+(`node scripts/contrast-dump.mjs`, main's against this tree's). The
+workshop probe on the skeleton is green with the wait. The wait costs 0–13
+ms a page (the first navigation fetches the eight files; every later one
+reads Chrome's cache).
 
-Not fixed, stated: the cure — paint each measured look once, then await
-`document.fonts.ready` (or load every face the sheets declare) before the
-synchronous loop — changes what the phone pass of the ordinary probe
-measures for the shipped looks, and may surface failures; it is its own
-change, with a red proof by a face that never loads.
+**Red proofs**, each against the real run:
+
+- **The wait removed, the loads asked** (`void loadEveryFace(...)`, the
+  echo read at once): **red on the 390 pass alone** — all eight faces
+  `loading` at the start and still `loading` at the verdict, and the pass's
+  points 926/11034, main's to the point — and green on every later pass,
+  because a face asked for from Chrome's memory cache is `loaded` within the
+  same task. That is the shape `main` had. The workshop probe under the same
+  plant: the same, red on its 390 pass alone.
+- **The wait removed, nothing asked** (the echo read at once): red on every
+  pass, eight faces `unloaded` at the start; at the verdict the 390 pass
+  still had seven `loading`, the later passes only the italic Vietnamese
+  subset no fixture uses `unloaded`. The contrast and transparency passes
+  were refused at their first page. On the workshop probe the same plant
+  is red everywhere too, and at the verdict it is the 390 pass alone with
+  faces `loading` (above).
+- **A face that never loads** (a planted `@font-face` in `stall.css` whose
+  file does not exist): `error` at the start and at the verdict on every
+  pass, the eight real faces `loaded` beside it, the contrast and
+  transparency pages refused; the wait ended at once (an error settles).
+- The pure halves: `scripts/probe-faces.test.mjs` (a face not loaded, a
+  missing echo, a page that declares nothing, a wait that ran out, a face
+  stall.css declares missing from the page, a late face; the sheet's range
+  spelling and the browser's read as one) and `layout/faces.test.ts` (only
+  faces not loaded are asked, `ready` is awaited, a failed load is `error`,
+  the bound).
+
+**Stated limits.** The echo is each face's status, not which face a given
+line was drawn in. The runner's list is `stall.css`'s: a worn-only look's
+own faces are owed `loaded` by the page's echo but are not named by the
+runner. The worn-only sheet job's page measures no text and its echo is not
+read. `scripts/print-measure.mjs` loads the same page and so inherits the
+wait, but holds no echo of its own.
