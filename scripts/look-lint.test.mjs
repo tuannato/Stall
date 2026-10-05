@@ -205,6 +205,32 @@ describe('a-look-cannot-target-one-seller', () => {
     });
 });
 
+describe('a-look-never-hands-a-link-its-browser-colour', () => {
+    /**
+     * The 8e1 critic's item 10: `color: revert` (or `revert-layer`, or
+     * either on `all`) in a look sheet gives a link the browser's blue and
+     * visited purple back, the defect `every-anchor-the-app-builds-sets-its-own-colour`
+     * exists for and cannot see in a look's sheet. Refused for every look,
+     * shipped, kit or private; `unset` and `inherit` keep an author colour.
+     */
+    it('refuses revert and revert-layer on color and all, in the shipped sheet and its starter', () => {
+        for (const rule of [
+            '.t-neo .cashtab-link { color: revert; }',
+            '.t-neo .guide-link { color: revert-layer; }',
+            '.t-neo a { all: revert; }',
+            '.t-neo .x a { all: REVERT-LAYER; }',
+        ]) {
+            plant(rule, /reverting the colour hands a link back to the browser/);
+        }
+    });
+
+    it('accepts an inherited or unset colour, and revert on another property', () => {
+        accepts('.t-neo .cashtab-link { color: inherit; }');
+        accepts('.t-neo .cashtab-link { color: unset; }');
+        accepts('.t-neo .cashtab-link { text-decoration: revert; }');
+    });
+});
+
 describe('generated-text-in-a-look-is-listed', () => {
     /**
      * G2. A stylesheet can print text — a "5" beside a figure reads as the
@@ -353,7 +379,7 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
      * ~0.22 s of a 7 s cycle, exactly three.
      */
     it('finds no served keyframe over three flashes a second, and no flashing one it cannot time', async () => {
-        const { report, problems } = await servedFlashReport();
+        const { report, problems } = await servedFlashReport({ sheets: SERVED });
         assert.deepEqual(problems, []);
         assert.ok(report.length > 10, 'the report read the served keyframes');
         const worst = Math.max(...report.map((row) => row.flashes));
@@ -363,7 +389,7 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
     });
 
     it('reads att-hum at the boundary: three flashes, six changes, at its shipped 7 s', async () => {
-        const { report } = await servedFlashReport();
+        const { report } = await servedFlashReport({ sheets: SERVED });
         const hum = report.filter((row) => row.name === 'att-hum-gutter');
         assert.deepEqual(
             hum.map((row) => [row.seconds, row.iterations, row.alternate, row.changes, row.flashes]),
@@ -373,7 +399,7 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
 
     it('reads every private look a run reads beside the served sheets, and goes red on a strobe in one', async () => {
         assert.ok(PRIVATE.length > 0, 'a private look sheet is read');
-        const names = (await flashSheets()).map((sheet) => sheet.name);
+        const names = (await flashSheets({ sheets: SERVED })).map((sheet) => sheet.name);
         for (const row of PRIVATE) {
             assert.ok(names.includes(row.path), `${row.path} is read by the flash rule`);
         }
@@ -389,7 +415,7 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
 
     it('refuses a strobe, a re-timed lamp, and a flashing keyframe run for a time it cannot read', async () => {
         const vars = await themeVarValues();
-        const served = await flashSheets();
+        const served = await flashSheets({ sheets: SERVED });
         const withNeo = (css) => served.map((sheet) => (sheet.name === NEO.path ? { name: sheet.name, css } : sheet));
         for (const [rule, pattern] of [
             [
@@ -675,8 +701,8 @@ describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
     });
 
     it('refuses it in the private-look fixture, the sheet a build lints', () => {
-        const path = 'layout/fixture-private-looks/fixture/sheet.css';
-        const css = read(path);
+        // As HEAD holds it, which is what a build and every guard read.
+        const css = PRIVATE.find((row) => row.look.source === 'fixture').css;
         const reduce = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
         const planted = `${css.slice(0, reduce)}@font-face { font-family: t-fixture-private-serif; src: url(./art/serif.woff2) format("woff2"); }\n\n${css.slice(reduce)}`;
         const problems = lintLookSheet(planted, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'serif.woff2'] } });

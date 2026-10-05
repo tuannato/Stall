@@ -19,12 +19,13 @@ import { SELECTION_ENV, selectionFromEnv, selectionRefusal, withoutSelection } f
  */
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The commands that build through the app's config, the name each refuses under, and how it is started. */
+/** The commands that build through the app's config — and the kit's lint, which reads the served sheets as they do — the name each refuses under. */
 const COMMANDS = [
     ['scripts/layout-check.mjs', 'test:layout'],
     ['scripts/looks-diff.mjs', 'looks:diff'],
     ['scripts/workshop.mjs', 'workshop'],
     ['scripts/print-measure.mjs', 'print-measure'],
+    ['scripts/workshop-lint.mjs', 'workshop:lint'],
 ];
 
 /** The text without comments, as a reader of statements wants it. */

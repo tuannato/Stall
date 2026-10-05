@@ -37,7 +37,7 @@ export type ServedSheetText = (
       }
 ) & { readonly css: string };
 
-type ReadOptions = { root?: string; env?: Env; fixture?: boolean; git?: string; gitEnv?: Env };
+type ReadOptions = { root?: string; env?: Env; fixture?: boolean; required?: boolean; git?: string; gitEnv?: Env };
 
 export declare const ROOT: string;
 export declare const PRIVATE_ROLE: 'private';
@@ -45,5 +45,6 @@ export declare function privateLookReads(options?: ReadOptions & { facts?: unkno
 export declare function ownArtOf(look: PrivateLookRead): { dir: 'art'; files: string[] };
 export declare function servedSheets(options?: ReadOptions): Promise<readonly ServedSheetText[]>;
 export declare function guardSheets(): Promise<readonly ServedSheetText[]>;
+export declare function guardLine(sheets: readonly ServedSheetText[]): string;
 export declare function privateRows(sheets: readonly ServedSheetText[]): (ServedSheetText & { role: 'private'; look: PrivateLookRead })[];
 export declare function lookRows(sheets: readonly ServedSheetText[]): ServedSheetText[];

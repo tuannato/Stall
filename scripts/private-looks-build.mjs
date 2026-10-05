@@ -36,6 +36,12 @@
  * Whether a look is paid reaches the app the same way: the gate reads
  * `PAID_LOOK_IDS` (`lookTable.ts`); nothing paid travels in the module.
  *
+ * **Then every sheet at once** (`crossSheetProblems`, step 8e1): the flash
+ * rule and the worn-only rules over the public table and the carried
+ * sheets, as the kit's commands run them before they build. And under
+ * `STALL_LOOKS_REQUIRED` (the deploy job's) a build that selects nothing
+ * fails.
+ *
  * Every included look, before Vite reads a byte of it (the critic's item 25):
  * its `look.json` through the app's own validator (`lookDataProblems`,
  * handed in by `vite.config.ts`, under the look's place, rows mintable); its
@@ -78,7 +84,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { artNamedBy, distFiles, distLooksProblems, lookFilesOf } from './check-dist-looks.mjs';
 import { LOOK_FONTS_FILE, lookFaceProblems, lookFontNotices } from './look-faces.mjs';
-import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, selectionFromEnv } from './looks-selection.mjs';
+import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { noticesWithLookFonts } from './notices-lib.mjs';
 import {
     PRIVATE_FACE_LICENCE,
@@ -91,11 +97,12 @@ import {
     parsePrivateIndex,
     readPrivateLooksAt,
 } from './private-looks.mjs';
+import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
-import { lintLookSheet } from './workshop-css.mjs';
+import { flashReport, lintLookSheet, wornSheetProblems } from './workshop-css.mjs';
 import { sameOwner } from '../src/domain/moodClass.ts';
 
-export { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, SELECTION_ENV, selectionFromEnv } from './looks-selection.mjs';
+export { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, REQUIRED_ENV, SELECTION_ENV, selectionFromEnv } from './looks-selection.mjs';
 
 /** The module a build answers, as the app imports it. */
 export const PRIVATE_LOOKS_MODULE = 'virtual:stall-private-looks';
@@ -182,7 +189,10 @@ export function selectedIndex({ root, selection, facts, git, env }) {
  * `vite.config.ts`, which can import TypeScript); it answers a list of
  * problems.
  */
-export function readSelectedLooks({ root, selection, facts, validateLook, git, env }) {
+export function readSelectedLooks({ root, selection, facts, validateLook, vars, git, env }) {
+    if (vars === null || typeof vars !== 'object') {
+        throw new TypeError("private looks: the cross-sheet checks read the theme table's values (`vars`, `themeVarValues`), and none were given");
+    }
     const { commit, read, files, index } = selectedIndex({ root, selection, facts, git, env });
     const problems = [];
     const looks = [];
@@ -232,10 +242,37 @@ export function readSelectedLooks({ root, selection, facts, validateLook, git, e
         looks.push({ entry, lookText, sheet, art, fonts });
     }
     problems.push(...sharedRowClasses(looks));
+    problems.push(...crossSheetProblems({ root, looks, vars }));
     if (problems.length > 0) {
         throw new Error(`private looks at ${commit}:\n  - ${problems.join('\n  - ')}`);
     }
     return { commit, index, looks };
+}
+
+/**
+ * The checks that need every sheet a build serves at once, over the public
+ * table read from `root` and the carried looks' sheets (the 8e1 critic's
+ * item 2: a carried sheet reached `dist` without them, held only by a test
+ * run that may not have read it): the flash rule (`flashReport`, with the
+ * theme table's `vars`) — a rule in one sheet can re-time a keyframe another
+ * declares — and the worn-only rules (`wornSheetProblems`: no keyframe or
+ * face name another sheet declares, which a worn sheet loading after the
+ * entry CSS would replace on every stall; no other sheet naming its class).
+ * The kit's commands hold a creator's sheet to the same before they build
+ * (`requireKit`). None for a build that carries nothing.
+ */
+export function crossSheetProblems({ root, looks, vars }) {
+    if (looks.length === 0) {
+        return [];
+    }
+    const sheets = [
+        ...SERVED_SHEETS.map((sheet) => ({ ...sheet, css: readFileSync(join(root, sheet.path), 'utf8') })),
+        ...looks.map((look) => ({ path: `${look.entry.slug}/sheet.css`, css: look.sheet, load: 'worn', lookClass: look.entry.cls })),
+    ];
+    return [
+        ...flashReport(sheets.map((sheet) => ({ name: sheet.path, css: sheet.css })), { vars }).problems.map((why) => `the flash rule: ${why}`),
+        ...wornSheetProblems(sheets),
+    ];
 }
 
 /**
@@ -355,7 +392,7 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env }) {
  * dist check over what it wrote, and fails on a problem
  * (`the-dist-holds-what-the-index-names`).
  */
-export function privateLooksPlugin({ facts, validateLook, env = process.env, git } = {}) {
+export function privateLooksPlugin({ facts, validateLook, vars, env = process.env, git } = {}) {
     let root = process.cwd();
     let outDir;
     let writes = true;
@@ -384,11 +421,17 @@ export function privateLooksPlugin({ facts, validateLook, env = process.env, git
             entries = [];
             carried = [];
             selection = undefined;
-            const wanted = env.VITEST === undefined ? selectionFromEnv(env) : undefined;
-            if (wanted === undefined) {
+            if (env.VITEST !== undefined) {
                 return;
             }
-            const { commit, looks } = readSelectedLooks({ root, selection: wanted, facts, validateLook, git, env });
+            const wanted = selectionFromEnv(env);
+            if (wanted === undefined) {
+                if (selectionRequired(env)) {
+                    throw new Error(`private looks: ${REQUIRED_ENV} is set and this build selects no private look — a run that must carry its looks names them (STALL_LOOKS_TARGET, STALL_LOOKS_DIR)`);
+                }
+                return;
+            }
+            const { commit, looks } = readSelectedLooks({ root, selection: wanted, facts, validateLook, vars, git, env });
             // Held at the close only once read whole: a build that fails on
             // a look's check says why, not the dist check's complaint over a
             // dist it never wrote (which is what it said until 8e1).

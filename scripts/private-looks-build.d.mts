@@ -33,6 +33,7 @@ export declare const SELECTION_ENV: { readonly target: 'STALL_LOOKS_TARGET'; rea
 export declare const FIXTURE_LOOKS_DIR: 'layout/fixture-private-looks';
 export declare const MATERIALISED_PREFIX: string;
 export declare const RESOLVED_MODULE: '\0stall:private-looks';
+export declare const REQUIRED_ENV: 'STALL_LOOKS_REQUIRED';
 
 export declare function selectionFromEnv(env: Env): LooksSelection | undefined;
 export declare function includedEntries(index: PrivateIndex, target: LooksTarget, facts: Pick<PublicLookFacts, 'released'>): PrivateIndexEntry[];
@@ -43,9 +44,13 @@ export declare function selectedIndex(input: { root: string; selection: LooksSel
     files: PrivateFile[];
     index: PrivateIndex;
 };
+/** The theme table's custom property values, `{ '--s-name-anim': [...] }` (`themeVarValues`). */
+export type ThemeVarValues = Readonly<Record<string, readonly string[]>>;
+
 export declare function readSelectedLooks(
-    input: { root: string; selection: LooksSelection; facts: PublicLookFacts; validateLook: ValidateLook } & GitOptions,
+    input: { root: string; selection: LooksSelection; facts: PublicLookFacts; validateLook: ValidateLook; vars: ThemeVarValues } & GitOptions,
 ): { commit: string; index: PrivateIndex; looks: SelectedLook[] };
+export declare function crossSheetProblems(input: { root: string; looks: readonly SelectedLook[]; vars: ThemeVarValues }): string[];
 export declare function sharedRowClasses(looks: readonly SelectedLook[]): string[];
 export declare function checkSelectedDist(
     input: { dir: string; selection: LooksSelection | undefined; root: string; facts: PublicLookFacts } & GitOptions,
@@ -56,6 +61,7 @@ export declare function privateLooksModuleCode(entries: readonly ModuleEntry[]):
 export declare function privateLooksPlugin(options: {
     facts: PublicLookFacts;
     validateLook: ValidateLook;
+    vars?: ThemeVarValues;
     env?: Env;
     git?: string;
 }): Plugin;

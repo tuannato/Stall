@@ -503,3 +503,98 @@ describe('the-raised-small-text-stays-at-eleven-px', () => {
         expect(bad.offenders).toEqual([`${planted.path}: .${PLANTED_CLASS} .chip at 9px`]);
     });
 });
+
+/**
+ * Flatten a sheet's rules for a ladder read: comments out, at-rule blocks
+ * unwrapped (the tier rules live inside the phone media query, and a flat
+ * rule scan must not glue the first selector inside a block onto the
+ * block's prelude), each selector of a list on its own, quotes made one
+ * kind.
+ */
+const ladderRules = (css: string): { selector: string; body: string }[] =>
+    [...css
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/@media[^{]*\{/g, '')
+        .matchAll(/([^{}]+)\{([^}]*)\}/g)].flatMap(([, selectors, body]) =>
+        selectors!.split(',').map((selector) => ({ selector: selector.trim().replace(/"/g, "'").replace(/\s+/g, ' '), body: body! })),
+    );
+
+/** Every look sheet the guards read with the class it is under: the shipped three, the kit's, the harness fixture's and every private look's. */
+const LOOK_SHEETS = SERVED.filter((sheet) => ['look', 'kit', 'fixture', 'private'].includes(sheet.role) && sheet.lookClass !== undefined);
+
+/** The ladder steps a look sheet that sizes `figure` under its class leaves unsized: each `tier` with no font-size of its own. */
+function unsizedSteps(css: string, cls: string, figure: (selector: string) => boolean, step: (tier: string) => string): string[] {
+    const rules = ladderRules(css).filter((rule) => new RegExp(`\\.${cls}(?![\\w-])`).test(rule.selector) && figure(rule.selector) && /font-size\s*:/.test(rule.body));
+    const sizes = rules.some((rule) => !/data-(?:price-)?tier/.test(rule.selector));
+    if (!sizes) {
+        return [];
+    }
+    return ['1', '2', '3'].filter((tier) => !rules.some((rule) => rule.selector.includes(step(tier))));
+}
+
+const ITEM_FIGURE = (selector: string): boolean => /\.item-x(?![\w-])/.test(selector);
+const ITEM_STEP = (tier: string): string => `[data-price-tier='${tier}']`;
+const OVERLAY_FIGURE = (selector: string): boolean => /\.bc-p\b/.test(selector) && /\[data-role='(?:seller-)?price'\]/.test(selector);
+const OVERLAY_STEP = (tier: string): string => `[data-tier='${tier}']`;
+
+describe('every-look-that-sizes-its-figure-sizes-every-price-tier', () => {
+    /**
+     * The tier sizes live in each look's sheet, next to its own `.item-x`.
+     * stall.css carries a base ladder too — tiers derived from
+     * `--s-price-size` (0.81 and 0.65) — but it is written at (0,1,0) under
+     * `:where()` so that **any sheet that sizes `.item-x` at all out-ranks
+     * it, tiers included**: it is the floor for a look with no sheet (the
+     * skeleton, an untouched kit), not a default a look inherits. So a look
+     * that sizes its figure owns its whole ladder, and one that forgot a
+     * tier paints its full-size figure into that tier's column with nothing
+     * underneath to catch it. Over every look sheet a run serves — a private
+     * look's included (the 8e1 critic's item 3: this read the three shipped
+     * sheets by path, and a private look sized its figure with no static
+     * rule holding its ladder) — and the shipped three must size it.
+     */
+    it('holds every look sheet that sizes .item-x under its class to tiers 1, 2 and 3, and the shipped three size it', () => {
+        expect(LOOK_SHEETS.some((sheet) => sheet.role === 'private')).toBe(true);
+        for (const sheet of LOOK_SHEETS) {
+            expect(unsizedSteps(sheet.css, sheet.lookClass!, ITEM_FIGURE, ITEM_STEP), `${sheet.path} sizes .item-x and leaves tiers unsized`).toEqual([]);
+        }
+        for (const sheet of LOOK_SHEETS.filter((s) => s.role === 'look')) {
+            expect(
+                ladderRules(sheet.css).some((rule) => rule.selector.includes(`.${sheet.lookClass}`) && ITEM_FIGURE(rule.selector) && /font-size/.test(rule.body)),
+                `${sheet.path} sizes its figure`,
+            ).toBe(true);
+            expect(unsizedSteps(sheet.css, sheet.lookClass!, ITEM_FIGURE, ITEM_STEP)).toEqual([]);
+        }
+    });
+
+    it('goes red on a planted private look that sizes .item-x and no tier', async () => {
+        const planted = await plantedSheet(`.${PLANTED_CLASS} .item-x { font-size: 40px; }`);
+        expect(unsizedSteps(planted.css, planted.lookClass!, ITEM_FIGURE, ITEM_STEP)).toEqual(['1', '2', '3']);
+        const two = await plantedSheet(
+            `.${PLANTED_CLASS} .item-x { font-size: 40px; }\n.${PLANTED_CLASS} .item-head[data-price-tier="1"] .item-x, .${PLANTED_CLASS} .item-head[data-price-tier='3'] .item-x { font-size: 30px; }`,
+        );
+        expect(unsizedSteps(two.css, two.lookClass!, ITEM_FIGURE, ITEM_STEP)).toEqual(['2']);
+    });
+});
+
+describe('every-look-that-sizes-the-overlay-figure-sizes-every-tier', () => {
+    /**
+     * The overlay's twin (the critic's item 3). broadcast.css steps the
+     * stream card's figure down by `data-tier` (31 → 24 → 24px, nowrap at
+     * 3: `broadcast.css sizes the three steps…` in render.test.ts), and a
+     * worn-only look keeps its overlay rules in its own sheet
+     * (`no-bundled-sheet-names-a-worn-only-look`), which lands after
+     * broadcast.css and wins its equal-specificity ties. So a look sheet
+     * that sizes the overlay's figure under its class sizes every step, or
+     * its figure spills at the long asks broadcast.css's ladder exists for.
+     */
+    it('holds every look sheet that sizes the overlay figure to tiers 1, 2 and 3', () => {
+        for (const sheet of LOOK_SHEETS) {
+            expect(unsizedSteps(sheet.css, sheet.lookClass!, OVERLAY_FIGURE, OVERLAY_STEP), sheet.path).toEqual([]);
+        }
+    });
+
+    it('goes red on a planted private look that sizes the overlay figure and no tier', async () => {
+        const planted = await plantedSheet(`.stall.${PLANTED_CLASS}.broadcast .bc-p [data-role='price'] { font-size: 44px; }`);
+        expect(unsizedSteps(planted.css, planted.lookClass!, OVERLAY_FIGURE, OVERLAY_STEP)).toEqual(['1', '2', '3']);
+    });
+});

@@ -6,6 +6,12 @@ export type FontNotice = { readonly name: string; readonly files: readonly strin
 export declare const LOOK_FONTS_FILE: 'fonts.json';
 export declare const FACE_FILE: RegExp;
 export declare const OFL_STATEMENT: RegExp;
+export declare const OFL_BODY_START: 'SIL OPEN FONT LICENSE Version 1.1';
+export declare function foldForReading(text: string): string;
+export declare function oflBodyOf(text: string): string | undefined;
+export declare function canonicalOflBody(): string;
+export declare function readReservations(text: string): { names: string[]; unreadable: string[] };
+export declare function holdersIn(text: string): string[];
 export declare const FONT_NAME_MAX: number;
 export declare const SUBSET_MAX: number;
 export declare function woff2NameRecords(buf: Buffer): { id: number; platform: number; text: string }[];

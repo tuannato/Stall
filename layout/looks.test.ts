@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { attachmentsForTheme } from '../src/domain/attachments';
 import { DEFAULT_THEME_ID, PRIVATE_LOOK_IDS, SHIPPED_THEMES, WORKSHOP_THEME_ID, decodeTheme } from '../src/domain/theme';
 import { HARNESS_LOOK_CLASSES } from '../scripts/private-looks.mjs';
+import { guardSheets } from '../scripts/served-sheets.mjs';
 import {
     FIXTURE_LOOK_ID,
     FIXTURE_SHEET_CLASS,
@@ -165,18 +166,15 @@ describe('the-skeleton-is-the-default-row-under-a-class-no-sheet-styles', () => 
         expect(skeleton.theme.id).toBe(DEFAULT_THEME_ID);
     });
 
-    it('wears a class no stylesheet in the repository names', () => {
-        const ROOT = join(LAYOUT, '..');
-        const sheets = [
-            ...readdirSync(join(ROOT, 'src/ui')).filter((n) => n.endsWith('.css')).map((n) => join(ROOT, 'src/ui', n)),
-            ...readdirSync(LAYOUT).filter((n) => n.endsWith('.css')).map((n) => join(LAYOUT, n)),
-            join(ROOT, 'workshop/theme-workshop.css'),
-        ];
-        // The walk found the sheets it exists for.
-        expect(sheets.some((path) => path.endsWith('stall.css'))).toBe(true);
-        expect(sheets.some((path) => path.endsWith('theme-modern.css'))).toBe(true);
-        for (const path of sheets) {
-            expect(readFileSync(path, 'utf8').includes(SKELETON_SHEET_CLASS), path).toBe(false);
+    it('wears a class no stylesheet a run serves names', async () => {
+        // Every sheet a run serves, a private look's among them
+        // (`scripts/served-sheets.mjs`, the 8e1 critic's item 3).
+        const sheets = await guardSheets();
+        expect(sheets.some((sheet) => sheet.path === 'src/ui/stall.css')).toBe(true);
+        expect(sheets.some((sheet) => sheet.path === 'src/ui/theme-modern.css')).toBe(true);
+        expect(sheets.some((sheet) => sheet.role === 'private')).toBe(true);
+        for (const sheet of sheets) {
+            expect(sheet.css.includes(SKELETON_SHEET_CLASS), sheet.path).toBe(false);
         }
     });
 

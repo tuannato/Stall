@@ -5,8 +5,9 @@
  * to prove their private half red (step 8e1) — and a synthetic WOFF2, so a
  * face check has a face to read without a real font ever being tracked.
  *
- * `plantLooks(edit, add)` copies the fixture's tracked files into a fresh
- * repository under the OS's temporary directory, its class renamed to
+ * `plantLooks(edit, add)` copies the fixture as HEAD holds it (the commit
+ * the guards read it at) into a fresh repository under the OS's temporary
+ * directory, its class renamed to
  * `t-planted-look` (the fixture's class is the fixture's alone,
  * `FIXTURE_PRIVATE_LOOK_CLASS`) and its rows' `att-fixture-…` to
  * `att-planted-…` (two looks share no row class), each text passed through
@@ -25,6 +26,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync } from 'node:zlib';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV } from './looks-selection.mjs';
+import { gitCommitOf, gitFilesAt, gitTextAt } from './private-looks.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -43,12 +45,19 @@ export function removePlants() {
     }
 }
 
-/** The tracked fixture's files, as git's index lists them, from the fixture's root. */
-function fixturePaths() {
-    return execFileSync('git', ['ls-files', '-z', '--', FIXTURE_LOOKS_DIR], { cwd: ROOT, encoding: 'utf8' })
-        .split('\0')
-        .filter((path) => path !== '')
-        .map((path) => path.slice(FIXTURE_LOOKS_DIR.length + 1));
+/**
+ * The tracked fixture as HEAD holds it: every file of its subtree, by its
+ * path from the fixture's root, with its text — the commit every guard reads
+ * the fixture at (`guardSheets`), so a red proof planted from it and the
+ * passing half beside it read one fixture, whatever the working tree holds
+ * (the 8e1 critic's item 5).
+ */
+function fixtureAtHead() {
+    const commit = gitCommitOf({ dir: ROOT });
+    return gitFilesAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR }).map(({ path }) => ({
+        path,
+        text: gitTextAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR, path }),
+    }));
 }
 
 /**
@@ -71,12 +80,10 @@ export function plantLooks(edit = (_path, text) => text, add = {}) {
     };
     const git = (...args) => execFileSync('git', args, { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     git('init', '-q', '-b', 'main', '.');
-    for (const path of fixturePaths()) {
-        mkdirSync(join(dir, dirname(path)), { recursive: true });
-        const text = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, path), 'utf8')
-            .replaceAll('t-fixture-private', PLANTED_CLASS)
-            .replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
-        writeFileSync(join(dir, path), edit(path, text));
+    for (const file of fixtureAtHead()) {
+        mkdirSync(join(dir, dirname(file.path)), { recursive: true });
+        const text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
+        writeFileSync(join(dir, file.path), edit(file.path, text));
     }
     for (const [path, contents] of Object.entries(add)) {
         mkdirSync(join(dir, dirname(path)), { recursive: true });
@@ -154,8 +161,15 @@ export function syntheticWoff2(records) {
     return Buffer.concat([head, directory, stream]);
 }
 
-/** A short OFL 1.1 text of the shape a font project ships, for `holder`, reserving `reserved` when given. */
+/**
+ * An OFL 1.1 text of the shape a font project ships, for `holder`,
+ * reserving `reserved` when given: a header of its own, then the licence's
+ * body whole, from the tracked `src/ui/fonts/LICENSE-OFL.txt` (a face's
+ * licence carries the OFL itself, not a mention of it).
+ */
 export function oflText(holder, reserved) {
+    const tracked = readFileSync(join(ROOT, 'src', 'ui', 'fonts', 'LICENSE-OFL.txt'), 'utf8');
+    const body = tracked.slice(tracked.indexOf('SIL OPEN FONT LICENSE Version 1.1'));
     return [
         `Copyright 2024 ${holder}${reserved === undefined ? '' : `, with Reserved Font Name "${reserved}"`}.`,
         '',
@@ -163,12 +177,8 @@ export function oflText(holder, reserved) {
         'This license is copied below, and is also available with a FAQ at:',
         'https://openfontlicense.org',
         '',
-        '-----------------------------------------------------------',
-        'SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007',
-        '-----------------------------------------------------------',
         '',
-        '"Reserved Font Name" refers to any names specified as such after the',
-        'copyright statement(s).',
-        '',
+        '-----------------------------------------------------------',
+        body,
     ].join('\n');
 }

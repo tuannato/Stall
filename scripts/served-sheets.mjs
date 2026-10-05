@@ -23,17 +23,21 @@
  *   names, and a red there is about the look named;
  * - **the tracked fixture, always, for the static guards**
  *   (`{ fixture: true }`, `guardSheets()`): every look its index names, at
- *   the checkout's HEAD — or at the selection's commit when the selection
- *   names the fixture, so one look is never read twice — so every guard's
+ *   the checkout's HEAD — a selection naming the fixture at HEAD is read
+ *   once, and one naming it at another commit is refused — so every guard's
  *   private half has a subject in public CI and is never green over nothing
  *   (CLAUDE §6: a guard that quietly does not run is counted as coverage).
  *   The fixture is served by no build unless a run selects it; a command
- *   that measures what a build serves (the audit, a kit command) reads the
- *   selection alone.
+ *   that measures what a build serves (the audit, a kit command's flash
+ *   rule) reads the selection alone (`servedSheets()`), and with nothing
+ *   selected runs no git at all.
  *
- * A half selection, an unknown target, an index the public lists refuse or
- * a commit that is not there throws, as the build does: a guard never reads
- * half a look. Read once per process for the guards (`guardSheets`).
+ * A half selection, an unknown target, an index the public lists refuse, a
+ * `look.json` that is not JSON or a commit that is not there throws, as the
+ * build does: a guard never reads half a look. Read once per process for the
+ * guards (`guardSheets`), which says on stderr which private looks it read
+ * and, under `STALL_LOOKS_REQUIRED`, refuses a run that did not read the
+ * looks the build carries.
  * Node built-ins and the private-look readers; a `.d.mts` beside it. Test:
  * `every-whole-sheet-guard-reads-the-served-sheets`
  * (`scripts/served-sheets.test.mjs`).
@@ -42,8 +46,8 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOOK_FONTS_FILE } from './look-faces.mjs';
-import { FIXTURE_LOOKS_DIR, selectionFromEnv } from './looks-selection.mjs';
-import { PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
+import { FIXTURE_LOOKS_DIR, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
+import { PRIVATE_FILE_MODE, gitBlobAt, gitCommitOf, gitTextAt, publicLookFacts } from './private-looks.mjs';
 import { includedEntries, selectedIndex, selectedTree } from './private-looks-build.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 
@@ -77,8 +81,11 @@ function readLooks({ root, selection, facts, source, git, gitEnv }) {
         let look;
         try {
             look = JSON.parse(lookText);
-        } catch {
-            look = undefined;
+        } catch (error) {
+            // The build refuses it (`validateLook`); a guard that read it as
+            // a look with no rows would check less and say nothing (the 8e1
+            // critic's item 6).
+            throw new Error(`private looks: ${base}/${entry.slug}/look.json at ${commit} is not JSON (${error.message})`);
         }
         return Object.freeze({
             source,
@@ -97,20 +104,48 @@ function readLooks({ root, selection, facts, source, git, gitEnv }) {
 
 /**
  * The private looks a run reads: the selection `env` names (the looks its
- * build carries), and with `fixture` the tracked fixture whole. `gitEnv` is
- * the environment git runs in (a planted repository's, in a test).
+ * build carries), and with `fixture` the tracked fixture whole, at HEAD.
+ * `gitEnv` is the environment git runs in (a planted repository's, in a
+ * test).
+ *
+ * - **A selection of the fixture at another commit is refused** with
+ *   `fixture` (the 8e1 critic's item 7): the guards read the tracked fixture
+ *   at HEAD, and one look under one class read twice, or at a commit other
+ *   than HEAD in its place, would be neither. Without `fixture` — what a
+ *   build serves — it is read at its commit as any selection is.
+ * - **`required`** (`STALL_LOOKS_REQUIRED`, the deploy job's): a run with no
+ *   selection throws, and so does one that did not read, at the selection's
+ *   commit, every look a build with that selection carries — the guards hold
+ *   the looks the build ships, or the run fails (the critic's item 2).
  */
-export async function privateLookReads({ root = ROOT, env = process.env, fixture = false, git, gitEnv = process.env, facts } = {}) {
+export async function privateLookReads({ root = ROOT, env = process.env, fixture = false, required = false, git, gitEnv = process.env, facts } = {}) {
     const known = facts ?? (await publicLookFacts());
     const selection = selectionFromEnv(env);
+    if (required && selection === undefined) {
+        throw new Error(
+            `private looks: ${REQUIRED_ENV} is set and this run selects no private look — the guards read the looks the build carries, so the run names them (STALL_LOOKS_TARGET, STALL_LOOKS_DIR)`,
+        );
+    }
     const selectsFixture = selection !== undefined && selectedTree({ root, selection, git, env: gitEnv }).fixture;
+    if (fixture && selectsFixture && selection.commit !== undefined && selection.commit !== gitCommitOf({ dir: root, git, env: gitEnv })) {
+        throw new Error(
+            `private looks: the selection names the tracked fixture at ${selection.commit}, and the guards read the fixture at HEAD — select a copy of it in a repository of its own to read another commit`,
+        );
+    }
     const out = [];
     if (fixture) {
-        const at = { target: 'preview', dir: FIXTURE_LOOKS_DIR, ...(selectsFixture && selection.commit !== undefined ? { commit: selection.commit } : {}) };
-        out.push(...readLooks({ root, selection: at, facts: known, source: 'fixture', git, gitEnv }));
+        out.push(...readLooks({ root, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts: known, source: 'fixture', git, gitEnv }));
     }
     if (selection !== undefined && !(fixture && selectsFixture)) {
         out.push(...readLooks({ root, selection, facts: known, source: 'selection', git, gitEnv }));
+    }
+    if (required) {
+        const { commit, index } = selectedIndex({ root, selection, facts: known, git, env: gitEnv });
+        for (const entry of includedEntries(index, selection.target, known)) {
+            if (!out.some((look) => look.entry.cls === entry.cls && look.commit === commit)) {
+                throw new Error(`private looks: ${REQUIRED_ENV} is set and this run did not read ${entry.slug} (${entry.cls}) at ${commit}, which the build carries`);
+            }
+        }
     }
     return out;
 }
@@ -138,17 +173,32 @@ function privateRow(look) {
  * Every sheet a run serves, with its text: `SERVED_SHEETS` from the disk,
  * then each private look `privateLookReads` reads, as a `private` row.
  */
-export async function servedSheets({ root = ROOT, env = process.env, fixture = false, git, gitEnv } = {}) {
+export async function servedSheets({ root = ROOT, env = process.env, fixture = false, required = false, git, gitEnv } = {}) {
     const rows = SERVED_SHEETS.map((sheet) => Object.freeze({ ...sheet, css: readFileSync(join(root, sheet.path), 'utf8') }));
-    const looks = await privateLookReads({ root, env, fixture, git, gitEnv });
+    const looks = await privateLookReads({ root, env, fixture, required, git, gitEnv });
     return Object.freeze([...rows, ...looks.map(privateRow)]);
+}
+
+/** The line the guards say which private looks they read with: each class, where it came from and its commit. */
+export function guardLine(sheets) {
+    const rows = privateRows(sheets);
+    return `guards read private looks: ${rows.length === 0 ? 'none' : rows.map((row) => `${row.lookClass} (${row.look.source} @${row.look.commit.slice(0, 12)})`).join(', ')}\n`;
 }
 
 let guard;
 
-/** What the static guards read: `servedSheets({ fixture: true })` from this checkout and this process's environment, once. */
+/**
+ * What the static guards read: `servedSheets({ fixture: true })` from this
+ * checkout and this process's environment, once — `required` when
+ * `STALL_LOOKS_REQUIRED` is set — saying on stderr which private looks it
+ * read (`guardLine`), so a run that read only the fixture where a look was
+ * meant says so on screen.
+ */
 export function guardSheets() {
-    guard ??= servedSheets({ fixture: true });
+    guard ??= servedSheets({ fixture: true, required: selectionRequired(process.env) }).then((sheets) => {
+        process.stderr.write(guardLine(sheets));
+        return sheets;
+    });
     return guard;
 }
 

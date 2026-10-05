@@ -34,7 +34,8 @@ function start(base: string, dir: string) {
 }
 
 function lint(file: string) {
-    return spawnSync('node', ['scripts/workshop-lint.mjs', file], { cwd: ROOT, encoding: 'utf8' });
+    // The kit lint refuses a private-look selection too (8e1).
+    return spawnSync('node', ['scripts/workshop-lint.mjs', file], { cwd: ROOT, encoding: 'utf8', env: withoutSelection(process.env) });
 }
 
 /**

@@ -14,6 +14,7 @@ import {
     PRIVATE_LOOKS_MODULE,
     RESOLVED_MODULE,
     SELECTION_ENV,
+    crossSheetProblems,
     includedEntries,
     jsString,
     privateLooksModuleCode,
@@ -24,6 +25,7 @@ import {
 } from './private-looks-build.mjs';
 import { MAX_SVG_ELEMENTS, SVG_ELEMENTS, sanitizeSvg } from './svg-allow.mjs';
 import { LOOK_FONTS_HEADING, noticedLicence } from './notices-lib.mjs';
+import { LOOKS_ENV, REQUIRED_ENV } from './looks-selection.mjs';
 import { PLANTED_CLASS, beforeReduce, oflText, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
 
 /**
@@ -47,6 +49,8 @@ const VITE = join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 const facts = await publicLookFacts();
 const { runnerImport } = await import('vite');
 const { module: lookData } = await runnerImport(join(ROOT, 'src/domain/lookData.ts'), { configFile: false, logLevel: 'silent' });
+/** The theme table's values, as `vite.config.ts` hands them to the plugin for the flash rule. */
+const vars = await (await import('./look-flash.mjs')).themeVarValues();
 /** The app's own validator, as `vite.config.ts` hands it to the plugin. */
 const validateLook = (text, place) => lookData.lookDataProblems(text, place);
 
@@ -62,9 +66,9 @@ const tempDir = (name) => {
     return dir;
 };
 
-/** The tracked fixture's files as git's index lists them, from the fixture's root. */
+/** The tracked fixture's files as HEAD holds them, from the fixture's root. */
 function trackedFixturePaths() {
-    return execFileSync('git', ['ls-files', '-z', '--', FIXTURE_LOOKS_DIR], { cwd: ROOT, encoding: 'utf8' })
+    return execFileSync('git', ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', FIXTURE_LOOKS_DIR], { cwd: ROOT, encoding: 'utf8' })
         .split('\0')
         .filter((path) => path !== '')
         .map((path) => path.slice(FIXTURE_LOOKS_DIR.length + 1));
@@ -93,7 +97,8 @@ function plantRepo(edit = (_path, text) => text) {
     git('init', '-q', '-b', 'main', '.');
     for (const path of trackedFixturePaths()) {
         mkdirSync(join(dir, dirname(path)), { recursive: true });
-        const text = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, path), 'utf8').replaceAll('t-fixture-private', 't-planted-look');
+        // As HEAD holds it: the commit the build and the guards read the fixture at.
+        const text = execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT, encoding: 'utf8' }).replaceAll('t-fixture-private', 't-planted-look');
         writeFileSync(join(dir, path), edit(path, text));
     }
     git('add', '-A');
@@ -102,12 +107,12 @@ function plantRepo(edit = (_path, text) => text) {
 }
 
 const readPlanted = (repo, over = {}) =>
-    readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir, ...over }, facts, validateLook, env: repo.env });
+    readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir, ...over }, facts, validateLook, vars, env: repo.env });
 
 /** A `vite build` of this checkout into `outDir`, with `selection` (env names) and nothing else selected. */
 function build(outDir, selection = {}) {
     const env = { ...process.env, ...selection };
-    for (const name of ['VITEST', ...Object.values(SELECTION_ENV)]) {
+    for (const name of ['VITEST', ...LOOKS_ENV]) {
         if (!(name in selection)) {
             delete env[name];
         }
@@ -159,7 +164,7 @@ describe('an-unnamed-selection-carries-no-private-look', () => {
 
     it('answers an empty module with nothing selected, and under vitest whatever is selected', () => {
         for (const env of [{}, { ...PREVIEW, VITEST: 'true' }]) {
-            const plugin = privateLooksPlugin({ facts, validateLook, env });
+            const plugin = privateLooksPlugin({ facts, validateLook, vars, env });
             plugin.configResolved({ root: ROOT, build: { outDir: 'dist', write: false } });
             try {
                 plugin.buildStart();
@@ -173,9 +178,29 @@ describe('an-unnamed-selection-carries-no-private-look', () => {
                 plugin.closeBundle();
             }
         }
-        const half = privateLooksPlugin({ facts, validateLook, env: { [SELECTION_ENV.target]: 'preview' } });
+        const half = privateLooksPlugin({ facts, validateLook, vars, env: { [SELECTION_ENV.target]: 'preview' } });
         half.configResolved({ root: ROOT, build: { outDir: 'dist', write: false } });
         assert.throws(() => half.buildStart(), /the selection is not whole/);
+    });
+
+    it('fails a build that must carry its looks and selects none, and only that one', () => {
+        // `STALL_LOOKS_REQUIRED` (the deploy job's, 8c): a build with no
+        // selection under it fails; one with a selection, or under vitest,
+        // or with the variable empty or 0, does not.
+        const start = (env) => {
+            const plugin = privateLooksPlugin({ facts, validateLook, vars, env });
+            plugin.configResolved({ root: ROOT, build: { outDir: 'dist', write: false } });
+            try {
+                plugin.buildStart();
+            } finally {
+                plugin.closeBundle();
+            }
+        };
+        assert.throws(() => start({ [REQUIRED_ENV]: '1' }), /STALL_LOOKS_REQUIRED is set and this build selects no private look/);
+        for (const env of [{ [REQUIRED_ENV]: '1', VITEST: 'true' }, { [REQUIRED_ENV]: '0' }, { [REQUIRED_ENV]: '' }, { ...PRODUCTION, [REQUIRED_ENV]: '1' }]) {
+            assert.doesNotThrow(() => start(env), JSON.stringify(env));
+        }
+        assert.deepEqual(LOOKS_ENV, ['STALL_LOOKS_TARGET', 'STALL_LOOKS_DIR', 'STALL_LOOKS_COMMIT', 'STALL_LOOKS_REQUIRED']);
     });
 
     it('reads a repository from its root, and inside this checkout the tracked fixture alone', () => {
@@ -364,10 +389,44 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
     });
 
     it('reads this checkout’s tracked fixture at HEAD, as a build and public CI do', () => {
-        const read = readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts, validateLook });
+        const read = readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts, validateLook, vars });
         assert.deepEqual(read.looks.map((look) => look.entry.cls), ['t-fixture-private']);
-        const production = readSelectedLooks({ root: ROOT, selection: { target: 'production', dir: FIXTURE_LOOKS_DIR }, facts, validateLook });
+        const production = readSelectedLooks({ root: ROOT, selection: { target: 'production', dir: FIXTURE_LOOKS_DIR }, facts, validateLook, vars });
         assert.deepEqual(production.looks, [], 'the fixture is at preview and nothing is released');
+    });
+});
+
+describe('a-build-refuses-a-carried-look-that-strobes', () => {
+    /**
+     * The 8e1 critic's item 2: a carried sheet reached `dist` held only by
+     * its own lint, and the checks that need every sheet at once — the flash
+     * rule, and a worn sheet's keyframe or face name replacing another
+     * sheet's — ran only in a test run that may not have read it. The build
+     * runs them itself over the public table and the carried sheets
+     * (`crossSheetProblems`) and fails, as the kit's commands do.
+     */
+    const strobe =
+        '@keyframes t-planted-look-strobe { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+        '.t-planted-look .stall-name { animation: t-planted-look-strobe 1s steps(1) infinite; }\n';
+    const planted = (rule) => plantRepo((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, rule) : text));
+
+    it('fails a real build of a look whose sheet strobes, naming the rule', () => {
+        const repo = planted(strobe);
+        const out = build(tempDir('dist-strobe'), { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: repo.dir });
+        assert.notEqual(out.status, 0, 'a strobing look built');
+        assert.match(out.stderr, /the flash rule: @keyframes t-planted-look-strobe .* flashes 5 times in one second/);
+    });
+
+    it('fails on a keyframe another served sheet declares, and on a public sheet naming the look; passes the look as it is', () => {
+        assert.throws(
+            () => readPlanted(planted('@keyframes om-flick { from { rotate: 0deg; } to { rotate: 1deg; } }')),
+            /fixture\/sheet\.css: @keyframes om-flick is also declared in src\/ui\/stall\.css/,
+        );
+        assert.doesNotThrow(() => readPlanted(planted('.t-planted-look .item-n { letter-spacing: 0.02em; }')));
+        const looks = readPlanted(plantRepo()).looks;
+        assert.deepEqual(crossSheetProblems({ root: ROOT, looks, vars }), []);
+        assert.deepEqual(crossSheetProblems({ root: ROOT, looks: [], vars }), []);
+        assert.throws(() => readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts, validateLook }), /cross-sheet checks read the theme table/);
     });
 });
 
@@ -392,7 +451,7 @@ describe('a-private-row-class-is-its-looks-own', () => {
         for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/'))) {
             const to = join(repo.dir, path.replace(/^fixture\//, 'other/'));
             mkdirSync(dirname(to), { recursive: true });
-            let text = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, path), 'utf8')
+            let text = execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT, encoding: 'utf8' })
                 .replaceAll('t-fixture-private', 't-other-look')
                 .replaceAll('att-fixture-dusk', 'att-other-dusk');
             if (path.endsWith('look.json')) {
@@ -409,7 +468,7 @@ describe('a-private-row-class-is-its-looks-own', () => {
         return repo;
     }
     const read = (repo) =>
-        readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir }, facts: twoIds, validateLook, env: repo.env });
+        readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir }, facts: twoIds, validateLook, vars, env: repo.env });
 
     it('carries two looks whose row classes are their own', () => {
         assert.deepEqual(read(plantTwo('att-other-trim')).looks.map((look) => look.entry.slug), ['fixture', 'other']);
@@ -709,7 +768,7 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             // The plugin runs the check itself on every build that selected
             // anything and wrote to the disk (the critic's item 7a): planted
             // here over the public build's dist, under a preview selection.
-            const plugin = privateLooksPlugin({ facts, validateLook, env: PREVIEW });
+            const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
             plugin.configResolved({ root: ROOT, build: { outDir: publicDist, write: true } });
             const writes = [];
             const write = process.stderr.write;

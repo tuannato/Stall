@@ -1,26 +1,29 @@
 /**
- * The flash rule (G6) over the real files: every sheet a run serves
- * (`guardSheets`, `scripts/served-sheets.mjs` — the role table's and every
- * private look's the run reads, the tracked fixture's always), the theme
- * table's `--s-*-anim` values, and — for the kit — a creator's sheet in the
- * kit's place, because a rule in one sheet can re-time a keyframe declared
- * in another. `flashReport` in `workshop-css.mjs` is the pure half; this
- * module only reads.
+ * The flash rule (G6) over the real files: every sheet a build serves
+ * (`servedSheets`, `scripts/served-sheets.mjs` — the role table's, and the
+ * private looks the environment's selection carries; with none selected it
+ * reads the disk alone and runs no git, so a kit command works in a copy
+ * with no repository, the 8e1 critic's item 4), the theme table's
+ * `--s-*-anim` values, and — for the kit — a creator's sheet in the kit's
+ * place, because a rule in one sheet can re-time a keyframe declared in
+ * another. The static guards hand it their own list (`guardSheets()`, the
+ * tracked fixture included). `flashReport` in `workshop-css.mjs` is the pure
+ * half; this module only reads.
  *
- * Read by `scripts/look-lint.test.mjs` (the served sheets), by
+ * Read by `scripts/look-lint.test.mjs` (the guards' sheets), by
  * `pnpm workshop:lint` and by every kit command that builds.
  */
-import { guardSheets } from './served-sheets.mjs';
+import { servedSheets } from './served-sheets.mjs';
 import { flashReport } from './workshop-css.mjs';
 
 /**
  * Every served sheet as `{ name, css }`, named by its path — `sheets` (a
- * merged list, `guardSheets()` when not given) with the kit's sheet
+ * merged list, `servedSheets()` when not given) with the kit's sheet
  * replaced by `kit` (`{ name, css }`) when one is given, so a creator's
  * sheet is read in the kit's place.
  */
 export async function flashSheets({ kit, sheets } = {}) {
-    const list = sheets ?? (await guardSheets());
+    const list = sheets ?? (await servedSheets());
     return list.map((sheet) =>
         sheet.role === 'kit' && kit !== undefined ? { name: kit.name, css: kit.css } : { name: sheet.path, css: sheet.css },
     );
@@ -45,7 +48,7 @@ export async function themeVarValues() {
     return out;
 }
 
-/** `flashReport` over every served sheet (the kit's replaced by `kit` when given; `sheets` a merged list, the guards' when not given) and the theme table. */
+/** `flashReport` over every served sheet (the kit's replaced by `kit` when given; `sheets` a merged list, `servedSheets()` when not given) and the theme table. */
 export async function servedFlashReport({ kit, sheets } = {}) {
     return flashReport(await flashSheets({ kit, sheets }), { vars: await themeVarValues() });
 }

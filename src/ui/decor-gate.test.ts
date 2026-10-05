@@ -276,7 +276,7 @@ const PAINTS = /(?:^|;)\s*(background|background-image|background-color|box-shad
 /** Reaching an asset, in every spelling CSS admits. `url(` in any case,
  *  `image-set(`, `src(`, and a custom property this row does not define
  *  itself (an asset parked in `:root` is still an asset the row ships). */
-const reachesArt = (blob: string): boolean => {
+const reachesArt = (blob: string, defines: ReadonlySet<string> = SHEET_DEFINES): boolean => {
     const lower = blob.toLowerCase();
     if (/\burl\s*\(/.test(lower) || /\bimage-set\s*\(/.test(lower) || /\bsrc\s*\(/.test(lower)) {
         return true;
@@ -291,7 +291,7 @@ const reachesArt = (blob: string): boolean => {
      * `palette` claim. `--s-*` is the shipped table's namespace.
      */
     return reads.some(
-        (name) => !name.startsWith('--s-') && !SHEET_DEFINES.has(name),
+        (name) => !name.startsWith('--s-') && !defines.has(name),
     );
 };
 
@@ -607,6 +607,85 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
                 `${row.label} paints a node and never says it cannot be pressed`,
             ).toBe(true);
         }
+    });
+});
+
+/** A private decoration row as the gate reads it: its catalogue fields from its look's `look.json`, its look's class and sheet. */
+type PrivateDecoration = { cls: string; label: string; paint?: unknown; motion?: unknown; lookClass: string; css: string; path: string };
+
+/** Every decoration row with a class of every private look in `sheets` (moods aside, as `paintable` sets them aside). */
+function privateDecorations(sheets: readonly ServedSheetText[]): PrivateDecoration[] {
+    return privateRows(sheets).flatMap((row) =>
+        ((row.look.look as { decorations?: Record<string, unknown>[] } | undefined)?.decorations ?? [])
+            .filter((d) => typeof d['cls'] === 'string')
+            .map((d) => ({ cls: d['cls'] as string, label: String(d['label']), paint: d['paint'], motion: d['motion'], lookClass: row.lookClass, css: row.css, path: row.path })),
+    );
+}
+
+/**
+ * Why the gate cannot pass a private decoration row, or nothing (the 8e1
+ * critic's item 8): the per-row rules above read the shipped catalogue and
+ * stall.css, and a private row's reasons — the colours it follows, art it
+ * draws, a mover's reader — have no place to be written until its
+ * `look.json` carries the plan's `guard` field (8i). So a private row is
+ * judged in the one shape that needs no reason, and refused in any other,
+ * never skipped: a rule of its own in its look's sheet that paints
+ * something; colours that are tokens and only tokens (`palette`); no art (a
+ * `url()`, an `image-set()`, a property its sheet does not define); no
+ * motion (its `motion` flag, an animation or a transition); and a root
+ * paint (a node needs its mount and its `pointer-events` with it).
+ */
+function privateRowProblems(row: PrivateDecoration): string[] {
+    const css = row.css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1]!.trim().replace(/\s+/g, ' '), body: m[2]! }));
+    const own = rules.filter((r) => {
+        const seen = classesIn(r.selector);
+        return seen.length > 0 && seen.every((found) => ownedBy(row.cls, found));
+    });
+    const bodies = own.map((r) => r.body).join(' ');
+    const defines = new Set([...css.toLowerCase().matchAll(/(--[a-z0-9_-]+)\s*:/g)].map((m) => m[1]!));
+    const at = `${row.label} (${row.cls}, ${row.path})`;
+    const out: string[] = [];
+    if (own.length === 0 || !own.some((r) => PAINTS.test(r.body))) {
+        out.push(`${at} has no rule of its own in its look's sheet that paints`);
+    }
+    if (reachesArt(bodies, defines) || /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\(|\bcolor\(/i.test(bodies)) {
+        out.push(`${at} draws art or a literal colour a mood cannot reach — its reason travels with the row's guard (8i), refused until then`);
+    }
+    if (own.length > 0 && !bodies.includes('var(--s-')) {
+        out.push(`${at} names no token: a private row with no declared reason follows the palette`);
+    }
+    if (row.motion === true || /(?:^|;)\s*(?:animation|animation-name|transition)\s*:/.test(bodies)) {
+        out.push(`${at} moves — a mover's reader travels with the row's guard (8i), refused until then`);
+    }
+    if (row.paint !== 'root') {
+        out.push(`${at} paints ${String(row.paint)} — a private node row needs its mount and its reader (8i), refused until then`);
+    }
+    return out;
+}
+
+describe('a-private-row-the-gate-cannot-judge-is-refused', () => {
+    it('judges every private decoration a run reads, the fixture\'s two among them, in the one shape that needs no reason', () => {
+        const rows = privateDecorations(SERVED);
+        expect(rows.filter((row) => row.lookClass === 't-fixture-private').map((row) => row.cls).sort()).toEqual(['att-fixture-crest', 'att-fixture-trim']);
+        for (const row of rows) {
+            expect(privateRowProblems(row), row.cls).toEqual([]);
+        }
+    });
+
+    it('refuses a planted row with no rule, one with art or a literal colour, one that moves, and a node', async () => {
+        const planted = async (rule: string, editLook?: (json: string) => string): Promise<string[]> =>
+            privateDecorations(await plantedServed(rule, editLook))
+                .filter((row) => row.lookClass === PLANTED_CLASS)
+                .flatMap(privateRowProblems);
+        const harmless = `.${PLANTED_CLASS} .item-n { letter-spacing: 0.01em; }`;
+        expect(await planted(harmless)).toEqual([]);
+        expect((await planted(harmless, (json) => json.replace('"att-planted-crest"', '"att-planted-ghost"'))).join('\n')).toMatch(/att-planted-ghost.* has no rule of its own/);
+        expect((await planted(`.${PLANTED_CLASS}.att-planted-trim .stall-sign { color: #c0503f; }`)).join('\n')).toMatch(/att-planted-trim.* draws art or a literal colour/);
+        expect((await planted(`.${PLANTED_CLASS}.att-planted-trim .x { color: var(--s-text); mask-image: url(./art/ground.svg); }`)).join('\n')).toMatch(/draws art/);
+        expect((await planted(harmless, (json) => json.replace('"motion": false,\n            "tokenId": "f1', '"motion": true,\n            "tokenId": "f1'))).join('\n')).toMatch(/att-planted-trim.* moves/);
+        expect((await planted(`.${PLANTED_CLASS}.att-planted-crest .stall-name { transition: color 1s; }`)).join('\n')).toMatch(/att-planted-crest.* moves/);
+        expect((await planted(harmless, (json) => json.replace('"paint": "root",\n            "motion": false\n', '"paint": "node",\n            "motion": false\n'))).join('\n')).toMatch(/att-planted-crest.* paints node/);
     });
 });
 
