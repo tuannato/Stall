@@ -21,7 +21,6 @@ import {
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
-import { lintLookSheet } from './workshop-css.mjs';
 
 /**
  * A private look repository's shape (`scripts/private-looks.mjs`), over
@@ -443,21 +442,5 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         const own = readPrivateLooksAt({ dir: ROOT, commit: head, prefix: FIXTURE, facts, fixture: true });
         assert.ok(own.files.length >= 4);
         assert.deepEqual(own.problems, []);
-    });
-});
-
-describe('the-private-fixture-sheet-obeys-the-look-rules', () => {
-    /**
-     * The fixture's sheet is a worn-only look sheet like any private look's:
-     * it names itself, its `url()`s reach only its own `art/`, and its reduce
-     * block is last. Read here until the static guards read private sheets
-     * through the join (8e1), so the fixture is a valid subject from the day
-     * it lands.
-     */
-    it('passes the look rules as a worn-only sheet over its own art', () => {
-        const { files } = trackedFixture();
-        const css = readFileSync(join(ROOT, FIXTURE, 'fixture', 'sheet.css'), 'utf8');
-        const art = files.filter((f) => f.path.startsWith('fixture/art/')).map((f) => f.path.slice('fixture/art/'.length));
-        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: art } }), []);
     });
 });

@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { privateLooksModuleCode } from './private-looks-build.mjs';
+import { guardSheets, privateRows } from './served-sheets.mjs';
 import { SERVED_SHEETS, SHEET_LOADS, SHEET_ROLE_NAMES, appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import { parseSheet, splitTopLevel } from './workshop-css.mjs';
 
@@ -22,13 +24,15 @@ const inTable = new Set(SERVED_SHEETS.map((sheet) => sheet.path));
  * The tracked fixture of a private look repository (step 8,
  * `scripts/private-looks.mjs`): its sheets are a private look's, served by
  * no build until a run selects that directory, so they are no row of this
- * table. Exactly the `<slug>/sheet.css` its index names — any other
+ * table — they are the merged list's (`scripts/served-sheets.mjs`), which
+ * reads them through the fixture's index at HEAD, as every static guard
+ * does. Exactly the `<slug>/sheet.css` its index names: any other
  * stylesheet under it is one the table must name, and is not.
  */
 const PRIVATE_FIXTURE = 'layout/fixture-private-looks';
-const privateFixtureSheets = JSON.parse(readFileSync(join(ROOT, PRIVATE_FIXTURE, 'index.json'), 'utf8')).looks.map(
-    (entry) => `${PRIVATE_FIXTURE}/${entry.slug}/sheet.css`,
-);
+const privateFixtureSheets = privateRows(await guardSheets())
+    .filter((row) => row.look.source === 'fixture')
+    .map((row) => row.path);
 
 function walk(dir, keep) {
     const out = [];
@@ -88,7 +92,7 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
         assert.ok(sheets.includes('src/ui/stall.css'), 'the walk found the base sheet');
         // The private fixture's own sheet is in the walk, or the exception
         // below is an exception for nothing.
-        assert.ok(privateFixtureSheets.length > 0 && privateFixtureSheets.every((path) => sheets.includes(path)), 'the walk found the private fixture sheet');
+        assert.ok(privateFixtureSheets.length > 0 && privateFixtureSheets.every((path) => path.startsWith(`${PRIVATE_FIXTURE}/`) && sheets.includes(path)), 'the walk found the private fixture sheet');
         assert.ok(privateFixtureSheets.every((path) => !inTable.has(path)), 'a private look sheet is not a served one');
         assert.deepEqual(
             sheets.filter((path) => !inTable.has(path) && !privateFixtureSheets.includes(path)),
@@ -130,6 +134,20 @@ describe('every-served-sheet-is-on-the-guard-list', () => {
             }
         }
         assert.deepEqual(wrong, []);
+    });
+
+    /**
+     * A private look's sheet is loaded by no source file: its one road is
+     * the build's virtual module, which imports each carried sheet by `?url`
+     * (`privateLooksModuleCode`) — its own built file, never the entry CSS,
+     * the worn-only road.
+     */
+    it("loads a private look's sheet by the virtual module's ?url import alone", () => {
+        const loaded = loadedSheets();
+        assert.deepEqual(loaded.filter((l) => privateFixtureSheets.includes(l.path)).map((l) => `${l.from} loads ${l.path}`), []);
+        const code = privateLooksModuleCode([{ id: 4, sheetClass: 't-fixture-private', sheetPath: '/tmp/x/fixture/sheet.css', lookText: '{}' }]);
+        assert.match(code, /^import sheet0 from "\/tmp\/x\/fixture\/sheet\.css\?url";$/m);
+        assert.doesNotMatch(code, /import\s+["'][^"']+\.css["']/, 'never a side-effect import');
     });
 
     it('holds a well-formed table: every path exists once, every role is known, every look names its class', () => {

@@ -44,6 +44,7 @@
  * the catalogue's sum: a visitor never downloads every row of one slot.
  */
 import { gzipSync } from 'node:zlib';
+import { sanitizeSvg } from './svg-allow.mjs';
 import { parseSheet, splitTopLevel } from './workshop-css.mjs';
 
 /**
@@ -321,4 +322,32 @@ export function lookArtBudget({ sheet, sheetFile = 'sheet.css', files, rows = []
     }
     const total = bare + Object.values(slots).reduce((sum, row) => sum + row.gzip, 0);
     return { bare, slots, total };
+}
+
+/**
+ * A private look's budget reading from its source (step 8e1), for every
+ * private look a run reads (`scripts/served-sheets.mjs`: the tracked fixture
+ * in public CI, the selected look in a deploy job's `pnpm test`): its sheet
+ * as written — the build only minifies it, so a source sheet counts more,
+ * never less — over its `art/` as a build writes it (an SVG re-serialised by
+ * the allow-list, `sanitizeSvg`, which is what is emitted; one it refuses
+ * counted as given, the build failing on it anyway; a face as it is), and
+ * its rows from its `look.json` (its moods and decorations, `{ cls, slot }`).
+ * `look`: a `PrivateLookRead`. The built bucket of a deploy build is 8e2's.
+ */
+export function privateLookArtBudget(look) {
+    const files = new Map(
+        look.art
+            .filter((file) => !file.name.endsWith('.txt'))
+            .map((file) => {
+                if (!file.name.endsWith('.svg')) return [`art/${file.name}`, file.bytes];
+                const { svg } = sanitizeSvg(file.bytes.toString('utf8'));
+                return [`art/${file.name}`, svg === undefined ? file.bytes : Buffer.from(svg, 'utf8')];
+            }),
+    );
+    const json = look.look !== null && typeof look.look === 'object' ? look.look : {};
+    const rows = [...(Array.isArray(json.moods) ? json.moods : []), ...(Array.isArray(json.decorations) ? json.decorations : [])]
+        .filter((row) => row !== null && typeof row === 'object' && typeof row.slot === 'string')
+        .map((row) => ({ cls: typeof row.cls === 'string' ? row.cls : undefined, slot: row.slot }));
+    return lookArtBudget({ sheet: look.css, sheetFile: 'sheet.css', files, rows });
 }

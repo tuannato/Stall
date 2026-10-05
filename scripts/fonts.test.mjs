@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
-import { SERVED_SHEETS } from './sheet-roles.mjs';
+import { guardSheets, privateRows } from './served-sheets.mjs';
 
 /**
  * `stall-serif-carries-no-reserved-name`: Rural's serif is Lora, whose OFL
@@ -16,7 +16,8 @@ import { SERVED_SHEETS } from './sheet-roles.mjs';
  * copied in again by hand, or a CSS family that says 'Lora', turns red.
  *
  * `node --test`, like the other scripts' tests: WOFF2 is parsed here with
- * Node's own brotli, and nothing else.
+ * Node's own brotli, and nothing else. The stylesheets are the ones a run
+ * serves (`guardSheets`): a private look's sheet names no Lora either.
  */
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -126,9 +127,10 @@ describe('stall-serif-carries-no-reserved-name', () => {
         }
     });
 
-    it('names no family "Lora" in any served stylesheet or font stack', () => {
-        for (const { path } of SERVED_SHEETS) {
-            const css = readFileSync(join(ROOT, path), 'utf8');
+    it('names no family "Lora" in any served stylesheet or font stack', async () => {
+        const sheets = await guardSheets();
+        assert.ok(privateRows(sheets).length > 0, 'a private look sheet is read');
+        for (const { path, css } of sheets) {
             assert.doesNotMatch(css, /font-family:[^;]*\bLora\b/i, `${path} names Lora as a family`);
             assert.doesNotMatch(css, /\bfont:[^;]*\bLora\b/i, `${path} names Lora in a font shorthand`);
         }

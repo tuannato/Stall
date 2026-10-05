@@ -15,8 +15,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import { SERVED_SHEETS, appSheets } from '../../scripts/sheet-roles.mjs';
+import { afterAll, describe, expect, it } from 'vitest';
+import { beforeReduce, plantLooks, removePlants, PLANTED_CLASS } from '../../scripts/private-looks-plant.mjs';
+import { guardSheets, privateRows, servedSheets, type ServedSheetText } from '../../scripts/served-sheets.mjs';
+import { appSheets } from '../../scripts/sheet-roles.mjs';
 import {
     DEFAULT_THEME_ID,
     NEO_CITY_THEME_ID,
@@ -39,10 +41,45 @@ const NOT_BASE = appSheets()
     .filter((sheet) => sheet.role !== 'base')
     .map((sheet) => sheet.path);
 
+/**
+ * Every sheet a run serves, with its text (`scripts/served-sheets.mjs`):
+ * the role table's, and every private look's the run reads — the tracked
+ * fixture always, the selection when the environment names one (step 8e1).
+ * A private look's sheet is held by every rule here that reads a sheet's
+ * own declarations — what it reads, what it pairs, where its reduce block
+ * sits, how small its text is. The emit side of the var table is the one
+ * rule that reads the public sheets alone: a var only a private sheet read
+ * would be dead in the public build, which carries no private look.
+ */
+const SERVED = await guardSheets();
+const PRIVATE = privateRows(SERVED);
+const PRIVATE_SHEETS = PRIVATE.map((sheet) => sheet.path);
+const TEXT = new Map(SERVED.map((sheet) => [sheet.path, sheet.css]));
+afterAll(removePlants);
+
 const stripped = (file: string): string =>
-    readFileSync(join(ROOT, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    (TEXT.get(file) ?? readFileSync(join(ROOT, file), 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
 
 const allCss = (): string => SHEETS.map(stripped).join('\n');
+/** The app's sheets and every private look's: what a sheet's reads, pairs and sizes are held over. */
+const withPrivate = (paths: readonly string[]): string[] => [...paths, ...PRIVATE_SHEETS];
+const allServedCss = (): string => withPrivate(SHEETS).map(stripped).join('\n');
+
+/** A planted private look (the fixture, renamed) with `rule` before its reduce block, read as a run that selects it reads it. */
+async function plantedSheet(rule: string, after = false): Promise<ServedSheetText> {
+    const repo = plantLooks((path, text) => (path !== 'fixture/sheet.css' ? text : after ? `${text}\n${rule}\n` : beforeReduce(text, rule)));
+    const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+    const row = rows.find((sheet) => sheet.lookClass === PLANTED_CLASS);
+    if (row === undefined) throw new Error('the planted look was not read');
+    return row;
+}
+
+describe('the-sheet-guards-read-every-private-look-a-run-reads', () => {
+    it('reads the tracked fixture beside the role table', () => {
+        expect(PRIVATE.some((sheet) => sheet.look.source === 'fixture')).toBe(true);
+        expect(PRIVATE_SHEETS.every((path) => !SHEETS.includes(path) && stripped(path).length > 0)).toBe(true);
+    });
+});
 
 /** The emitted key set is identical per look, but union anyway: an id that
  *  ever emitted a key the others do not must still have that key consumed. */
@@ -62,7 +99,10 @@ describe('every-theme-var-reaches-the-stylesheet', () => {
      * 2026-08-30 review from stall.css alone to every sheet in SHEETS — the pivot
      * moved some consumers into the theme files (`--s-card-sheen` lives in
      * theme-neo.css's background stack), and the one-file version would have
-     * called every such var dead.
+     * called every such var dead. **The public sheets alone** (step 8e1):
+     * the public build carries no private look, so a var only a private
+     * look's sheet read would be dead there, and counting that read would
+     * hide it.
      */
     it('consumes every --s-* the table emits, in a sheet or another emitted value', () => {
         const css = allCss();
@@ -91,8 +131,15 @@ describe('no-stylesheet-reads-a-var-nobody-emits', () => {
      * `--s-accent-2` failure with the files swapped, and exactly what a table
      * rename leaves behind.
      */
-    it('finds an emitter for every --s-* any sheet reads', () => {
-        const css = allCss();
+    it('finds an emitter for every --s-* any sheet reads, a private look\'s among them', async () => {
+        expect(unemitted(allServedCss())).toEqual([]);
+        // A private look's sheet reading a var nobody emits: red.
+        const planted = await plantedSheet(`.${PLANTED_CLASS} .item-n { color: var(--s-nothing); }`);
+        expect(unemitted([allCss(), planted.css].join('\n'))).toEqual(['--s-nothing']);
+    });
+
+    /** Every --s-* `css` reads that nothing emits and `css` does not declare. */
+    const unemitted = (css: string): string[] => {
         const emitted = emittedNames();
         // A sheet may define its own custom property and read it back; none
         // do today, but a local definition is a legal emitter.
@@ -100,16 +147,11 @@ describe('no-stylesheet-reads-a-var-nobody-emits', () => {
             [...css.matchAll(/(--s-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
         );
         const reads = new Set(
-            [...css.matchAll(/var\(\s*(--s-[a-z0-9-]+)/g)].map((m) => m[1]),
+            [...css.matchAll(/var\(\s*(--s-[a-z0-9-]+)/g)].map((m) => m[1]!),
         );
         expect(reads.size).toBeGreaterThan(0);
-        for (const name of reads) {
-            expect(
-                emitted.has(name) || local.has(name),
-                `${name} is read by a rule and emitted by nothing`,
-            ).toBe(true);
-        }
-    });
+        return [...reads].filter((name) => !emitted.has(name) && !local.has(name));
+    };
 });
 
 describe('a-var-read-at-rest-resolves-at-rest', () => {
@@ -128,8 +170,8 @@ describe('a-var-read-at-rest-resolves-at-rest', () => {
      * at-rule bodies), or an `@property` registration that carries an
      * `initial-value` (registration without one changes nothing at rest).
      */
-    it('every var() read has a value outside @keyframes', () => {
-        const css = allCss();
+    it('every var() read has a value outside @keyframes, in a private look\'s sheet too', () => {
+        const css = allServedCss();
         const emitted = emittedNames();
         const rules = parseRules(css);
         const atRest = new Set<string>();
@@ -225,7 +267,7 @@ describe('the-second-accent-is-ornament-and-never-ink', () => {
      */
     it('is never painted as text in any sheet', () => {
         const offences: string[] = [];
-        for (const file of SHEETS) {
+        for (const file of withPrivate(SHEETS)) {
             const css = stripped(file);
             // `color:` but not `background-color:`/`border-color:`/`--x-color:`
             for (const match of css.matchAll(/(^|[;{\s])color\s*:\s*([^;}]+)/g)) {
@@ -257,7 +299,7 @@ describe('a-theme-rule-never-pairs-a-literal-ink-with-a-token-ground', () => {
      */
     it('every theme rule declaring both keeps ink and ground in one world', () => {
         const offences: string[] = [];
-        for (const file of NOT_BASE) {
+        for (const file of withPrivate(NOT_BASE)) {
             for (const { selector, body } of parseRules(stripped(file))) {
                 const ink = kindOf(lastDecl(body, ['color']));
                 const ground = kindOf(lastDecl(body, ['background', 'background-color']));
@@ -281,10 +323,10 @@ describe('the-reduce-block-is-the-last-rule-in-its-sheet', () => {
      * that declares one — the kit's and the static pages' too, read from the
      * role table.
      */
-    it('ends every sheet that has a reduce block with that block', () => {
-        expect(SERVED_SHEETS.length).toBeGreaterThan(SHEETS.length);
-        for (const { path: sheet } of SERVED_SHEETS) {
-            const css = readFileSync(join(ROOT, sheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const afterReduce = (sheets: readonly { path: string; css: string }[]): string[] => {
+        const out: string[] = [];
+        for (const { path: sheet, css: text } of sheets) {
+            const css = text.replace(/\/\*[\s\S]*?\*\//g, '');
             const at = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
             if (at < 0) {
                 continue;
@@ -299,8 +341,18 @@ describe('the-reduce-block-is-the-last-rule-in-its-sheet', () => {
                     if (depth === 0) break;
                 }
             }
-            expect(css.slice(i + 1).trim(), `${sheet}: rules after its reduce block`).toBe('');
+            if (css.slice(i + 1).trim() !== '') out.push(`${sheet}: rules after its reduce block`);
         }
+        return out;
+    };
+
+    it('ends every sheet that has a reduce block with that block, a private look\'s too', async () => {
+        expect(SERVED.length).toBeGreaterThan(SHEETS.length);
+        expect(PRIVATE.length).toBeGreaterThan(0);
+        expect(afterReduce(SERVED)).toEqual([]);
+        // A private look with a mover after its reduce block: red.
+        const planted = await plantedSheet(`.${PLANTED_CLASS} .item-n { animation: none; }`, true);
+        expect(afterReduce([...SERVED, planted])).toEqual([`${planted.path}: rules after its reduce block`]);
     });
 });
 
@@ -360,7 +412,7 @@ describe('a-container-rule-is-not-out-ranked-by-a-later-base-rule', () => {
     it('finds no conditional declaration a later unconditional rule of the same selector takes back', () => {
         const dead: string[] = [];
         let conditional = 0;
-        for (const sheet of SHEETS) {
+        for (const sheet of withPrivate(SHEETS)) {
             const rules = rulesOf(stripped(sheet));
             for (const r of rules) {
                 if (r.cond === '' || /prefers-reduced-motion|keyframes/.test(r.cond)) continue;
@@ -417,11 +469,12 @@ describe('the-raised-small-text-stays-at-eleven-px', () => {
         expect(EXTRA).toEqual(expect.arrayContaining(['public/guide.css', 'public/stream.css', 'workshop/theme-workshop.css']));
     });
 
-    it('declares no pixel size under 11 in any served sheet, but the aria-hidden caption', () => {
+    /** Every declared pixel size under 11 in `sheets` (paths, read through `css`), the exception aside, and how many sizes were read. */
+    const underEleven = (sheets: readonly string[], css: (sheet: string) => string = stripped): { offenders: string[]; read: number } => {
         const offenders: string[] = [];
         let read = 0;
-        for (const sheet of [...SHEETS, ...EXTRA]) {
-            for (const m of stripped(sheet).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+        for (const sheet of sheets) {
+            for (const m of css(sheet).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
                 const body = m[2]!;
                 const sizes = [
                     ...[...body.matchAll(/(?:^|;)\s*font-size:\s*([0-9.]+)px/g)].map((x) => x[1]!),
@@ -436,7 +489,17 @@ describe('the-raised-small-text-stays-at-eleven-px', () => {
                 }
             }
         }
+        return { offenders, read };
+    };
+
+    it('declares no pixel size under 11 in any served sheet, a private look\'s among them, but the aria-hidden caption', async () => {
+        expect(PRIVATE.length).toBeGreaterThan(0);
+        const { offenders, read } = underEleven([...withPrivate(SHEETS), ...EXTRA]);
         expect(read, 'the test read no size at all').toBeGreaterThan(100);
         expect(offenders).toEqual([]);
+        // A private look's 9px chip: red.
+        const planted = await plantedSheet(`.${PLANTED_CLASS} .chip { font-size: 9px; }`);
+        const bad = underEleven([planted.path], () => planted.css.replace(/\/\*[\s\S]*?\*\//g, ''));
+        expect(bad.offenders).toEqual([`${planted.path}: .${PLANTED_CLASS} .chip at 9px`]);
     });
 });

@@ -1,13 +1,16 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { build } from 'vite';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { KIT_SKELETON } from '../layout/workshopStarter';
+import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
+import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets.mjs';
 import { wornSheets } from '../scripts/sheet-roles.mjs';
 import {
     LOOK_ART_BUDGET_GZIP,
     bytesOf,
     lookArtBudget,
+    privateLookArtBudget,
     weightBuckets,
     type BuiltPart as WeighedPart,
 } from '../scripts/weight-buckets.mjs';
@@ -414,6 +417,45 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(fixture.total, 'the fixture look was not read').toBeGreaterThan(100);
         expect(fixture.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
     }, 120_000);
+
+    /*
+     * Every private look a run reads (`scripts/served-sheets.mjs`: the
+     * tracked fixture always, the selection when the environment names one
+     * — the real look in a deploy job's `pnpm test`), from its source: its
+     * sheet as written (the build only minifies it, so never under), its
+     * art as the build writes it (SVGs re-serialised), its rows from its
+     * `look.json` (`privateLookArtBudget`). A deploy build's own worn bucket
+     * is 8e2's. Red over a planted look carrying ~600 KB of art gzip cannot
+     * shrink.
+     */
+    it(`keeps every private look a run reads under ${LOOK_ART_BUDGET_GZIP} gzip bytes, from its source`, async () => {
+        const rows = privateRows(await guardSheets());
+        expect(rows.some((row) => row.look.source === 'fixture'), 'the fixture is read').toBe(true);
+        for (const row of rows) {
+            const reading = privateLookArtBudget(row.look);
+            expect(reading.total, `${row.path}: the look was not read`).toBeGreaterThan(100);
+            expect(reading.total, `${row.path}: ${JSON.stringify(reading)}`).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+        }
+        // Digits from a fixed-seed generator: an SVG the allow-list passes and gzip cannot shrink much.
+        let seed = 0x2545f491;
+        const digits = Array.from({ length: 1_400_000 }, () => {
+            seed ^= seed << 13;
+            seed ^= seed >>> 17;
+            seed ^= seed << 5;
+            return String((seed >>> 0) % 10);
+        }).join('');
+        const heavy = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`;
+        const repo = plantLooks(
+            (path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, `.${PLANTED_CLASS} .item-n { background-image: url(./art/heavy.svg); }`) : text),
+            { 'fixture/art/heavy.svg': heavy },
+        );
+        const planted = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env })).find(
+            (row) => row.lookClass === PLANTED_CLASS,
+        )!;
+        const reading = privateLookArtBudget(planted.look);
+        expect(reading.total, `a heavy private look passed the budget: ${JSON.stringify(reading)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+    }, 60_000);
+    afterAll(removePlants);
 
     it('counts the bare look and the largest row of each slot, and refuses 600 KB of art', () => {
         // Bytes gzip cannot shrink: a fixed-seed generator, so the reading is the same every run.

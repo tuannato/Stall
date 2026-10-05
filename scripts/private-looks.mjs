@@ -37,8 +37,10 @@
  * `a-private-file-outside-the-allow-list-fails`,
  * `a-private-look-id-is-reserved-and-unshared`,
  * `a-private-index-cannot-free-a-reserved-id`, `a-release-is-a-public-diff`,
- * `private-files-are-read-from-git-at-a-commit`,
- * `the-private-fixture-sheet-obeys-the-look-rules` (`scripts/private-looks.test.mjs`).
+ * `private-files-are-read-from-git-at-a-commit` (`scripts/private-looks.test.mjs`);
+ * a private look's sheet against the look rules is
+ * `every-private-look-sheet-passes-the-look-rules` (`scripts/look-lint.test.mjs`,
+ * over every private look a run reads — `scripts/served-sheets.mjs`).
  */
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';

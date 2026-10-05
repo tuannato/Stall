@@ -24,7 +24,7 @@
  * closed below, and the closing is the point: a rule that only catches the
  * mistakes the owner already made is a rule that protects nobody.
  */
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,11 +42,38 @@ import {
     decodeTheme,
     themeVars,
 } from '../domain/theme';
-import { SERVED_SHEETS } from '../../scripts/sheet-roles.mjs';
+import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../../scripts/private-looks-plant.mjs';
+import { guardSheets, privateRows, servedSheets, type ServedSheetText } from '../../scripts/served-sheets.mjs';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet } from '../../layout/outline';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * Every sheet a run serves, with its text (`scripts/served-sheets.mjs`):
+ * the role table's, and every private look's the run reads — the tracked
+ * fixture always, the selection when the environment names one (step 8e1).
+ * Every rule below that reads the served sheets reads a private look's too:
+ * the ground under text, the outline's shape and colours, a mood class's
+ * scope (its rows read from the look's own `look.json`), a keyframe's
+ * runners and the custom properties every value is resolved through. What
+ * reads the shipped catalogue alone — a row's own paint, its palette, its
+ * art under a mood, its travel — reads `stall.css` and the shipped rows,
+ * and a private look's rows join it with their reasons (8e2).
+ */
+const SERVED: readonly ServedSheetText[] = await guardSheets();
+const PRIVATE = privateRows(SERVED);
+afterAll(removePlants);
+
+/** A planted private look (the fixture, renamed) with `rule` before its reduce block and `edit` over its look.json, as a run that selects it serves it. */
+async function plantedServed(rule: string, editLook: (json: string) => string = (json) => json): Promise<readonly ServedSheetText[]> {
+    const repo = plantLooks((path, text) =>
+        path === 'fixture/sheet.css' ? beforeReduce(text, rule) : path === 'fixture/look.json' ? editLook(text) : text,
+    );
+    const sheets = await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env });
+    if (!privateRows(sheets).some((sheet) => sheet.lookClass === PLANTED_CLASS)) throw new Error('the planted look was not read');
+    return sheets;
+}
 
 /**
  * Where each row's COLOURS come from, and therefore whether a mood can move
@@ -669,7 +696,7 @@ function customProperties(extra: string): Map<string, string[]> {
     const add = (name: string, value: string): void => {
         defs.set(name, [...(defs.get(name) ?? []), value]);
     };
-    const sheets = SERVED_SHEETS.map((sheet) => readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'));
+    const sheets = SERVED.map((sheet) => sheet.css);
     for (const css of [...sheets, extra]) {
         for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(?:^|[;{])\s*(--[a-zA-Z0-9_-]+)\s*:\s*([^;{}]+)/g)) {
             add(m[1]!, m[2]!.trim());
@@ -740,7 +767,7 @@ function paints(value: string, prop: string, defs: Map<string, string[]>, seen: 
  */
 function customUses(extra: string): (name: string) => Set<string> {
     const readers = new Map<string, Set<string>>();
-    const sheets = SERVED_SHEETS.map((sheet) => readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'));
+    const sheets = SERVED.map((sheet) => sheet.css);
     for (const css of [...sheets, extra]) {
         for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
             for (const d of declarationsOf(m[2]!)) {
@@ -907,9 +934,9 @@ describe('a-mood-class-is-look-scoped', () => {
      * pin test and the look data validator. No shipped mood carries a class today, so the
      * plants are what show the rule refusing.
      */
-    const sheets = SERVED_SHEETS.map((sheet) => ({
+    const sheets = SERVED.map((sheet) => ({
         sheet,
-        css: readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8'),
+        css: sheet.css,
     }));
 
     it('holds every shipped mood class to its look, in every served sheet', () => {
@@ -919,6 +946,32 @@ describe('a-mood-class-is-look-scoped', () => {
                 expect(outOfScope(css, row.cls!, lookClassesFor(lookClass, sheet)), `${row.label} in ${sheet.path}`).toEqual([]);
             }
         }
+    });
+
+    /** Every mood class a private look's `look.json` names, with its look's class. */
+    const privateMoodClasses = (rows: readonly ServedSheetText[]): { cls: string; lookClass: string; label: string }[] =>
+        privateRows(rows).flatMap((row) =>
+            ((row.look.look as { moods?: { cls?: unknown; label?: unknown }[] } | undefined)?.moods ?? [])
+                .filter((mood) => typeof mood.cls === 'string')
+                .map((mood) => ({ cls: mood.cls as string, lookClass: row.lookClass, label: String(mood.label) })),
+        );
+
+    it('holds every private look\'s mood class to its look, in every served sheet, the fixture\'s among them', () => {
+        const moods = privateMoodClasses(SERVED);
+        expect(moods.some((mood) => mood.lookClass === 't-fixture-private'), 'the fixture names a mood class').toBe(true);
+        for (const mood of moods) {
+            for (const { sheet, css } of sheets) {
+                expect(outOfScope(css, mood.cls, lookClassesFor(mood.lookClass, sheet)), `${mood.label} in ${sheet.path}`).toEqual([]);
+            }
+        }
+    });
+
+    it('goes red on a planted private look whose own sheet reads its mood class outside its compound', async () => {
+        const served = await plantedServed(`.${PLANTED_CLASS} .att-planted-dusk .item { letter-spacing: 0.01em; }`);
+        const mood = privateMoodClasses(served).find((m) => m.lookClass === PLANTED_CLASS)!;
+        expect(mood.cls).toBe('att-planted-dusk');
+        const offences = served.flatMap((sheet) => outOfScope(sheet.css, mood.cls, lookClassesFor(mood.lookClass, sheet)));
+        expect(offences).toEqual([`.${PLANTED_CLASS} .att-planted-dusk .item — not beside .${PLANTED_CLASS}`]);
     });
 
     it('refuses a rule that reads a mood class outside its look (plants)', () => {
@@ -964,8 +1017,8 @@ describe('a-mood-class-is-look-scoped', () => {
 
     it("reads a kit sheet under the sheet's own class, and no other sheet (item 2)", () => {
         const at = 'att-harness-dusk';
-        const kit = SERVED_SHEETS.find((sheet) => sheet.role === 'kit')!;
-        const base = SERVED_SHEETS.find((sheet) => sheet.role === 'base')!;
+        const kit = SERVED.find((sheet) => sheet.role === 'kit')!;
+        const base = SERVED.find((sheet) => sheet.role === 'base')!;
         const copied = `.t-workshop.${at} .item { color: red }`;
         expect(outOfScope(copied, at, lookClassesFor('t-rural', kit))).toEqual([]);
         expect(outOfScope(copied, at, lookClassesFor('t-rural', base))).toHaveLength(1);
@@ -991,17 +1044,22 @@ describe('a-decoration-lays-no-ground-under-text', () => {
      * (`marksUnderText`, the critic's eighth pass, item 7). A custom
      * property is judged where it is read (`customUses`).
      */
-    it('lays none in any served sheet', () => {
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+    it('lays none in any served sheet, a private look\'s among them', async () => {
+        expect(PRIVATE.length).toBeGreaterThan(0);
+        for (const sheet of SERVED) {
+            const css = sheet.css;
             expect(groundsUnderText(css), sheet.path).toEqual([]);
         }
+        // A planted private look whose decoration lays a ground under a line: red.
+        const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d; }`);
+        const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
+        expect(groundsUnderText(planted.css)).toEqual([`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`]);
     });
 
     it('names only art a served sheet still declares', () => {
         const declared = new Set<string>();
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const sheet of SERVED) {
+            const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
             for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
                 for (const selector of m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim())) {
                     for (const d of declarationsOf(m[2]!)) declared.add(`${selector} | ${d.prop}`);
@@ -1580,7 +1638,7 @@ function outlineOffences(
  * a keyframe stall.css declares), so its runners are looked for in all.
  */
 function servedCss(): string {
-    return SERVED_SHEETS.map((sheet) => readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')).join('\n');
+    return SERVED.map((sheet) => sheet.css.replace(/\/\*[\s\S]*?\*\//g, '')).join('\n');
 }
 
 /** Where each `@keyframes` block of `css` begins and ends, by name. */
@@ -1713,22 +1771,31 @@ function marksUnderText(css: string, defs: Map<string, string[]> = customPropert
 }
 
 describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
-    it('holds every served sheet to the outline’s shape', () => {
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+    it('holds every served sheet to the outline’s shape, a private look\'s among them', async () => {
+        expect(PRIVATE.length).toBeGreaterThan(0);
+        for (const sheet of SERVED) {
+            const css = sheet.css;
             expect(outlineOffences(css), sheet.path).toEqual([]);
         }
+        // A planted private look whose decoration outlines in the ground's colour, three pixels out: red.
+        const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .fine { text-shadow: 3px 3px 0 var(--s-bg); }`);
+        const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
+        expect(outlineOffences(planted.css)).not.toEqual([]);
     });
 
-    it('lets no other mark under text on a decoration, in any served sheet, and lists every glow it lets', () => {
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+    it('lets no other mark under text on a decoration, in any served sheet, and lists every glow it lets', async () => {
+        for (const sheet of SERVED) {
+            const css = sheet.css;
             expect(marksUnderText(css), sheet.path).toEqual([]);
         }
+        // A planted private look whose decoration puts a cloud under a line: red.
+        const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .fine { text-shadow: 0 0 20px #000; }`);
+        const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
+        expect(marksUnderText(planted.css)).not.toEqual([]);
         // Every listed glow is a rule a served sheet still sets.
         const seen = new Set<string>();
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const sheet of SERVED) {
+            const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
             const defs = customProperties('');
             const frames = keyframesIn(css);
             for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -1807,8 +1874,8 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         // every surface OUTLINE_GROUNDS lists — a custom property is resolved
         // where it is declared, so a surface's own colour is read only where
         // the sets are declared again — and in no other served sheet.
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const sheet of SERVED) {
+            const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
             for (const name of ['--rain-outline-1', '--rain-outline-2']) {
                 const at = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => declarationsOf(m[2]!).some((d) => d.prop === name));
                 const expected =
@@ -1831,11 +1898,15 @@ describe('an-outline-is-the-only-mark-under-text-on-a-decoration', () => {
         }
     });
 
-    it('declares every outline colour it paints: the look’s ground on the rain, and each tinted surface’s own paint, listed', () => {
-        for (const sheet of SERVED_SHEETS) {
-            const css = readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8');
+    it('declares every outline colour it paints: the look’s ground on the rain, and each tinted surface’s own paint, listed', async () => {
+        for (const sheet of SERVED) {
+            const css = sheet.css;
             expect(outlineGroundOffences(css), sheet.path).toEqual([]);
         }
+        // A planted private look that gives the outline a colour of its own: red.
+        const served = await plantedServed(`.${PLANTED_CLASS} { --rain-outline-ground: #05060d; }`);
+        const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
+        expect(outlineGroundOffences(planted.css)).not.toEqual([]);
         // Every listed surface is declared, and nothing else is.
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
         const declared = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
@@ -2177,7 +2248,7 @@ describe('every-state-of-a-listed-surface-has-its-outline-colour', () => {
      * ancestor or inside `:has()` is a state too, and is refused: the
      * outline's colour cannot be listed on such a selector.
      */
-    const sheets = SERVED_SHEETS.map((sheet) => ({ path: sheet.path, css: readFileSync(join(UI_DIR, '..', '..', sheet.path), 'utf8') }));
+    const sheets = SERVED.map((sheet) => ({ path: sheet.path, css: sheet.css }));
     const stall = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
 
     it('finds every state that repaints a listed surface, and each carries its listed colour', () => {
