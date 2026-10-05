@@ -39,14 +39,14 @@ function code(file: string): string {
  * every harness file chooses through `looks.ts`, and this refuses the
  * by-id functions anywhere else in `layout/`.
  *
- * Allowed: `looks.ts` (the resolver), and the two modules that BUILD the kit's
- * look from a shipped row — `workshopLook.ts` (the base row the file names)
- * and `workshopStarter.ts` (a shipped look written out as a starter). Tests
- * are not harness code. Proved red by planting `decodeTheme(themeId)` back in
- * `probe.ts`'s `paint()`.
+ * Allowed: `looks.ts` (the resolver), and `workshopStarter.ts` (a shipped
+ * look written out as a starter). The kit's look is built from its base row
+ * by `src/domain/lookData.ts` since step 8b1, so `workshopLook.ts` names the
+ * kit's place and reads no row by id. Tests are not harness code. Proved red
+ * by planting `decodeTheme(themeId)` back in `probe.ts`'s `paint()`.
  */
 describe('the-harness-chooses-looks-in-one-place', () => {
-    const ALLOWED = new Set(['looks.ts', 'workshopLook.ts', 'workshopStarter.ts']);
+    const ALLOWED = new Set(['looks.ts', 'workshopStarter.ts']);
     const BANNED = [/\bdecodeTheme\(/, /\battachmentsForTheme\(/, /\bwornAttachments\(/, /\bwornFrom\(/, /\bSHIPPED_THEMES\b/];
 
     it('no harness file but the resolver picks a look by id', () => {

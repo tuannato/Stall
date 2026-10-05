@@ -24,7 +24,7 @@ import {
     MIN_CONTRAST,
     contrastRatio,
 } from './theme';
-import { moodClassProblems } from '../../layout/moodClass';
+import { moodClassProblems } from './moodClass';
 
 const bits = (...ns: number[]): number => ns.reduce((f, n) => f | (1 << n), 0);
 

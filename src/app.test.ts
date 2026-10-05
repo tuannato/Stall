@@ -399,7 +399,7 @@ describe('decoration-does-not-queue-behind-the-price', () => {
 
 describe('a-full-load-wears-nothing-it-cannot-prove', () => {
     /**
-     * §7: the flag is not the entitlement. `wornAttachments` skips the
+     * §7: the flag is not the entitlement. `wornForLook` skips the
      * holdings check when handed `undefined` — the picker's preview
      * affordance — and `loadCurrent`'s `heldTokens` is `undefined` on
      * exactly the two paths that must fail closed on a visitor's screen: a
@@ -420,9 +420,12 @@ describe('a-full-load-wears-nothing-it-cannot-prove', () => {
     })();
 
     it('the view\'s worn list is computed against a definite holdings set', () => {
-        const worn = body.slice(body.indexOf('worn: wornAttachments('));
-        expect(worn.length, 'loadCurrent no longer computes worn').toBeGreaterThan(0);
-        expect(worn.slice(0, 200)).toMatch(/heldTokens \?\? NOTHING_HELD/);
+        // The merged view since step 8b1 (`lookTable.ts`): the site moved, the
+        // rule did not. An anchor that is not found is a failure, never a
+        // one-character slice from the end of the body.
+        const at = body.indexOf('worn: wornForLook(');
+        expect(at, 'loadCurrent no longer computes worn').toBeGreaterThanOrEqual(0);
+        expect(body.slice(at, at + 200)).toMatch(/heldTokens \?\? NOTHING_HELD/);
     });
 });
 

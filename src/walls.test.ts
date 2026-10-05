@@ -59,6 +59,15 @@ function read(p: string): string {
 const LAYOUT_OR_WORKSHOP =
     /(?:from\s*|import\s*|@import\s*|url\(\s*)['"]?(?:\.\.\/)+(?:layout|workshop)\//;
 
+/**
+ * An import of the look table, the look data validator or the private looks
+ * module. The edge reads nothing private (step 8): a private look's data
+ * reaches the app through `lookTable.ts` alone, and the edge's one look fact
+ * is `ogImageFor`, a literal of the shipped cards.
+ */
+const PRIVATE_LOOK_ROAD =
+    /(?:from\s*|import\s*\(?\s*)['"](?:virtual:stall-private-looks|[^'"]*\/domain\/look(?:Table|Data))['"]/;
+
 describe('directory-walls', () => {
     it('keeps domain pure, net off document, ui off chronik, the harness out, and keys empty', () => {
         const files = walk(SRC);
@@ -107,6 +116,7 @@ describe('directory-walls', () => {
             expect(text, rel).not.toMatch(/src\/ui\//);
             expect(text, rel).not.toMatch(/from ['"]ecash-wallet['"]/);
             expect(text, rel).not.toMatch(LAYOUT_OR_WORKSHOP);
+            expect(text, rel).not.toMatch(PRIVATE_LOOK_ROAD);
         }
     });
 });
@@ -150,5 +160,17 @@ describe('directory-walls-still-sees-code', () => {
         }
         // A directory of the same name inside `src/` is not the harness.
         expect("import { x } from './layout/grid';").not.toMatch(LAYOUT_OR_WORKSHOP);
+    });
+
+    it('sees every road from the edge into a private look', () => {
+        for (const road of [
+            "import { decodeLook } from '../../src/domain/lookTable';",
+            "import { lookFromData } from '../../src/domain/lookData';",
+            "import { privateLooks } from 'virtual:stall-private-looks';",
+            "const m = await import('virtual:stall-private-looks');",
+        ]) {
+            expect(road).toMatch(PRIVATE_LOOK_ROAD);
+        }
+        expect("import { isLegibleText } from '../../src/domain/text';").not.toMatch(PRIVATE_LOOK_ROAD);
     });
 });

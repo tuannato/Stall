@@ -903,8 +903,8 @@ describe('a-mood-class-is-look-scoped', () => {
      * and never beside another row's class — a mood's class is never a
      * decoration's selector. In a look's sheet the look lint already holds
      * every selector under that class. The shape and the owner are
-     * `moodClassProblems` (`layout/moodClass.ts`), read by the catalogue's
-     * pin test and the kit. No shipped mood carries a class today, so the
+     * `moodClassProblems` (`src/domain/moodClass.ts`), read by the catalogue's
+     * pin test and the look data validator. No shipped mood carries a class today, so the
      * plants are what show the rule refusing.
      */
     const sheets = SERVED_SHEETS.map((sheet) => ({

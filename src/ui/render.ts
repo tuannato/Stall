@@ -77,13 +77,17 @@ import { recordAge } from '../domain/age';
 import {
     attachmentClasses,
     attachmentNodesWanted,
-    attachmentsForTheme,
     withMood,
-    publishableFlags,
-    wornAttachments,
     type ShippedAttachment,
-    SHIPPED_ATTACHMENTS,
 } from '../domain/attachments';
+import {
+    attachmentsForLook,
+    decodeLook,
+    publishableLookFlags,
+    wornForLook,
+    LOOK_ATTACHMENTS,
+    LOOK_ROWS,
+} from '../domain/lookTable';
 import type {
     SelectionAsk,
     RememberedSurcharge,
@@ -115,8 +119,6 @@ import {
     FONT_STACKS,
     NEO_CITY_THEME_ID,
     RURAL_THEME_ID,
-    SHIPPED_THEMES,
-    decodeTheme,
     themeVars,
     type DecodedTheme,
 } from '../domain/theme';
@@ -539,7 +541,7 @@ export function paintedThemeId(view: StallView): number {
  */
 export function paintedTheme(view: StallView): DecodedTheme {
     const previewed = activePreview(view);
-    return previewed !== undefined ? decodeTheme(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
+    return previewed !== undefined ? decodeLook(previewed.themeId) : (view.theme ?? DEFAULT_THEME);
 }
 
 /**
@@ -664,7 +666,7 @@ export function renderStall(
      * attends must not be navigable into a state the seller has to walk over
      * and fix. What it does NOT drop is the decoration set: the owner's call
      * (2026-09-18) is that whatever look and decor a seller chose paints here
-     * in full, so `wornAttachments` runs exactly as it does on the shop.
+     * in full, so `wornForLook` runs exactly as it does on the shop.
      *
      * The ornament strip is the one thing left off. Round 9 took the hexagon
      * off the seller's sign because it made Stall a co-author of their
@@ -689,7 +691,7 @@ export function renderStall(
             stall,
             theme,
             previewed !== undefined
-                ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+                ? wornForLook(previewed.themeId, previewed.attachmentFlags)
                 : (view.worn ?? []),
             { ornament: false },
         );
@@ -780,7 +782,7 @@ export function renderStall(
         view.route.kind === 'home'
             ? []
             : previewed !== undefined
-              ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+              ? wornForLook(previewed.themeId, previewed.attachmentFlags)
               : (view.worn ?? []),
     );
 
@@ -926,7 +928,7 @@ export function renderStall(
     placeAttachmentNodes(
         stall,
         previewed !== undefined
-            ? wornAttachments(previewed.themeId, previewed.attachmentFlags)
+            ? wornForLook(previewed.themeId, previewed.attachmentFlags)
             : (view.worn ?? []),
     );
 
@@ -1026,7 +1028,7 @@ function dressLook(
     /*
      * The look's own stylesheet, by class (owner's ruling, 2026-08-30:
      * the design files apply directly). The chain still supplies only a
-     * one-byte id — `decodeTheme` turns it into a row, and the row names a
+     * one-byte id — `decodeLook` turns it into a row, and the row names a
      * class over CSS we ship, exactly as it names the ornament kind. Unknown
      * ids wear the default's row, and so its class.
      */
@@ -1167,7 +1169,7 @@ function doorBar(): HTMLElement {
 
 /**
  * The three looks the deck wears, and the one decoration each shows. Every
- * row is a shipped, minted decoration of that look (`SHIPPED_ATTACHMENTS`);
+ * row is a shipped, minted decoration of that look (`LOOK_ATTACHMENTS`);
  * the deck finds it by class so a renamed row still paints.
  */
 const DECK_LOOKS: ReadonlyArray<{ themeId: number; cls: string; slug: string }> = [
@@ -1202,8 +1204,8 @@ function doorDeck(): HTMLElement {
     // inner, which is how the regen cards showed the legend unstyled.
     const legend = el('div', 'deck-legend');
     for (const spec of DECK_LOOKS) {
-        const theme = decodeTheme(spec.themeId);
-        const worn = SHIPPED_ATTACHMENTS.filter(
+        const theme = decodeLook(spec.themeId);
+        const worn = LOOK_ATTACHMENTS.filter(
             (attachment) => attachment.cls === spec.cls && attachment.themeId === spec.themeId,
         );
         const look = el('div', `deck-look l-${spec.slug}`);
@@ -1226,7 +1228,7 @@ function doorDeck(): HTMLElement {
         placeAttachmentNodes(mini, worn);
         demoteOutline(mini);
         look.append(mini);
-        const label = SHIPPED_THEMES.find((row) => row.id === spec.themeId)?.label ?? '';
+        const label = LOOK_ROWS.find((row) => row.id === spec.themeId)?.label ?? '';
         const wornLabel = worn[0]?.label;
         look.append(deckCaption('deck-cap-look', label, wornLabel));
         row.append(look);
@@ -7676,7 +7678,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             );
         }
     };
-    for (const row of SHIPPED_THEMES) {
+    for (const row of LOOK_ROWS) {
         const button = el('button', 'seg-b', row.label);
         button.type = 'button';
         button.setAttribute('data-theme-id', String(row.id));
@@ -7782,7 +7784,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         };
         // The record never names an unminted row's bit — previewing one is
         // free, signing it would pin a row nothing can hold yet (§6).
-        const signable = publishableFlags(chosenTheme, flags);
+        const signable = publishableLookFlags(chosenTheme, flags);
         const hex = encodeManifestHex(input.value, chosenTheme, signable, extras);
         const cashtab = hex === undefined ? undefined : cashtabPublishUrl(address, hex);
         const pay = hex === undefined ? undefined : payECashPublishUrl(address, hex);
@@ -7820,7 +7822,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         const recordLook = view.theme ?? DEFAULT_THEME;
         parts.push({
             label: copy.SUMMARY_LOOK,
-            value: lookLabel(chosenTheme === recordLook.id ? recordLook : decodeTheme(chosenTheme)),
+            value: lookLabel(chosenTheme === recordLook.id ? recordLook : decodeLook(chosenTheme)),
         });
         if (extras.tagline !== undefined) {
             parts.push({ label: copy.SUMMARY_TAGLINE });
@@ -7831,7 +7833,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (extras.fiatHint !== undefined) {
             parts.push({ label: copy.SUMMARY_FIAT_HINT, value: extras.fiatHint.toUpperCase() });
         }
-        const worn = wornAttachments(chosenTheme, signable);
+        const worn = wornForLook(chosenTheme, signable);
         if (worn.length > 0) {
             parts.push({
                 label: copy.SUMMARY_DECOR,
@@ -7953,7 +7955,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
 
     const renderDecor = (themeId: number): void => {
         decorWrap.replaceChildren();
-        const rows = attachmentsForTheme(themeId);
+        const rows = attachmentsForLook(themeId);
         if (rows.length === 0) {
             return;
         }
@@ -9210,8 +9212,8 @@ function previewLook(anchor: Element, themeId: number, flags: number): void {
     if (stall === null || stall === undefined || !Number.isInteger(themeId)) {
         return;
     }
-    const worn = wornAttachments(themeId, flags);
-    applyTheme(stall as HTMLElement, decodeTheme(themeId), worn);
+    const worn = wornForLook(themeId, flags);
+    applyTheme(stall as HTMLElement, decodeLook(themeId), worn);
     placeAttachmentNodes(stall as HTMLElement, worn);
 }
 

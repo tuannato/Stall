@@ -23,10 +23,14 @@
  *   pseudo-class, and beside no other row's `att-` class;
  * - **the overlay strip**: `a-mood-class-never-reaches-the-overlay`.
  *
- * Used by the catalogue's pin test, the decor gate and the kit's `look.json`
- * validator, so the three agree on what a mood's class is.
+ * Used by the catalogue's pin test, the decor gate and the look data
+ * validator (`lookData.ts`, which reads the kit's `look.json` and, from 8b2,
+ * a private look's), so the three agree on what a mood's class is. In
+ * `src/domain` since step 8b1, beside that validator: `src/` may not import
+ * the harness (`directory-walls`), and the validator moved here to be the
+ * one reading of a look's data the app and the harness share.
  */
-import type { ShippedAttachment } from '../src/domain/attachments';
+import type { ShippedAttachment } from './attachments';
 
 /** One class: `att-`, then lower-case letters and digits in hyphen-separated runs. */
 export const ATT_CLASS = /^att-[a-z0-9]+(-[a-z0-9]+)*$/;

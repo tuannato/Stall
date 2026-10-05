@@ -12,12 +12,8 @@ import {
     sellerFromPath,
     stallPath,
 } from './domain/route';
-import {
-    ATTACHMENT_FLAGS_TAG,
-    decodeAttachmentFlags,
-    mintedAttachmentTokens,
-    wornAttachments,
-} from './domain/attachments';
+import { ATTACHMENT_FLAGS_TAG, decodeAttachmentFlags } from './domain/attachments';
+import { mintedLookTokens, wornForLook } from './domain/lookTable';
 import { DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
@@ -350,7 +346,7 @@ const TXID = /^[0-9a-f]{64}$/;
 /**
  * The entitlement, absent.
  *
- * `wornAttachments` skips the holdings check when it is handed `undefined` —
+ * `wornForLook` skips the holdings check when it is handed `undefined` —
  * that affordance is for the picker's preview, where a seller looking at a
  * decoration has not claimed to own it. On a visitor's screen it must fail
  * closed: §7 says a flag set over a token the address does not hold paints
@@ -3795,7 +3791,7 @@ export function boot(
      * purchase of a decoration moved a token nobody was watching, so buying
      * one was invisible to the page until the seller published a flag blind.
      */
-    const wantedAttachmentTokens = (): Set<string> => new Set(mintedAttachmentTokens());
+    const wantedAttachmentTokens = (): Set<string> => new Set(mintedLookTokens());
 
     /**
      * The stall's own settings, re-read because something at its address looked
@@ -3863,7 +3859,7 @@ export function boot(
             // bit means a different row under a different theme: carrying the
             // old `worn` across a theme change would paint one look's decoration
             // on another's stall for as long as the entitlement read takes.
-            view.worn = wornAttachments(manifest.theme.id, flags, view.heldTokens ?? NOTHING_HELD);
+            view.worn = wornForLook(manifest.theme.id, flags, view.heldTokens ?? NOTHING_HELD);
             const pubkeyHex = state.pubkeyHex;
             if (pubkeyHex !== undefined) {
                 sessionNames.set(pubkeyHex, manifest.name);
@@ -3915,7 +3911,7 @@ export function boot(
             view: {
                 ...state.view,
                 heldTokens: held,
-                worn: wornAttachments(themeId, flags, held),
+                worn: wornForLook(themeId, flags, held),
             },
         };
         livePaint();
@@ -4975,7 +4971,7 @@ async function loadCurrent(): Promise<AppState> {
         // seller who had just bought a decoration was told they did not hold
         // it. Same one `utxos()` call either way (`loadHoldings` filters
         // locally), and now a purchase is a question this page has asked.
-        const wanted = mintedAttachmentTokens();
+        const wanted = mintedLookTokens();
         // One utxo read per stall open, two answers: which decorations the
         // address holds, and which tokens it holds a mint baton for — the
         // seller's own product, the way a freshly minted token reaches the
@@ -5125,7 +5121,7 @@ async function loadCurrent(): Promise<AppState> {
             // `undefined` here would be the picker's skip-the-check affordance
             // on a visitor's screen, painting a decoration this stall cannot
             // prove it holds.
-            worn: wornAttachments(
+            worn: wornForLook(
                 theme?.id ?? DEFAULT_THEME_ID,
                 attachmentFlags,
                 heldTokens ?? NOTHING_HELD,
