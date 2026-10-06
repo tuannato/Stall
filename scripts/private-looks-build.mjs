@@ -365,10 +365,10 @@ export function privateLooksModuleCode(entries) {
  * filtered by the target and the public lists as the build filtered it.
  * Answers every problem, or none.
  */
-export function checkSelectedDist({ dir, selection, root, facts, git, env }) {
+export function checkSelectedDist({ dir, selection, root, facts, git, env, harnessClasses = [] }) {
     const files = distFiles(dir);
     if (selection === undefined) {
-        return distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [], excluded: [] });
+        return distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [], excluded: [], harnessClasses });
     }
     const { read, files: repoFiles, index } = selectedIndex({ root, selection, facts, git, env });
     const carried = new Set(includedEntries(index, selection.target, facts).map((entry) => entry.slug));
@@ -378,6 +378,7 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env }) {
         shippedClasses: facts.shippedClasses,
         included: looks.filter((look) => carried.has(look.slug)),
         excluded: looks.filter((look) => !carried.has(look.slug)),
+        harnessClasses,
     });
 }
 
@@ -390,9 +391,12 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env }) {
  * line on stderr, whatever the log level, so a forgotten shell export is on
  * screen; and a build that selected anything and wrote to the disk runs the
  * dist check over what it wrote, and fails on a problem
- * (`the-dist-holds-what-the-index-names`).
+ * (`the-dist-holds-what-the-index-names`). `harnessClasses` is a harness
+ * build's alone (8e2: the layout probe's and the kit's configs hand
+ * `HARNESS_LOOK_CLASSES`): the looks that build carries of the harness's
+ * own, which the dist check reads as the harness's (`distLooksProblems`).
  */
-export function privateLooksPlugin({ facts, validateLook, vars, env = process.env, git } = {}) {
+export function privateLooksPlugin({ facts, validateLook, vars, env = process.env, git, harnessClasses = [] } = {}) {
     let root = process.cwd();
     let outDir;
     let writes = true;
@@ -476,7 +480,7 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
         closeBundle() {
             try {
                 if (selection !== undefined && writes && outDir !== undefined) {
-                    const problems = checkSelectedDist({ dir: outDir, selection, root, facts, git, env });
+                    const problems = checkSelectedDist({ dir: outDir, selection, root, facts, git, env, harnessClasses });
                     if (problems.length > 0) {
                         throw new Error(`private looks: ${outDir} does not hold what its selection carries:\n  - ${problems.join('\n  - ')}`);
                     }

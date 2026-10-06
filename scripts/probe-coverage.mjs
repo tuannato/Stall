@@ -13,7 +13,13 @@
  *   so what the desk pass owes there is a Cycle card seen skipping one, and
  *   the canvas pass a stream card and a ticker item (`skipChecks`).
  * - **`a-shipped-row-states-the-sizes-its-sheet-paints`** reads every shipped
- *   look's row, at both widths.
+ *   look's row, at both widths — and every private look the run's selection
+ *   carries (8e2: `privateClasses`), whose row the build ships beside them.
+ * - **`the-record-road-paints-a-locked-look-as-the-default`** paints the
+ *   record road once for every paid private look the run carries
+ *   (`paidPrivateClasses`, 8e2), at both widths: the harness measures such a
+ *   look through the try-on under its own licence, and this is what holds
+ *   the app's gate to the default while it does.
  * - **`a-door-mini-paints-as-its-own-look`** compares every shipped look's
  *   deck mini with that look's own shop, at both widths.
  * - **`nothing-on-the-wall-is-cut-from-below`** reads the touch wall's
@@ -96,7 +102,11 @@ const WALL_ROLES = [
  * looks whose rows must be read; `skeleton` is whether the skeleton was
  * measured (the ordinary run, not the kit's).
  */
-export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton = false, sheetedClasses = [] } = {}) {
+export function probeCoverageGaps(
+    pass,
+    report,
+    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [] } = {},
+) {
     const gaps = [];
     const sheetsRead = new Set(report.lookSheetsRead ?? []);
     for (const cls of sheetedClasses) {
@@ -165,13 +175,23 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     }
     const rows = new Set(report.rowSizeClasses ?? []);
     const minis = new Set(report.doorMiniClasses ?? []);
-    for (const cls of shippedClasses) {
+    for (const cls of [...shippedClasses, ...privateClasses]) {
         if (!rows.has(cls)) {
             gaps.push(`a-shipped-row-states-the-sizes-its-sheet-paints read no row for ${cls}`);
         }
+    }
+    // The door's deck is the three shipped looks by design (Q8): a private
+    // look owes no mini.
+    for (const cls of shippedClasses) {
         if (!minis.has(cls)) {
             gaps.push(`a-door-mini-paints-as-its-own-look compared no ${cls} mini with its shop`);
         }
+    }
+    if ((report.recordRoadChecks ?? 0) !== paidPrivateClasses.length) {
+        gaps.push(
+            `the-record-road-paints-a-locked-look-as-the-default painted ${report.recordRoadChecks ?? 0} record(s) ` +
+                `where the run carries ${paidPrivateClasses.length} paid look(s)${paidPrivateClasses.length === 0 ? '' : ` (${paidPrivateClasses.join(', ')})`}`,
+        );
     }
     if (skeleton && pass === 'mobile') {
         const tiers = report.ladderTiers ?? {};
@@ -246,6 +266,7 @@ export function probeCoverageLine(pass, report) {
         skipped +
         ` · rows read: ${(report.rowSizeClasses ?? []).join(', ') || 'none'}` +
         ` · door minis: ${(report.doorMiniClasses ?? []).join(', ') || 'none'}` +
+        ((report.recordRoadChecks ?? 0) === 0 ? '' : ` · locked records painted as the default: ${report.recordRoadChecks}`) +
         ` · small text read: ${report.floorNamedChecks ?? 0}` +
         ` (under 11px, aria-hidden: ${(report.smallText ?? []).join('; ') || 'none'})` +
         ` · outlined lines read: ${report.outlineChecks ?? 0}` +

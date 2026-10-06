@@ -19,13 +19,28 @@
  * from `node_modules` belongs to its package, and everything else is the
  * app's own. `scripts/notices.test.mjs` fails when the committed file is
  * not byte-for-byte what this writes.
+ *
+ * **The file is the public build's, whatever the shell selects** (8e2):
+ * `bundleInventory` builds with no private look unless it is handed an
+ * environment that names one, so `public/licenses.txt` is written from the
+ * public build under a selection too. A private look's faces are its own
+ * look's to name, in the notices a deploy build writes beside this file
+ * (`noticesWithLookFonts`, `a-deploy-build-names-every-face-it-serves`).
+ * **Under a selection** (`harnessSelection`) the script also builds what
+ * the selection carries and holds it to that: the build ships no package
+ * this file does not name — a look is data, and brings no code — and every
+ * face it emits is a tracked face (`FONTS`) or one a carried look's
+ * `fonts.json` names (`selectedNoticesProblems`); it says which faces the
+ * deploy build's notices will add.
  */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
-import { selectionRefusal } from './looks-selection.mjs';
+import { LOOK_FONTS_FILE } from './look-faces.mjs';
+import { LOOKS_ENV, harnessSelection } from './looks-selection.mjs';
 import { classifyModule, noticesText } from './notices-lib.mjs';
+import { MATERIALISED_PREFIX } from './private-looks-build.mjs';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const NOTICES_PATH = join(ROOT, 'public', 'licenses.txt');
@@ -94,21 +109,39 @@ export const FONTS = [
 const FONT_FILE = /\.(woff2?|ttf|otf|eot)$/i;
 
 /**
- * What the bundle ships: every chunk module with its rendered length, and
- * every emitted asset with the source files it came from.
+ * Run `fn` with this process's private-look variables as `env` names them
+ * and none else, and put them back after: the private-look plugin reads the
+ * selection from `process.env` when a build starts, and an in-process build
+ * has no environment of its own.
  */
-export async function bundleInventory() {
-    // The notices are the public build's: a selected private look's faces
-    // are its own look's to name (8e), never this file's (the 8b2 critic's
-    // item 2). Refused here, where the build starts, not at the module's top:
-    // tests import FONTS from this file.
-    const refusal = selectionRefusal('notices', process.env);
-    if (refusal !== undefined) {
-        throw new Error(refusal);
+async function withLooksEnv(env, fn) {
+    const saved = Object.fromEntries(LOOKS_ENV.map((name) => [name, process.env[name]]));
+    for (const name of LOOKS_ENV) {
+        if (env[name] === undefined) delete process.env[name];
+        else process.env[name] = env[name];
     }
+    try {
+        return await fn();
+    } finally {
+        for (const [name, value] of Object.entries(saved)) {
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
+    }
+}
+
+/**
+ * What the bundle ships: every chunk module with its rendered length, and
+ * every emitted asset with the source files it came from. **The public
+ * build** unless `env` names a selection (8e2): the variables the shell set
+ * are set aside for the build and put back after, so the notices are never
+ * a selected look's by accident — the one road to a carrying inventory is a
+ * caller that hands its selection's variables over.
+ */
+export async function bundleInventory({ env = {} } = {}) {
     const modules = [];
     const assets = [];
-    await build({
+    await withLooksEnv(env, () => build({
         root: ROOT,
         logLevel: 'silent',
         build: { write: false },
@@ -131,8 +164,65 @@ export async function bundleInventory() {
                 },
             },
         ],
-    });
+    }));
     return { modules, assets };
+}
+
+/**
+ * The package folders an inventory ships code from (a module's rendered
+ * length over zero). A carried look's sheet, imported `?url` from the
+ * directory the build writes it to (`MATERIALISED_PREFIX`), is a module too:
+ * the look's data, never a package, and set aside here.
+ */
+function packageDirs(inventory) {
+    const dirs = new Set();
+    for (const { id, renderedLength } of inventory.modules) {
+        if (renderedLength > 0 && !id.includes(`/${MATERIALISED_PREFIX}`)) {
+            const kind = classifyModule(id, ROOT);
+            if (kind.kind === 'package') dirs.add(kind.dir);
+        }
+    }
+    return dirs;
+}
+
+/**
+ * Why a build carrying a selection does not ship what the public notices and
+ * its looks' own `fonts.json` name, as sentences (8e2): a package the public
+ * build does not ship — a look is data and brings no code — or a face that
+ * is neither a tracked face (`FONTS`) nor one a carried look serves, as the
+ * build writes it (under its materialised directory, `MATERIALISED_PREFIX`)
+ * and its `fonts.json` names. Also answers the carried faces, by file. Pure:
+ * inventories and the looks' face lists in.
+ */
+export function selectedNoticesProblems({ publicInventory, selectedInventory, lookFaces }) {
+    const problems = [];
+    const known = packageDirs(publicInventory);
+    for (const dir of packageDirs(selectedInventory)) {
+        if (!known.has(dir)) {
+            problems.push(`the selection's build ships ${dir.slice(ROOT.length + 1)}, which the public build does not — a look brings no code`);
+        }
+    }
+    const faces = new Set();
+    for (const asset of selectedInventory.assets) {
+        for (const source of asset.originalFileNames) {
+            if (!FONT_FILE.test(source) || source.includes('node_modules/')) continue;
+            if (FONTS.some((font) => font.files[source] !== undefined)) continue;
+            const carried = source.includes(`/${MATERIALISED_PREFIX}`) && lookFaces.includes(basename(source));
+            if (carried) {
+                faces.add(basename(source));
+            } else {
+                problems.push(`the selection's build emits a face no notice names: ${source} (${asset.fileName})`);
+            }
+        }
+    }
+    return { problems, faces: [...faces].sort() };
+}
+
+/** The face files a carried look's `fonts.json` names (8e1's shape), by file name. */
+export function lookFaceFiles(fontsText) {
+    if (fontsText === undefined) return [];
+    const json = JSON.parse(fontsText);
+    return (json?.fonts ?? []).flatMap((font) => Object.keys(font?.files ?? {}));
 }
 
 function licenceFile(dir, pattern) {
@@ -217,8 +307,30 @@ export function composeNotices(inventory) {
 }
 
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
-    const text = composeNotices(await bundleInventory());
+    const selection = harnessSelection('notices');
+    const publicInventory = await bundleInventory();
+    const text = composeNotices(publicInventory);
     writeFileSync(NOTICES_PATH, text);
     const count = (text.match(/^- /gm) ?? []).length;
-    console.log(`wrote public/licenses.txt: ${text.length} bytes, ${count} entries`);
+    console.log(`wrote public/licenses.txt: ${text.length} bytes, ${count} entries${selection === undefined ? '' : ' (the public build)'}`);
+    if (selection !== undefined) {
+        const { harnessLooks } = await import('./harness-looks.mjs');
+        const { privateLookReads } = await import('./served-sheets.mjs');
+        const carried = await harnessLooks(selection);
+        console.log(`  notices: and the build of ${carried.line}`);
+        const reads = await privateLookReads({ env: carried.env });
+        const lookFaces = reads.flatMap((look) => lookFaceFiles(look.fontsText));
+        const selectedInventory = await bundleInventory({ env: carried.env });
+        const { problems, faces } = selectedNoticesProblems({ publicInventory, selectedInventory, lookFaces });
+        if (problems.length > 0) {
+            console.error(`✗ notices: the selection's build ships what no notice names:\n    ${problems.join('\n    ')}`);
+            process.exit(1);
+        }
+        console.log(
+            `✓ notices: the selection's build ships the public notices' packages and no other; ` +
+                (faces.length === 0
+                    ? 'it serves no face of a look\'s own'
+                    : `the deploy build's own licenses.txt adds ${faces.join(', ')} (named in ${LOOK_FONTS_FILE})`),
+        );
+    }
 }

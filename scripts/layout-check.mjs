@@ -42,11 +42,19 @@ import {
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
-import { refuseSelection } from './looks-selection.mjs';
+import { harnessSelection, refuseSelection } from './looks-selection.mjs';
+import { harnessLooks } from './harness-looks.mjs';
+import { SERVED_SHEETS } from './sheet-roles.mjs';
 
-// A harness command measures the public build until 8e2 teaches it a private
-// look (the 8b2 critic's item 2): nothing is built under a selection.
-refuseSelection('test:layout');
+/*
+ * The private looks this run measures (8e2): the selection the shell names,
+ * whole, or none — half a selection stops the run before it builds
+ * (`harnessSelection`). With one, the probe's build carries what a build
+ * with it carries, every pass measures those looks beside the shipped ones,
+ * and every class they paint is expected below; with none, the run is the
+ * public one it was before 8e2.
+ */
+const SELECTION = harnessSelection('test:layout');
 
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the
@@ -70,6 +78,20 @@ if (LOOKS !== 'shipped' && LOOKS !== 'workshop') {
     console.error(`layout-check: --looks is "shipped" or "workshop", not "${LOOKS}"`);
     process.exit(1);
 }
+if (LOOKS === 'workshop') {
+    // The kit's probe judges a creator's look alone (`measuredLooks`), so a
+    // selection would put a look in its build that no pass reads.
+    refuseSelection('workshop:probe', "the kit's probe measures the kit's look alone and reads no private look");
+}
+/*
+ * What the selection carries, read once, with its commit pinned: the build
+ * below is handed that commit (`CARRIED.env`), so the looks this run
+ * expects are the looks its build carries, one commit's (`harness-looks.mjs`).
+ */
+const CARRIED = await harnessLooks(SELECTION);
+if (SELECTION !== undefined) {
+    console.log(`  test:layout measures the private looks of ${CARRIED.line}`);
+}
 const PROBE_PAGE = LOOKS === 'workshop' ? 'layout/probe-workshop.html' : 'layout/probe.html';
 /*
  * The preview server and Chrome this run starts are process groups of their
@@ -84,16 +106,25 @@ stopOnSignals('layout-check');
  * of the page: the page reports what it PAINTED (`sheetClasses`, every `t-*`
  * class on every `.stall`) and the runner refuses any pass whose set is not
  * exactly this one — the workshop critic's P1, a kit page that painted Modern
- * by id and read as a skeleton that passed. A fourth shipped look adds its
- * class to this line. `t-skeleton` is the harness's own look (the default row
- * under a class no sheet styles, `layout/looks.ts`), measured beside the
- * shipped three since step 2d. Tests:
+ * by id and read as a skeleton that passed. **Derived, never listed** (8e2):
+ * the shipped looks are the role table's look rows (`sheet-roles.mjs`, held
+ * to the theme table by `every-look-row-loads-its-sheet-the-way-its-role-says`),
+ * so a fourth shipped look is expected the day its row lands, and the
+ * private looks are what the selection carries (`CARRIED`). `t-skeleton` is
+ * the harness's own look (the default row under a class no sheet styles,
+ * `layout/looks.ts`), measured beside the shipped three since step 2d. Tests:
  * `the-workshop-probe-measures-the-workshop-look`,
- * `the-skeleton-is-the-default-row-under-a-class-no-sheet-styles`.
+ * `the-skeleton-is-the-default-row-under-a-class-no-sheet-styles`,
+ * `the-runner-expects-the-classes-it-derives`.
  */
-const SHIPPED_SHEET_CLASSES = LOOKS === 'workshop' ? [] : ['t-modern', 't-neo', 't-rural'];
+const SHIPPED_SHEET_CLASSES =
+    LOOKS === 'workshop' ? [] : SERVED_SHEETS.filter((sheet) => sheet.role === 'look').map((sheet) => sheet.lookClass);
+/** The private looks the selection carries, by class: none without a selection. */
+const PRIVATE_SHEET_CLASSES = CARRIED.looks.map((look) => look.cls);
+/** The paid ones, whose record road the probe holds to the default (`the-record-road-paints-a-locked-look-as-the-default`). */
+const PAID_PRIVATE_CLASSES = CARRIED.looks.filter((look) => look.paid).map((look) => look.cls);
 const EXPECTED_SHEET_CLASSES =
-    LOOKS === 'workshop' ? ['t-workshop'] : [...SHIPPED_SHEET_CLASSES, 't-skeleton'];
+    LOOKS === 'workshop' ? ['t-workshop'] : [...SHIPPED_SHEET_CLASSES, ...PRIVATE_SHEET_CLASSES, 't-skeleton'];
 
 /*
  * The faces every probe page owes before it measures
@@ -119,6 +150,18 @@ function faceFailures(echo) {
         check: FACES_CHECK,
         detail,
     }));
+}
+
+/** Why the private looks a page's build carries are not the ones the selection names, or undefined (8e2). */
+function privateLooksWrong(carried) {
+    if (LOOKS === 'workshop') return undefined;
+    const got = [...(carried ?? [])].sort();
+    const want = [...PRIVATE_SHEET_CLASSES].sort();
+    if (got.join(' ') === want.join(' ')) return undefined;
+    return (
+        `the page's build carries ${got.length === 0 ? 'no private look' : got.join(', ')} where the selection carries ` +
+        `${want.length === 0 ? 'none' : want.join(', ')} (${CARRIED.line})`
+    );
 }
 
 /** Why a painted class set is not the one this run measures, or undefined. */
@@ -380,7 +423,9 @@ const LOOK_PSEUDO_LEVELS = 2;
  * that clipped a whole line out of view would read green. These are
  * ceilings, exact today: a pass that finds more fails and names the count;
  * one that finds fewer says so, and the number here should come down with
- * the change that lowered it.
+ * the change that lowered it. **Over the public run's jobs** — the shipped
+ * looks and the skeleton, what was measured: a private look a selection
+ * carries (8e2) has its own count, printed and pinned by nobody yet.
  */
 const LINE_SKIP_CEILING = {
     mobile: { 'clipped-away': 63, 'not-rendered': 35 },
@@ -1121,7 +1166,11 @@ function gitRev() {
 }
 try {
     currentStep = 'the build';
-    run('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error']);
+    // The selection's own commit, pinned (`CARRIED.env`): the build carries
+    // the looks this run expects, and nothing read twice can differ.
+    run('npx', ['vite', 'build', '--config', PROBE_CONFIG, '--logLevel', 'error'], {
+        env: { ...process.env, ...CARRIED.env },
+    });
     if (LOOKS === 'workshop') {
         // The kit's build is held against what it was given before anything
         // serves it (`workshop-build-check.mjs`); the ordinary probe builds
@@ -1131,15 +1180,12 @@ try {
     currentStep = 'starting the preview server and Chrome';
     await refuseTakenPort(PORT, 'preview server');
     await refuseTakenPort(DEVTOOLS_PORT, 'Chrome DevTools endpoint');
-    server = spawnGroup('the preview server', 'npx', [
-        'vite',
-        'preview',
-        '--config',
-        PROBE_CONFIG,
-        '--port',
-        PORT,
-        '--strictPort',
-    ]);
+    server = spawnGroup(
+        'the preview server',
+        'npx',
+        ['vite', 'preview', '--config', PROBE_CONFIG, '--port', PORT, '--strictPort'],
+        { env: { ...process.env, ...CARRIED.env } },
+    );
     const profile = mkdtempSync(join(tmpdir(), 'stall-layout-'));
     // Best effort, and never the reason a run goes red: Chrome keeps writing
     // to its profile for a moment after the kill, and a leftover temp
@@ -1217,6 +1263,17 @@ try {
             failed = true;
             continue;
         }
+        // The private looks the page's build carries are the ones the
+        // selection names (8e2): a build that dropped one, or carried one
+        // nobody selected, is refused before any of its verdict is believed —
+        // and before the class audit, whose sentence would only say a class
+        // was not painted.
+        const wrongPrivate = privateLooksWrong(report.privateClasses);
+        if (wrongPrivate !== undefined) {
+            console.error(`✗ ${vp.name} (${measured}): ${wrongPrivate}`);
+            failed = true;
+            continue;
+        }
         const wrongLook = sheetClassesWrong(report.sheetClasses);
         if (wrongLook !== undefined) {
             console.error(`✗ ${vp.name} (${measured}): ${wrongLook}`);
@@ -1273,6 +1330,8 @@ try {
         for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
+            privateClasses: PRIVATE_SHEET_CLASSES,
+            paidPrivateClasses: PAID_PRIVATE_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
             sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
         });
@@ -1728,8 +1787,10 @@ try {
     const nameChromeSeen = new Set();
     const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
     const signPart = (sel) => (/(^|\.)stall-name(\.|$)/.test(sel) ? 'name' : 'tagline');
-    // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`).
+    // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`):
+    // the public run's jobs, and a carried private look's apart (8e2).
     const lineSkips = {};
+    const privateLineSkips = {};
     try {
         let boxes = 0;
         // Jobs whose rain was sampled at its brightest drop, by key: the rule
@@ -1982,8 +2043,13 @@ try {
                     for (const kind of prep.uncovered ?? []) uncoveredKinds.set(kind, (uncoveredKinds.get(kind) ?? 0) + 1);
                     record.skips = firstRead.live.skips ?? {};
                     for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
+                    // The ceiling is the public run's own count (it was
+                    // measured over the shipped looks and the skeleton); a
+                    // private look's jobs are counted apart and printed —
+                    // pinned by nobody yet, as a kit run's are (8e2).
+                    const skipsHere = PRIVATE_SHEET_CLASSES.includes(plannedJob.sheetClass) ? privateLineSkips : lineSkips;
                     for (const why of ['clipped-away', 'not-rendered']) {
-                        const at = (lineSkips[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
+                        const at = (skipsHere[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
                         at[why] += record.skips[why] ?? 0;
                     }
                     // A failing box is re-shot once before it is believed:
@@ -2549,6 +2615,15 @@ try {
                     }
                 }
             }
+            if (PRIVATE_SHEET_CLASSES.length > 0) {
+                // Reported, never held: LINE_SKIP_CEILING is the public run's
+                // measurement, and a ceiling for a private look is a number
+                // nobody has measured yet (the kit's runs pin none either).
+                const said = Object.entries(privateLineSkips)
+                    .map(([viewport, at]) => `${viewport} ${at['clipped-away']} clipped away, ${at['not-rendered']} not rendered`)
+                    .join('; ');
+                console.log(`  private looks' line targets with no line rect (reported, not held): ${said || 'none'}`);
+            }
         }
         if (LOOKS === 'shipped' && lookPseudoJobs === 0) {
             // Neo's sheet generates pseudos on every screen with a heading or
@@ -2587,7 +2662,14 @@ try {
             // The sign's name is read on every shipped look, bare and worn
             // (D14): a name the pass stopped reading on one is named.
             const read = new Set([...nameLeast.keys()].map((at) => at.replace(/ \(ring\)$/, '')));
-            const owed = SHIPPED_SHEET_CLASSES.flatMap((cls) => [`name ${cls}`, `name ${cls} + worn`]);
+            // Every carried private look's sign too (8e2): bare always, and
+            // all worn wherever the plan wears it (a look with no rows has
+            // no worn job to read).
+            const wornInPlan = new Set(plan.filter((j) => j.flags === 0xffff).map((j) => j.sheetClass));
+            const owed = [
+                ...SHIPPED_SHEET_CLASSES.flatMap((cls) => [`name ${cls}`, `name ${cls} + worn`]),
+                ...PRIVATE_SHEET_CLASSES.flatMap((cls) => [`name ${cls}`, ...(wornInPlan.has(cls) ? [`name ${cls} + worn`] : [])]),
+            ];
             const unreadNames = owed.filter((at) => !read.has(at));
             if (unreadNames.length > 0) {
                 verdicts.push(`the-sellers-name-on-the-sign-reads read no name on ${unreadNames.join(', ')}`);

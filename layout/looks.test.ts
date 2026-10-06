@@ -234,6 +234,37 @@ describe('the-skeleton-is-the-default-row-under-a-class-no-sheet-styles', () => 
 });
 
 /**
+ * The classes the ordinary runner expects to see painted are derived, never
+ * listed (8e2): the shipped looks from the role table's look rows, which
+ * `every-look-row-loads-its-sheet-the-way-its-role-says` holds to the theme
+ * table, and the private looks from what the run's selection carries
+ * (`harness-looks.mjs`) — so a fourth shipped look is expected the day its
+ * row lands, and a selected look the day it is selected. Read off the
+ * runner's own statements; the run itself refuses a pass whose painted set
+ * differs (`the-workshop-probe-measures-the-workshop-look`), and a page whose
+ * build carries other private looks than the selection's.
+ */
+describe('the-runner-expects-the-classes-it-derives', () => {
+    const runner = readFileSync(join(LAYOUT, '..', 'scripts/layout-check.mjs'), 'utf8');
+    const statement = (name: string): string => {
+        const at = runner.indexOf(`const ${name} =`);
+        expect(at, name).toBeGreaterThan(-1);
+        return runner.slice(at, runner.indexOf(';', at));
+    };
+
+    it('takes the shipped looks from the role table and the private ones from the selection', () => {
+        const shipped = statement('SHIPPED_SHEET_CLASSES');
+        expect(shipped).toContain("SERVED_SHEETS.filter((sheet) => sheet.role === 'look')");
+        for (const cls of SHIPPED_THEMES.map((row) => decodeTheme(row.id).sheetClass)) {
+            expect(shipped, cls).not.toContain(`'${cls}'`);
+        }
+        expect(statement('PRIVATE_SHEET_CLASSES')).toContain('CARRIED.looks.map((look) => look.cls)');
+        expect(statement('EXPECTED_SHEET_CLASSES')).toContain('...PRIVATE_SHEET_CLASSES');
+        expect(statement('CARRIED')).toContain('await harnessLooks(SELECTION)');
+    });
+});
+
+/**
  * A private look (step 8, `scripts/private-looks.mjs`) takes an id
  * `PRIVATE_LOOK_IDS` reserves and a class of its own. The harness's
  * addresses and classes live here, out of `src/`, so this is where they are

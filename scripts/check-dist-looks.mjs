@@ -79,15 +79,32 @@ export function lookSheetNames(css) {
     return [...css.matchAll(/--look-sheet\s*:\s*([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
 }
 
+/** The stylesheets one HTML file links, by path from `dist`'s root. */
+function linkedCss(html) {
+    return [...html.matchAll(/<link\b[^>]*\brel=["']?stylesheet["']?[^>]*>/gi)]
+        .map((m) => /\bhref=["']?([^"' >]+)/i.exec(m[0])?.[1])
+        .filter((href) => href !== undefined)
+        .map((href) => href.replace(/^\//, ''));
+}
+
 /** The stylesheets `index.html` links: the entry CSS every visitor downloads. */
 export function entryCss(files) {
-    const html = files.get('index.html')?.toString('utf8') ?? '';
-    return new Set(
-        [...html.matchAll(/<link\b[^>]*\brel=["']?stylesheet["']?[^>]*>/gi)]
-            .map((m) => /\bhref=["']?([^"' >]+)/i.exec(m[0])?.[1])
-            .filter((href) => href !== undefined)
-            .map((href) => href.replace(/^\//, '')),
-    );
+    return new Set(linkedCss(files.get('index.html')?.toString('utf8') ?? ''));
+}
+
+/**
+ * The stylesheets the harness's own pages link (8e2): every HTML file under
+ * `layout/` in a harness build's `dist` — the showroom's chrome, the
+ * probe's — each its page's entry CSS, never a look's.
+ */
+export function harnessPageCss(files) {
+    const out = new Set();
+    for (const [path, bytes] of files) {
+        if (path.startsWith('layout/') && path.endsWith('.html')) {
+            for (const href of linkedCss(bytes.toString('utf8'))) out.add(href);
+        }
+    }
+    return out;
 }
 
 /** Every file a stylesheet's text names: each `url()` target, and each quoted `image-set()` entry. */
@@ -127,10 +144,28 @@ export function artNamedBy(sheet) {
  * `a-deploy-build-names-every-face-it-serves`): `licenses.txt` names every
  * face file of every included look and carries each face's licence text
  * whole, as the build writes it (`noticesWithLookFonts`).
+ *
+ * **A harness build carries the harness's own looks** (8e2): the layout
+ * probe's build and the workshop kit's (`vite.probe.config.ts`,
+ * `vite.workshop.config.ts`) emit the step-6 fixture look's sheet and the
+ * kit's beside the app — sheets naming a harness class
+ * (`HARNESS_LOOK_CLASSES`) — and the fixture look's art, whose bytes the
+ * tracked private fixture copies. `harnessClasses` names those classes for
+ * such a build alone: a sheet naming one is the harness's, outside the entry
+ * CSS, and a file it names is the harness's too, never a private look's
+ * stray; and a stylesheet a harness page under `layout/` links (the
+ * showroom's chrome) is that page's entry CSS, never a look's
+ * (`harnessPageCss`). Everything else holds on a harness build as on a deploy build. A
+ * deploy build hands none (`vite.config.ts`), so a harness class in its
+ * dist is the stray it always was. Test:
+ * `the-dist-check-knows-a-harness-builds-own-looks`.
  */
-export function distLooksProblems({ files, shippedClasses, included, excluded }) {
+export function distLooksProblems({ files, shippedClasses, included, excluded, harnessClasses = [] }) {
     const problems = [];
     const entry = entryCss(files);
+    // A harness build's own pages link their own entry CSS (8e2): never a
+    // look's, and read as theirs only in a harness build.
+    const harnessPages = harnessClasses.length > 0 ? harnessPageCss(files) : new Set();
     if (!files.has('index.html')) {
         problems.push('no index.html: this is not a built dist');
     }
@@ -149,6 +184,10 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
             if (!paths.every((path) => entry.has(path))) {
                 problems.push(`${cls}: a shipped look's sheet outside the entry CSS (${paths.join(', ')})`);
             }
+        } else if (harnessClasses.includes(cls)) {
+            if (paths.some((path) => entry.has(path))) {
+                problems.push(`${cls}: a harness look's sheet in the entry CSS (${paths.join(', ')})`);
+            }
         } else if (!carried.has(cls)) {
             problems.push(`${cls}: a look sheet in ${paths.join(', ')} that this build's selection does not carry`);
         }
@@ -156,6 +195,18 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
     for (const cls of shippedClasses) {
         if (!declared.has(cls)) {
             problems.push(`${cls}: no shipped look's sheet in the entry CSS — is this the dist the build wrote?`);
+        }
+    }
+    // The files a harness look's sheet names: the harness's own (above).
+    const harnessTargets = new Set();
+    for (const [cls, paths] of declared) {
+        if (!harnessClasses.includes(cls)) {
+            continue;
+        }
+        for (const path of paths) {
+            for (const target of cssTargets(files.get(path).toString('utf8'))) {
+                harnessTargets.add(target.startsWith('/') ? target.slice(1) : posix.normalize(posix.join(posix.dirname(path), target)));
+            }
         }
     }
     const sameBytes = (a, b) => a.length === b.length && a.equals(b);
@@ -213,12 +264,13 @@ export function distLooksProblems({ files, shippedClasses, included, excluded })
             path.startsWith('assets/') &&
             path.endsWith('.css') &&
             !entry.has(path) &&
+            !harnessPages.has(path) &&
             !sheets.has(path) &&
             lookSheetNames(bytes.toString('utf8')).length === 0
         ) {
             problems.push(`${path}: a built stylesheet outside the entry CSS that is no carried look's sheet`);
         }
-        if (targeted.has(path)) {
+        if (targeted.has(path) || harnessTargets.has(path)) {
             continue;
         }
         for (const look of [...included, ...excluded]) {

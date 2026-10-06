@@ -77,6 +77,19 @@
  * `LOOKS_DIFF_CDP_PORT`), refused when taken, and the same process-group
  * cleanup as the probe and the kit (`process-groups.mjs`).
  *
+ * - **Under a private-look selection** (8e2; `harnessSelection`), both
+ *   sides carry the same private commit's looks — the selection's commit,
+ *   read once and pinned into both builds (`harness-looks.mjs`) — and the
+ *   plan shoots every carried look beside the shipped ones. The tracked
+ *   fixture is read from git, so the `<ref>` side's tree is made a
+ *   repository whose objects are this checkout's (an `alternates` file) and
+ *   reads the fixture at the same commit the working tree's build does.
+ *   **A side that cannot paint the carried looks is refused, never
+ *   compared**: a `<ref>` from before 8e2 has a showroom that paints no
+ *   private look (it publishes no `__privateLooks`), and the run stops with
+ *   exit 3 before a shot is taken. With no selection the run is the one it
+ *   was before 8e2.
+ *
  * What it cannot see: a difference the fixtures never paint, an animation at
  * any other instant than the one it pauses on, whatever moves under the
  * ribbon's mask, and a `<ref>` whose dependencies differ from the working
@@ -100,11 +113,16 @@ import {
     stopOnSignals,
     waitUntil,
 } from './process-groups.mjs';
-import { refuseSelection } from './looks-selection.mjs';
+import { FIXTURE_LOOKS_DIR, SELECTION_ENV, harnessSelection } from './looks-selection.mjs';
+import { harnessLooks } from './harness-looks.mjs';
+import { GIT_LOCATION_VARS } from './private-looks.mjs';
 
-// A harness command measures the public build until 8e2 teaches it a private
-// look (the 8b2 critic's item 2): nothing is built under a selection.
-refuseSelection('looks:diff');
+/*
+ * The private looks both sides carry (8e2): the selection the shell names,
+ * whole, or none — half a selection stops the run before it builds
+ * (`harnessSelection`).
+ */
+const SELECTION = harnessSelection('looks:diff');
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 process.chdir(ROOT);
@@ -200,6 +218,34 @@ const shaRun = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{co
 if (shaRun.status !== 0) usage(`"${ref}" names no commit here.`);
 const sha = shaRun.stdout.trim();
 
+/*
+ * What the selection carries, its commit read once (`harness-looks.mjs`):
+ * the working tree's build is handed it as read, the `<ref>`'s the same
+ * commit — for the tracked fixture, through the repository its tree is
+ * made (below).
+ */
+const CARRIED = await harnessLooks(SELECTION);
+if (SELECTION !== undefined) {
+    console.log(`  looks:diff carries, on both sides, the private looks of ${CARRIED.line}`);
+    // Refused before anything is built when the `<ref>`'s showroom cannot
+    // paint a private look at all (it predates 8e2): its build would carry
+    // the look and no shot would show it. The showroom's own answer, read
+    // once both sides are up, is the authority (`screensOf`).
+    const gallery = spawnSync('git', ['show', `${sha}:layout/gallery.ts`], { encoding: 'utf8' });
+    if (gallery.status !== 0 || !gallery.stdout.includes('__privateLooks')) {
+        console.error(
+            `looks:diff: ${ref} (${sha.slice(0, 12)}) has a showroom that paints no private look (it predates 8e2), ` +
+                'so the selection cannot be compared there — compare against a later ref, or run with no selection',
+        );
+        process.exit(EXIT_FAILED);
+    }
+}
+/** The private-look variables each side's builds are handed: none without a selection. */
+const LOOKS_ENV_OF = {
+    work: CARRIED.env,
+    ref: CARRIED.fixture ? { ...CARRIED.env, [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR } : CARRIED.env,
+};
+
 const chrome = findChrome();
 if (chrome === undefined) {
     console.error(`looks:diff: no Chrome found. Install one of: ${CHROMES.join(', ')}`);
@@ -208,11 +254,11 @@ if (chrome === undefined) {
 
 stopOnSignals('looks:diff');
 
-function build(cwd, outDir, what) {
+function build(cwd, outDir, what, looksEnv) {
     const r = spawnSync('npx', ['vite', 'build', '--config', CONFIG, '--outDir', outDir, '--logLevel', 'error'], {
         cwd,
         stdio: 'inherit',
-        env: { ...process.env, STALL_WORKSHOP_CMD: CONFIG_CMD },
+        env: { ...process.env, STALL_WORKSHOP_CMD: CONFIG_CMD, ...looksEnv },
     });
     if (r.status !== 0) throw new Error(`the ${what} build failed (vite exited ${r.status})`);
     if (!existsSync(join(cwd, outDir, 'layout', 'gallery.html'))) {
@@ -220,13 +266,31 @@ function build(cwd, outDir, what) {
     }
 }
 
-function preview(cwd, outDir, name) {
+function preview(cwd, outDir, name, looksEnv) {
     return spawnGroup(
         name,
         'npx',
         ['vite', 'preview', '--config', CONFIG, '--outDir', outDir, '--port', PORT, '--strictPort'],
-        { env: { ...process.env, STALL_WORKSHOP_CMD: CONFIG_CMD }, cwd },
+        { env: { ...process.env, STALL_WORKSHOP_CMD: CONFIG_CMD, ...looksEnv }, cwd },
     );
+}
+
+/**
+ * Make the `<ref>`'s tree a repository whose objects are this checkout's
+ * (8e2): the tracked fixture is read from git at a commit, a `git archive`
+ * carries no repository, and the build reads the fixture only as a subtree
+ * of its own root's repository. `git init` there and an `alternates` file
+ * naming this checkout's object store let the `<ref>`'s build read the
+ * fixture at the selection's commit, the same bytes the working tree's
+ * build reads. Nothing is written to this checkout's repository.
+ */
+function repositoryOver(tree) {
+    const env = { ...process.env };
+    for (const name of GIT_LOCATION_VARS) delete env[name];
+    const init = spawnSync('git', ['init', '-q', tree], { env, encoding: 'utf8' });
+    if (init.status !== 0) throw new Error(`git init in the ${ref} tree exited ${init.status}: ${init.stderr.trim()}`);
+    const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], { env }).toString().trim();
+    writeFileSync(join(tree, '.git', 'objects', 'info', 'alternates'), `${join(common, 'objects')}\n`);
 }
 
 async function evaluate(cdp, sessionId, expression) {
@@ -310,10 +374,13 @@ try {
         );
     }
 
+    if (CARRIED.fixture) {
+        repositoryOver(tree);
+    }
     console.log(`  building ${ref} (${sha.slice(0, 12)}) …`);
-    build(tree, REF_BUILD, ref);
+    build(tree, REF_BUILD, ref, LOOKS_ENV_OF.ref);
     console.log('  building the working tree …');
-    build(ROOT, WORK_BUILD, 'working tree');
+    build(ROOT, WORK_BUILD, 'working tree', LOOKS_ENV_OF.work);
 
     await refuseTakenPort(CDP_PORT, 'Chrome DevTools endpoint');
     const profile = mkdtempSync(join(tmpdir(), 'stall-looks-diff-chrome-'));
@@ -369,13 +436,13 @@ try {
      * runs no animation frame (the paint below would wait for ever).
      */
     const sides = {
-        ref: { cwd: tree, outDir: REF_BUILD, name: ref },
-        work: { cwd: ROOT, outDir: WORK_BUILD, name: 'working tree' },
+        ref: { cwd: tree, outDir: REF_BUILD, name: ref, looksEnv: LOOKS_ENV_OF.ref },
+        work: { cwd: ROOT, outDir: WORK_BUILD, name: 'working tree', looksEnv: LOOKS_ENV_OF.work },
     };
     async function openSide(which) {
-        const { cwd, outDir, name } = sides[which];
+        const { cwd, outDir, name, looksEnv } = sides[which];
         await refuseTakenPort(PORT, `${name} preview server`);
-        const server = preview(cwd, outDir, `the ${name} preview server`);
+        const server = preview(cwd, outDir, `the ${name} preview server`, looksEnv);
         started.push(server);
         const watch = [server, browser];
         await waitUntil(`the ${name} preview`, async () => (await fetch(gallery)).ok, { watch });
@@ -475,6 +542,22 @@ try {
                     "[...(document.querySelector('#gallery-ui select')?.options ?? [])].map((o) => o.value)",
             ),
         );
+        // The private looks this side's showroom paints (8e2): every one the
+        // selection carries, or the side is no comparison of them. A showroom
+        // from before 8e2 publishes none and paints none.
+        const carried = await evaluate(
+            cdp,
+            side.sessionId,
+            "typeof window.__privateLooks === 'function' ? JSON.stringify(window.__privateLooks().map((l) => l.sheetClass).sort()) : null",
+        );
+        const want = CARRIED.looks.map((look) => look.cls).sort();
+        const got = carried === null ? undefined : JSON.parse(carried);
+        if (want.length > 0 ? JSON.stringify(got) !== JSON.stringify(want) : (got ?? []).length > 0) {
+            throw new Error(
+                `the ${side.name} showroom paints ${got === undefined ? 'no private look (it predates 8e2)' : got.join(', ') || 'no private look'} ` +
+                    `where the selection carries ${want.join(', ') || 'none'} — a side that cannot paint the carried looks is refused, never compared`,
+            );
+        }
         // That page carries the control panel: the next shot loads one without.
         side.loadedAt = 0;
         return screens;

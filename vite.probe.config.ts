@@ -1,5 +1,5 @@
 import { mergeConfig } from 'vite';
-import appConfig from './vite.config';
+import appConfig, { forHarness } from './vite.config';
 
 /**
  * The layout probe's build: the app's own config, unchanged, plus
@@ -16,8 +16,14 @@ import appConfig from './vite.config';
  * the build options, and the preview headers, so the probe is still measured
  * under the production CSP and referrer policy. Its own `outDir`, because Vite
  * empties an outDir on every build and `dist/` is the app's.
+ *
+ * And its private-look plugin made for a harness build (`forHarness`, 8e2):
+ * under a selection this build carries the selected looks exactly as a
+ * deploy build would, and the dist check the build runs over `.probe-dist`
+ * reads the step-6 fixture look's sheet and art as the harness's own rather
+ * than a private look's strays.
  */
-export default mergeConfig(appConfig, {
+export default mergeConfig(forHarness(appConfig), {
     build: {
         rollupOptions: { input: { main: 'index.html', layoutProbe: 'layout/probe.html' } },
         outDir: '.probe-dist',
