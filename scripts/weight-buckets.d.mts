@@ -36,7 +36,14 @@ export type LookBudgetVerdict = {
     /** What every run prints for the look: its figure against the target and the cap, and its reason when one admitted it. */
     readonly line: string;
 };
-export declare function lookBudgetVerdict(input: { look: string; total: number; reason?: string | undefined }): LookBudgetVerdict;
+export declare function lookBudgetVerdict(input: {
+    look: string;
+    total: number;
+    reason?: string | undefined;
+    publicLog?: boolean;
+}): LookBudgetVerdict;
+export declare const PUBLIC_LOG_ENV: 'GITHUB_ACTIONS';
+export declare function printsPublicly(env?: Readonly<Record<string, string | undefined>>): boolean;
 export declare function bytesOf(part: BuiltPart): number;
 export declare function builtUrls(css: string): string[];
 export declare function weightBuckets(

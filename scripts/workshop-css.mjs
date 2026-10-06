@@ -341,9 +341,11 @@ function closingParen(text, open) {
  * inside a string or a custom property too, because Vite rewrites those —
  * and each entry of an `image-set(…)` or `-webkit-image-set(…)` that is not
  * itself a `url()`: a quoted string, or the entry's first bare token, which
- * Vite resolves as a path even though a browser would not.
+ * Vite resolves as a path even though a browser would not. Exported for the
+ * weight guard (`scripts/weight-buckets.mjs`), so a look's budget reads the
+ * targets the lint admits and never fewer.
  */
-function urlTargets(text) {
+export function urlTargets(text) {
     const out = [];
     const urlRe = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi;
     for (const m of text.matchAll(urlRe)) {

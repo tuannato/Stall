@@ -47,7 +47,11 @@
  * handed in by `vite.config.ts`, under the look's place, rows mintable); its
  * `sheet.css` through the look rules as a worn-only sheet over its own art
  * (`lintLookSheet`, `font-display` for a face included); every `art/*.svg`
- * through the allow-list (`svg-allow.mjs`, the critic's item 8). Any problem
+ * through the allow-list (`svg-allow.mjs`, the critic's item 8); and its art
+ * budget (`lookBudgetVerdict`: under the target, or under the cap on its
+ * index's `budgetReason`), the same reading the weight guard prints, so a
+ * road that builds without running the suite still refuses a look past it
+ * (the weight-buckets critic's item 9). Any problem
  * fails the build, every problem listed. Then the sheet and the art are
  * written — the SVGs as **re-serialised**, never as given, and every file as
  * the commit's blob, never through an eol or attribute filter (the 8a
@@ -99,6 +103,7 @@ import {
 } from './private-looks.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
+import { lookArtBudget, lookBudgetVerdict, privateLookRows } from './weight-buckets.mjs';
 import { flashReport, lintLookSheet, wornSheetProblems } from './workshop-css.mjs';
 import { sameOwner } from '../src/domain/moodClass.ts';
 
@@ -239,6 +244,36 @@ export function readSelectedLooks({ root, selection, facts, validateLook, vars, 
             problems.push(`${entry.slug}/${why}`);
         }
         const fonts = faceProblems.length === 0 ? lookFontNotices({ fontsText, art: faceArt }) : [];
+        // Its art budget (D-2026-10-06-08, the weight-buckets critic's item
+        // 9): the reading `each-look-keeps-its-art-budget` prints, over the
+        // sheet as written and the art as this build writes it — so a road
+        // that builds without running the suite still refuses a look past
+        // the cap, or between the target and the cap with no stated reason.
+        // An SVG the allow-list refused is not read here; it fails the build
+        // above.
+        if (art.length === sheetArt.length) {
+            let parsed;
+            try {
+                parsed = JSON.parse(lookText);
+            } catch {
+                parsed = undefined;
+            }
+            try {
+                const reading = lookArtBudget({
+                    sheet,
+                    sheetFile: 'sheet.css',
+                    files: new Map(art.map((file) => [`art/${file.name}`, file.bytes])),
+                    rows: privateLookRows({ look: parsed }),
+                });
+                // A build log may be public: a refusal never carries a reason's text anyway.
+                const verdict = lookBudgetVerdict({ look: entry.cls, total: reading.total, reason: entry.budgetReason, publicLog: true });
+                if (!verdict.admitted) {
+                    problems.push(`${entry.slug}: its art budget — ${verdict.line}`);
+                }
+            } catch (error) {
+                problems.push(`${entry.slug}: its art budget could not be read (${error.message})`);
+            }
+        }
         looks.push({ entry, lookText, sheet, art, fonts });
     }
     problems.push(...sharedRowClasses(looks));

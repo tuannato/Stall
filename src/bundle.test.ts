@@ -6,7 +6,8 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { loadKitLook } from '../layout/workshopKit';
 import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
-import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets.mjs';
+import { guardSheets, privateLookReads, privateRows, servedSheets, type PrivateLookRead } from '../scripts/served-sheets.mjs';
+import { gitCommitOf, gitFilesAt, gitTextAt, publicLookFacts, type PublicLookFacts } from '../scripts/private-looks.mjs';
 import { wornSheets } from '../scripts/sheet-roles.mjs';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV, selectionFromEnv, withoutSelection } from '../scripts/looks-selection.mjs';
 import {
@@ -15,6 +16,7 @@ import {
     bytesOf,
     lookArtBudget,
     lookBudgetVerdict,
+    printsPublicly,
     privateLookArtBudget,
     privateLookRows,
     weightBuckets,
@@ -24,6 +26,9 @@ import {
 } from '../scripts/weight-buckets.mjs';
 import { attachmentsForTheme } from './domain/attachments';
 import { SHIPPED_THEMES, decodeTheme } from './domain/theme';
+
+/** This checkout's root. */
+const ROOT = join(import.meta.dirname, '..');
 
 /** Structural, because `rollup` is not a dependency of this app to import types from. */
 type BuiltPart = {
@@ -201,9 +206,11 @@ function cssText(parts: readonly WeighedPart[], names: readonly string[]): strin
  * memory: the app's own config with its private-look plugin made to read
  * that selection (`privateLooks({ env })` in `vite.config.ts`) — a vitest
  * worker selects nothing (`VITEST`), so the selection is handed over rather
- * than read from this process. The one difference from `appParts`.
+ * than read from this process. The one difference from `appParts`. `facts`:
+ * public lists of the test's own, for a plant that needs a second reserved
+ * id (only one is reserved today).
  */
-async function deployParts(selection: Readonly<Record<string, string>>): Promise<readonly WeighedPart[]> {
+async function deployParts(selection: Readonly<Record<string, string>>, facts?: PublicLookFacts): Promise<readonly WeighedPart[]> {
     const { default: config, privateLooks } = await import('../vite.config');
     const env: Record<string, string | undefined> = { ...withoutSelection(process.env), ...selection };
     delete env['VITEST'];
@@ -211,7 +218,7 @@ async function deployParts(selection: Readonly<Record<string, string>>): Promise
     const plugins = (config.plugins ?? []).map((plugin) => {
         if (typeof plugin === 'object' && plugin !== null && (plugin as { name?: string }).name === 'stall-private-looks') {
             swapped += 1;
-            return privateLooks({ env });
+            return privateLooks({ env, ...(facts === undefined ? {} : { facts }) });
         }
         return plugin;
     });
@@ -219,6 +226,22 @@ async function deployParts(selection: Readonly<Record<string, string>>): Promise
     const result = await build({ ...config, configFile: false, plugins, logLevel: 'silent', build: { ...config.build, write: false } });
     return partsOf(result) as unknown as readonly WeighedPart[];
 }
+
+/**
+ * Every private look a build with `selection` carries, read as that build
+ * reads them (`privateLookReads` over the selection alone: the same index,
+ * target and commit), and the worn-only entries the buckets file them under
+ * — every one of them, not only the look a test is about (the
+ * weight-buckets critic's item 5: a preview build carries every look its
+ * index names, and a look left out of the worn list lands on demand, raw).
+ */
+async function carriedLooks(
+    selection: Readonly<Record<string, string>>,
+    { facts, gitEnv }: { facts?: PublicLookFacts; gitEnv?: Readonly<Record<string, string | undefined>> } = {},
+): Promise<readonly PrivateLookRead[]> {
+    return privateLookReads({ env: selection, ...(facts === undefined ? {} : { facts }), ...(gitEnv === undefined ? {} : { gitEnv }) });
+}
+const wornOf = (looks: readonly PrivateLookRead[]) => looks.map((look) => ({ lookClass: look.entry.cls, source: `${look.entry.slug}/sheet.css` }));
 
 /**
  * What a visitor's first load costs, held on the public build and — since
@@ -252,9 +275,14 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * **Kept at 895,000 when the ceilings were split by bucket**
      * (D-2026-10-06-07): this alarm is this bucket's alone again, and the
      * on-demand bucket has its own (`on-demand-weight-has-a-ceiling`). The
-     * served sum that read this bucket a second time, and so fired with
-     * ~28 KB of this ceiling still free, is retired. Each run prints the
-     * reading.
+     * served sum that read this bucket a second time is retired. **The room
+     * is two numbers** (the weight-buckets critic's item 2), and the second
+     * is the one that ships: 28,348 bytes on this public build, and 11,254
+     * on a deploy build carrying the tracked fixture (883,746, 2026-10-06 —
+     * the merged rows, the loader and the paid gate ride the entry, and a
+     * real look's `look.json` costs more than the fixture's 1,173). Each run
+     * prints both: this build's here, the deploy build's in
+     * `each-look-keeps-its-art-budget`.
      */
 
     it(`keeps every visitor's download under ${EVERY_VISITOR_CEILING_BYTES} bytes`, async () => {
@@ -282,11 +310,25 @@ describe('every-visitor-weight-has-a-ceiling', () => {
  * It replaced `served-weight-has-a-ceiling`, which held every-visitor + on
  * demand under one number (1,130,000 at the end) and so counted the
  * every-visitor bucket twice: measured 1,129,498 after step 8f2, it fired
- * with 502 bytes left while every visitor's own download had ~28 KB of its
- * ceiling free (the 8f1 critic's item 5). Its raises, each with the
- * feature that spent the room, are in `git log -G 'const CEILING_BYTES = '
- * -- src/bundle.test.ts`. The sum is printed by this test as a report and
- * gates nothing.
+ * with 502 bytes left while every visitor's own download had room — 28,348
+ * bytes on the public build, 11,254 on a deploy build carrying a look (the
+ * 8f1 critic's item 5; the weight-buckets critic's item 2). Its raises,
+ * each with the feature that spent the room, are in `git log -G 'const
+ * CEILING_BYTES = ' -- src/bundle.test.ts`. The sum is printed by this test
+ * as a report and gates nothing. **The bound on the two together rose by
+ * construction**, from 1,130,000 to 895,000 + 274,000 = 1,169,000: the
+ * owner chose the split, and this is its number.
+ *
+ * **On demand is not "rarely"** (the weight-buckets critic's item 6): the
+ * door alone paints three minis in the three looks' faces wearing Neon rain
+ * and Bunting, so an apex visit fetches three Latin faces (~126 KB), the
+ * rain, the bunting, the deck pictures and likely the logo — read from the
+ * CSS, not measured in a browser. Faces stay here (`font-display: swap`:
+ * not "before anything is painted"). Two things will spend this margin
+ * where the sum was neutral: a code split that moves bytes out of the entry
+ * (or an `import()` boot always awaits) is filed here, and the face
+ * re-subset PLAN § Decided names (`≈`, `◆`, the currency signs) grows the
+ * faces.
  *
  * Measured 262,846 bytes on 2026-10-06 (main 6464b67, in a vitest worker
  * with no private look: the eight woff2 subsets, the decoration art, the
@@ -486,21 +528,26 @@ describe('each-look-keeps-its-art-budget', () => {
      * `lookBudgetVerdict`; both numbers and their reasons are in
      * `scripts/weight-buckets.mjs`). Under `LOOK_ART_TARGET_GZIP` (256,000)
      * a look is admitted; from there up to `LOOK_ART_CAP_GZIP` (512,000)
-     * only on the `budgetReason` its private index states — the owner's OK,
-     * since that index is his and holds only what he commits — and at or
-     * over the cap never. A look with no index (the kit, the harness's
-     * fixture look, a worn-only look the role table ships) is held to the
-     * target. **Every look a run reads prints its line** (`weigh`, on stdout
-     * under this test's name): the figure against the target and the cap,
-     * and the reason when one admitted it, so a heavy look is never admitted
-     * in silence. The bundled looks are the every-visitor ceiling's, not
+     * only on the `budgetReason` its private index states (whether that is
+     * the owner's OK by itself or a public list must name the look too is
+     * put to him, not built — the weight-buckets critic's item 1), and at
+     * or over the cap never; the build refuses the same looks
+     * (`readSelectedLooks`, item 9). A look with no index (the kit, the
+     * harness's fixture look, a worn-only look the role table ships) is held
+     * to the target. **Every look a run reads prints its line** (`weigh`, on
+     * stdout under this test's name): the figure against the target and the
+     * cap, and the reason when one admitted it — its text in a local run,
+     * its length alone where `GITHUB_ACTIONS` is set, since this
+     * repository's Actions logs are public (item 8) — so a heavy look is
+     * never admitted in silence. The bundled looks are the every-visitor ceiling's, not
      * this budget's. No shipped look is worn only yet, so the subjects are
      * the harness's fixture look on the probe build, the workshop kit on its
      * own build, and every private look a run reads, from its source and on
      * a deploy build — each proved red by a plant beside it.
      */
-    const weigh = (look: string, total: number, reason?: string): LookBudgetVerdict => {
-        const verdict = lookBudgetVerdict({ look, total, reason });
+    /** The verdict, printed: a reason's text in a local run, its length alone where `env` names a public log (`printsPublicly`). */
+    const weigh = (look: string, total: number, reason?: string, env: Readonly<Record<string, string | undefined>> = process.env): LookBudgetVerdict => {
+        const verdict = lookBudgetVerdict({ look, total, reason, publicLog: printsPublicly(env) });
         console.log(`look budget · ${verdict.line}`);
         return verdict;
     };
@@ -571,11 +618,34 @@ describe('each-look-keeps-its-art-budget', () => {
         for (const broken of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
             expect(at(broken, REASON)).toMatchObject({ admitted: false, state: 'unread' });
         }
+        // In a public log a reason is counted, never printed (the weight-buckets critic's item 8).
+        expect(printsPublicly({})).toBe(false);
+        expect(printsPublicly({ GITHUB_ACTIONS: 'true' })).toBe(true);
+        expect(printsPublicly({ GITHUB_ACTIONS: '' })).toBe(true);
+        for (const total of [1_000, 300_000]) {
+            const hidden = lookBudgetVerdict({ look: 't-x', total, reason: REASON, publicLog: true });
+            expect(hidden.admitted).toBe(true);
+            expect(hidden.line).not.toContain(REASON);
+            expect(hidden.line).toContain(`stated (${[...REASON].length} characters; not printed in a public log)`);
+            expect(lookBudgetVerdict({ look: 't-x', total, reason: REASON, publicLog: false }).line).toContain(JSON.stringify(REASON));
+        }
     });
 
-    it(`admits every worn-only look the role table names, and the fixture look, within the ${LOOK_ART_TARGET_GZIP} target`, async () => {
+    it(`admits every worn-only look the role table names (none yet), and the fixture look, within the ${LOOK_ART_TARGET_GZIP} target`, async () => {
         const production = await appParts();
-        for (const sheet of wornSheets().filter((s) => s.role === 'look')) {
+        // The loop below weighs nothing while no shipped look is worn only
+        // (the critic's item 7): said by count, and held to the theme table,
+        // so the day a row is worn only this test names it — and this
+        // literal, with the test's "(none yet)", is changed in that diff.
+        const wornLooks = wornSheets().filter((s) => s.role === 'look');
+        expect(wornLooks.map((s) => s.lookClass).sort()).toEqual(
+            SHIPPED_THEMES.map(({ id }) => decodeTheme(id))
+                .filter((t) => t.sheetLoad === 'worn')
+                .map((t) => t.sheetClass)
+                .sort(),
+        );
+        expect(wornLooks, 'a shipped look is worn only: this test weighs it now, so drop "(none yet)"').toHaveLength(0);
+        for (const sheet of wornLooks) {
             const row = SHIPPED_THEMES.map(({ id }) => decodeTheme(id)).find((t) => t.sheetClass === sheet.lookClass)!;
             const reading = budgetOf(production, sheet.lookClass!, attachmentsForTheme(row.id));
             // A shipped look has no private index to state a reason in: the target is its limit.
@@ -643,8 +713,10 @@ describe('each-look-keeps-its-art-budget', () => {
      * Every private look a run reads (`scripts/served-sheets.mjs`: the
      * tracked fixture always, the selection when the environment names one
      * — the real look in a deploy job's `pnpm test`), from its source: its
-     * sheet as written (the build only minifies it, so never under), its
-     * art as the build writes it (SVGs re-serialised), its rows from its
+     * sheet as written, every target the lint admits read (`url()` and
+     * `image-set()` entries, `the-source-budget-reads-image-set-targets`) —
+     * so never under the build, which only minifies the sheet — its art as
+     * the build writes it (SVGs re-serialised), its rows from its
      * `look.json` (`privateLookArtBudget`), its reason from its index entry.
      * A deploy build's own worn bucket is the case after the plants.
      */
@@ -683,13 +755,77 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(reasoned.look.entry.budgetReason).toBe(REASON);
         const log = vi.spyOn(console, 'log');
         try {
-            const verdict = weigh(`${PLANTED_CLASS} (planted by this test)`, privateLookArtBudget(reasoned.look).total, reasoned.look.entry.budgetReason);
-            expect(verdict).toMatchObject({ admitted: true, state: 'reasoned' });
-            expect(log).toHaveBeenCalledWith(expect.stringContaining(`budgetReason: ${JSON.stringify(REASON)}`));
+            const total = privateLookArtBudget(reasoned.look).total;
+            // A local run prints the reason's text…
+            const local = weigh(`${PLANTED_CLASS} (planted by this test)`, total, reasoned.look.entry.budgetReason, {});
+            expect(local).toMatchObject({ admitted: true, state: 'reasoned' });
+            expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`budgetReason: ${JSON.stringify(REASON)}`));
+            // …and a run in a public log (GitHub Actions) its length alone.
+            const inPublic = weigh(`${PLANTED_CLASS} (planted by this test, as an Actions log prints it)`, total, reasoned.look.entry.budgetReason, {
+                GITHUB_ACTIONS: 'true',
+            });
+            expect(inPublic).toMatchObject({ admitted: true, state: 'reasoned' });
+            expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`budgetReason: stated (${[...REASON].length} characters`));
+            expect(log).toHaveBeenLastCalledWith(expect.not.stringContaining(REASON));
         } finally {
             log.mockRestore();
         }
     }, 60_000);
+
+    /*
+     * The source reading reads every target the lint admits (the critic's
+     * item 3): a look naming its art through `image-set("./art/x.svg" 1x)`
+     * read 2,774 gzip bytes from its source — `within` — and 388,777 built.
+     * Read with the lint's own reader now (`urlTargets`, through
+     * `builtUrls`), the source and the build agree: between the target and
+     * the cap, refused at the build with no reason, and with one admitted
+     * from its source and on the build's own worn bucket.
+     */
+    it('the-source-budget-reads-image-set-targets', async () => {
+        const viaImageSet = (index: (entry: Record<string, unknown>) => void = () => {}) =>
+            plantLooks(
+                (path, text) => {
+                    if (path === 'fixture/sheet.css') {
+                        return beforeReduce(text, `.${PLANTED_CLASS} .item-n { background-image: image-set("./art/heavy.svg" 1x); }`);
+                    }
+                    if (path === 'index.json') {
+                        const json = JSON.parse(text) as { looks: Record<string, unknown>[] };
+                        index(json.looks[0]!);
+                        return `${JSON.stringify(json, null, 4)}\n`;
+                    }
+                    return text;
+                },
+                { 'fixture/art/heavy.svg': digitsSvg(BETWEEN_DIGITS) },
+            );
+        const bare = await readPlanted(viaImageSet());
+        expect(bare.look.css).toContain('image-set("./art/heavy.svg" 1x)');
+        const source = privateLookArtBudget(bare.look).total;
+        expect(source, 'the source reading missed the image-set target').toBeGreaterThanOrEqual(LOOK_ART_TARGET_GZIP);
+        expect(source).toBeLessThan(LOOK_ART_CAP_GZIP);
+        const refused = viaImageSet();
+        await expect(deployParts({ ...refused.selection, [SELECTION_ENV.commit]: refused.head() })).rejects.toThrow(
+            /its art budget — t-planted-look: [\d,]+ gzip -9 bytes, .* no budgetReason stated/,
+        );
+
+        const repo = viaImageSet((entry) => {
+            entry['budgetReason'] = REASON;
+        });
+        const parts = await deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() });
+        const buckets = weightBuckets(parts, { worn: [...WORN, { lookClass: PLANTED_CLASS, source: 'fixture/sheet.css' }] });
+        expect(buckets.problems).toEqual([]);
+        const bucket = buckets.worn[PLANTED_CLASS]!;
+        const byName = new Map(parts.map((part) => [part.fileName, part]));
+        const built = lookArtBudget({
+            sheet: String(byName.get(bucket.sheet)?.source ?? ''),
+            sheetFile: bucket.sheet,
+            files: new Map(bucket.art.map((name) => [name, byName.get(name)?.source ?? ''])),
+            rows: [],
+        }).total;
+        expect(built, 'the built reading lost the image-set target').toBeGreaterThanOrEqual(LOOK_ART_TARGET_GZIP);
+        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: built, reason: REASON }).state).toBe('reasoned');
+        // From its source, never under what the build serves.
+        expect(source).toBeGreaterThanOrEqual(built);
+    }, 120_000);
 
     it('refuses a private look over the cap whatever its index says, and an index whose reason is blank', async () => {
         const heavy = await readPlanted(
@@ -718,23 +854,29 @@ describe('each-look-keeps-its-art-budget', () => {
 
     /*
      * And on a deploy build's own worn bucket (8e2): every private look a run
-     * reads — the tracked fixture always, the selection when the
-     * environment names one, each built as a deploy build of it would carry
-     * it (`deployParts`, the fixture at the commit the guards read it) — is
-     * weighed from the bytes the build emits: its own sheet as built and
-     * every file that sheet's `url()`s name, through `weightBuckets` like
-     * any worn-only look, its rows from its `look.json`, its reason from its
-     * index entry. The bucket is the look's alone (no file of it in the
-     * every-visitor bucket, no problem over the build), and the build's
-     * every-visitor download and its on-demand files stay under the public
-     * ceilings. Red over the fixture planted with art over the cap and a
-     * reason stated in its index, built — which also proves a deploy build
-     * reads an index carrying a reason.
+     * reads — the tracked fixture always, the selection when the environment
+     * names one — is weighed on a deploy build of its selection
+     * (`deployParts`, the fixture at the commit the guards read it), one
+     * build per selection, from the bytes the build emits: each carried
+     * look's own sheet as built and every file that sheet's `url()`s name,
+     * through `weightBuckets` with **every** look that build carries filed
+     * worn-only (`carriedLooks`; the critic's item 5), its rows from its
+     * `look.json` and its reason from its index entry. Each bucket is its
+     * look's alone (no file of it in the every-visitor bucket, no problem
+     * over the build), and the build's every-visitor and on-demand buckets
+     * stay under the public ceilings — **printed beside the public build's**
+     * (the critic's item 2): a deploy build carrying a look is what visitors
+     * get the day a look ships, and it costs every visitor more than the
+     * public build (the merged rows and the loader ride the entry). Red: a
+     * look over the cap with a reason in its index, refused at the build
+     * itself (`readSelectedLooks`, the critic's item 9) — and the build
+     * proves it read an index carrying a reason to say so.
      */
     it(`weighs every private look a run reads on a deploy build's own worn bucket, and holds that build's other buckets`, async () => {
         const rows = privateRows(await guardSheets());
         expect(rows.some((row) => row.look.source === 'fixture'), 'the fixture is read').toBe(true);
         const selected = selectionFromEnv(process.env);
+        const selections = new Map<string, Record<string, string>>();
         for (const row of rows) {
             const selection =
                 row.look.source === 'fixture' || selected === undefined
@@ -744,48 +886,103 @@ describe('each-look-keeps-its-art-budget', () => {
                           [SELECTION_ENV.dir]: selected.dir,
                           [SELECTION_ENV.commit]: row.look.commit,
                       };
+            selections.set(JSON.stringify(selection), selection);
+        }
+        const weighed = new Set<string>();
+        for (const selection of selections.values()) {
             const parts = await deployParts(selection);
-            const worn = [...WORN, { lookClass: row.lookClass, source: `${row.look.entry.slug}/sheet.css` }];
-            const buckets = weightBuckets(parts, { worn });
-            expect(buckets.problems, row.path).toEqual([]);
-            const bucket = buckets.worn[row.lookClass];
-            expect(bucket, `${row.path}: the deploy build emitted no sheet of the look's own`).toBeDefined();
-            expect(buckets.everyVisitor.files.some((name) => name === bucket!.sheet || bucket!.art.includes(name))).toBe(false);
+            const carried = await carriedLooks(selection);
+            expect(carried.length, `${JSON.stringify(selection)} carries no look`).toBeGreaterThan(0);
+            const buckets = weightBuckets(parts, { worn: [...WORN, ...wornOf(carried)] });
+            expect(buckets.problems, JSON.stringify(selection)).toEqual([]);
+            const names = carried.map((look) => look.entry.cls).join(', ');
+            console.log(
+                `weight · deploy build carrying ${names}: every visitor ${figure(buckets.everyVisitor.bytes)} bytes against ${figure(EVERY_VISITOR_CEILING_BYTES)}` +
+                    ` (${figure(EVERY_VISITOR_CEILING_BYTES - buckets.everyVisitor.bytes)} left) · on demand ${figure(buckets.onDemand.bytes)} against ${figure(ON_DEMAND_CEILING_BYTES)}`,
+            );
             const byName = new Map(parts.map((part) => [part.fileName, part]));
             const bytes = (name: string): string | Uint8Array => byName.get(name)?.source ?? '';
-            const reading = lookArtBudget({
-                sheet: String(bytes(bucket!.sheet)),
-                sheetFile: bucket!.sheet,
-                files: new Map(bucket!.art.map((name) => [name, bytes(name)])),
-                rows: privateLookRows(row.look),
-            });
-            expect(reading.total, `${row.path}: the built look was not read`).toBeGreaterThan(100);
-            const verdict = weigh(`${row.lookClass} (deploy build)`, reading.total, row.look.entry.budgetReason);
-            expect(verdict.admitted, `${row.path}: ${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
+            for (const look of carried) {
+                const bucket = buckets.worn[look.entry.cls];
+                expect(bucket, `${look.sheetPath}: the deploy build emitted no sheet of the look's own`).toBeDefined();
+                expect(buckets.everyVisitor.files.some((name) => name === bucket!.sheet || bucket!.art.includes(name))).toBe(false);
+                const reading = lookArtBudget({
+                    sheet: String(bytes(bucket!.sheet)),
+                    sheetFile: bucket!.sheet,
+                    files: new Map(bucket!.art.map((name) => [name, bytes(name)])),
+                    rows: privateLookRows(look),
+                });
+                expect(reading.total, `${look.sheetPath}: the built look was not read`).toBeGreaterThan(100);
+                const verdict = weigh(`${look.entry.cls} (deploy build)`, reading.total, look.entry.budgetReason);
+                expect(verdict.admitted, `${look.sheetPath}: ${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
+                weighed.add(look.entry.cls);
+            }
             expect(
                 buckets.everyVisitor.bytes,
-                `a deploy build of ${row.path} costs every visitor ${buckets.everyVisitor.bytes} bytes against ${EVERY_VISITOR_CEILING_BYTES}`,
+                `a deploy build carrying ${names} costs every visitor ${buckets.everyVisitor.bytes} bytes against ${EVERY_VISITOR_CEILING_BYTES}`,
             ).toBeLessThan(EVERY_VISITOR_CEILING_BYTES);
-            expect(onDemandFaults(buckets), `a deploy build of ${row.path}`).toEqual([]);
+            expect(onDemandFaults(buckets), `a deploy build carrying ${names}`).toEqual([]);
         }
-        // Red: the fixture planted with art over the cap and a reason stated in its index, built.
+        expect([...weighed].sort(), 'a look this run read was weighed on no deploy build').toEqual(
+            expect.arrayContaining([...new Set(rows.map((row) => row.lookClass))]),
+        );
+        // Red: the fixture planted with art over the cap and a reason stated in its index — refused by the build itself.
         const repo = plantedLook(OVER_CAP_DIGITS, (entry) => {
             entry['budgetReason'] = REASON;
         });
-        const planted = await deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() });
-        const plantedBuckets = weightBuckets(planted, { worn: [...WORN, { lookClass: PLANTED_CLASS, source: 'fixture/sheet.css' }] });
-        const plantedBucket = plantedBuckets.worn[PLANTED_CLASS]!;
-        const byName = new Map(planted.map((part) => [part.fileName, part]));
-        const plantedReading = lookArtBudget({
-            sheet: String(byName.get(plantedBucket.sheet)?.source ?? ''),
-            sheetFile: plantedBucket.sheet,
-            files: new Map(plantedBucket.art.map((name) => [name, byName.get(name)?.source ?? ''])),
-            rows: [],
-        });
-        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: plantedReading.total, reason: REASON }), JSON.stringify(plantedReading)).toMatchObject({
-            admitted: false,
-            state: 'over-cap',
-        });
+        await expect(deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() })).rejects.toThrow(
+            /fixture: its art budget — t-planted-look: [\d,]+ gzip -9 bytes, at or over the 512,000 cap/,
+        );
+    }, 180_000);
+
+    /*
+     * Two looks on one deploy build (the critic's item 5): a preview build
+     * carries every look its index names, so the worn list is every carried
+     * look's, and none of their files lands on demand. One id is reserved
+     * today, so the public lists are planted with a second
+     * (`deployParts(…, facts)`); the second look is the fixture copied under
+     * its own class, rows and token ids. Red: the worn list of the look a
+     * test is about alone — what this file passed until the critic — files
+     * the other look's sheet and art on demand.
+     */
+    it('files every look a deploy build carries under its own bucket, two at once, and none on demand', async () => {
+        const facts = await publicLookFacts();
+        const twoIds: PublicLookFacts = { ...facts, reserved: [...facts.reserved, 5], paid: [...facts.paid, 5] };
+        const head = gitCommitOf({ dir: ROOT });
+        const fixture = gitFilesAt({ dir: ROOT, commit: head, prefix: FIXTURE_LOOKS_DIR }).filter((file) => file.path.startsWith('fixture/'));
+        const other: Record<string, string> = {};
+        for (const { path } of fixture) {
+            const text = gitTextAt({ dir: ROOT, commit: head, prefix: FIXTURE_LOOKS_DIR, path })
+                .replaceAll('t-fixture-private', 't-other-look')
+                .replaceAll('att-fixture-', 'att-other-')
+                .replaceAll('f1f1', 'e1e1')
+                .replaceAll('f2f2', 'e2e2');
+            // Art of its own: byte-identical art is one emitted file two
+            // sheets name, which the bucket rule refuses as shared.
+            other[path.replace(/^fixture\//, 'other/')] = path.endsWith('.svg') ? text.replace('</svg>', '<path d="M0 0"/></svg>') : text;
+        }
+        const repo = plantLooks((path, text) => {
+            if (path !== 'index.json') return text;
+            const json = JSON.parse(text) as { looks: Record<string, unknown>[] };
+            json.looks.push({ id: 5, slug: 'other', cls: 't-other-look', stage: 'preview', paid: true });
+            return `${JSON.stringify(json, null, 4)}\n`;
+        }, other);
+        const selection = { ...repo.selection, [SELECTION_ENV.commit]: repo.head() } as Record<string, string>;
+        const parts = await deployParts(selection, twoIds);
+        const carried = await carriedLooks(selection, { facts: twoIds, gitEnv: repo.env });
+        expect(carried.map((look) => look.entry.cls).sort()).toEqual([PLANTED_CLASS, 't-other-look'].sort());
+        const publicOnDemand = weightBuckets(await appParts(), { worn: WORN }).onDemand;
+
+        const buckets = weightBuckets(parts, { worn: [...WORN, ...wornOf(carried)] });
+        expect(buckets.problems).toEqual([]);
+        for (const look of carried) {
+            expect(buckets.worn[look.entry.cls], `${look.entry.cls} has no worn bucket`).toBeDefined();
+        }
+        expect(buckets.onDemand).toEqual(publicOnDemand);
+
+        const one = weightBuckets(parts, { worn: [...WORN, ...wornOf(carried.filter((look) => look.entry.cls === PLANTED_CLASS))] });
+        expect(one.onDemand.files, 'the other look was not on demand under the old worn list').toContain(buckets.worn['t-other-look']!.sheet);
+        expect(one.onDemand.bytes).toBeGreaterThan(publicOnDemand.bytes);
     }, 180_000);
 
     it('counts the bare look and the largest row of each slot, and refuses 600 KB of art', () => {

@@ -52,10 +52,13 @@ export const PRIVATE_INDEX = 'index.json';
 
 /**
  * The index's one schema; a later one is a new number and a new reader.
- * An OPTIONAL field joins schema 1 without a new number
- * (`PRIVATE_INDEX_OPTIONAL_FIELDS`): an index that does not carry it reads
- * the same to every reader, and a reader older than the field refuses an
- * index that does (an unknown field) — fail closed, never a misreading.
+ * An optional field **whose absence is exactly the prior reading** joins
+ * schema 1 without a new number (`PRIVATE_INDEX_OPTIONAL_FIELDS`; absent
+ * `budgetReason` is the old hard 256,000 budget): an index that does not
+ * carry it reads the same to every reader, and a reader older than the field
+ * refuses an index that does (an unknown field) — fail closed, never a
+ * misreading. A deploy moves the public commit and the private pin
+ * together, so no rollback pairs an old reader with a new index.
  */
 export const PRIVATE_INDEX_SCHEMA = 1;
 
@@ -70,25 +73,43 @@ export const PRIVATE_INDEX_FIELDS = Object.freeze(['id', 'slug', 'cls', 'stage',
  * D-2026-10-06-08). `budgetReason`: why this look may weigh more than the
  * soft target of a look's art budget (`LOOK_ART_TARGET_GZIP` in
  * `scripts/weight-buckets.mjs`) and still be admitted under the hard cap
- * (`LOOK_ART_CAP_GZIP`). The index is the owner's — the private repository
- * is his, and nothing reaches it but what he commits — so a reason written
- * there is his OK; `each-look-keeps-its-art-budget` prints it on every run,
- * so it is never admitted in silence.
+ * (`LOOK_ART_CAP_GZIP`). Whether a reason in this index is the owner's OK
+ * by itself, or a public list must name the look too, is the owner's
+ * question (the weight-buckets critic's item 1, not built);
+ * `each-look-keeps-its-art-budget` prints it on every run — its length
+ * alone in a public log — so it is never admitted in silence.
  */
 export const PRIVATE_INDEX_OPTIONAL_FIELDS = Object.freeze(['budgetReason']);
 
-/** The longest `budgetReason`, in code points: one sentence, printed on one line. */
+/**
+ * The longest `budgetReason`, in code points: one sentence, printed on one
+ * line. Its text is printed by a local run only: a run in a public log
+ * (GitHub Actions, `printsPublicly` in `scripts/weight-buckets.mjs`) prints
+ * its length, so the deploy job's log never carries the private index's
+ * words.
+ */
 export const BUDGET_REASON_MAX = 400;
+
+/**
+ * Every code point a `budgetReason` may not hold: controls and format
+ * characters (`Cc`, `Cf` — a newline, an escape sequence, a bidi override),
+ * the line and paragraph separators (`Zl`, `Zp`: U+2028 and U+2029, which a
+ * terminal breaks a line on and `JSON.stringify` prints raw — the
+ * weight-buckets critic's item 4), lone surrogates (`Cs`), private-use
+ * (`Co`) and unassigned (`Cn`) code points: one plain printed line, or no
+ * reason.
+ */
+const REASON_REFUSED = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}\p{Co}\p{Cn}]/u;
 
 /**
  * Why `value` is not a `budgetReason`, or undefined when it is one: a
  * string with something to read after trimming — never empty, never only
- * whitespace — at most `BUDGET_REASON_MAX` code points, and with no control
- * or format character (`\p{Cc}`, `\p{Cf}`: a newline, an escape sequence
- * or a bidi override would let the printed line say something else than
- * the index does). Fail closed: anything else is refused, and a refused
- * reason refuses the whole index (`parsePrivateIndex`), so no reader ever
- * admits a look on a reason it could not print.
+ * whitespace — at most `BUDGET_REASON_MAX` code points, and holding nothing
+ * `REASON_REFUSED` names, since a line break or a bidi override would let
+ * the printed line say something else than the index does. Fail closed:
+ * anything else is refused, and a refused reason refuses the whole index
+ * (`parsePrivateIndex`), so no reader ever admits a look on a reason it
+ * could not print as one line.
  */
 export function budgetReasonProblem(value) {
     if (typeof value !== 'string') {
@@ -100,8 +121,8 @@ export function budgetReasonProblem(value) {
     if ([...value].length > BUDGET_REASON_MAX) {
         return `budgetReason is ${[...value].length} characters, over ${BUDGET_REASON_MAX}`;
     }
-    if (/[\p{Cc}\p{Cf}]/u.test(value)) {
-        return 'budgetReason carries a control or format character, where it is one plain line';
+    if (REASON_REFUSED.test(value)) {
+        return 'budgetReason carries a control, format, separator, surrogate, private-use or unassigned character, where it is one plain line';
     }
     return undefined;
 }

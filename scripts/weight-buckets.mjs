@@ -17,7 +17,13 @@
  *   top, and no one else.
  * - **on demand** — everything else: faces and decoration art the entry CSS
  *   names, pictures a script imports, chunks nothing imports statically.
- *   Fetched when a screen asks.
+ *   Fetched when a screen asks — which is **not** rarely: the door alone
+ *   paints three minis in the three looks' faces wearing Neon rain and
+ *   Bunting, so an apex visit fetches three Latin faces (~126 KB), the rain,
+ *   the bunting, the deck pictures and likely the logo (read from the CSS,
+ *   not measured in a browser; the weight-buckets critic's item 6). Faces
+ *   stay here all the same: `font-display: swap`, so not "before anything
+ *   is painted".
  *
  * **Never classified by `viteMetadata.importedAssets`** (the step-6 critic):
  * a chunk that imports a sheet as `?url` lists that sheet AND its art among
@@ -49,12 +55,15 @@
  * (D-2026-10-06-07): every-visitor and on demand in `src/bundle.test.ts`,
  * each worn-only look its budget here. The served-weight ceiling over
  * every-visitor + on demand is retired: it counted the every-visitor bucket
- * a second time, so it fired while every visitor's download still had room.
+ * a second time, so it fired while every visitor's download still had room
+ * — ~28 KB on the public build, ~11 KB on a deploy build carrying a look
+ * (measured 2026-10-06). The bound on the two together rose by construction,
+ * from 1,130,000 to 895,000 + 274,000 = 1,169,000.
  */
 import { gzipSync } from 'node:zlib';
 import { sanitizeSvg } from './svg-allow.mjs';
 import { budgetReasonProblem } from './private-looks.mjs';
-import { parseSheet, splitTopLevel } from './workshop-css.mjs';
+import { parseSheet, splitTopLevel, urlTargets } from './workshop-css.mjs';
 
 /**
  * A look's art budget is a soft target and a hard cap (D-2026-10-06-08,
@@ -89,12 +98,22 @@ import { parseSheet, splitTopLevel } from './workshop-css.mjs';
  * **Between the two, a stated reason admits a look** (`lookBudgetVerdict`):
  * a private look whose index entry carries `budgetReason`
  * (`scripts/private-looks.mjs`, validated fail closed there — one plain,
- * non-blank sentence). The index is the owner's private repository, which
- * holds nothing he did not commit, so the reason being there IS his OK;
- * the reason is printed beside the figure on every run, so a heavy look is
- * never admitted in silence. A look with no index to state one in — the
- * workshop kit, the harness's fixture look, a worn-only look the role table
- * ships — is held to the target.
+ * non-blank line). The decision asks for a reason AND the owner's OK; what
+ * is built reads a reason in the private index, which holds what is
+ * committed to it, as both. Whether the OK needs an artifact of its own — a
+ * public list beside `PAID_LOOK_IDS` and `RELEASED_LOOK_IDS`, held both ways
+ * against the index, as a release is — is put to the owner and not built
+ * (the weight-buckets critic's item 1); so is the tracked fixture's index,
+ * which is public and could state a reason too. The reason is printed
+ * beside the figure on every run (its length alone in a public log), so a
+ * heavy look is never admitted in silence. A look with no index to state
+ * one in — the workshop kit, the harness's fixture look, a worn-only look
+ * the role table ships — is held to the target.
+ *
+ * **Enforced at the build too** (the critic's item 9): `readSelectedLooks`
+ * (`scripts/private-looks-build.mjs`) runs this verdict over every look a
+ * build carries, from its source, before Vite reads a byte — so a road that
+ * runs `pnpm build` without `pnpm test` refuses it as well.
  */
 export const LOOK_ART_TARGET_GZIP = 256_000;
 export const LOOK_ART_CAP_GZIP = 512_000;
@@ -113,13 +132,18 @@ function textOf(part) {
     return '';
 }
 
-/** Every `url()` target in a built sheet, quotes stripped. */
+/**
+ * Every target a sheet names, quotes stripped: each `url()` and each entry
+ * of an `image-set()` that is not a `url()` — the look lint's own reader
+ * (`urlTargets`, `scripts/workshop-css.mjs`), so a sheet as written is read
+ * for exactly the files the lint admits and a build resolves (the
+ * weight-buckets critic's item 3: reading `url(` alone, a look naming ~800 KB
+ * of art through `image-set("./art/x.svg" 1x)` read 2,774 gzip bytes from
+ * its source, `within`, and 388,777 built). A built sheet, where Vite writes
+ * every entry as a `url()`, reads the same.
+ */
 export function builtUrls(css) {
-    const out = [];
-    for (const m of css.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi)) {
-        out.push(m[1] ?? m[2] ?? m[3] ?? '');
-    }
-    return out;
+    return urlTargets(css).map((target) => target.value);
 }
 
 /** The emitted file a built `url()` names, from a sheet at `from`: root-absolute or relative to the sheet. */
@@ -360,8 +384,10 @@ export function lookArtBudget({ sheet, sheetFile = 'sheet.css', files, rows = []
  * the allow-list, `sanitizeSvg`, which is what is emitted; one it refuses
  * counted as given, the build failing on it anyway; a face as it is), and
  * its rows from its `look.json` (its moods and decorations, `{ cls, slot }`).
- * `look`: a `PrivateLookRead`. The built bucket of a deploy build is read
- * beside it in `src/bundle.test.ts` (8e2).
+ * `look`: a `PrivateLookRead`. Every target the lint admits is read —
+ * `url()` and `image-set()` entries alike (`builtUrls`), or a look naming
+ * its art through `image-set()` read low. The built bucket of a deploy
+ * build is read beside it in `src/bundle.test.ts` (8e2).
  */
 export function privateLookArtBudget(look) {
     const rows = privateLookRows(look);
@@ -393,6 +419,24 @@ export function privateLookRows(look) {
 const n = (value) => value.toLocaleString('en-US');
 
 /**
+ * The variable whose presence says a run prints into a public log: GitHub
+ * Actions sets it, and this repository's Actions logs are public, so the
+ * deploy job's `pnpm test` — which reads the real look — would publish a
+ * private index's reason word for word (the weight-buckets critic's item 8).
+ */
+export const PUBLIC_LOG_ENV = 'GITHUB_ACTIONS';
+
+/** True when `env` names a public log (`PUBLIC_LOG_ENV` set, to anything): a reason is then counted, never printed. */
+export function printsPublicly(env = process.env) {
+    return env[PUBLIC_LOG_ENV] !== undefined;
+}
+
+/** A reason as a line prints it: its text in a local run, its length alone in a public log. */
+function shown(reason, publicLog) {
+    return publicLog ? `stated (${[...reason].length} characters; not printed in a public log)` : JSON.stringify(reason);
+}
+
+/**
  * One look's budget verdict, and the line every run prints for it:
  * `look` the name to print (its class), `total` its `lookArtBudget` total,
  * `reason` its index's `budgetReason`, or undefined for a look with none.
@@ -408,8 +452,10 @@ const n = (value) => value.toLocaleString('en-US');
  * index reader refuses it first, and a caller that passes one anyway gets
  * the refusal, never an admission). A total that is not a finite,
  * non-negative number is refused: a reading that failed is not a light look.
+ * `publicLog` (`printsPublicly`): the line names a stated reason by its
+ * length only, never its text.
  */
-export function lookBudgetVerdict({ look, total, reason }) {
+export function lookBudgetVerdict({ look, total, reason, publicLog = false }) {
     const head = `${look}: ${Number.isFinite(total) ? n(total) : String(total)} gzip -9 bytes`;
     if (!Number.isFinite(total) || total < 0) {
         return { admitted: false, state: 'unread', line: `${head} — not a reading; refused` };
@@ -425,7 +471,7 @@ export function lookBudgetVerdict({ look, total, reason }) {
     if (total < LOOK_ART_TARGET_GZIP) {
         // A reason the look no longer needs is still printed: it is the
         // owner's to take out of the index, and silence would hide it.
-        const spare = stated ? ` — its index's budgetReason is not needed under the target: ${JSON.stringify(reason)}` : '';
+        const spare = stated ? ` — its index's budgetReason is not needed under the target: ${shown(reason, publicLog)}` : '';
         return {
             admitted: true,
             state: 'within',
@@ -443,6 +489,6 @@ export function lookBudgetVerdict({ look, total, reason }) {
     return {
         admitted: true,
         state: 'reasoned',
-        line: `${head}, ${over} — admitted on its index's budgetReason: ${JSON.stringify(reason)}`,
+        line: `${head}, ${over} — admitted on its index's budgetReason: ${shown(reason, publicLog)}`,
     };
 }

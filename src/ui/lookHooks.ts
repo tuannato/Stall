@@ -85,7 +85,7 @@ type Fits = (name: HTMLElement) => boolean;
  * model the probe holds a name to (`the-sellers-name-stands-whole`), so the
  * ladder climbs exactly until the probe would call the name whole in its
  * own box; a `clip-path` on the name the probe fails and the ladder does
- * not ask (the served weight's room, `signInk.ts`). Two answers it
+ * not ask (every visitor's room on a deploy build, `signInk.ts`). Two answers it
  * replaced, both wrong (step 8f2 and its critic): the box's own scroll size,
  * which counts a tight line-height's content areas past their slots (a
  * fitting name climbed), and the line-height's slot, which a stacked mark

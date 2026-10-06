@@ -33,9 +33,11 @@
  * corners are read square, stated). A `polygon()`, a `path()`, a bare box
  * keyword or a `url()` is a clip this model does not resolve and says so:
  * the probe resolves a polygon itself and fails the rest. The ladder asks
- * no clip but its own box (`inkFits`): the shapes cost the app's bundle
- * ~2.7 KB the served ceiling does not have, so a look that clips its name
- * with a shape is failed by the probe rather than climbed past — and the
+ * no clip but its own box (`inkFits`): the shapes cost every visitor
+ * ~2.7 KB, a quarter of the ~11 KB a deploy build carrying a look has left
+ * under its every-visitor ceiling (2026-10-06; the served ceiling that
+ * first refused them is retired), so a look that clips its name with a
+ * shape is failed by the probe rather than climbed past — and the
  * probe holds the name's own padding box inside every clip and shape above
  * it too, so the ladder's fit (ink inside the box) and the probe's (the box
  * inside every clip) keep a name whole at lengths no screen paints.

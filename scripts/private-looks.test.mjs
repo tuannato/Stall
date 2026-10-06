@@ -324,8 +324,10 @@ describe('a-budget-reason-is-one-plain-sentence-or-nothing', () => {
      * (`each-look-keeps-its-art-budget`, `src/bundle.test.ts`). Fail closed:
      * absent is no reason; a string with something to read is one; anything
      * else — not a string, empty, only whitespace, over
-     * `BUDGET_REASON_MAX`, a control or format character — refuses the whole
-     * index, so a look is never admitted on a reason no line could print.
+     * `BUDGET_REASON_MAX`, a control, format, line or paragraph separator,
+     * surrogate, private-use or unassigned character — refuses the whole
+     * index, so a look is never admitted on a reason no single printed line
+     * could show.
      */
     const one = (entry) => parsePrivateIndex(indexOf(entry));
     const reason = 'Ink wash draws its ground as four masks the owner refused to raster.';
@@ -356,6 +358,14 @@ describe('a-budget-reason-is-one-plain-sentence-or-nothing', () => {
             'an escape \u001b[31m sequence',
             'a bidi \u202e override',
             'a zero\u200bwidth space',
+            // One printed line only: the line and paragraph separators (the critic's item 4).
+            'ok\u2028look budget \u00b7 t-x: 1 gzip -9 bytes, within',
+            'two\u2029paragraphs',
+            'a next-line\u0085control',
+            'a vertical\u000btab',
+            'a lone \ud800 surrogate',
+            'a private \ue000 use',
+            'an unassigned \u0378 point',
         ]) {
             const { index, problems } = one({ budgetReason: bad });
             assert.equal(problems.length, 1, JSON.stringify(bad));

@@ -12,7 +12,7 @@ import {
 } from './src/domain/theme';
 import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST, SECOND_FEED } from './src/net/hosts';
 import { privateLooksPlugin } from './scripts/private-looks-build.mjs';
-import { HARNESS_LOOK_CLASSES } from './scripts/private-looks.mjs';
+import { HARNESS_LOOK_CLASSES, type PublicLookFacts } from './scripts/private-looks.mjs';
 
 /**
  * Key derivation must not reach the bundle.
@@ -315,7 +315,12 @@ const DEV_CSP = CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline
 export function privateLooks({
     harness = false,
     env,
-}: { harness?: boolean; env?: Readonly<Record<string, string | undefined>> } = {}): Plugin {
+    facts,
+}: {
+    harness?: boolean;
+    env?: Readonly<Record<string, string | undefined>>;
+    facts?: PublicLookFacts;
+} = {}): Plugin {
     // The theme table's values, for the flash rule the build runs over every
     // sheet it serves when it carries a look (the `--s-*-anim` the base sheet
     // runs): `themeVarValues` in `scripts/look-flash.mjs`, read here directly.
@@ -326,7 +331,10 @@ export function privateLooks({
         }
     }
     return privateLooksPlugin({
-        facts: {
+        // The public lists, unless a test plants a second reserved id to
+        // build two private looks at once (`src/bundle.test.ts`): only one id
+        // is reserved today. Never handed by a build this file configures.
+        facts: facts ?? {
             reserved: PRIVATE_LOOK_IDS,
             paid: PAID_LOOK_IDS,
             released: RELEASED_LOOK_IDS,
