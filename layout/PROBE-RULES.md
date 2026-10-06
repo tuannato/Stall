@@ -5192,6 +5192,136 @@ line. The levers left are not the fixture's or the stress screens' scope
 only): they are a **two-tab contrast pass** — the job list split across
 two targets of the one Chrome, each with its own emulated viewport, its
 own page load and its own prepare-capture-read loop, the verdicts merged
-by job key — proposed and not built (the gain is unmeasured: if the
-browser's screenshots serialise, it buys only the Node side's decode and
-sampling, ~10%); and fewer frames for an unmixed stack.
+by job key — built the same day, and measured: the screenshots do not
+serialise ("The contrast pass walks on two tabs", next); and fewer frames
+for an unmixed stack, not built.
+
+## The contrast pass walks on two tabs (2026-10-06)
+
+8f2's projection put the run past the 240s shard line once Ink wash is
+ported (~253s, ~280s with its movers' readers, above). Measured before
+anything was built, on this Mac (on battery, low-power mode off), with
+`main`'s own phase table (181.8s; contrast 145.6s, 697 jobs, 1,218
+captures):
+
+| phase | calls | total | mean |
+|---|---|---|---|
+| capture (the CDP call, transfer, base64) | 1218 | 78.3s (54%) | 64 ms |
+| prepare (the paint, the font wait, two frames) | 697 | 17.6s | 25 ms |
+| decode | 1218 | 9.2s | 8 ms |
+| sample, boxes | 697 | 3.5s | — |
+| load: ready (4 pages) | 4 | 6.6s | ~1.6 s |
+
+(The look-paint, ring, horizon and art-off phases — 19.8s, 8.6s, 21.8s,
+14.3s — are wall time that holds their own captures, so they overlap the
+capture row.) **Decoding and sampling are ~12s of the 145** (the ring,
+look-paint and art-off reads' own pixel loops sit inside their phases and
+were not split out): decoding once, decoding off the main thread or
+sampling faster buys at most about that. The time is the browser's —
+Chrome rastering, copying and encoding each frame, and the frames a prepare
+waits for — so the question was the critic's: do two targets' screenshots
+queue, or overlap? A scratch benchmark (not kept in the repository)
+answered it before the runner changed: 90 desktop jobs of the plan (each prepared,
+grown, captured and decoded as the pass does) on 1, 2, 3 and again 1 tab of
+one Chrome — **11.8s, 8.9s, 8.2s, 12.1s**, a capture call 82, 107 and 123 ms.
+They overlap: a capture waits a little longer and two run at once, and one
+tab's frame waits are time another tab paints in.
+
+**So the walk runs on `CONTRAST_TABS` tabs** (`LAYOUT_CONTRAST_TABS`, 1–4,
+default 2). The first tab is the session every other pass uses; the rest
+are targets of the same Chrome, each created in a window of its own — a
+background tab is hidden, and a hidden page runs no animation frame, so its
+prepare would sit out the CDP bound instead of saying why — and each page
+load is held to `visible` and focused (`loadContrastPage`). Every tab gets
+the fixed clock and the focus emulation, and has its own page, viewport,
+emulated media and page age. The plan is read once, from the first tab's
+page; the jobs are handed out one at a time in plan order to whichever tab
+is free, and a tab whose next job is at another viewport opens that page
+first (its screens held to the plan's, as before), so no tab waits at a
+viewport's end for the others. **A job never reads another tab's state**:
+the job body (`contrastJob`, the walk's body moved out whole, its six early
+`continue`s now `return`s) keeps everything it accumulates in job-local
+names and hands them back; the totals are folded from those answers **in
+plan order** once every tab has stopped (`commitContrastJob`: a count is a
+sum, a least a `Math.min`, a set a union, a list a concatenation, a map's
+keys land in the order their first job put them there, and the one map a
+later job overwrites, `codesUnread`, is overwritten in that order too). The
+job function is declared outside the pass, so a total it named by mistake
+would be an undeclared name rather than a silent write: `tsc --checkJs`
+over the runner reports none. The first tab to throw stops the hand-out,
+the others finish the job they hold, and the earliest job in the plan that
+threw is the pass's error. A job handed out must come back with its own
+record, or the pass fails naming it (`… came back with no record of their
+own`) — a tab that took a job and never ran it would otherwise count it
+done, since `done` is counted at the hand-out. The tabs past the first are
+closed before the transparency pass, which runs on the first as it did.
+
+**What it changed, and what it did not.** Every run of it was green, and
+its per-box dump is **byte for byte `main`'s in its `jobs` and `boxes`
+arrays** (the JSON of both arrays compared, order and every field: 724 jobs,
+13,212 boxes) at one tab and at two; `contrast-dump.mjs` reads every box
+identical at one, two and three tabs. Every verdict line is `main`'s but
+one: `faces: every face loaded before the first job on all N contrast
+pages` counts the pages the tabs loaded — 4 on `main` (three viewports and
+one reload past a minute), 6 at two tabs, 9 at three. (The canvas geometry
+pass printed `257/4357` points behind a clip on two of the twelve green
+runs — one `main`'s, one at two tabs — and `259/4359` on the rest: it varies
+by itself, and the geometry passes run before the contrast pass, untouched.)
+The phase table
+now sums each phase over the tabs, so it adds up to more than the pass
+took; the `contrast tabs:` line above it says each tab's jobs, busy time
+and pages.
+
+**Measured, back to back on this Mac** (on battery, low-power mode off;
+`main` from a worktree of 1472b99):
+
+| run | total | contrast |
+|---|---|---|
+| `main` (three runs) | 181.8s, 180.7s, 184.8s | 145.0–145.6s |
+| two tabs (five runs, the last on the commit's tree) | 126.9s, 135.4s, 132.0s, 129.5s, 130.5s | 92.0–97.4s |
+| three tabs (once) | 119.1s | 83.4s |
+| one tab (the refactor alone) | 183.0s | 146.7s |
+| `main`, the fixture showing every hook on every job (a plant) | 196.7s | 159.7s |
+| two tabs, the same plant | 139.7s | 101.1s |
+
+Two tabs take ~51s (28%) off the run and ~51s (35%) off the contrast pass;
+a third took 8s more once. **Two is the default** because a third tab is a
+third renderer at a 1920-wide grown page on an 8 GB machine that had
+2.6 GB of swap in use just after that run, and the Linux box with four
+cores has not been measured with any tab count.
+
+**The projection for a look that shows every hook on every job**, as a
+method: the plant above moves the fixture's mark and its file-masked ground
+out of the desk block, so 106 of its 140 contrast jobs show both (look-paint
+jobs 168 → 214, art-off jobs 60 → 106). On two tabs those 46 more hooked
+jobs cost 6.6s (101.1 − 94.5, the mean of the first three unplanted runs), **~0.14s a job against
+~0.31s on `main`** (14.3s); a plain job is ~0.075s (8f2's 0.116s at the
+contrast pass's measured 0.65), so an every-hook job is ~0.22s. Ink wash
+replaces the fixture's 140 jobs (~26s of contrast at those rates, and
+~6s of geometry, its fifth of those passes — an estimate) with ~220 (~48s,
+and 8f2's ~8s more geometry): 139.7 − 32
++ 48 + 14 ≈ **170s before its movers' worst-case readers**; the horizon's
+reader costs ~0.15s of wall a job at two tabs (24.8s summed over 83 jobs
+and two tabs), ~16s on half of Ink wash's jobs, **≈ 187s with them**.
+Cross-checked by the plant's own ratio (139.7 / 196.7 = 0.71) applied to
+8f2's 253s and 280s: 180s and 199s. Under the 240s line either way.
+
+**Proved red**, each on the second tab alone, each reverted:
+- **A defect on its page**: an adopted sheet on tab 2's pages painting every
+  `[data-role="price"]` ink on its own ink, and tab 2's first job painting
+  another look — "✗ contrast: 271 figure(s) on paint below 3:1" (every one
+  a job tab 2 ran, listed in plan order) and "1 job(s) refused —
+  mobile/offers/1/65535: it painted offers/2/65535; the paint wore t-neo
+  where the job's look is t-modern", exit 1.
+- **A job taken and never run**: "✗ contrast: 1 job(s) handed to a tab came
+  back with no record of their own: mobile/offers/1/65535", exit 1.
+- **A throw**: tab 2's tenth job asking the page for a hook it does not
+  have — "✗ contrast: page threw: … window.__noSuchHook is not a function
+  (on contrast job mobile/unbuyable/3/0)", the first tab stopping after
+  the job it held, exit 1.
+
+**Not measured, stated**: the Linux box (the manual CI job) at any tab
+count; three tabs more than once; the geometry passes, still one page at a
+time (~30s of the run), which are the next lever if one is needed; and
+whether a tab count above two changes anything on a machine with more
+memory.
