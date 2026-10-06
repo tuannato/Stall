@@ -165,6 +165,16 @@ working accept, and there is no accept.
   deploys through an Environment with the owner as required reviewer; the
   first production run is by hand, and Pages' automatic builds are turned
   off only after it.
+- **Until a look is sold, production reads nothing private and the look
+  travels nowhere (owner, 2026-10-06, by recommendation; STEP-8C-PLAN v2).**
+  Production builds without the private repository until step 9 — a build
+  that reads no private file is the public build by construction, and an
+  expired read token stops previews, never production. Before its release a
+  private look is reviewed on the owner's machine only (shots, local runs);
+  only a canary of public bytes travels to previews. Pages' automatic
+  production build goes off only after a dashboard rollback has been proved;
+  after that each push is a production run waiting for the owner's Approve;
+  the unattended screens' idle reload waits for step 9.
 - **Weight is held per bucket (owner, 2026-10-06).** Every-visitor bytes and
   on-demand bytes each have their own ceiling (no summed ceiling that counts
   one twice); a worn-only look has a soft target of 256,000 gzip bytes and a
