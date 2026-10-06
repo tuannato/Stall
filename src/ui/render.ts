@@ -505,6 +505,16 @@ function announce(doc: Document, message: string): void {
     region.textContent = region.textContent === message ? `${message} ` : message;
 }
 
+/**
+ * `node` with a `data-role`, returned: a role names a sentence the layout
+ * probe reads by role (the money and signing sentences on the four sheets,
+ * `layout/honestDisplay.ts`) and paints nothing.
+ */
+function roled<T extends HTMLElement>(node: T, role: string): T {
+    node.setAttribute('data-role', role);
+    return node;
+}
+
 /** No holdings: the gate's `held` where only the look it paints is asked, never what it wears. */
 const NO_HOLDINGS: ReadonlySet<string> = new Set();
 
@@ -3784,7 +3794,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // "More" after the sign controls: the shelf, the tolerance, the way in
     // for a pasted token id, the meter, removal, the bytes and the phone QR.
     const more = el('div', 'sheet-more');
-    more.append(el('p', 'fine', copy.DESC_LEDE));
+    more.append(roled(el('p', 'fine', copy.DESC_LEDE), 'describe-lede'));
 
     const address = view.address;
     if (address === undefined || address === '') {
@@ -3994,7 +4004,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     priceUnit.append(unitSeg);
     priceWrap.append(priceAmountLabel, priceUnit);
     form.append(priceWrap);
-    const priceLede = el('p', 'fine', copy.DESC_PRICE_LEDE);
+    const priceLede = roled(el('p', 'fine', copy.DESC_PRICE_LEDE), 'describe-price-lede');
     form.append(priceLede);
     /*
      * The surcharge (STLD tag 0x04, 2026-09-21): a whole percent, 1–100,
@@ -4256,7 +4266,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     // Cashtab previews an unknown LOKAD as raw hex, so this sheet is the only
     // place an `STLD` record is legible before it is signed — the same reason
     // the stall's own record says it, and the same sentence.
-    more.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
+    more.append(roled(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX), 'describe-wallet-hex'));
     const bytes = el('p', 'fine publish-hex', '');
     bytes.setAttribute('data-role', 'describe-hex');
     const hexFold = sheetFold('describe-hex-fold', copy.RECORD_BYTES_FOLD, bytes);
@@ -4653,7 +4663,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (bip21 !== undefined && fitsQr(bip21)) {
             qrBox.replaceChildren(
                 qrSvg(bip21, copy.PUBLISH_QR_ALT),
-                el('p', 'fine', copy.PUBLISH_QR_LEDE),
+                roled(el('p', 'fine', copy.PUBLISH_QR_LEDE), 'describe-qr-lede'),
             );
             qrBox.hidden = false;
         } else {
@@ -4815,7 +4825,7 @@ function describeSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     });
     form.addEventListener('submit', (event) => event.preventDefault());
 
-    wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
+    wrap.append(roled(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING), 'describe-after-signing'));
     wrap.append(sheetFoot(handlers));
     loadToken();
     refresh();
@@ -5226,7 +5236,7 @@ function paySheet(
     if (usesRate) {
         card.append(rateRow);
     }
-    const why = el('p', 'fine', '');
+    const why = roled(el('p', 'fine', ''), 'pay-why');
     why.hidden = true;
     card.append(why);
     /**
@@ -5245,7 +5255,7 @@ function paySheet(
     // The rail's own limits, under the figure and inside the card: this is
     // where a buyer is looking when they decide, and a note further down the
     // sheet is a note read after the decision.
-    card.append(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT));
+    card.append(roled(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT), 'pay-direct'));
     // Whose genesis this is, said here as well as on the row: a scanned link
     // opens this sheet without the row ever being on screen. One node, painted
     // in place, because the answer can land after the sheet did.
@@ -5381,8 +5391,8 @@ function paySheet(
     // goes under one closed summary after the control: mechanism, read by
     // whoever wants it, never standing between the figure and Pay.
     const how = el('div');
-    const someWallets = el('p', 'fine', copy.PAY_FINE_SOME_WALLETS);
-    how.append(el('p', 'fine', copy.PAY_FINE_MEMO), someWallets);
+    const someWallets = roled(el('p', 'fine', copy.PAY_FINE_SOME_WALLETS), 'pay-some-wallets');
+    how.append(roled(el('p', 'fine', copy.PAY_FINE_MEMO), 'pay-memo'), someWallets);
     /*
      * The seller's own margin, and the two honest ways of not having one. Only
      * a quote that needs a rate can drift, and a value past what this app's
@@ -5398,14 +5408,14 @@ function paySheet(
         // Both bytes on the record AND a tolerance line on the sheet: an XEC
         // quote mounts none (§5), and "not stated" is a line about no margin.
         return record.tolerancePct !== undefined && record.surchargePct !== undefined
-            ? [tolerance, el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE)]
+            ? [tolerance, roled(el('p', 'fine', copy.PAY_FINE_SURCHARGE_TOLERANCE), 'pay-surcharge-tolerance')]
             : [tolerance];
     };
     let margins = marginLines(price);
     someWallets.after(...margins);
-    how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY));
+    how.append(roled(el('p', 'fine', copy.PAY_FINE_DELIVERY), 'pay-delivery'));
     if (decimalsOf(view.tokens, tokenId) > 0) {
-        how.append(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS));
+        how.append(roled(el('p', 'fine', copy.PAY_FINE_WHOLE_ITEMS), 'pay-whole-items'));
     }
     let age = quoteAgeNode(view, tokenId, 'p', 'fine');
     if (age !== null) {
@@ -6005,14 +6015,14 @@ function paySheet(
         if (bip21 !== undefined && !aged && fitsQr(bip21)) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
-            box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
+            box.append(qrSvg(bip21, copy.PAY_QR_ALT), roled(el('p', 'fine', copy.PAY_QR_LEDE), 'pay-qr-lede'));
             qrBody.replaceChildren(box);
             if (usesRate && rate !== undefined) {
                 const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
                 at.armQrTimer(refresh, Math.max(left, 0));
             }
         } else if (bip21 !== undefined) {
-            qrBody.replaceChildren(el('p', 'fine', copy.PAY_QR_STALE));
+            qrBody.replaceChildren(roled(el('p', 'fine', copy.PAY_QR_STALE), 'pay-qr-stale'));
         } else {
             qrBody.replaceChildren();
         }
@@ -6776,10 +6786,10 @@ function paySeveralSheet(
     if (usesRate) {
         card.append(rateRow);
     }
-    const why = el('p', 'fine', '');
+    const why = roled(el('p', 'fine', ''), 'pay-why');
     why.hidden = true;
     card.append(why);
-    card.append(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT));
+    card.append(roled(el('p', 'note pay-amt-note', copy.PAY_NOTE_DIRECT), 'pay-direct'));
     wrap.append(card);
 
     const valve = el('p', 'note', '');
@@ -6794,8 +6804,8 @@ function paySeveralSheet(
     const memoLine = el('p', 'fine', copy.PAY_FINE_NO_MEMO);
     memoLine.setAttribute('data-role', 'pay-memo-line');
     how.append(memoLine);
-    how.append(el('p', 'fine', copy.PAY_FINE_TOLERANCES_PER_ITEM));
-    how.append(el('p', 'fine', copy.PAY_FINE_DELIVERY_SEVERAL));
+    how.append(roled(el('p', 'fine', copy.PAY_FINE_TOLERANCES_PER_ITEM), 'pay-tolerances-per-item'));
+    how.append(roled(el('p', 'fine', copy.PAY_FINE_DELIVERY_SEVERAL), 'pay-delivery'));
     const final = el('p', 'fine', copy.PAY_NOTE_FINAL);
     final.setAttribute('data-role', 'pay-final');
 
@@ -7219,7 +7229,7 @@ function paySeveralSheet(
         if (bip21 !== undefined && !aged && scans) {
             const box = el('div', 'pay-qr');
             box.setAttribute('data-role', 'pay-qr');
-            box.append(qrSvg(bip21, copy.PAY_QR_ALT), el('p', 'fine', copy.PAY_QR_LEDE));
+            box.append(qrSvg(bip21, copy.PAY_QR_ALT), roled(el('p', 'fine', copy.PAY_QR_LEDE), 'pay-qr-lede'));
             qrBody.replaceChildren(box);
             if (usesRate && rate !== undefined) {
                 const left = rate.atMs + PAY_RATE_MAX_AGE_MS - Date.now();
@@ -8121,7 +8131,7 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (ready && bip21 !== undefined && fitsQr(bip21)) {
             qrBox.replaceChildren(
                 qrSvg(bip21, copy.PUBLISH_QR_ALT),
-                el('p', 'fine', copy.PUBLISH_QR_LEDE),
+                roled(el('p', 'fine', copy.PUBLISH_QR_LEDE), 'publish-qr-lede'),
             );
             qrBox.hidden = false;
         } else {
@@ -8347,12 +8357,12 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     wrap.append(mustSign);
     wrap.append(acts);
     const more = el('div', 'sheet-more');
-    more.append(el('p', 'fine', copy.PUBLISH_LEDE));
+    more.append(roled(el('p', 'fine', copy.PUBLISH_LEDE), 'publish-lede'));
     more.append(themeGroup, announceLabel, decorWrap, meter.wrap);
-    more.append(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX));
+    more.append(roled(el('p', 'fine', copy.PUBLISH_WALLET_SHOWS_HEX), 'publish-wallet-hex'));
     more.append(hexFold, qrFold);
     wrap.append(sheetFold('publish-more', copy.SHEET_MORE, more));
-    wrap.append(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING));
+    wrap.append(roled(el('p', 'fine', copy.PUBLISH_AFTER_SIGNING), 'publish-after-signing'));
     wrap.append(sheetFoot(handlers));
     refresh();
     return wrap;

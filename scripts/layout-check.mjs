@@ -1867,6 +1867,19 @@ try {
         let plan;
         // The jobs that owe the rain and the horizon at their worst, by key.
         let owed;
+        /*
+         * The honest-display lines each sampled sheet screen owes, per
+         * viewport (`__honestOwed()`, `layout/honestDisplay.ts`; 8e2,
+         * CRITIC-STEP-8E2 item 11): every job of that screen and viewport
+         * must READ each one — a line a look collapses or clips out of view
+         * is a role owed and not read, never a skip that hides. The jobs
+         * checked per screen and viewport, the reads per role, and the
+         * honest lines in scope that were not rendered at a job's width.
+         */
+        let honestOwed;
+        const honestJobs = new Map();
+        const honestReads = new Map();
+        let honestUnrendered = 0;
         const done = new Map();
         let reducedNow = false;
         for (const vp of ALL_VIEWPORTS) {
@@ -1882,6 +1895,7 @@ try {
             const pageScreens = await timed('plan reads', async () => {
                 plan ??= await evalJson(cdp, sessionId, 'window.__contrastPlan()');
                 owed ??= await evalJson(cdp, sessionId, 'window.__contrastOwed()');
+                honestOwed ??= await evalJson(cdp, sessionId, 'window.__honestOwed()');
                 return evalJson(cdp, sessionId, 'window.__contrastScreens');
             });
             const jobsHere = plan.filter((planned) => planned.viewport === vp.name);
@@ -2106,6 +2120,9 @@ try {
                     record.image = [img.width, img.height];
                     let sampled = 0;
                     let dropped = 0;
+                    // The honest-display roles this job READ: a verdict, on
+                    // the line read or in the ring.
+                    const honestRead = new Set();
                     const sampleStart = performance.now();
                     let retryMs = 0;
                     let retryWhy = [];
@@ -2176,7 +2193,9 @@ try {
                             worst: dumpValue(worst),
                             read: kind,
                             ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
+                            ...(t.role === undefined ? {} : { role: t.role }),
                         };
+                        if (t.role !== undefined && worst !== undefined) honestRead.add(t.role);
                         if (kind === 'line') {
                             entry.rects = t.rects.length;
                             entry.px = read.px;
@@ -2311,6 +2330,7 @@ try {
                         sampled += results.length;
                         for (const { t, r } of results) {
                             ringTargets += 1;
+                            if (t.role !== undefined) honestRead.add(t.role);
                             if (t.money) {
                                 /*
                                  * A money box is never read by a weaker
@@ -2518,6 +2538,27 @@ try {
                     record.sampled = sampled;
                     record.dropped = dropped;
                     record.retried = retried;
+                    /*
+                     * `the-honest-display-sentences-are-read` (8e2): every
+                     * role this screen owes at this width was read on this
+                     * job, or the job fails naming it.
+                     */
+                    honestUnrendered += prep.honestUnrendered ?? 0;
+                    for (const role of honestRead) honestReads.set(role, (honestReads.get(role) ?? 0) + 1);
+                    const owedHere = honestOwed?.[screen]?.[vp.name];
+                    if (owedHere !== undefined && retryWhy.length === 0) {
+                        const at = `${screen}|${vp.name}`;
+                        honestJobs.set(at, (honestJobs.get(at) ?? 0) + 1);
+                        record.honest = [...honestRead].sort();
+                        for (const role of owedHere) {
+                            if (!honestRead.has(role)) {
+                                dim.push(
+                                    `${screen} @${vp.name} / theme ${theme}${wornLabel}: the honest-display line [data-role="${role}"] is owed here and was not read ` +
+                                        `— collapsed, clipped out of view, hidden or gone (the-honest-display-sentences-are-read, layout/honestDisplay.ts)`,
+                                );
+                            }
+                        }
+                    }
                     if (retryWhy.length > 0) {
                         refuse(retryWhy.map((w) => `on the re-shot, ${w}`));
                     } else if (sampled === 0) {
@@ -2590,6 +2631,25 @@ try {
         // or a decoration worn and owed on no job, fails rather than owing
         // nothing.
         for (const fault of owedFaults(owed, [...wornClassesSeen])) verdicts.push(fault);
+        // The honest-display lines (8e2): the page owes some, and every
+        // screen and width that owes them was sampled — a sheet screen moved
+        // to the geometry-only list would otherwise owe its lines to no job.
+        const honestScreens = Object.entries(honestOwed ?? {});
+        if (honestScreens.length === 0) {
+            verdicts.push('the page owes no honest-display line (__honestOwed) — the four money sheets carry them by role');
+        }
+        for (const [screen, byViewport] of honestScreens) {
+            for (const [viewport, roles] of Object.entries(byViewport)) {
+                const planned = plan.filter((j) => j.screen === screen && j.viewport === viewport).length;
+                const checked = honestJobs.get(`${screen}|${viewport}`) ?? 0;
+                if (planned === 0 || checked === 0) {
+                    verdicts.push(
+                        `${screen} @${viewport} owes ${roles.length} honest-display line(s) and ${planned === 0 ? 'is in no contrast job' : 'no job of it was checked'} ` +
+                            `(the-honest-display-sentences-are-read, layout/honestDisplay.ts)`,
+                    );
+                }
+            }
+        }
         const RAIN_REQUIRED = Array.isArray(owed?.rain) ? owed.rain : [];
         const HORIZON_REQUIRED = [
             ...new Set([...(Array.isArray(owed?.horizon) ? owed.horizon : []), ...(LOOKS === 'shipped' ? Object.values(HORIZON_WORST).map((at) => at.job) : [])]),
@@ -2757,7 +2817,10 @@ try {
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}` +
                         `\n    faces: every face loaded before the first job on all ${contrastFacePages.length} contrast pages` +
-                        ` (the first: ${contrastFacePages[0] ?? 'none'})`,
+                        ` (the first: ${contrastFacePages[0] ?? 'none'})` +
+                        `\n    honest-display: ${[...honestJobs.values()].reduce((a, b) => a + b, 0)} job(s) on ${honestScreens.length} sheet screens read every line they owe; ` +
+                        `${honestReads.size} role(s) read ${[...honestReads.values()].reduce((a, b) => a + b, 0)} times; ` +
+                        `${honestUnrendered} line(s) not rendered at their job's width, not targets there`,
                 );
             }
         } else {

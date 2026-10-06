@@ -207,7 +207,7 @@ nothing.
   `T1` being `attributed` now puts a **second** `.chip` in the row's name
   column beside the quote chip, and `QUOTE_TIMES` dates `T1` and not `QUOTED`
   — so `plugin-missing-quotes`, `pay` and `pay-xec` measure the dated row and
-  card against the undated ones (`pay-xec` by geometry alone since 2026-09-05), and a two-chip name column against a track
+  card against the undated ones (`pay-xec` by geometry alone from 2026-09-05, sampled again since 2026-10-06 for its borrowed-id warning — "The honest-display sentences are read"), and a two-chip name column against a track
   `minmax(0, 1fr)` is free to shrink. That is why the row's chip is the short
   `QUOTE_MINTED_CHIP` and the sentence stays in the sheet: a `.chip` is
   uppercase and `white-space: nowrap`, and the whole sentence at that size is
@@ -4612,31 +4612,8 @@ public ceiling untouched; and a planted look carried under another class
 line-skip ceiling of its own … measured clipped-away/not-rendered: mobile
 16/10, desktop 4/8, canvas 205/0".
 
-**Not built — the fine print as a contrast target, waiting on the owner**
-(the 8e2 critic's item 11). The honest-display sentences — "a payment is
-final" (`PAY_NOTE_FINAL`), "sign with this stall's wallet"
-(`PUBLISH_MUST_SIGN`) — are `p.fine`, and `p.fine` is first in the pass's
-"text no target reads" report: only the `.fine` lines on the stall's own
-ground are targets. Measured with `p.fine` added to `CONTRAST_TEXT`:
-**no contrast failure on any look**, shipped, skeleton or fixture — and the
-public `LINE_SKIP_CEILING` failed on its not-rendered count: mobile 133
-against 35, desktop 112 against 28 (the fixture's 36 and 32 against 10 and
-8). Every new skip is a fine-print line that is not on screen by design:
-state sentences behind the `hidden` attribute ("Price left empty …",
-"Every field is empty …", "Token minted by another wallet", the shop
-window's lock and touch hints and their switch rows), and — the one that
-survives excluding `[hidden]` and anything inside it — the record sheets'
-desk-only QR caption ("On a phone, scan this with the wallet …"), not
-rendered below 680px: 4 per shipped look and 2 on the skeleton. Measured
-with `p.fine:not([hidden]):not([hidden] *)` as the target: public mobile
-not-rendered 49 against 35 (the fixture's 12 against 10), desktop within its
-ceiling, no contrast failure, 155.1 s. No stylesheet is touched and no
-ceiling moved: the owner's call is
-between re-measuring `LINE_SKIP_CEILING`'s mobile not-rendered to 49 with
-`p.fine:not([hidden]):not([hidden] *)` as the target, or reading the
-honest-display sentences by role alone. The critic's collapse plant still
-goes red without it (the `.stall-sub` and the ground's `.fine` lines are
-targets already).
+**The fine print the critic's item 11 named is read by role since the
+same day** — the next section.
 
 **Limits, stated** (the 8e2 critic's items 6, 8 and 9).
 - **`looks:diff` under a selection pins one private commit into both
@@ -4670,3 +4647,95 @@ targets already).
   refuses one meanwhile. The fixture has none.
 - The new probe rules of 8f2 (the sticky scroll pass, the art-off read, the
   mark capture, the vertical name) are not built.
+
+## The honest-display sentences are read (step 8e2, 2026-10-06, the 8e2 critic's item 11)
+
+**The incident.** The sentences on the four money sheets that state a
+money or signing fact — "a payment is final" (`PAY_NOTE_FINAL`), "No
+escrow" (`PAY_NOTE_DIRECT`), "sign it with this stall's own wallet"
+(`PUBLISH_MUST_SIGN`), "Token minted by another wallet", "this quote is no
+longer on the stall" — are `p.fine`, `p.note` and `p.ctx` lines, and no
+`CONTRAST_TEXT` selector matched one: `p.fine` was first in the pass's
+"text no target reads" report. The critic collapsed every `.fine` under
+the fixture look and the pay, Pay several and publish screens showed no
+skip at all. A look could paint them unreadable, or out of view, on a
+green run.
+
+**Measured first, as a class** (the window's options, the same day):
+`p.fine` added to the list read **no contrast failure on any look** and
+failed the public `LINE_SKIP_CEILING` on its not-rendered count — mobile
+133 against 35, desktop 112 against 28 — every new skip a line not on
+screen by design: `hidden` state sentences, and the record sheets'
+desk-only code caption below 680px; with `[hidden]` excluded, mobile 49
+against 35. The window chose **(b): by role, no ceiling moved.**
+
+**Now** (`layout/honestDisplay.ts`; `HONEST_DISPLAY`, 45 roles with the
+copy each says and the fact it states): every such sentence carries a
+`data-role` — 19 roles on 23 nodes were added in `render.ts`, attributes
+only (`roled`), and
+`looks:diff main` over the seven sheet screens read 84 shots identical —
+and is a contrast target by that role, scoped to `.sheet` (the row's, the
+face's and the tag's provenance lines are other surfaces), "Pay several"'s
+`dd[data-role="quote-not-minted"]` left out because it stands in
+`pay-lines`, a money box read whole. In the probe the list is
+`CONTRAST = CONTRAST_TEXT + HONEST_SELECTOR`, every rule that asks "is this
+a contrast target" asks it, and a prepare:
+- puts the honest lines **after** the list's own nodes, so every box the
+  list matched keeps its index and its dump key — **11,952 boxes identical,
+  0 moved, 0 removed** against the run before (the added 1,262 are the
+  honest boxes and the newly sampled screens' own);
+- **drops an honest line with no layout box at the job's width** before it
+  is counted (`hidden`, or the record sheets' `.sheet-qr-fold` on a
+  phone): a line not on screen is not a target there, and so not a skip —
+  390 such lines over the pass, and `LINE_SKIP_CEILING` read exactly its
+  old numbers (63/35, 23/28, 726/0; the fixture's 16/10, 4/8, 205/0).
+
+**What a pass owes** (`HONEST_OWED`): per sampled sheet screen and width,
+the roles every job there must READ — on every look, bare and worn — or
+the job fails naming the role (`the-honest-display-sentences-are-read`,
+the runner); and every screen and width that owes lines must be in the
+plan and checked, or the pass fails. The table is the fixtures' own state,
+held by its static half (`layout/honestDisplay.test.ts`: every role written
+by `render.ts`, every owed screen sampled at both widths and painting each
+owed role on a sheet, shown, in no money box, on every measured look bare
+and worn; proved red by renaming `pay-final`). A collapsed line is caught
+twice (clipped away, over its look's skip ceiling, and owed and unread); a
+line taken out with `display: none` only here — it is not rendered, so no
+ceiling counts it.
+
+**Screens sampled for it**: `pay-xec` and `pay-moved` left the
+geometry-only list (the borrowed-id warning and the valve's line are
+painted nowhere else), and `pay-gone` is new — the pay sheet over a quote
+that left, its title and the `pay-lost` sentence, over the quotes rail so
+the pay-screens audit sees a seller's figure. +21 contrast jobs a viewport
+(the plan pinned at 249 / 279 / 29, 557 with the skeleton);
+`pnpm test:layout` 157.2 s → 162.9 s. **`pay-dust` stays geometry only**:
+its line (`pay-why`) stands where no link was composed, so the sheet's two
+Pay controls are `hidden`, and a hidden control is a line target not
+rendered — sampled, it measured +7 a viewport over the unchanged ceiling.
+
+**Measured**: 126 owed jobs on 7 screens, 32 roles read 902 times, **no
+contrast failure on any look**; the least each look's honest lines read:
+Modern 4.63:1 (the code caption on Pay several, the skeleton the same),
+Neo 5.82:1 (`pay-lost`), Rural 5.36:1, the fixture 4.43:1 (its code
+caption on Pay several). The 1,262 added boxes are those 902 reads and the
+360 the newly sampled screens' own list targets add.
+
+**Read where painted, owed nowhere, stated**: `pay-why`, `pay-quantity-why`,
+`pay-whole-items`, `pay-qr-stale` and Pay several's `pay-several-dropped`,
+`pay-qr-why` and its own `pay-lost`; the describe sheet's state lines
+(`describe-invalid`, `describe-price-why`, the two other warnings,
+`describe-price-cleared`, `describe-clear-lede`, `describe-remove-warn`);
+the name sheet's `publish-invalid`, `publish-same-look` and its code
+caption (read on the shipped looks; not owed, since the name sheet
+composes no record for a paid look under the try-on). Each is a state no
+sampled fixture stages; each is a target the day one does.
+
+**Proved red in the real run**: the critic's plant committed into the
+fixture (and reset) — `.sheet .fine { max-height: 0; overflow: hidden }`
+and `.sheet .note, .sheet .ctx { display: none }` under the fixture look:
+**194 owed lines not read**, every owed role on all seven screens at both
+widths, bare and worn, beside "t-fixture-private: 102 line target(s)
+clipped-away at mobile, over its own 16" (92 at desktop); the `display:
+none` half — `pay-direct`, `pay-valve`, `pay-lost` — failed by this rule
+alone.

@@ -57,6 +57,7 @@ import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
+import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import {
@@ -2393,6 +2394,18 @@ const CONTRAST_TEXT = [
 ].join(', ');
 
 /**
+ * **Every contrast target**: the list above and the honest-display
+ * sentences on the four money sheets, by role (8e2, CRITIC-STEP-8E2 item
+ * 11; `layout/honestDisplay.ts`). Kept apart from the list so a prepare
+ * can put them after it — the boxes the list matched keep the index, and
+ * so the dump key, they had — and drop an honest line that is not rendered
+ * at this width before it is counted: a hidden line or the record sheets'
+ * desk-only code caption on a phone is not a target where it is not on
+ * screen. Every rule that asks "is this a contrast target" asks this.
+ */
+const CONTRAST = `${CONTRAST_TEXT}, ${HONEST_SELECTOR}`;
+
+/**
  * **The outline under a line on a decoration** (round 8, 2026-09-25; the
  * owner's rule: no ground under text over a decoration, and "cho lớp nền tối
  * ngay dưới nét chữ" where a line does not read). Every line standing on
@@ -2880,7 +2893,7 @@ function outlineFaults(screen: string, label: string): Failure[] {
                 out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a ground painted ${painted} — an outline that shows at rest` });
             }
         }
-        const target = node.closest(CONTRAST_TEXT);
+        const target = node.closest(CONTRAST);
         if (target === null) {
             fail(node, 'wears the outline and is no contrast target — an outline nobody reads');
         } else {
@@ -2913,7 +2926,7 @@ function moneySetFaults(screen: string, label: string): Failure[] {
     const fail = (node: Element, what: string): void => {
         out.push({ screen, theme: label, check: MONEY_CHECK, detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" ${what}` });
     };
-    for (const node of app.querySelectorAll(CONTRAST_TEXT)) {
+    for (const node of app.querySelectorAll(CONTRAST)) {
         if (node.closest('.deck-stall') !== null) continue;
         if (node.matches(PROTECTED)) {
             moneyChecks += 1;
@@ -2936,7 +2949,7 @@ function moneySetFaults(screen: string, label: string): Failure[] {
     for (const node of app.querySelectorAll(MONEY)) {
         if (node.closest('.deck-stall') !== null) continue;
         moneyChecks += 1;
-        if (!node.matches(CONTRAST_TEXT)) {
+        if (!node.matches(CONTRAST)) {
             fail(node, 'is in the money set and no contrast target');
         } else if (node.closest(PROTECTED) === null && !node.matches(MONEY_OUTSIDE_PROTECTED)) {
             fail(node, 'is in the money set and stands in no protected box');
@@ -3883,6 +3896,8 @@ type ContrastTarget = {
     sel: string;
     /** In the money set (`layout/moneySet.ts`): read whole, never by a weaker verdict. */
     money: boolean;
+    /** An honest-display line's role (`layout/honestDisplay.ts`), which the runner holds owed screens to. */
+    role?: string;
     /**
      * The rotation of this node's frame, radians: the sum of every
      * `transform` and `rotate` from the node up to the root (step 5b). A
@@ -3978,6 +3993,8 @@ type ContrastPrepared = {
     pageH: number;
     sheetClasses: string[];
     nodes: number;
+    /** Honest-display lines in scope with no layout box at this width: not targets here (8e2). */
+    honestUnrendered?: number;
     nonce: string;
     painted: { screen: string; look: number; flags: number };
     vw: number;
@@ -4046,6 +4063,8 @@ declare global {
         __contrastPlan: () => ContrastJob[];
         /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
         __contrastOwed: () => { rain: string[]; horizon: string[] };
+        /** The honest-display roles each sampled sheet screen owes, per viewport (`layout/honestDisplay.ts`). */
+        __honestOwed: () => typeof HONEST_OWED;
         /** The overlay screens, so the driver can skip their `wornAll` half. */
         __noDecorScreens: string[];
         __canvasScreens: string[];
@@ -4117,6 +4136,7 @@ window.__contrastPlan = () => contrastPlan(measuredLooks());
  * from Neo.
  */
 window.__contrastOwed = () => contrastOwed(measuredLooks());
+window.__honestOwed = () => HONEST_OWED;
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
 window.__themes = measuredLooks().map((look) => ({
@@ -4299,6 +4319,7 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         angle,
         ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
         sel: describe(node),
+        ...(node.matches(HONEST_SELECTOR) ? { role: node.getAttribute('data-role')! } : {}),
         money,
         rects: read?.rects,
         legacyDropped: sliver,
@@ -4433,7 +4454,7 @@ function lineRectsOf(
     for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
         const owner = text.parentElement;
         if (owner === null || owner.closest('svg') !== null || (text.textContent ?? '').trim() === '') continue;
-        if (owner.closest(CONTRAST_TEXT) !== node) continue;
+        if (owner.closest(CONTRAST) !== node) continue;
         const cs = getComputedStyle(owner);
         if (cs.visibility !== 'visible') continue;
         const lineInk = owner === node ? ink : owner instanceof HTMLElement && owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
@@ -4443,7 +4464,7 @@ function lineRectsOf(
     if (fragments === 0) {
         // No text on a line: a control drawn with a glyph alone.
         for (const svg of node.querySelectorAll('svg')) {
-            if (svg.closest(CONTRAST_TEXT) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
+            if (svg.closest(CONTRAST) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
             push(svg, svg.getBoundingClientRect(), ink, true);
         }
     }
@@ -5072,7 +5093,7 @@ function uncoveredText(scope: ParentNode): string[] {
         const owner = text.parentElement;
         if (owner === null || (text.textContent ?? '').trim() === '') continue;
         if (owner.closest('.deck-stall, svg, [aria-hidden="true"], #layout-result') !== null) continue;
-        if (owner.closest(CONTRAST_TEXT) !== null) continue;
+        if (owner.closest(CONTRAST) !== null) continue;
         if (getComputedStyle(owner).visibility !== 'visible') continue;
         range.selectNodeContents(text);
         if ([...range.getClientRects()].every((r) => r.width === 0 || r.height === 0)) continue;
@@ -5179,6 +5200,18 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     // 5b, CRITIC-SAMPLER-STEP item 9; `PROBE-RULES.md`, "The door's deck is
     // not a contrast target").
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)].filter((node) => node.closest('.deck-stall') === null);
+    // The honest-display lines after them (8e2): a node the list above
+    // already matched is not taken twice, and one with no layout box at
+    // this width — `hidden`, or in a fold a phone does not paint — is not a
+    // target here, so it is neither read nor counted as a skip.
+    const honestUnrendered = [...scope.querySelectorAll<HTMLElement>(HONEST_SELECTOR)].filter(
+        (node) => !node.matches(CONTRAST_TEXT) && node.getClientRects().length === 0,
+    ).length;
+    preparedNodes.push(
+        ...[...scope.querySelectorAll<HTMLElement>(HONEST_SELECTOR)].filter(
+            (node) => !node.matches(CONTRAST_TEXT) && node.getClientRects().length > 0,
+        ),
+    );
     preparedScope = scope;
     const lookPseudos = markLookPseudos(scope);
     const uncovered = uncoveredText(scope);
@@ -5263,8 +5296,10 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         pageH: pageHeight(scope),
         // What this one paint wore, for the runner's class audit.
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
-        // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
+        // How many nodes matched `CONTRAST`, before any was dropped — an
+        // honest line not rendered at this width aside (`honestUnrendered`).
         nodes: preparedNodes.length,
+        honestUnrendered,
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
         // The signs that wore Grid horizon, painted as they are.

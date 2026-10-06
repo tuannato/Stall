@@ -108,7 +108,7 @@ describe('the-harness-measures-the-private-looks-a-build-carries', () => {
         const theirs = jobs.filter((job) => job.look !== FIXTURE_ID);
         // The public run's plan, unchanged by value (`the-contrast-plan-is-every-job-the-pass-owes`).
         expect(theirs.map((job) => job.key)).toEqual(contrastPlan([...shippedLooks(), lookById(SKELETON_LOOK_ID)]).map((job) => job.key));
-        expect(theirs.length).toBe(515);
+        expect(theirs.length).toBe(557);
         // Every screen the skeleton is sampled on, bare and all worn: the look
         // has rows, and carries neither the rain nor the horizon nor a moving price.
         const skeletonCells = jobs.filter((job) => job.look === SKELETON_LOOK_ID).map((job) => `${job.viewport}/${job.screen}`);
