@@ -60,6 +60,7 @@ import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
+import { STICKY_SUBJECTS } from './stickyBoxes';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -74,6 +75,8 @@ import {
     paintsBareOnly,
     STATE_SCREENS,
     T1,
+    CJK_NAME,
+    LONGEST_NAME,
     handlers,
 } from './fixtures';
 
@@ -918,6 +921,28 @@ function measure(screen: string, themeLabel: string): Failure[] {
                 'the zoomed picture wears the shelf\'s framing',
                 `${describe(ic)} has radius ${cs.borderTopLeftRadius}, border ${cs.borderTopWidth}, clip ${clip}`,
             );
+        }
+        /*
+         * And none of the shelf's mask or its mark (step 8f2, STEP-8-PLAN
+         * §4.3 item 9): a look that cuts its tiles to a shape with a mask,
+         * or frames them with the tile's mark, would cut or frame the
+         * seller's picture here too. The reset takes both off with
+         * `!important` (stall.css), because a worn-only look's sheet lands
+         * later and a (0,3,0) rule of its own wins on source order; this
+         * reads what the cascade left. Red by a planted (0,3,0) mask with the
+         * reset's `!important` taken off (`PROBE-RULES.md`).
+         */
+        const masks = ['mask-image', '-webkit-mask-image', 'mask-border-source', '-webkit-mask-box-image-source']
+            .map((prop) => [prop, cs.getPropertyValue(prop).trim()] as const)
+            .filter(([, value]) => value !== '' && value !== 'none');
+        if (masks.length > 0) {
+            fail('the zoomed picture wears the shelf\'s mask', `${describe(ic)} has ${masks.map(([p, v]) => `${p} ${v.slice(0, 60)}`).join(', ')}`);
+        }
+        for (const mark of ic.querySelectorAll('[data-look-mark]')) {
+            const shown = getComputedStyle(mark).display;
+            if (shown !== 'none') {
+                fail('the zoomed picture wears the shelf\'s mark', `a ${mark.getAttribute('data-look-mark')} mark computes display: ${shown} on ${describe(ic)}`);
+            }
         }
     }
 
@@ -3259,12 +3284,31 @@ function tileLetterCuts(screen: string, label: string): Failure[] {
 const MARK_CHECK = 'no-shipped-look-shows-a-mark';
 const markChecksByClass: Record<string, number> = {};
 
+/**
+ * Marks a carried private look shows, per class (step 8f2): such a look may
+ * show its marks, and a mark it shows is still the renderer's empty,
+ * aria-hidden node — what it paints is measured by the contrast pass
+ * (`no-look-mark-paints-inside-a-protected-box`). The tracked fixture owes
+ * some at the desk (`probe-coverage.mjs`), so the capture has a subject.
+ */
+const marksShownByClass: Record<string, number> = {};
+
 function markFaults(screen: string, label: string, look: Look): Failure[] {
-    if (look.carried === 'private') {
-        return [];
-    }
     const out: Failure[] = [];
     const cls = look.theme.sheetClass;
+    if (look.carried === 'private') {
+        for (const mark of document.querySelectorAll<HTMLElement>('#app [data-look-mark]')) {
+            if (mark.closest('.deck-stall') !== null || getComputedStyle(mark).display === 'none') continue;
+            marksShownByClass[cls] = (marksShownByClass[cls] ?? 0) + 1;
+            const why = mark.childNodes.length > 0 ? 'holds something' : mark.getAttribute('aria-hidden') !== 'true' ? 'is not aria-hidden' : undefined;
+            if (why === undefined) continue;
+            const detail = `a ${mark.getAttribute('data-look-mark')} mark in ${describe(mark.parentElement ?? mark)} ${why}`;
+            if (!out.some((f) => f.detail === detail)) {
+                out.push({ screen, theme: label, check: MARK_CHECK, detail });
+            }
+        }
+        return out;
+    }
     for (const mark of document.querySelectorAll<HTMLElement>('#app [data-look-mark]')) {
         markChecksByClass[cls] = (markChecksByClass[cls] ?? 0) + 1;
         const display = getComputedStyle(mark).display;
@@ -3509,6 +3553,253 @@ function fileClipFaults(screen: string, label: string): Failure[] {
     return out;
 }
 
+/*
+ * **The seller's name stands whole** (`the-sellers-name-stands-whole`, step
+ * 8f2; the step-8 critic's item 10). A look that bounds the sign's name in
+ * a box of fixed size — a column, the name set on its end — can cut a long
+ * name, and nothing saw it: `text-spills` reads a box whose overflow is
+ * visible and a width, `cutSideways` is sideways by design, the line reads
+ * clip their rects to what shows, and the name is no protected box. DECISIONS
+ * D4 measured the binding case — a 32-byte Latin name run off the bottom of
+ * a wall, its last letters gone — and a cut name is an absent one. So on
+ * every screen, look and variant of every geometry pass, every line of the
+ * sign's name and tagline (each text node's line boxes, a Range's client
+ * rects) must stand whole on both axes inside every clip from its own box up
+ * to the viewport — `nothing-on-the-wall-is-cut-from-below`'s shape: a clip
+ * (`overflow` hidden or clip, the element's own included) must hold the
+ * line whole; inside a box that scrolls on that axis the line is reachable,
+ * and from there up it is the scroller's showing part that must be able to
+ * hold it. The viewport scrolls down when the page does and never sideways.
+ * The name's ladder (`applyNameTiers`, `lookHooks.ts`) is how a look keeps
+ * a long name inside its box: this rule is what fails when it does not.
+ * The lines read and the rungs climbed are counted per look
+ * (`nameLinesByClass`, `nameTiersByClass`); the phone and desk passes owe
+ * lines read on every look they painted, and the tracked fixture's rungs
+ * (`probe-coverage.mjs`). Not read: a name inside a turned wall
+ * (`[data-turn]`), whose rects are axis-aligned boxes of a rotated paint,
+ * and the door's deck minis. Proved red by the 32-byte fixture with the
+ * ladder off (`PROBE-RULES.md`).
+ */
+const NAME_WHOLE_CHECK = 'the-sellers-name-stands-whole';
+const nameLinesByClass: Record<string, number> = {};
+const nameTiersByClass: Record<string, Record<string, number>> = {};
+
+/** Why a line box does not stand whole inside every clip from `from` up to the viewport, or undefined. */
+function lineCut(rect: DOMRect, from: Element): string | undefined {
+    const span = { y: { lo: rect.top, hi: rect.bottom } as Span, x: { lo: rect.left, hi: rect.right } as Span };
+    const need = { y: rect.height, x: rect.width };
+    const scrolled = { y: false, x: false };
+    const via = { y: '', x: '' };
+    const side = { y: 'from below or above', x: 'sideways' };
+    const clipTo = (axis: 'y' | 'x', by: string, edge: Span): string | undefined => {
+        const s = span[axis];
+        const shown = Math.max(0, Math.min(s.hi, edge.hi) - Math.max(s.lo, edge.lo));
+        if (!scrolled[axis] && !(s.lo >= edge.lo - 1 && s.hi <= edge.hi + 1)) {
+            return `is cut ${side[axis]} by ${by}${via[axis]}: ${Math.round(shown)} of its ${Math.round(need[axis])}px show (${Math.round(s.lo)}–${Math.round(s.hi)} inside ${Math.round(edge.lo)}–${Math.round(edge.hi)})`;
+        }
+        if (scrolled[axis] && shown + 1 < need[axis]) {
+            return `can never be brought whole into view${via[axis]}: ${by} shows ${Math.round(shown)} of its ${Math.round(need[axis])}px ${side[axis]}`;
+        }
+        span[axis] = { lo: Math.max(s.lo, edge.lo), hi: Math.min(s.hi, edge.hi) };
+        return undefined;
+    };
+    for (let at: Element | null = from; at !== null && at !== document.documentElement && at !== document.body; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        const box = at.getBoundingClientRect();
+        for (const axis of ['y', 'x'] as const) {
+            const overflow = axis === 'y' ? cs.overflowY : cs.overflowX;
+            if (overflow === 'visible') continue;
+            const scrolls =
+                (overflow === 'auto' || overflow === 'scroll') &&
+                (axis === 'y' ? at.scrollHeight > at.clientHeight + 1 : at.scrollWidth > at.clientWidth + 1);
+            const edge = axis === 'y' ? { lo: box.top, hi: box.bottom } : { lo: box.left, hi: box.right };
+            if (scrolls && !scrolled[axis]) {
+                // Reachable inside this box by scrolling it: from here up the
+                // scroller's own box is what must show, at the line's size.
+                span[axis] = edge;
+                via[axis] = ` (in ${describe(at)}, which scrolls)`;
+                scrolled[axis] = true;
+                continue;
+            }
+            const why = clipTo(axis, at === from ? `its own box (${describe(at)})` : describe(at), edge);
+            if (why !== undefined) return why;
+        }
+    }
+    const pageScrolls = document.documentElement.scrollHeight > window.innerHeight + 1;
+    if (pageScrolls && !scrolled.y) {
+        scrolled.y = true;
+        via.y = ' (the page scrolls)';
+        span.y = { lo: 0, hi: window.innerHeight };
+    }
+    return clipTo('y', 'the viewport', { lo: 0, hi: window.innerHeight }) ?? clipTo('x', 'the viewport', { lo: 0, hi: window.innerWidth });
+}
+
+function nameWholeFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const range = document.createRange();
+    for (const line of document.querySelectorAll<HTMLElement>('#app .stall-head .stall-name, #app .stall-head .stall-tagline')) {
+        if (line.closest('.deck-stall, [data-turn]') !== null) continue;
+        const tier = line.getAttribute('data-name-tier');
+        if (tier !== null) {
+            const tiers = (nameTiersByClass[measuringClass] ??= {});
+            tiers[tier] = (tiers[tier] ?? 0) + 1;
+        }
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        let fault: string | undefined;
+        for (let text = walker.nextNode(); text !== null && fault === undefined; text = walker.nextNode()) {
+            if ((text.textContent ?? '').trim() === '' || text.parentElement === null) continue;
+            range.selectNodeContents(text);
+            // A line is its line-height's slot, not its font's content area:
+            // under a tight line-height (the wall's 1.02) the content area
+            // runs past the box by design with every glyph inside it. And its
+            // trailing letter-spacing is no glyph.
+            // In a vertical writing mode the slot runs across the width and
+            // the spacing down the line (`lookHooks.ts`' fit, the same measure).
+            const cs = getComputedStyle(text.parentElement);
+            const slot = Number.parseFloat(cs.lineHeight);
+            const spacing = Math.max(0, Number.parseFloat(cs.letterSpacing) || 0);
+            const vertical = !cs.writingMode.startsWith('horizontal');
+            for (const box of range.getClientRects()) {
+                if (box.width === 0 || box.height === 0) continue;
+                const across = vertical ? box.width : box.height;
+                const s = Number.isFinite(slot) && slot < across ? slot : across;
+                const rect = vertical
+                    ? new DOMRect(box.left + (box.width - s) / 2, box.top, s, Math.max(1, box.height - spacing))
+                    : new DOMRect(box.left, box.top + (box.height - s) / 2, Math.max(1, box.width - spacing), s);
+                nameLinesByClass[measuringClass] = (nameLinesByClass[measuringClass] ?? 0) + 1;
+                const why = lineCut(rect, text.parentElement);
+                if (why !== undefined) {
+                    fault = `${describe(line)}${tier === null ? '' : ` at rung ${tier}`} "${(line.textContent ?? '').trim().slice(0, 24)}…": a line at ${Math.round(rect.left)},${Math.round(rect.top)} ${why}`;
+                    break;
+                }
+            }
+        }
+        if (fault !== undefined) {
+            out.push({ screen, theme: label, check: NAME_WHOLE_CHECK, detail: `${fault} at ${window.innerWidth}x${window.innerHeight}` });
+        }
+    }
+    range.detach?.();
+    return out;
+}
+
+/*
+ * **A sticky sign covers nothing as the region scrolls**
+ * (`a-sticky-sign-covers-nothing-as-the-region-scrolls`, step 8f2; the
+ * owner's approval, DECISIONS 2026-09-26, STEP-8-PLAN §5). A look sheet may
+ * make the sign's own box sticky (`STICKY_BOXES` in the look rules — the
+ * one box `layout/stickyBoxes.ts` names here), and a box that follows the
+ * scroll stands over whatever the region scrolls under it, at a position
+ * no paint at rest is in. Every other rule measures the region at its top.
+ * So on every screen, look and variant of every geometry pass, a sticky
+ * subject box is found by its computed `position`, its scrollport found
+ * (the nearest ancestor that clips, or the page), and the region scrolled
+ * through stops — the top, every shelf head, the end, and every protected
+ * box that shares the sticky box's columns brought to the sticky box's
+ * edge, top and bottom — and at every stop no protected box's showing part
+ * (`PROTECTED`, the sign's own address aside) may meet the sticky box by
+ * more than a pixel each way. Scrolling is vertical, so a protected box in
+ * none of the sticky box's columns can never pass under it, and is asked at
+ * the shelf stops alone. The region is put back where it was. Counted per
+ * look (`stickyByClass`: paints with a sticky subject, paints whose region
+ * scrolled, stops); a pass that saw a sticky sign owes it a region that
+ * scrolled, and the tracked fixture owes one at the desk
+ * (`probe-coverage.mjs`). Proved red by the fixture's sign widened across
+ * both columns (`PROBE-RULES.md`).
+ */
+const STICKY_CHECK = 'a-sticky-sign-covers-nothing-as-the-region-scrolls';
+const stickyByClass: Record<string, { paints: number; scrolled: number; stops: number }> = {};
+
+/** The box a sticky box sticks within: the nearest ancestor that clips, or the page. */
+function scrollportOf(node: Element): HTMLElement {
+    for (let at = node.parentElement; at !== null && at !== document.body && at !== document.documentElement; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        const clips = (v: string): boolean => v !== 'visible' && v !== 'clip';
+        if (clips(cs.overflowY) || clips(cs.overflowX)) return at;
+    }
+    return (document.scrollingElement ?? document.documentElement) as HTMLElement;
+}
+
+function stickyScrollFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const subject of STICKY_SUBJECTS) {
+        for (const box of document.querySelectorAll<HTMLElement>(`#app .${subject}`)) {
+            if (box.closest('.deck-stall') !== null) continue;
+            const cs = getComputedStyle(box);
+            if (cs.position !== 'sticky') continue;
+            const tally = (stickyByClass[measuringClass] ??= { paints: 0, scrolled: 0, stops: 0 });
+            tally.paints += 1;
+            const region = scrollportOf(box);
+            const page = region === document.scrollingElement || region === document.documentElement;
+            const max = region.scrollHeight - region.clientHeight;
+            if (max <= 1) continue;
+            tally.scrolled += 1;
+            const start = region.scrollTop;
+            const view = (): DOMRect => (page ? new DOMRect(0, 0, window.innerWidth, window.innerHeight) : region.getBoundingClientRect());
+            const go = (top: number): void => region.scrollTo({ top, behavior: 'instant' });
+            go(0);
+            const rest = box.getBoundingClientRect();
+            const atZero = view();
+            // Where a box sits in the region's content, read at the top.
+            const content = (el: Element): { top: number; bottom: number } => {
+                const r = el.getBoundingClientRect();
+                return { top: r.top - atZero.top, bottom: r.bottom - atZero.top };
+            };
+            const insetTop = Number.parseFloat(cs.top);
+            const insetBottom = Number.parseFloat(cs.bottom);
+            const guarded = [...region.querySelectorAll(PROTECTED)].filter(
+                (node) => !box.contains(node) && node.closest('.deck-stall') === null,
+            );
+            const stops = new Set<number>([0, max]);
+            const clamp = (y: number): number => Math.round(Math.min(max, Math.max(0, y)));
+            for (const head of region.querySelectorAll('div.items, .section-title, .collection-name, .shelf-head')) {
+                stops.add(clamp(content(head).top - (Number.isFinite(insetTop) ? insetTop : 0)));
+            }
+            for (const node of guarded) {
+                const r = node.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0 || r.right <= rest.left + 1 || r.left >= rest.right - 1) continue;
+                const at = content(node);
+                if (Number.isFinite(insetTop)) {
+                    stops.add(clamp(at.top - insetTop));
+                    stops.add(clamp(at.bottom - insetTop - rest.height));
+                }
+                if (Number.isFinite(insetBottom)) {
+                    stops.add(clamp(at.bottom - (atZero.height - insetBottom)));
+                    stops.add(clamp(at.top - (atZero.height - insetBottom) + rest.height));
+                }
+            }
+            const said = new Set<Element>();
+            for (const top of [...stops].sort((a, b) => a - b)) {
+                go(top);
+                tally.stops += 1;
+                const s = box.getBoundingClientRect();
+                const v = view();
+                for (const node of guarded) {
+                    if (said.has(node)) continue;
+                    const r = node.getBoundingClientRect();
+                    const t = Math.max(r.top, v.top);
+                    const b = Math.min(r.bottom, v.bottom);
+                    const l = Math.max(r.left, v.left);
+                    const rt = Math.min(r.right, v.right);
+                    if (b - t <= 1 || rt - l <= 1) continue;
+                    const ox = Math.min(rt, s.right) - Math.max(l, s.left);
+                    const oy = Math.min(b, s.bottom) - Math.max(t, s.top);
+                    if (ox > 1 && oy > 1) {
+                        said.add(node);
+                        out.push({
+                            screen,
+                            theme: label,
+                            check: STICKY_CHECK,
+                            detail: `${describe(box)} stands over ${describe(node)} by ${Math.round(ox)}x${Math.round(oy)}px with ${describe(region)} scrolled to ${Math.round(region.scrollTop)} of ${Math.round(max)} at ${window.innerWidth}x${window.innerHeight}`,
+                        });
+                    }
+                }
+            }
+            go(start);
+        }
+    }
+    return out;
+}
+
 const failures: Failure[] = [];
 
 /*
@@ -3610,6 +3901,7 @@ for (const screen of measured) {
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
+            failures.push(...nameWholeFaults(screen, label));
             failures.push(...outlineFaults(screen, label));
             failures.push(...moneySetFaults(screen, label));
             failures.push(...buntingSwingFaults(screen, label));
@@ -3629,11 +3921,61 @@ for (const screen of measured) {
             if (look.id === SKELETON_LOOK_ID) {
                 failures.push(...skeletonLadderFaults(screen, label));
             }
+            // Last: it scrolls the region through its stops and puts it back
+            // (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
+            failures.push(...stickyScrollFaults(screen, label));
         }
     }
 }
 
 failures.push(...doorMiniFaults());
+
+/*
+ * **The sign's stress names on a try-on** (step 8f2; the 8f1 critic's item
+ * 6). Every carried private look is painted through the try-on already
+ * (`paintView`), but that is a whole paint; a seller trying a look on from
+ * the name sheet gets the other road — `showLook`'s `put` patches the look
+ * onto the stall behind the sheet and chooses the name's rung again there
+ * (`applyNameTiers`). So on every pass that measures `publish-name`, for
+ * each carried private look and each stress name (the 32-byte name and the
+ * CJK name), the name sheet is painted over the default look with that
+ * name, the look's own button in the picker pressed, and the stall behind
+ * held to wearing the look and to its name standing whole
+ * (`the-sellers-name-stands-whole`). The paints are counted per look
+ * (`tryOnNamesByClass`); a page pass owes one per carried look
+ * (`probe-coverage.mjs`).
+ */
+const tryOnNamesByClass: Record<string, number> = {};
+if (measured.includes('publish-name')) {
+    const root = document.getElementById('app')!;
+    // The default look, named by its class (`DEFAULT_LOOK_CLASS`, `looks.ts`): the probe names no look by id.
+    const behind = shippedLooks().find((look) => look.theme.sheetClass === DEFAULT_LOOK_CLASS)!;
+    for (const look of privateLooks()) {
+        measuringClass = look.theme.sheetClass;
+        for (const [what, name] of [['the 32-byte name', LONGEST_NAME], ['the CJK name', CJK_NAME]] as const) {
+            const label = `${look.label}, tried on over ${behind.label} with ${what}`;
+            renderStall(root, paintView({ ...SCREENS['publish-name']!, stallName: name }, behind, []), handlers);
+            const button = root.querySelector<HTMLButtonElement>(`[data-role="look-${look.id}"]`);
+            if (button === null) {
+                failures.push({ screen: 'publish-name', theme: label, check: NAME_WHOLE_CHECK, detail: `the name sheet offers no button for ${look.theme.sheetClass}` });
+                continue;
+            }
+            button.click();
+            const stall = root.querySelector('.stall:not(.deck-stall)');
+            if (stall === null || !stall.classList.contains(look.theme.sheetClass)) {
+                failures.push({
+                    screen: 'publish-name',
+                    theme: label,
+                    check: NAME_WHOLE_CHECK,
+                    detail: `pressing its button left the stall behind the sheet wearing ${[...(stall?.classList ?? [])].filter((c) => c.startsWith('t-')).join(', ') || 'no look'}`,
+                });
+                continue;
+            }
+            tryOnNamesByClass[look.theme.sheetClass] = (tryOnNamesByClass[look.theme.sheetClass] ?? 0) + 1;
+            failures.push(...nameWholeFaults('publish-name (tried on)', label));
+        }
+    }
+}
 // Out of the loop: no look is being measured.
 measuringClass = '-';
 
@@ -4056,6 +4398,10 @@ type ContrastPrepared = {
     vh: number;
     /** The look pseudos generated in the job's scope (D6(i)): none means no second frame. */
     lookPseudos?: number;
+    /** The marks a look shows in the job's scope (8f2): with none and no pseudo, no second frame. */
+    lookMarks?: number;
+    /** The file art in the job's scope (8f2): none means no art-off frame. */
+    fileArt?: number;
     /** The elements whose visible text no contrast target reads, described (a report, step 5b). */
     uncovered?: string[];
     /** How the sign's name was painted at the frozen instant (D14): its animations and opacity. */
@@ -4096,8 +4442,10 @@ declare global {
         /** Pause every animation on the page at one instant, its delay zeroed. */
         __contrastFreeze: () => void;
         __contrastBoxes: () => ContrastLive;
-        /** Hide (or show again) every look pseudo the last prepare marked; how many are marked (D6(i)). */
-        __lookPseudosHidden: (hide: boolean) => Promise<number>;
+        /** Hide (or show again) the look pseudos the last prepare marked, the marks a look shows, both or neither (D6(i), 8f2). */
+        __lookPaintHidden: (which: 'none' | 'pseudos' | 'marks' | 'both') => Promise<{ pseudos: number; marks: number }>;
+        /** Fail (or restore) the load of the file art the last prepare marked; how many rules (8f2). */
+        __artOff: (off: boolean) => Promise<number>;
         /** The protected boxes in the last prepare's scope, as they stand now (D6(i)). */
         __protectedBoxes: () => { x: number; y: number; w: number; h: number; sel: string }[];
         /**
@@ -5157,20 +5505,174 @@ function uncoveredText(scope: ParentNode): string[] {
     return [...out];
 }
 
-let lookPseudoSheetAdopted = false;
+let lookPaintSheetAdopted = false;
 
-window.__lookPseudosHidden = async (hide: boolean) => {
-    if (!lookPseudoSheetAdopted) {
+/*
+ * **No look mark paints inside a protected box**
+ * (`no-look-mark-paints-inside-a-protected-box`, step 8f2; STEP-8-PLAN §5).
+ * A mark (`lookMark`, `src/ui/lookHooks.ts`) a look shows is an in-flow
+ * node: a negative margin or a relative offset moves its paint over a
+ * figure while every box the geometry passes read stands clear, and with
+ * `pointer-events: none` the hit test reads straight through it — and it is
+ * no `att-` decoration, so the box sweep never asks it. So it is measured
+ * the look pseudos' way (D6(i)): every mark the job's scope shows is
+ * counted here (`shownLookMarks`), and the runner compares a frame with
+ * them shown against one with every mark at `visibility: hidden` inside
+ * every protected box. One frame hides the look pseudos and the marks
+ * together, where a job has both; only a frame that moved is captured again
+ * with each hidden alone, to say which painted there.
+ */
+function shownLookMarks(scope: ParentNode): number {
+    let n = 0;
+    for (const mark of scope.querySelectorAll('[data-look-mark]')) {
+        if (mark.closest('.deck-stall') !== null) continue;
+        if (getComputedStyle(mark).display !== 'none') n += 1;
+    }
+    return n;
+}
+
+/** Hide (or show again) the look pseudos the last prepare marked, the marks, both or neither; how many of each. */
+window.__lookPaintHidden = async (which: 'none' | 'pseudos' | 'marks' | 'both') => {
+    if (!lookPaintSheetAdopted) {
         const sheet = new CSSStyleSheet();
         sheet.replaceSync(
-            'html[data-probe-lp-off] [data-probe-lp-before]::before,html[data-probe-lp-off] [data-probe-lp-after]::after{visibility:hidden!important}',
+            'html[data-probe-lp-off] [data-probe-lp-before]::before,html[data-probe-lp-off] [data-probe-lp-after]::after{visibility:hidden!important}' +
+                'html[data-probe-lm-off] [data-look-mark]{visibility:hidden!important}',
         );
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-        lookPseudoSheetAdopted = true;
+        lookPaintSheetAdopted = true;
     }
-    document.documentElement.toggleAttribute('data-probe-lp-off', hide);
+    document.documentElement.toggleAttribute('data-probe-lp-off', which === 'pseudos' || which === 'both');
+    document.documentElement.toggleAttribute('data-probe-lm-off', which === 'marks' || which === 'both');
     await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
-    return document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]').length;
+    return {
+        pseudos: document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]').length,
+        marks: shownLookMarks(preparedScope ?? document),
+    };
+};
+
+/*
+ * **A word reads when the art does not load**
+ * (`a-word-reads-when-the-art-does-not-load`, step 8f2; the step-8 critic's
+ * item 11, owner question 2). A file can always fail to load — a flaky
+ * line, a tab older than a deploy — and a mask image that has not loaded is
+ * transparent black by the spec, so a box a look masks with its own art
+ * paints nothing at all; a `clip-path` naming a file that does not load is
+ * as if none were given. `no-word-is-clipped-by-a-file` keeps a file's mask
+ * off every box with words, but a ground under words drawn by a masked
+ * pseudo or a sibling box is what a look of washes and masses is made of,
+ * and with its file gone the words stand on whatever is left. So every
+ * element and every `::before`/`::after` in the job's scope whose computed
+ * mask image, mask border source or `clip-path` names a file is marked
+ * here, and the runner reads every target again — a line by its line
+ * rects, money whole, an outlined line in its ring — on a frame with that
+ * art as a failed load leaves it: each mask image's `url()` layers turned
+ * to an image of transparent black (`FAILED_LAYER`, the spec's own
+ * failure — never `none`, which as a mask's only layer is no mask at all;
+ * gradients and compositing kept), each mask border source `none`, each file
+ * `clip-path` `none`. Asked only where a file mask is painted (no shipped
+ * look paints one; the tracked fixture does); `fileArt` is how many.
+ * Proved red by the fixture's name painted in the paper's ink, on a mass of
+ * its own art with nothing under it (`PROBE-RULES.md`).
+ */
+const ART_PROPS = ['mask-image', '-webkit-mask-image', 'mask-border-source', '-webkit-mask-box-image-source', 'clip-path'] as const;
+/**
+ * A mask layer as a failed load leaves it: an image of transparent black. Not
+ * `none` — a mask whose every layer is `none` is no mask at all, so the
+ * masked box would paint whole where a failed file paints nothing (the first
+ * red proof of this rule read green for exactly that reason).
+ */
+const FAILED_LAYER = 'linear-gradient(transparent, transparent)';
+/** The shorthands a masking rule may be written with. */
+const ART_SHORTHANDS = ['mask', '-webkit-mask', 'mask-border', '-webkit-mask-box-image'] as const;
+const ART_ATTR = /^data-probe-art(?:-before|-after)?$/;
+let artSheet: CSSStyleSheet | undefined;
+
+/** A selector list split at its top-level commas (a comma inside `:is()` or `[...]` is not a separator). */
+function selectorList(text: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < text.length; i += 1) {
+        const c = text[i];
+        if (c === '(' || c === '[') depth += 1;
+        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+        else if (c === ',' && depth === 0) {
+            out.push(text.slice(start, i));
+            start = i + 1;
+        }
+    }
+    out.push(text.slice(start));
+    return out.map((one) => one.trim()).filter((one) => one !== '');
+}
+
+/** Mark every box and pseudo in `scope` whose art names a file, and write the sheet that fails its load; how many. */
+function markFileArt(scope: ParentNode): number {
+    for (const el of document.querySelectorAll('[data-probe-art], [data-probe-art-before], [data-probe-art-after]')) {
+        for (const attr of [...el.attributes].map((a) => a.name).filter((name) => ART_ATTR.test(name))) {
+            el.removeAttribute(attr);
+        }
+    }
+    const rules: string[] = [];
+    const seen = new Set<string>();
+    for (const rule of styleRules()) {
+        // A shorthand holding a `var()` leaves its longhands empty in the
+        // rule, so the shorthands are asked too; what the host computes is
+        // what is read below.
+        if (![...ART_PROPS, ...ART_SHORTHANDS].some((prop) => rule.style.getPropertyValue(prop).trim() !== '')) continue;
+        for (const one of selectorList(rule.selectorText)) {
+            const pseudo = PSEUDO_AT.exec(one);
+            const host = one.replace(/::?(?:before|after)\b/g, '').trim() || '*';
+            let hosts: NodeListOf<Element>;
+            try {
+                hosts = scope.querySelectorAll(host);
+            } catch {
+                throw new Error(`a masking rule's selector the probe cannot match: ${one}`);
+            }
+            for (const el of hosts) {
+                if (el.closest('.deck-stall') !== null) continue;
+                const which = pseudo === null ? undefined : (pseudo[1] as 'before' | 'after');
+                const key = `${which ?? ''}`;
+                const cs = getComputedStyle(el, which === undefined ? null : `::${which}`);
+                if (which !== undefined && (cs.content === 'none' || cs.content === 'normal')) continue;
+                const failed: string[] = [];
+                for (const prop of ['mask-image', '-webkit-mask-image'] as const) {
+                    const value = cs.getPropertyValue(prop);
+                    if (fileNamedBy(value) !== undefined) {
+                        failed.push(`${prop}:${value.replace(/url\((?:"[^"]*"|'[^']*'|[^)]*)\)/g, FAILED_LAYER)}!important`);
+                    }
+                }
+                for (const prop of ['mask-border-source', '-webkit-mask-box-image-source'] as const) {
+                    if (fileNamedBy(cs.getPropertyValue(prop)) !== undefined) failed.push(`${prop}:none!important`);
+                }
+                if (fileNamedBy(cs.clipPath) !== undefined) failed.push('clip-path:none!important');
+                if (failed.length === 0) continue;
+                const attr = which === undefined ? 'data-probe-art' : `data-probe-art-${which}`;
+                let id = el.getAttribute(attr);
+                if (id === null) {
+                    id = String(seen.size);
+                    el.setAttribute(attr, id);
+                }
+                if (seen.has(`${key}/${id}`)) continue;
+                seen.add(`${key}/${id}`);
+                rules.push(`html[data-probe-art-off] [${attr}="${id}"]${which === undefined ? '' : `::${which}`}{${failed.join(';')}}`);
+            }
+        }
+    }
+    artSheet ??= (() => {
+        const sheet = new CSSStyleSheet();
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        return sheet;
+    })();
+    artSheet.replaceSync(rules.join('\n'));
+    return rules.length;
+}
+
+/** Fail (or restore) the load of every piece of file art the last prepare marked; how many are marked. */
+window.__artOff = async (off: boolean) => {
+    document.documentElement.toggleAttribute('data-probe-art-off', off);
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return artSheet?.cssRules.length ?? 0;
 };
 
 /** The protected boxes in the last prepare's scope, the deck aside, as they stand now. */
@@ -5269,6 +5771,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     );
     preparedScope = scope;
     const lookPseudos = markLookPseudos(scope);
+    const lookMarks = shownLookMarks(scope);
+    const fileArt = markFileArt(scope);
     const uncovered = uncoveredText(scope);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
@@ -5361,6 +5865,10 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         horizon,
         // The look pseudos in scope, marked for D6(i)'s second frame.
         lookPseudos,
+        // The marks a look shows in scope (8f2), hidden in that frame too.
+        lookMarks,
+        // The file art in scope, failed in the art-off frame (8f2).
+        fileArt,
         // Visible text no target reads, reported (step 5b).
         uncovered,
         // The sign name's animations and opacity where it was read (D14).
@@ -5547,6 +6055,15 @@ const verdict = {
     fileClipChecks,
     /* Marks read hidden, per look class (`no-shipped-look-shows-a-mark`). */
     markChecksByClass,
+    /* Marks a carried private look showed, per class (8f2). */
+    marksShownByClass,
+    /* Sign lines read whole, and the name rungs climbed, per class (`the-sellers-name-stands-whole`, 8f2). */
+    nameLinesByClass,
+    nameTiersByClass,
+    /* Sticky signs and the stops their regions were scrolled through, per class (`a-sticky-sign-covers-nothing-as-the-region-scrolls`, 8f2). */
+    stickyByClass,
+    /* The stress names measured on the name sheet's try-on, per carried look (8f2). */
+    tryOnNamesByClass,
     /* Every policy refusal the page met before its verdict (`the-probe-page-meets-no-csp-refusal`). */
     cspRefusals: cspRefusals(),
     clipSkips,

@@ -326,6 +326,31 @@ frame` — the probe's fixture paints initials rather than a picture, so the
 defect was there to be measured with no network at all, on every look and
 every mood, from the day the surface shipped.
 
+**The shelf's mask and mark, and resets that win** (step 8f2; STEP-8-PLAN
+§4.3 item 9, the 8f1 critic's item 4, the window after 8f1). A look may cut
+its tiles to a shape with a mask (8f1 put the tile's initials in their own
+span and a mark beside them for exactly that), and `.zoom-ic` is still
+`.item-ic`: the zoom would cut the seller's picture to the shelf's shape. So
+the same sweep reads the computed `mask-image`, `-webkit-mask-image` and the
+two mask border sources off the icon ("the zoomed picture wears the shelf's
+mask") and every mark inside it ("… the shelf's mark": a tile mark that
+computes anything but `display: none`). And the reset wins whatever weight a
+look's rule has: a worn-only look's sheet lands after stall.css, so
+`.t-x .items .item-ic` — (0,3,0), the natural way to scope a tile's shape to
+the rows — beat a (0,3,0) reset on source order. Since 8f2 every property
+the reset takes off is `!important` — border, radius, clip, both masks, and
+the mark's `display` — the base sheet's only uses beside `[hidden]`, and G4
+refuses `!important` in a look sheet, so nothing a look writes can beat
+them (`the-base-sheet-says-important-only-where-a-look-must-never-win`
+pins the list). **Proved red with a (0,3,0) plant**, never (0,2,0), which
+loses to the reset at any weight: the tracked fixture planted
+`.t-fixture-private .zoom-frame .item-ic { mask-image: linear-gradient(#000,
+transparent); border-radius: 50% }` (with its `-webkit-` twin), which lands
+after stall.css. With the reset's `!important` taken off the mask and the
+radius, `item-zoom` failed on the fixture at the phone and the desk —
+"the zoomed picture wears the shelf's mask" 10 times and "… framing" 10;
+with the `!important` back, the same plant moved nothing (0 of either).
+
 ## Rendered-pixel contrast (pass 4)
 
 `legibleOn` proves text against the two flat palette roles; only pixels
@@ -4646,7 +4671,7 @@ same day** — the next section.
   plan's `guard` field (8i); `every-moving-decoration-has-a-reader-or-a-reason`
   refuses one meanwhile. The fixture has none.
 - The new probe rules of 8f2 (the sticky scroll pass, the art-off read, the
-  mark capture, the vertical name) are not built.
+  mark capture, the vertical name) landed with 8f2 — "Step 8f2" below.
 
 ## The honest-display sentences are read (step 8e2, 2026-10-06, the 8e2 critic's item 11)
 
@@ -4739,3 +4764,240 @@ widths, bare and worn, beside "t-fixture-private: 102 line target(s)
 clipped-away at mobile, over its own 16" (92 at desktop); the `display:
 none` half — `pay-direct`, `pay-valve`, `pay-lost` — failed by this rule
 alone.
+
+## Step 8f2: the shared hooks a look shows, measured (2026-10-06)
+
+Step 8f1 built the hooks a fourth look needs — marks, a sticky sign, the
+name's ladder, `data-script` — and held them inert on the three looks
+(`no-shipped-look-shows-a-mark`, `looks:diff`). 8f2 is the half that
+measures a look that SHOWS them (STEP-8-PLAN §5, CRITIC-STEP-8 items 10 and
+11): four rules, general to any look that uses a hook, each given a subject
+in the tracked fixture (`layout/fixture-private-looks/`, carried by every
+default run) and each proved red by a plant. The three looks paint none of
+it, so their verdicts and their `looks:diff` stay what they were.
+
+### The seller's name stands whole (`the-sellers-name-stands-whole`)
+
+**The incident it answers** (CRITIC-STEP-8 item 10): DECISIONS D4 measured a
+32-byte Latin name in a look's vertical column running off the bottom of a
+wall — its last letters gone — and no rule could fail on it: `text-spills`
+reads a box whose overflow is visible and a width, `cutSideways` is
+sideways by design, the line reads clip their rects to what shows, and the
+name is no protected box. A cut name is an absent one.
+
+**Now**, on every screen, look and variant of every geometry pass, every
+line of the sign's name and tagline (`.stall-head .stall-name`,
+`.stall-head .stall-tagline`; each text node's line boxes, a Range's client
+rects) must stand whole on both axes inside every clip from its own box up
+to the viewport — `nothing-on-the-wall-is-cut-from-below`'s shape: a clip
+(`overflow` hidden or clip, the element's own included) holds the line
+whole; inside a box that scrolls on that axis the line is reachable, and
+from there up it is the scroller's showing part that must be able to hold
+it; the viewport scrolls down when the page does, never sideways. **A line
+is its line-height's slot**, not its face's content area: under a
+line-height tighter than the face (the wall's 1.02, Inter at 1.15) every
+content area runs past its slot by design with every glyph inside it — the
+first run read every fixture name on a wall as cut by 2–3px of content area
+(`35–56 inside 37–55`). The slot is centred on the content area, as CSS
+places the half-leading, and runs across the width in a vertical writing
+mode; a line's trailing letter-spacing is no glyph. Counted per look
+(`nameLinesByClass`) and owed on every page and wall pass for every look it
+painted; the rungs a name climbed are counted too (`nameTiersByClass`).
+Not read: a name inside a turned wall (`[data-turn]`, axis-aligned rects of
+a rotated paint) and the door's deck minis.
+
+**The ladder's fit was the same mistake** (a finding, fixed in
+`src/ui/lookHooks.ts`'s `realFits`): it asked the box's own scroll size,
+which counts the content areas past the slots, so a two-line name standing
+whole in a box two lines tall read as overflowing and climbed a rung it did
+not need — measured on the fixture's desk sign, 44px over 50.6px slots,
+`scrollHeight` 103 against 101, and `a-shipped-row-states-the-sizes-its-sheet-paints`
+then read the fixture's name at 18px against the row's 44. When the box's
+own answer is no, the lines are now asked, slot by slot, by the measure
+above. Inert on the three looks (no `--name-rungs`, never asked).
+
+**The shipped looks**: no failure on any screen, the new stress screens
+included — a 32-byte name wraps on every look and the sign grows.
+
+### A sticky sign covers nothing as the region scrolls (`a-sticky-sign-covers-nothing-as-the-region-scrolls`)
+
+The look rules admit one sticky box in a look sheet, the sign's own
+(`STICKY_BOXES`; 8f1), and until this pass a fence
+(`a-sticky-sign-waits-for-the-scroll-pass`) refused one in every served
+sheet, because a box that follows the scroll stands over whatever the
+region scrolls under it — at a position no paint at rest is in, and every
+other rule measures the region at its top. **Now**, on every screen, look
+and variant of every geometry pass, every subject box `layout/stickyBoxes.ts`
+lists (held to the lint's table by
+`the-scroll-pass-measures-what-the-lint-admits`) that computes
+`position: sticky` has its scrollport found (the nearest ancestor that
+clips, or the page) and scrolled through stops: the top, every shelf head,
+the end, and every protected box that shares the sticky box's columns
+brought to the sticky box's edge, top and bottom. At every stop no
+protected box's showing part (the sign's own address aside) may meet the
+sticky box by more than a pixel each way. Scrolling is vertical, so a
+protected box in none of the sticky box's columns can never pass under it
+and is asked at the shelf stops alone; the region is put back where it
+was. Counted per look (`stickyByClass`: paints with a sticky sign, paints
+whose region scrolled, stops); a page pass that found a sticky sign owes
+it a region that scrolled. The fence is deleted; its replacement test
+holds the two lists to one and the tracked fixture to having a sticky
+sign, and no public look sheet to having one.
+
+### No look mark paints inside a protected box (`no-look-mark-paints-inside-a-protected-box`)
+
+A mark a look shows is an in-flow node: a negative margin or a relative
+offset moves its paint over a figure while every box the geometry passes
+read stands clear; with `pointer-events: none` the five-point hit test
+reads straight through it; and it carries no `att-` class, so the box sweep
+never asks it (STEP-8-PLAN §5, dry-run D6). So it is measured the look
+pseudos' way (D6(i), "No look pseudo paints inside a protected box"): the
+prepare counts the marks the job's scope shows (`lookMarks`), and the
+runner compares a frame with them shown against one with every mark at
+`visibility: hidden`, inside every protected box, a device pixel in, at
+`LOOK_PSEUDO_LEVELS`. **One frame hides the look pseudos and the marks
+together** where a job has both (`__lookPaintHidden('both')`), so a passing
+job pays the two captures a job with look pseudos alone always did; only a
+frame that moved is taken again with each hidden alone, to say which
+painted there. On the geometry
+passes a mark a carried private look shows is still held to be the
+renderer's empty, aria-hidden node (`no-shipped-look-shows-a-mark` keeps
+the display read for every other look), and counted (`marksShownByClass`).
+
+### A word reads when the art does not load (`a-word-reads-when-the-art-does-not-load`)
+
+**The incident it answers** (CRITIC-STEP-8 item 11; owner question 2): a
+file can always fail to load — a flaky line, a tab older than a deploy —
+and a mask image that has not loaded is transparent black by the spec, so a
+box a look masks with its own art paints nothing at all. `no-word-is-clipped-by-a-file`
+keeps a file's mask off every box with words, but a ground under words
+drawn by a masked pseudo is what a look of washes and masses is made of
+(`fileClipFaults` reads elements only, the critic's own note), and with its
+file gone the words stand on whatever is left.
+
+**Now**, on every contrast job whose scope paints file art, the prepare
+marks every element and every `::before`/`::after` whose computed mask
+image, mask border source or `clip-path` names a file (`markFileArt`: the
+masking rules found in the CSSOM, their hosts matched, each read computed),
+and writes the sheet that fails exactly that art as a failed load leaves
+it — each mask image's `url()` layers turned to an image of transparent
+black (`FAILED_LAYER`, `linear-gradient(transparent, transparent)`: the
+spec's own failure; gradient layers and compositing kept), each file mask
+border source `none`, each file `clip-path` `none` (a reference that does
+not load is as if none were given). **Never `none` for a mask layer**: the
+first red proof read green because of it — a mask whose every layer is
+`none` is no mask at all, so the "failed" mass painted whole, dark, behind
+a name in the paper's ink, where a failed file paints nothing. The runner reads every
+target again on that frame by the reader it was read by — a line by its
+line rects, money whole, an outlined line in its ring on a second frame
+with its glyphs shown — and every one must clear the floor; a frame that
+failed is taken again once before it is believed. The masking rules are
+found by their longhands and their shorthands (a shorthand holding a
+`var()` leaves its longhands empty in the CSSOM). Asked only where file
+art is painted: no shipped look paints any, so the rule costs the public
+run nothing (`fileArt` echoed per job; `artOff` in the dump). **Not
+switched off, stated**: a `background-image` or `border-image` file that
+fails leaves the element's colour standing — a look whose words need the
+picture over a different colour is not seen here; and a `url()` a custom
+property carries is read computed, so it is seen.
+
+### The stress names: CJK, 32 bytes on every wall composition, and on a try-on
+
+New screens, geometry only and bare and all worn (`STATE_SCREENS`,
+`GEOMETRY_ONLY_SCREENS`): `cjk-name` (nine ideographs, 27 bytes, and a CJK
+tagline — `data-script="cjk"`); `shop-window-long-name` and
+`shop-window-browse-long-name` (`hostile-name`'s 32-byte `W`s, now
+`LONGEST_NAME`, on the Cycle card and in Browse at the desk) and
+`shop-window-wall-long-name` and `shop-window-wall-browse-long-name` (the
+same at 1920x1080), and `shop-window-cjk-name` — every one of them on the
+portrait wall and the counter tablet too (`WINDOW_SCREENS`). The CJK glyphs
+are the machine's fallback face (no CJK face is served): those screens
+measure a per-OS layout, as the plan states for a CJK name.
+
+**On a try-on** (the 8f1 critic's item 6): every carried private look is
+painted through the try-on already (`paintView`), but as a whole paint; a
+seller who tries a look on from the name sheet gets `showLook`'s `put`,
+which patches the look onto the stall behind the sheet and chooses the
+name's rung there. So on every pass that measures `publish-name`, for each
+carried look and each stress name, the sheet is painted over the default
+look with that name, the look's own picker button pressed, and the stall
+behind held to wearing the look and to its name standing whole
+(`tryOnNamesByClass`, owed per carried look on the page passes).
+
+### What the tracked fixture carries, and what a run owes
+
+The fixture's sheet gained, each scoped as narrowly as its rule needs:
+a name ladder (`--name-rungs: 2`, a bounded name box — 72px on a phone,
+110px at the desk where two lines of its 44px name stand — rungs at 18 and
+12px, and a letter-spacing under `data-script="cjk"`), at every width; and
+at the desk only, off the wall: the sign sticky in a column of its own
+(`grid-template-columns: 380px minmax(0, 1fr)` on the scroller, the rows as
+tall as what they hold — an auto row in a scroller of definite height
+shrank a body whose minimum height is 0 and the footer painted over the
+goods, the first run's 58 failures), a dot after every row's figure (the
+figure mark), and a mass masked by its own file (`art/mass.svg`) behind the
+name, light enough that the name reads on the paper when the file does not
+load. A run that carries the fixture owes each subject
+(`TRACKED_FIXTURE_CLASS`, `probe-coverage.mjs` and the runner): a region
+scrolled under its sticky sign and a mark shown at the desk, a rung
+climbed on both page passes, a mark hidden and file art failed on some
+contrast job — so an edit that took a subject away fails the run.
+
+**The fixture's own tallies did not move**: line skips 16/10, 4/8, 205/0
+(`CARRIED_LINE_SKIP_CEILING` unchanged); points behind a clip desktop
+261/2230 (12%).
+
+### Proved red
+
+Two runs of plants on the tracked fixture (a commit object of the planted
+sheet, selected by `STALL_LOOKS_COMMIT`) and the code, each reverted:
+
+- **Run A**: the fixture's sign widened across both columns
+  (`grid-column: 1 / -1`), the ladder off (`applyNameTiers` returning at
+  once), the zoom plant above with the reset's `!important` off the mask
+  and radius, and a tile mark 8px wider than its tile with
+  `a-tile-shows-its-letters-whole` reading the whole tile again.
+  `a-sticky-sign-covers-nothing-as-the-region-scrolls` 65 at the desk —
+  "header.stall-head stands over a.buy by 583x51px with div.stall-scroll
+  scrolled to 439 of 643"; `the-sellers-name-stands-whole` 19 (phone 7,
+  desk 3, tablet 8, reduced motion 1) — "hostile-name: … a line at 83,111 is
+  cut from below or above by its own box (h1.stall-name): 10 of its 31px
+  show", the name sheet's try-on of the 32-byte name among them — and the
+  coverage gap "read no t-fixture-private name on a rung of its ladder" on
+  both page passes; the zoom's mask and framing 10 each; the tile rule 1,365
+  — which is the red proof 8f1's `.ic-initials` change was owed: a tile
+  mark a look shows lends its box to the letters' extent ("spans 52.0×52.0px
+  in a 44×44px box"). Every failure the fixture's; no shipped look's.
+- **Run B**: the figure mark pulled over the price and out of the hit test
+  (`margin-left: -40px; pointer-events: none`), the mass in the text's ink
+  with the name in the paper's over it and nothing under the two, and the
+  zoom and tile plants of run A kept with the probe and stall.css as they
+  are. `no-look-mark-paints-inside-a-protected-box` 62 — "span.item-x at
+  1094,233 changes 24 px when the look's marks are hidden" — while "asked
+  amount is covered" read 0 (the hit test reads through `pointer-events:
+  none`, which is why the capture exists); `a-word-reads-when-the-art-does-not-load`
+  60, every art-off job — `offers`' name at 1.17:1 — and on 20 of those
+  screens the ordinary read of the same name passed (the others' names run
+  to the mass's ragged edge and failed it too); the zoom's mask and framing
+  0, and the tile rule 0. **The first run B read the art-off rule green**:
+  the failure layer was `none` (above), now `FAILED_LAYER`.
+
+### Measured
+
+This Mac, 2026-10-06, back to back with `main` (1bcdf58, a worktree):
+`pnpm test:layout` **171.0s on main, 189.4s here (+18.4s)**, under the
+240s shard line. Where it went: the geometry passes +2.3s together (the
+name read on every paint, the scroll pass over the fixture's 53 desk
+paints whose region scrolls — 146 stops — the five stress screens and the
+try-on job); the contrast pass +16.2s — the look-paint frame on 60 more
+jobs (the fixture's desk jobs, whose masked mass is a look pseudo; 30 of
+them show marks too) +9.0s, and the art-off frame on the same 60 jobs
++7.3s (1,046 targets read again). No public job gained a capture. The
+contrast dump: 13,214 boxes on both sides, 12,997 identical, 217 moved, 0
+added or removed — every moved box the fixture's (its desk sign in a
+column of its own moves its rows), every public look's identical. **What
+a look showing every hook on every job costs**: on the fixture's numbers
+about +0.3s a job (one look-paint frame, one art-off frame), so a look
+measured on ~140 jobs adds ~40s — 8g's to measure on Ink wash, and the
+first lever if the run nears 240s is the stress screens' and the
+fixture's scope, not the rules.

@@ -71,13 +71,20 @@ describe('the-zoom-takes-off-a-looks-mask', () => {
      * mask off beside the radius and the clip, and the tile's mark stays off
      * the zoom; both are `!important`, because a worn-only sheet lands after
      * this one and a (0,3,0) look rule would win on source order (the 8f1
-     * critic's item 4). The probe's reading of the computed mask is step
-     * 8f2's.
+     * critic's item 4) — and since 8f2 the border, the radius and the clip
+     * too. The probe reads the computed mask and mark on the zoom ("A
+     * zoomed picture fills its frame", `PROBE-RULES.md`).
      */
     it('resets the mask both ways, important, with the rest of the shelf’s framing', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
         const block = /\n\.zoom-frame \.zoom-ic\.item-ic \{([^}]+)\}/.exec(css)?.[1] ?? '';
-        for (const decl of ['border-radius: 0;', 'clip-path: none;', '-webkit-mask: none !important;', 'mask: none !important;']) {
+        for (const decl of [
+            'border: 0 !important;',
+            'border-radius: 0 !important;',
+            'clip-path: none !important;',
+            '-webkit-mask: none !important;',
+            'mask: none !important;',
+        ]) {
             expect(block, decl).toContain(decl);
         }
         expect(css).toMatch(/\n\.zoom-frame \.zoom-ic \[data-look-mark\] \{\n    display: none !important;\n\}/);
@@ -89,7 +96,8 @@ describe('the-base-sheet-says-important-only-where-a-look-must-never-win', () =>
      * `!important` in stall.css is the one way past a look rule of equal
      * weight in a worn-only sheet that lands later, and the look rules refuse
      * it in a look sheet (G4) — so it is kept to the places a look must never
-     * win: `hidden`, and the zoom's reset of a tile's framing.
+     * win: `hidden`, and the zoom's reset of a tile's framing (its border,
+     * radius, clip and mask, and its mark).
      */
     it('lists every important declaration in the base sheet, each under a selector named here', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -101,6 +109,9 @@ describe('the-base-sheet-says-important-only-where-a-look-must-never-win', () =>
         }
         expect(found).toEqual([
             '[hidden] { display: none !important }',
+            '.zoom-frame .zoom-ic.item-ic { border: 0 !important }',
+            '.zoom-frame .zoom-ic.item-ic { border-radius: 0 !important }',
+            '.zoom-frame .zoom-ic.item-ic { clip-path: none !important }',
             '.zoom-frame .zoom-ic.item-ic { -webkit-mask: none !important }',
             '.zoom-frame .zoom-ic.item-ic { mask: none !important }',
             '.zoom-frame .zoom-ic [data-look-mark] { display: none !important }',

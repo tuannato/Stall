@@ -5,6 +5,7 @@ import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { flashSheets, servedFlashReport, themeVarValues } from './look-flash.mjs';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private-looks-plant.mjs';
+import { FIXTURE_PRIVATE_LOOK_CLASS } from './private-looks.mjs';
 import { guardSheets, lookRows, privateRows, servedSheets } from './served-sheets.mjs';
 import { appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import {
@@ -264,31 +265,41 @@ describe('a-look-may-make-only-its-sign-sticky', () => {
     });
 });
 
-describe('a-sticky-sign-waits-for-the-scroll-pass', () => {
+describe('the-scroll-pass-measures-what-the-lint-admits', () => {
     /**
-     * The sticky sign is measured by nothing until step 8f2's scroll pass
-     * (STEP-8-PLAN §5: scroll the region in steps and run the cover checks
-     * at each), so no served sheet uses it yet. 8f2 replaces this fence
-     * with the pass; until then a look that makes its sign sticky turns
-     * `pnpm test` red here, by design — though the look rules admit it.
+     * Step 8f2: the look rules admit one sticky box in a look sheet, the
+     * sign's own (`STICKY_BOXES`), and the probe's scroll pass
+     * (`a-sticky-sign-covers-nothing-as-the-region-scrolls`) scrolls the
+     * region under every subject `layout/stickyBoxes.ts` lists. The two are
+     * one list: a box the lint admitted that no pass scrolled under is a
+     * sticky box nobody measured — which is why, until the pass landed, a
+     * fence (`a-sticky-sign-waits-for-the-scroll-pass`) refused one in every
+     * served sheet. The tracked fixture makes its sign sticky, so the pass
+     * has a subject in every default run (the runner owes one at the desk,
+     * `probe-coverage.mjs`); no shipped look, the kit or the harness's
+     * worn-only fixture does. Red: a subject added to either list alone, or
+     * the fixture's sticky rule taken out.
      */
     const stickyIn = (rows) =>
         rows.filter((row) => /position\s*:\s*sticky/i.test(row.css.replace(/\/\*[\s\S]*?\*\//g, ''))).map((row) => row.path);
 
-    it('finds no sticky box in any served sheet a look owns', () => {
-        const looks = lookRows(SERVED);
-        assert.ok(looks.length >= 6, 'the shipped looks, the kit, the fixtures and every private look a run reads');
-        assert.deepEqual(stickyIn(looks), []);
+    it('lists the subjects the look rules admit, and no other', async () => {
+        const { STICKY_SUBJECTS } = await import('../layout/stickyBoxes.ts');
+        assert.deepEqual([...STICKY_SUBJECTS], STICKY_BOXES.map((box) => box.subject));
     });
 
-    it('goes red on a planted private look whose sign is sticky, which the look rules admit', async () => {
-        const sign = `.${PLANTED_CLASS} .stall-head { position: sticky; top: 0; }`;
-        const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, sign) : text));
-        const rows = lookRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
-        const row = rows.find((r) => r.lookClass === PLANTED_CLASS);
-        assert.ok(row !== undefined, 'the planted look is read');
-        assert.deepEqual(lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt }), []);
-        assert.deepEqual(stickyIn(rows), [row.path]);
+    it('finds the sign sticky in the tracked fixture, and in no public look sheet', () => {
+        const looks = lookRows(SERVED);
+        const fixture = looks.filter((row) => row.lookClass === FIXTURE_PRIVATE_LOOK_CLASS);
+        assert.equal(fixture.length, 1, 'the tracked fixture is read');
+        const sticky = stickyIn(looks);
+        assert.ok(sticky.includes(fixture[0].path), 'the tracked fixture makes its sign sticky');
+        assert.deepEqual(
+            sticky.filter((path) => !PRIVATE.some((row) => row.path === path)),
+            [],
+            'no shipped look, the kit or the harness fixture is sticky',
+        );
+        assert.deepEqual(lintLookSheet(fixture[0].css, { lookClass: fixture[0].lookClass, load: 'worn', ownArt: fixture[0].ownArt }), []);
     });
 });
 
@@ -865,7 +876,7 @@ describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
         const planted = `${css.slice(0, reduce)}@font-face { font-family: t-fixture-private-serif; src: url(./art/serif.woff2) format("woff2"); }\n\n${css.slice(reduce)}`;
         const problems = lintLookSheet(planted, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'serif.woff2'] } });
         assert.deepEqual(problems.filter((p) => /font-display/.test(p)).length, 1, problems.join('\n'));
-        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg'] } }), []);
+        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'mass.svg'] } }), []);
     });
 });
 

@@ -750,6 +750,19 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
          * selection, or a plant on a built `dist`.
          */
         const env = (selection) => ({ ...selection });
+        /**
+         * The tracked fixture's art as a build writes it: every file of its
+         * `art/` (the ground, and since 8f2 the mass under the sign's name),
+         * each re-serialised, with the bytes it was given — read from the
+         * directory, so a fixture that grows a file needs no edit here.
+         */
+        const fixtureArt = () =>
+            readdirSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/art'))
+                .sort()
+                .map((name) => {
+                    const given = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/art', name));
+                    return { name, bytes: Buffer.from(sanitizeSvg(given.toString('utf8')).svg), given };
+                });
 
         it('passes each build under its own selection', async () => {
             assert.deepEqual(await checkDist({ dir: publicDist, env: {} }), []);
@@ -777,8 +790,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             const look = {
                 cls: 't-fixture-private',
                 slug: 'fixture',
-                art: [{ name: 'ground.svg', bytes: Buffer.from(sanitizeSvg(readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/art/ground.svg'), 'utf8')).svg) }],
-                named: new Set(['ground.svg']),
+                art: fixtureArt(),
+                named: new Set(fixtureArt().map((file) => file.name)),
             };
             const check = (files) => distLooksProblems({ files, shippedClasses: shipped, included: [look], excluded: [] });
             assert.deepEqual(check(base), []);
@@ -814,8 +827,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             const look = {
                 cls: 't-fixture-private',
                 slug: 'fixture',
-                art: [{ name: 'ground.svg', bytes: Buffer.from(sanitizeSvg(given.toString('utf8')).svg), given }],
-                named: new Set(['ground.svg']),
+                art: fixtureArt(),
+                named: new Set(fixtureArt().map((file) => file.name)),
             };
             const check = (files, harnessClasses) =>
                 distLooksProblems({ files, shippedClasses: shipped, included: [look], excluded: [], harnessClasses });

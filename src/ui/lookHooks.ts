@@ -76,9 +76,54 @@ export const NAME_RUNGS_PROPERTY = '--name-rungs';
 
 type Fits = (name: HTMLElement) => boolean;
 
-/** Whether the name's content stays inside its own box, a pixel of rounding allowed. */
-const realFits: Fits = (name) =>
-    name.scrollWidth <= name.clientWidth + 1 && name.scrollHeight <= name.clientHeight + 1;
+/**
+ * Whether the name's content stays inside its own box, a pixel of rounding
+ * allowed. The quick answer is the box's own overflow; when that says no,
+ * the lines themselves are asked, each as its line-height's slot (step 8f2):
+ * under a line-height tighter than the face's own height (the wall's 1.02,
+ * Inter at 1.15) every line's content area runs past its slot by design,
+ * and the box's scroll size counts it — so a two-line name standing whole
+ * in a box of two lines read as overflowing and climbed a rung it did not
+ * need (measured on the tracked fixture, 2026-10-06: 44px over 50.6px
+ * slots, scrollHeight 103 against 101). The same measure the probe holds a
+ * name to (`the-sellers-name-stands-whole`): a slot inside the padding box,
+ * trailing letter-spacing aside, on both axes and in either writing mode.
+ */
+const realFits: Fits = (name) => {
+    if (name.scrollWidth <= name.clientWidth + 1 && name.scrollHeight <= name.clientHeight + 1) {
+        return true;
+    }
+    const box = name.getBoundingClientRect();
+    const cs = getComputedStyle(name);
+    const left = box.left + (Number.parseFloat(cs.borderLeftWidth) || 0);
+    const top = box.top + (Number.parseFloat(cs.borderTopWidth) || 0);
+    const right = left + name.clientWidth;
+    const bottom = top + name.clientHeight;
+    const vertical = !cs.writingMode.startsWith('horizontal');
+    const slot = Number.parseFloat(cs.lineHeight);
+    const spacing = Math.max(0, Number.parseFloat(cs.letterSpacing) || 0);
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    for (const r of range.getClientRects()) {
+        if (r.width === 0 || r.height === 0) continue;
+        let { left: l, right: rt, top: t, bottom: b } = r;
+        if (vertical) {
+            const w = Number.isFinite(slot) && slot < r.width ? slot : r.width;
+            l += (r.width - w) / 2;
+            rt = l + w;
+            b -= Math.min(spacing, r.height - 1);
+        } else {
+            const h = Number.isFinite(slot) && slot < r.height ? slot : r.height;
+            t += (r.height - h) / 2;
+            b = t + h;
+            rt -= Math.min(spacing, r.width - 1);
+        }
+        if (l < left - 1 || rt > right + 1 || t < top - 1 || b > bottom + 1) {
+            return false;
+        }
+    }
+    return true;
+};
 let fits: Fits = realFits;
 
 /** Tests inject a measure: happy-dom lays out nothing, and every box fits. */

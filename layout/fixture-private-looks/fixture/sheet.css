@@ -47,5 +47,101 @@
     color: var(--s-accent);
 }
 
+/*
+ * What the fixture carries for the probe's step-8f2 rules, so each has a
+ * subject in public CI (`TRACKED_FIXTURE_CLASS` in `scripts/probe-coverage.mjs`
+ * owes every one; `PROBE-RULES.md` has each rule and its red proof):
+ *
+ * - **A name ladder** (`--name-rungs`, `applyNameTiers`) in a box of bounded
+ *   height, at every width: a 32-byte name climbs it and stands whole
+ *   (`the-sellers-name-stands-whole`); a CJK name is set its own way.
+ * - **A sticky sign in a column of its own**, at the desk and off the wall:
+ *   the goods scroll beside it and never under it
+ *   (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
+ * - **A mark it shows**: a dot after every row's figure, at the desk
+ *   (`no-look-mark-paints-inside-a-protected-box`).
+ * - **File art under a word**: a mass masked by its own file behind the
+ *   sign's name, at the desk, light enough that the name reads on the
+ *   paper when the file does not load (`a-word-reads-when-the-art-does-not-load`).
+ */
+.t-fixture-private .stall-name {
+    --name-rungs: 2;
+    max-height: 72px;
+    overflow: hidden;
+}
+
+.t-fixture-private .stall-name[data-name-tier='1'] {
+    font-size: 18px;
+}
+
+.t-fixture-private .stall-name[data-name-tier='2'] {
+    font-size: 12px;
+}
+
+.t-fixture-private .stall-name[data-script='cjk'] {
+    letter-spacing: 0.12em;
+}
+
+@media (min-width: 680px) {
+    /* Two lines of the desk's name fit; a 32-byte name still climbs. */
+    .t-fixture-private .stall-name {
+        max-height: 110px;
+    }
+
+    .t-fixture-private:not(.shop-window) .stall-scroll {
+        display: grid;
+        grid-template-columns: 380px minmax(0, 1fr);
+        /* Rows as tall as what they hold: the region's height is definite,
+           and an auto row would shrink a body whose minimum height is 0
+           to fit it, so the rows below painted over the goods. */
+        grid-auto-rows: max-content;
+        align-content: start;
+    }
+
+    .t-fixture-private:not(.shop-window) .stall-scroll > * {
+        grid-column: 2;
+    }
+
+    .t-fixture-private:not(.shop-window) .stall-scroll > .stall-head {
+        grid-column: 1;
+        grid-row: 1 / span 12;
+        align-self: start;
+        position: sticky;
+        top: 0;
+    }
+
+    .t-fixture-private .item-a > .mark-figure {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--s-accent);
+        align-self: center;
+    }
+
+    .t-fixture-private .stall-headings {
+        display: grid;
+        justify-items: center;
+        isolation: isolate;
+    }
+
+    .t-fixture-private .stall-headings > .stall-name {
+        grid-row: 1;
+        grid-column: 1;
+    }
+
+    .t-fixture-private .stall-headings::before {
+        content: '';
+        grid-row: 1;
+        grid-column: 1;
+        justify-self: stretch;
+        align-self: stretch;
+        z-index: -1;
+        background: color-mix(in srgb, var(--s-accent) 10%, var(--s-bg));
+        -webkit-mask: url(./art/mass.svg) center / 100% 100% no-repeat;
+        mask: url(./art/mass.svg) center / 100% 100% no-repeat;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
 }
