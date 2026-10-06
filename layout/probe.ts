@@ -35,6 +35,7 @@ import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } fro
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { FIXTURE_LOOK, FIXTURE_SHEET_CLASS, SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type RootFacts } from './atRest';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
@@ -2495,7 +2496,8 @@ let outlineChecks = 0;
  * - **The root's own image layers are read by what they are**, never passed
  *   by where they sit (`a-new-root-layer-is-not-exempt-by-position`, step
  *   5b, the same item). Each layer of the stall root is one of the named
- *   exceptions in `ROOT_LAYERS_SET_ASIDE`, matched on its own form and on
+ *   exceptions in `ROOT_LAYERS_SET_ASIDE` (`layout/atRest.ts`, pure, decided
+ *   by `rootLayerSetAside` from the facts read off the root), matched on its own form and on
  *   what paints it — a decoration's class worn on the stall, or the look's
  *   own backdrop as the row states it (`LOOK_BACKDROP`), never a look's
  *   `t-*` class: the rain, what the outline is for; the aurora's washes and
@@ -2532,122 +2534,44 @@ function over(colour: { rgb: Rgb; alpha: number }, under: Rgb): Rgb {
 }
 
 /**
- * The root's image layers this rule sets aside, each by its own form and
- * what paints it, with the reason (`a-new-root-layer-is-not-exempt-by-position`).
- * A root layer none of these names is read like any layer under a line.
+ * The look's own backdrop layers as this stall computes them
+ * (`LOOK_BACKDROP`), cached by the backdrop's computed value. An
+ * unregistered custom property computes to its tokens with every `var()`
+ * substituted, so that string fixes the layers (a mood that swaps the
+ * accent is a new key), and they are computed from it on a node outside
+ * `#app`, never inside the tree being measured: `display: none`, gone before
+ * the call returns. A value that still named a `var()` would compute to no
+ * layer there, and the backdrop would then be read as a ground and fail
+ * loudly, never pass silently.
  */
-const C = String.raw`(?:rgba?\([^)]*\)|color\(srgb [\d.]+ [\d.]+ [\d.]+(?: \/ [\d.]+)?\))`;
-/**
- * Whether every colour a layer names is one of the stall's own tokens, at no
- * more than `most` alpha, or transparent: the aurora's washes are its accent
- * and its second accent and nothing else (the critic, 2026-09-27: the entry
- * matched any root `radial-gradient(farthest-side, …` on a stall wearing
- * the aurora).
- */
-function coloursAre(layer: string, stall: HTMLElement, tokens: readonly string[], most: number): boolean {
-    const cs = getComputedStyle(stall);
-    const allowed = tokens.map((t) => colourOf(cs.getPropertyValue(t).trim())?.rgb);
-    const named = layer.match(new RegExp(C, 'g')) ?? [];
-    return (
-        named.length > 0 &&
-        named.every((text) => {
-            const c = colourOf(text);
-            if (c === undefined) return false;
-            if (c.alpha === 0) return true;
-            return c.alpha <= most + 1e-6 && allowed.some((a) => a !== undefined && a.every((v, i) => Math.abs(v - c.rgb[i]!) <= 1));
-        })
-    );
-}
-
-/**
- * What `paints` names when a layer is the look's own backdrop rather than a
- * decoration's: the row's `backdrop`, which the renderer hands the stall as
- * this custom property. Read as data (`backdropLayers`), so a look is read by
- * what its row paints and never by its class: a starter that copies Neo's
- * row under `t-workshop` carries Neo's backdrop and is read as Neo is.
- */
-const LOOK_BACKDROP = '--s-backdrop';
-
-/** The look's own backdrop layers as this stall computes them, cached by the backdrop's computed value. */
 const backdropComputed = new Map<string, readonly string[]>();
 function backdropLayers(stall: HTMLElement): readonly string[] {
-    // An unregistered custom property computes to its tokens with every
-    // `var()` substituted, so this string fixes the layers and a mood that
-    // swaps the accent is a new key. One still naming a `var()` fixes
-    // nothing, and is computed afresh on every call.
     const value = getComputedStyle(stall).getPropertyValue(LOOK_BACKDROP).trim();
-    const cached = value.includes('var(') ? undefined : backdropComputed.get(value);
+    const cached = backdropComputed.get(value);
     if (cached !== undefined) return cached;
     let layers: readonly string[] = [];
     if (value !== '' && value !== 'none') {
-        // Computed as the root's own `background-image: var(--s-backdrop)`
-        // is, inside the stall, by a node that lays nothing out and is gone
-        // before anything is measured.
         const scratch = document.createElement('div');
         scratch.style.display = 'none';
-        scratch.style.backgroundImage = `var(${LOOK_BACKDROP})`;
-        stall.append(scratch);
+        scratch.style.backgroundImage = value;
+        document.body.append(scratch);
         const computed = getComputedStyle(scratch).backgroundImage;
         scratch.remove();
         layers = computed === 'none' ? [] : splitLayers(computed);
     }
-    if (!value.includes('var(')) backdropComputed.set(value, layers);
+    backdropComputed.set(value, layers);
     return layers;
 }
 
-/**
- * Whether `paints` painted `layer` on `stall`: a decoration's class worn on
- * the stall, or — for `LOOK_BACKDROP` — one of the look's own backdrop
- * layers, exactly as computed.
- */
-function paintedBy(paints: string, layer: string, stall: HTMLElement): boolean {
-    return paints === LOOK_BACKDROP ? backdropLayers(stall).includes(layer) : stall.classList.contains(paints);
+/** What the at-rest decision is handed about a stall root (`rootLayerSetAside`, `layout/atRest.ts`). */
+function rootFacts(stall: HTMLElement): RootFacts {
+    const cs = getComputedStyle(stall);
+    return {
+        classes: [...stall.classList],
+        backdrop: backdropLayers(stall),
+        tokens: Object.fromEntries(ROOT_TOKENS.map((t) => [t, colourOf(cs.getPropertyValue(t).trim())])),
+    };
 }
-
-const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test: (layer: string, stall: HTMLElement) => boolean }> = [
-    // What the outline is for.
-    { name: 'the rain', paints: 'att-rainfall', test: (l) => /^url\("?[^")]*\/rain-(?:near|mid|far)[^")]*"?\)$/.test(l) },
-    // Two washes across the whole stall, each one accent at most 28% fading
-    // to nothing at 66%, and their tint over the rain (140deg, the two
-    // accents at most 16%, transparent at 46%) — the exact shapes
-    // stall.css's aurora rules paint.
-    {
-        name: 'the aurora’s washes',
-        paints: 'att-aurora',
-        test: (l, stall) =>
-            new RegExp(String.raw`^radial-gradient\(farthest-side, ${C}, rgba\(0, 0, 0, 0\) 66%\)$`).test(l) &&
-            coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.28),
-    },
-    {
-        name: 'the aurora’s tint over the rain',
-        paints: 'att-aurora',
-        test: (l, stall) =>
-            new RegExp(String.raw`^linear-gradient\(140deg, ${C}, rgba\(0, 0, 0, 0\) 46%, ${C}\)$`).test(l) &&
-            coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.16),
-    },
-    // The look's own backdrop (`--s-backdrop`, Neo's row's): a 1px scanline
-    // every 4px, and the glow in its top 480px — each matched on its form AND
-    // as a layer the row's backdrop paints, never on the look's class.
-    { name: 'the backdrop’s scanlines', paints: LOOK_BACKDROP, test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
-    { name: 'the backdrop’s top glow', paints: LOOK_BACKDROP, test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
-];
-
-/**
- * A decoration's own art on the surface it paints (step 5a″, D14): what the
- * outline is for, like the rain on the root — matched on its form, the
- * element it paints and the class that paints it. Grid horizon's skyline,
- * moon and stars on the sign. Every other layer of that surface is read as
- * any layer is: a full-size gradient evaluated under the line, a smaller
- * one set aside and counted, a radial or repeating one held to its stops.
- */
-const SURFACE_ART_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; on: string; test: (layer: string) => boolean }> = [
-    {
-        name: 'Grid horizon’s skyline, moon and stars',
-        paints: 'att-horizon',
-        on: '.stall-sign',
-        test: (l) => /^url\("?[^")]*\/horizon-(?:sky-left|sky-right|sky-fill|moon|stars)[^")]*"?\)$/.test(l),
-    },
-];
 
 /** What the at-rest rule set aside, by reason, over the whole pass. */
 const atRestSetAside: Record<string, number> = {};
@@ -2772,6 +2696,8 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
     for (let at: HTMLElement | null = node; at !== null && at !== stall; at = at.parentElement) chain.splice(1, 0, at);
     let lo: Rgb = base.rgb;
     let hi: Rgb = base.rgb;
+    let facts: RootFacts | undefined;
+    const classes = [...stall.classList];
     for (const el of chain) {
         const cs = getComputedStyle(el);
         const fill = colourOf(cs.backgroundColor);
@@ -2787,18 +2713,19 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
             const size = sizes[i % sizes.length]!;
             const layer = layers[i]!;
             if (el === stall) {
-                const known = ROOT_LAYERS_SET_ASIDE.find((k) => k.test(layer, stall) && paintedBy(k.paints, layer, stall));
+                facts ??= rootFacts(stall);
+                const known = rootLayerSetAside(layer, facts);
                 if (known !== undefined) {
-                    setAside(known.name);
+                    setAside(known);
                     continue;
                 }
                 if (!FULL_SIZE.includes(size) || !/gradient\(/.test(layer)) {
                     return { picture: el, what: `a root layer this rule does not know (${layer.slice(0, 60)}…, ${size}) — a-new-root-layer-is-not-exempt-by-position` };
                 }
             }
-            const art = SURFACE_ART_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && el.matches(k.on) && k.test(layer));
+            const art = surfaceArtSetAside(layer, classes, (selector) => el.matches(selector));
             if (art !== undefined) {
-                setAside(art.name);
+                setAside(art);
                 continue;
             }
             if (/^url\(/.test(layer)) return { picture: el, what: `a picture (${size}) this rule cannot read` };
@@ -4431,44 +4358,6 @@ function drawsNothing(node: HTMLElement): boolean {
     return !generated('::before') && !generated('::after');
 }
 
-/** An sRGB colour as computed — `rgb()`, `rgba()` or `color(srgb …)` — with its alpha. */
-function colourOf(value: string): { rgb: [number, number, number]; alpha: number } | undefined {
-    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(value);
-    if (m !== null) {
-        return { rgb: [Number(m[1]), Number(m[2]), Number(m[3])], alpha: m[4] === undefined ? 1 : Number(m[4]) };
-    }
-    const f = /color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/.exec(value);
-    if (f !== null) {
-        const rgb = [f[1], f[2], f[3]].map((v) => Math.round(Number(v) * 255)) as [number, number, number];
-        return { rgb, alpha: f[4] === undefined ? 1 : Number(f[4]) };
-    }
-    /*
-     * `oklab()` (step 5a″): a colour an animation sets is interpolated in
-     * OKLab and computed as one — the failing lamp's outlined frames
-     * (`att-hum-gutter-outlined`) serialise every shadow so, and read as
-     * "not an outline" the lamp's glyph lost its outline in the prepare and
-     * was read bare. Converted with Björn Ottosson's matrices, as CSS Color 4
-     * does, to sRGB rounded to the level.
-     */
-    const k = /oklab\((-?[\d.]+) (-?[\d.]+) (-?[\d.]+)(?: \/ ([\d.]+))?\)/.exec(value);
-    if (k !== null) {
-        const [L, A, B] = [Number(k[1]), Number(k[2]), Number(k[3])];
-        const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
-        const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
-        const q = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
-        const lin = [
-            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * q,
-            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * q,
-            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * q,
-        ];
-        const rgb = lin.map((c) => {
-            const v = Math.min(1, Math.max(0, c));
-            return Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
-        }) as [number, number, number];
-        return { rgb, alpha: k[4] === undefined ? 1 : Number(k[4]) };
-    }
-    return undefined;
-}
 
 /**
  * An outlined target's lines: every text node's visible characters, grouped

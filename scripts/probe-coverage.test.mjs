@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 const full = {
@@ -251,5 +251,30 @@ describe('no-word-is-clipped-by-a-file', () => {
         }
         const canvas = probeCoverageGaps('canvas', { ...full, fileClipChecks: 0 }, { shippedClasses: SHIPPED });
         assert.ok(!canvas.some((g) => g.startsWith('no-word-is-clipped-by-a-file')), canvas.join('; '));
+    });
+});
+
+describe('owed-follows-what-a-pass-wore', () => {
+    it('holds when what the passes wore is owed, and when nothing that is owed by name was worn', () => {
+        assert.deepEqual(owedFaults({ rain: ['mobile/empty/255/65535'], horizon: ['mobile/offers/255/4'] }, ['att-aurora', 'att-horizon', 'att-rainfall']), []);
+        assert.deepEqual(owedFaults({ rain: [], horizon: [] }, ['att-awning', 'att-pinstripe']), []);
+        assert.deepEqual(owedFaults({ rain: [], horizon: [] }, []), []);
+    });
+
+    it('fails an answer that is not two lists', () => {
+        const said = ['owed-follows-what-a-pass-wore: the page answered no rain list and horizon list (__contrastOwed)'];
+        for (const answer of [undefined, null, {}, { rain: [] }, { horizon: [] }, { rain: 'mobile/empty/2/65535', horizon: [] }, []]) {
+            assert.deepEqual(owedFaults(answer, ['att-rainfall']), said, JSON.stringify(answer));
+            assert.deepEqual(owedFaults(answer, []), said, JSON.stringify(answer));
+        }
+    });
+
+    it('fails a decoration a pass wore that no job owes', () => {
+        assert.deepEqual(owedFaults({ rain: [], horizon: ['mobile/offers/255/4'] }, ['att-rainfall', 'att-horizon']), [
+            'owed-follows-what-a-pass-wore: a pass wore att-rainfall and the page owes its rain on no contrast job (__contrastOwed)',
+        ]);
+        assert.deepEqual(owedFaults({ rain: ['x'], horizon: [] }, ['att-rainfall', 'att-horizon']), [
+            'owed-follows-what-a-pass-wore: a pass wore att-horizon and the page owes its horizon on no contrast job (__contrastOwed)',
+        ]);
     });
 });

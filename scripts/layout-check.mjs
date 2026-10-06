@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
@@ -461,6 +461,12 @@ const RING_MASK_ALPHA = 0.5;
  * the ring on some contrast job, or the outline is one nobody reads.
  */
 const outlinedTargetsSeen = new Set();
+/**
+ * Every decoration class a geometry pass painted worn (the probe's
+ * `wornClasses`): the contrast pass's owed jobs must follow it
+ * (`owed-follows-what-a-pass-wore`, `owedFaults`).
+ */
+const wornClassesSeen = new Set();
 /**
  * Every code a geometry pass painted, as `pass/screen:name` (the probe's
  * `codesPainted`): the contrast pass lists which of them it read the quiet
@@ -1263,6 +1269,7 @@ try {
          * comparison is refused (`probe-coverage.mjs`).
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+        for (const cls of report.wornClasses ?? []) wornClassesSeen.add(cls);
         for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
@@ -1426,6 +1433,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of pv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const cls of pv.wornClasses ?? []) wornClassesSeen.add(cls);
                 for (const code of pv.codesPainted ?? []) codesPaintedSeen.add(`${PORTRAIT.name}/${code}`);
                 const gaps = probeCoverageGaps(PORTRAIT.name, pv);
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
@@ -1504,6 +1512,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of tv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const cls of tv.wornClasses ?? []) wornClassesSeen.add(cls);
                 for (const code of tv.codesPainted ?? []) codesPaintedSeen.add(`${TABLET.name}/${code}`);
                 const gaps = probeCoverageGaps(TABLET.name, tv);
                 const compared = probeCoverageLine(TABLET.name, tv);
@@ -2475,9 +2484,14 @@ try {
         // that wears the horizon owes it read at its worst. The shipped run
         // also owes the job each of the owner's horizon numbers was read on,
         // and owes the rain somewhere at all.
-        const RAIN_REQUIRED = owed?.rain ?? [];
+        // The page's answer is held against what the geometry passes wore,
+        // on every run (`owed-follows-what-a-pass-wore`): a malformed answer,
+        // or a decoration worn and owed on no job, fails rather than owing
+        // nothing.
+        for (const fault of owedFaults(owed, [...wornClassesSeen])) verdicts.push(fault);
+        const RAIN_REQUIRED = Array.isArray(owed?.rain) ? owed.rain : [];
         const HORIZON_REQUIRED = [
-            ...new Set([...(owed?.horizon ?? []), ...(LOOKS === 'shipped' ? Object.values(HORIZON_WORST).map((at) => at.job) : [])]),
+            ...new Set([...(Array.isArray(owed?.horizon) ? owed.horizon : []), ...(LOOKS === 'shipped' ? Object.values(HORIZON_WORST).map((at) => at.job) : [])]),
         ];
         if (LOOKS === 'shipped' && (RAIN_REQUIRED.length === 0 || (owed?.horizon ?? []).length === 0)) {
             verdicts.push(

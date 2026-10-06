@@ -184,6 +184,36 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     return gaps;
 }
 
+/**
+ * The decorations whose worst the contrast pass owes by name, by the class a
+ * pass wears them by and the list in the page's owed jobs that names them
+ * (`contrastOwed` in `layout/contrastPlan.ts`, `window.__contrastOwed()`).
+ */
+const OWED_BY_CLASS = [
+    ['att-rainfall', 'rain'],
+    ['att-horizon', 'horizon'],
+];
+
+/**
+ * **`owed-follows-what-a-pass-wore`** (the critic on `neo-starter-probe`,
+ * item 4). Outside the shipped run nothing but the page says what the
+ * contrast pass owes, and the page derives it from the same rows it paints
+ * from — so an answer that is malformed, or a rename that reaches the paint
+ * and not the owed list, would owe nothing and pass green. Held against the
+ * classes the geometry passes actually wore (`wornClasses`): the answer must
+ * carry both lists, and a decoration a pass wore must be owed on some job.
+ * Sentences, empty when it holds.
+ */
+export function owedFaults(owed, wornClasses) {
+    if (owed === null || typeof owed !== 'object' || !OWED_BY_CLASS.every(([, list]) => Array.isArray(owed[list]))) {
+        return ['owed-follows-what-a-pass-wore: the page answered no rain list and horizon list (__contrastOwed)'];
+    }
+    const worn = new Set(wornClasses);
+    return OWED_BY_CLASS.filter(([cls, list]) => worn.has(cls) && owed[list].length === 0).map(
+        ([cls, list]) => `owed-follows-what-a-pass-wore: a pass wore ${cls} and the page owes its ${list} on no contrast job (__contrastOwed)`,
+    );
+}
+
 /** What a pass compared, in one line for the runner to print — empty for a pass that owes nothing. */
 export function probeCoverageLine(pass, report) {
     // Text under 11px that no reader is given (aria-hidden) is reported,

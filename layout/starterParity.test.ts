@@ -20,9 +20,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { attachmentsForTheme } from '../src/domain/attachments';
 import { SHIPPED_THEMES, themeVars } from '../src/domain/theme';
+import { LOOK_BACKDROP, ROOT_LAYERS_SET_ASIDE, SURFACE_ART_SET_ASIDE } from './atRest';
 import { CONTRAST_VIEWPORTS, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { shippedLooks, type Look } from './looks';
 import { KIT_BASES, WORKSHOP_SHEET_CLASS, lookFromJson, type KitBase } from './workshopLook';
@@ -30,6 +32,19 @@ import { starterLook } from './workshopStarter';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = (file: string): string => readFileSync(join(ROOT, file), 'utf8');
+
+/**
+ * A file's code with every comment taken out, by the TypeScript printer, so
+ * a rule about code is not tripped by a sentence about it and a string, a
+ * template or a selector is still read.
+ */
+function code(file: string): string {
+    const parsed = ts.createSourceFile(file, source(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    return ts.createPrinter({ removeComments: true }).printFile(parsed);
+}
+
+/** The harness files that decide what a look owes and what is set aside for it. */
+const DECIDING = ['layout/probe.ts', 'layout/contrastPlan.ts', 'layout/atRest.ts'];
 
 /** The kit's look as `pnpm workshop:start <base>` writes it, read back the way the kit's pages read it. */
 function starter(base: KitBase): Look {
@@ -106,31 +121,30 @@ describe('every-starter-is-measured-as-its-shipped-look', () => {
     });
 
     it('keys the probe’s at-rest exceptions on a worn decoration or the look’s own backdrop, never on a look', () => {
-        const probe = source('layout/probe.ts');
-        const painters = (name: string, field: string): string[] =>
-            [...table(probe, name).matchAll(new RegExp(`\\b${field}: ([^,}]+)`, 'g'))].map((m) => m[1]!.trim());
-        const root = painters('ROOT_LAYERS_SET_ASIDE', 'paints');
-        const art = painters('SURFACE_ART_SET_ASIDE', 'paints');
-        const surfaces = painters('OUTLINE_SURFACES', 'cls');
-        // Each table is read, and each says who paints every entry.
+        // The decision itself is pure and held by behaviour
+        // (`the-at-rest-exceptions-decide-the-same-for-a-starter-and-its-look`);
+        // here, what each table names as the painter. `OUTLINE_SURFACES`
+        // stays in the probe (its surfaces are DOM lookups) and is read from
+        // its source.
+        const surfaces = [...table(source('layout/probe.ts'), 'OUTLINE_SURFACES').matchAll(/\bcls: '([^']+)'/g)].map((m) => m[1]!);
+        const root = ROOT_LAYERS_SET_ASIDE.map((k) => k.paints);
+        const art = SURFACE_ART_SET_ASIDE.map((k) => k.paints);
         expect(root.length).toBeGreaterThanOrEqual(5);
         expect(art.length).toBeGreaterThanOrEqual(1);
         expect(surfaces.length).toBeGreaterThanOrEqual(2);
-        for (const painter of [...root, ...art, ...surfaces]) {
-            if (painter === 'LOOK_BACKDROP') continue;
-            const cls = /^'([^']+)'$/.exec(painter)?.[1];
-            expect(cls, `${painter} is a quoted class`).toBeDefined();
+        for (const cls of [...root, ...art, ...surfaces]) {
+            if (cls === LOOK_BACKDROP) continue;
             // A decoration a shipped row carries — which a starter carries
             // under the same class — and never a look's own class.
-            expect(SHIPPED_LOOK_CLASSES, painter).not.toContain(cls);
-            expect(cls!.startsWith('t-'), painter).toBe(false);
-            expect(DECORATION_CLASSES.has(cls!), `${painter} is a shipped decoration's class`).toBe(true);
+            expect(SHIPPED_LOOK_CLASSES, cls).not.toContain(cls);
+            expect(cls.startsWith('t-'), cls).toBe(false);
+            expect(DECORATION_CLASSES.has(cls), `${cls} is a shipped decoration's class`).toBe(true);
         }
         // The backdrop is the row's own data: `LOOK_BACKDROP` names the custom
         // property the renderer hands the stall the row's `backdrop` in, so a
         // starter, which keeps its base row's backdrop, is read as its base.
-        expect(probe).toContain("const LOOK_BACKDROP = '--s-backdrop';");
-        expect(root).toContain('LOOK_BACKDROP');
+        expect(LOOK_BACKDROP).toBe('--s-backdrop');
+        expect(root).toContain(LOOK_BACKDROP);
         const neo = shippedLooks().find((look) => look.rows.some((row) => row.cls === 'att-rainfall'))!;
         expect(themeVars(neo.theme)['--s-backdrop']).toBe(neo.theme.backdrop);
         expect(themeVars(starter('neo').theme)['--s-backdrop']).toBe(neo.theme.backdrop);
@@ -140,14 +154,33 @@ describe('every-starter-is-measured-as-its-shipped-look', () => {
         // A rule keyed to a shipped look's name judges a copy of that look
         // under the kit's name by another rule. The runner states the shipped
         // classes it measures (`SHIPPED_SHEET_CLASSES`) and the coverage rules
-        // key the shipped run on them beside what was worn; the page and the
-        // plan never do.
-        for (const file of ['layout/probe.ts', 'layout/contrastPlan.ts']) {
-            const text = source(file);
-            for (const cls of SHIPPED_LOOK_CLASSES) {
-                expect(text.includes(`'${cls}'`) || text.includes(`"${cls}"`), `${file} quotes ${cls}`).toBe(false);
+        // key the shipped run on them beside what was worn; the page, the
+        // plan and the set-aside decision never do. Read on the code alone,
+        // comments out, in any spelling: a quoted class, a selector, a
+        // template, a number, a table index.
+        expect(SHIPPED_LOOK_CLASSES).toEqual(['t-modern', 't-neo', 't-rural']);
+        const REFUSED: ReadonlyArray<[string, RegExp]> = [
+            ['a shipped look’s class', /\bt-(?:modern|neo|rural)\b/],
+            ['a shipped look’s id constant', /\b(?:NEO_CITY|RURAL|MODERN|DEFAULT)_THEME_ID\b/],
+            ['a look picked by a literal id', /\blookById\(\s*(?:0x[\da-f]+|\d)/i],
+            ['an id compared with a literal', /\.id\s*[!=]==?\s*(?:0x[\da-f]+|\d)|\b(?:0x[\da-f]+|\d+)\s*[!=]==?\s*[\w.]*\.id\b/i],
+            ['a shipped row by its index', /\bSHIPPED_THEMES\s*\[/],
+        ];
+        for (const file of DECIDING) {
+            const text = code(file);
+            // The comments are out and the code is in: a file read as empty
+            // would pass over nothing.
+            expect(text.length, file).toBeGreaterThan(2000);
+            for (const [what, pattern] of REFUSED) {
+                expect(text.match(pattern)?.[0], `${file} names ${what}`).toBeUndefined();
             }
-            expect(/\b(?:NEO_CITY|RURAL|MODERN|DEFAULT)_THEME_ID\b/.test(text), `${file} names a shipped look's id`).toBe(false);
+        }
+        // The probe resolves a look by id in one place, for the job the
+        // runner names (`__contrastPrepare`); nothing else asks by id.
+        expect(code('layout/probe.ts').match(/\blookById\(/g)).toEqual(['lookById(']);
+        expect(code('layout/probe.ts')).toContain('lookById(themeId)');
+        for (const file of ['layout/contrastPlan.ts', 'layout/atRest.ts']) {
+            expect(code(file).includes('lookById('), file).toBe(false);
         }
     });
 });
