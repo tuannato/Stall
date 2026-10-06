@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { encodeCashAddress } from 'ecashaddrjs';
 import { fromHex, shaRmd160, toHex } from 'ecash-lib';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StallView } from '../domain/state';
 
 /**
@@ -28,8 +28,10 @@ vi.mock('./lookSheets', async (original) => ({
     askForLookSheet: vi.fn(),
 }));
 
-const { renderStall } = await import('./render');
-const { askForLookSheet } = await import('./lookSheets');
+const { paintedTheme, renderStall } = await import('./render');
+const { askForLookSheet, LOOK_SHEET_PROPERTY, LOOK_SHEET_WAIT_MS, loadLookSheet, resetLookSheetsForTests } =
+    await import('./lookSheets');
+const { resetMarqueesForTests, setMarqueeMeasure } = await import('./marquee');
 const { fixturePrivateLooks } = await import('../../layout/fixturePrivateLooks');
 const copy = await import('./copy');
 const { decodeLook, mintedLookTokens, paintableLook } = await import('../domain/lookTable');
@@ -81,6 +83,67 @@ function locked(over: Partial<StallView> = {}): StallView {
 }
 
 const stallOf = (root: HTMLElement) => root.querySelector('.stall') as HTMLElement;
+
+/** The fixture look's built sheet, as the look table hands it to the loader. */
+const FIXTURE_SHEET = () => ({ url: fixturePrivateLooks()[0]!.sheetUrl, cls: 't-fixture-private' });
+
+/**
+ * The page's worn-only sheets, held rather than sent (8d2): the head records
+ * every link the loader appends and connects none — a connected stylesheet
+ * link is a request, and no test reaches the network — and a test answers
+ * each link as a browser would, `load` with the sheet or `error`, the way
+ * `lookSheets.test.ts` does. A fresh page per test: the loader keeps a
+ * page's sheets for its life, and these tests share one document.
+ */
+let sheetHead: { links: () => HTMLLinkElement[]; restore: () => void } | undefined;
+function holdSheets(): () => HTMLLinkElement[] {
+    sheetHead?.restore();
+    resetLookSheetsForTests(document);
+    const holder = document.createElement('div');
+    const append = vi.spyOn(document.head, 'append').mockImplementation((...nodes) => holder.append(...nodes));
+    sheetHead = {
+        links: () => [...holder.querySelectorAll('link')],
+        restore: () => {
+            append.mockRestore();
+            resetLookSheetsForTests(document);
+        },
+    };
+    return sheetHead.links;
+}
+afterEach(() => {
+    sheetHead?.restore();
+    sheetHead = undefined;
+});
+
+/** Answer `link` as a browser would: `load` with the fixture's sheet, or `error`. */
+function answer(link: HTMLLinkElement, how: 'sheet' | 'error'): void {
+    if (how === 'error') {
+        link.dispatchEvent(new Event('error'));
+        return;
+    }
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`.t-fixture-private { ${LOOK_SHEET_PROPERTY}: t-fixture-private; }`);
+    Object.defineProperty(link, 'sheet', { value: sheet, configurable: true });
+    link.dispatchEvent(new Event('load'));
+}
+
+/** The fixture's sheet on the page, ready: what a try-on finds once it has loaded. */
+async function fixtureSheetReady(links: () => HTMLLinkElement[]): Promise<void> {
+    const done = loadLookSheet(FIXTURE_SHEET().url, FIXTURE_SHEET().cls, document);
+    answer(links().at(-1)!, 'sheet');
+    await done;
+}
+
+/** Let the loader's answers and the waits behind them land. */
+async function settle(): Promise<void> {
+    for (let i = 0; i < 4; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+}
+
+const pressLook = (root: HTMLElement, id: number): void => {
+    root.querySelector<HTMLButtonElement>(`[data-role="look-${id}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+};
 const notes = (root: HTMLElement) => [...root.querySelectorAll('.stall-body > p.fine')].map((p) => p.textContent);
 
 describe('a-locked-look-paints-the-default-and-says-this-page-does-not-show-it', () => {
@@ -210,6 +273,12 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
         expect(p.err.textContent).toBe(copy.PUBLISH_LOOK_NOT_UNLOCKED);
     };
 
+    // The fixture's sheet has loaded: a try-on of it goes on at the press
+    // (the wait itself is `a-try-on-waits-for-its-sheet-and-the-latest-press-wins`).
+    beforeEach(async () => {
+        await fixtureSheetReady(holdSheets());
+    });
+
     it('offers the paid look, tries it on, and composes nothing that names it', () => {
         const { root, h } = sheet();
         expect(root.querySelector(`[data-role="look-${FIXTURE_ID}"]`)?.textContent).toBe('Fixture private look');
@@ -252,7 +321,11 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
         // stall stayed on the default under the seller's press.
         const theme = decodeLook(FIXTURE_ID);
         const { root } = paint(
-            locked({ recordFlags: 0b1, previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 } }),
+            locked({
+                recordFlags: 0b1,
+                previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 },
+                lookSheets: new Map([[FIXTURE_ID, 'ready']]),
+            }),
         );
         const stall = stallOf(root);
         expect(theme.known).toBe(true);
@@ -269,6 +342,7 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
             address: ADDR,
             fetch: { kind: 'empty' },
             previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 },
+            lookSheets: new Map([[FIXTURE_ID, 'ready']]),
         });
         const stall = stallOf(root);
         expect(stall.classList.contains('t-fixture-private')).toBe(true);
@@ -279,18 +353,20 @@ describe('a-paid-look-composes-no-record-until-it-can-be-bought', () => {
 
 /**
  * The renderer asks for a worn-only sheet for the row it paints, and only
- * that row (8d1, `applyTheme`): a try-on of the fixture look — the press's
- * live patch and every later paint — asks for the fixture's built sheet on
- * the stall's own document; a record naming the locked look paints the
- * default, a shipped look whose sheet is in the entry CSS, and asks for
- * nothing; and nothing is asked for a public look. No paint waits for the
- * answer (8d2's hold): the look's class is on the stall at once.
+ * that row (8d1, `applyTheme`): a try-on of the fixture look asks for the
+ * fixture's built sheet on the stall's own document, and once it has loaded
+ * every paint that puts it on asks again (the same answer, no second link);
+ * a record naming the locked look paints the default, a shipped look whose
+ * sheet is in the entry CSS, and asks for nothing; and nothing is asked for
+ * a public look. Since 8d2 the try-on waits for its sheet: the look is not on
+ * the stall until it has loaded (`a-try-on-waits-for-its-sheet-and-the-latest-press-wins`).
  */
 describe('a-try-on-asks-for-its-sheet-and-a-locked-look-for-none', () => {
     const ask = vi.mocked(askForLookSheet);
-    const SHEET = { url: fixturePrivateLooks()[0]!.sheetUrl, cls: 't-fixture-private' };
+    const SHEET = FIXTURE_SHEET();
 
     it('asks for nothing over a locked record, on the shop, the Studio, the wall and the overlay', () => {
+        const links = holdSheets();
         ask.mockClear();
         for (const over of [
             {},
@@ -305,30 +381,282 @@ describe('a-try-on-asks-for-its-sheet-and-a-locked-look-for-none', () => {
             root.remove();
         }
         expect(ask).not.toHaveBeenCalled();
+        expect(links(), 'no sheet on the page').toEqual([]);
     });
 
     it('asks for nothing for a public look', () => {
+        const links = holdSheets();
         ask.mockClear();
         const { root } = paint(locked({ recordTheme: decodeLook(DEFAULT_THEME_ID), worn: [] }));
         root.remove();
         expect(ask).not.toHaveBeenCalled();
+        expect(links()).toEqual([]);
     });
 
-    it('asks for the fixture’s sheet when it is tried on, on the press and on every later paint', () => {
+    it('asks for the fixture’s sheet when it is tried on, and every paint that puts it on asks again', async () => {
+        const links = holdSheets();
         ask.mockClear();
         const { root } = paint(locked({ overlay: { kind: 'publish-name' } }));
-        expect(ask).not.toHaveBeenCalled();
-        root.querySelector<HTMLButtonElement>(`[data-role="look-${FIXTURE_ID}"]`)!.dispatchEvent(
-            new MouseEvent('click', { bubbles: true }),
-        );
-        expect(stallOf(root).classList.contains('t-fixture-private'), 'painted at once, no wait').toBe(true);
+        expect(links()).toEqual([]);
+        pressLook(root, FIXTURE_ID);
+        expect(links().map((link) => link.getAttribute('href'))).toEqual([new URL(SHEET.url, document.baseURI).href]);
+        expect(stallOf(root).classList.contains('t-fixture-private'), 'not before its sheet has loaded').toBe(false);
+        answer(links()[0]!, 'sheet');
+        await settle();
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(true);
         expect(ask).toHaveBeenCalledWith(SHEET, root.ownerDocument);
         root.remove();
         ask.mockClear();
-        const later = paint(locked({ previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 } }));
+        const later = paint(
+            locked({ previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 }, lookSheets: new Map([[FIXTURE_ID, 'ready']]) }),
+        );
         expect(stallOf(later.root).classList.contains('t-fixture-private')).toBe(true);
         expect(ask).toHaveBeenCalledTimes(1);
         expect(ask).toHaveBeenCalledWith(SHEET, later.root.ownerDocument);
+        expect(links(), 'one link for the page').toHaveLength(1);
         later.root.remove();
+    });
+});
+
+/**
+ * A try-on of a look whose sheet is its own file waits for that sheet (8d2;
+ * STEP-8-PLAN §3, CRITIC-STEP-8D1 item 8): the press asks for it and the
+ * picker says it is loading, the stall keeps the look it had, and the look
+ * goes on when the sheet lands — if that press is still the latest and the
+ * picker still on screen. A sheet that does not load, or does not answer
+ * within `LOOK_SHEET_WAIT_MS`, leaves the look the stall had and says so, and
+ * a late answer changes nothing. Red: the try-on applied at the press (the
+ * class on before the answer), the press number not compared (the earlier
+ * look over the later), `isConnected` not asked (a closed sheet's press
+ * reported), and the failure line dropped.
+ */
+describe('a-try-on-waits-for-its-sheet-and-the-latest-press-wins', () => {
+    const status = (root: HTMLElement) => root.querySelector('[data-role="look-status"]') as HTMLElement;
+    const lookButton = (root: HTMLElement, id: number) => root.querySelector(`[data-role="look-${id}"]`) as HTMLElement;
+    const triedOn = (h: Record<string, ReturnType<typeof vi.fn>>, id: number) =>
+        h['onPreviewLook']!.mock.calls.some(([preview]) => (preview as { themeId?: number } | undefined)?.themeId === id);
+
+    it('changes nothing at the press, says it is loading, and puts the look on when its sheet lands', async () => {
+        const links = holdSheets();
+        const { root, h } = paint(locked({ overlay: { kind: 'publish-name' } }));
+        expect(status(root).hidden, 'nothing to say before a press').toBe(true);
+        pressLook(root, FIXTURE_ID);
+        expect(stallOf(root).classList.contains('t-modern'), 'the stall keeps the look it had').toBe(true);
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(false);
+        expect(status(root).hidden).toBe(false);
+        expect(status(root).textContent).toBe(copy.PUBLISH_LOOK_LOADING);
+        expect(lookButton(root, FIXTURE_ID).getAttribute('aria-busy')).toBe('true');
+        expect(triedOn(h, FIXTURE_ID), 'not remembered before it is on').toBe(false);
+        expect(links()).toHaveLength(1);
+        answer(links()[0]!, 'sheet');
+        await settle();
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(true);
+        expect(status(root).hidden).toBe(true);
+        expect(lookButton(root, FIXTURE_ID).hasAttribute('aria-busy')).toBe(false);
+        expect(h['onPreviewLook']).toHaveBeenLastCalledWith({ themeId: FIXTURE_ID, attachmentFlags: 0 });
+        root.remove();
+    });
+
+    it('lets a later press win: a look that needs no sheet goes on at once, and the earlier answer changes nothing', async () => {
+        const links = holdSheets();
+        const { root, h } = paint(locked({ overlay: { kind: 'publish-name' } }));
+        pressLook(root, FIXTURE_ID);
+        pressLook(root, 0x02);
+        expect(stallOf(root).classList.contains('t-neo')).toBe(true);
+        expect(status(root).hidden, 'the later press has nothing to wait for').toBe(true);
+        answer(links()[0]!, 'sheet');
+        await settle();
+        expect(stallOf(root).classList.contains('t-neo'), 'the earlier press is not the latest').toBe(true);
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(false);
+        expect(h['onPreviewLook']).toHaveBeenLastCalledWith({ themeId: 0x02, attachmentFlags: 0 });
+        expect(triedOn(h, FIXTURE_ID)).toBe(false);
+        // Pressed again, the sheet is on the page: the look goes on at once.
+        pressLook(root, FIXTURE_ID);
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(true);
+        expect(links(), 'still one link').toHaveLength(1);
+        root.remove();
+    });
+
+    it('puts on the latest of two presses on one look, its decoration included', async () => {
+        const links = holdSheets();
+        const { root, h } = paint(locked({ overlay: { kind: 'publish-name' } }));
+        pressLook(root, FIXTURE_ID);
+        root.querySelector<HTMLButtonElement>('[data-role="decor-trim-0"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(stallOf(root).classList.contains('att-fixture-trim'), 'still waiting').toBe(false);
+        answer(links()[0]!, 'sheet');
+        await settle();
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(true);
+        expect(stallOf(root).classList.contains('att-fixture-trim')).toBe(true);
+        expect(h['onPreviewLook']).toHaveBeenLastCalledWith({ themeId: FIXTURE_ID, attachmentFlags: 0b1 });
+        expect(h['onPreviewLook'], 'one look put on, once').toHaveBeenCalledTimes(1);
+        root.remove();
+    });
+
+    it('answers no picker that is no longer on screen', async () => {
+        const links = holdSheets();
+        const { root, h } = paint(locked({ overlay: { kind: 'publish-name' } }));
+        pressLook(root, FIXTURE_ID);
+        root.remove();
+        answer(links()[0]!, 'sheet');
+        await settle();
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(false);
+        expect(triedOn(h, FIXTURE_ID)).toBe(false);
+    });
+
+    it('keeps the look the stall had and says so when the sheet does not load, and asks no second time', async () => {
+        const links = holdSheets();
+        const { root, h } = paint(locked({ overlay: { kind: 'publish-name' } }));
+        pressLook(root, FIXTURE_ID);
+        answer(links()[0]!, 'error');
+        await settle();
+        expect(stallOf(root).classList.contains('t-modern')).toBe(true);
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(false);
+        expect(status(root).hidden).toBe(false);
+        expect(status(root).textContent).toBe(copy.PUBLISH_LOOK_UNLOADED);
+        expect(lookButton(root, FIXTURE_ID).hasAttribute('aria-busy')).toBe(false);
+        expect(document.querySelector('[role="status"]')?.textContent?.trim()).toBe(copy.PUBLISH_LOOK_UNLOADED);
+        expect(triedOn(h, FIXTURE_ID)).toBe(false);
+        // Failed is the page's for its life: pressed again, said at once.
+        pressLook(root, 0x02);
+        pressLook(root, FIXTURE_ID);
+        expect(status(root).textContent).toBe(copy.PUBLISH_LOOK_UNLOADED);
+        expect(stallOf(root).classList.contains('t-neo'), 'the look the stall had').toBe(true);
+        expect(links()).toHaveLength(1);
+        root.remove();
+    });
+
+    it('paints no try-on whose sheet is not ready on the page, and wears none of its rows', () => {
+        // The renderer's own half (CRITIC-STEP-8D2 item 5): a view that names
+        // a try-on whose sheet is pending, failed or never asked for paints
+        // the look the record paints — the default, under the locked record —
+        // and none of the try-on's decorations. Red: the try-on's sheet not
+        // asked in `asThisPagePaints` (the paint), or in `paintedOnThisPage`
+        // (`paintedTheme` asked directly).
+        for (const sheet of ['pending', 'failed', undefined] as const) {
+            const view = locked({
+                previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 },
+                ...(sheet === undefined ? {} : { lookSheets: new Map([[FIXTURE_ID, sheet]]) }),
+            });
+            // Asked directly too, as the overlay's ladder asks it: the look
+            // that paints is never a try-on before its sheet.
+            expect(paintedTheme(view).sheetClass, String(sheet)).toBe('t-modern');
+            const { root } = paint(view);
+            const stall = stallOf(root);
+            expect(stall.classList.contains('t-modern'), String(sheet)).toBe(true);
+            expect(stall.classList.contains('t-fixture-private'), String(sheet)).toBe(false);
+            expect([...stall.classList].filter((cls) => cls.startsWith('att-')), String(sheet)).toEqual([]);
+            expect(root.querySelector('.stall [class^="att-"], .stall [class*=" att-"]'), String(sheet)).toBeNull();
+            root.remove();
+        }
+    });
+
+    it('gives up at the wait, and a sheet that lands later changes nothing', async () => {
+        const links = holdSheets();
+        vi.useFakeTimers();
+        try {
+            const { root, h } = paint(locked({ overlay: { kind: 'publish-name' } }));
+            pressLook(root, FIXTURE_ID);
+            await vi.advanceTimersByTimeAsync(LOOK_SHEET_WAIT_MS - 1);
+            expect(status(root).textContent, 'still waiting').toBe(copy.PUBLISH_LOOK_LOADING);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(status(root).textContent).toBe(copy.PUBLISH_LOOK_UNLOADED);
+            answer(links()[0]!, 'sheet');
+            await vi.advanceTimersByTimeAsync(0);
+            expect(stallOf(root).classList.contains('t-fixture-private')).toBe(false);
+            expect(triedOn(h, FIXTURE_ID)).toBe(false);
+            pressLook(root, FIXTURE_ID);
+            expect(status(root).textContent).toBe(copy.PUBLISH_LOOK_UNLOADED);
+            root.remove();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+/**
+ * The paint after a sheet is ready measures under that sheet (8d2;
+ * CRITIC-STEP-8D1 item 6): a try-on puts the look on by a patch, not a
+ * repaint, so the rows' cut lines the paint measured in the look the stall
+ * had are measured again once the look — and its sheet — is on. Here the
+ * measure answers a cut line only inside the fixture look: measured before
+ * the sheet, nothing runs; after, the row's name does. Red: the patch with
+ * no measure after it.
+ */
+describe('a-try-on-measures-its-marquees-under-its-own-sheet', () => {
+    beforeEach(() => {
+        resetMarqueesForTests();
+    });
+    afterEach(() => {
+        resetMarqueesForTests();
+    });
+
+    it('arms a name the look cuts once the look is on, and not before', async () => {
+        const links = holdSheets();
+        setMarqueeMeasure((node) => (node.closest('.stall')?.classList.contains('t-fixture-private') === true ? 120 : 0));
+        const token = 'cd'.repeat(32);
+        const { root } = paint(
+            locked({
+                overlay: { kind: 'publish-name' },
+                fetch: {
+                    kind: 'offers',
+                    offers: [
+                        {
+                            outpoint: { txid: 'ab'.repeat(32), outIdx: 0 },
+                            tokenId: token,
+                            atoms: 12n,
+                            variant: 'PARTIAL',
+                            askedSats: 120_000n,
+                            askedAtoms: 1n,
+                            priceNanoSatsPerAtom: 120_000n * 1_000_000_000n,
+                        },
+                    ],
+                },
+                tokens: new Map([[token, { tokenId: token, name: 'A name far too long for its line', ticker: 'LONG', decimals: 0 }]]),
+            }),
+        );
+        const name = () => root.querySelector('.item-n[data-mq]') as HTMLElement;
+        expect(name(), 'a row whose name may run').not.toBeNull();
+        expect(name().hasAttribute('data-marquee')).toBe(false);
+        pressLook(root, FIXTURE_ID);
+        expect(name().hasAttribute('data-marquee'), 'nothing measured in a look not on yet').toBe(false);
+        answer(links()[0]!, 'sheet');
+        await settle();
+        expect(stallOf(root).classList.contains('t-fixture-private')).toBe(true);
+        expect(name().hasAttribute('data-marquee'), 'measured again under the look’s own sheet').toBe(true);
+        root.remove();
+    });
+});
+
+/**
+ * The door paints no stall's look, so it asks for no sheet (8d2; STEP-8-PLAN
+ * §3): whatever the view names — a record, a try-on, a sheet the page holds
+ * ready — the door wears the default's values and asks the loader nothing. A
+ * look the door does not paint costs the door nothing. Red: the hold's door
+ * rule removed (a ready try-on on the door then paints and asks).
+ */
+describe('a-look-the-door-does-not-paint-costs-the-door-nothing', () => {
+    it('paints the door bare and asks for no sheet, whatever the view names', () => {
+        const links = holdSheets();
+        const ask = vi.mocked(askForLookSheet);
+        ask.mockClear();
+        const theme = decodeLook(FIXTURE_ID);
+        const { root } = paint({
+            route: { kind: 'home' },
+            overlay: { kind: 'idle' },
+            tokens: new Map(),
+            recordTheme: theme,
+            recordFlags: 0b11,
+            heldTokens: mintedLookTokens(),
+            worn: [],
+            previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 },
+            lookSheets: new Map([[FIXTURE_ID, 'ready']]),
+        });
+        const stall = stallOf(root);
+        expect(stall.classList.contains('door')).toBe(true);
+        expect([...stall.classList].filter((cls) => cls.startsWith('t-') || cls.startsWith('att-'))).toEqual([]);
+        expect(stall.style.getPropertyValue('--s-bg')).toBe(themeVars(DEFAULT_THEME)['--s-bg']);
+        expect(ask).not.toHaveBeenCalled();
+        expect(links()).toEqual([]);
+        root.remove();
     });
 });

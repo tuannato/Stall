@@ -215,3 +215,106 @@ describe('an-unlicensed-look-wears-none-of-its-own-rows', () => {
         expectLocked(root);
     });
 });
+
+/**
+ * A locked look is never asked for, on any road (CRITIC-STEP-8D2 item 1):
+ * every road the app takes to a record's look asks for the sheet of the
+ * row the gate chose (`sheetForLook`), and under a paid look this stall
+ * holds no licence for that is the default, a shipped look in the entry CSS
+ * — so no road loads the locked look's sheet, and no first paint waits for
+ * it. Held over the real loader and the real `loadCurrent`, on a full load,
+ * a wall run past three heartbeats, a stream overlay run past three of its
+ * retries, and a live record naming the locked look; the page's head records
+ * every link and connects none. Red: the gate bypassed in `sheetForLook`
+ * (the full load asks, and holds its first paint), and a boot prefetch of
+ * every worn-only sheet on the wall and the overlay (the plan's §3 bullet,
+ * not built — its sheet would reach every wall).
+ */
+const { resetLookSheetsForTests } = await import('./ui/lookSheets');
+const { WINDOW_BEAT_MS } = await import('./app');
+
+describe('a-locked-look-is-never-asked-for-on-any-road', () => {
+    /** The overlay's failure retry (`BROADCAST_RETRY_MS` in `app.ts`), which its sheet retry starts from. */
+    const BROADCAST_RETRY_MS = 30_000;
+    let restore: (() => void) | undefined;
+
+    /** The page's head, recording: every link the app appends, none connected. */
+    function holdLinks(): () => Element[] {
+        resetLookSheetsForTests(document);
+        const made: Element[] = [];
+        const append = vi.spyOn(document.head, 'append').mockImplementation((...nodes) => {
+            made.push(...nodes.filter((node): node is Element => node instanceof Element));
+        });
+        restore = () => {
+            append.mockRestore();
+            resetLookSheetsForTests(document);
+        };
+        return () => [...made];
+    }
+
+    afterEach(() => {
+        restore?.();
+        restore = undefined;
+        vi.useRealTimers();
+        chain.addressTxs = [];
+        chain.txs.clear();
+        chain.utxos = [];
+    });
+
+    /** The locked record on the address, as the real loader reads it. */
+    function lockedOnChain(): void {
+        const hex = encodeManifestHex('Locked look', 0x04, 0xffff)!;
+        const record: ChainTx = {
+            txid: '61'.repeat(32),
+            block: { height: 800_000 },
+            inputs: [{ inputScript: p2pkhScriptSig(PK_BYTES), outputScript: STALL_SCRIPT }],
+            outputs: [{ outputScript: `6a${hex}` }, { outputScript: STALL_SCRIPT, sats: DUST_SATS }],
+        };
+        chain.addressTxs = [record];
+        chain.txs.set(record.txid, record);
+        chain.utxos = [...mintedLookTokens()].map((tokenId) => ({ token: { tokenId } }));
+    }
+
+    function bootAt(path: string): HTMLElement {
+        window.history.replaceState(null, '', path);
+        const root = document.createElement('div');
+        document.body.append(root);
+        running.push(boot(root));
+        return root;
+    }
+
+    it('asks for no sheet on a full load, and holds no first paint for one', async () => {
+        const links = holdLinks();
+        lockedOnChain();
+        const root = bootAt(stallPath(PK));
+        await flush();
+        expect(painted.get(root)?.fetch?.kind, 'the first paint was not held').not.toBe('opening');
+        expectLocked(root);
+        expect(links()).toEqual([]);
+    });
+
+    it('asks for no sheet on a wall, beat after beat, nor on an overlay, retry after retry', async () => {
+        vi.useFakeTimers();
+        const links = holdLinks();
+        lockedOnChain();
+        const wall = bootAt(`${stallPath(PK)}?view=window&mode=cycle`);
+        await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS * 3 + 1_000);
+        expect(wall.querySelector('.stall.shop-window'), 'a wall').not.toBeNull();
+        running.pop()!();
+        document.body.replaceChildren();
+        const overlay = bootAt(`${stallPath(PK)}?view=broadcast`);
+        await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS * 3 + 1_000);
+        expect(overlay.querySelector('.stall.broadcast'), 'an overlay').not.toBeNull();
+        expect(links()).toEqual([]);
+    });
+
+    it('asks for no sheet when a live record names the locked look', async () => {
+        const links = holdLinks();
+        chain.utxosThrow = false;
+        chain.utxos = [...mintedLookTokens()].map((tokenId) => ({ token: { tokenId } }));
+        const root = await bootHolding(mintedLookTokens());
+        await publishLockedRecord();
+        expectLocked(root);
+        expect(links()).toEqual([]);
+    });
+});

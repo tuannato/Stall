@@ -423,9 +423,12 @@ describe('no-app-site-wears-a-look-around-the-gate', () => {
     it('finds the try-on calls and the gate, and nothing else', () => {
         const files = appFiles();
         expect(wornOutsideTheGate(files)).toEqual([]);
-        // The walk saw what it is about: the try-on calls and the app's three writes.
+        // The walk saw what it is about: the try-on calls, and in the app
+        // its three writes, the two a look waiting for its sheet makes (the
+        // look kept, then the look put on; 8d2) and the row whose sheet the
+        // hold waits for (`sheetForLook`).
         expect(callsOf(files.get('ui/render.ts')!, 'wornForLook').length).toBeGreaterThanOrEqual(5);
-        expect([...files.get('app.ts')!.matchAll(/\bpaintableLook\(/g)].length).toBe(3);
+        expect([...files.get('app.ts')!.matchAll(/\bpaintableLook\(/g)].length).toBe(6);
     });
 
     it('refuses a holdings set outside the gate, a call outside render.ts, and an app write around it', () => {
@@ -448,7 +451,8 @@ describe('no-app-site-wears-a-look-around-the-gate', () => {
  * Where the record's own look and flags may be read, by file and by the
  * function a read sits in — each with the reason it paints nothing around
  * the gate. `render.ts`'s are top-level functions; `app.ts`'s are the three
- * writers inside `boot` and `loadCurrent`.
+ * writers inside `boot` and `loadCurrent`, and `recordSheet`, which reads the
+ * look only to hand it to the gate (8d2's hold).
  */
 const MAY_READ_THE_RECORD: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
     [
@@ -467,6 +471,7 @@ const MAY_READ_THE_RECORD: ReadonlyMap<string, ReadonlyMap<string, string>> = ne
             ['applyManifest', 'writes the record, and its worn set through the gate'],
             ['refreshHoldings', 'compares the record to the one it asked about, and wears through the gate'],
             ['loadCurrent', 'writes the record, and its worn set through the gate'],
+            ['recordSheet', "the sheet the hold waits for (8d2): the gate's row, never the record's own under a lock"],
         ]),
     ],
 ]);
@@ -574,17 +579,24 @@ const GATE = 'paintableLook';
 const SHEET = 'lookSheetOf';
 
 /**
+ * The build's switch for every road that waits for a worn-only sheet (8d2):
+ * the virtual module's literal, re-exported so `render.ts` and `app.ts` can
+ * sit their hold behind it — the one name here that is a value, not a view.
+ */
+const SWITCH = 'CARRIES_WORN_ONLY_LOOKS';
+
+/**
  * The look table's runtime exports are exactly its eight merged views, the
- * gate and the sheet a painted row loads (the 8b1 critic's item 2; the gate
- * is 8b2's, the step-8 critic's item 3; the sheet 8d1's): an eleventh is a
- * view no parity test reads, and a missing one is a site with nowhere to
- * go. `every-merged-view-answers-the-fixture-look`
+ * gate, the sheet a painted row loads and the switch (the 8b1 critic's item
+ * 2; the gate is 8b2's, the step-8 critic's item 3; the sheet 8d1's; the
+ * switch 8d2's): another is a view no parity test reads, and a missing one is
+ * a site with nowhere to go. `every-merged-view-answers-the-fixture-look`
  * (`lookTable.private.test.ts`) enumerates the same exports and owes each a
  * case.
  */
 describe('the-look-table-exports-exactly-its-merged-views', () => {
-    it('exports the eight, the gate and the sheet, and no other name', () => {
-        expect(Object.keys(table).sort()).toEqual([...MERGED_VIEWS, GATE, SHEET].sort());
+    it('exports the eight, the gate, the sheet and the switch, and no other name', () => {
+        expect(Object.keys(table).sort()).toEqual([...MERGED_VIEWS, GATE, SHEET, SWITCH].sort());
     });
 });
 
@@ -663,6 +675,7 @@ describe('every-merged-view-answers-a-public-id-as-the-public-table-does', () =>
  */
 describe('a-build-with-no-private-look-is-the-public-table', () => {
     it('lists the shipped looks and rows alone, and reads every reserved id as unknown', () => {
+        expect(table.CARRIES_WORN_ONLY_LOOKS, 'no worn-only look, so nothing waits for a sheet').toBe(false);
         expect(LOOK_ROWS).toEqual(SHIPPED_THEMES);
         sameRows(LOOK_ATTACHMENTS, SHIPPED_ATTACHMENTS, 'LOOK_ATTACHMENTS');
         for (const id of PRIVATE_LOOK_IDS) {

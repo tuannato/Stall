@@ -692,6 +692,47 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         assert.ok(sheet !== undefined && preview.includes(`/${sheet[0]}`), "the script names the look's built sheet");
     });
 
+    /**
+     * `the-hold-ships-only-with-a-worn-only-look` (8d2): every road that
+     * waits for a worn-only sheet, holds a paint back for it, retries it or
+     * speaks about it — the hold in `render.ts` and `app.ts`, the try-on's
+     * wait, the unattended screens' retry, the failure sentences — sits
+     * behind `CARRIES_WORN_ONLY_LOOKS`, the build's literal, so a build that
+     * carries no worn-only look folds all of it away and is the bytes it was
+     * before 8d2 (measured: the public `dist` identical to bee004b's). A
+     * build carrying the fixture carries every one of them. Held by what
+     * survives minification: the sentences, the loader's own give-up
+     * message, and the hold's code — the view's `lookSheets` field (a
+     * property name, never mangled; the app writes it, the renderer reads
+     * it), the picker's `look-status` line and the try-on's `aria-busy`. Red:
+     * a hold sentence painted outside the switch, and the paint-time
+     * `view.lookSheets` write moved outside it (CRITIC-STEP-8D2 item 6,
+     * plant K) — each then ships in the public build.
+     */
+    it('the-hold-ships-only-with-a-worn-only-look', () => {
+        const HOLD = [
+            'did not load on this page, so it is showing the default one',
+            'this look has not loaded on this page',
+            'Loading this look',
+            'This look did not load on this page, so it is not shown',
+            'did not load within',
+            'lookSheets',
+            'look-status',
+            'aria-busy',
+        ];
+        const js = (dir) =>
+            [...distFiles(dir)]
+                .filter(([path]) => path.endsWith('.js'))
+                .map(([, bytes]) => bytes.toString('utf8'))
+                .join('\n');
+        const shipped = js(publicDist);
+        const preview = js(previewDist);
+        for (const words of HOLD) {
+            assert.ok(!shipped.includes(words), `the public build carries the hold: ${words}`);
+            assert.ok(preview.includes(words), `a build carrying a worn-only look carries no hold: ${words}`);
+        }
+    });
+
     it('carries the look at preview, in its own sheet, its art beside it', () => {
         const files = distFiles(previewDist);
         const sheets = [...files].filter(([path, bytes]) => path.endsWith('.css') && lookSheetNames(bytes.toString('utf8')).includes('t-fixture-private'));

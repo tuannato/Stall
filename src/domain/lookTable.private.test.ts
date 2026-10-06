@@ -115,6 +115,12 @@ describe('every-merged-view-answers-the-fixture-look', () => {
                 expect(table.lookSheetOf(table.decodeLook(id))).toBeUndefined();
             }
         },
+        CARRIES_WORN_ONLY_LOOKS: () => {
+            // The fixture's sheet is its own file, so this build holds its
+            // paints for it (8d2).
+            expect(table.CARRIES_WORN_ONLY_LOOKS).toBe(true);
+            expect(table.decodeLook(FIXTURE_ID).sheetLoad).toBe('worn');
+        },
         paintableLook: () => {
             const held = table.mintedLookTokens();
             // The fixture is paid and no stall is licensed in step 8.

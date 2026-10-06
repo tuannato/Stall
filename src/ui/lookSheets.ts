@@ -32,19 +32,37 @@
  * it is the sheet. Anything else — `error`, a load that is not the sheet, a
  * URL refused — is `failed`, and failed is sticky for the page's life: asked
  * again, the same URL answers the same failure and no second link is made
- * (`a-worn-only-sheet-is-fetched-once-per-page`). A retry that removes the
- * failed link first, and caps itself, is the unattended surfaces' (8d2,
- * CRITIC-STEP-8 item 18).
+ * (`a-worn-only-sheet-is-fetched-once-per-page`). **One exception, the
+ * unattended screens'** (8d2, CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3):
+ * a wall or a stream overlay, which nobody reloads, gives a failed sheet a
+ * fresh link (`retryLookSheet`) — the failed link removed first, so a page
+ * holds at most one link per sheet, never a pile — **bounded by rate, never by
+ * a lifetime count**: at most one fresh link per `LOOK_SHEET_RETRY_MIN_MS`
+ * for one sheet on one page, and the screens never stop asking, so a shop's
+ * Wi-Fi down at opening heals when it comes back, however long that takes. A
+ * tab older than a deploy asks for a hash the edge no longer has (Pages: 404,
+ * `no-store`), which no retry can heal: that screen paints the default until
+ * it is reloaded, and a reload asks for the new hash.
  *
- * **What a page shows while the sheet is not ready** (8d1, before 8d2's
- * hold): the look's class and its row's `--s-*` inline, over the base sheets
- * alone — the skeleton's state (`layout/looks.ts`, measured by the probe on
- * every screen) in the look's own palette, which `themeVars` has already
- * run through `legibleOn`. Nothing of the look's own sheet is on the page,
- * so nothing of it can cover a figure; when the sheet lands, its rules apply
- * to the class already on the stall without a repaint. A sheet that never
- * loads leaves exactly that state, which is what every build that carried a
- * private look painted before this module existed.
+ * **Late is failed** (8d2): a paint waits for the sheet at most
+ * `LOOK_SHEET_WAIT_MS` (`waitForLookSheet`), and a sheet still pending then
+ * is given up — `failed`, sticky like any other failure — so an answer that
+ * arrives afterwards changes nothing on the page
+ * (`a-late-sheet-changes-nothing-on-the-page`): the stall painted the default
+ * and said so, and a look that swapped itself in under a reader a moment
+ * later would be the flash the wait exists to prevent. Only a pending entry
+ * takes an answer at all. **A newer wait moves the deadline, an older one
+ * never cuts it short** (CRITIC-STEP-8D2 item 12): the entry keeps the latest
+ * deadline any wait set, and gives up only there — a `refresh` superseded
+ * 2.9 s into its wait leaves the next stall its own three seconds
+ * (`a-superseded-wait-never-cuts-a-newer-one-short`).
+ *
+ * **What a page shows while the sheet is not ready** is the renderer's
+ * (8d2's hold, `render.ts`): the default look wearing nothing until the
+ * sheet is `ready`, never the look's class over the base sheets alone — so
+ * nothing paints in a look whose own rules have not arrived, and everything
+ * measured off a paint (a cut name's run, the ticker's pass, the wall's
+ * payment lines) is measured under the sheet.
  */
 
 import { LOOK_CLASS } from '../domain/lookClass';
@@ -58,11 +76,41 @@ export type LookSheetState = 'pending' | 'ready' | 'failed';
 /** A look's sheet, as the look table hands it for a worn-only row (`lookSheetOf`). */
 export type LookSheet = { readonly url: string; readonly cls: string };
 
+/**
+ * How long a paint waits for a worn-only sheet before it paints the default
+ * and calls the sheet failed (8d2; STEP-6-PLAN 6.4, STEP-8-PLAN §3): the
+ * clock starts when the paint is otherwise ready, never at the request, so a
+ * sheet asked for early — beside the chain reads — is waited for no longer
+ * than one that was not. Three seconds: a few hundred milliseconds on the
+ * slowest connection measured for the sheet's size, so a sheet that has not
+ * arrived by then is one that is not coming.
+ */
+export const LOOK_SHEET_WAIT_MS = 3_000;
+
+/**
+ * The least time between two links for one sheet on one page
+ * (`retryLookSheet`; CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3): thirty
+ * seconds, the overlay's failure retry, which the wall's sixty-second
+ * heartbeat and the overlay's own backoff (30 s doubling to 10 min, `app.ts`)
+ * already keep to. The bound is the loader's own, so no caller can turn a
+ * retry into a loop; it is a rate and never a lifetime count — a screen that
+ * stopped asking after ten tries painted the default all day after a morning
+ * outage, with nothing on it to say so.
+ */
+export const LOOK_SHEET_RETRY_MIN_MS = 30_000;
 
 type Entry = {
     readonly cls: string;
     state: LookSheetState;
     readonly done: Promise<HTMLLinkElement>;
+    /** When its link was made, on the page's monotonic clock: a retry within `LOOK_SHEET_RETRY_MIN_MS` of it is refused. */
+    readonly askedAt: number;
+    /** The latest moment any wait gives it, on the same clock (`waitForLookSheet`). */
+    deadline?: number;
+    /** The link this entry put on the page, once it exists: a retry removes it. */
+    link?: HTMLLinkElement;
+    /** Fail a pending entry — the wait gave up on it — and do nothing to a settled one. */
+    readonly giveUp: (why: Error) => void;
 };
 
 /** Every sheet asked for, per document, by its absolute URL. */
@@ -136,11 +184,17 @@ export function loadLookSheet(url: string, cls: string, doc: Document = document
     // stylesheet link while it is being connected (happy-dom does, with CSS
     // loading off), and the answer lands on this entry either way.
     let answer!: { resolve: (link: HTMLLinkElement) => void; reject: (why: Error) => void };
-    const entry: Entry = {
-        cls,
-        state: 'pending',
-        done: settled(new Promise<HTMLLinkElement>((resolve, reject) => (answer = { resolve, reject }))),
+    const done = settled(new Promise<HTMLLinkElement>((resolve, reject) => (answer = { resolve, reject })));
+    // Only a pending entry is answered: once it is settled — ready, failed,
+    // or given up by a wait that ran out — a later event changes nothing
+    // (`a-late-sheet-changes-nothing-on-the-page`).
+    const fail = (why: Error): void => {
+        if (entry.state === 'pending') {
+            entry.state = 'failed';
+            answer.reject(why);
+        }
     };
+    const entry: Entry = { cls, state: 'pending', done, askedAt: performance.now(), giveUp: fail };
     page.set(href, entry);
     // A document that will not take the link (no head, a head that throws)
     // is a sheet that failed — never a throw on the renderer's paint path,
@@ -149,34 +203,29 @@ export function loadLookSheet(url: string, cls: string, doc: Document = document
     try {
         const link = doc.createElement('link');
         link.rel = 'stylesheet';
+        entry.link = link;
         link.addEventListener(
             'load',
             () => {
+                if (entry.state !== 'pending') {
+                    return;
+                }
                 if (sheetNamesItself(link.sheet, cls)) {
                     entry.state = 'ready';
                     answer.resolve(link);
                 } else {
-                    entry.state = 'failed';
-                    answer.reject(new Error(`${url} loaded, and is not a sheet naming ${cls}`));
+                    fail(new Error(`${url} loaded, and is not a sheet naming ${cls}`));
                 }
             },
             { once: true },
         );
-        link.addEventListener(
-            'error',
-            () => {
-                entry.state = 'failed';
-                answer.reject(new Error(`the look sheet at ${url} did not load`));
-            },
-            { once: true },
-        );
+        link.addEventListener('error', () => fail(new Error(`the look sheet at ${url} did not load`)), { once: true });
         // Both attributes before the link is connected: a document asks for a
         // stylesheet the moment it is in the tree with both.
         link.href = href;
         doc.head.append(link);
     } catch (err) {
-        entry.state = 'failed';
-        answer.reject(
+        fail(
             new Error(`the look sheet at ${url} could not be put on the page: ${err instanceof Error ? err.message : String(err)}`),
         );
     }
@@ -190,12 +239,80 @@ export function lookSheetState(url: string, doc: Document = document): LookSheet
 }
 
 /**
- * The renderer's ask, for the look it paints (`applyTheme`): the sheet, when
- * the look table says the row is worn-only, and nothing to wait for — the
- * paint goes ahead over the base sheets and the sheet's rules apply when it
- * lands (the module docblock). A failure is kept on the page's entry
- * (`lookSheetState`), where 8d2's failure path will read it.
+ * The ask that waits nothing (`applyTheme`, and the app's early ask when the
+ * record's look is first known): the sheet on the page, its answer kept on
+ * the page's entry (`lookSheetState`) for whoever paints next. A failure is
+ * never thrown at the caller.
  */
 export function askForLookSheet(sheet: LookSheet, doc: Document): void {
     void loadLookSheet(sheet.url, sheet.cls, doc).catch(() => undefined);
+}
+
+/**
+ * Ask for `sheet` and answer once it has settled: `ready`, or `failed` — an
+ * error, a load that is not the sheet, a URL refused, or no answer within
+ * `ms`, when a pending entry is given up for the page's life (the module
+ * docblock: late is failed). Never rejects. Each wait gives the entry `ms`
+ * from now, and the entry gives up only at the latest deadline any wait gave
+ * it, so a wait whose caller was superseded never cuts a newer one short. A
+ * sheet already settled answers at once.
+ */
+export function waitForLookSheet(
+    sheet: LookSheet,
+    doc: Document,
+    ms: number = LOOK_SHEET_WAIT_MS,
+): Promise<'ready' | 'failed'> {
+    const done = loadLookSheet(sheet.url, sheet.cls, doc);
+    const href = sameOrigin(sheet.url, doc);
+    const entry = href === undefined ? undefined : PAGES.get(doc)?.get(href);
+    const settledAs = done.then(
+        (): 'ready' => 'ready',
+        (): 'failed' => 'failed',
+    );
+    if (entry === undefined || entry.cls !== sheet.cls || entry.state !== 'pending') {
+        return settledAs;
+    }
+    entry.deadline = Math.max(entry.deadline ?? 0, performance.now() + ms);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = (): void => {
+        const left = (entry.deadline ?? 0) - performance.now();
+        if (left > 0) {
+            timer = setTimeout(check, left);
+            return;
+        }
+        entry.giveUp(new Error(`the look sheet at ${sheet.url} did not load within ${ms} ms`));
+    };
+    timer = setTimeout(check, ms);
+    return settledAs.finally(() => clearTimeout(timer));
+}
+
+/**
+ * The unattended screens' retry (the module docblock; CRITIC-STEP-8 item 18,
+ * CRITIC-STEP-8D2 item 3): a sheet that failed on `doc` gets a fresh link —
+ * the failed one removed and its entry dropped first, so the page holds one
+ * link for it — unless its last link was made less than
+ * `LOOK_SHEET_RETRY_MIN_MS` ago. No lifetime count: a screen nobody reloads
+ * keeps asking at its own rate for as long as it is on. Answers whether it
+ * asked again; a sheet that is pending, ready, never asked for, or asked for
+ * too recently is left as it is.
+ */
+export function retryLookSheet(sheet: LookSheet, doc: Document): boolean {
+    const href = sameOrigin(sheet.url, doc);
+    const page = PAGES.get(doc);
+    const known = href === undefined ? undefined : page?.get(href);
+    if (href === undefined || page === undefined || known === undefined || known.state !== 'failed' || known.cls !== sheet.cls) {
+        return false;
+    }
+    if (performance.now() - known.askedAt < LOOK_SHEET_RETRY_MIN_MS) {
+        return false;
+    }
+    known.link?.remove();
+    page.delete(href);
+    askForLookSheet(sheet, doc);
+    return true;
+}
+
+/** Forget every sheet asked for on `doc`: a test's fresh page, where the tests share one document. */
+export function resetLookSheetsForTests(doc: Document): void {
+    PAGES.delete(doc);
 }

@@ -32,9 +32,10 @@
  * | `mintedLookTokens`        | `mintedAttachmentTokens`    |
  * | `lookAttachmentByTokenId` | `attachmentByTokenId`       |
  *
- * These eight, the gate and `lookSheetOf` (the sheet a painted worn-only
+ * These eight, the gate, `lookSheetOf` (the sheet a painted worn-only
  * row loads, 8d1 — no public counterpart: a shipped look's sheet is in the
- * entry CSS) are the module's whole runtime export
+ * entry CSS) and `CARRIES_WORN_ONLY_LOOKS` (the build's switch for every road
+ * that waits for such a sheet, 8d2) are the module's whole runtime export
  * (`the-look-table-exports-exactly-its-merged-views`). Each view answers a
  * public id exactly as its public counterpart does, rows by reference
  * (`every-merged-view-answers-a-public-id-as-the-public-table-does`), and a
@@ -180,6 +181,18 @@ function admitted(sources: readonly PrivateLookSource[]): readonly LookData[] {
  * pays a little over a kilobyte for the join, not the validator's nine.
  */
 const PRIVATE_LOOKS: readonly LookData[] = carriesPrivateLooks ? admitted(privateLooks) : [];
+
+/**
+ * Whether this build carries a look whose sheet is its own file — every
+ * private look is (`sheetLoad: 'worn'`). The build's literal, re-exported:
+ * every road that waits for such a sheet, holds a paint back for it, retries
+ * it or speaks about it (8d2: the hold, the failure sentence, the try-on's
+ * wait, the unattended screens' retry, `render.ts` and `app.ts`) sits behind
+ * it, so a build that carries none runs none of that and is the public build
+ * byte for byte (`the-hold-ships-only-with-a-worn-only-look`). Per row,
+ * `lookSheetOf` still decides which sheet a painted look needs.
+ */
+export const CARRIES_WORN_ONLY_LOOKS: boolean = carriesPrivateLooks;
 const PRIVATE_ROWS: ReadonlyMap<number, DecodedTheme> = new Map(PRIVATE_LOOKS.map((look) => [look.theme.id, look.theme]));
 
 /** Every look a seller can choose, in the order they are offered: the shipped three, then each private look. */

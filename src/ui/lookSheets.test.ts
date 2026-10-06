@@ -1,6 +1,16 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
-import { LOOK_SHEET_PROPERTY, askForLookSheet, loadLookSheet, lookSheetState, sheetNamesItself } from './lookSheets';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+    LOOK_SHEET_PROPERTY,
+    LOOK_SHEET_RETRY_MIN_MS,
+    LOOK_SHEET_WAIT_MS,
+    askForLookSheet,
+    loadLookSheet,
+    lookSheetState,
+    retryLookSheet,
+    sheetNamesItself,
+    waitForLookSheet,
+} from './lookSheets';
 
 /**
  * The worn-only loader (`lookSheets.ts`, step 8d1), over a page whose head
@@ -83,6 +93,12 @@ describe('a-worn-only-sheet-is-a-same-origin-link-and-no-inline-style', () => {
     });
 });
 
+/**
+ * One link per sheet per page, and a failure kept for the page's life. The
+ * one exception is the unattended screens' retry (8d2, CRITIC-STEP-8 item
+ * 18), which replaces a failed link with a fresh one only through
+ * `retryLookSheet`, at a bounded rate: `a-failed-sheet-is-retried-by-rate-and-never-piles-up-links`.
+ */
 describe('a-worn-only-sheet-is-fetched-once-per-page', () => {
     it('answers every later ask with the first one’s promise, and makes one link', async () => {
         const { doc, appended } = page();
@@ -208,5 +224,181 @@ describe('the-renderers-ask-puts-one-link-on-the-page-and-never-throws', () => {
             expect(lookSheetState(SHEET.url, doc), String(head)).toBe('failed');
             await expect(loadLookSheet(SHEET.url, SHEET.cls, doc)).rejects.toThrow(/could not be put on the page/);
         }
+    });
+});
+
+/**
+ * Late is failed (8d2; STEP-8-PLAN §3): a wait gives a pending sheet
+ * `LOOK_SHEET_WAIT_MS` from the moment it starts, then gives it up — failed,
+ * for the page's life — and an answer that arrives afterwards changes
+ * nothing: the page already painted the default and said so. A wait never
+ * rejects, and a sheet already settled is answered at once. Red: the load
+ * handler acting on an entry that is no longer pending; the wait with no
+ * clock.
+ */
+describe('a-late-sheet-changes-nothing-on-the-page', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('gives a pending sheet up at the wait, and a later load leaves it failed', async () => {
+        vi.useFakeTimers();
+        const { doc, appended } = page();
+        const sheet = { url: '/assets/slow.css', cls: 't-slow' };
+        const waited = waitForLookSheet(sheet, doc);
+        await vi.advanceTimersByTimeAsync(LOOK_SHEET_WAIT_MS - 1);
+        expect(lookSheetState(sheet.url, doc)).toBe('pending');
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(waited).resolves.toBe('failed');
+        expect(lookSheetState(sheet.url, doc)).toBe('failed');
+        answer(appended[0]!, { sheet: sheetOf(NAMED('t-slow')) });
+        expect(lookSheetState(sheet.url, doc), 'a late answer changes nothing').toBe('failed');
+        await expect(loadLookSheet(sheet.url, sheet.cls, doc)).rejects.toThrow(/within/);
+        expect(vi.getTimerCount(), 'no clock left running').toBe(0);
+    });
+
+    it('answers a sheet that lands in time, one already settled at once, and never rejects', async () => {
+        vi.useFakeTimers();
+        const { doc, appended } = page();
+        const ready = { url: '/assets/ready.css', cls: 't-ready' };
+        const waited = waitForLookSheet(ready, doc);
+        answer(appended[0]!, { sheet: sheetOf(NAMED('t-ready')) });
+        await expect(waited).resolves.toBe('ready');
+        expect(vi.getTimerCount(), 'the clock is cleared when the sheet lands').toBe(0);
+        await expect(waitForLookSheet(ready, doc)).resolves.toBe('ready');
+        const gone = { url: '/assets/gone.css', cls: 't-gone' };
+        const first = waitForLookSheet(gone, doc);
+        answer(appended[1]!, 'error');
+        await expect(first).resolves.toBe('failed');
+        await expect(waitForLookSheet(gone, doc)).resolves.toBe('failed');
+        await expect(waitForLookSheet({ url: 'https://elsewhere.test/x.css', cls: 't-x' }, doc)).resolves.toBe('failed');
+        expect(appended, 'a settled sheet is not asked again').toHaveLength(2);
+    });
+});
+
+/**
+ * The unattended screens' retry (8d2; CRITIC-STEP-8 item 18, CRITIC-STEP-8D2
+ * item 3): a sheet that failed gets a fresh link only through
+ * `retryLookSheet` — the failed link removed from the page and its entry
+ * dropped first, so the page holds one link for it, never a pile — and at
+ * most one per `LOOK_SHEET_RETRY_MIN_MS`: bounded by rate, never by a
+ * lifetime count, so a screen nobody reloads keeps asking for as long as it
+ * is on and gets its look back when an outage ends. A sheet that is pending,
+ * ready or never asked for is left as it is. A page older than a deploy asks
+ * for a hash the edge no longer has, which no retry heals; a reload is a new
+ * page, which asks again. Red: the failed link left on the page (two links),
+ * the rate bound removed (a fresh link at once), a lifetime cap put back (no
+ * link on the fifty-first try).
+ */
+describe('a-failed-sheet-is-retried-by-rate-and-never-piles-up-links', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    /** A page whose head is a real element no document holds: links are kept and removable, and none is a request. */
+    function pageWithHead(url = `${ORIGIN}/s/qq`) {
+        const head = document.createElement('div');
+        const doc = { URL: url, baseURI: url, createElement: (tag: string) => document.createElement(tag), head } as unknown as Document;
+        return { doc, links: () => [...head.querySelectorAll('link')] };
+    }
+    const SHEET = { url: '/assets/skewed.css', cls: 't-skewed' };
+
+    it('replaces the failed link with one fresh one, never sooner than its rate allows, and never stops', async () => {
+        vi.useFakeTimers();
+        const { doc, links } = pageWithHead();
+        const first = waitForLookSheet(SHEET, doc);
+        answer(links()[0]!, 'error');
+        await expect(first).resolves.toBe('failed');
+        expect(retryLookSheet(SHEET, doc), 'too soon after its link').toBe(false);
+        await vi.advanceTimersByTimeAsync(LOOK_SHEET_RETRY_MIN_MS - 1);
+        expect(retryLookSheet(SHEET, doc), 'still too soon').toBe(false);
+        expect(links()).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(1);
+        for (let i = 1; i <= 50; i += 1) {
+            const failedLink = links()[0]!;
+            expect(lookSheetState(SHEET.url, doc)).toBe('failed');
+            expect(retryLookSheet(SHEET, doc), `retry ${i}`).toBe(true);
+            expect(links(), 'the failed link is gone, one fresh one in its place').toHaveLength(1);
+            expect(links()[0]).not.toBe(failedLink);
+            expect(lookSheetState(SHEET.url, doc)).toBe('pending');
+            expect(retryLookSheet(SHEET, doc), 'a pending sheet is not asked again').toBe(false);
+            answer(links()[0]!, 'error');
+            await vi.advanceTimersByTimeAsync(0);
+            expect(retryLookSheet(SHEET, doc), 'the rate holds after every retry').toBe(false);
+            await vi.advanceTimersByTimeAsync(LOOK_SHEET_RETRY_MIN_MS);
+        }
+        // Still asking, and it lands when the edge answers.
+        expect(retryLookSheet(SHEET, doc)).toBe(true);
+        answer(links()[0]!, { sheet: sheetOf(NAMED('t-skewed')) });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(lookSheetState(SHEET.url, doc)).toBe('ready');
+        expect(links()).toHaveLength(1);
+        // A reload is a new page: it asks again, once.
+        const reloaded = pageWithHead();
+        const again = waitForLookSheet(SHEET, reloaded.doc);
+        expect(reloaded.links()).toHaveLength(1);
+        answer(reloaded.links()[0]!, { sheet: sheetOf(NAMED('t-skewed')) });
+        await expect(again).resolves.toBe('ready');
+    });
+
+    it('leaves a sheet that is pending, ready or never asked for as it is', async () => {
+        vi.useFakeTimers();
+        const { doc, links } = pageWithHead();
+        expect(retryLookSheet(SHEET, doc), 'never asked for').toBe(false);
+        expect(links()).toEqual([]);
+        const pending = loadLookSheet(SHEET.url, SHEET.cls, doc);
+        await vi.advanceTimersByTimeAsync(LOOK_SHEET_RETRY_MIN_MS);
+        expect(retryLookSheet(SHEET, doc), 'pending').toBe(false);
+        answer(links()[0]!, { sheet: sheetOf(NAMED('t-skewed')) });
+        await pending;
+        expect(retryLookSheet(SHEET, doc), 'ready').toBe(false);
+        expect(retryLookSheet({ url: SHEET.url, cls: 't-other' }, doc), 'another look').toBe(false);
+        expect(links()).toHaveLength(1);
+        expect(lookSheetState(SHEET.url, doc)).toBe('ready');
+    });
+});
+
+/**
+ * A newer wait moves the deadline, an older one never cuts it short
+ * (CRITIC-STEP-8D2 item 12): the entry gives up only at the latest moment any
+ * wait gave it, so a `refresh` superseded 2.9 s into its wait leaves the next
+ * stall its own `LOOK_SHEET_WAIT_MS`, not the 0.1 s the first wait's timer
+ * had left. Red: one fixed timer per wait (the sheet given up at 3 s).
+ */
+describe('a-superseded-wait-never-cuts-a-newer-one-short', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('gives the sheet up at the latest deadline, not the first', async () => {
+        vi.useFakeTimers();
+        const { doc, appended } = page();
+        const sheet = { url: '/assets/slow.css', cls: 't-slow' };
+        const older = waitForLookSheet(sheet, doc);
+        await vi.advanceTimersByTimeAsync(2_900);
+        const newer = waitForLookSheet(sheet, doc);
+        await vi.advanceTimersByTimeAsync(100);
+        expect(lookSheetState(sheet.url, doc), 'the older wait’s three seconds are up, the newer’s are not').toBe('pending');
+        await vi.advanceTimersByTimeAsync(LOOK_SHEET_WAIT_MS - 100 - 1);
+        expect(lookSheetState(sheet.url, doc)).toBe('pending');
+        await vi.advanceTimersByTimeAsync(1);
+        expect(lookSheetState(sheet.url, doc)).toBe('failed');
+        await expect(newer).resolves.toBe('failed');
+        await expect(older).resolves.toBe('failed');
+        expect(appended).toHaveLength(1);
+        expect(vi.getTimerCount(), 'no clock left running').toBe(0);
+    });
+
+    it('lets a sheet that lands inside the newer deadline be ready', async () => {
+        vi.useFakeTimers();
+        const { doc, appended } = page();
+        const sheet = { url: '/assets/slow.css', cls: 't-slow' };
+        void waitForLookSheet(sheet, doc);
+        await vi.advanceTimersByTimeAsync(2_900);
+        const newer = waitForLookSheet(sheet, doc);
+        await vi.advanceTimersByTimeAsync(1_000);
+        answer(appended[0]!, { sheet: sheetOf(NAMED('t-slow')) });
+        await expect(newer).resolves.toBe('ready');
+        expect(vi.getTimerCount()).toBe(0);
     });
 });

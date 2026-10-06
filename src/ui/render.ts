@@ -81,6 +81,7 @@ import {
     type ShippedAttachment,
 } from '../domain/attachments';
 import {
+    CARRIES_WORN_ONLY_LOOKS,
     attachmentsForLook,
     decodeLook,
     lookSheetOf,
@@ -91,7 +92,7 @@ import {
     LOOK_ROWS,
     type PaintedLook,
 } from '../domain/lookTable';
-import { askForLookSheet } from './lookSheets';
+import { askForLookSheet, lookSheetState, waitForLookSheet } from './lookSheets';
 import type {
     SelectionAsk,
     RememberedSurcharge,
@@ -598,7 +599,93 @@ export function paintedThemeId(view: StallView): number {
  */
 export function paintedTheme(view: StallView): DecodedTheme {
     const previewed = activePreview(view);
+    if (CARRIES_WORN_ONLY_LOOKS) {
+        return paintedOnThisPage(view, previewed);
+    }
     return previewed !== undefined ? decodeLook(previewed.themeId) : recordLook(view).theme;
+}
+
+/**
+ * Where look `theme`'s own sheet stands on this page, as the app wrote it at
+ * paint time (`view.lookSheets`; 8d2): `undefined` for a row that needs no
+ * sheet of its own — a shipped look, whose sheet is in the entry CSS, the
+ * default a locked look paints, an id this build carries no row for — and
+ * `pending` for a worn-only row nobody has asked for yet.
+ */
+function sheetOnPage(view: StallView, theme: DecodedTheme): 'pending' | 'ready' | 'failed' | undefined {
+    return lookSheetOf(theme) === undefined ? undefined : (view.lookSheets?.get(theme.id) ?? 'pending');
+}
+
+/** True when `theme` can paint on this page now: it needs no sheet of its own, or its sheet is ready. */
+function onPage(view: StallView, theme: DecodedTheme): boolean {
+    const state = sheetOnPage(view, theme);
+    return state === undefined || state === 'ready';
+}
+
+/**
+ * The record's look held back for its sheet (8d2): the state of that sheet
+ * when the row the gate chose is worn-only and its sheet is not ready on this
+ * page, and `undefined` when the record's look paints as it is. A locked look
+ * paints the default, a shipped row, so it is never held.
+ */
+function recordHeld(view: StallView): 'pending' | 'failed' | undefined {
+    const state = sheetOnPage(view, recordLook(view).theme);
+    return state === 'ready' ? undefined : state;
+}
+
+/**
+ * The look a paint puts on screen in a build that carries a worn-only look
+ * (`paintedTheme`'s answer there; 8d2's hold, STEP-8-PLAN §3): a try-on whose
+ * sheet is ready, else the record's look whose sheet is ready (or needs
+ * none), else the default — **never a worn-only look before its own sheet has
+ * arrived**. Before 8d2 the look's class went on at once over the base sheets
+ * alone, and everything measured off that paint (a cut name's run, the
+ * ticker's pass, the wall's payment lines) was measured in a layout the sheet
+ * then changed with nothing measuring again (CRITIC-STEP-8D1 item 6). So the
+ * paint that puts such a look on is always one made after its sheet is
+ * `ready`, and it measures under it. A try-on that is not ready keeps the look
+ * the stall had (the record's); a record that is not ready paints the
+ * default, wearing nothing (`asThisPagePaints`), and says so
+ * (`THEME_SHEET_UNLOADED` once it failed). The door paints no stall's look,
+ * so it asks for no sheet (`a-look-the-door-does-not-paint-costs-the-door-nothing`).
+ */
+function paintedOnThisPage(
+    view: StallView,
+    previewed: { themeId: number; attachmentFlags: number } | undefined,
+): DecodedTheme {
+    if (view.route.kind === 'home') {
+        return DEFAULT_THEME;
+    }
+    if (previewed !== undefined) {
+        const tried = decodeLook(previewed.themeId);
+        if (onPage(view, tried)) {
+            return tried;
+        }
+    }
+    return recordHeld(view) === undefined ? recordLook(view).theme : DEFAULT_THEME;
+}
+
+/**
+ * The view as this page can paint it (8d2), handed to every reader below
+ * `renderStall` in a build that carries a worn-only look: a try-on whose
+ * sheet is not ready is not on screen (the look the stall had stays), and a
+ * record held back for its sheet wears nothing —
+ * none of its own rows, its flags being bits of its own table, and none of
+ * the default's (`a-look-that-did-not-load-wears-none-of-its-rows`). The
+ * record itself is kept: the Studio reads it back and the name sheet opens on
+ * it, and both say the look has not loaded rather than that nothing was
+ * chosen (`a-look-that-did-not-load-is-not-called-wearing-nothing`).
+ */
+function asThisPagePaints(view: StallView): StallView {
+    let out = view;
+    const tried = out.previewLook;
+    if (tried !== undefined && !onPage(out, decodeLook(tried.themeId))) {
+        out = { ...out, previewLook: undefined };
+    }
+    if (recordHeld(out) !== undefined) {
+        out = { ...out, worn: [] };
+    }
+    return out;
 }
 
 /**
@@ -616,6 +703,10 @@ export function renderStall(
     view: StallView,
     handlers: StallHandlers,
 ): void {
+    if (CARRIES_WORN_ONLY_LOOKS) {
+        // The hold (8d2): what this page cannot paint yet is not painted.
+        view = asThisPagePaints(view);
+    }
     const serial = ++paintSerial;
     paintedIconCells.clear();
     // A timer from the paint before this one would fire against a tree that
@@ -2483,6 +2574,12 @@ function settingsNotes(body: HTMLElement, view: StallView): void {
         // of the sentences above — and the default on screen is not the
         // seller's choice either (the gate, `paintableLook`).
         body.append(el('p', 'fine', copy.THEME_NOT_UNLOCKED));
+    }
+    if (CARRIES_WORN_ONLY_LOOKS && recordHeld(view) === 'failed') {
+        // The record's look is carried and its own sheet did not load on
+        // this page (8d2): the default on screen is ours, not the seller's,
+        // and a reload is the way on. Nothing while it is still on its way.
+        body.append(el('p', 'fine', copy.THEME_SHEET_UNLOADED));
     }
 }
 
@@ -7771,6 +7868,84 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         seg.append(button);
     }
     themeGroup.append(seg);
+    /*
+     * A look whose sheet is its own file is tried on once that sheet has
+     * arrived, never before (8d2's hold; `a-try-on-waits-for-its-sheet-and-
+     * the-latest-press-wins`): the press asks for it and this line says it is
+     * loading, the stall behind keeps the look it had, and when the sheet
+     * lands the look goes on — if this press is still the latest and the
+     * picker is still on screen. A sheet that does not load leaves the look
+     * the stall had and says so; opened over a record whose own look did not
+     * load, the line says that too.
+     */
+    let lookStatus: HTMLElement | undefined;
+    let lookPress = 0;
+    if (CARRIES_WORN_ONLY_LOOKS) {
+        lookStatus = el('p', 'fine');
+        lookStatus.setAttribute('data-role', 'look-status');
+        const failed = sheetOnPage(view, decodeLook(chosenTheme)) === 'failed';
+        lookStatus.hidden = !failed;
+        lookStatus.textContent = failed ? copy.PUBLISH_LOOK_UNLOADED : '';
+        themeGroup.append(lookStatus);
+    }
+    const sayLook = (text: string | undefined): void => {
+        if (lookStatus !== undefined) {
+            lookStatus.hidden = text === undefined;
+            lookStatus.textContent = text ?? '';
+        }
+        for (const button of lookButtons) {
+            if (text === copy.PUBLISH_LOOK_LOADING && button.getAttribute('aria-pressed') === 'true') {
+                button.setAttribute('aria-busy', 'true');
+            } else {
+                button.removeAttribute('aria-busy');
+            }
+        }
+    };
+    /*
+     * Put look `themeId` with `chosen` flags on the stall behind the sheet,
+     * and remember it (`reportPreview`) — at once when it needs no sheet of
+     * its own or its sheet is ready, after the sheet lands when it is on its
+     * way. Every press is numbered; an answer for any press but the latest,
+     * or for a picker no longer on screen, changes nothing. The paint the
+     * look goes on with measures the rows' cut lines again, under its own
+     * sheet (`a-try-on-measures-its-marquees-under-its-own-sheet`).
+     */
+    const showLook = (anchor: Element, themeId: number, chosen: number): void => {
+        const press = ++lookPress;
+        const theme = decodeLook(themeId);
+        const sheet = lookSheetOf(theme);
+        const put = (): void => {
+            sayLook(undefined);
+            previewLook(anchor, themeId, chosen);
+            reportPreview(themeId, chosen);
+            const behind = anchor.closest('.frame')?.parentElement;
+            if (sheet !== undefined && behind !== null && behind !== undefined) {
+                applyMarquees(behind, ROW_MARQUEE);
+            }
+        };
+        if (sheet === undefined) {
+            put();
+            return;
+        }
+        const settle = (state: 'ready' | 'failed'): void => {
+            if (press !== lookPress || !anchor.isConnected) {
+                return;
+            }
+            if (state === 'ready') {
+                put();
+            } else {
+                sayLook(copy.PUBLISH_LOOK_UNLOADED);
+                announce(anchor.ownerDocument, copy.PUBLISH_LOOK_UNLOADED);
+            }
+        };
+        const now = lookSheetState(sheet.url, anchor.ownerDocument);
+        if (now === 'ready' || now === 'failed') {
+            settle(now);
+            return;
+        }
+        sayLook(copy.PUBLISH_LOOK_LOADING);
+        void waitForLookSheet(sheet, anchor.ownerDocument).then(settle);
+    };
 
     /*
      * The three P5 fields, each a tagged push the reader already skips when
@@ -8015,8 +8190,12 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         // consent" exists to prevent, arriving through the front door.
         flags = 0;
         renderDecor(themeId);
-        previewLook(seg, themeId, flags);
-        reportPreview(themeId, flags);
+        if (CARRIES_WORN_ONLY_LOOKS) {
+            showLook(seg, themeId, flags);
+        } else {
+            previewLook(seg, themeId, flags);
+            reportPreview(themeId, flags);
+        }
         refresh();
     }
     form.addEventListener('submit', (event) => event.preventDefault());
@@ -8103,8 +8282,12 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                         flags |= 1 << row.bit;
                     }
                     paintTicks();
-                    previewLook(list, themeId, flags);
-                    reportPreview(themeId, flags);
+                    if (CARRIES_WORN_ONLY_LOOKS) {
+                        showLook(list, themeId, flags);
+                    } else {
+                        previewLook(list, themeId, flags);
+                        reportPreview(themeId, flags);
+                    }
                     refresh();
                 });
                 line.append(tick);
@@ -9768,7 +9951,11 @@ function wearingRow(view: StallView): HTMLElement {
     row.setAttribute('data-role', 'studio-wearing-row');
     row.append(el('span', undefined, copy.STUDIO_WEARING_ROW));
     const value = el('span', 'kv-chips');
-    if (recordLook(view).why === 'not-unlocked') {
+    if (CARRIES_WORN_ONLY_LOOKS && recordHeld(view) !== undefined) {
+        // Held back for its sheet (8d2): nothing is worn because of this
+        // page, and the record still names what was chosen.
+        value.append(copy.STUDIO_WEARING_NOT_LOADED);
+    } else if (recordLook(view).why === 'not-unlocked') {
         // Nothing is worn because the look is locked, not because the
         // seller chose nothing: "Nothing worn" here would be our refusal
         // reported as their choice.
