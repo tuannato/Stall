@@ -709,6 +709,17 @@ export type StallView = WindowState & {
      */
     previewLook?: { themeId: number; attachmentFlags: number };
     /**
+     * Where each worn-only look's own sheet stands on this page, by look id
+     * (8d2): written by the app at paint time from the loader
+     * (`src/ui/lookSheets.ts`), like `fiatCode`, and only in a build that
+     * carries such a look — never a loader's field. A look whose sheet is not
+     * `ready` here does not paint: the renderer holds it back, so a record's
+     * look paints the default wearing nothing and a try-on stays off the
+     * stall until its sheet has arrived. Absent, or a worn-only look missing
+     * from it, is a sheet nobody has asked for yet, held like a pending one.
+     */
+    lookSheets?: ReadonlyMap<number, 'pending' | 'ready' | 'failed'>;
+    /**
      * Token ids the stall address holds, when a holdings read answered. Absent
      * means "not read", which is not the same as "holds nothing" — the picker
      * says the weaker thing rather than telling a seller they own nothing.

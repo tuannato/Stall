@@ -13,7 +13,14 @@ import {
     stallPath,
 } from './domain/route';
 import { ATTACHMENT_FLAGS_TAG, decodeAttachmentFlags } from './domain/attachments';
-import { mintedLookTokens, paintableLook } from './domain/lookTable';
+import {
+    CARRIES_WORN_ONLY_LOOKS,
+    LOOK_ROWS,
+    decodeLook,
+    lookSheetOf,
+    mintedLookTokens,
+    paintableLook,
+} from './domain/lookTable';
 import { DEFAULT_THEME, DEFAULT_THEME_ID } from './domain/theme';
 import { loadHeldTokens, loadHoldings } from './net/holdings';
 import { fetchXecPrice } from './net/price';
@@ -177,6 +184,15 @@ import {
     type PayShown,
 } from './ui/render';
 import { lastMarqueeRunAheadMs } from './ui/marquee';
+import {
+    askForLookSheet,
+    lookSheetRetriesLeft,
+    lookSheetState,
+    retryLookSheet,
+    waitForLookSheet,
+    type LookSheet,
+    type LookSheetState,
+} from './ui/lookSheets';
 import { fetchXecPriceCheck } from './net/priceCheck';
 import { SECOND_FEED } from './net/hosts';
 import { withDeadline } from './domain/deadline';
@@ -358,6 +374,42 @@ const TXID = /^[0-9a-f]{64}$/;
 const NOTHING_HELD: ReadonlySet<string> = new Set();
 
 /**
+ * The worn-only sheet look `theme` needs before a record naming it paints
+ * (8d2's hold): the gate's row — the default under a lock, a shipped row, so
+ * a locked look asks for no sheet — and `lookSheetOf`'s answer for it.
+ */
+function sheetForLook(theme: DecodedTheme | undefined): LookSheet | undefined {
+    return lookSheetOf(paintableLook(theme ?? DEFAULT_THEME, 0, NOTHING_HELD).theme);
+}
+
+/**
+ * The worn-only sheet the view's record needs before its look paints
+ * (8d2's hold): the gate's row, never the record's own under a lock.
+ */
+function recordSheet(view: StallView): LookSheet | undefined {
+    return sheetForLook(view.recordTheme);
+}
+
+/**
+ * Where every worn-only look's sheet stands on `doc`, by look id, for the
+ * paint (`view.lookSheets`; 8d2): written at paint time, like `fiatCode`, so
+ * the renderer holds back exactly what this page has not loaded. A sheet
+ * nobody has asked for is left out, which the renderer holds like a pending
+ * one.
+ */
+function lookSheetsOnPage(doc: Document): ReadonlyMap<number, LookSheetState> {
+    const out = new Map<number, LookSheetState>();
+    for (const { id } of LOOK_ROWS) {
+        const sheet = lookSheetOf(decodeLook(id));
+        const state = sheet === undefined ? undefined : lookSheetState(sheet.url, doc);
+        if (state !== undefined) {
+            out.set(id, state);
+        }
+    }
+    return out;
+}
+
+/**
  * The two walks a failure screen is still owed.
  *
  * They ask the address history, which every chronik node serves, and the offer
@@ -468,6 +520,45 @@ export function boot(
      */
     const withRail = (view: StallView): StallView => ({ ...view, broadcastRail: broadcastRailAt });
 
+    /**
+     * The stream overlay's own retry for a look's sheet that failed (8d2;
+     * CRITIC-STEP-8 item 18): an overlay has no heartbeat, and its failure
+     * retry is a full `refresh()` that only a failed read arms — so a sheet
+     * that failed on a working overlay gets a fresh link here every
+     * `BROADCAST_RETRY_MS`, while its retries last, and the overlay paints the
+     * look once it is ready. No full reload, so the card on stream is never
+     * blanked for it; the wall's retry rides its heartbeat (`refresh`).
+     */
+    let sheetRetry: ReturnType<typeof setTimeout> | undefined;
+    const syncSheetRetry = (): void => {
+        if (sheetRetry !== undefined || stopped || state.view.broadcast === undefined) {
+            return;
+        }
+        const sheet = recordSheet(state.view);
+        if (
+            sheet === undefined ||
+            lookSheetState(sheet.url, document) !== 'failed' ||
+            lookSheetRetriesLeft(sheet, document) === 0
+        ) {
+            return;
+        }
+        const claimed = generation;
+        sheetRetry = setTimeout(() => {
+            sheetRetry = undefined;
+            if (stopped || claimed !== generation) {
+                return;
+            }
+            retryLookSheet(sheet, document);
+            void waitForLookSheet(sheet, document).then(() => {
+                if (stopped || claimed !== generation) {
+                    return;
+                }
+                livePaint();
+                syncSheetRetry();
+            });
+        }, BROADCAST_RETRY_MS);
+    };
+
     const clearBroadcastTimers = (): void => {
         if (carousel !== undefined) {
             clearTimeout(carousel);
@@ -494,6 +585,10 @@ export function boot(
         windowBeat = undefined;
         windowRoll = undefined;
         windowPayingTimer = undefined;
+        if (CARRIES_WORN_ONLY_LOOKS && sheetRetry !== undefined) {
+            clearTimeout(sheetRetry);
+            sheetRetry = undefined;
+        }
     };
     /**
      * One currency above the table (CLAUDE §8). `readSavedFiat` answers `usd`
@@ -1505,6 +1600,11 @@ export function boot(
             // it in, so a refresh cannot lose it and a shared link cannot gain it.
             pasted: (history.state as { pasted?: boolean } | null)?.pasted === true,
         };
+        if (CARRIES_WORN_ONLY_LOOKS) {
+            // Where each worn-only look's sheet stands on this page, at paint
+            // time (8d2): the renderer holds back what has not loaded.
+            view.lookSheets = lookSheetsOnPage(document);
+        }
         // The records the open pay sheet composes from, exactly as this paint
         // hands them to it: the single sheet's item when it is a quoted row,
         // every chosen item's on "Pay several" (`payPainted`).
@@ -2317,6 +2417,9 @@ export function boot(
     const syncBroadcastTimers = (): void => {
         if (state.view.broadcast === undefined) {
             return;
+        }
+        if (CARRIES_WORN_ONLY_LOOKS) {
+            syncSheetRetry();
         }
         if (isBroadcastFailure(state.view.fetch?.kind)) {
             // Only a resolved stall has no socket to heal the screen.
@@ -3301,6 +3404,37 @@ export function boot(
         if (claimed !== generation) {
             return;
         }
+        if (CARRIES_WORN_ONLY_LOOKS) {
+            /*
+             * The hold before the first paint (8d2; STEP-8-PLAN §3): a record
+             * whose look's sheet is its own file waits for that sheet — asked
+             * for already when the record was read (`loadCurrent`), or now —
+             * at most `LOOK_SHEET_WAIT_MS` from here, the moment the rest of
+             * the view is ready. Meanwhile the screen stays what it was: the
+             * opening screen, or on a wall the stall it showed. A sheet that
+             * is not there by then is failed for the page's life, and the
+             * paint below puts the default on, wearing nothing, and says so
+             * (`a-stall-in-a-worn-only-look-paints-once-its-sheet-has-loaded`,
+             * `a-look-sheet-that-does-not-load-paints-the-default-and-says-so`).
+             *
+             * An unattended screen — a wall, whose heartbeat is this call, or
+             * a stream overlay — first gives a sheet that failed a fresh
+             * link, while its retries last (CRITIC-STEP-8 item 18,
+             * `a-wall-retries-a-sheet-that-failed-on-its-heartbeat`). Every
+             * other page keeps a failure for its life; its sentence offers a
+             * reload.
+             */
+            const sheet = recordSheet(next.view);
+            if (sheet !== undefined) {
+                if (next.view.broadcast !== undefined || wallParams(next.view) !== undefined) {
+                    retryLookSheet(sheet, document);
+                }
+                await waitForLookSheet(sheet, document);
+                if (claimed !== generation || stopped) {
+                    return;
+                }
+            }
+        }
         // Pages already walked for **this** stall in this page load come back:
         // a retry, or a Back to a stall already read, must not charge a reader
         // ten round trips for what this page is still holding. A different
@@ -3832,6 +3966,12 @@ export function boot(
     };
 
     /**
+     * The records `applyManifest` has applied, numbered (8d2): a look waiting
+     * for its sheet goes on only if no newer record landed meanwhile.
+     */
+    let recordLookSerial = 0;
+
+    /**
      * A settings answer, onto the view.
      *
      * Its own function because two roads reach it: a live re-read, and a walk
@@ -3870,6 +4010,64 @@ export function boot(
             if (pubkeyHex !== undefined) {
                 sessionNames.set(pubkeyHex, manifest.name);
                 sessionThemes.set(pubkeyHex, manifest.theme);
+            }
+        }
+        if (CARRIES_WORN_ONLY_LOOKS && manifest !== undefined) {
+            /*
+             * Only the look waits (8d2; STEP-8-PLAN §3, "Live change"): a
+             * record that moves this stall to a look whose sheet is not on the
+             * page yet applies its name, tagline and announcement now, keeps
+             * the look and decorations on screen as they were, and puts the
+             * new look on once its sheet has settled — ready, or failed, when
+             * the paint says so. Never the default in between, which would be
+             * a second change under a reader for a look about to arrive. Each
+             * record that lands is numbered, so a wait outlived by a newer
+             * record, or by another stall, changes nothing
+             * (`a-record-that-moves-to-a-worn-only-look-repaints-once-its-sheet-loads`).
+             */
+            const serial = ++recordLookSerial;
+            const sheet = recordSheet(view);
+            const now = sheet === undefined ? undefined : lookSheetState(sheet.url, document);
+            if (sheet !== undefined && now !== 'ready' && now !== 'failed') {
+                const before = state.view;
+                const claimed = generation;
+                state = {
+                    ...state,
+                    view: {
+                        ...view,
+                        recordTheme: before.recordTheme,
+                        recordFlags: before.recordFlags,
+                        worn: paintableLook(before.recordTheme ?? DEFAULT_THEME, before.recordFlags ?? 0, view.heldTokens ?? NOTHING_HELD).worn,
+                    },
+                };
+                adoptFiatHint();
+                livePaint();
+                void waitForLookSheet(sheet, document).then(() => {
+                    if (stopped || claimed !== generation || serial !== recordLookSerial) {
+                        return;
+                    }
+                    state = {
+                        ...state,
+                        view: {
+                            ...state.view,
+                            recordTheme: view.recordTheme,
+                            recordFlags: view.recordFlags,
+                            worn: paintableLook(view.recordTheme ?? DEFAULT_THEME, view.recordFlags ?? 0, state.view.heldTokens ?? NOTHING_HELD).worn,
+                        },
+                    };
+                    livePaint();
+                    // A stream overlay retries a sheet that failed here too:
+                    // its retry is armed only after a paint `refresh` made.
+                    syncSheetRetry();
+                    // The holdings read the record woke asked about the look
+                    // it replaced, and drops its answer now that the look has
+                    // moved (`refreshHoldings`): ask again, for this one.
+                    const address = state.view.address;
+                    if (address !== undefined) {
+                        void refreshHoldings(claimed, address);
+                    }
+                });
+                return;
             }
         }
         state = { ...state, view };
@@ -4833,6 +5031,17 @@ async function loadCurrent(): Promise<AppState> {
     const manifestSoon = loadManifest(chronik, { address, hash }, hint, addrPageSoon).catch(
         () => undefined,
     );
+    if (CARRIES_WORN_ONLY_LOOKS) {
+        // The record's look's own sheet is asked for the moment the record
+        // is read, beside the book, token and holdings reads still in flight
+        // (8d2): the hold in `refresh` then usually finds it already there.
+        void manifestSoon.then((lookup) => {
+            const sheet = sheetForLook(lookup?.manifest?.theme);
+            if (sheet !== undefined) {
+                askForLookSheet(sheet, document);
+            }
+        });
+    }
 
     let fetch: FetchStatus;
     try {

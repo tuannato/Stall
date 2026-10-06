@@ -55,6 +55,21 @@ export const THEME_UNKNOWN =
 export const THEME_NOT_UNLOCKED =
     'This seller chose a look this page does not show yet, so it is showing the default one.';
 
+/**
+ * The record's look is one whose sheet is its own file, and that file did
+ * not load on this page — an error, an answer that was not the sheet, or
+ * none within `LOOK_SHEET_WAIT_MS` (8d2's failure path). **About this page,
+ * never about the seller**: the record read perfectly and names a look this
+ * build carries, so neither THEME_UNKNOWN nor SETTINGS_UNREADABLE is true,
+ * and the default on screen is not the seller's choice. The failure is
+ * sticky for the page's life, so the one way on is a reload, which is what
+ * the sentence offers. The shop, the face and the Studio say it; the wall and
+ * the stream overlay say nothing (a broadcast's failure paints no text, and
+ * the wall says none of the sign's notes).
+ */
+export const THEME_SHEET_UNLOADED =
+    'This stall\u2019s look did not load on this page, so it is showing the default one. Reload to try again.';
+
 export const PUBLISH_TITLE = 'Name this stall';
 export const PUBLISH_NAME_LABEL = 'Stall name';
 export const PUBLISH_THEME_LABEL = 'Look';
@@ -179,6 +194,23 @@ export const PUBLISH_WALLET_SHOWS_HEX =
  * the look yet — never about the seller.
  */
 export const PUBLISH_LOOK_NOT_UNLOCKED = 'You can try this look on here, but this page cannot publish it yet.';
+
+/**
+ * The picker while a look whose sheet is its own file is on its way (8d2): a
+ * try-on of it waits for the sheet, so the stall behind keeps the look it had
+ * and this line says why nothing has changed yet. The latest press wins.
+ */
+export const PUBLISH_LOOK_LOADING = 'Loading this look\u2026';
+
+/**
+ * The picker when the chosen look's sheet did not load on this page — a
+ * try-on that failed, or the record's own look on a page where it failed
+ * (8d2). The stall keeps the look it had (a try-on) or the default (the
+ * record's), so the sentence says the look is not shown, never that it is
+ * gone or wrong; a record naming it can still be published, since the record
+ * is about the stall and the sheet about this page.
+ */
+export const PUBLISH_LOOK_UNLOADED = 'This look did not load on this page, so it is not shown. Reload to try again.';
 
 export const PUBLISH_NAME_TOO_LONG =
     'Names are up to 32 bytes. Accents and emoji cost more than one byte each.';
@@ -494,6 +526,14 @@ export const STUDIO_WEARING_ROW = 'Wearing';
 export const STUDIO_WEARING_NONE = 'Nothing worn';
 /** The Wearing row under a look this page does not show yet: nothing is worn because of the page, not because nothing was chosen. */
 export const STUDIO_WEARING_NOT_UNLOCKED = 'Nothing, because this page does not show this look yet';
+/**
+ * The Wearing row while the record's look is held back for its sheet (8d2):
+ * the stall paints the default wearing nothing, which is the page's state and
+ * not the seller's choice — "Nothing worn" there would be our failure
+ * reported as theirs. "Has not loaded" is true while the sheet is still on
+ * its way and after it failed.
+ */
+export const STUDIO_WEARING_NOT_LOADED = 'Not shown: this look has not loaded on this page';
 /**
  * A row's state, derived from what this load read and nothing else: listed
  * on Agora (from the book, said only when the book answered — an unread
