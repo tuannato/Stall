@@ -67,6 +67,21 @@
  *   each look's sheet gives a painted stall (`sheetedClasses`: every look the
  *   run measures but the sheetless skeleton) — a look this pass painted and
  *   never read was measured with its sheet unproved.
+ * - **`the-sellers-name-stands-whole`** (8f2) reads, on every page and wall
+ *   pass, a line of the sign on every look the pass painted
+ *   (`nameLinesByClass`), and on the page passes the stress names on a
+ *   try-on of every carried private look (`tryOnNamesByClass`).
+ * - **`a-sticky-sign-covers-nothing-as-the-region-scrolls`** (8f2): a page
+ *   pass that found a sticky sign owes it a region that scrolled
+ *   (`stickyByClass`).
+ * - **The tracked fixture's subjects** (8f2, `TRACKED_FIXTURE_CLASS`): a run
+ *   that carries it owes a region scrolled under its sticky sign, a mark it
+ *   shows and a vertical name at the desk, a rung its long name climbed on
+ *   both page passes and the last rung on the phone; the runner owes its
+ *   art-off frames, pending and failed, on the contrast pass, and a
+ *   mark-hide and pending frame for any carried look with marks or file art.
+ * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
+ *   `cjk-name` owes the advance it read (`cjkFaces`).
  *
  * The phone and desk passes owe the page rules, the canvas the overlay's
  * places and the wall's controls, and the portrait and tablet passes the
@@ -74,6 +89,19 @@
  * (`mobile`, `desktop`, `canvas`, `portrait` and `tablet` are the runner's
  * pass names).
  */
+
+import { FIXTURE_PRIVATE_LOOK_CLASS } from './private-looks.mjs';
+
+/**
+ * The tracked fixture's class (`layout/fixture-private-looks/`, measured by
+ * every default run): the look that gives each 8f2 rule a subject in public
+ * CI — a sticky sign in its own column at the desk, a mark it shows, file
+ * art under the sign's name, and a name ladder a long name climbs. A run
+ * that carries it owes each one (`probeCoverageGaps`, and the runner's
+ * contrast verdicts), so a fixture edit that took a subject away fails the
+ * run rather than leaving the rule green over nothing.
+ */
+export const TRACKED_FIXTURE_CLASS = FIXTURE_PRIVATE_LOOK_CLASS;
 
 const UNBUYABLE_PLACES = {
     mobile: ['row', 'face'],
@@ -154,6 +182,56 @@ export function probeCoverageGaps(
                 }
             }
         }
+    }
+    // Every look a page or wall pass painted owes sign lines read whole
+    // (`the-sellers-name-stands-whole`, 8f2): a pass that read no line of a
+    // look's name certified nothing about it.
+    if (PAGE_PASSES.has(pass) || WALL_PASSES.has(pass)) {
+        const lines = report.nameLinesByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            if (!((lines[cls] ?? 0) > 0)) {
+                gaps.push(`the-sellers-name-stands-whole read no line of the sign on a ${cls} stall`);
+            }
+        }
+        // A sticky sign whose region never scrolled on a pass was measured at
+        // rest alone (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
+        for (const [cls, at] of Object.entries(report.stickyByClass ?? {})) {
+            if (PAGE_PASSES.has(pass) && at.paints > 0 && !(at.scrolled > 0)) {
+                gaps.push(`a-sticky-sign-covers-nothing-as-the-region-scrolls found a sticky sign on a ${cls} stall and no region it scrolled`);
+            }
+        }
+    }
+    // Every carried private look owes its stress names measured on the name
+    // sheet's try-on, on a page pass (8f2).
+    if (PAGE_PASSES.has(pass)) {
+        for (const cls of privateClasses) {
+            if (!(((report.tryOnNamesByClass ?? {})[cls] ?? 0) > 0)) {
+                gaps.push(`the-sellers-name-stands-whole measured no stress name on a try-on of ${cls}`);
+            }
+        }
+    }
+    // The tracked fixture's subjects (8f2): what it carries for each rule.
+    if (privateClasses.includes(TRACKED_FIXTURE_CLASS)) {
+        const fx = TRACKED_FIXTURE_CLASS;
+        if (pass === 'desktop' && !(((report.stickyByClass ?? {})[fx]?.scrolled ?? 0) > 0)) {
+            gaps.push(`a-sticky-sign-covers-nothing-as-the-region-scrolls scrolled no region under the ${fx} sign`);
+        }
+        if (pass === 'desktop' && !(((report.marksShownByClass ?? {})[fx] ?? 0) > 0)) {
+            gaps.push(`no-look-mark-paints-inside-a-protected-box has no subject: the ${fx} stall showed no mark`);
+        }
+        if (PAGE_PASSES.has(pass) && Object.keys((report.nameTiersByClass ?? {})[fx] ?? {}).length === 0) {
+            gaps.push(`the-sellers-name-stands-whole read no ${fx} name on a rung of its ladder`);
+        }
+        if (pass === 'mobile' && !(Number(Object.keys((report.nameTiersByClass ?? {})[fx] ?? {}).sort().at(-1) ?? 0) >= 2)) {
+            gaps.push(`the-sellers-name-stands-whole read no ${fx} name on the last rung of its ladder`);
+        }
+        if (pass === 'desktop' && !(((report.nameVerticalByClass ?? {})[fx] ?? 0) > 0)) {
+            gaps.push(`the-sellers-name-stands-whole read no vertical ${fx} name`);
+        }
+    }
+    // A pass that measured the CJK screen owes the face it was set in (8f2).
+    if ((report.screensMeasured ?? []).includes('cjk-name') && !((report.cjkFaces ?? []).length > 0)) {
+        gaps.push('a-cjk-name-is-set-in-a-cjk-face read no CJK sign line on a pass that measured cjk-name');
     }
     if (WALL_PASSES.has(pass) && !((report.statusLineChecks ?? 0) > 0)) {
         gaps.push('nothing-in-the-body-reaches-the-status-line asked nothing on a wall');
@@ -283,8 +361,23 @@ export function probeCoverageLine(pass, report) {
                       .map(([cls, n]) => `${cls} ${n}`)
                       .join(', ') || 'none'
               }`;
+    const perClass = (table) =>
+        Object.entries(table ?? {})
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([cls, n]) => `${cls} ${typeof n === 'number' ? n : Object.entries(n).map(([k, v]) => `${k}:${v}`).join('/')}`)
+            .join(', ') || 'none';
+    // 8f2: the sign's lines read whole, the rungs a name climbed, the marks a
+    // carried look showed and the sticky signs scrolled under, per look.
+    const signs =
+        (report.nameLinesByClass === undefined ? '' : ` · sign lines read whole: ${perClass(report.nameLinesByClass)}`) +
+        (Object.keys(report.nameTiersByClass ?? {}).length === 0 ? '' : ` · name rungs: ${perClass(report.nameTiersByClass)}`) +
+        (Object.keys(report.marksShownByClass ?? {}).length === 0 ? '' : ` · marks shown: ${perClass(report.marksShownByClass)}`) +
+        (Object.keys(report.stickyByClass ?? {}).length === 0 ? '' : ` · sticky signs (paints/scrolled/stops): ${perClass(report.stickyByClass)}`) +
+        (Object.keys(report.tryOnNamesByClass ?? {}).length === 0 ? '' : ` · stress names tried on: ${perClass(report.tryOnNamesByClass)}`) +
+        (Object.keys(report.nameVerticalByClass ?? {}).length === 0 ? '' : ` · vertical sign lines: ${perClass(report.nameVerticalByClass)}`) +
+        ((report.cjkFaces ?? []).length === 0 ? '' : ` · CJK advance: ${report.cjkFaces.join(', ')}`);
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
@@ -320,7 +413,8 @@ export function probeCoverageLine(pass, report) {
         ` · words asked about a mask from a file: ${report.fileClipChecks ?? 0}` +
         ` · at rest, set aside: ${Object.entries(report.atRestSetAside ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([why, n]) => `${why} ${n}`).join(', ') || 'none'}` +
         ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
-        (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`)
+        (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`) +
+        signs
     );
 }
 

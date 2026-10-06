@@ -52,6 +52,8 @@
  * read once and left alone: no attribute, no layout forced.
  */
 
+import { inkFits } from './signInk';
+
 export type LookMarkKind = 'figure' | 'shelf' | 'tile';
 
 /** One inert node a look may paint: `display: none` everywhere else (stall.css). */
@@ -76,9 +78,21 @@ export const NAME_RUNGS_PROPERTY = '--name-rungs';
 
 type Fits = (name: HTMLElement) => boolean;
 
-/** Whether the name's content stays inside its own box, a pixel of rounding allowed. */
-const realFits: Fits = (name) =>
-    name.scrollWidth <= name.clientWidth + 1 && name.scrollHeight <= name.clientHeight + 1;
+/**
+ * Whether the name's text stands whole in its own box: every line's ink —
+ * the glyphs' measured reach, a Vietnamese capital's stacked marks
+ * included — inside its padding box (`inkFits`, `signInk.ts`). The same ink
+ * model the probe holds a name to (`the-sellers-name-stands-whole`), so the
+ * ladder climbs exactly until the probe would call the name whole in its
+ * own box; a `clip-path` on the name the probe fails and the ladder does
+ * not ask (the served weight's room, `signInk.ts`). Two answers it
+ * replaced, both wrong (step 8f2 and its critic): the box's own scroll size,
+ * which counts a tight line-height's content areas past their slots (a
+ * fitting name climbed), and the line-height's slot, which a stacked mark
+ * runs past (a cut name stood: "ẪỮỆ" at 44px reached 48.7px above a 43px
+ * ascent, and the box's scroll size was 52 against 51).
+ */
+const realFits: Fits = (name) => inkFits(name);
 let fits: Fits = realFits;
 
 /** Tests inject a measure: happy-dom lays out nothing, and every box fits. */

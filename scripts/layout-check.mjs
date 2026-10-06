@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { TRACKED_FIXTURE_CLASS, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
@@ -46,6 +46,7 @@ import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-se
 import { harnessLooks } from './harness-looks.mjs';
 import { carriedTallyFaults } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
+import { privateRows, servedSheets } from './served-sheets.mjs';
 
 /*
  * The private looks this run measures (8e2): the selection the shell names,
@@ -285,7 +286,12 @@ const WINDOW_SCREENS =
     // An unbuyable offer on a wall (2026-09-23), in a Browse row, and the
     // Cycle card that skips it (since 2026-09-24): the tall wall and the
     // tablet lay both out on their own.
-    'shop-window-unbuyable,shop-window-cycle-unbuyable';
+    'shop-window-unbuyable,shop-window-cycle-unbuyable,' +
+    // The sign under stress (8f2): a 32-byte name on the Cycle card and in
+    // Browse, at the desk width and at a wall size, a name in stacked-mark
+    // capitals and a CJK name (`the-sellers-name-stands-whole`).
+    'shop-window-long-name,shop-window-browse-long-name,shop-window-stacked-name,shop-window-cjk-name,' +
+    'shop-window-wall-long-name,shop-window-wall-browse-long-name';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>
@@ -521,6 +527,21 @@ const RING_MASK_ALPHA = 0.5;
  * the ring on some contrast job, or the outline is one nobody reads.
  */
 const outlinedTargetsSeen = new Set();
+/** Every look class whose geometry passes showed a mark (`marksShownByClass`): each owes a mark-hide frame (8f2). */
+const marksShownSeen = new Set();
+/**
+ * The carried looks whose own sheet names a file in a mask or clip property
+ * (8f2, the 8f2 critic's P3-8), read from the sheet as the build reads it:
+ * each owes the art-off read a pending frame, so a computed miss in the
+ * probe's `markFileArt` fails the run rather than reading as no art.
+ */
+const FILE_ART_IN_SHEET = /(?:^|[;{\s])(?:-webkit-)?(?:mask(?:-image|-border(?:-source)?|-box-image(?:-source)?)?|clip-path)\s*:[^;{}]*url\(/i;
+const CARRIED_FILE_ART =
+    MEASURED_SELECTION === undefined
+        ? []
+        : privateRows(await servedSheets({ env: CARRIED.env }))
+              .filter((row) => FILE_ART_IN_SHEET.test(row.css.replace(/\/\*[\s\S]*?\*\//g, '')))
+              .map((row) => row.lookClass);
 /**
  * Every decoration class a geometry pass painted worn (the probe's
  * `wornClasses`): the contrast pass's owed jobs must follow it
@@ -1348,6 +1369,7 @@ try {
          * comparison is refused (`probe-coverage.mjs`).
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+        for (const [cls, n] of Object.entries(report.marksShownByClass ?? {})) if (n > 0) marksShownSeen.add(cls);
         for (const cls of report.wornClasses ?? []) wornClassesSeen.add(cls);
         for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
@@ -1849,6 +1871,17 @@ try {
         // protected-box pixels compared.
         let lookPseudoJobs = 0;
         let lookPseudoPixels = 0;
+        // 8f2: jobs whose shown marks were hidden and compared, and the jobs
+        // read again with the look's file art failed, each per look class.
+        let lookMarkJobs = 0;
+        const lookMarkJobsByClass = {};
+        let artOffJobs = 0;
+        let artOffTargets = 0;
+        const artOffJobsByClass = {};
+        // The art-off frames read, by state and look class (`pending`,
+        // `failed`): a carried look whose sheet names a file mask owes a
+        // pending one, and the tracked fixture a failed one too.
+        const artOffFrames = {};
         // Jobs with the aurora worn alone and its tide held at an end
         // (`the-aurora-is-read-at-both-ends-of-its-tide`, `TIDE_SCREENS`).
         let tideJobs = 0;
@@ -2468,72 +2501,198 @@ try {
                     }
                     /*
                      * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
-                     * (step 5b; the probe's `markLookPseudos`): where the job's
-                     * scope holds a look pseudo, a frame with every one of
-                     * them hidden against a fresh frame with them shown,
-                     * compared inside every protected box a device pixel in
-                     * from each edge. A pixel that moved is a look pseudo
-                     * painting over money, a code or a control. No capture
-                     * where no look pseudo exists.
+                     * (step 5b; the probe's `markLookPseudos`), and since
+                     * 8f2 `no-look-mark-paints-inside-a-protected-box` (the
+                     * probe's `shownLookMarks`): where the job's scope holds
+                     * a look pseudo or a mark a look shows, a frame with
+                     * every one of them hidden against a fresh frame with
+                     * them shown, compared inside every protected box a
+                     * device pixel in from each edge. A pixel that moved is
+                     * a look's paint over money, a code or a control. One
+                     * frame hides both where a job has both; a frame that
+                     * moved is taken again with each hidden alone, to say
+                     * which painted there. No capture where neither exists.
                      */
-                    if (retryWhy.length === 0 && (prep.lookPseudos ?? 0) > 0) {
+                    const pseudosHere = (prep.lookPseudos ?? 0) > 0;
+                    const marksHere = (prep.lookMarks ?? 0) > 0;
+                    if (retryWhy.length === 0 && (pseudosHere || marksHere)) {
                         const lpStart = performance.now();
-                        const hidden = async (hide) => {
+                        const hidden = async (which) => {
                             const r = await cdp.send(
                                 'Runtime.evaluate',
-                                { expression: `window.__lookPseudosHidden(${hide})`, awaitPromise: true, returnByValue: true },
+                                { expression: `window.__lookPaintHidden(${JSON.stringify(which)})`, awaitPromise: true, returnByValue: true },
                                 sessionId,
                             );
                             if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
                             return r.result.value;
                         };
-                        const on = await capture();
-                        await hidden(true);
-                        const off = await capture();
-                        await hidden(false);
-                        const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
-                        const why = [...on.why, ...off.why];
-                        if (why.length > 0) {
-                            retryWhy = why.map((w) => `for the look-pseudo frames, ${w}`);
-                        } else {
-                            lookPseudoJobs += 1;
-                            let changedAll = 0;
+                        /** The protected boxes whose pixels moved between two frames: [{ b, changed, first }]. */
+                        const movedIn = (on, off, shields) => {
+                            const out = [];
                             for (const b of shields) {
                                 const x0 = Math.max(0, Math.ceil(b.x) + 1);
                                 const y0 = Math.max(0, Math.ceil(b.y) + 1);
-                                const x1 = Math.min(on.shot.width - 1, Math.floor(b.x + b.w) - 2);
-                                const y1 = Math.min(on.shot.height - 1, Math.floor(b.y + b.h) - 2);
+                                const x1 = Math.min(on.width - 1, Math.floor(b.x + b.w) - 2);
+                                const y1 = Math.min(on.height - 1, Math.floor(b.y + b.h) - 2);
                                 let changed = 0;
                                 let first;
                                 for (let y = y0; y <= y1; y += 1) {
                                     for (let x = x0; x <= x1; x += 1) {
-                                        const i = (y * on.shot.width + x) * on.shot.bpp;
+                                        const i = (y * on.width + x) * on.bpp;
                                         lookPseudoPixels += 1;
                                         if (
-                                            Math.abs(on.shot.data[i] - off.shot.data[i]) > LOOK_PSEUDO_LEVELS ||
-                                            Math.abs(on.shot.data[i + 1] - off.shot.data[i + 1]) > LOOK_PSEUDO_LEVELS ||
-                                            Math.abs(on.shot.data[i + 2] - off.shot.data[i + 2]) > LOOK_PSEUDO_LEVELS
+                                            Math.abs(on.data[i] - off.data[i]) > LOOK_PSEUDO_LEVELS ||
+                                            Math.abs(on.data[i + 1] - off.data[i + 1]) > LOOK_PSEUDO_LEVELS ||
+                                            Math.abs(on.data[i + 2] - off.data[i + 2]) > LOOK_PSEUDO_LEVELS
                                         ) {
                                             changed += 1;
                                             first ??= [x, y];
                                         }
                                     }
                                 }
-                                changedAll += changed;
-                                if (changed > 0) {
-                                    dim.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
-                                            `changes ${changed} px (the first at ${first.join(',')}) when the look's pseudo-elements are hidden — ` +
-                                            `no-look-pseudo-paints-inside-a-protected-box`,
-                                    );
+                                if (changed > 0) out.push({ b, changed, first });
+                            }
+                            return out;
+                        };
+                        const both = pseudosHere && marksHere ? 'both' : pseudosHere ? 'pseudos' : 'marks';
+                        // The "shown" frame is the job's own capture (8f2, the
+                        // critic's P2-4): the same blanked, frozen paint, and
+                        // every step since put back what it changed. Only a
+                        // frame that moved is shot fresh before it is believed.
+                        let on = { shot: img, why: [] };
+                        await hidden(both);
+                        const off = await capture();
+                        await hidden('none');
+                        const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
+                        if (off.why.length === 0 && movedIn(on.shot, off.shot, shields).length > 0) {
+                            on = await capture();
+                        }
+                        const why = [...on.why, ...off.why];
+                        if (why.length > 0) {
+                            retryWhy = why.map((w) => `for the look-paint frames, ${w}`);
+                        } else {
+                            if (pseudosHere) lookPseudoJobs += 1;
+                            if (marksHere) {
+                                lookMarkJobs += 1;
+                                lookMarkJobsByClass[plannedJob.sheetClass] = (lookMarkJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
+                            }
+                            const moved = movedIn(on.shot, off.shot, shields);
+                            // Who painted there, asked only of a frame that moved.
+                            const byKind = { pseudos: moved, marks: moved };
+                            if (moved.length > 0 && both === 'both') {
+                                for (const kind of ['pseudos', 'marks']) {
+                                    await hidden(kind);
+                                    const alone = await capture();
+                                    await hidden('none');
+                                    byKind[kind] = alone.why.length === 0 ? movedIn(on.shot, alone.shot, shields) : moved;
                                 }
                             }
-                            record.lookPseudos = { marked: prep.lookPseudos, boxes: shields.length, changed: changedAll };
+                            const say = (kind, rule, words) => {
+                                if (both !== 'both' && both !== kind) return;
+                                for (const { b, changed, first } of byKind[kind]) {
+                                    dim.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
+                                            `changes ${changed} px (the first at ${first.join(',')}) when ${words} hidden — ${rule}`,
+                                    );
+                                }
+                            };
+                            say('pseudos', 'no-look-pseudo-paints-inside-a-protected-box', "the look's pseudo-elements are");
+                            say('marks', 'no-look-mark-paints-inside-a-protected-box', "the look's marks are");
+                            record.lookPseudos = {
+                                marked: prep.lookPseudos ?? 0,
+                                marks: prep.lookMarks ?? 0,
+                                boxes: shields.length,
+                                changed: moved.reduce((n, m) => n + m.changed, 0),
+                            };
                         }
                         const entry = phases.get('look pseudos') ?? { calls: 0, ms: 0 };
                         entry.calls += 1;
                         entry.ms += performance.now() - lpStart;
                         phases.set('look pseudos', entry);
+                    }
+                    /*
+                     * `a-word-reads-when-the-art-does-not-load` (8f2; the
+                     * step-8 critic's item 11 and the 8f2 critic's P1-2, the
+                     * probe's `markFileArt`): where the job's scope paints
+                     * file art — a mask image, a mask border or a `clip-path`
+                     * naming a file — every target is read again in the two
+                     * states the engines paint (`__artOff`): **pending**,
+                     * each such box painting nothing, and — where it differs,
+                     * a mask stack mixing file and other layers or a file
+                     * clip (`fileArtMixed`) — **failed**, each file layer
+                     * skipped and the rest kept. Each target by the reader it
+                     * was read by, on the boxes the job read (the art moves
+                     * no box): a line by its line rects, money whole, an
+                     * outlined line in its ring on a second frame with its
+                     * glyphs shown. Every one must clear the floor; a frame
+                     * that failed is taken again once before it is believed.
+                     */
+                    if (retryWhy.length === 0 && (prep.fileArt ?? 0) > 0) {
+                        const artStart = performance.now();
+                        const page = async (expression) => {
+                            const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
+                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                            return r.result.value;
+                        };
+                        const artRead = async (state) => {
+                            await page(`window.__artOff(${JSON.stringify(state)})`);
+                            const blank = await capture();
+                            const why = [...blank.why];
+                            let shown;
+                            if (why.length === 0 && targets.some((t) => t.ring > 0)) {
+                                await page('window.__contrastGlyphs(true)');
+                                shown = await capture();
+                                await page('window.__contrastGlyphs(false)');
+                                why.push(...shown.why);
+                            }
+                            await page("window.__artOff('off')");
+                            if (why.length > 0) return { why };
+                            const reads = targets.map((t) => ({
+                                t,
+                                worst: t.ring > 0 ? ringRead(blank.shot, shown.shot, t).worst : readOne(blank.shot, t).worst,
+                            }));
+                            return { why, reads };
+                        };
+                        const states = (prep.fileArtMixed ?? 0) > 0 ? ['pending', 'failed'] : ['pending'];
+                        const leastBy = {};
+                        for (const state of states) {
+                            let art = await artRead(state);
+                            if (art.why.length === 0 && art.reads.some((r) => r.worst !== undefined && r.worst < PIXEL_CONTRAST_FLOOR)) {
+                                await sleep(250);
+                                art = await artRead(state);
+                            }
+                            if (art.why.length > 0) {
+                                retryWhy = art.why.map((w) => `for the art-${state} frame, ${w}`);
+                                break;
+                            }
+                            (artOffFrames[state] ??= {})[plannedJob.sheetClass] = ((artOffFrames[state] ?? {})[plannedJob.sheetClass] ?? 0) + 1;
+                            let least = Infinity;
+                            for (const { t, worst } of art.reads) {
+                                // A target with no sample is named by the
+                                // read above, on the same layout: the art
+                                // moves no box.
+                                if (worst === undefined || !Number.isFinite(worst)) continue;
+                                artOffTargets += 1;
+                                least = Math.min(least, worst);
+                                if (worst < PIXEL_CONTRAST_FLOOR) {
+                                    dim.push(
+                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                            `reads ${worst.toFixed(2)}:1 with the look's file art ${state === 'pending' ? 'still loading (each box it masks painting nothing)' : 'failed (each failed layer skipped, the rest kept)'} — ` +
+                                            `a-word-reads-when-the-art-does-not-load`,
+                                    );
+                                }
+                            }
+                            leastBy[state] = dumpValue(least);
+                        }
+                        if (retryWhy.length === 0) {
+                            artOffJobs += 1;
+                            artOffJobsByClass[plannedJob.sheetClass] = (artOffJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
+                            record.artOff = { art: prep.fileArt, mixed: prep.fileArtMixed ?? 0, read: targets.length, least: leastBy };
+                        }
+                        const entry = phases.get('art off') ?? { calls: 0, ms: 0 };
+                        entry.calls += 1;
+                        entry.ms += performance.now() - artStart;
+                        phases.set('art off', entry);
                     }
                     record.sampled = sampled;
                     record.dropped = dropped;
@@ -2717,6 +2876,29 @@ try {
             // nothing.
             verdicts.push('no-look-pseudo-paints-inside-a-protected-box compared no frame — vacuous green');
         }
+        /*
+         * The two 8f2 frames owe their subject on every look that has one
+         * (the 8f2 critic's P3-8): a look whose geometry passes showed a mark
+         * owes a mark-hide frame, and a carried look whose sheet names a file
+         * in a mask or clip property (`CARRIED_FILE_ART`, read from the sheet
+         * itself — a computed miss in `markFileArt` must not read as nothing
+         * to fail) owes a pending art-off frame. The tracked fixture paints a
+         * mixed mask stack, so it owes a failed frame too: the failed state's
+         * one committed subject.
+         */
+        for (const cls of marksShownSeen) {
+            if (!((lookMarkJobsByClass[cls] ?? 0) > 0)) {
+                verdicts.push(`no-look-mark-paints-inside-a-protected-box hid no mark on a ${cls} job, and ${cls} shows marks — vacuous green`);
+            }
+        }
+        for (const cls of CARRIED_FILE_ART) {
+            if (!(((artOffFrames.pending ?? {})[cls] ?? 0) > 0)) {
+                verdicts.push(`a-word-reads-when-the-art-does-not-load read no ${cls} job with its file art pending, and its sheet names a file mask — vacuous green`);
+            }
+        }
+        if (PRIVATE_SHEET_CLASSES.includes(TRACKED_FIXTURE_CLASS) && !(((artOffFrames.failed ?? {})[TRACKED_FIXTURE_CLASS] ?? 0) > 0)) {
+            verdicts.push(`a-word-reads-when-the-art-does-not-load read no ${TRACKED_FIXTURE_CLASS} job with its file art failed — its mixed stack is the failed state's subject`);
+        }
         if (tideJobs !== plan.filter((j) => j.tide !== undefined).length) {
             // Every planned tide job held the tide (a job that did not is
             // refused by its echo); a count that differs is a walk that lost
@@ -2811,7 +2993,8 @@ try {
                 console.log(
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
-                        `${lookPseudoJobs} job(s) with look pseudos hidden and compared (${lookPseudoPixels} protected pixels), ` +
+                        `${lookPseudoJobs} job(s) with look pseudos and ${lookMarkJobs} with a look's marks hidden and compared (${lookPseudoPixels} protected pixels), ` +
+                        `${artOffJobs} job(s) read again with the look's file art pending (${Object.values(artOffFrames.pending ?? {}).reduce((a, b) => a + b, 0)}) or failed (${Object.values(artOffFrames.failed ?? {}).reduce((a, b) => a + b, 0)}; ${artOffTargets} reads), ` +
                         `the aurora's tide held at an end on ${tideJobs}, ` +
                         `${lineTargets} of them over their line rects, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +

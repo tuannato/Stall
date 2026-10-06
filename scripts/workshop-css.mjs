@@ -884,10 +884,17 @@ function compositesAgree(legacy, standard) {
  * `header`), at rest — no state pseudo-class, no attribute but `data-role`.
  * The kit refuses every sticky box, as the workshop README says.
  *
- * **Measured by nothing until step 8f2's scroll pass** (STEP-8-PLAN §5:
- * scroll the region in steps and run the cover checks at each), so
- * `a-sticky-sign-waits-for-the-scroll-pass` refuses one in any served sheet
- * until that pass lands — the exception is written down, not yet open.
+ * **Measured by the probe's scroll pass** (step 8f2,
+ * `a-sticky-sign-covers-nothing-as-the-region-scrolls`): on every screen a
+ * sticky sign is painted, its region is scrolled through stops and no
+ * protected box may stand under it at any. The pass reads its subjects from
+ * `layout/stickyBoxes.ts`, held to this table by
+ * `the-scroll-pass-measures-what-the-lint-admits` — a box admitted here and
+ * scrolled under by no pass would be a sticky box nobody measured. **Off
+ * the wall only** (8f2, the 8f2 critic's P3-9): the shop window, and a
+ * turned one above all — whose region scrolls along the screen's other axis
+ * — is measured by no scroll pass, so the rule's look compound must say
+ * `:not(.shop-window)` (`.t-x:not(.shop-window) .stall-head`) until one is.
  */
 export const STICKY_BOXES = Object.freeze([
     Object.freeze({
@@ -912,7 +919,33 @@ function subjectOf(selector) {
     return text.slice(start);
 }
 
-/** Whether every selector of a rule names a box `STICKY_BOXES` admits, at rest. */
+/** The top-level compounds of a selector, split at its combinators. */
+function compoundsOf(selector) {
+    const out = [];
+    let depth = 0;
+    let cur = '';
+    const text = selector.trim();
+    for (let i = 0; i < text.length; i += 1) {
+        const c = text[i];
+        if (c === '(' || c === '[') depth += 1;
+        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+        if (depth === 0 && (c === '>' || c === '+' || c === '~' || /\s/.test(c))) {
+            if (cur !== '') out.push(cur);
+            cur = '';
+        } else {
+            cur += c;
+        }
+    }
+    if (cur !== '') out.push(cur);
+    return out;
+}
+
+/** Whether a selector's look compound keeps it off the wall: `.t-x:not(.shop-window)`. */
+function offTheWall(selector) {
+    return compoundsOf(selector).some((compound) => /\.t-[a-z0-9-]+/.test(compound) && /:not\(\s*\.shop-window\s*\)/.test(compound));
+}
+
+/** Whether every selector of a rule names a box `STICKY_BOXES` admits, at rest and off the wall. */
 function isStickyBox(selectors) {
     return (
         selectors !== undefined &&
@@ -921,6 +954,7 @@ function isStickyBox(selectors) {
             const subject = subjectOf(selector);
             return (
                 !isStateSelector(selector) &&
+                offTheWall(selector) &&
                 STICKY_BOXES.some((box) => subject === `.${box.subject}` || subject === `header.${box.subject}`)
             );
         })
@@ -1046,7 +1080,7 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
             if (!sign) {
                 out.push(
                     `${shown} — a fixed or sticky box follows the scroll, and can stand over a figure at a position the probe never scrolled to` +
-                        (firstParty ? ` (a look sheet may make sticky only ${STICKY_BOXES.map((b) => `.${b.subject}`).join(', ')}, at rest)` : ''),
+                        (firstParty ? ` (a look sheet may make sticky only ${STICKY_BOXES.map((b) => `.${b.subject}`).join(', ')}, at rest and off the wall: .t-x:not(.shop-window) .stall-head)` : ''),
                 );
             }
         }

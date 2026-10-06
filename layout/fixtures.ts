@@ -205,6 +205,18 @@ function severalPaying(n: number, borrowedAt: readonly number[] = []): Partial<S
 /** Hostile content: no spaces anywhere, so nothing can wrap by accident. */
 export const UNBROKEN = 'A'.repeat(178);
 
+/** The widest name a record carries: 32 bytes of the widest Latin letter (`hostile-name`, and the wall's long-name screens). */
+export const LONGEST_NAME = 'W'.repeat(32);
+/** A stall named in CJK: ten ideographs, 30 of the record's 32 bytes — the record's binding CJK case — and a tagline in the same script (8f2). */
+export const CJK_NAME = '山間清泉茶葉老舖子店';
+/**
+ * A name in Vietnamese capitals with stacked marks (8f2, the 8f2 critic's
+ * P1-1): its marks reach past the face's ascent, so a box that holds a
+ * line's slot cuts them and Ẫ reads Â. 29 bytes.
+ */
+export const STACKED_NAME = 'ẪỮỆ ẤẦẨ ẪỮỆ';
+export const CJK_TAGLINE = '每週新鮮烘焙，用心包裝';
+
 export const handlers: StallHandlers = {
     onOpenItem: () => {},
     onRetry: () => {},
@@ -851,11 +863,36 @@ export const SCREENS: Record<string, StallView> = {
     }),
     'hostile-name': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
-        stallName: 'W'.repeat(32),
+        stallName: LONGEST_NAME,
     }),
     'emoji-name': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         stallName: '\u{1F6D2}'.repeat(8),
+    }),
+    /*
+     * A stall named in CJK (step 8f2; DECISIONS D4): the sign says so
+     * (`data-script="cjk"`, `scriptOf`), and a look may set such a name its
+     * own way — so the rule that the name stands whole
+     * (`the-sellers-name-stands-whole`) is measured on one. Ten ideographs,
+     * 30 bytes, the record's binding CJK case; a CJK tagline under it. The
+     * glyphs come from the machine's own fallback face (no CJK face is
+     * served): the layout is per OS here, and a machine with no CJK face
+     * fails `a-cjk-name-is-set-in-a-cjk-face` rather than measuring boxes.
+     * Geometry only.
+     */
+    'cjk-name': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        stallName: CJK_NAME,
+        tagline: CJK_TAGLINE,
+    }),
+    /*
+     * A stall named in Vietnamese capitals with stacked marks (8f2, the 8f2
+     * critic's P1-1): the marks run past the face's ascent, so a look that
+     * bounds its name must leave them room. Geometry only.
+     */
+    'stacked-name': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        stallName: STACKED_NAME,
     }),
     /*
      * The state screens. Most sellers meet one of these before they ever see
@@ -1194,6 +1231,55 @@ export const SCREENS: Record<string, StallView> = {
         announcement: 'Back on the 10th — orders ship then',
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
+    /*
+     * The sign under its binding case on every composition of the wall (step
+     * 8f2; DECISIONS D4, REVIEW F2): a 32-byte Latin name — the widest a
+     * record carries, `hostile-name`'s — on the Cycle card and in Browse, at
+     * the desk width (the first two) and at the 1920x1080 a wall is hung at
+     * (the last two), and every one on the portrait wall and the counter
+     * tablet (`WINDOW_SCREENS`). And a stacked-mark name and a CJK name on
+     * the Cycle card. Here for
+     * `the-sellers-name-stands-whole`: a look that bounds its name on a wall
+     * keeps it whole or climbs its ladder, and the rule is what fails when it
+     * does not. Geometry only; bare and all worn.
+     */
+    'shop-window-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        stallName: LONGEST_NAME,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-browse-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        stallName: LONGEST_NAME,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-stacked-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        stallName: STACKED_NAME,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cjk-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        stallName: CJK_NAME,
+        tagline: CJK_TAGLINE,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-wall-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        stallName: LONGEST_NAME,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-wall-browse-long-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        stallName: LONGEST_NAME,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
     broadcast: base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         broadcast: bc('corner', 'fixed'),
@@ -1496,6 +1582,17 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'item-unbuyable-fold',
     'shop-window-unbuyable',
     'shop-window-cycle-unbuyable',
+    // The sign under stress (8f2): a 32-byte name, a CJK name. They exist
+    // for the sign; the decoration interactions they could stage are
+    // `offers`' and `shop-window-cycle`'s.
+    'cjk-name',
+    'stacked-name',
+    'shop-window-long-name',
+    'shop-window-browse-long-name',
+    'shop-window-stacked-name',
+    'shop-window-cjk-name',
+    'shop-window-wall-long-name',
+    'shop-window-wall-browse-long-name',
 ]);
 
 /**
@@ -1596,6 +1693,23 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // row, the face, its fold, the wall's Browse, the overlay card and the
     // ticker — `[data-role="unbuyable"]` in `CONTRAST_TEXT`.
     'shop-window-cycle-unbuyable',
+    /*
+     * The sign under stress (8f2): the sign's ground with a longer name on
+     * it, which `hostile-name` and `offers` already sample, and the wall's
+     * own ground which `shop-window-cycle` and `shop-window-wall` sample.
+     * What these screens are here for is geometry
+     * (`the-sellers-name-stands-whole`). The CJK name's glyphs are the
+     * machine's fallback face, so a contrast read of them would be a read of
+     * whatever face each machine has.
+     */
+    'cjk-name',
+    'stacked-name',
+    'shop-window-long-name',
+    'shop-window-browse-long-name',
+    'shop-window-stacked-name',
+    'shop-window-cjk-name',
+    'shop-window-wall-long-name',
+    'shop-window-wall-browse-long-name',
 ]);
 
 /**
@@ -1650,6 +1764,8 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-ticker-unbuyable',
     'broadcast-ticker-none-buyable',
     'shop-window-wall',
+    'shop-window-wall-long-name',
+    'shop-window-wall-browse-long-name',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
     'shop-window-touch-quotes-pay-3',

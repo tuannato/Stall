@@ -71,4 +71,10 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
       - run: pnpm install --frozen-lockfile
+      # The probe holds a CJK sign line to a CJK face
+      # (`a-cjk-name-is-set-in-a-cjk-face`). The app serves none, so the
+      # runner must carry one, or every Linux run is red for its environment
+      # rather than for the diff; whether the image already ships one is not
+      # something this file can know.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-cjk
       - run: pnpm test:layout

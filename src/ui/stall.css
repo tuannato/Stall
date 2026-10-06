@@ -2979,19 +2979,23 @@ textarea.paste-in {
     grid-area: auto;
     width: 100%;
     height: 100%;
-    border: 0;
-    border-radius: 0;
-    clip-path: none;
-    /* A look that masks its tiles (step 8f1) would cut the seller's
-       picture to that shape here too: the mask is the shelf's framing,
-       like the radius. `!important`, the base sheet's second use after
-       `[hidden]`, for one reason: a worn-only look's sheet lands after this
-       one, so a look rule of the same weight — `.t-x .items .item-ic`,
+    /* The shelf's framing, off — the border, the radius, the clip and (step
+       8f1) a look's mask, which would cut the seller's picture to the
+       tile's shape here too. `!important`, the base sheet's second use
+       after `[hidden]`, for one reason: a worn-only look's sheet lands after
+       this one, so a look rule of the same weight — `.t-x .items .item-ic`,
        (0,3,0), the natural way to scope a tile's shape to the rows — wins
        on source order (the 8f1 critic's item 4, the 2026-09-22 incident's
        mechanism one class higher), and the look rules refuse `!important`
-       in a look sheet (G4), so nothing a look writes can beat this.
-       `the-base-sheet-says-important-only-where-a-look-must-never-win`. */
+       in a look sheet (G4), so nothing a look writes can beat this. The
+       border, radius and clip joined the mask in step 8f2 (the window,
+       after 8f1): a look can never crop or frame the picture here.
+       `the-base-sheet-says-important-only-where-a-look-must-never-win`;
+       the probe reads what the cascade left ("A zoomed picture fills its
+       frame"). */
+    border: 0 !important;
+    border-radius: 0 !important;
+    clip-path: none !important;
     -webkit-mask: none !important;
     mask: none !important;
     font-size: 64px;
