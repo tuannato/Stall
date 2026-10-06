@@ -22,7 +22,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { loadavg, tmpdir } from 'node:os';
+import { cpus, loadavg, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
@@ -1055,6 +1055,8 @@ function liveEcho(live, nonce, width, height) {
 let prepareSerial = 0;
 /** What the run is doing now, for the watchdog's last sentence. */
 let currentStep = 'starting';
+/** The contrast pass's tabs while it walks, each with the step it is on (`tab.step`), for the same sentence. */
+let watchedTabs = [];
 
 /**
  * The shot as PNG bytes, not yet decoded — the contrast pass times the two
@@ -1074,6 +1076,898 @@ async function captureRaw(cdp, sessionId) {
 
 async function captureShot(cdp, sessionId) {
     return decodePng(await captureRaw(cdp, sessionId));
+}
+
+/** The sign's name or tagline, by a target's description (D14). */
+const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
+const signPart = (sel) => (/(^|\.)stall-name(\.|$)/.test(sel) ? 'name' : 'tagline');
+
+/**
+ * One contrast job, on one of the pass's tabs: the walk's body, as it was, with
+ * everything it accumulates kept in job-local names and handed back in
+ * `out` when it ends — normally, early (a refused job) or by a throw.
+ * Nothing here reads or writes the walk's totals: the walk folds every
+ * job's `out` into them in plan order (`commitContrastJob`), so what a run
+ * prints and dumps does not depend on which tab ran which job, or when.
+ */
+async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
+    const { cdp, sessionId } = tab;
+    const dumpJobs = [];
+    const dumpBoxes = [];
+    const refused = [];
+    const dim = [];
+    const contrastClasses = new Set();
+    let tideJobs = 0;
+    let rainJobs = 0;
+    const rainKeys = new Set();
+    const uncoveredKinds = new Map();
+    const skipTotals = new Map();
+    const lineSkips = {};
+    const privateLineSkips = {};
+    let boxes = 0;
+    let lineTargets = 0;
+    const nameLeast = new Map();
+    const nameChromeSeen = new Set();
+    const codesUnread = new Map();
+    const codesRead = new Map();
+    const codesReadByClass = {};
+    let quietPixels = 0;
+    let ringTargets = 0;
+    let ringPixels = 0;
+    let ringLeastPerChar = Infinity;
+    let moneyRingRead = 0;
+    const ringKinds = new Map();
+    const horizonKeys = new Set();
+    const horizonWorst = new Map();
+    const horizonUnread = [];
+    let lookPseudoPixels = 0;
+    let lookPseudoJobs = 0;
+    let lookMarkJobs = 0;
+    const lookMarkJobsByClass = {};
+    const artOffFrames = {};
+    let artOffTargets = 0;
+    let artOffJobs = 0;
+    const artOffJobsByClass = {};
+    let honestUnrendered = 0;
+    const honestReads = new Map();
+    const honestJobs = new Map();
+    try {
+        await (async () => {
+            currentStep = `contrast job ${plannedJob.key}`;
+            tab.step = currentStep;
+            const { screen, look: theme, flags } = plannedJob;
+            const reduced = plannedJob.reduced === true;
+            const tideHeld = plannedJob.tide;
+            // How a line names the job's decorations: all worn, a solo
+            // row's bits, the aurora's tide held (`TIDE_SCREENS`).
+            const wornLabel =
+                (flags === 0 ? '' : flags === 0xffff ? ' + worn' : ` + flags ${flags}`) +
+                (tideHeld === undefined ? '' : ` tide ${tideHeld}`);
+            const job = {
+                pass: 'contrast',
+                viewport: vp.name,
+                screen,
+                look: theme,
+                flags,
+                ...(reduced ? { reduced } : {}),
+                ...(tideHeld === undefined ? {} : { tide: tideHeld }),
+            };
+            // A job of `REDUCED_JOBS` is painted under reduced motion: a
+            // box the sampler cannot read while it moves (Rural's swaying
+            // tag) is read stilled. Switched per job, and back after it.
+            if (reduced !== tab.reducedNow) {
+                await cdp.send(
+                    'Emulation.setEmulatedMedia',
+                    { features: reduced ? [{ name: 'prefers-reduced-motion', value: 'reduce' }] : [] },
+                    sessionId,
+                );
+                tab.reducedNow = reduced;
+            }
+            const record = { key: jobKey(job), ...job };
+            dumpJobs.push(record);
+            // A job whose echo is not the job is refused before anything
+            // is sampled, and says why; the run fails.
+            const refuse = (why) => {
+                record.refused = why;
+                refused.push(`${plannedJob.key}: ${why.join('; ')}`);
+            };
+            // Two animation frames between hiding the glyphs and the
+            // shot: the style change needs a composited frame, and a
+            // screenshot taken before one still shows the text — which
+            // read as 1.00:1 wherever a sample point landed on a glyph.
+            // Every prepare carries a nonce of its own, echoed back by
+            // the prepare and by every box re-read after it.
+            let nonce;
+            const prepare = (neutral, heightOnly = false) => {
+                nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
+                return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide);
+            };
+            // First paint tells us how tall the page is — the document,
+            // and the viewport it takes for the shell's region and an
+            // open sheet to hide nothing (`pageHeight` in the probe) —
+            // and a page taller than its viewport is grown to hold all
+            // of it and painted again at that size, because
+            // `captureBeyondViewport` does not reliably paint
+            // backgrounds below the fold: a below-fold buy control
+            // sampled as near-white. A page that fits is shot at its
+            // own size and prepared afresh from the neutral screen —
+            // the same paint, by hermeticity. That first paint is asked
+            // for its height alone (step 3a): the boxes, the blanking,
+            // the font wait and the frames belong to the paint that is
+            // shot. Until 2026-09-24 no page fit, because the probe's
+            // verdict `<pre>` sat under the app and padded every shot
+            // by 313px (`PROBE-RULES.md`, "Shot at the real height").
+            const first = await timed('height', () => prepare(true, true));
+            for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
+            record.classes = first.sheetClasses ?? [];
+            let why = paintEcho(plannedJob, first, nonce, vp.width, vp.height);
+            if (why.length > 0) {
+                refuse(why);
+                return;
+            }
+            let shotH = Math.max(vp.height, first.pageH);
+            const grew = shotH !== vp.height;
+            record.pageH = first.pageH;
+            record.grew = grew;
+            let grown = false;
+            const growTo = (height) =>
+                timed('grow', () =>
+                    cdp.send(
+                        'Emulation.setDeviceMetricsOverride',
+                        { width: vp.width, height, deviceScaleFactor: 1, mobile: false },
+                        sessionId,
+                    ),
+                );
+            try {
+                if (grew) {
+                    await growTo(shotH);
+                    grown = true;
+                }
+                let prep = await timed('prepare', () => prepare(!grew));
+                /*
+                 * The grow is held to the paint it was for. A sheet's
+                 * share of a grown viewport is read off the paint, not
+                 * known, and the first paint above did not wait for the
+                 * self-hosted face — so when the prepared page says it
+                 * is still taller than the shot, the shot grows again,
+                 * twice at most, and a job that still does not fit is
+                 * refused rather than shot with its foot behind a clip.
+                 * With the verdict out of the flow nothing pads the
+                 * shot past either (`PROBE-RULES.md`, "Shot at the real
+                 * height").
+                 */
+                for (let round = 0; prep.pageH > shotH && round < 2; round += 1) {
+                    shotH = prep.pageH;
+                    await growTo(shotH);
+                    grown = true;
+                    prep = await timed('prepare', () => prepare(false));
+                }
+                record.shotH = shotH;
+                if (prep.pageH > shotH) {
+                    refuse([`the page is ${prep.pageH}px tall at a ${shotH}px shot after two more grows`]);
+                    return;
+                }
+                for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
+                if ((prep.tide?.held ?? 0) > 0) {
+                    tideJobs += 1;
+                }
+                if ((prep.rain?.flattened ?? 0) > 0) {
+                    rainJobs += 1;
+                    rainKeys.add(plannedJob.key);
+                }
+                record.prepared = prep.targets.length;
+                record.nodes = prep.nodes;
+                record.classes = prep.sheetClasses ?? [];
+                why = paintEcho(plannedJob, prep, nonce, vp.width, shotH);
+                if (why.length === 0 && prep.targets.length === 0) {
+                    why = ['the prepare collected no contrast targets — a planned job that measures nothing'];
+                }
+                if (why.length > 0) {
+                    refuse(why);
+                    return;
+                }
+                // The boxes are re-read at the last moment before every
+                // shot: anything that lands between prepare and capture
+                // (a late face, an image) moves the layout under
+                // coordinates already taken.
+                const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
+                // The shot, and the re-read after it, each held to the
+                // job: the image its width by the grown height, the
+                // re-read from this job's last prepare at that viewport.
+                const capture = async () => {
+                    const png = await timed('capture', () => captureRaw(cdp, sessionId));
+                    const shot = await timed('decode', async () => decodePng(png));
+                    const bad = shot.width !== vp.width || shot.height !== shotH;
+                    return {
+                        shot,
+                        why: bad ? [`the shot is ${shot.width}x${shot.height} where the job is ${vp.width}x${shotH}`] : [],
+                    };
+                };
+                const reread = async () => {
+                    const live = await liveBoxes();
+                    return { live, why: liveEcho(live, nonce, vp.width, shotH) };
+                };
+                let { shot: img, why: shotWhy } = await capture();
+                if (shotWhy.length > 0) {
+                    refuse(shotWhy);
+                    return;
+                }
+                const firstRead = await timed('boxes', reread);
+                if (firstRead.why.length > 0) {
+                    refuse(firstRead.why);
+                    return;
+                }
+                let targets = firstRead.live.boxes;
+                // Every prepared node that gave no box, by the reason the
+                // page gave (step 5b: no silent drop) — per job in the
+                // dump, summed on the pass's line.
+                for (const kind of prep.uncovered ?? []) uncoveredKinds.set(kind, (uncoveredKinds.get(kind) ?? 0) + 1);
+                record.skips = firstRead.live.skips ?? {};
+                for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
+                // The ceiling is the public run's own count (it was
+                // measured over the shipped looks and the skeleton); a
+                // private look's jobs are counted apart and printed —
+                // pinned by nobody yet, as a kit run's are (8e2).
+                const skipsHere = PRIVATE_SHEET_CLASSES.includes(plannedJob.sheetClass)
+                    ? (privateLineSkips[plannedJob.sheetClass] ??= {})
+                    : lineSkips;
+                for (const why of ['clipped-away', 'not-rendered']) {
+                    const at = (skipsHere[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
+                    at[why] += record.skips[why] ?? 0;
+                }
+                // A failing box is re-shot once before it is believed:
+                // capture right after an emulated resize can raster a
+                // stale frame — measured: the live DOM held transparent
+                // glyphs and unmoved boxes while the shot showed the text
+                // still painted. A real defect is steady state (the
+                // planted-colour falsification fails both shots); a stale
+                // surface is not. (Step 3a found what most of those
+                // shots were: the prepare's own blanking starting a
+                // 0.2 s `color` transition on a `.mini`, 89 retries a
+                // run. The prepare starts none now and the retries went
+                // to zero; the re-shot stays for whatever else is late.)
+                let retried = false;
+                if (targets.length === 0) {
+                    refuse([`prepared ${record.prepared} targets and the re-read found none`]);
+                    return;
+                }
+                record.live = targets.length;
+                record.image = [img.width, img.height];
+                let sampled = 0;
+                let dropped = 0;
+                // The honest-display roles this job READ: a verdict, on
+                // the line read or in the ring.
+                const honestRead = new Set();
+                const sampleStart = performance.now();
+                let retryMs = 0;
+                let retryWhy = [];
+                /*
+                 * One target's read: a money box or a box with no line
+                 * rects whole (`worstContrastInBox`), every other target
+                 * over its line rects (`lineRead`, D7). `undefined` when
+                 * the read found no pixel — never a silent drop (step
+                 * 5b): the target is named below and the job fails.
+                 */
+                const readOne = (image, t) => {
+                    if (t.rects === undefined) {
+                        return { worst: worstContrastInBox(image, t, t.color), px: undefined, at: undefined };
+                    }
+                    const r = lineRead(image, t);
+                    return { worst: r.px > 0 ? r.worst : undefined, px: r.px, at: r.at };
+                };
+                for (let ti = 0; ti < targets.length; ti += 1) {
+                    let t = targets[ti];
+                    // An outlined line is read in its ring, below.
+                    if (t.ring > 0) continue;
+                    let read = readOne(img, t);
+                    let worst = read.worst;
+                    const kind = t.rects === undefined ? 'box' : 'line';
+                    if (worst === undefined) {
+                        dropped += 1;
+                        dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null, read: kind });
+                        dim.push(
+                            `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                (kind === 'line'
+                                    ? `has ${t.rects.length} line rect(s) on screen and no pixel wholly inside one — a target with text and no sample`
+                                    : `is ${t.money ? 'money' : 'a box'} the whole-box read found no pixel of — a target with no sample`),
+                        );
+                        continue;
+                    }
+                    boxes += 1;
+                    sampled += 1;
+                    if (kind === 'line') lineTargets += 1;
+                    let firstWorst;
+                    if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
+                        const retryStart = performance.now();
+                        firstWorst = worst;
+                        await sleep(250);
+                        const again = await capture();
+                        const againRead = await reread();
+                        retryWhy = [...again.why, ...againRead.why];
+                        if (retryWhy.length > 0) break;
+                        img = again.shot;
+                        if (againRead.live.boxes.length === targets.length) {
+                            targets = againRead.live.boxes;
+                            t = targets[ti];
+                        }
+                        retried = true;
+                        read = readOne(img, t);
+                        worst = read.worst;
+                        retryMs += performance.now() - retryStart;
+                    }
+                    const entry = {
+                        key: boxKey(job, t),
+                        job: record.key,
+                        i: t.i,
+                        sel: t.sel,
+                        x: t.x,
+                        y: t.y,
+                        w: t.w,
+                        h: t.h,
+                        color: t.color,
+                        worst: dumpValue(worst),
+                        read: kind,
+                        ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
+                        ...(t.role === undefined ? {} : { role: t.role }),
+                    };
+                    if (t.role !== undefined && worst !== undefined) honestRead.add(t.role);
+                    if (kind === 'line') {
+                        entry.rects = t.rects.length;
+                        entry.px = read.px;
+                        if (LEGACY) {
+                            // The read before step 5b on this same
+                            // capture, and — for a fall — where the new
+                            // read's worst pixel lies against it.
+                            const legacy = t.legacyDropped ? undefined : worstContrastInBox(img, t, t.color, { legacy: true });
+                            entry.legacy = dumpValue(legacy);
+                            entry.at = read.at === undefined ? null : [read.at.x, read.at.y];
+                            if (legacy !== undefined && worst !== undefined && worst < legacy) {
+                                entry.bucket = bucketOf(img, t, read.at);
+                            }
+                        }
+                    }
+                    dumpBoxes.push(entry);
+                    if (worst !== undefined && isName(t.sel)) {
+                        const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel}`;
+                        nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, worst));
+                    }
+                    if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
+                        dim.push(
+                            `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
+                                `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
+                                (kind === 'line' && read.at !== undefined
+                                    ? ` (line read: the worst of ${read.px} px at ${read.at.x},${read.at.y}, ground rgb(${read.at.ground.join(',')}), ink ${read.at.ink})`
+                                    : '') +
+                                (process.env.LAYOUT_WHY && kind === 'box' ? `\n        ${globalThis.__why ?? ''}` : ''),
+                        );
+                    }
+                }
+                {
+                    // The sampling itself, net of any retry inside it
+                    // (whose capture and decode are their own phases).
+                    const entry = phases.get('sample') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - sampleStart - retryMs;
+                    phases.set('sample', entry);
+                }
+                /*
+                 * D4, `a-code-keeps-its-quiet-zone-white`: every code the
+                 * job's scope paints, its quiet zone read on the capture
+                 * the boxes were read on (`quiet-zone.mjs`). The prepare
+                 * blanks text and nothing else, so the code and its plate
+                 * are painted as a buyer sees them.
+                 */
+                if (retryWhy.length === 0) {
+                    for (const line of prep.nameChrome ?? []) nameChromeSeen.add(line);
+                    const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                    for (const z of zones) {
+                        const code = `${vp.name}/${screen}:${z.name}`;
+                        if (z.turned) {
+                            codesUnread.set(code, 'its frame is turned');
+                            continue;
+                        }
+                        const r = readQuietZone(img, z);
+                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
+                        if (r.fault !== undefined) {
+                            dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
+                            continue;
+                        }
+                        if (r.px === 0) {
+                            codesUnread.set(code, 'wholly outside a clip or the shot');
+                            continue;
+                        }
+                        codesRead.set(code, (codesRead.get(code) ?? 0) + 1);
+                        (codesReadByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                        quietPixels += r.px;
+                        if (r.bad > 0) {
+                            dim.push(
+                                `${at} has ${r.bad} of ${r.px} quiet-zone pixel(s) under ${QUIET_ZONE_FLOOR} on a channel ` +
+                                    `(the first at ${r.first.x},${r.first.y}, rgb(${r.first.rgb.join(',')})) — a-code-keeps-its-quiet-zone-white`,
+                            );
+                        }
+                    }
+                }
+                /*
+                 * The ring read (`ringRead`): every outlined target, on a
+                 * second capture with its glyphs shown. A failing ring is
+                 * read again on a fresh pair before it is believed — the
+                 * box read's own rule, and it shares that rule's one
+                 * re-shot per job.
+                 */
+                if (retryWhy.length === 0 && targets.some((t) => t.ring > 0)) {
+                    const ringStart = performance.now();
+                    const glyphs = async (show) => {
+                        const r = await cdp.send(
+                            'Runtime.evaluate',
+                            { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
+                            sessionId,
+                        );
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                        return r.result.value;
+                    };
+                    const shownPair = async () => {
+                        const n = await glyphs(true);
+                        const shownCap = await capture();
+                        const shownRead = await reread();
+                        await glyphs(false);
+                        const why = [...shownCap.why, ...shownRead.why];
+                        if (shownRead.live.boxes.length !== targets.length) {
+                            why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
+                        }
+                        if (n !== targets.filter((t) => t.ring > 0).length) {
+                            why.push(`${n} outlined targets shown where the read has ${targets.filter((t) => t.ring > 0).length}`);
+                        }
+                        return { shot: shownCap.shot, why };
+                    };
+                    const readAll = (shown) =>
+                        targets.filter((t) => t.ring > 0).map((t) => ({ t, r: ringRead(img, shown, t) }));
+                    const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0 || r.bare.length > 0;
+                    let pair = await shownPair();
+                    let results = pair.why.length === 0 ? readAll(pair.shot) : [];
+                    if (pair.why.length === 0 && results.some(bad) && !retried) {
+                        await sleep(250);
+                        const again = await capture();
+                        const againRead = await reread();
+                        const whyAgain = [...again.why, ...againRead.why];
+                        if (whyAgain.length === 0 && againRead.live.boxes.length === targets.length) {
+                            img = again.shot;
+                            targets = againRead.live.boxes;
+                            retried = true;
+                            pair = await shownPair();
+                            results = pair.why.length === 0 ? readAll(pair.shot) : [];
+                        } else {
+                            pair = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
+                        }
+                    }
+                    if (pair.why.length > 0) {
+                        retryWhy = pair.why.map((w) => `with the glyphs shown, ${w}`);
+                    }
+                    sampled += results.length;
+                    for (const { t, r } of results) {
+                        ringTargets += 1;
+                        if (t.role !== undefined) honestRead.add(t.role);
+                        if (t.money) {
+                            /*
+                             * A money box is never read by a weaker
+                             * verdict (step 5b; PROPOSAL §12 as amended):
+                             * a figure outlined on a decoration's bare
+                             * ground is read in its ring — every solid
+                             * ring pixel, no percentile — and only with
+                             * the decoration at its worst. The outline
+                             * is worn only where the rain is, and a job
+                             * whose rain was not flattened is refused
+                             * by its echo (`paintEcho`); this holds the
+                             * money half to it by name.
+                             */
+                            moneyRingRead += 1;
+                            if (!((prep.rain?.flattened ?? 0) > 0)) {
+                                dim.push(
+                                    `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} is money, wears the outline and was ring-read with no decoration at its worst — an-outlined-money-figure-is-ring-read-at-its-worst`,
+                                );
+                            }
+                        }
+                        ringPixels += r.ringPx;
+                        if (isName(t.sel)) {
+                            const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel} (ring)`;
+                            nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, r.worst));
+                        }
+                        if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
+                        const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
+                        kind.n += 1;
+                        kind.least = Math.min(kind.least, r.worst);
+                        kind.rim = Math.min(kind.rim, r.worstRim);
+                        ringKinds.set(t.sel, kind);
+                        dumpBoxes.push({
+                            key: boxKey(job, t),
+                            job: record.key,
+                            i: t.i,
+                            sel: t.sel,
+                            x: t.x,
+                            y: t.y,
+                            w: t.w,
+                            h: t.h,
+                            color: t.color,
+                            worst: dumpValue(r.worst),
+                            ring: t.ring,
+                            ringPx: r.ringPx,
+                            rimPx: r.rimPx,
+                            rim: dumpValue(r.worstRim),
+                            maskPx: r.maskPx,
+                            chars: r.chars,
+                            bareLines: r.bare.length,
+                        });
+                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
+                        if (r.ringPx === 0 || r.thin.length > 0) {
+                            const line = r.thin[0];
+                            dim.push(
+                                `${at} wears the ${t.ring}px outline and shows no ring to read` +
+                                    (line === undefined
+                                        ? ''
+                                        : ` — a line of ${line.chars} letter(s) at ${Math.round(line.x)},${Math.round(line.y)} showed ${line.mask} glyph pixel(s)`),
+                            );
+                        } else if (r.bare.length > 0) {
+                            const line = r.bare[0];
+                            dim.push(
+                                `${at} wears the ${t.ring}px outline and a line of ${line.chars} letter(s) at ` +
+                                    `${Math.round(line.x)},${Math.round(line.y)} shows ${line.mask} glyph pixel(s) and no ring around them`,
+                            );
+                        } else if (r.worst < PIXEL_CONTRAST_FLOOR) {
+                            dim.push(
+                                `${at} wears the ${t.ring}px outline and its ring reads ${r.worst.toFixed(2)}:1` +
+                                    (process.env.LAYOUT_WHY ? `\n        ${r.why ?? ''}` : ''),
+                            );
+                        }
+                    }
+                    const entry = phases.get('ring') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - ringStart;
+                    phases.set('ring', entry);
+                }
+                /*
+                 * Grid horizon at its worst, reported (step 5a″; the
+                 * owner's C, 2026-09-27): the art flattened to its
+                 * brightest paint (`__horizonAtItsWorst`), a frame with
+                 * the glyphs blanked and one with them shown, the sign's
+                 * outlined lines ring-read and its other lines line-read
+                 * on them, the art put back. Held to `HORIZON_WORST`, a
+                 * regression guard and not a floor: the ring read on the
+                 * horizon as painted, above, is the failing guard.
+                 */
+                if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0) {
+                    const worstStart = performance.now();
+                    const page = async (expression) => {
+                        const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                        return r.result.value;
+                    };
+                    const flat = await page('window.__horizonAtItsWorst(true)');
+                    const blankCap = await capture();
+                    const flatRead = await reread();
+                    await page('window.__contrastGlyphs(true)');
+                    const shownCap = await capture();
+                    await page('window.__contrastGlyphs(false)');
+                    const back = await page('window.__horizonAtItsWorst(false)');
+                    const why = [...blankCap.why, ...shownCap.why, ...flatRead.why];
+                    if (flat.worn !== flat.flattened || flat.worn !== prep.horizon.worn || back.worn !== flat.worn) {
+                        why.push(`${prep.horizon.worn} sign(s) wore Grid horizon and ${flat.flattened} had its art at its brightest`);
+                    }
+                    if (why.length > 0) {
+                        retryWhy = why.map((w) => `for the horizon's worst, ${w}`);
+                    } else {
+                        horizonKeys.add(plannedJob.key);
+                        for (const t of flatRead.live.boxes) {
+                            const part = /(^|\.)stall-(name|tagline|sub)(\.|$)/.exec(t.sel)?.[2];
+                            if (part === undefined) continue;
+                            const least =
+                                t.ring > 0
+                                    ? ringRead(blankCap.shot, shownCap.shot, t).worst
+                                    : t.rects === undefined
+                                      ? worstContrastInBox(blankCap.shot, t, t.color)
+                                      : lineRead(blankCap.shot, t).worst;
+                            if (least === undefined || !Number.isFinite(least)) {
+                                // A line read with no sample is named,
+                                // never skipped (5b's rule; the critic,
+                                // step 5a″ item 3).
+                                horizonUnread.push(`${plannedJob.key} ${t.sel}`);
+                                continue;
+                            }
+                            const byJob = horizonWorst.get(part) ?? new Map();
+                            byJob.set(plannedJob.key, Math.min(byJob.get(plannedJob.key) ?? Infinity, least));
+                            horizonWorst.set(part, byJob);
+                        }
+                    }
+                    const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - worstStart;
+                    phases.set('horizon worst', entry);
+                }
+                /*
+                 * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
+                 * (step 5b; the probe's `markLookPseudos`), and since
+                 * 8f2 `no-look-mark-paints-inside-a-protected-box` (the
+                 * probe's `shownLookMarks`): where the job's scope holds
+                 * a look pseudo or a mark a look shows, a frame with
+                 * every one of them hidden against a fresh frame with
+                 * them shown, compared inside every protected box a
+                 * device pixel in from each edge. A pixel that moved is
+                 * a look's paint over money, a code or a control. One
+                 * frame hides both where a job has both; a frame that
+                 * moved is taken again with each hidden alone, to say
+                 * which painted there. No capture where neither exists.
+                 */
+                const pseudosHere = (prep.lookPseudos ?? 0) > 0;
+                const marksHere = (prep.lookMarks ?? 0) > 0;
+                if (retryWhy.length === 0 && (pseudosHere || marksHere)) {
+                    const lpStart = performance.now();
+                    const hidden = async (which) => {
+                        const r = await cdp.send(
+                            'Runtime.evaluate',
+                            { expression: `window.__lookPaintHidden(${JSON.stringify(which)})`, awaitPromise: true, returnByValue: true },
+                            sessionId,
+                        );
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                        return r.result.value;
+                    };
+                    /** The protected boxes whose pixels moved between two frames: [{ b, changed, first }]. */
+                    const movedIn = (on, off, shields) => {
+                        const out = [];
+                        for (const b of shields) {
+                            const x0 = Math.max(0, Math.ceil(b.x) + 1);
+                            const y0 = Math.max(0, Math.ceil(b.y) + 1);
+                            const x1 = Math.min(on.width - 1, Math.floor(b.x + b.w) - 2);
+                            const y1 = Math.min(on.height - 1, Math.floor(b.y + b.h) - 2);
+                            let changed = 0;
+                            let first;
+                            for (let y = y0; y <= y1; y += 1) {
+                                for (let x = x0; x <= x1; x += 1) {
+                                    const i = (y * on.width + x) * on.bpp;
+                                    lookPseudoPixels += 1;
+                                    if (
+                                        Math.abs(on.data[i] - off.data[i]) > LOOK_PSEUDO_LEVELS ||
+                                        Math.abs(on.data[i + 1] - off.data[i + 1]) > LOOK_PSEUDO_LEVELS ||
+                                        Math.abs(on.data[i + 2] - off.data[i + 2]) > LOOK_PSEUDO_LEVELS
+                                    ) {
+                                        changed += 1;
+                                        first ??= [x, y];
+                                    }
+                                }
+                            }
+                            if (changed > 0) out.push({ b, changed, first });
+                        }
+                        return out;
+                    };
+                    const both = pseudosHere && marksHere ? 'both' : pseudosHere ? 'pseudos' : 'marks';
+                    // The "shown" frame is the job's own capture (8f2, the
+                    // critic's P2-4): the same blanked, frozen paint, and
+                    // every step since put back what it changed. Only a
+                    // frame that moved is shot fresh before it is believed.
+                    let on = { shot: img, why: [] };
+                    await hidden(both);
+                    const off = await capture();
+                    await hidden('none');
+                    const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
+                    if (off.why.length === 0 && movedIn(on.shot, off.shot, shields).length > 0) {
+                        on = await capture();
+                    }
+                    const why = [...on.why, ...off.why];
+                    if (why.length > 0) {
+                        retryWhy = why.map((w) => `for the look-paint frames, ${w}`);
+                    } else {
+                        if (pseudosHere) lookPseudoJobs += 1;
+                        if (marksHere) {
+                            lookMarkJobs += 1;
+                            lookMarkJobsByClass[plannedJob.sheetClass] = (lookMarkJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
+                        }
+                        const moved = movedIn(on.shot, off.shot, shields);
+                        // Who painted there, asked only of a frame that moved.
+                        const byKind = { pseudos: moved, marks: moved };
+                        if (moved.length > 0 && both === 'both') {
+                            for (const kind of ['pseudos', 'marks']) {
+                                await hidden(kind);
+                                const alone = await capture();
+                                await hidden('none');
+                                byKind[kind] = alone.why.length === 0 ? movedIn(on.shot, alone.shot, shields) : moved;
+                            }
+                        }
+                        const say = (kind, rule, words) => {
+                            if (both !== 'both' && both !== kind) return;
+                            for (const { b, changed, first } of byKind[kind]) {
+                                dim.push(
+                                    `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
+                                        `changes ${changed} px (the first at ${first.join(',')}) when ${words} hidden — ${rule}`,
+                                );
+                            }
+                        };
+                        say('pseudos', 'no-look-pseudo-paints-inside-a-protected-box', "the look's pseudo-elements are");
+                        say('marks', 'no-look-mark-paints-inside-a-protected-box', "the look's marks are");
+                        record.lookPseudos = {
+                            marked: prep.lookPseudos ?? 0,
+                            marks: prep.lookMarks ?? 0,
+                            boxes: shields.length,
+                            changed: moved.reduce((n, m) => n + m.changed, 0),
+                        };
+                    }
+                    const entry = phases.get('look pseudos') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - lpStart;
+                    phases.set('look pseudos', entry);
+                }
+                /*
+                 * `a-word-reads-when-the-art-does-not-load` (8f2; the
+                 * step-8 critic's item 11 and the 8f2 critic's P1-2, the
+                 * probe's `markFileArt`): where the job's scope paints
+                 * file art — a mask image, a mask border or a `clip-path`
+                 * naming a file — every target is read again in the two
+                 * states the engines paint (`__artOff`): **pending**,
+                 * each such box painting nothing, and — where it differs,
+                 * a mask stack mixing file and other layers or a file
+                 * clip (`fileArtMixed`) — **failed**, each file layer
+                 * skipped and the rest kept. Each target by the reader it
+                 * was read by, on the boxes the job read (the art moves
+                 * no box): a line by its line rects, money whole, an
+                 * outlined line in its ring on a second frame with its
+                 * glyphs shown. Every one must clear the floor; a frame
+                 * that failed is taken again once before it is believed.
+                 */
+                if (retryWhy.length === 0 && (prep.fileArt ?? 0) > 0) {
+                    const artStart = performance.now();
+                    const page = async (expression) => {
+                        const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                        return r.result.value;
+                    };
+                    const artRead = async (state) => {
+                        await page(`window.__artOff(${JSON.stringify(state)})`);
+                        const blank = await capture();
+                        const why = [...blank.why];
+                        let shown;
+                        if (why.length === 0 && targets.some((t) => t.ring > 0)) {
+                            await page('window.__contrastGlyphs(true)');
+                            shown = await capture();
+                            await page('window.__contrastGlyphs(false)');
+                            why.push(...shown.why);
+                        }
+                        await page("window.__artOff('off')");
+                        if (why.length > 0) return { why };
+                        const reads = targets.map((t) => ({
+                            t,
+                            worst: t.ring > 0 ? ringRead(blank.shot, shown.shot, t).worst : readOne(blank.shot, t).worst,
+                        }));
+                        return { why, reads };
+                    };
+                    const states = (prep.fileArtMixed ?? 0) > 0 ? ['pending', 'failed'] : ['pending'];
+                    const leastBy = {};
+                    for (const state of states) {
+                        let art = await artRead(state);
+                        if (art.why.length === 0 && art.reads.some((r) => r.worst !== undefined && r.worst < PIXEL_CONTRAST_FLOOR)) {
+                            await sleep(250);
+                            art = await artRead(state);
+                        }
+                        if (art.why.length > 0) {
+                            retryWhy = art.why.map((w) => `for the art-${state} frame, ${w}`);
+                            break;
+                        }
+                        (artOffFrames[state] ??= {})[plannedJob.sheetClass] = ((artOffFrames[state] ?? {})[plannedJob.sheetClass] ?? 0) + 1;
+                        let least = Infinity;
+                        for (const { t, worst } of art.reads) {
+                            // A target with no sample is named by the
+                            // read above, on the same layout: the art
+                            // moves no box.
+                            if (worst === undefined || !Number.isFinite(worst)) continue;
+                            artOffTargets += 1;
+                            least = Math.min(least, worst);
+                            if (worst < PIXEL_CONTRAST_FLOOR) {
+                                dim.push(
+                                    `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
+                                        `reads ${worst.toFixed(2)}:1 with the look's file art ${state === 'pending' ? 'still loading (each box it masks painting nothing)' : 'failed (each failed layer skipped, the rest kept)'} — ` +
+                                        `a-word-reads-when-the-art-does-not-load`,
+                                );
+                            }
+                        }
+                        leastBy[state] = dumpValue(least);
+                    }
+                    if (retryWhy.length === 0) {
+                        artOffJobs += 1;
+                        artOffJobsByClass[plannedJob.sheetClass] = (artOffJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
+                        record.artOff = { art: prep.fileArt, mixed: prep.fileArtMixed ?? 0, read: targets.length, least: leastBy };
+                    }
+                    const entry = phases.get('art off') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - artStart;
+                    phases.set('art off', entry);
+                }
+                record.sampled = sampled;
+                record.dropped = dropped;
+                record.retried = retried;
+                /*
+                 * `the-honest-display-sentences-are-read` (8e2): every
+                 * role this screen owes at this width was read on this
+                 * job, or the job fails naming it.
+                 */
+                honestUnrendered += prep.honestUnrendered ?? 0;
+                for (const role of honestRead) honestReads.set(role, (honestReads.get(role) ?? 0) + 1);
+                const owedHere = honestOwed?.[screen]?.[vp.name];
+                if (owedHere !== undefined && retryWhy.length === 0) {
+                    const at = `${screen}|${vp.name}`;
+                    honestJobs.set(at, (honestJobs.get(at) ?? 0) + 1);
+                    record.honest = [...honestRead].sort();
+                    for (const role of owedHere) {
+                        if (!honestRead.has(role)) {
+                            dim.push(
+                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: the honest-display line [data-role="${role}"] is owed here and was not read ` +
+                                    `— collapsed, clipped out of view, hidden or gone (the-honest-display-sentences-are-read, layout/honestDisplay.ts)`,
+                            );
+                        }
+                    }
+                }
+                if (retryWhy.length > 0) {
+                    refuse(retryWhy.map((w) => `on the re-shot, ${w}`));
+                } else if (sampled === 0) {
+                    // Every box fell outside the shot — a stale capture
+                    // from before the viewport grew is the shape — and a
+                    // job that sampled nothing proved nothing.
+                    refuse([`${targets.length} boxes and none sampled — every one fell outside the ${img.width}x${img.height} shot`]);
+                }
+            } finally {
+                if (grown) {
+                    await timed('shrink', () =>
+                        cdp.send(
+                            'Emulation.setDeviceMetricsOverride',
+                            {
+                                width: vp.width,
+                                height: vp.height,
+                                deviceScaleFactor: 1,
+                                mobile: false,
+                            },
+                            sessionId,
+                        ),
+                    );
+                }
+            }
+        })();
+    } finally {
+        Object.assign(out, {
+            dumpJobs,
+            dumpBoxes,
+            refused,
+            dim,
+            contrastClasses,
+            tideJobs,
+            rainJobs,
+            rainKeys,
+            uncoveredKinds,
+            skipTotals,
+            lineSkips,
+            privateLineSkips,
+            boxes,
+            lineTargets,
+            nameLeast,
+            nameChromeSeen,
+            codesUnread,
+            codesRead,
+            codesReadByClass,
+            quietPixels,
+            ringTargets,
+            ringPixels,
+            ringLeastPerChar,
+            moneyRingRead,
+            ringKinds,
+            horizonKeys,
+            horizonWorst,
+            horizonUnread,
+            lookPseudoPixels,
+            lookPseudoJobs,
+            lookMarkJobs,
+            lookMarkJobsByClass,
+            artOffFrames,
+            artOffTargets,
+            artOffJobs,
+            artOffJobsByClass,
+            honestUnrendered,
+            honestReads,
+            honestJobs,
+        });
+    }
 }
 
 const chromeBin = findChrome();
@@ -1124,6 +2018,44 @@ let failed = false;
  */
 const CLIP_SKIP_CEILING = 0.3;
 
+/*
+ * How many tabs of the one Chrome the contrast pass walks its plan on
+ * (`LAYOUT_CONTRAST_TABS`, 1–4). Measured before it was built, 2026-10-06
+ * on the Mac: Chrome's captures on two targets overlap rather than queue,
+ * and a job's frame waits are idle time another tab can paint in — two tabs
+ * took the run from ~182s to ~131s, three to 119s once (`PROBE-RULES.md`,
+ * "The contrast pass walks on two tabs"). One tab is the walk as it always
+ * ran; the answers are the same at any count (`commitContrastJob`), and
+ * every run with more than one tab re-reads a few jobs on another tab to
+ * say so (`the-contrast-pass-reads-the-same-on-every-tab`).
+ *
+ * Unasked, it is 2 only where the overlap is there to take — at least
+ * `CONTRAST_TABS_MIN_CORES` cores and `CONTRAST_TABS_MIN_MEMORY` of memory —
+ * and 1 elsewhere (the critic's P3-7: on two cores the gain is not there,
+ * and no machine smaller than this Mac has run two tabs). The count and why
+ * are printed with the pass. `workshop:probe` runs this file, so the kit's
+ * probe takes the same count by the same rule.
+ */
+const CONTRAST_TABS_MIN_CORES = 4;
+const CONTRAST_TABS_MIN_MEMORY = 8 * 1024 ** 3;
+const { count: CONTRAST_TABS, why: CONTRAST_TABS_WHY } = (() => {
+    const asked = process.env.LAYOUT_CONTRAST_TABS;
+    if (asked !== undefined) {
+        if (!/^[1-4]$/.test(asked)) {
+            console.error(`layout-check: LAYOUT_CONTRAST_TABS is a count of 1 to 4, not "${asked}"`);
+            process.exit(1);
+        }
+        return { count: Number(asked), why: 'set by LAYOUT_CONTRAST_TABS' };
+    }
+    const cores = cpus().length;
+    const memory = totalmem();
+    const machine = `${cores} cores, ${(memory / 1024 ** 3).toFixed(1)} GiB`;
+    if (cores < CONTRAST_TABS_MIN_CORES || memory < CONTRAST_TABS_MIN_MEMORY) {
+        return { count: 1, why: `the default under ${CONTRAST_TABS_MIN_CORES} cores or ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
+    }
+    return { count: 2, why: `the default, on ${machine}` };
+})();
+
 const RUNTIME_CEILING_S = 300;
 const startedAt = Date.now();
 /*
@@ -1143,8 +2075,9 @@ const CDP_TIMEOUT_MS = 30_000;
  */
 const watchdog = setTimeout(() => {
     console.error(
-        `\n✗ runtime: past the ${RUNTIME_CEILING_S}s ceiling while on ${currentStep} — ` +
-            'the watchdog stops the run.',
+        `\n✗ runtime: past the ${RUNTIME_CEILING_S}s ceiling while on ${currentStep}` +
+            (watchedTabs.length > 1 ? ` (${watchedTabs.map((tab) => `tab ${tab.index} on ${tab.step ?? 'nothing yet'}`).join('; ')})` : '') +
+            ' — the watchdog stops the run.',
     );
     stopGroups().finally(() => process.exit(interruptedCode() ?? 1));
 }, RUNTIME_CEILING_S * 1000);
@@ -1179,15 +2112,23 @@ async function timed(phase, fn) {
         phases.set(phase, entry);
     }
 }
-function phaseTable(passMs) {
+function phaseTable(passMs, tabs = 1) {
+    // With more than one tab a phase's total is its time summed over the
+    // tabs, so the share is of the tabs' time — the pass's wall time once
+    // per tab — and what no phase accounts for includes a tab's idle time.
+    const tabMs = passMs * tabs;
     const rows = [...phases].map(([phase, { calls, ms }]) => ({ phase, calls, ms }));
     const accounted = rows.reduce((sum, row) => sum + row.ms, 0);
-    rows.push({ phase: '(unaccounted)', calls: 0, ms: Math.max(0, passMs - accounted) });
-    const lines = [`    phase             calls     total   share     mean`];
+    rows.push({ phase: '(unaccounted)', calls: 0, ms: Math.max(0, tabMs - accounted) });
+    const lines = [
+        tabs === 1
+            ? `    phase             calls     total   share     mean`
+            : `    phase             calls     total   share     mean   (summed over ${tabs} tabs; share of ${tabs} × the pass)`,
+    ];
     for (const { phase, calls, ms } of rows) {
         lines.push(
             `    ${phase.padEnd(16)} ${String(calls || '').padStart(6)} ${(ms / 1000).toFixed(1).padStart(8)}s` +
-                ` ${((ms / passMs) * 100).toFixed(0).padStart(6)}%` +
+                ` ${((ms / tabMs) * 100).toFixed(0).padStart(6)}%` +
                 ` ${calls === 0 ? '' : `${(ms / calls).toFixed(0).padStart(6)}ms`}`,
         );
     }
@@ -1197,10 +2138,19 @@ function phaseTable(passMs) {
  * The per-box dump (`contrast-dump.mjs`): every job each contrast pass ran
  * and every box it sampled, with the worst value it found, written to
  * `.layout-dump/` on every run. It is how a change to the passes' machinery
- * is shown to move nothing — or exactly what it moved.
+ * is shown to move nothing — or exactly what it moved. Named apart from
+ * `contrastJob`'s own `dumpJobs` and `dumpBoxes`, so a job that lost one of
+ * its locals would name an undeclared array (`tsc --checkJs` says so)
+ * rather than write here out of plan order.
  */
-const dumpJobs = [];
-const dumpBoxes = [];
+const runDumpJobs = [];
+const runDumpBoxes = [];
+/*
+ * How the contrast pass was walked, for the dump's `meta` and never its
+ * `jobs` or `boxes` (which stay comparable byte for byte at any tab count):
+ * the tab count and why, the tab each job ran on, and the canary's reads.
+ */
+const contrastRun = { tabs: CONTRAST_TABS, tabsWhy: CONTRAST_TABS_WHY, ranOn: {}, canary: [] };
 function gitRev() {
     const head = spawnSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' });
     if (head.status !== 0) return undefined;
@@ -1765,56 +2715,136 @@ try {
      * (`FIXED_CLOCK`, shared with `looks-diff.mjs`): the pay fixtures stamp
      * their rate at load and a sheet prints it to the second, the quote's age
      * and the wall's freshness are read against "now", and the pay code turns
-     * stale 120 s after that stamp. Installed here, so the geometry passes
-     * above keep the real clock they were written against.
-     */
-    await cdp.send('Page.enable', {}, sessionId);
-    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, sessionId);
-    /*
+     * stale 120 s after that stamp. Installed here, on every tab the pass
+     * drives, so the geometry passes above keep the real clock they were
+     * written against.
+     *
      * The page is focused whether or not its window is: `render.ts` focuses a
      * sheet's close and a face's back control, and `:focus-visible` paints a
      * ring only in a focused page. One headless window is focused already
      * (measured: `document.hasFocus()` true with and without this, and the
-     * per-box dump identical, 4575 of 4575); a second window, which a sharded
-     * pass would open, is not.
+     * per-box dump identical, 4575 of 4575); a second window is not, so every
+     * tab asks for it, and each page load is held to it (`loadContrastPage`).
      */
-    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId);
+    const readyTab = async (tabSession) => {
+        await cdp.send('Page.enable', {}, tabSession);
+        await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, tabSession);
+        await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, tabSession);
+    };
+    /*
+     * The tabs the contrast pass walks its plan on (`CONTRAST_TABS`): the
+     * first is the session every other pass uses, the rest are targets of
+     * the same Chrome, each in a window of its own — by choice: measured
+     * (the critic, 2026-10-06, Chrome 154 `--headless=new`), a background
+     * tab in one window is visible too, runs its animation frames and
+     * answers a capture as quickly, so the windows buy nothing that tabs
+     * would not; the runs that proved the dumps identical used windows.
+     * Each tab has its own page, viewport, emulated media and page age;
+     * nothing a job reads or paints is another tab's.
+     */
+    const tabs = [{ index: 0, cdp, sessionId, targetId: undefined }];
+    for (let index = 1; index < CONTRAST_TABS; index += 1) {
+        const target = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true });
+        const attached = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+        tabs.push({ index, cdp, sessionId: attached.sessionId, targetId: target.targetId });
+    }
+    for (const tab of tabs) {
+        Object.assign(tab, { vp: undefined, loadedAt: 0, reducedNow: false, faces: [], refusals: [], jobs: 0, busyMs: 0, step: undefined });
+        await readyTab(tab.sessionId);
+    }
+    watchedTabs = tabs;
     /*
      * And no page older than a minute: the rate stamp ages out at 120 s,
      * and a pay sheet arms a timer that repaints it then. A page is loaded
      * per viewport and again whenever it has lived longer than this.
      */
     const PAGE_MAX_AGE_MS = 60_000;
-    let loadedAt = 0;
+    // How long a freshly loaded page may take to answer its first capture
+    // (`loadContrastPage`): a grown 1920 page answers in well under a second.
+    const TAB_PAINT_CHECK_MS = 5_000;
     /*
      * The policy's refusals on every contrast page, asked before the page
      * is left and once more at the end: its jobs paint after the verdict
      * the page wrote, so the verdict's own list cannot carry them
-     * (`the-probe-page-meets-no-csp-refusal`, `cspWatch.ts`).
+     * (`the-probe-page-meets-no-csp-refusal`, `cspWatch.ts`). Kept per tab
+     * and said tab by tab, so the order is not the order the tabs ran in.
      */
-    const contrastRefusals = [];
-    const collectRefusals = async () => {
-        if (loadedAt === 0) return;
-        contrastRefusals.push(...(await evalJson(cdp, sessionId, 'window.__cspRefusals()')));
+    const collectRefusals = async (tab) => {
+        if (tab.loadedAt === 0) return;
+        tab.refusals.push(...(await evalJson(cdp, tab.sessionId, 'window.__cspRefusals()')));
     };
     // One faces line per contrast page loaded, printed with the pass's verdict.
-    const contrastFacePages = [];
-    const loadContrastPage = async (vp, phase = 'load') => {
-        await collectRefusals();
+    const loadContrastPage = async (tab, vp, phase = 'load') => {
+        await collectRefusals(tab);
         await timed(`${phase}: navigate`, () =>
-            cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, sessionId),
+            cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, tab.sessionId),
         );
-        await timed(`${phase}: ready`, () => waitForFlag(cdp, sessionId, '__probeReady'));
-        loadedAt = performance.now();
+        await timed(`${phase}: ready`, () => waitForFlag(cdp, tab.sessionId, '__probeReady'));
+        tab.loadedAt = performance.now();
         // Every face loaded before the first job on this page
         // (`every-face-is-loaded-before-the-probe-measures`): a job paints
         // after the page's own wait, so one check per page covers its jobs.
-        const echo = await evalJson(cdp, sessionId, 'window.__faces ?? null');
+        const echo = await evalJson(cdp, tab.sessionId, 'window.__faces ?? null');
         const faults = facesFaults(echo, DECLARED_FACES);
         if (faults.length > 0) {
             throw new Error(`the ${vp.name} page was not measured in its faces (${FACES_CHECK}): ${faults.join('; ')}`);
         }
-        contrastFacePages.push(facesLine(echo));
+        /*
+         * Every tab's page paints as a visitor's would. Visible and focused —
+         * a hidden page runs no animation frame, an unfocused one paints no
+         * focus ring — a belt this headless Chrome has never tripped: every
+         * tab reads visible and focused, in a window of its own or not, with
+         * focus emulation off, and in a minimised window (measured
+         * 2026-10-06). The minimised window is the failure that does happen:
+         * its page stays visible, focused and running frames, and answers no
+         * capture, so a job there sat out the 30 s CDP bound. So each page
+         * is also asked for one capture, bounded short, before any job — the
+         * check a minimised window turns red.
+         */
+        const shown = await evalJson(cdp, tab.sessionId, '[document.visibilityState, document.hasFocus()]');
+        if (shown[0] !== 'visible' || shown[1] !== true) {
+            throw new Error(`contrast tab ${tab.index}'s ${vp.name} page is ${shown[0]}${shown[1] ? '' : ' and unfocused'} — it would not paint as a visitor's does`);
+        }
+        await timed('paint check', async () => {
+            try {
+                await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, optimizeForSpeed: true }, tab.sessionId, {
+                    timeoutMs: TAB_PAINT_CHECK_MS,
+                });
+            } catch (err) {
+                throw new Error(
+                    `contrast tab ${tab.index}'s ${vp.name} page answered no capture within ${TAB_PAINT_CHECK_MS / 1000}s — its window paints nothing a job could read (${err.message})`,
+                );
+            }
+        });
+        tab.faces.push(facesLine(echo));
+    };
+    /*
+     * A tab's page at a viewport, held to the plan: the screens the plan
+     * walks at this width are the ones the page itself samples there.
+     */
+    const openViewport = async (tab, vp, plan) => {
+        currentStep = `contrast: loading the ${vp.name} page on tab ${tab.index}`;
+        tab.step = currentStep;
+        await timed('metrics', () =>
+            cdp.send(
+                'Emulation.setDeviceMetricsOverride',
+                { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
+                tab.sessionId,
+            ),
+        );
+        await loadContrastPage(tab, vp);
+        tab.vp = vp;
+        if (plan !== undefined) await holdScreensToPlan(tab, vp, plan);
+    };
+    const holdScreensToPlan = async (tab, vp, plan) => {
+        const pageScreens = await timed('plan reads', () => evalJson(cdp, tab.sessionId, 'window.__contrastScreens'));
+        const planScreens = [...new Set(plan.filter((j) => j.viewport === vp.name).map((j) => j.screen))];
+        if (planScreens.join(',') !== pageScreens.join(',')) {
+            throw new Error(
+                `the plan's ${vp.name} screens are not the ones the page samples at ${vp.width}px: ` +
+                    `plan ${planScreens.join(',')}; page ${pageScreens.join(',')}`,
+            );
+        }
     };
     // Jobs refused by their echo checks, one line each — said whatever else
     // the pass does, a pass that threw later included.
@@ -1839,8 +2869,6 @@ try {
     // name was painted where it was read (`nameChrome`).
     const nameLeast = new Map();
     const nameChromeSeen = new Set();
-    const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
-    const signPart = (sel) => (/(^|\.)stall-name(\.|$)/.test(sel) ? 'name' : 'tagline');
     // Line targets with no line rect on screen, per viewport (`LINE_SKIP_CEILING`):
     // the public run's jobs, and a carried private look's apart (8e2).
     const lineSkips = {};
@@ -1892,10 +2920,13 @@ try {
         const contrastClasses = new Set();
         /*
          * The walk is the page's plan (`__contrastPlan()`, `contrastPlan.ts`),
-         * read once: every job of every viewport, in order. The runner keeps
-         * its own count of what it did, and at the end every planned job must
-         * have been done exactly once — a job that fell out of the walk, or
-         * ran twice, fails the pass rather than printing a smaller number.
+         * read once: every job of every viewport, in order. The runner counts
+         * each job as it is handed to a tab (`done`), and at the end every
+         * planned job must have been handed out exactly once — a job that
+         * fell out of the walk, or was handed out twice, fails the pass rather
+         * than printing a smaller number. That the tab then ran it is the
+         * answers' check: each job's answer must carry its own record, under
+         * its own key (`unanswered`).
          */
         let plan;
         // The jobs that owe the rain and the horizon at their worst, by key.
@@ -1913,840 +2944,277 @@ try {
         const honestJobs = new Map();
         const honestReads = new Map();
         let honestUnrendered = 0;
+        /*
+         * One job's answer folded into the pass's totals (`contrastJob`).
+         * Called in plan order, it leaves every total exactly as the walk
+         * left it when one tab ran the jobs one after another: a count is a
+         * sum, a least a `Math.min`, a set a union, a list a concatenation,
+         * and a map's keys land in the order their first job put them there
+         * (a later job's value replaces an earlier one where the walk's did:
+         * `codesUnread`). A job that never reached its body (its tab threw
+         * opening a page) hands back nothing.
+         */
+        const sumInto = (into, from) => {
+            for (const [key, n] of Object.entries(from)) into[key] = (into[key] ?? 0) + n;
+        };
+        const countInto = (into, from) => {
+            for (const [key, n] of from) into.set(key, (into.get(key) ?? 0) + n);
+        };
+        const commitContrastJob = (out) => {
+            if (out.dumpJobs === undefined) return;
+            runDumpJobs.push(...out.dumpJobs);
+            runDumpBoxes.push(...out.dumpBoxes);
+            refused.push(...out.refused);
+            dim.push(...out.dim);
+            for (const cls of out.contrastClasses) contrastClasses.add(cls);
+            tideJobs += out.tideJobs;
+            rainJobs += out.rainJobs;
+            for (const key of out.rainKeys) rainKeys.add(key);
+            countInto(uncoveredKinds, out.uncoveredKinds);
+            countInto(skipTotals, out.skipTotals);
+            const skipsInto = (into, from) => {
+                for (const [viewport, at] of Object.entries(from)) {
+                    sumInto((into[viewport] ??= { 'clipped-away': 0, 'not-rendered': 0 }), at);
+                }
+            };
+            skipsInto(lineSkips, out.lineSkips);
+            for (const [cls, byViewport] of Object.entries(out.privateLineSkips)) {
+                skipsInto((privateLineSkips[cls] ??= {}), byViewport);
+            }
+            boxes += out.boxes;
+            lineTargets += out.lineTargets;
+            for (const [at, least] of out.nameLeast) nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, least));
+            for (const line of out.nameChromeSeen) nameChromeSeen.add(line);
+            for (const [code, why] of out.codesUnread) codesUnread.set(code, why);
+            countInto(codesRead, out.codesRead);
+            for (const [cls, codes] of Object.entries(out.codesReadByClass)) {
+                const into = (codesReadByClass[cls] ??= new Set());
+                for (const code of codes) into.add(code);
+            }
+            quietPixels += out.quietPixels;
+            ringTargets += out.ringTargets;
+            ringPixels += out.ringPixels;
+            ringLeastPerChar = Math.min(ringLeastPerChar, out.ringLeastPerChar);
+            moneyRingRead += out.moneyRingRead;
+            for (const [sel, kind] of out.ringKinds) {
+                const into = ringKinds.get(sel);
+                if (into === undefined) {
+                    ringKinds.set(sel, { ...kind });
+                } else {
+                    into.n += kind.n;
+                    into.least = Math.min(into.least, kind.least);
+                    into.rim = Math.min(into.rim, kind.rim);
+                }
+            }
+            for (const key of out.horizonKeys) horizonKeys.add(key);
+            for (const [part, byJob] of out.horizonWorst) {
+                const into = horizonWorst.get(part) ?? new Map();
+                for (const [key, least] of byJob) into.set(key, Math.min(into.get(key) ?? Infinity, least));
+                horizonWorst.set(part, into);
+            }
+            horizonUnread.push(...out.horizonUnread);
+            lookPseudoPixels += out.lookPseudoPixels;
+            lookPseudoJobs += out.lookPseudoJobs;
+            lookMarkJobs += out.lookMarkJobs;
+            sumInto(lookMarkJobsByClass, out.lookMarkJobsByClass);
+            for (const [state, byClass] of Object.entries(out.artOffFrames)) sumInto((artOffFrames[state] ??= {}), byClass);
+            artOffTargets += out.artOffTargets;
+            artOffJobs += out.artOffJobs;
+            sumInto(artOffJobsByClass, out.artOffJobsByClass);
+            honestUnrendered += out.honestUnrendered;
+            countInto(honestReads, out.honestReads);
+            countInto(honestJobs, out.honestJobs);
+        };
         const done = new Map();
-        let reducedNow = false;
+        /*
+         * Every tab opens the first viewport's page at once, and the plan
+         * is read from the first tab's. Every open is settled before a
+         * failure is said: no tab is left loading behind the pass's error.
+         */
+        for (const opened of await Promise.allSettled(tabs.map((tab) => openViewport(tab, ALL_VIEWPORTS[0])))) {
+            if (opened.status === 'rejected') throw opened.reason;
+        }
+        await timed('plan reads', async () => {
+            plan ??= await evalJson(cdp, sessionId, 'window.__contrastPlan()');
+            owed ??= await evalJson(cdp, sessionId, 'window.__contrastOwed()');
+            honestOwed ??= await evalJson(cdp, sessionId, 'window.__honestOwed()');
+        });
         for (const vp of ALL_VIEWPORTS) {
-            currentStep = `contrast: loading the ${vp.name} page`;
-            await timed('metrics', () =>
-                cdp.send(
-                    'Emulation.setDeviceMetricsOverride',
-                    { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
-                    sessionId,
-                ),
-            );
-            await loadContrastPage(vp);
-            const pageScreens = await timed('plan reads', async () => {
-                plan ??= await evalJson(cdp, sessionId, 'window.__contrastPlan()');
-                owed ??= await evalJson(cdp, sessionId, 'window.__contrastOwed()');
-                honestOwed ??= await evalJson(cdp, sessionId, 'window.__honestOwed()');
-                return evalJson(cdp, sessionId, 'window.__contrastScreens');
-            });
-            const jobsHere = plan.filter((planned) => planned.viewport === vp.name);
-            // The plan's viewport is this one, and its screens are the ones
-            // the page itself would sample at this width.
-            const planned = jobsHere[0];
+            // The plan's viewport is this one.
+            const planned = plan.find((j) => j.viewport === vp.name);
             if (planned !== undefined && (planned.width !== vp.width || planned.height !== vp.height)) {
                 throw new Error(
                     `the plan's ${vp.name} is ${planned.width}x${planned.height}, this run's ${vp.width}x${vp.height}`,
                 );
             }
-            const planScreens = [...new Set(jobsHere.map((j) => j.screen))];
-            if (planScreens.join(',') !== pageScreens.join(',')) {
-                throw new Error(
-                    `the plan's ${vp.name} screens are not the ones the page samples at ${vp.width}px: ` +
-                        `plan ${planScreens.join(',')}; page ${pageScreens.join(',')}`,
-                );
-            }
-            for (const plannedJob of jobsHere) {
-                currentStep = `contrast job ${plannedJob.key}`;
-                done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
-                const { screen, look: theme, flags } = plannedJob;
-                const reduced = plannedJob.reduced === true;
-                const tideHeld = plannedJob.tide;
-                // How a line names the job's decorations: all worn, a solo
-                // row's bits, the aurora's tide held (`TIDE_SCREENS`).
-                const wornLabel =
-                    (flags === 0 ? '' : flags === 0xffff ? ' + worn' : ` + flags ${flags}`) +
-                    (tideHeld === undefined ? '' : ` tide ${tideHeld}`);
-                const job = {
-                    pass: 'contrast',
-                    viewport: vp.name,
-                    screen,
-                    look: theme,
-                    flags,
-                    ...(reduced ? { reduced } : {}),
-                    ...(tideHeld === undefined ? {} : { tide: tideHeld }),
-                };
-                // A job of `REDUCED_JOBS` is painted under reduced motion: a
-                // box the sampler cannot read while it moves (Rural's swaying
-                // tag) is read stilled. Switched per job, and back after it.
-                if (reduced !== reducedNow) {
-                    await cdp.send(
-                        'Emulation.setEmulatedMedia',
-                        { features: reduced ? [{ name: 'prefers-reduced-motion', value: 'reduce' }] : [] },
-                        sessionId,
-                    );
-                    reducedNow = reduced;
-                }
-                const record = { key: jobKey(job), ...job };
-                dumpJobs.push(record);
-                // A job whose echo is not the job is refused before anything
-                // is sampled, and says why; the run fails.
-                const refuse = (why) => {
-                    record.refused = why;
-                    refused.push(`${plannedJob.key}: ${why.join('; ')}`);
-                };
-                if (performance.now() - loadedAt > PAGE_MAX_AGE_MS) {
-                    await loadContrastPage(vp, 'reload');
-                }
-                // Two animation frames between hiding the glyphs and the
-                // shot: the style change needs a composited frame, and a
-                // screenshot taken before one still shows the text — which
-                // read as 1.00:1 wherever a sample point landed on a glyph.
-                // Every prepare carries a nonce of its own, echoed back by
-                // the prepare and by every box re-read after it.
-                let nonce;
-                const prepare = (neutral, heightOnly = false) => {
-                    nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
-                    return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide);
-                };
-                // First paint tells us how tall the page is — the document,
-                // and the viewport it takes for the shell's region and an
-                // open sheet to hide nothing (`pageHeight` in the probe) —
-                // and a page taller than its viewport is grown to hold all
-                // of it and painted again at that size, because
-                // `captureBeyondViewport` does not reliably paint
-                // backgrounds below the fold: a below-fold buy control
-                // sampled as near-white. A page that fits is shot at its
-                // own size and prepared afresh from the neutral screen —
-                // the same paint, by hermeticity. That first paint is asked
-                // for its height alone (step 3a): the boxes, the blanking,
-                // the font wait and the frames belong to the paint that is
-                // shot. Until 2026-09-24 no page fit, because the probe's
-                // verdict `<pre>` sat under the app and padded every shot
-                // by 313px (`PROBE-RULES.md`, "Shot at the real height").
-                const first = await timed('height', () => prepare(true, true));
-                for (const cls of first.sheetClasses ?? []) contrastClasses.add(cls);
-                record.classes = first.sheetClasses ?? [];
-                let why = paintEcho(plannedJob, first, nonce, vp.width, vp.height);
-                if (why.length > 0) {
-                    refuse(why);
-                    continue;
-                }
-                let shotH = Math.max(vp.height, first.pageH);
-                const grew = shotH !== vp.height;
-                record.pageH = first.pageH;
-                record.grew = grew;
-                let grown = false;
-                const growTo = (height) =>
-                    timed('grow', () =>
-                        cdp.send(
-                            'Emulation.setDeviceMetricsOverride',
-                            { width: vp.width, height, deviceScaleFactor: 1, mobile: false },
-                            sessionId,
-                        ),
-                    );
-                try {
-                    if (grew) {
-                        await growTo(shotH);
-                        grown = true;
-                    }
-                    let prep = await timed('prepare', () => prepare(!grew));
-                    /*
-                     * The grow is held to the paint it was for. A sheet's
-                     * share of a grown viewport is read off the paint, not
-                     * known, and the first paint above did not wait for the
-                     * self-hosted face — so when the prepared page says it
-                     * is still taller than the shot, the shot grows again,
-                     * twice at most, and a job that still does not fit is
-                     * refused rather than shot with its foot behind a clip.
-                     * With the verdict out of the flow nothing pads the
-                     * shot past either (`PROBE-RULES.md`, "Shot at the real
-                     * height").
-                     */
-                    for (let round = 0; prep.pageH > shotH && round < 2; round += 1) {
-                        shotH = prep.pageH;
-                        await growTo(shotH);
-                        grown = true;
-                        prep = await timed('prepare', () => prepare(false));
-                    }
-                    record.shotH = shotH;
-                    if (prep.pageH > shotH) {
-                        refuse([`the page is ${prep.pageH}px tall at a ${shotH}px shot after two more grows`]);
-                        continue;
-                    }
-                    for (const cls of prep.sheetClasses ?? []) contrastClasses.add(cls);
-                    if ((prep.tide?.held ?? 0) > 0) {
-                        tideJobs += 1;
-                    }
-                    if ((prep.rain?.flattened ?? 0) > 0) {
-                        rainJobs += 1;
-                        rainKeys.add(plannedJob.key);
-                    }
-                    record.prepared = prep.targets.length;
-                    record.nodes = prep.nodes;
-                    record.classes = prep.sheetClasses ?? [];
-                    why = paintEcho(plannedJob, prep, nonce, vp.width, shotH);
-                    if (why.length === 0 && prep.targets.length === 0) {
-                        why = ['the prepare collected no contrast targets — a planned job that measures nothing'];
-                    }
-                    if (why.length > 0) {
-                        refuse(why);
-                        continue;
-                    }
-                    // The boxes are re-read at the last moment before every
-                    // shot: anything that lands between prepare and capture
-                    // (a late face, an image) moves the layout under
-                    // coordinates already taken.
-                    const liveBoxes = () => evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                    // The shot, and the re-read after it, each held to the
-                    // job: the image its width by the grown height, the
-                    // re-read from this job's last prepare at that viewport.
-                    const capture = async () => {
-                        const png = await timed('capture', () => captureRaw(cdp, sessionId));
-                        const shot = await timed('decode', async () => decodePng(png));
-                        const bad = shot.width !== vp.width || shot.height !== shotH;
-                        return {
-                            shot,
-                            why: bad ? [`the shot is ${shot.width}x${shot.height} where the job is ${vp.width}x${shotH}`] : [],
-                        };
-                    };
-                    const reread = async () => {
-                        const live = await liveBoxes();
-                        return { live, why: liveEcho(live, nonce, vp.width, shotH) };
-                    };
-                    let { shot: img, why: shotWhy } = await capture();
-                    if (shotWhy.length > 0) {
-                        refuse(shotWhy);
-                        continue;
-                    }
-                    const firstRead = await timed('boxes', reread);
-                    if (firstRead.why.length > 0) {
-                        refuse(firstRead.why);
-                        continue;
-                    }
-                    let targets = firstRead.live.boxes;
-                    // Every prepared node that gave no box, by the reason the
-                    // page gave (step 5b: no silent drop) — per job in the
-                    // dump, summed on the pass's line.
-                    for (const kind of prep.uncovered ?? []) uncoveredKinds.set(kind, (uncoveredKinds.get(kind) ?? 0) + 1);
-                    record.skips = firstRead.live.skips ?? {};
-                    for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
-                    // The ceiling is the public run's own count (it was
-                    // measured over the shipped looks and the skeleton); a
-                    // private look's jobs are counted apart and printed —
-                    // pinned by nobody yet, as a kit run's are (8e2).
-                    const skipsHere = PRIVATE_SHEET_CLASSES.includes(plannedJob.sheetClass)
-                        ? (privateLineSkips[plannedJob.sheetClass] ??= {})
-                        : lineSkips;
-                    for (const why of ['clipped-away', 'not-rendered']) {
-                        const at = (skipsHere[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
-                        at[why] += record.skips[why] ?? 0;
-                    }
-                    // A failing box is re-shot once before it is believed:
-                    // capture right after an emulated resize can raster a
-                    // stale frame — measured: the live DOM held transparent
-                    // glyphs and unmoved boxes while the shot showed the text
-                    // still painted. A real defect is steady state (the
-                    // planted-colour falsification fails both shots); a stale
-                    // surface is not. (Step 3a found what most of those
-                    // shots were: the prepare's own blanking starting a
-                    // 0.2 s `color` transition on a `.mini`, 89 retries a
-                    // run. The prepare starts none now and the retries went
-                    // to zero; the re-shot stays for whatever else is late.)
-                    let retried = false;
-                    if (targets.length === 0) {
-                        refuse([`prepared ${record.prepared} targets and the re-read found none`]);
-                        continue;
-                    }
-                    record.live = targets.length;
-                    record.image = [img.width, img.height];
-                    let sampled = 0;
-                    let dropped = 0;
-                    // The honest-display roles this job READ: a verdict, on
-                    // the line read or in the ring.
-                    const honestRead = new Set();
-                    const sampleStart = performance.now();
-                    let retryMs = 0;
-                    let retryWhy = [];
-                    /*
-                     * One target's read: a money box or a box with no line
-                     * rects whole (`worstContrastInBox`), every other target
-                     * over its line rects (`lineRead`, D7). `undefined` when
-                     * the read found no pixel — never a silent drop (step
-                     * 5b): the target is named below and the job fails.
-                     */
-                    const readOne = (image, t) => {
-                        if (t.rects === undefined) {
-                            return { worst: worstContrastInBox(image, t, t.color), px: undefined, at: undefined };
-                        }
-                        const r = lineRead(image, t);
-                        return { worst: r.px > 0 ? r.worst : undefined, px: r.px, at: r.at };
-                    };
-                    for (let ti = 0; ti < targets.length; ti += 1) {
-                        let t = targets[ti];
-                        // An outlined line is read in its ring, below.
-                        if (t.ring > 0) continue;
-                        let read = readOne(img, t);
-                        let worst = read.worst;
-                        const kind = t.rects === undefined ? 'box' : 'line';
-                        if (worst === undefined) {
-                            dropped += 1;
-                            dumpBoxes.push({ key: boxKey(job, t), job: record.key, i: t.i, sel: t.sel, x: t.x, y: t.y, w: t.w, h: t.h, color: t.color, worst: null, read: kind });
-                            dim.push(
-                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
-                                    (kind === 'line'
-                                        ? `has ${t.rects.length} line rect(s) on screen and no pixel wholly inside one — a target with text and no sample`
-                                        : `is ${t.money ? 'money' : 'a box'} the whole-box read found no pixel of — a target with no sample`),
-                            );
-                            continue;
-                        }
-                        boxes += 1;
-                        sampled += 1;
-                        if (kind === 'line') lineTargets += 1;
-                        let firstWorst;
-                        if (worst < PIXEL_CONTRAST_FLOOR && !retried) {
-                            const retryStart = performance.now();
-                            firstWorst = worst;
-                            await sleep(250);
-                            const again = await capture();
-                            const againRead = await reread();
-                            retryWhy = [...again.why, ...againRead.why];
-                            if (retryWhy.length > 0) break;
-                            img = again.shot;
-                            if (againRead.live.boxes.length === targets.length) {
-                                targets = againRead.live.boxes;
-                                t = targets[ti];
-                            }
-                            retried = true;
-                            read = readOne(img, t);
-                            worst = read.worst;
-                            retryMs += performance.now() - retryStart;
-                        }
-                        const entry = {
-                            key: boxKey(job, t),
-                            job: record.key,
-                            i: t.i,
-                            sel: t.sel,
-                            x: t.x,
-                            y: t.y,
-                            w: t.w,
-                            h: t.h,
-                            color: t.color,
-                            worst: dumpValue(worst),
-                            read: kind,
-                            ...(firstWorst === undefined ? {} : { first: dumpValue(firstWorst) }),
-                            ...(t.role === undefined ? {} : { role: t.role }),
-                        };
-                        if (t.role !== undefined && worst !== undefined) honestRead.add(t.role);
-                        if (kind === 'line') {
-                            entry.rects = t.rects.length;
-                            entry.px = read.px;
-                            if (LEGACY) {
-                                // The read before step 5b on this same
-                                // capture, and — for a fall — where the new
-                                // read's worst pixel lies against it.
-                                const legacy = t.legacyDropped ? undefined : worstContrastInBox(img, t, t.color, { legacy: true });
-                                entry.legacy = dumpValue(legacy);
-                                entry.at = read.at === undefined ? null : [read.at.x, read.at.y];
-                                if (legacy !== undefined && worst !== undefined && worst < legacy) {
-                                    entry.bucket = bucketOf(img, t, read.at);
-                                }
-                            }
-                        }
-                        dumpBoxes.push(entry);
-                        if (worst !== undefined && isName(t.sel)) {
-                            const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel}`;
-                            nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, worst));
-                        }
-                        if (worst !== undefined && worst < PIXEL_CONTRAST_FLOOR) {
-                            dim.push(
-                                `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
-                                    `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
-                                    (kind === 'line' && read.at !== undefined
-                                        ? ` (line read: the worst of ${read.px} px at ${read.at.x},${read.at.y}, ground rgb(${read.at.ground.join(',')}), ink ${read.at.ink})`
-                                        : '') +
-                                    (process.env.LAYOUT_WHY && kind === 'box' ? `\n        ${globalThis.__why ?? ''}` : ''),
-                            );
-                        }
-                    }
-                    {
-                        // The sampling itself, net of any retry inside it
-                        // (whose capture and decode are their own phases).
-                        const entry = phases.get('sample') ?? { calls: 0, ms: 0 };
-                        entry.calls += 1;
-                        entry.ms += performance.now() - sampleStart - retryMs;
-                        phases.set('sample', entry);
-                    }
-                    /*
-                     * D4, `a-code-keeps-its-quiet-zone-white`: every code the
-                     * job's scope paints, its quiet zone read on the capture
-                     * the boxes were read on (`quiet-zone.mjs`). The prepare
-                     * blanks text and nothing else, so the code and its plate
-                     * are painted as a buyer sees them.
-                     */
-                    if (retryWhy.length === 0) {
-                        for (const line of prep.nameChrome ?? []) nameChromeSeen.add(line);
-                        const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
-                        for (const z of zones) {
-                            const code = `${vp.name}/${screen}:${z.name}`;
-                            if (z.turned) {
-                                codesUnread.set(code, 'its frame is turned');
-                                continue;
-                            }
-                            const r = readQuietZone(img, z);
-                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
-                            if (r.fault !== undefined) {
-                                dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
-                                continue;
-                            }
-                            if (r.px === 0) {
-                                codesUnread.set(code, 'wholly outside a clip or the shot');
-                                continue;
-                            }
-                            codesRead.set(code, (codesRead.get(code) ?? 0) + 1);
-                            (codesReadByClass[plannedJob.sheetClass] ??= new Set()).add(code);
-                            quietPixels += r.px;
-                            if (r.bad > 0) {
-                                dim.push(
-                                    `${at} has ${r.bad} of ${r.px} quiet-zone pixel(s) under ${QUIET_ZONE_FLOOR} on a channel ` +
-                                        `(the first at ${r.first.x},${r.first.y}, rgb(${r.first.rgb.join(',')})) — a-code-keeps-its-quiet-zone-white`,
-                                );
-                            }
-                        }
-                    }
-                    /*
-                     * The ring read (`ringRead`): every outlined target, on a
-                     * second capture with its glyphs shown. A failing ring is
-                     * read again on a fresh pair before it is believed — the
-                     * box read's own rule, and it shares that rule's one
-                     * re-shot per job.
-                     */
-                    if (retryWhy.length === 0 && targets.some((t) => t.ring > 0)) {
-                        const ringStart = performance.now();
-                        const glyphs = async (show) => {
-                            const r = await cdp.send(
-                                'Runtime.evaluate',
-                                { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
-                                sessionId,
-                            );
-                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                            return r.result.value;
-                        };
-                        const shownPair = async () => {
-                            const n = await glyphs(true);
-                            const shownCap = await capture();
-                            const shownRead = await reread();
-                            await glyphs(false);
-                            const why = [...shownCap.why, ...shownRead.why];
-                            if (shownRead.live.boxes.length !== targets.length) {
-                                why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
-                            }
-                            if (n !== targets.filter((t) => t.ring > 0).length) {
-                                why.push(`${n} outlined targets shown where the read has ${targets.filter((t) => t.ring > 0).length}`);
-                            }
-                            return { shot: shownCap.shot, why };
-                        };
-                        const readAll = (shown) =>
-                            targets.filter((t) => t.ring > 0).map((t) => ({ t, r: ringRead(img, shown, t) }));
-                        const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0 || r.bare.length > 0;
-                        let pair = await shownPair();
-                        let results = pair.why.length === 0 ? readAll(pair.shot) : [];
-                        if (pair.why.length === 0 && results.some(bad) && !retried) {
-                            await sleep(250);
-                            const again = await capture();
-                            const againRead = await reread();
-                            const whyAgain = [...again.why, ...againRead.why];
-                            if (whyAgain.length === 0 && againRead.live.boxes.length === targets.length) {
-                                img = again.shot;
-                                targets = againRead.live.boxes;
-                                retried = true;
-                                pair = await shownPair();
-                                results = pair.why.length === 0 ? readAll(pair.shot) : [];
-                            } else {
-                                pair = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
-                            }
-                        }
-                        if (pair.why.length > 0) {
-                            retryWhy = pair.why.map((w) => `with the glyphs shown, ${w}`);
-                        }
-                        sampled += results.length;
-                        for (const { t, r } of results) {
-                            ringTargets += 1;
-                            if (t.role !== undefined) honestRead.add(t.role);
-                            if (t.money) {
-                                /*
-                                 * A money box is never read by a weaker
-                                 * verdict (step 5b; PROPOSAL §12 as amended):
-                                 * a figure outlined on a decoration's bare
-                                 * ground is read in its ring — every solid
-                                 * ring pixel, no percentile — and only with
-                                 * the decoration at its worst. The outline
-                                 * is worn only where the rain is, and a job
-                                 * whose rain was not flattened is refused
-                                 * by its echo (`paintEcho`); this holds the
-                                 * money half to it by name.
-                                 */
-                                moneyRingRead += 1;
-                                if (!((prep.rain?.flattened ?? 0) > 0)) {
-                                    dim.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} is money, wears the outline and was ring-read with no decoration at its worst — an-outlined-money-figure-is-ring-read-at-its-worst`,
-                                    );
-                                }
-                            }
-                            ringPixels += r.ringPx;
-                            if (isName(t.sel)) {
-                                const at = `${signPart(t.sel)} ${plannedJob.sheetClass}${wornLabel} (ring)`;
-                                nameLeast.set(at, Math.min(nameLeast.get(at) ?? Infinity, r.worst));
-                            }
-                            if (r.chars > 0) ringLeastPerChar = Math.min(ringLeastPerChar, r.maskPx / r.chars);
-                            const kind = ringKinds.get(t.sel) ?? { least: Infinity, rim: Infinity, n: 0, ring: t.ring };
-                            kind.n += 1;
-                            kind.least = Math.min(kind.least, r.worst);
-                            kind.rim = Math.min(kind.rim, r.worstRim);
-                            ringKinds.set(t.sel, kind);
-                            dumpBoxes.push({
-                                key: boxKey(job, t),
-                                job: record.key,
-                                i: t.i,
-                                sel: t.sel,
-                                x: t.x,
-                                y: t.y,
-                                w: t.w,
-                                h: t.h,
-                                color: t.color,
-                                worst: dumpValue(r.worst),
-                                ring: t.ring,
-                                ringPx: r.ringPx,
-                                rimPx: r.rimPx,
-                                rim: dumpValue(r.worstRim),
-                                maskPx: r.maskPx,
-                                chars: r.chars,
-                                bareLines: r.bare.length,
-                            });
-                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
-                            if (r.ringPx === 0 || r.thin.length > 0) {
-                                const line = r.thin[0];
-                                dim.push(
-                                    `${at} wears the ${t.ring}px outline and shows no ring to read` +
-                                        (line === undefined
-                                            ? ''
-                                            : ` — a line of ${line.chars} letter(s) at ${Math.round(line.x)},${Math.round(line.y)} showed ${line.mask} glyph pixel(s)`),
-                                );
-                            } else if (r.bare.length > 0) {
-                                const line = r.bare[0];
-                                dim.push(
-                                    `${at} wears the ${t.ring}px outline and a line of ${line.chars} letter(s) at ` +
-                                        `${Math.round(line.x)},${Math.round(line.y)} shows ${line.mask} glyph pixel(s) and no ring around them`,
-                                );
-                            } else if (r.worst < PIXEL_CONTRAST_FLOOR) {
-                                dim.push(
-                                    `${at} wears the ${t.ring}px outline and its ring reads ${r.worst.toFixed(2)}:1` +
-                                        (process.env.LAYOUT_WHY ? `\n        ${r.why ?? ''}` : ''),
-                                );
-                            }
-                        }
-                        const entry = phases.get('ring') ?? { calls: 0, ms: 0 };
-                        entry.calls += 1;
-                        entry.ms += performance.now() - ringStart;
-                        phases.set('ring', entry);
-                    }
-                    /*
-                     * Grid horizon at its worst, reported (step 5a″; the
-                     * owner's C, 2026-09-27): the art flattened to its
-                     * brightest paint (`__horizonAtItsWorst`), a frame with
-                     * the glyphs blanked and one with them shown, the sign's
-                     * outlined lines ring-read and its other lines line-read
-                     * on them, the art put back. Held to `HORIZON_WORST`, a
-                     * regression guard and not a floor: the ring read on the
-                     * horizon as painted, above, is the failing guard.
-                     */
-                    if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0) {
-                        const worstStart = performance.now();
-                        const page = async (expression) => {
-                            const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
-                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                            return r.result.value;
-                        };
-                        const flat = await page('window.__horizonAtItsWorst(true)');
-                        const blankCap = await capture();
-                        const flatRead = await reread();
-                        await page('window.__contrastGlyphs(true)');
-                        const shownCap = await capture();
-                        await page('window.__contrastGlyphs(false)');
-                        const back = await page('window.__horizonAtItsWorst(false)');
-                        const why = [...blankCap.why, ...shownCap.why, ...flatRead.why];
-                        if (flat.worn !== flat.flattened || flat.worn !== prep.horizon.worn || back.worn !== flat.worn) {
-                            why.push(`${prep.horizon.worn} sign(s) wore Grid horizon and ${flat.flattened} had its art at its brightest`);
-                        }
-                        if (why.length > 0) {
-                            retryWhy = why.map((w) => `for the horizon's worst, ${w}`);
-                        } else {
-                            horizonKeys.add(plannedJob.key);
-                            for (const t of flatRead.live.boxes) {
-                                const part = /(^|\.)stall-(name|tagline|sub)(\.|$)/.exec(t.sel)?.[2];
-                                if (part === undefined) continue;
-                                const least =
-                                    t.ring > 0
-                                        ? ringRead(blankCap.shot, shownCap.shot, t).worst
-                                        : t.rects === undefined
-                                          ? worstContrastInBox(blankCap.shot, t, t.color)
-                                          : lineRead(blankCap.shot, t).worst;
-                                if (least === undefined || !Number.isFinite(least)) {
-                                    // A line read with no sample is named,
-                                    // never skipped (5b's rule; the critic,
-                                    // step 5a″ item 3).
-                                    horizonUnread.push(`${plannedJob.key} ${t.sel}`);
-                                    continue;
-                                }
-                                const byJob = horizonWorst.get(part) ?? new Map();
-                                byJob.set(plannedJob.key, Math.min(byJob.get(plannedJob.key) ?? Infinity, least));
-                                horizonWorst.set(part, byJob);
-                            }
-                        }
-                        const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
-                        entry.calls += 1;
-                        entry.ms += performance.now() - worstStart;
-                        phases.set('horizon worst', entry);
-                    }
-                    /*
-                     * D6(i), `no-look-pseudo-paints-inside-a-protected-box`
-                     * (step 5b; the probe's `markLookPseudos`), and since
-                     * 8f2 `no-look-mark-paints-inside-a-protected-box` (the
-                     * probe's `shownLookMarks`): where the job's scope holds
-                     * a look pseudo or a mark a look shows, a frame with
-                     * every one of them hidden against a fresh frame with
-                     * them shown, compared inside every protected box a
-                     * device pixel in from each edge. A pixel that moved is
-                     * a look's paint over money, a code or a control. One
-                     * frame hides both where a job has both; a frame that
-                     * moved is taken again with each hidden alone, to say
-                     * which painted there. No capture where neither exists.
-                     */
-                    const pseudosHere = (prep.lookPseudos ?? 0) > 0;
-                    const marksHere = (prep.lookMarks ?? 0) > 0;
-                    if (retryWhy.length === 0 && (pseudosHere || marksHere)) {
-                        const lpStart = performance.now();
-                        const hidden = async (which) => {
-                            const r = await cdp.send(
-                                'Runtime.evaluate',
-                                { expression: `window.__lookPaintHidden(${JSON.stringify(which)})`, awaitPromise: true, returnByValue: true },
-                                sessionId,
-                            );
-                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                            return r.result.value;
-                        };
-                        /** The protected boxes whose pixels moved between two frames: [{ b, changed, first }]. */
-                        const movedIn = (on, off, shields) => {
-                            const out = [];
-                            for (const b of shields) {
-                                const x0 = Math.max(0, Math.ceil(b.x) + 1);
-                                const y0 = Math.max(0, Math.ceil(b.y) + 1);
-                                const x1 = Math.min(on.width - 1, Math.floor(b.x + b.w) - 2);
-                                const y1 = Math.min(on.height - 1, Math.floor(b.y + b.h) - 2);
-                                let changed = 0;
-                                let first;
-                                for (let y = y0; y <= y1; y += 1) {
-                                    for (let x = x0; x <= x1; x += 1) {
-                                        const i = (y * on.width + x) * on.bpp;
-                                        lookPseudoPixels += 1;
-                                        if (
-                                            Math.abs(on.data[i] - off.data[i]) > LOOK_PSEUDO_LEVELS ||
-                                            Math.abs(on.data[i + 1] - off.data[i + 1]) > LOOK_PSEUDO_LEVELS ||
-                                            Math.abs(on.data[i + 2] - off.data[i + 2]) > LOOK_PSEUDO_LEVELS
-                                        ) {
-                                            changed += 1;
-                                            first ??= [x, y];
-                                        }
-                                    }
-                                }
-                                if (changed > 0) out.push({ b, changed, first });
-                            }
-                            return out;
-                        };
-                        const both = pseudosHere && marksHere ? 'both' : pseudosHere ? 'pseudos' : 'marks';
-                        // The "shown" frame is the job's own capture (8f2, the
-                        // critic's P2-4): the same blanked, frozen paint, and
-                        // every step since put back what it changed. Only a
-                        // frame that moved is shot fresh before it is believed.
-                        let on = { shot: img, why: [] };
-                        await hidden(both);
-                        const off = await capture();
-                        await hidden('none');
-                        const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
-                        if (off.why.length === 0 && movedIn(on.shot, off.shot, shields).length > 0) {
-                            on = await capture();
-                        }
-                        const why = [...on.why, ...off.why];
-                        if (why.length > 0) {
-                            retryWhy = why.map((w) => `for the look-paint frames, ${w}`);
-                        } else {
-                            if (pseudosHere) lookPseudoJobs += 1;
-                            if (marksHere) {
-                                lookMarkJobs += 1;
-                                lookMarkJobsByClass[plannedJob.sheetClass] = (lookMarkJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
-                            }
-                            const moved = movedIn(on.shot, off.shot, shields);
-                            // Who painted there, asked only of a frame that moved.
-                            const byKind = { pseudos: moved, marks: moved };
-                            if (moved.length > 0 && both === 'both') {
-                                for (const kind of ['pseudos', 'marks']) {
-                                    await hidden(kind);
-                                    const alone = await capture();
-                                    await hidden('none');
-                                    byKind[kind] = alone.why.length === 0 ? movedIn(on.shot, alone.shot, shields) : moved;
-                                }
-                            }
-                            const say = (kind, rule, words) => {
-                                if (both !== 'both' && both !== kind) return;
-                                for (const { b, changed, first } of byKind[kind]) {
-                                    dim.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${b.sel} at ${Math.round(b.x)},${Math.round(b.y)} ` +
-                                            `changes ${changed} px (the first at ${first.join(',')}) when ${words} hidden — ${rule}`,
-                                    );
-                                }
-                            };
-                            say('pseudos', 'no-look-pseudo-paints-inside-a-protected-box', "the look's pseudo-elements are");
-                            say('marks', 'no-look-mark-paints-inside-a-protected-box', "the look's marks are");
-                            record.lookPseudos = {
-                                marked: prep.lookPseudos ?? 0,
-                                marks: prep.lookMarks ?? 0,
-                                boxes: shields.length,
-                                changed: moved.reduce((n, m) => n + m.changed, 0),
-                            };
-                        }
-                        const entry = phases.get('look pseudos') ?? { calls: 0, ms: 0 };
-                        entry.calls += 1;
-                        entry.ms += performance.now() - lpStart;
-                        phases.set('look pseudos', entry);
-                    }
-                    /*
-                     * `a-word-reads-when-the-art-does-not-load` (8f2; the
-                     * step-8 critic's item 11 and the 8f2 critic's P1-2, the
-                     * probe's `markFileArt`): where the job's scope paints
-                     * file art — a mask image, a mask border or a `clip-path`
-                     * naming a file — every target is read again in the two
-                     * states the engines paint (`__artOff`): **pending**,
-                     * each such box painting nothing, and — where it differs,
-                     * a mask stack mixing file and other layers or a file
-                     * clip (`fileArtMixed`) — **failed**, each file layer
-                     * skipped and the rest kept. Each target by the reader it
-                     * was read by, on the boxes the job read (the art moves
-                     * no box): a line by its line rects, money whole, an
-                     * outlined line in its ring on a second frame with its
-                     * glyphs shown. Every one must clear the floor; a frame
-                     * that failed is taken again once before it is believed.
-                     */
-                    if (retryWhy.length === 0 && (prep.fileArt ?? 0) > 0) {
-                        const artStart = performance.now();
-                        const page = async (expression) => {
-                            const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
-                            if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                            return r.result.value;
-                        };
-                        const artRead = async (state) => {
-                            await page(`window.__artOff(${JSON.stringify(state)})`);
-                            const blank = await capture();
-                            const why = [...blank.why];
-                            let shown;
-                            if (why.length === 0 && targets.some((t) => t.ring > 0)) {
-                                await page('window.__contrastGlyphs(true)');
-                                shown = await capture();
-                                await page('window.__contrastGlyphs(false)');
-                                why.push(...shown.why);
-                            }
-                            await page("window.__artOff('off')");
-                            if (why.length > 0) return { why };
-                            const reads = targets.map((t) => ({
-                                t,
-                                worst: t.ring > 0 ? ringRead(blank.shot, shown.shot, t).worst : readOne(blank.shot, t).worst,
-                            }));
-                            return { why, reads };
-                        };
-                        const states = (prep.fileArtMixed ?? 0) > 0 ? ['pending', 'failed'] : ['pending'];
-                        const leastBy = {};
-                        for (const state of states) {
-                            let art = await artRead(state);
-                            if (art.why.length === 0 && art.reads.some((r) => r.worst !== undefined && r.worst < PIXEL_CONTRAST_FLOOR)) {
-                                await sleep(250);
-                                art = await artRead(state);
-                            }
-                            if (art.why.length > 0) {
-                                retryWhy = art.why.map((w) => `for the art-${state} frame, ${w}`);
-                                break;
-                            }
-                            (artOffFrames[state] ??= {})[plannedJob.sheetClass] = ((artOffFrames[state] ?? {})[plannedJob.sheetClass] ?? 0) + 1;
-                            let least = Infinity;
-                            for (const { t, worst } of art.reads) {
-                                // A target with no sample is named by the
-                                // read above, on the same layout: the art
-                                // moves no box.
-                                if (worst === undefined || !Number.isFinite(worst)) continue;
-                                artOffTargets += 1;
-                                least = Math.min(least, worst);
-                                if (worst < PIXEL_CONTRAST_FLOOR) {
-                                    dim.push(
-                                        `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
-                                            `reads ${worst.toFixed(2)}:1 with the look's file art ${state === 'pending' ? 'still loading (each box it masks painting nothing)' : 'failed (each failed layer skipped, the rest kept)'} — ` +
-                                            `a-word-reads-when-the-art-does-not-load`,
-                                    );
-                                }
-                            }
-                            leastBy[state] = dumpValue(least);
-                        }
-                        if (retryWhy.length === 0) {
-                            artOffJobs += 1;
-                            artOffJobsByClass[plannedJob.sheetClass] = (artOffJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
-                            record.artOff = { art: prep.fileArt, mixed: prep.fileArtMixed ?? 0, read: targets.length, least: leastBy };
-                        }
-                        const entry = phases.get('art off') ?? { calls: 0, ms: 0 };
-                        entry.calls += 1;
-                        entry.ms += performance.now() - artStart;
-                        phases.set('art off', entry);
-                    }
-                    record.sampled = sampled;
-                    record.dropped = dropped;
-                    record.retried = retried;
-                    /*
-                     * `the-honest-display-sentences-are-read` (8e2): every
-                     * role this screen owes at this width was read on this
-                     * job, or the job fails naming it.
-                     */
-                    honestUnrendered += prep.honestUnrendered ?? 0;
-                    for (const role of honestRead) honestReads.set(role, (honestReads.get(role) ?? 0) + 1);
-                    const owedHere = honestOwed?.[screen]?.[vp.name];
-                    if (owedHere !== undefined && retryWhy.length === 0) {
-                        const at = `${screen}|${vp.name}`;
-                        honestJobs.set(at, (honestJobs.get(at) ?? 0) + 1);
-                        record.honest = [...honestRead].sort();
-                        for (const role of owedHere) {
-                            if (!honestRead.has(role)) {
-                                dim.push(
-                                    `${screen} @${vp.name} / theme ${theme}${wornLabel}: the honest-display line [data-role="${role}"] is owed here and was not read ` +
-                                        `— collapsed, clipped out of view, hidden or gone (the-honest-display-sentences-are-read, layout/honestDisplay.ts)`,
-                                );
-                            }
-                        }
-                    }
-                    if (retryWhy.length > 0) {
-                        refuse(retryWhy.map((w) => `on the re-shot, ${w}`));
-                    } else if (sampled === 0) {
-                        // Every box fell outside the shot — a stale capture
-                        // from before the viewport grew is the shape — and a
-                        // job that sampled nothing proved nothing.
-                        refuse([`${targets.length} boxes and none sampled — every one fell outside the ${img.width}x${img.height} shot`]);
-                    }
-                } finally {
-                    if (grown) {
-                        await timed('shrink', () =>
-                            cdp.send(
-                                'Emulation.setDeviceMetricsOverride',
-                                {
-                                    width: vp.width,
-                                    height: vp.height,
-                                    deviceScaleFactor: 1,
-                                    mobile: false,
-                                },
-                                sessionId,
-                            ),
-                        );
-                    }
-                }
-            }
         }
-        if (reducedNow) {
-            await cdp.send('Emulation.setEmulatedMedia', { features: [] }, sessionId);
-            reducedNow = false;
+        for (const tab of tabs) await holdScreensToPlan(tab, ALL_VIEWPORTS[0], plan);
+        /*
+         * The walk, on every tab at once (`CONTRAST_TABS`). The jobs are
+         * handed out one at a time in plan order — viewport by viewport, as
+         * the plan lists them — to whichever tab is free; a tab whose next
+         * job is at another viewport opens that viewport's page first, and
+         * one whose page is past its age loads it again. A job reads and
+         * paints its own tab's page and nothing else, and hands back what it
+         * found (`contrastJob`); the totals are folded from those answers in
+         * plan order once every tab has stopped, so a green run says and
+         * dumps the same thing whichever tab ran which job
+         * (`commitContrastJob`), and which tab ran each is written beside the
+         * dump (`meta.ranOn`). The first tab to throw stops the hand-out; the
+         * others finish the job they hold, the throw of the earliest job in
+         * the plan is the pass's, and only the jobs before it in the plan are
+         * folded — the same jobs at any tab count.
+         */
+        const viewportNamed = new Map(ALL_VIEWPORTS.map((vp) => [vp.name, vp]));
+        const queue = ALL_VIEWPORTS.flatMap((vp) => plan.filter((planned) => planned.viewport === vp.name));
+        const answers = new Array(queue.length);
+        const ranOn = new Array(queue.length);
+        let handedOut = 0;
+        let fault;
+        // A tab's page at the job's viewport and under its age, then the job.
+        const runOn = async (tab, plannedJob, out) => {
+            const vp = viewportNamed.get(plannedJob.viewport);
+            if (tab.vp !== vp) {
+                await openViewport(tab, vp, plan);
+            } else if (performance.now() - tab.loadedAt > PAGE_MAX_AGE_MS) {
+                await loadContrastPage(tab, vp, 'reload');
+            }
+            await contrastJob(tab, vp, plannedJob, honestOwed, out);
+        };
+        const walkTab = async (tab) => {
+            while (fault === undefined && handedOut < queue.length) {
+                const n = handedOut;
+                handedOut += 1;
+                const plannedJob = queue[n];
+                done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
+                const out = {};
+                answers[n] = out;
+                ranOn[n] = tab.index;
+                const started = performance.now();
+                try {
+                    await runOn(tab, plannedJob, out);
+                } catch (err) {
+                    if (fault === undefined || n < fault.n) fault = { n, key: plannedJob.key, tab: tab.index, err };
+                } finally {
+                    tab.jobs += 1;
+                    tab.busyMs += performance.now() - started;
+                }
+            }
+            tab.step = 'the end of the walk';
+        };
+        await Promise.all(tabs.map(walkTab));
+        const folded = fault === undefined ? queue.length : fault.n;
+        for (let n = 0; n < folded; n += 1) commitContrastJob(answers[n]);
+        contrastRun.ranOn = Object.fromEntries(queue.slice(0, folded).map((j, n) => [j.key, ranOn[n]]));
+        if (fault !== undefined) {
+            const later = answers.filter((out, n) => n > fault.n && out !== undefined).length;
+            if (later > 0) {
+                console.error(`    ${later} job(s) after it in the plan ran on other tabs before the hand-out stopped, and are not reported`);
+            }
+            currentStep = `contrast job ${fault.key} on tab ${fault.tab}`;
+            throw fault.err;
+        }
+        /*
+         * Every job handed out came back with its own record, under its own
+         * key: a tab that took a job and never ran it — or answered another
+         * job's — would otherwise count as done (`done` counts hand-outs).
+         */
+        currentStep = 'contrast: the answers';
+        const keyOf = (planned) =>
+            jobKey({
+                pass: 'contrast',
+                viewport: planned.viewport,
+                screen: planned.screen,
+                look: planned.look,
+                flags: planned.flags,
+                reduced: planned.reduced === true ? true : undefined,
+                tide: planned.tide,
+            });
+        const unanswered = queue
+            .filter((planned, n) => !(answers[n]?.dumpJobs?.length === 1 && answers[n].dumpJobs[0].key === keyOf(planned)))
+            .map((j) => j.key);
+        if (unanswered.length > 0) {
+            throw new Error(`${unanswered.length} job(s) handed to a tab came back with no record of their own: ${unanswered.join(', ')}`);
+        }
+        /*
+         * `the-contrast-pass-reads-the-same-on-every-tab` (the critic's P2-1):
+         * the fold proves nothing about the answers it folds — that a job
+         * reads the same whichever tab ran it, after whatever that tab ran
+         * before, is the jobs' hermeticity, and this holds it on every run
+         * with more than one tab. A handful of jobs are read again on a tab
+         * other than the one that ran them — the first job of each viewport,
+         * the first read at Grid horizon's worst, the first that hid a look's
+         * marks or read its file art away, and the one holding the least box
+         * — and each must hand back the same record and the same boxes, byte
+         * for byte, or the pass fails naming the job and both tabs. The
+         * answers read again are compared and never folded.
+         */
+        const canaryFaults = [];
+        if (tabs.length > 1) {
+            currentStep = 'contrast: the cross-tab canary';
+            const picks = new Map();
+            const pick = (n, why) => {
+                if (n >= 0 && !picks.has(n)) picks.set(n, why);
+            };
+            for (const vp of ALL_VIEWPORTS) pick(queue.findIndex((j) => j.viewport === vp.name), `the first ${vp.name} job`);
+            pick(answers.findIndex((out) => out.horizonKeys.size > 0), "the first read at Grid horizon's worst");
+            pick(
+                answers.findIndex((out) => (out.dumpJobs[0].lookPseudos?.marks ?? 0) > 0 && out.dumpJobs[0].artOff !== undefined),
+                "the first with a look's marks hidden and its file art read away",
+            );
+            let least;
+            answers.forEach((out, n) => {
+                for (const box of out.dumpBoxes) {
+                    if (typeof box.worst === 'number' && (least === undefined || box.worst < least.worst)) least = { n, worst: box.worst };
+                }
+            });
+            if (least !== undefined) pick(least.n, `the job holding the least box (${least.worst.toFixed(3)}:1)`);
+            // Each pick on the next tab round from the one that ran it, the
+            // tabs at once, each walking its picks from the last viewport
+            // back (where the walk left it).
+            const byTab = new Map(tabs.map((tab) => [tab, []]));
+            for (const n of picks.keys()) byTab.get(tabs[(ranOn[n] + 1) % tabs.length]).push(n);
+            const viewportAt = (n) => ALL_VIEWPORTS.findIndex((vp) => vp.name === queue[n].viewport);
+            const readAgain = new Map();
+            const settled = await Promise.allSettled(
+                [...byTab].map(async ([tab, ns]) => {
+                    for (const n of ns.sort((a, b) => viewportAt(b) - viewportAt(a) || a - b)) {
+                        const again = {};
+                        readAgain.set(n, { tab: tab.index, again });
+                        await runOn(tab, queue[n], again);
+                    }
+                    tab.step = 'the end of the canary';
+                }),
+            );
+            for (const result of settled) {
+                if (result.status === 'rejected') throw result.reason;
+            }
+            const boxesOf = (out) => new Map(out.dumpBoxes.map((box) => [box.key, JSON.stringify(box)]));
+            contrastRun.canary = [...picks].sort(([a], [b]) => a - b).map(([n, why]) => {
+                const { tab, again } = readAgain.get(n);
+                const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
+                const sameBoxes = JSON.stringify(again.dumpBoxes) === JSON.stringify(answers[n].dumpBoxes);
+                const said = { key: queue[n].key, why, ranOn: ranOn[n], readOn: tab, same: sameRecord && sameBoxes };
+                if (!said.same) {
+                    const before = boxesOf(answers[n]);
+                    const after = boxesOf(again);
+                    const differ = [...new Set([...before.keys(), ...after.keys()])].filter((key) => before.get(key) !== after.get(key));
+                    said.boxesDiffer = differ.length;
+                    canaryFaults.push(
+                        `the-contrast-pass-reads-the-same-on-every-tab: ${queue[n].key} (${why}) ran on tab ${ranOn[n]} and read again on tab ${tab}: ` +
+                            (sameRecord ? '' : 'its record differs; ') +
+                            `${differ.length} of ${before.size} box(es) differ` +
+                            (differ.length === 0 ? '' : ` (the first: ${differ[0]} — ${before.get(differ[0]) ?? 'absent'} → ${after.get(differ[0]) ?? 'absent'})`),
+                    );
+                }
+                return said;
+            });
+        }
+        for (const tab of tabs) {
+            if (tab.reducedNow) {
+                await cdp.send('Emulation.setEmulatedMedia', { features: [] }, tab.sessionId);
+                tab.reducedNow = false;
+            }
         }
         currentStep = 'contrast: the verdict';
         const planKeys = new Set(plan.map((j) => j.key));
@@ -2767,10 +3235,17 @@ try {
         // Every rule that failed says so, one line each: a run that fails
         // for one reason still names the others (round 8 — a missing rain
         // key used to hide the figures under the floor).
-        const verdicts = [];
-        await collectRefusals();
-        for (const r of contrastRefusals) {
-            verdicts.push(`the-probe-page-meets-no-csp-refusal: ${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}`);
+        const verdicts = [...canaryFaults];
+        // A refusal is said once, with how many times the pages met it: a
+        // page-level one is met on every page every tab loads.
+        for (const tab of tabs) await collectRefusals(tab);
+        const refusalsMet = new Map();
+        for (const r of tabs.flatMap((tab) => tab.refusals)) {
+            const line = `the-probe-page-meets-no-csp-refusal: ${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}`;
+            refusalsMet.set(line, (refusalsMet.get(line) ?? 0) + 1);
+        }
+        for (const [line, n] of [...refusalsMet].sort(([a], [b]) => a.localeCompare(b))) {
+            verdicts.push(n === 1 ? line : `${line} (${n} times)`);
         }
         if (boxes === 0) {
             verdicts.push('no figure boxes were sampled — vacuous green.');
@@ -2999,8 +3474,8 @@ try {
                         `${lineTargets} of them over their line rects, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}` +
-                        `\n    faces: every face loaded before the first job on all ${contrastFacePages.length} contrast pages` +
-                        ` (the first: ${contrastFacePages[0] ?? 'none'})` +
+                        `\n    faces: every face loaded before the first job on all ${tabs.reduce((n, tab) => n + tab.faces.length, 0)} contrast pages` +
+                        ` (the first: ${tabs[0].faces[0] ?? 'none'})` +
                         `\n    honest-display: ${[...honestJobs.values()].reduce((a, b) => a + b, 0)} job(s) on ${honestScreens.length} sheet screens read every line they owe; ` +
                         `${honestReads.size} role(s) read ${[...honestReads.values()].reduce((a, b) => a + b, 0)} times; ` +
                         `${honestUnrendered} line(s) not rendered at their job's width, not targets there`,
@@ -3017,6 +3492,16 @@ try {
         failed = true;
         console.error(`✗ contrast: ${err.message} (on ${currentStep}) — ${took()}`);
     }
+    // The tabs past the first are the contrast pass's own: closed before
+    // the transparency pass, which runs on the first.
+    for (const tab of tabs.slice(1)) {
+        try {
+            await cdp.send('Target.closeTarget', { targetId: tab.targetId });
+        } catch {
+            // A tab that is already gone is not a layout defect.
+        }
+    }
+    watchedTabs = [];
     if (refused.length > 0) {
         failed = true;
         console.error(`✗ contrast: ${refused.length} job(s) refused — what the page answered is not the job:`);
@@ -3092,8 +3577,23 @@ try {
         );
     }
     // Printed whatever the verdict, a pass that threw included: a slow red
-    // run is exactly the one whose phases someone needs to read.
-    for (const line of phaseTable(performance.now() - contrastStartedAt)) console.log(line);
+    // run is exactly the one whose phases someone needs to read. With more
+    // than one tab the phases are each tab's time summed, so they add up to
+    // more than the pass took; each tab's own share is said first.
+    console.log(
+        `    contrast tabs: ${tabs.length} (${CONTRAST_TABS_WHY}) — ` +
+            tabs.map((tab) => `tab ${tab.index} ${tab.jobs} jobs, ${(tab.busyMs / 1000).toFixed(1)}s, ${tab.faces.length} page(s)`).join('; '),
+    );
+    console.log(
+        `    the-contrast-pass-reads-the-same-on-every-tab: ` +
+            (tabs.length === 1
+                ? 'not asked — one tab'
+                : contrastRun.canary.length === 0
+                  ? 'not read — the walk did not finish'
+                  : `${contrastRun.canary.filter((c) => c.same).length} of ${contrastRun.canary.length} job(s) read again on another tab, the same record and boxes byte for byte: ` +
+                    contrastRun.canary.map((c) => `${c.key} (tab ${c.ranOn} → ${c.readOn}${c.same ? '' : `, ${c.boxesDiffer} box(es) differ`})`).join(', ')),
+    );
+    for (const line of phaseTable(performance.now() - contrastStartedAt, tabs.length)) console.log(line);
 
     /*
      * Pass 5: the transparent wire, in pixels.
@@ -3230,7 +3730,7 @@ try {
                         live: targets.length,
                         image: [img.width, img.height],
                     };
-                    dumpJobs.push(record);
+                    runDumpJobs.push(record);
                     const sample = (shot) => {
                         const found = [];
                         const values = [];
@@ -3270,7 +3770,7 @@ try {
                         ({ found, values } = sample(img));
                     }
                     for (const { t, ground, worst } of values) {
-                        dumpBoxes.push({
+                        runDumpBoxes.push({
                             key: boxKey(job, { ...t, ground }),
                             job: record.key,
                             i: t.i,
@@ -3346,13 +3846,19 @@ try {
                     at: new Date().toISOString(),
                     loadavg: loadavg(),
                     argv: process.argv.slice(2),
+                    // How the contrast pass was walked (P2-1): the tab count
+                    // and why, the tab each folded job ran on, the canary.
+                    contrastTabs: contrastRun.tabs,
+                    contrastTabsWhy: contrastRun.tabsWhy,
+                    ranOn: contrastRun.ranOn,
+                    canary: contrastRun.canary,
                 },
-                jobs: dumpJobs,
-                boxes: dumpBoxes,
+                jobs: runDumpJobs,
+                boxes: runDumpBoxes,
             },
             { looks: kind, stamp, rev },
         );
-        console.log(`  contrast dump: ${dumpBoxes.length} boxes over ${dumpJobs.length} jobs → ${path}`);
+        console.log(`  contrast dump: ${runDumpBoxes.length} boxes over ${runDumpJobs.length} jobs → ${path}`);
     }
     const elapsedS = (Date.now() - startedAt) / 1000;
     if (elapsedS > RUNTIME_CEILING_S) {

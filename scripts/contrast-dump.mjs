@@ -187,6 +187,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         console.error(`contrast-dump: ${differ}`);
         process.exit(2);
     }
+    // How each side's contrast pass was walked (`meta.contrastTabs`, since
+    // the pass runs on tabs): a comparison across tab counts is the proof
+    // that the count moves nothing, and says so.
+    const tabsOf = (dump) => (dump.meta?.contrastTabs === undefined ? 'tabs not recorded' : `${dump.meta.contrastTabs} tab(s)`);
+    console.log(`contrast tabs: ${tabsOf(before)} → ${tabsOf(after)}`);
     const result = compareDumps(before, after);
     for (const line of comparisonLines(result, { list: Number(process.env.DUMP_LIST ?? 40) })) console.log(line);
     const same = result.moved.length === 0 && result.added.length === 0 && result.removed.length === 0;
