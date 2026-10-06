@@ -162,19 +162,19 @@ export function privateLooks(): readonly Look[] {
 
 /**
  * **The harness's licence** (8e2): every paid look this page carries,
- * stated here and held by the harness alone. The app's gate
- * (`paintableLook`) paints a paid look only for a stall licensed for it,
- * and step 8 licenses none — so no record the harness could write paints
- * one, and a probe that measured a paid look's record would measure the
- * default under its name. Measuring a paid look is a written choice, then,
- * never a record the gate let through: this set, handed to the app's own
- * gate to ask what the look paints once licensed (`harnessGateFaults`),
- * and the look put on screen the one road the app paints a paid look with
- * no licence — the try-on (`paintView`). The gate itself is untouched:
+ * derived (`PRIVATE` ∩ `PAID_LOOK_IDS`), and used for one thing — to ask the
+ * app's gate what such a look paints once licensed (`harnessGateFaults`).
+ * **It paints nothing**: a paid look is put on screen by the try-on
+ * (`paintView`), which needs no licence — looking is free — because the
+ * gate (`paintableLook`) paints a paid look only for a licensed stall and
+ * step 8 licenses none, so a probe that measured a paid look's record would
+ * measure the default under its name. The gate is untouched:
  * `harnessGateFaults` asks it, every page, that a paid look without this
- * set is still the default (`not-unlocked`), and the probe paints the record
+ * set is still the default (`not-unlocked`), the probe paints the record
  * road once and holds it to that in Chrome
- * (`the-record-road-paints-a-locked-look-as-the-default`).
+ * (`the-record-road-paints-a-locked-look-as-the-default`, `recordView`), and
+ * no app file passes the gate a licence before step 9
+ * (`no-app-site-passes-a-licence-before-step-9`).
  */
 export const HARNESS_LICENCE: ReadonlySet<number> = new Set(
     PRIVATE.filter((look) => PAID_LOOK_IDS.includes(look.id)).map((look) => look.id),
@@ -224,6 +224,31 @@ export function harnessGateFaults(looks: readonly Look[] = PRIVATE): string[] {
     return out;
 }
 
+/**
+ * The view the app paints for a stall whose published record names `look`
+ * under `flags` (8e2, the 8e2 critic's item 3): the record's look and flags,
+ * and the worn set **the app writes through the gate** — `paintableLook(…)
+ * .worn`, as `app.ts` writes `view.worn` on every road (`applyManifest`,
+ * `loadCurrent`, `refreshHoldings`) — with `heldTokens` holding every token
+ * the look's rows can be entitled by, so a gate that leaked a locked look's
+ * rows would put them on the stall. Its sheet as the loader holds it, like
+ * `paintView`. The probe paints it to hold the gate to the default
+ * (`the-record-road-paints-a-locked-look-as-the-default`); it is never how a
+ * look is measured.
+ */
+export function recordView(base: StallView, look: Look, flags: number): StallView {
+    const held: ReadonlySet<string> = new Set(look.rows.flatMap((row) => (row.tokenId === undefined ? [] : [row.tokenId])));
+    const sheet = look.sheetUrl === undefined ? undefined : lookSheetState(look.sheetUrl);
+    return {
+        ...base,
+        recordTheme: look.theme,
+        recordFlags: flags,
+        heldTokens: held,
+        worn: paintableLook(look.theme, flags, held).worn,
+        lookSheets: new Map([[look.id, sheet ?? 'pending']]),
+    };
+}
+
 /** The flags that wear `rows` — one bit per row, as a picker sets them. */
 export function flagsOf(rows: readonly ShippedAttachment[]): number {
     return rows.reduce((bits, row) => bits | (1 << row.bit), 0);
@@ -239,8 +264,8 @@ export function flagsOf(rows: readonly ShippedAttachment[]): number {
  *   names it.
  * - **A carried private look rides the try-on** (8e2): `previewLook` names
  *   it with the flags that wear `worn` — the road the app paints a paid look
- *   on with no licence, and the one road the harness's licence
- *   (`HARNESS_LICENCE`) lets it take — `worn` is the try-on's own rows for
+ *   on with no licence (the harness's licence only asks the gate,
+ *   `HARNESS_LICENCE`) — `worn` is the try-on's own rows for
  *   those flags (`wornForLook`, no entitlement: looking is free, so an
  *   unminted row paints), and `lookSheets` is where the look's sheet stands
  *   on this page **as the app's loader holds it** (`lookSheetState`), read

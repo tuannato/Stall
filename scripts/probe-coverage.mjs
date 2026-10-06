@@ -23,7 +23,8 @@
  * - **`a-door-mini-paints-as-its-own-look`** compares every shipped look's
  *   deck mini with that look's own shop, at both widths.
  * - **`nothing-on-the-wall-is-cut-from-below`** reads the touch wall's
- *   controls on the three passes that paint it: the canvas (1920x1080), the
+ *   controls — on the public looks, and on each carried private look's own
+ *   walls (8e2: `wallControlRolesByClass`) — on the three passes that paint it: the canvas (1920x1080), the
  *   portrait wall (1080x1920) and the counter tablet (768x1024) — every one
  *   of its five controls on each, and the payment's two lines outside its
  *   scroller, "+N more" and the borrowed-token sentence (`WALL_ROLES`), each
@@ -115,10 +116,30 @@ export function probeCoverageGaps(
         }
     }
     if (WALL_PASSES.has(pass)) {
-        const roles = report.wallControlRoles ?? {};
+        // The public looks' own reads, and each carried look's on its own
+        // walls (8e2, the 8e2 critic's item 1): one count across looks let
+        // the shipped looks owe a carried look's controls for it.
+        const byClass = report.wallControlRolesByClass;
+        const roles =
+            byClass === undefined
+                ? (report.wallControlRoles ?? {})
+                : Object.entries(byClass)
+                      .filter(([cls]) => !privateClasses.includes(cls))
+                      .reduce((sum, [, read]) => {
+                          for (const [role, n] of Object.entries(read)) sum[role] = (sum[role] ?? 0) + n;
+                          return sum;
+                      }, {});
         for (const role of WALL_ROLES) {
             if (!((roles[role] ?? 0) > 0)) {
                 gaps.push(`nothing-on-the-wall-is-cut-from-below read no ${role} on a wall`);
+            }
+        }
+        for (const cls of privateClasses) {
+            const mine = byClass?.[cls] ?? {};
+            for (const role of WALL_ROLES) {
+                if (!((mine[role] ?? 0) > 0)) {
+                    gaps.push(`nothing-on-the-wall-is-cut-from-below read no ${role} on a ${cls} wall`);
+                }
             }
         }
     }

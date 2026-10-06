@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type * as PrivateLooksModule from 'virtual:stall-private-looks';
 import {
@@ -553,6 +554,80 @@ describe('no-site-paints-the-record-look-around-the-gate', () => {
         expect(
             recordReadsAroundTheGate(new Map([['ui/render.ts', 'function recordLook(view) {\n    return paintableLook(view.recordTheme);\n}\n']])),
         ).toEqual([]);
+    });
+});
+
+/**
+ * Every use of the gate in `source` that could hand it a licence: a call
+ * with a fourth argument (or a spread, which can carry one), or the gate
+ * used as a value — passed, stored, aliased, `.call`ed or `.apply`d —
+ * which a fence over its calls cannot follow. Parsed, never text-matched.
+ * Each as `<what> at <line>`.
+ */
+function licensedGateUses(source: string): string[] {
+    const file = ts.createSourceFile('app.ts', source, ts.ScriptTarget.Latest, true);
+    const out: string[] = [];
+    const line = (node: ts.Node): number => file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
+    const visit = (node: ts.Node): void => {
+        if (ts.isIdentifier(node) && node.text === GATE) {
+            const parent = node.parent;
+            const declared =
+                ts.isImportSpecifier(parent) ||
+                ts.isExportSpecifier(parent) ||
+                (ts.isFunctionDeclaration(parent) && parent.name === node) ||
+                (ts.isPropertyAccessExpression(parent) && parent.name === node && !ts.isCallExpression(parent.parent));
+            if (ts.isCallExpression(parent) && parent.expression === node) {
+                if (parent.arguments.length > 3) {
+                    out.push(`a call with ${parent.arguments.length} arguments at ${line(node)}`);
+                } else if (parent.arguments.some((arg) => ts.isSpreadElement(arg))) {
+                    out.push(`a call with a spread argument at ${line(node)}`);
+                }
+            } else if (!declared) {
+                out.push(`the gate used as a value at ${line(node)}`);
+            }
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    return out;
+}
+
+/**
+ * `no-app-site-passes-a-licence-before-step-9` (8e2, the 8e2 critic's item
+ * 4). The gate's fourth parameter, `licensed`, is the seam step 9's licence
+ * check fills, and step 8 has no licence check: one call in `src/` that
+ * handed it a set naming a paid id would paint that look for free, and every
+ * other fence would stay green. The harness asks the gate the licensed
+ * question (`harnessGateFaults`, `layout/looks.ts`), which is outside `src/`
+ * and paints nothing. So no app file calls the gate with more than three
+ * arguments, or with a spread, or holds the gate as a value it could call
+ * another way; the table itself declares it.
+ */
+describe('no-app-site-passes-a-licence-before-step-9', () => {
+    it('finds every app call of the gate with three arguments at most, and the gate never held as a value', () => {
+        const files = walk(SRC, (path) => path.endsWith('.ts') && !path.endsWith('.test.ts') && !path.endsWith(join('domain', 'lookTable.ts')));
+        const calls = files.flatMap((path) => {
+            const text = readFileSync(path, 'utf8');
+            return licensedGateUses(text).map((at) => `${relative(SRC, path)}: ${at}`);
+        });
+        expect(calls, calls.join('\n')).toEqual([]);
+        // The walk is not blind: the app's own calls are there to be read.
+        const app = readFileSync(join(SRC, 'app.ts'), 'utf8');
+        expect(app.match(/\bpaintableLook\(/g)?.length ?? 0).toBeGreaterThan(3);
+    });
+
+    it('refuses a planted licence, in every shape', () => {
+        for (const planted of [
+            'const p = paintableLook(theme, flags, held, new Set([0x04]));',
+            'const p = paintableLook(theme, flags, held, licence, extra);',
+            'const p = paintableLook(...args);',
+            'const gate = paintableLook; gate(theme, flags, held, licence);',
+            'const p = paintableLook.call(undefined, theme, flags, held, licence);',
+            'apply(paintableLook);',
+        ]) {
+            expect(licensedGateUses(planted), planted).toHaveLength(1);
+        }
+        expect(licensedGateUses("import { paintableLook } from './lookTable';\nconst p = paintableLook(theme, flags, held);")).toEqual([]);
     });
 });
 

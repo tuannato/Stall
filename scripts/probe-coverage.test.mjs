@@ -80,8 +80,20 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
                 'the-record-road-paints-a-locked-look-as-the-default painted 0 record(s) where the run carries 1 paid look(s) (t-fixture-private)',
             ]);
         }
-        // The canvas paints no `offers`, and owes neither.
-        assert.deepEqual(probeCoverageGaps('canvas', { ...full, rowSizeClasses: [], recordRoadChecks: 0 }, options), []);
+        // The canvas paints no `offers`, and owes neither — but it owes the
+        // carried look's own wall controls (8e2), never the public looks'.
+        const walls = { wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': full.wallControlRoles } };
+        assert.deepEqual(probeCoverageGaps('canvas', { ...full, ...walls, rowSizeClasses: [], recordRoadChecks: 0 }, options), []);
+        assert.deepEqual(
+            probeCoverageGaps('canvas', { ...full, wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': { ...full.wallControlRoles, 'window-pay': 0 } } }, options),
+            ['nothing-on-the-wall-is-cut-from-below read no window-pay on a t-fixture-private wall'],
+        );
+        // The public count is the public looks' own: a carried look's reads
+        // never stand in for theirs.
+        assert.deepEqual(
+            probeCoverageGaps('portrait', { ...full, wallControlRolesByClass: { 't-modern': { ...full.wallControlRoles, 'pay-borrowed': 0 }, 't-fixture-private': full.wallControlRoles } }, options),
+            ['nothing-on-the-wall-is-cut-from-below read no pay-borrowed on a wall'],
+        );
         // A free private look owes its row and no locked record; a run that
         // carries none owes no record either — and paints none.
         assert.deepEqual(

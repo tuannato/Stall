@@ -25,7 +25,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
-import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
+import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
 import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
@@ -42,8 +42,9 @@ import {
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
-import { harnessSelection, refuseSelection } from './looks-selection.mjs';
+import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
+import { carriedTallyFaults } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 
 /*
@@ -84,13 +85,27 @@ if (LOOKS === 'workshop') {
     refuseSelection('workshop:probe', "the kit's probe measures the kit's look alone and reads no private look");
 }
 /*
- * What the selection carries, read once, with its commit pinned: the build
- * below is handed that commit (`CARRIED.env`), so the looks this run
- * expects are the looks its build carries, one commit's (`harness-looks.mjs`).
+ * **With no selection the probe measures the tracked fixture** (8e2, the 8e2
+ * critic's item 2; STEP-8-PLAN v2: tests run on the tracked fixture always):
+ * a run that carried no private look would hold every private-look rule —
+ * the record road, a carried look's own tallies, its row, its name — to
+ * nothing, and 8f's rules proved on the fixture once would regress unseen in
+ * every default run. An explicit selection replaces it; the kit's probe
+ * measures the kit's look alone and carries none. Test:
+ * `the-default-probe-carries-the-tracked-fixture`.
  */
-const CARRIED = await harnessLooks(SELECTION);
-if (SELECTION !== undefined) {
-    console.log(`  test:layout measures the private looks of ${CARRIED.line}`);
+const MEASURED_SELECTION = LOOKS === 'workshop' ? undefined : (SELECTION ?? { target: 'preview', dir: FIXTURE_LOOKS_DIR });
+/*
+ * What it carries, read once, with its commit pinned: the build below is
+ * handed that commit (`CARRIED.env`), so the looks this run expects are the
+ * looks its build carries, one commit's (`harness-looks.mjs`).
+ */
+const CARRIED = await harnessLooks(MEASURED_SELECTION);
+if (MEASURED_SELECTION !== undefined) {
+    console.log(
+        `  test:layout measures the private looks of ${CARRIED.line}` +
+            (SELECTION === undefined ? ' — the tracked fixture, measured by default; a selection replaces it' : ''),
+    );
 }
 const PROBE_PAGE = LOOKS === 'workshop' ? 'layout/probe-workshop.html' : 'layout/probe.html';
 /*
@@ -512,6 +527,13 @@ const outlinedTargetsSeen = new Set();
  * (`owed-follows-what-a-pass-wore`, `owedFaults`).
  */
 const wornClassesSeen = new Set();
+/**
+ * Each carried private look's points behind a clip and hit-tested, per
+ * geometry pass (`clipByClass` in the page's verdict, 8e2): held to the
+ * clip ceiling on its own (`look-tallies.mjs`) where the public looks keep
+ * the ratio over theirs.
+ */
+const clipSeen = {};
 /**
  * Every code a geometry pass painted, as `pass/screen:name` (the probe's
  * `codesPainted`): the contrast pass lists which of them it read the quiet
@@ -1351,8 +1373,15 @@ try {
          * points this pass actually hit-tested, and a pass with none of them
          * proved nothing at all whatever its failure list says.
          */
-        const skipped = report.clipSkips ?? 0;
-        const checked = report.clipChecks ?? 0;
+        // The public looks' own points (8e2): a carried look's are held to
+        // the same ceiling on their own (`look-tallies.mjs`), and neither can
+        // mask nor trip the other.
+        const carriedClip = PRIVATE_SHEET_CLASSES.map((cls) => report.clipByClass?.[cls] ?? { skips: 0, checks: 0 });
+        for (const cls of PRIVATE_SHEET_CLASSES) {
+            (clipSeen[cls] ??= {})[vp.name] = report.clipByClass?.[cls] ?? { skips: 0, checks: 0 };
+        }
+        const skipped = (report.clipSkips ?? 0) - carriedClip.reduce((n, at) => n + at.skips, 0);
+        const checked = (report.clipChecks ?? 0) - carriedClip.reduce((n, at) => n + at.checks, 0);
         const clipLine =
             skipped + checked === 0
                 ? ''
@@ -1494,7 +1523,7 @@ try {
                 for (const kind of pv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
                 for (const cls of pv.wornClasses ?? []) wornClassesSeen.add(cls);
                 for (const code of pv.codesPainted ?? []) codesPaintedSeen.add(`${PORTRAIT.name}/${code}`);
-                const gaps = probeCoverageGaps(PORTRAIT.name, pv);
+                const gaps = probeCoverageGaps(PORTRAIT.name, pv, { privateClasses: PRIVATE_SHEET_CLASSES });
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
                 if (pv.failures.length === 0 && gaps.length === 0) {
                     console.log(
@@ -1573,7 +1602,7 @@ try {
                 for (const kind of tv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
                 for (const cls of tv.wornClasses ?? []) wornClassesSeen.add(cls);
                 for (const code of tv.codesPainted ?? []) codesPaintedSeen.add(`${TABLET.name}/${code}`);
-                const gaps = probeCoverageGaps(TABLET.name, tv);
+                const gaps = probeCoverageGaps(TABLET.name, tv, { privateClasses: PRIVATE_SHEET_CLASSES });
                 const compared = probeCoverageLine(TABLET.name, tv);
                 if (tv.failures.length === 0 && gaps.length === 0) {
                     console.log(
@@ -1778,6 +1807,9 @@ try {
     // D4: the codes whose quiet zone was read (`pass/screen:name` → jobs),
     // the ones a job painted and could not read, and why.
     const codesRead = new Map();
+    // The same reads per look's class (8e2): what a carried look owes by
+    // name is read on its own jobs (`look-tallies.mjs`).
+    const codesReadByClass = {};
     const codesUnread = new Map();
     let quietPixels = 0;
     // D14: the least the sign's name read per look and decoration state
@@ -2047,7 +2079,9 @@ try {
                     // measured over the shipped looks and the skeleton); a
                     // private look's jobs are counted apart and printed —
                     // pinned by nobody yet, as a kit run's are (8e2).
-                    const skipsHere = PRIVATE_SHEET_CLASSES.includes(plannedJob.sheetClass) ? privateLineSkips : lineSkips;
+                    const skipsHere = PRIVATE_SHEET_CLASSES.includes(plannedJob.sheetClass)
+                        ? (privateLineSkips[plannedJob.sheetClass] ??= {})
+                        : lineSkips;
                     for (const why of ['clipped-away', 'not-rendered']) {
                         const at = (skipsHere[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
                         at[why] += record.skips[why] ?? 0;
@@ -2209,6 +2243,7 @@ try {
                                 continue;
                             }
                             codesRead.set(code, (codesRead.get(code) ?? 0) + 1);
+                            (codesReadByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                             quietPixels += r.px;
                             if (r.bad > 0) {
                                 dim.push(
@@ -2615,15 +2650,6 @@ try {
                     }
                 }
             }
-            if (PRIVATE_SHEET_CLASSES.length > 0) {
-                // Reported, never held: LINE_SKIP_CEILING is the public run's
-                // measurement, and a ceiling for a private look is a number
-                // nobody has measured yet (the kit's runs pin none either).
-                const said = Object.entries(privateLineSkips)
-                    .map(([viewport, at]) => `${viewport} ${at['clipped-away']} clipped away, ${at['not-rendered']} not rendered`)
-                    .join('; ');
-                console.log(`  private looks' line targets with no line rect (reported, not held): ${said || 'none'}`);
-            }
         }
         if (LOOKS === 'shipped' && lookPseudoJobs === 0) {
             // Neo's sheet generates pseudos on every screen with a heading or
@@ -2653,9 +2679,44 @@ try {
             // The codes a buyer pays by are owed by name (the critic, step
             // 5a″ item 7): a fixture that stopped painting one would leave
             // the rule green over the rest.
-            const unreadCodes = CODES_REQUIRED.filter((code) => !codesRead.has(code));
+            // Read on the public looks' own jobs (8e2): a carried look's codes
+            // are its own to owe (`look-tallies.mjs`), and never stand in.
+            const publicCodes = new Set(
+                Object.entries(codesReadByClass)
+                    .filter(([cls]) => !PRIVATE_SHEET_CLASSES.includes(cls))
+                    .flatMap(([, codes]) => [...codes]),
+            );
+            const unreadCodes = CODES_REQUIRED.filter((code) => !publicCodes.has(code));
             if (unreadCodes.length > 0) {
                 verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
+            }
+        }
+        if (PRIVATE_SHEET_CLASSES.length > 0) {
+            // Every carried look on its own tallies (8e2, the 8e2 critic's
+            // item 1): its line skips against its own ceiling, its points
+            // behind a clip, the codes owed by name on its own jobs. A
+            // carried look with no ceiling of its own fails here.
+            const { faults, notes } = carriedTallyFaults({
+                carried: CARRIED.looks,
+                lineSkips: privateLineSkips,
+                clip: clipSeen,
+                clipCeiling: CLIP_SKIP_CEILING,
+                codesRead: codesReadByClass,
+                codesRequired: CODES_REQUIRED,
+            });
+            verdicts.push(...faults);
+            for (const note of notes) console.log(`  ${note}`);
+            if (faults.length === 0) {
+                const said = PRIVATE_SHEET_CLASSES.map((cls) =>
+                    ['mobile', 'desktop', 'canvas']
+                        .map((vp) => `${vp} ${privateLineSkips[cls]?.[vp]?.['clipped-away'] ?? 0}/${privateLineSkips[cls]?.[vp]?.['not-rendered'] ?? 0}`)
+                        .join(', ') +
+                    ' · points behind a clip ' +
+                    ['mobile', 'desktop', 'canvas']
+                        .map((vp) => `${vp} ${clipSeen[cls]?.[vp]?.skips ?? 0}/${(clipSeen[cls]?.[vp]?.skips ?? 0) + (clipSeen[cls]?.[vp]?.checks ?? 0)}`)
+                        .join(', '),
+                );
+                console.log(`  carried looks on their own tallies (a-carried-look-is-held-to-its-own-skip-ceilings): ${PRIVATE_SHEET_CLASSES.map((cls, i) => `${cls}: line skips ${said[i]}`).join('; ')}`);
             }
         }
         if (LOOKS === 'shipped') {
@@ -3022,10 +3083,19 @@ try {
     {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         const rev = gitRev();
+        // A run that carried private looks is its own kind of run (8e2, the
+        // 8e2 critic's item 7): its dump names them, never overwrites the
+        // public run's latest, and is never compared with it
+        // (`dumpKindOf`, `contrast-dump.mjs`).
+        const kind = dumpKindOf(LOOKS, PRIVATE_SHEET_CLASSES);
         const path = writeDump(
             {
                 meta: {
                     looks: LOOKS,
+                    kind,
+                    carried: PRIVATE_SHEET_CLASSES,
+                    selection: MEASURED_SELECTION === undefined ? null : CARRIED.line,
+                    privateCommit: CARRIED.commit ?? null,
                     rev: rev ?? null,
                     at: new Date().toISOString(),
                     loadavg: loadavg(),
@@ -3034,7 +3104,7 @@ try {
                 jobs: dumpJobs,
                 boxes: dumpBoxes,
             },
-            { looks: LOOKS, stamp, rev },
+            { looks: kind, stamp, rev },
         );
         console.log(`  contrast dump: ${dumpBoxes.length} boxes over ${dumpJobs.length} jobs → ${path}`);
     }

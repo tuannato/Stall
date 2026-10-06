@@ -45,6 +45,7 @@ import {
     measuredLooks,
     paintView,
     privateLooks,
+    recordView,
     shippedLooks,
     wornAllFlags,
     wornOf,
@@ -259,6 +260,21 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
 export let clipSkips = 0;
 export let clipChecks = 0;
 
+/**
+ * **The same two halves per look** (8e2, the 8e2 critic's item 1): one
+ * ratio over the whole page let the shipped looks satisfy the ceiling for a
+ * carried look that measured nothing — every point of one look behind a
+ * clip moved the phone's ratio from 8% to about 27%, under the 30% line. So
+ * every point is also counted under the class of the look the loop is
+ * measuring (`measuringClass`, set by the loop below), and the runner holds
+ * a carried look to the ceiling on its own points (`look-tallies.mjs`) while
+ * the public looks keep the ratio they always had.
+ */
+const clipByClass: Record<string, { skips: number; checks: number }> = {};
+/** The `t-*` class of the look the main loop is measuring now; `-` outside it. */
+let measuringClass = '-';
+const clipTallyOf = (cls: string): { skips: number; checks: number } => (clipByClass[cls] ??= { skips: 0, checks: 0 });
+
 type Clip = {
     rect: DOMRect;
     el: Element;
@@ -378,9 +394,11 @@ function coveredBy(node: Element): string | undefined {
             )
         ) {
             clipSkips += 1;
+            clipTallyOf(measuringClass).skips += 1;
             continue;
         }
         clipChecks += 1;
+        clipTallyOf(measuringClass).checks += 1;
         const hit = document.elementFromPoint(x, y);
         if (hit === null) {
             continue;
@@ -1784,6 +1802,8 @@ const SLIVER_ROLES = /^window-step-/;
 const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"]';
 let wallControlChecks = 0;
 const wallControlRoles: Record<string, number> = {};
+/** The same roles per look (8e2): a carried look owes every role on its own walls. */
+const wallControlRolesByClass: Record<string, Record<string, number>> = {};
 const wallSlivers = new Set<string>();
 
 /*
@@ -1930,6 +1950,8 @@ function wallCuts(screen: string, label: string): Failure[] {
             // Read whole: the only read the runner's coverage counts.
             wallControlChecks += 1;
             wallControlRoles[role] = (wallControlRoles[role] ?? 0) + 1;
+            const byLook = (wallControlRolesByClass[measuringClass] ??= {});
+            byLook[role] = (byLook[role] ?? 0) + 1;
         }
     }
     return out;
@@ -3481,6 +3503,7 @@ const codesPainted = new Set<string>();
 const wornClassesPainted = new Set<string>();
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
+        measuringClass = look.theme.sheetClass;
         for (const worn of variantsFor(screen, look)) {
             for (const row of worn) {
                 if (row.cls !== undefined) wornClassesPainted.add(row.cls);
@@ -3543,6 +3566,8 @@ for (const screen of measured) {
 }
 
 failures.push(...doorMiniFaults());
+// Out of the loop: no look is being measured.
+measuringClass = '-';
 
 /*
  * **The record road paints a locked look as the default**
@@ -3552,9 +3577,10 @@ failures.push(...doorMiniFaults());
  * paints no paid look from a record in step 8 — and the gate must be the
  * app's, untouched, while the harness walks around it. So on every pass
  * that measures `offers`, each paid look the build carries is painted once
- * the way the app would paint a record naming it — its own sheet ready on
- * the page, the worn set the app computes through the gate for a locked look
- * (none) — and must come out the default's class, wearing no class of the
+ * the way the app would paint a record naming it (`recordView`: its sheet
+ * as the loader holds it, every flag set, every token held, and the worn set
+ * the app writes through the gate — so a gate that leaked rows would show
+ * them) — and must come out the default's class, wearing no class of the
  * look's own and none of its rows, with the sign saying this page does not
  * show it (`THEME_NOT_UNLOCKED`). And the gate is asked directly, here
  * rather than only in a unit test (`harnessGateFaults`): licensed, the look
@@ -3575,11 +3601,10 @@ if (measured.includes('offers')) {
         const fail = (detail: string): void => {
             failures.push({ screen: 'offers', theme: `${look.label} (its record)`, check: RECORD_ROAD_CHECK, detail });
         };
-        renderStall(
-            root,
-            { ...SCREENS['offers']!, recordTheme: look.theme, recordFlags: 0xffff, worn: [], lookSheets: new Map([[look.id, 'ready']]) },
-            handlers,
-        );
+        // The record's view as the app writes it, through the gate
+        // (`recordView`): a gate that leaked the locked look's rows would
+        // put them on the stall, and the rows half below would fail.
+        renderStall(root, recordView(SCREENS['offers']!, look, 0xffff), handlers);
         const stall = root.querySelector('.stall:not(.deck-stall)');
         const classes = stall === null ? [] : [...stall.classList];
         const looks = classes.filter((cls) => cls.startsWith('t-'));
@@ -5434,6 +5459,8 @@ const verdict = {
     cspRefusals: cspRefusals(),
     clipSkips,
     clipChecks,
+    /* The same per look (8e2): what the runner holds a carried look to on its own points. */
+    clipByClass,
     screensWithQuote: [...withQuote],
     codesPainted: [...codesPainted].sort(),
     /*
@@ -5453,6 +5480,8 @@ const verdict = {
     wallControlChecks,
     statusLineChecks,
     wallControlRoles,
+    /* The same per look (8e2). */
+    wallControlRolesByClass,
     wallSlivers: [...wallSlivers].sort(),
     floorNamedChecks,
     outlineChecks,

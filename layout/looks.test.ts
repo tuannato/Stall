@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -34,6 +35,39 @@ function code(file: string): string {
     return readFileSync(join(LAYOUT, file), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^[ \t]*\/\/.*$/gm, '');
+}
+
+/** The view properties a look is composed onto a view by: the record road and the try-on. */
+const VIEW_LOOK_PROPS = new Set(['recordTheme', 'previewLook']);
+
+/**
+ * Every write of a view's look property in `source`, parsed — never a token
+ * match: an object literal's property or shorthand, and an assignment to a
+ * property access or a string-keyed element. Each as `<name> at <line>`.
+ */
+function viewLookWrites(source: string): string[] {
+    const file = ts.createSourceFile('harness.ts', source, ts.ScriptTarget.Latest, true);
+    const out: string[] = [];
+    const at = (node: ts.Node, name: string): void => {
+        out.push(`${name} at ${file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1}`);
+    };
+    const nameOf = (node: ts.Node): string | undefined => {
+        if (ts.isPropertyAccessExpression(node)) return node.name.text;
+        if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) return node.argumentExpression.text;
+        return undefined;
+    };
+    const visit = (node: ts.Node): void => {
+        if ((ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) && !ts.isComputedPropertyName(node.name)) {
+            const name = ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name) ? node.name.text : undefined;
+            if (name !== undefined && VIEW_LOOK_PROPS.has(name)) at(node, name);
+        } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+            const name = nameOf(node.left);
+            if (name !== undefined && VIEW_LOOK_PROPS.has(name)) at(node, name);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    return out;
 }
 
 /**
@@ -77,13 +111,10 @@ describe('the-harness-chooses-looks-in-one-place', () => {
         /\bwornForLook\(/,
         /\bLOOK_ROWS\b/,
         /\bpaintableLook\(/,
-        /\brecordTheme\s*:/g,
-        /\bpreviewLook\s*:/,
     ];
     /** A name a file may still use, and how many times: each with its reason (the docblock above). */
     const EXCUSED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
         'fixtures.ts': { [String(/\bSHIPPED_ATTACHMENTS\b/)]: 2 },
-        'probe.ts': { [String(/\brecordTheme\s*:/g)]: 1 },
     };
 
     it('no harness file but the resolver picks a look by id, or composes one onto a view', () => {
@@ -106,6 +137,36 @@ describe('the-harness-chooses-looks-in-one-place', () => {
             }
         }
         expect(offences, offences.join('\n')).toEqual([]);
+    });
+
+    /*
+     * A look composed onto a view is a property the view is written with —
+     * `recordTheme` (the record road) or `previewLook` (the try-on) — and a
+     * token match missed the shorthand (`{ ...base, recordTheme }`) and an
+     * assignment (the 8e2 critic's item 10). So every harness file but the
+     * resolver is parsed and every write of either name is found: an object
+     * literal's property, its shorthand, an assignment to a property access
+     * or to a string-keyed element. Red over each shape, planted below.
+     */
+    it('composes no record and no try-on onto a view outside the resolver, in any spelling', () => {
+        const files = readdirSync(LAYOUT).filter(
+            (name) => name.endsWith('.ts') && !name.endsWith('.test.ts') && !ALLOWED.has(name),
+        );
+        const offences = files.flatMap((file) =>
+            viewLookWrites(readFileSync(join(LAYOUT, file), 'utf8')).map((at) => `${file}: ${at}`),
+        );
+        expect(offences, offences.join('\n')).toEqual([]);
+        for (const planted of [
+            'const v = { ...base, recordTheme: look.theme };',
+            'const recordTheme = look.theme; const v = { ...base, recordTheme };',
+            'const v = { ...base, previewLook };',
+            'view.recordTheme = look.theme;',
+            "view['previewLook'] = tried;",
+        ]) {
+            expect(viewLookWrites(planted), planted).toHaveLength(1);
+        }
+        // A read is no write: the resolver's own reads and a comparison pass.
+        expect(viewLookWrites('const t = view.recordTheme; if (view.previewLook === undefined) {}')).toEqual([]);
     });
 
     it('resolves the shipped looks to their own rows, and the kit only once registered', () => {
@@ -260,7 +321,32 @@ describe('the-runner-expects-the-classes-it-derives', () => {
         }
         expect(statement('PRIVATE_SHEET_CLASSES')).toContain('CARRIED.looks.map((look) => look.cls)');
         expect(statement('EXPECTED_SHEET_CLASSES')).toContain('...PRIVATE_SHEET_CLASSES');
-        expect(statement('CARRIED')).toContain('await harnessLooks(SELECTION)');
+        expect(statement('CARRIED')).toContain('await harnessLooks(MEASURED_SELECTION)');
+    });
+});
+
+/**
+ * `the-default-probe-carries-the-tracked-fixture` (8e2, the 8e2 critic's
+ * item 2; STEP-8-PLAN v2: tests run on the tracked fixture always): with no
+ * selection the ordinary probe measures the tracked fixture, so every
+ * private-look rule has a subject on every default run — CI's on-demand
+ * layout job included, which runs `pnpm test:layout` as it stands — and an
+ * explicit selection replaces it; the kit's probe carries none. Read off the
+ * runner's own statements.
+ */
+describe('the-default-probe-carries-the-tracked-fixture', () => {
+    const runner = readFileSync(join(LAYOUT, '..', 'scripts/layout-check.mjs'), 'utf8');
+
+    it('selects the tracked fixture when the shell selects nothing, and a selection replaces it', () => {
+        const at = runner.indexOf('const MEASURED_SELECTION =');
+        expect(at).toBeGreaterThan(-1);
+        const statement = runner.slice(at, runner.indexOf(';', at));
+        expect(statement).toContain("LOOKS === 'workshop' ? undefined");
+        expect(statement).toContain("SELECTION ?? { target: 'preview', dir: FIXTURE_LOOKS_DIR }");
+        expect(runner).toContain("import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';");
+        const ci = readFileSync(join(LAYOUT, '..', '.github/workflows/ci.yml'), 'utf8');
+        expect(ci).toMatch(/\n  layout:[\s\S]*- run: pnpm test:layout\n/);
+        expect(ci).not.toMatch(/STALL_LOOKS_/);
     });
 });
 

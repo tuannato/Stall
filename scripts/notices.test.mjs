@@ -68,13 +68,13 @@ describe('the-notices-are-the-public-builds-under-a-selection', () => {
             faces: [],
         });
         const asset = (fileName, source) => ({ fileName, originalFileNames: [source] });
-        const face = 'tmp/stall-private-looks-abc/inkwash/art/inkwash-latin.woff2';
+        const face = 'tmp/stall-private-looks-abc/look/art/face-latin.woff2';
         const extra = {
             modules: [...selected.modules, { id: `${ROOT}/node_modules/.pnpm/x@1/node_modules/left-pad/index.js`, renderedLength: 10 }],
-            assets: [...selected.assets, asset('assets/inkwash-latin.woff2', face), asset('assets/stray.woff2', 'src/ui/fonts/stray.woff2')],
+            assets: [...selected.assets, asset('assets/face-latin.woff2', face), asset('assets/stray.woff2', 'src/ui/fonts/stray.woff2')],
         };
-        const { problems, faces } = selectedNoticesProblems({ publicInventory: inventory, selectedInventory: extra, lookFaces: ['inkwash-latin.woff2'] });
-        assert.deepEqual(faces, ['inkwash-latin.woff2']);
+        const { problems, faces } = selectedNoticesProblems({ publicInventory: inventory, selectedInventory: extra, lookFaces: ['face-latin.woff2'] });
+        assert.deepEqual(faces, ['face-latin.woff2']);
         assert.equal(problems.length, 2, problems.join('\n'));
         assert.match(problems[0], /left-pad, which the public build does not/);
         assert.match(problems[1], /a face no notice names: src\/ui\/fonts\/stray\.woff2/);
