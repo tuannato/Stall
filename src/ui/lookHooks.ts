@@ -25,9 +25,16 @@
  * for that reason. The tile's mark sits beside the token's initials, which
  * have their own span now, and the picture replaces the initials alone.
  *
- * What measures a mark that a look shows is step 8f2's
- * (`no-look-mark-paints-inside-a-protected-box`, STEP-8-PLAN §5): until it
- * lands, nothing in the probe sees one, and no look shows one.
+ * Inert is measured, not trusted: the probe's `no-shipped-look-shows-a-mark`
+ * reads every mark's computed display on every look this build does not
+ * carry as a private one, on every screen of every geometry pass, and
+ * `no-app-sheet-names-a-mark` refuses a selector that names a mark or picks
+ * a host's children by position (`layout/lookMarks.test.ts`). On the zoom
+ * the tile's mark is off whatever a look shows (`!important` in stall.css).
+ * What measures a mark a look SHOWS is step 8f2's
+ * (`no-look-mark-paints-inside-a-protected-box`, STEP-8-PLAN §5); the kit
+ * names no hook until the workshop README does
+ * (`the-kit-refuses-the-first-party-hooks`).
  *
  * **The name's ladder** (`applyNameTiers`). A look that bounds the seller's
  * name in a box of fixed size — a name set on its end in a column, say — has
@@ -91,19 +98,19 @@ export function nameRungs(name: HTMLElement): number {
 /**
  * Choose each sign name's rung under `root`, after the tree is laid out. Run
  * before the marquees are measured: a rung can move the column the rows
- * stand beside. Test: `the-name-climbs-the-looks-ladder-until-it-fits`.
+ * stand beside. A look with rungs costs up to `NAME_TIER_MAX` layouts per
+ * name per paint; one with none, a style read. Test:
+ * `the-name-climbs-the-looks-ladder-until-it-fits`.
  */
 export function applyNameTiers(root: ParentNode): void {
     for (const name of root.querySelectorAll<HTMLElement>('.stall-name')) {
-        const rungs = nameRungs(name);
-        if (rungs === 0) {
-            // A try-on away from a look with a ladder leaves no rung behind.
-            if (name.hasAttribute('data-name-tier')) {
-                name.removeAttribute('data-name-tier');
-            }
-            continue;
+        // Off first, then read: a look that states its rungs under a rung
+        // would otherwise be read under the last paint's (the 8f1 critic's
+        // item 6), and a try-on away from a look with a ladder leaves none.
+        if (name.hasAttribute('data-name-tier')) {
+            name.removeAttribute('data-name-tier');
         }
-        name.removeAttribute('data-name-tier');
+        const rungs = nameRungs(name);
         for (let tier = 1; tier <= rungs && !fits(name); tier += 1) {
             name.setAttribute('data-name-tier', String(tier));
         }

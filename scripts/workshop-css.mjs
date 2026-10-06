@@ -636,8 +636,25 @@ function lastPseudoElement(selector) {
 }
 
 /** Why one selector of a look sheet may not stand (G3's attributes, G2's pseudo-elements, G4's engine-gated ones). */
-function selectorProblems(selector) {
+/**
+ * The shared hooks a first-party look may dress (step 8f1,
+ * `src/ui/lookHooks.ts`) — the marks, by class or attribute, and the state
+ * attributes the hooks write — which the kit may not name until the
+ * workshop README does (the 8f1 critic's item 3): no fixture the kit's probe
+ * paints carries a CJK name or a name that climbs a rung, and no rule yet
+ * measures a mark shown, so a kit rule under any of them paints on a screen
+ * no pass measures. The `--name-rungs` declaration is refused beside them
+ * (`declarationProblems`). Test: `the-kit-refuses-the-first-party-hooks`.
+ */
+const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier)(?![\w-])/;
+
+function selectorProblems(selector, { kit = false } = {}) {
     const out = [];
+    if (kit && FIRST_PARTY_HOOK.test(selector)) {
+        out.push(
+            `"${echo(selector)}" names a first-party hook (a look's mark, data-script or data-name-tier): the kit names none until the workshop README does`,
+        );
+    }
     for (const inner of attributeBlocks(selector)) {
         const why = attributeProblem(inner);
         if (why !== undefined) out.push(why);
@@ -986,6 +1003,9 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (READ_PLAINLY.has(prop) && /(?<![\w-])var\s*\(/i.test(bare)) {
             out.push(`${shown} — write ${prop} plainly: a var() here carries a value past these rules`);
         }
+        if (!firstParty && prop === '--name-rungs') {
+            out.push(`${shown} — the name ladder is a first-party hook: the kit states no rungs until the workshop README does`);
+        }
         if (prop.startsWith('--') && word('text').test(keywords)) {
             out.push(`${shown} — a custom property holding "text" is how a background clipped to the text hides in a shorthand`);
         }
@@ -1248,7 +1268,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const selector of selectors) {
                     const escape = selectorEscape(selector, scope);
                     if (escape !== undefined) at(node.start, escape);
-                    for (const why of selectorProblems(selector)) at(node.start, why);
+                    for (const why of selectorProblems(selector, { kit })) at(node.start, why);
                 }
                 for (const why of declarationProblems(declarationsOf(node.body), selectors, { firstParty: !kit })) at(node.start, why);
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);

@@ -584,13 +584,15 @@ function excludedBy(row: ShippedAttachment, worn: Iterable<ShippedAttachment>): 
 }
 
 /**
- * The flags after a seller presses `bit` in the picker: pressed off when it
- * was on, otherwise on — and every other row in its slot, and every row on
- * the other side of an exclusion, off. That makes two rows in one place,
- * and two rows that exclude each other, unrepresentable at the place the
- * choice is made, which is a better answer than `wornFrom` resolving them
- * quietly after the record is signed. Bits naming no row of `rows` pass
- * through untouched (`publishableFlags`' reason). Test:
+ * The flags after a seller presses `bit` in the picker. Pressed on, it
+ * turns every other row in its slot, and every row on the other side of an
+ * exclusion, off — which makes two rows in one place, and two rows that
+ * exclude each other, unrepresentable at the place the choice is made, a
+ * better answer than `wornFrom` resolving them quietly after the record is
+ * signed. Pressed off, it takes its own place back to bare (every row in its
+ * slot, as the picker always has) and leaves a row it only excluded alone:
+ * turning one row off is not a choice about another place. Bits naming no
+ * row of `rows` pass through untouched (`publishableFlags`' reason). Test:
  * `a-row-that-excludes-slots-wins-by-its-bit`.
  */
 export function chooseAttachment(rows: readonly ShippedAttachment[], flags: number, bit: number): number {
@@ -601,7 +603,7 @@ export function chooseAttachment(rows: readonly ShippedAttachment[], flags: numb
     const wasOn = (flags & (1 << bit)) !== 0;
     let out = flags;
     for (const other of rows) {
-        if (other.slot === row.slot || excludedBy(row, [other])) {
+        if (other.slot === row.slot || (!wasOn && excludedBy(row, [other]))) {
             out &= ~(1 << other.bit);
         }
     }

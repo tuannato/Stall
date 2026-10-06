@@ -125,15 +125,22 @@ describe('no-look-mark-is-inside-a-money-node', () => {
     });
 });
 
-describe('no-shipped-look-shows-a-mark', () => {
+describe('no-app-sheet-names-a-mark', () => {
     /**
      * The marks are inert on Modern, Neo and Rural: `stall.css` hides them,
      * and no app sheet — the base, a screen's, a shipped look's — names one:
-     * a rule that did would show it on a look nobody measured with it
-     * (`pnpm looks:diff` is the browser half). A private look's sheet is the
-     * one that shows a mark, so it is not held to this. A shelf's first child
-     * is its mark, so no served sheet — a private look's included — counts
-     * the rows of `.items` by every child.
+     * a rule that did would show it on a look nobody measured with it. A
+     * private look's sheet is the one that shows a mark, so it is not held to
+     * this. The browser half is the probe's `no-shipped-look-shows-a-mark`,
+     * which reads every mark's computed display on every shipped look —
+     * a selector can reach a mark without naming it. This half refuses the
+     * structural selectors that would: a mark is the first child of
+     * `.items` and of `.item-ic`, and the last of `.item-a`, `.pay-x`,
+     * `.face-x` and `.bc-p`, so no served sheet — a private look's included
+     * — counts or picks children there by position or emptiness (the 8f1
+     * critic's item 2). Rows of a shelf are counted `:nth-child(… of .item)`
+     * — and with no `.item` compound beside it, since `of S` adds S's weight
+     * (`rural-rows-straighten-under-the-hand`).
      */
     const stall = SERVED.find((sheet) => sheet.path === 'src/ui/stall.css')!;
     const selectorsOf = (css: string): string[] =>
@@ -141,7 +148,7 @@ describe('no-shipped-look-shows-a-mark', () => {
 
     it('hides every mark in the base sheet, and keeps it off the zoom', () => {
         expect(stall.css).toMatch(/\n\[data-look-mark\] \{\n    display: none;\n\}/);
-        expect(stall.css).toMatch(/\n\.zoom-frame \.zoom-ic \[data-look-mark\] \{\n    display: none;\n\}/);
+        expect(stall.css).toMatch(/\n\.zoom-frame \.zoom-ic \[data-look-mark\] \{\n    display: none !important;\n\}/);
     });
 
     it('names no mark in any app sheet', () => {
@@ -156,17 +163,168 @@ describe('no-shipped-look-shows-a-mark', () => {
         }
     });
 
-    it('counts no shelf’s rows by every child, in any served sheet', () => {
+    it('counts and picks no child of a mark’s host by position or emptiness, in any served sheet', () => {
         let counted = 0;
         for (const sheet of SERVED) {
-            for (const selector of selectorsOf(sheet.css).filter((sel) => /\.items\b/.test(sel))) {
-                if (/:nth-(child|last-child)\(/.test(selector)) {
-                    expect(selector, `${sheet.path}: counts a shelf's rows by every child`).toMatch(/ of \.item\)/);
-                    counted += 1;
+            for (const selector of selectorsOf(sheet.css)) {
+                const at = `${sheet.path}: ${selector}`;
+                if (/\.items\b/.test(selector)) {
+                    if (/:nth-(child|last-child)\(/.test(selector)) {
+                        expect(selector, `${at} counts a shelf's rows by every child`).toMatch(/ of \.item\)/);
+                        counted += 1;
+                    }
+                    expect(selector, at).not.toMatch(/:(first-child|first-of-type|only-child|only-of-type|nth-of-type|empty)/);
                 }
-                expect(selector, `${sheet.path}: ${selector}`).not.toMatch(/:(first-child|first-of-type|only-child|nth-of-type)/);
+                if (/\.(item-a|pay-x|face-x|bc-p)(?![\w-])/.test(selector)) {
+                    expect(selector, at).not.toMatch(/:(last-child|nth-last-child|nth-last-of-type|last-of-type|only-child|only-of-type|empty)/);
+                }
+                if (/\.item-ic(?![\w-])/.test(selector)) {
+                    expect(selector, at).not.toMatch(/:(first-child|first-of-type|only-child|only-of-type|empty|nth-child|nth-of-type)/);
+                }
             }
         }
         expect(counted, "Rural's tilt is read").toBeGreaterThan(0);
+    });
+});
+
+/**
+ * The weight of a selector, (a, b, c) — Selectors 4: ids; classes,
+ * attributes and pseudo-classes; types and pseudo-elements. `:where()` is
+ * nothing, `:is()`, `:not()` and `:has()` their heaviest argument, and
+ * `:nth-child(An+B of S)` one pseudo-class plus S's heaviest.
+ */
+function weightOf(selector: string): [number, number, number] {
+    const w: [number, number, number] = [0, 0, 0];
+    const add = (v: [number, number, number]): void => {
+        w[0] += v[0];
+        w[1] += v[1];
+        w[2] += v[2];
+    };
+    const heaviest = (list: string): [number, number, number] =>
+        splitTop(list)
+            .map(weightOf)
+            .reduce((m, v) => (compare(v, m) > 0 ? v : m), [0, 0, 0] as [number, number, number]);
+    let i = 0;
+    const text = selector.trim();
+    const parens = (from: number): [string, number] => {
+        let depth = 0;
+        for (let j = from; j < text.length; j += 1) {
+            if (text[j] === '(') depth += 1;
+            else if (text[j] === ')' && --depth === 0) return [text.slice(from + 1, j), j + 1];
+        }
+        return [text.slice(from + 1), text.length];
+    };
+    while (i < text.length) {
+        const c = text[i]!;
+        if (c === '#') {
+            w[0] += 1;
+            i = ident(text, i + 1);
+        } else if (c === '.') {
+            w[1] += 1;
+            i = ident(text, i + 1);
+        } else if (c === '[') {
+            w[1] += 1;
+            i = text.indexOf(']', i) + 1;
+        } else if (c === ':' && text[i + 1] === ':') {
+            w[2] += 1;
+            i = ident(text, i + 2);
+            if (text[i] === '(') i = parens(i)[1];
+        } else if (c === ':') {
+            const end = ident(text, i + 1);
+            const name = text.slice(i + 1, end).toLowerCase();
+            i = end;
+            const arg = text[i] === '(' ? parens(i) : undefined;
+            if (arg !== undefined) i = arg[1];
+            if (name === 'where') continue;
+            if (name === 'before' || name === 'after') {
+                w[2] += 1;
+            } else if (name === 'is' || name === 'not' || name === 'has') {
+                add(heaviest(arg?.[0] ?? ''));
+            } else if (/^nth-(last-)?child$/.test(name) && / of /.test(arg?.[0] ?? '')) {
+                w[1] += 1;
+                add(heaviest(arg![0].slice(arg![0].indexOf(' of ') + 4)));
+            } else {
+                w[1] += 1;
+            }
+        } else if (/[a-zA-Z]/.test(c)) {
+            w[2] += 1;
+            i = ident(text, i);
+        } else {
+            i += 1;
+        }
+    }
+    return w;
+}
+
+function ident(text: string, from: number): number {
+    let i = from;
+    while (i < text.length && /[\w-]/.test(text[i]!)) i += 1;
+    return i;
+}
+
+function splitTop(list: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < list.length; i += 1) {
+        if (list[i] === '(') depth += 1;
+        else if (list[i] === ')') depth -= 1;
+        else if (list[i] === ',' && depth === 0) {
+            out.push(list.slice(start, i));
+            start = i + 1;
+        }
+    }
+    out.push(list.slice(start));
+    return out.map((part) => part.trim()).filter(Boolean);
+}
+
+function compare(a: readonly number[], b: readonly number[]): number {
+    return a[0]! - b[0]! || a[1]! - b[1]! || a[2]! - b[2]!;
+}
+
+describe('rural-rows-straighten-under-the-hand', () => {
+    /**
+     * Rural pins its rows a little crooked and straightens a row under the
+     * hand (`:hover`, `.open`) by a later rule of the same weight. A shelf's
+     * first child is its mark (step 8f1), so the tilt counts rows
+     * `:nth-child(… of .item)` — and `of S` adds S's weight: written beside
+     * a `.item` compound the tilt was (0,5,0) and outranked the straightening
+     * (0,4,0), so a hovered row lifted and stayed crooked (the 8f1 critic's
+     * item 1; `looks:diff` shoots at rest and could not see it). Every rule
+     * that tilts a row must lose to every rule that straightens one: lighter,
+     * or as heavy and earlier. Red on the (0,5,0) shape.
+     */
+    it('weighs selectors as Selectors 4 does', () => {
+        expect(weightOf('.t-rural .items .item:hover')).toEqual([0, 4, 0]);
+        expect(weightOf('.t-rural .items .item:nth-child(3n + 1)')).toEqual([0, 4, 0]);
+        expect(weightOf('.t-rural .items .item:nth-child(3n + 1 of .item)')).toEqual([0, 5, 0]);
+        expect(weightOf('.t-rural .items :nth-child(3n + 1 of .item)')).toEqual([0, 4, 0]);
+        expect(weightOf('.t-neo header.stall-head::before')).toEqual([0, 2, 2]);
+        expect(weightOf(':where(.a) .b:is(#x, .y)')).toEqual([1, 1, 0]);
+        expect(weightOf('.a:not(.b, .c .d)')).toEqual([0, 3, 0]);
+    });
+
+    it('lets every straightening rule outrank every tilt, on the served Rural sheet', () => {
+        const rural = SERVED.find((sheet) => sheet.path === 'src/ui/theme-rural.css')!;
+        const css = rural.css.replace(/\/\*[\s\S]*?\*\//g, '');
+        const tilts: { selector: string; at: number }[] = [];
+        const straights: { selector: string; at: number }[] = [];
+        for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            const rotate = /(?:^|;)\s*rotate\s*:\s*([^;]+)/.exec(m[2]!)?.[1]?.trim();
+            if (rotate === undefined) continue;
+            for (const selector of splitTop(m[1]!.trim())) {
+                if (!/\.items\b/.test(selector)) continue;
+                if (/:nth-(last-)?child\(/.test(selector) && rotate !== '0deg') tilts.push({ selector, at: m.index! });
+                if (/:hover|\.open\b/.test(selector) && rotate === '0deg') straights.push({ selector, at: m.index! });
+            }
+        }
+        expect(tilts.length, 'the tilts were read').toBeGreaterThanOrEqual(2);
+        expect(straights.length, 'the straightening was read').toBeGreaterThanOrEqual(2);
+        for (const tilt of tilts) {
+            for (const straight of straights) {
+                const order = compare(weightOf(straight.selector), weightOf(tilt.selector));
+                expect(order > 0 || (order === 0 && straight.at > tilt.at), `${straight.selector} outranks ${tilt.selector}`).toBe(true);
+            }
+        }
     });
 });

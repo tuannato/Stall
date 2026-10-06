@@ -60,6 +60,9 @@
  * - **`no-word-is-clipped-by-a-file`** asks, on the phone and desk passes,
  *   every element with words of its own whether it or an ancestor is masked
  *   or clipped by a file.
+ * - **`no-shipped-look-shows-a-mark`** reads, on every pass, every mark a
+ *   look this build does not carry as a private one painted (`markChecksByClass`,
+ *   per class of the pass's `sheetClasses`): each computes `display: none`.
  * - **`a-look-is-measured-with-its-sheet`** reads, on every pass, the name
  *   each look's sheet gives a painted stall (`sheetedClasses`: every look the
  *   run measures but the sheetless skeleton) — a look this pass painted and
@@ -113,6 +116,15 @@ export function probeCoverageGaps(
     for (const cls of sheetedClasses) {
         if (!sheetsRead.has(cls)) {
             gaps.push(`a-look-is-measured-with-its-sheet read no sheet's name on a ${cls} stall`);
+        }
+    }
+    // Every look a pass painted that is not a private look's owes a mark
+    // read hidden (step 8f1 after its critic, item 2): a pass that read no
+    // mark on a look certified nothing about its marks.
+    const marks = report.markChecksByClass ?? {};
+    for (const cls of (report.sheetClasses ?? []).filter((c) => !privateClasses.includes(c))) {
+        if (!((marks[cls] ?? 0) > 0)) {
+            gaps.push(`no-shipped-look-shows-a-mark read no mark on a ${cls} stall`);
         }
     }
     if (WALL_PASSES.has(pass)) {
@@ -260,8 +272,19 @@ export function probeCoverageLine(pass, report) {
     // Text under 11px that no reader is given (aria-hidden) is reported,
     // never failed — on every pass that paints some, not the page ones only.
     const hiddenSmall = (report.smallText ?? []).length === 0 ? '' : ` · under 11px, aria-hidden: ${report.smallText.join('; ')}`;
+    // Marks read hidden, per look (`no-shipped-look-shows-a-mark`), on every
+    // pass whose page reported them.
+    const marks =
+        report.markChecksByClass === undefined
+            ? ''
+            : ` · marks read hidden: ${
+                  Object.entries(report.markChecksByClass)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([cls, n]) => `${cls} ${n}`)
+                      .join(', ') || 'none'
+              }`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
@@ -278,7 +301,7 @@ export function probeCoverageLine(pass, report) {
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
     if (!PAGE_PASSES.has(pass)) {
-        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || hiddenSmall.replace(/^ · /, '')]
+        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || (hiddenSmall + marks).replace(/^ · /, '')]
             .filter(Boolean)
             .join(' · ');
     }
@@ -286,6 +309,7 @@ export function probeCoverageLine(pass, report) {
         `unbuyable labels read: ${read || 'none'}` +
         skipped +
         ` · rows read: ${(report.rowSizeClasses ?? []).join(', ') || 'none'}` +
+        marks +
         ` · door minis: ${(report.doorMiniClasses ?? []).join(', ') || 'none'}` +
         ((report.recordRoadChecks ?? 0) === 0 ? '' : ` · locked records painted as the default: ${report.recordRoadChecks}`) +
         ` · small text read: ${report.floorNamedChecks ?? 0}` +

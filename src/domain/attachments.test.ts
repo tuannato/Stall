@@ -573,6 +573,10 @@ describe('a-row-that-excludes-slots-wins-by-its-bit', () => {
         expect(flags).toBe(bits(2, 3));
         flags = chooseAttachment(rows, flags, 2);
         expect(flags).toBe(bits(3));
+        // Pressed off, a row leaves alone a row it only excluded: a record
+        // carrying both sides keeps the other one.
+        expect(chooseAttachment(rows, bits(0, 6), 6)).toBe(bits(0));
+        expect(chooseAttachment(rows, bits(0, 6), 0)).toBe(bits(6));
         // A bit naming no row of the look passes through, and changes nothing.
         expect(chooseAttachment(rows, bits(9, 3), 12)).toBe(bits(9, 3));
         expect(chooseAttachment(rows, bits(9), 0)).toBe(bits(9, 0));

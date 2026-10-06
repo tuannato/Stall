@@ -669,12 +669,16 @@
    The probe's contrast pad already covers text in transformed ancestors.
    Counted `of .item`: a shelf's first child is its mark (step 8f1,
    `lookHooks.ts`), hidden here, and a count of every child would tilt
-   each row the other way. */
-.t-rural .items .item:nth-child(3n + 1 of .item) {
+   each row the other way. With no `.item` compound beside it: `of S`
+   adds S's weight, so `.item:nth-child(… of .item)` is (0,5,0) and beat
+   the straightening rule below, (0,4,0) (the 8f1 critic's item 1);
+   this is (0,4,0), and the rule after it wins
+   (`rural-rows-straighten-under-the-hand`). */
+.t-rural .items :nth-child(3n + 1 of .item) {
     rotate: -0.6deg;
 }
 
-.t-rural .items .item:nth-child(3n + 2 of .item) {
+.t-rural .items :nth-child(3n + 2 of .item) {
     rotate: 0.5deg;
 }
 

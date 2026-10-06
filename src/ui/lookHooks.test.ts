@@ -9,6 +9,7 @@ import { NAME_RUNGS_PROPERTY, NAME_TIER_MAX, applyNameTiers, lookMark, nameRungs
 
 afterEach(() => {
     setNameTierFits(undefined);
+    document.head.querySelectorAll('style[data-test]').forEach((node) => node.remove());
     document.body.replaceChildren();
 });
 
@@ -75,6 +76,22 @@ describe('the-name-climbs-the-looks-ladder-until-it-fits', () => {
         setNameTierFits(fitsFrom(1));
         applyNameTiers(document);
         expect(name.getAttribute('data-name-tier')).toBe('1');
+    });
+
+    it('reads the rung count with no rung on, so a look that restates it under a rung cannot flip it', () => {
+        // The look states its rungs on the name and, under its last rung,
+        // none: read under the rung the last paint left, the ladder would be
+        // gone on every other paint (the 8f1 critic's item 6).
+        const style = document.createElement('style');
+        style.setAttribute('data-test', '');
+        style.textContent = '.stall-name { --name-rungs: 2; } .stall-name[data-name-tier="2"] { --name-rungs: 0; }';
+        document.head.append(style);
+        const name = named();
+        setNameTierFits(() => false);
+        for (let paint = 0; paint < 3; paint += 1) {
+            applyNameTiers(document);
+            expect(name.getAttribute('data-name-tier'), `paint ${paint}`).toBe('2');
+        }
     });
 
     it('reads a whole number of rungs up to the most a look may have, and nothing else', () => {

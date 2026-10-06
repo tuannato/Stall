@@ -2984,15 +2984,24 @@ textarea.paste-in {
     clip-path: none;
     /* A look that masks its tiles (step 8f1) would cut the seller's
        picture to that shape here too: the mask is the shelf's framing,
-       like the radius. */
-    -webkit-mask: none;
-    mask: none;
+       like the radius. `!important`, the base sheet's second use after
+       `[hidden]`, for one reason: a worn-only look's sheet lands after this
+       one, so a look rule of the same weight — `.t-x .items .item-ic`,
+       (0,3,0), the natural way to scope a tile's shape to the rows — wins
+       on source order (the 8f1 critic's item 4, the 2026-09-22 incident's
+       mechanism one class higher), and the look rules refuse `!important`
+       in a look sheet (G4), so nothing a look writes can beat this.
+       `the-base-sheet-says-important-only-where-a-look-must-never-win`. */
+    -webkit-mask: none !important;
+    mask: none !important;
     font-size: 64px;
 }
 
-/* The tile's own mark (step 8f1) is shelf framing too: never on the zoom. */
+/* The tile's own mark (step 8f1) is shelf framing too: never on the zoom,
+   whatever a look shows on its rows — `!important` for the mask's reason
+   above. */
 .zoom-frame .zoom-ic [data-look-mark] {
-    display: none;
+    display: none !important;
 }
 
 .zoom-frame .zoom-ic.item-ic img {

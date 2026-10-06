@@ -7954,6 +7954,16 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 applyNameTiers(behind);
                 if (sheet !== undefined) {
                     applyMarquees(behind, ROW_MARQUEE);
+                    // A worn-only look may bring its own face, which lands
+                    // after this: the ladder and the lines are measured again
+                    // then, as both paint paths do (the 8f1 critic's item 6).
+                    remeasureWhenFontsReady(
+                        behind,
+                        () => press === lookPress && anchor.isConnected,
+                        ROW_MARQUEE,
+                        undefined,
+                        applyNameTiers,
+                    );
                 }
             }
         };
@@ -8256,6 +8266,40 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
         if (rows.length === 0) {
             return;
         }
+        /*
+         * What this stall can do about a row, said on the row it is about.
+         * `undefined` is the read that did not answer, which is our own fact
+         * and not a claim about the seller (§4). A row the flags turn on
+         * that would not paint — a lower bit holds its place, or excludes it
+         * (a record composed elsewhere can carry both sides) — says so
+         * first, so the picker never shows as worn a row that is not
+         * (`a-row-that-excludes-slots-is-worn-and-picked-by-its-bit`). The
+         * bit stays set: a republish never strips what the seller signed.
+         */
+        const rowState = (row: ShippedAttachment): string => {
+            if ((flags & (1 << row.bit)) !== 0) {
+                const wearing = wornForLook(themeId, flags);
+                if (!wearing.includes(row)) {
+                    const beside = wearing.find(
+                        (other) =>
+                            other.slot === row.slot ||
+                            other.excludes?.includes(row.slot) === true ||
+                            row.excludes?.includes(other.slot) === true,
+                    );
+                    if (beside !== undefined) {
+                        return copy.decorRowNotWorn(beside.label);
+                    }
+                }
+            }
+            const held = view.heldTokens;
+            return row.tokenId === undefined
+                ? copy.DECOR_ROW_UNMINTED
+                : held === undefined
+                  ? copy.DECOR_ROW_UNKNOWN
+                  : held.has(row.tokenId)
+                    ? copy.DECOR_ROW_HELD
+                    : copy.DECOR_ROW_NOT_HELD;
+        };
         decorWrap.append(el('p', 'fine', copy.DECOR_LEDE));
         for (const slot of [...new Set(rows.map((r) => r.slot))]) {
             /*
@@ -8277,7 +8321,8 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             list.setAttribute('role', 'group');
             list.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${here[0]!.place}`);
             // Every place's ticks, not only this one's: a row that excludes
-            // another place's rows turns them off too (`chooseAttachment`).
+            // another place's rows turns them off too (`chooseAttachment`) —
+            // and every row's state line, since a set row may not paint.
             const paintTicks = (): void => {
                 for (const tick of decorWrap.querySelectorAll('[data-bit]')) {
                     const bit = Number(tick.getAttribute('data-bit'));
@@ -8285,6 +8330,12 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                         'aria-pressed',
                         (flags & (1 << bit)) !== 0 ? 'true' : 'false',
                     );
+                }
+                for (const other of rows) {
+                    const line = decorWrap.querySelector(`[data-role="decor-state-${other.slot}-${other.bit}"]`);
+                    if (line !== null) {
+                        line.textContent = rowState(other);
+                    }
                 }
             };
             for (const row of here) {
@@ -8323,19 +8374,8 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                     refresh();
                 });
                 line.append(tick);
-                // What this stall can do about it, said on the row it is
-                // about. `undefined` is the read that did not answer, which
-                // is our own fact and not a claim about the seller (§4).
                 const held = view.heldTokens;
-                const state =
-                    row.tokenId === undefined
-                        ? copy.DECOR_ROW_UNMINTED
-                        : held === undefined
-                          ? copy.DECOR_ROW_UNKNOWN
-                          : held.has(row.tokenId)
-                            ? copy.DECOR_ROW_HELD
-                            : copy.DECOR_ROW_NOT_HELD;
-                const why = el('span', 'fine dec-state', state);
+                const why = el('span', 'fine dec-state', rowState(row));
                 why.setAttribute('data-role', `decor-state-${slot}-${row.bit}`);
                 line.append(why);
                 // The way to get one, on the row that wants it: the shop's

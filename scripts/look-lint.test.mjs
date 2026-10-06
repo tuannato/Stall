@@ -331,6 +331,38 @@ describe('a-legacy-mask-composite-is-the-same-value', () => {
     });
 });
 
+describe('the-kit-refuses-the-first-party-hooks', () => {
+    /**
+     * Step 8f1's hooks (the marks, `data-script`, `data-name-tier`,
+     * `--name-rungs`) are a first-party look's (the 8f1 critic's item 3):
+     * no fixture the kit's probe paints carries a CJK name or a name that
+     * climbs a rung, and nothing measures a mark shown, so the kit refuses
+     * them until the workshop README names them. A look sheet takes them.
+     * Red: `selectorProblems` without its `kit` half.
+     */
+    const HOOKS = [
+        '.t-neo .stall-name[data-script="cjk"] { letter-spacing: 0.2em; }',
+        '.t-neo .stall-name[data-name-tier="3"] { font-size: 20px; }',
+        '.t-neo .stall-name { --name-rungs: 3; }',
+        '.t-neo .mark-figure { display: block; }',
+        '.t-neo .item-ic .mark-tile { display: block; }',
+        '.t-neo .items > .look-mark { display: block; }',
+    ];
+    // By attribute a mark is matched by no look sheet at all: `data-look-mark`
+    // is on neither state list, so a look dresses a mark by its class.
+
+    it('takes each in a look sheet', () => {
+        for (const rule of HOOKS) accepts(rule);
+    });
+
+    it('refuses each in the kit', () => {
+        for (const rule of HOOKS) {
+            const kit = lintSheet(plantedKit(rule));
+            assert.ok(kit.some((p) => /first-party hook/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ') || '(no problem)'}`);
+        }
+    });
+});
+
 describe('a-look-never-hands-a-link-its-browser-colour', () => {
     /**
      * The 8e1 critic's item 10: `color: revert` (or `revert-layer`, or

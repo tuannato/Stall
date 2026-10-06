@@ -66,17 +66,44 @@ describe('the-name-ladder-runs-after-every-paint', () => {
 
 describe('the-zoom-takes-off-a-looks-mask', () => {
     /**
-     * A look that masks its tiles would cut the seller's
-     * picture to that shape on the zoom too — `.zoom-ic` IS `.item-ic`. The
-     * reset is (0,3,0), out-ranking every look's `.t-* .item-ic`, and takes
-     * the mask off beside the radius and the clip; the tile's mark stays off
-     * the zoom. The probe's reading of the computed mask is step 8f2's.
+     * A look that masks its tiles would cut the seller's picture to that
+     * shape on the zoom too — `.zoom-ic` IS `.item-ic`. The reset takes the
+     * mask off beside the radius and the clip, and the tile's mark stays off
+     * the zoom; both are `!important`, because a worn-only sheet lands after
+     * this one and a (0,3,0) look rule would win on source order (the 8f1
+     * critic's item 4). The probe's reading of the computed mask is step
+     * 8f2's.
      */
-    it('resets the mask both ways at (0,3,0), with the rest of the shelf’s framing', () => {
+    it('resets the mask both ways, important, with the rest of the shelf’s framing', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8');
         const block = /\n\.zoom-frame \.zoom-ic\.item-ic \{([^}]+)\}/.exec(css)?.[1] ?? '';
-        for (const decl of ['border-radius: 0;', 'clip-path: none;', '-webkit-mask: none;', 'mask: none;']) {
+        for (const decl of ['border-radius: 0;', 'clip-path: none;', '-webkit-mask: none !important;', 'mask: none !important;']) {
             expect(block, decl).toContain(decl);
         }
+        expect(css).toMatch(/\n\.zoom-frame \.zoom-ic \[data-look-mark\] \{\n    display: none !important;\n\}/);
+    });
+});
+
+describe('the-base-sheet-says-important-only-where-a-look-must-never-win', () => {
+    /**
+     * `!important` in stall.css is the one way past a look rule of equal
+     * weight in a worn-only sheet that lands later, and the look rules refuse
+     * it in a look sheet (G4) — so it is kept to the places a look must never
+     * win: `hidden`, and the zoom's reset of a tile's framing.
+     */
+    it('lists every important declaration in the base sheet, each under a selector named here', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const found: string[] = [];
+        for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            for (const decl of m[2]!.split(';')) {
+                if (/!\s*important/i.test(decl)) found.push(`${m[1]!.trim()} { ${decl.trim()} }`);
+            }
+        }
+        expect(found).toEqual([
+            '[hidden] { display: none !important }',
+            '.zoom-frame .zoom-ic.item-ic { -webkit-mask: none !important }',
+            '.zoom-frame .zoom-ic.item-ic { mask: none !important }',
+            '.zoom-frame .zoom-ic [data-look-mark] { display: none !important }',
+        ]);
     });
 });

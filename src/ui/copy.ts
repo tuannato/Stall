@@ -124,6 +124,13 @@ export const DECOR_ROW_UNKNOWN = 'Holding not known';
 export const DECOR_ROW_UNMINTED = 'Not on sale yet';
 export const DECOR_ROW_BUY = 'Buy it';
 /**
+ * A row the record turns on that does not paint, because a row of a lower
+ * bit holds its place or excludes it (step 8f1 after its critic, item 9).
+ * The bit stays set — a republish never strips what the seller signed —
+ * and the row says so instead of reading as worn.
+ */
+export const decorRowNotWorn = (beside: string): string => `On, but not worn with ${beside}`;
+/**
  * The footer credit: the catalogue's own billboard, in our words.
  *
  * Kept as a whole sentence for anything that wants one string, and split into
