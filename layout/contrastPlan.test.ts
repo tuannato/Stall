@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CONTRAST_VIEWPORTS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastPlan, type ContrastJob } from './contrastPlan';
+import { CONTRAST_VIEWPORTS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
@@ -44,6 +44,41 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         // once, and the horizon alone was a combination nothing read.
         const solo = jobs.filter((j) => j.flags !== 0 && j.flags !== WORN_ALL && j.tide === undefined);
         expect(solo.map((j) => j.key).sort()).toEqual(['desktop/offers/2/4', 'mobile/offers/2/4']);
+    });
+
+    it('owes the rain and the horizon at their worst on Neo’s named jobs, pinned by value', () => {
+        // What the runner holds the walk to (`__contrastOwed`), derived from
+        // the rows a look carries; on the shipped run, Neo's — the list the
+        // runner kept by hand until 2026-10-06, so a job that left the plan
+        // or a fixture that stopped wearing the rain fails by name.
+        const owed = contrastOwed(looks);
+        expect(owed.rain).toEqual([
+            ...['mobile', 'desktop'].flatMap((viewport) =>
+                [
+                    'activity',
+                    'plugin-missing',
+                    'empty',
+                    'quotes-failed',
+                    'nothing-quoted',
+                    'quotes-truncated',
+                    'first-stall',
+                    'sparse-pasted',
+                    'item-listing',
+                    'item-quote',
+                ].map((screen) => `${viewport}/${screen}/2/65535`),
+            ),
+            'desktop/shop-window-cycle/2/65535',
+        ]);
+        expect(owed.horizon).toEqual([
+            'mobile/offers/2/4',
+            'desktop/offers/2/4',
+            'mobile/offers/2/65535',
+            'desktop/offers/2/65535',
+            'canvas/shop-window-wall/2/65535',
+        ]);
+        // Every owed job is a job the plan does.
+        const keys = new Set(jobs.map((job) => job.key));
+        expect([...owed.rain, ...owed.horizon].filter((key) => !keys.has(key))).toEqual([]);
     });
 
     it('walks the runner’s own viewports', () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 const full = {
@@ -25,7 +25,7 @@ const full = {
     moneyChecks: 300,
     haloChecks: 30,
     fileClipChecks: 5000,
-    atRestSetAside: { 'the rain': 120, 'Neo’s scanlines': 120 },
+    atRestSetAside: { 'the rain': 120, 'the backdrop’s scanlines': 120 },
     buntingChecks: 40,
     smallText: ['t-neo span.sm-cap 9.5px (aria-hidden)'],
 };
@@ -95,6 +95,24 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         assert.deepEqual(probeCoverageGaps('canvas', { ...full, outlineChecks: 0 }, { shippedClasses: SHIPPED }), []);
     });
 
+    it('owes the rain’s outline rules and the bunting’s sweep wherever a look wore them, whatever its class', () => {
+        // The kit's Neo starter is Neo's rows under `t-workshop`: no shipped
+        // class is measured, and what the pass wore is what it owes.
+        const kit = { unbuyableChecks: { row: 1, face: 1, 'wall-browse': 1 }, skipChecks: { 'wall-cycle': 1 }, floorNamedChecks: 40, moneyChecks: 20, haloChecks: 2, fileClipChecks: 90 };
+        const neoKit = { ...kit, wornClasses: ['att-aurora', 'att-horizon', 'att-hum', 'att-rainfall'] };
+        assert.deepEqual(probeCoverageGaps('mobile', neoKit), [
+            'an-outline-where-the-text-has-its-own-ground read no outlined line',
+            'an-outline-that-shows-at-rest read no rain-wearing root',
+        ]);
+        assert.deepEqual(probeCoverageGaps('mobile', { ...neoKit, outlineChecks: 9, atRestSetAside: { 'the rain': 9 } }), []);
+        assert.deepEqual(probeCoverageGaps('desktop', { ...kit, wornClasses: ['att-bunting'] }), [
+            'the-bunting-never-swings-into-the-ornament-label swept no bunting',
+        ]);
+        assert.deepEqual(probeCoverageGaps('desktop', { ...kit, wornClasses: ['att-bunting'], buntingChecks: 3 }), []);
+        // Worn on the canvas, owed on the page passes alone, as for Neo.
+        assert.deepEqual(probeCoverageGaps('canvas', { skipChecks: { 'stream-card': 1, 'stream-ticker': 1 }, wallControlRoles: full.wallControlRoles, statusLineChecks: 3, wornClasses: ['att-rainfall', 'att-bunting'] }), []);
+    });
+
     it('asks the wall only of the desk, the stream only of the canvas, and nothing of the other passes', () => {
         const phoneOnly = { ...full, unbuyableChecks: { row: 1, face: 1 }, skipChecks: {} };
         assert.deepEqual(probeCoverageGaps('desktop', { ...full, floorNamedChecks: 0 }, { shippedClasses: SHIPPED }), [
@@ -138,7 +156,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         assert.equal(
             probeCoverageLine('desktop', full),
-            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: Neo’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
+            'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
         );
         const quiet = { ...full, smallText: [] };
         assert.equal(
@@ -233,5 +251,30 @@ describe('no-word-is-clipped-by-a-file', () => {
         }
         const canvas = probeCoverageGaps('canvas', { ...full, fileClipChecks: 0 }, { shippedClasses: SHIPPED });
         assert.ok(!canvas.some((g) => g.startsWith('no-word-is-clipped-by-a-file')), canvas.join('; '));
+    });
+});
+
+describe('owed-follows-what-a-pass-wore', () => {
+    it('holds when what the passes wore is owed, and when nothing that is owed by name was worn', () => {
+        assert.deepEqual(owedFaults({ rain: ['mobile/empty/255/65535'], horizon: ['mobile/offers/255/4'] }, ['att-aurora', 'att-horizon', 'att-rainfall']), []);
+        assert.deepEqual(owedFaults({ rain: [], horizon: [] }, ['att-awning', 'att-pinstripe']), []);
+        assert.deepEqual(owedFaults({ rain: [], horizon: [] }, []), []);
+    });
+
+    it('fails an answer that is not two lists', () => {
+        const said = ['owed-follows-what-a-pass-wore: the page answered no rain list and horizon list (__contrastOwed)'];
+        for (const answer of [undefined, null, {}, { rain: [] }, { horizon: [] }, { rain: 'mobile/empty/2/65535', horizon: [] }, []]) {
+            assert.deepEqual(owedFaults(answer, ['att-rainfall']), said, JSON.stringify(answer));
+            assert.deepEqual(owedFaults(answer, []), said, JSON.stringify(answer));
+        }
+    });
+
+    it('fails a decoration a pass wore that no job owes', () => {
+        assert.deepEqual(owedFaults({ rain: [], horizon: ['mobile/offers/255/4'] }, ['att-rainfall', 'att-horizon']), [
+            'owed-follows-what-a-pass-wore: a pass wore att-rainfall and the page owes its rain on no contrast job (__contrastOwed)',
+        ]);
+        assert.deepEqual(owedFaults({ rain: ['x'], horizon: [] }, ['att-rainfall', 'att-horizon']), [
+            'owed-follows-what-a-pass-wore: a pass wore att-horizon and the page owes its horizon on no contrast job (__contrastOwed)',
+        ]);
     });
 });

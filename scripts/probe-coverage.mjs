@@ -25,18 +25,22 @@
  *   counts as nothing read. A "+N more" read whole is also the
  *   `a-payment-list-that-scrolls-says-how-many-lines-it-hides` rule
  *   comparing a nonzero count.
- * - **`an-outline-where-the-text-has-its-own-ground`** reads the lines Neo's
- *   rain outlines, on the phone and desk passes wherever Neo is measured.
+ * - **`an-outline-where-the-text-has-its-own-ground`** reads the lines the
+ *   rain outlines, on the phone and desk passes wherever Neo is measured or
+ *   any look wore the rain (`wornClasses`: the kit's Neo starter as much as
+ *   Neo).
  * - **`the-money-set-is-every-protected-contrast-target`** runs on every
  *   geometry pass; the phone and desk passes owe nodes asked (a canvas or
  *   wall pass may paint none of one kind, so it owes nothing here).
  * - **`an-outline-that-shows-at-rest`** reads the rain-wearing root's
  *   layers by what they are, on the phone and desk passes wherever Neo is
- *   measured: the rain is set aside there by name, or no root was read.
+ *   measured or any look wore the rain: the rain is set aside there by
+ *   name, or no root was read.
  * - **`nothing-in-the-body-reaches-the-status-line`** asks the wall's body
  *   on the three wall passes.
  * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
- *   bunting on the phone and desk passes wherever Rural is measured.
+ *   bunting on the phone and desk passes wherever Rural is measured or any
+ *   look wore the bunting.
  * - **`a-halo-never-reaches-a-neighbours-text`** runs on every geometry
  *   pass; the phone and desk passes owe halos asked (the sticky sheet
  *   head's slab among them).
@@ -137,20 +141,26 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
     if (!((report.floorNamedChecks ?? 0) > 0)) {
         gaps.push('small-text-is-at-least-11px read no named small-text node');
     }
-    // Rural's bunting sways in its ornament strip; a pass that measured
-    // Rural and swept no row swept none of them (`movingDecor.ts`).
-    if (shippedClasses.includes('t-rural') && !((report.buntingChecks ?? 0) > 0)) {
+    // What a pass owes follows what it wore (`wornClasses`), and the shipped
+    // run's own classes besides, which the runner states rather than asks
+    // of the page: a look that copies Neo's rows under another class (the
+    // kit's starter) owes what Neo owes.
+    const wore = new Set(report.wornClasses ?? []);
+    // Rural's bunting sways in its ornament strip; a pass that wore it and
+    // swept no row swept none of them (`movingDecor.ts`).
+    if ((shippedClasses.includes('t-rural') || wore.has('att-bunting')) && !((report.buntingChecks ?? 0) > 0)) {
         gaps.push('the-bunting-never-swings-into-the-ornament-label swept no bunting');
     }
-    // Neo's rain outlines every line on its bare ground, so a pass that
-    // measured Neo and read no outline read none of them.
-    if (shippedClasses.includes('t-neo') && !((report.outlineChecks ?? 0) > 0)) {
+    // The rain outlines every line on its bare ground, so a pass that wore
+    // it and read no outline read none of them.
+    const rain = shippedClasses.includes('t-neo') || wore.has('att-rainfall');
+    if (rain && !((report.outlineChecks ?? 0) > 0)) {
         gaps.push('an-outline-where-the-text-has-its-own-ground read no outlined line');
     }
     // The at-rest rule reads the rain-wearing root's layers by what they
-    // are: a pass that measured Neo and set the rain aside nowhere read no
-    // root at all (`a-new-root-layer-is-not-exempt-by-position`).
-    if (shippedClasses.includes('t-neo') && !(((report.atRestSetAside ?? {})['the rain'] ?? 0) > 0)) {
+    // are: a pass that wore the rain and set it aside nowhere read no root
+    // at all (`a-new-root-layer-is-not-exempt-by-position`).
+    if (rain && !(((report.atRestSetAside ?? {})['the rain'] ?? 0) > 0)) {
         gaps.push('an-outline-that-shows-at-rest read no rain-wearing root');
     }
     const rows = new Set(report.rowSizeClasses ?? []);
@@ -172,6 +182,36 @@ export function probeCoverageGaps(pass, report, { shippedClasses = [], skeleton 
         }
     }
     return gaps;
+}
+
+/**
+ * The decorations whose worst the contrast pass owes by name, by the class a
+ * pass wears them by and the list in the page's owed jobs that names them
+ * (`contrastOwed` in `layout/contrastPlan.ts`, `window.__contrastOwed()`).
+ */
+const OWED_BY_CLASS = [
+    ['att-rainfall', 'rain'],
+    ['att-horizon', 'horizon'],
+];
+
+/**
+ * **`owed-follows-what-a-pass-wore`** (the critic on `neo-starter-probe`,
+ * item 4). Outside the shipped run nothing but the page says what the
+ * contrast pass owes, and the page derives it from the same rows it paints
+ * from — so an answer that is malformed, or a rename that reaches the paint
+ * and not the owed list, would owe nothing and pass green. Held against the
+ * classes the geometry passes actually wore (`wornClasses`): the answer must
+ * carry both lists, and a decoration a pass wore must be owed on some job.
+ * Sentences, empty when it holds.
+ */
+export function owedFaults(owed, wornClasses) {
+    if (owed === null || typeof owed !== 'object' || !OWED_BY_CLASS.every(([, list]) => Array.isArray(owed[list]))) {
+        return ['owed-follows-what-a-pass-wore: the page answered no rain list and horizon list (__contrastOwed)'];
+    }
+    const worn = new Set(wornClasses);
+    return OWED_BY_CLASS.filter(([cls, list]) => worn.has(cls) && owed[list].length === 0).map(
+        ([cls, list]) => `owed-follows-what-a-pass-wore: a pass wore ${cls} and the page owes its ${list} on no contrast job (__contrastOwed)`,
+    );
 }
 
 /** What a pass compared, in one line for the runner to print — empty for a pass that owes nothing. */

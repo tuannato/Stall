@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SURFACE_ART_SET_ASIDE } from './atRest';
 import { MONEY_SET } from './moneySet';
 
 const PROBE = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'probe.ts'), 'utf8');
@@ -53,6 +54,12 @@ describe('the-sellers-name-on-the-sign-reads', () => {
 
     it('is outlined over Grid horizon on the sign alone, the sign being the surface the horizon paints', () => {
         expect(PROBE).toMatch(/cls: 'att-horizon', surface: \(node\) => node\.closest<HTMLElement>\('\.stall-sign'\)/);
-        expect(PROBE).toContain("name: 'Grid horizon’s skyline, moon and stars'");
+        // The horizon's art is set aside on the sign alone, where it is worn
+        // (`layout/atRest.ts`, where the at-rest decision moved, 2026-10-06).
+        expect(SURFACE_ART_SET_ASIDE.map(({ name, paints, on }) => ({ name, paints, on }))).toContainEqual({
+            name: 'Grid horizon’s skyline, moon and stars',
+            paints: 'att-horizon',
+            on: '.stall-sign',
+        });
     });
 });

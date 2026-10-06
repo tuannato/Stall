@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
@@ -394,54 +394,20 @@ const LINE_SKIP_CEILING = {
  * carries, and the way to ask it again.
  */
 const LEGACY = process.env.LAYOUT_LEGACY === '1';
-/**
- * The contrast jobs that must have had Neo's rain at its brightest drop
- * (`a-line-on-the-ground-reads-wherever-a-drop-falls`): Neo worn, at the
- * phone and the desk, on the screens whose lines stand on the stall's own
- * ground — the Activity panel, two failure screens, the empty stall and the
- * quotes rail's own two.
+/*
+ * The contrast jobs that must have had the rain at its brightest drop
+ * (`a-line-on-the-ground-reads-wherever-a-drop-falls`), and the jobs that
+ * must read Grid horizon at its worst (step 5a″), are the page's to say:
+ * `window.__contrastOwed()` (`contrastOwed` in `layout/contrastPlan.ts`)
+ * names them by key for every measured look whose rows carry the rain or
+ * the horizon — Neo's on the ordinary probe, the kit's when it starts from
+ * Neo — and the shipped keys are pinned by value in
+ * `the-contrast-plan-is-every-job-the-pass-owes`. Until 2026-10-06 they were
+ * a list here keyed to Neo's id and asked of the shipped run alone, so the
+ * kit's Neo starter owed nothing.
  */
-const RAIN_REQUIRED = [
-    ...['mobile', 'desktop'].flatMap((viewport) =>
-        [
-            'activity',
-            'plugin-missing',
-            'empty',
-            'quotes-failed',
-            'nothing-quoted',
-            'quotes-truncated',
-            'first-stall',
-            'sparse-pasted',
-            // The two faces: the back control, and the quote's pointer
-            // to the other rail (round 8).
-            'item-listing',
-            'item-quote',
-        ].map((screen) => `${viewport}/${screen}/2/65535`),
-    ),
-    // And a wall: the shop window wears every decoration the seller chose,
-    // and its status line stands on the ground at 19px.
-    'desktop/shop-window-cycle/2/65535',
-];
 
 // Grid horizon at its worst: the owner's numbers and their verdict (`horizon-worst.mjs`).
-
-
-/**
- * The jobs that must read Grid horizon at its worst (step 5a″): the name on
- * the sign over the horizon alone at a phone and a desk, and all worn at a
- * phone, a desk and the 1920 wall, where the tagline stands in the sky.
- */
-const HORIZON_REQUIRED = [
-    ...new Set([
-        'mobile/offers/2/4',
-        'desktop/offers/2/4',
-        'mobile/offers/2/65535',
-        'desktop/offers/2/65535',
-        'canvas/shop-window-wall/2/65535',
-        // And the job each of the owner's numbers was read on.
-        ...Object.values(HORIZON_WORST).map((at) => at.job),
-    ]),
-];
 
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
@@ -495,6 +461,12 @@ const RING_MASK_ALPHA = 0.5;
  * the ring on some contrast job, or the outline is one nobody reads.
  */
 const outlinedTargetsSeen = new Set();
+/**
+ * Every decoration class a geometry pass painted worn (the probe's
+ * `wornClasses`): the contrast pass's owed jobs must follow it
+ * (`owed-follows-what-a-pass-wore`, `owedFaults`).
+ */
+const wornClassesSeen = new Set();
 /**
  * Every code a geometry pass painted, as `pass/screen:name` (the probe's
  * `codesPainted`): the contrast pass lists which of them it read the quiet
@@ -1297,6 +1269,7 @@ try {
          * comparison is refused (`probe-coverage.mjs`).
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+        for (const cls of report.wornClasses ?? []) wornClassesSeen.add(cls);
         for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
@@ -1460,6 +1433,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of pv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const cls of pv.wornClasses ?? []) wornClassesSeen.add(cls);
                 for (const code of pv.codesPainted ?? []) codesPaintedSeen.add(`${PORTRAIT.name}/${code}`);
                 const gaps = probeCoverageGaps(PORTRAIT.name, pv);
                 const compared = probeCoverageLine(PORTRAIT.name, pv);
@@ -1538,6 +1512,7 @@ try {
                 // that stopped mounting its controls would leave it green
                 // over nothing (`probe-coverage.mjs`).
                 for (const kind of tv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const cls of tv.wornClasses ?? []) wornClassesSeen.add(cls);
                 for (const code of tv.codesPainted ?? []) codesPaintedSeen.add(`${TABLET.name}/${code}`);
                 const gaps = probeCoverageGaps(TABLET.name, tv);
                 const compared = probeCoverageLine(TABLET.name, tv);
@@ -1797,6 +1772,8 @@ try {
          * ran twice, fails the pass rather than printing a smaller number.
          */
         let plan;
+        // The jobs that owe the rain and the horizon at their worst, by key.
+        let owed;
         const done = new Map();
         let reducedNow = false;
         for (const vp of ALL_VIEWPORTS) {
@@ -1811,6 +1788,7 @@ try {
             await loadContrastPage(vp);
             const pageScreens = await timed('plan reads', async () => {
                 plan ??= await evalJson(cdp, sessionId, 'window.__contrastPlan()');
+                owed ??= await evalJson(cdp, sessionId, 'window.__contrastOwed()');
                 return evalJson(cdp, sessionId, 'window.__contrastScreens');
             });
             const jobsHere = plan.filter((planned) => planned.viewport === vp.name);
@@ -2499,31 +2477,54 @@ try {
         if (sheetClassesWrong([...contrastClasses]) !== undefined) {
             verdicts.push(sheetClassesWrong([...contrastClasses]));
         }
-        if (LOOKS === 'shipped' && RAIN_REQUIRED.some((key) => !rainKeys.has(key))) {
-            // Neo's worn jobs wear the rain; a run that did not flatten it on
-            // the screens whose lines stand on the ground read the moving
-            // decoration at one instant again, or not at all — named, so a
-            // door mini flattened alone can never stand in for them (the
-            // critic's third pass).
+        // Every run owes what its measured looks carry (`contrastOwed`): a
+        // look that wears the rain owes it flattened on the screens whose
+        // lines stand on the ground — named, so a door mini flattened alone
+        // can never stand in for them (the critic's third pass) — and one
+        // that wears the horizon owes it read at its worst. The shipped run
+        // also owes the job each of the owner's horizon numbers was read on,
+        // and owes the rain somewhere at all.
+        // The page's answer is held against what the geometry passes wore,
+        // on every run (`owed-follows-what-a-pass-wore`): a malformed answer,
+        // or a decoration worn and owed on no job, fails rather than owing
+        // nothing.
+        for (const fault of owedFaults(owed, [...wornClassesSeen])) verdicts.push(fault);
+        const RAIN_REQUIRED = Array.isArray(owed?.rain) ? owed.rain : [];
+        const HORIZON_REQUIRED = [
+            ...new Set([...(Array.isArray(owed?.horizon) ? owed.horizon : []), ...(LOOKS === 'shipped' ? Object.values(HORIZON_WORST).map((at) => at.job) : [])]),
+        ];
+        if (LOOKS === 'shipped' && (RAIN_REQUIRED.length === 0 || (owed?.horizon ?? []).length === 0)) {
+            verdicts.push(
+                `the page owes the rain on ${RAIN_REQUIRED.length} and the horizon on ${(owed?.horizon ?? []).length} job(s) — a shipped run measures Neo, which carries both (__contrastOwed)`,
+            );
+        }
+        if (RAIN_REQUIRED.some((key) => !rainKeys.has(key))) {
+            // A run that did not flatten the rain on the screens whose lines
+            // stand on the ground read the moving decoration at one instant
+            // again, or not at all.
             verdicts.push(
                 `a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
         }
+        if (horizonUnread.length > 0) {
+            verdicts.push(`${horizonUnread.length} sign line(s) at Grid horizon's worst gave no sample: ${horizonUnread.join(', ')}`);
+        }
         if (LOOKS === 'shipped') {
             // At the horizon's worst, held to the owner's numbers
             // (`horizonWorstVerdict`): the job each was read on is owed and
-            // must read it again, and no job may read lower.
+            // must read it again, and no job may read lower. They are Neo's
+            // as shipped; a kit look's are printed and not pinned.
             for (const line of horizonWorstVerdict(horizonWorst)) verdicts.push(line);
-            if (horizonUnread.length > 0) {
-                verdicts.push(`${horizonUnread.length} sign line(s) at Grid horizon's worst gave no sample: ${horizonUnread.join(', ')}`);
-            }
+        }
+        if (horizonWorst.size > 0) {
             const said = [...horizonWorst].map(([part, byJob]) => {
                 const [job, least] = [...byJob].sort((a, b) => a[1] - b[1])[0];
-                return `${part} ${least.toFixed(4)} (${job}; pinned ${HORIZON_WORST[part]?.least.toFixed(2)} on ${HORIZON_WORST[part]?.job})`;
+                const pinned = LOOKS === 'shipped' ? `; pinned ${HORIZON_WORST[part]?.least.toFixed(2)} on ${HORIZON_WORST[part]?.job}` : '';
+                return `${part} ${least.toFixed(4)} (${job}${pinned})`;
             });
             console.log(`  Grid horizon at its worst, least per sign line (a known limit, the owner's C, 2026-09-27): ${said.join('; ')}`);
         }
-        if (LOOKS === 'shipped' && HORIZON_REQUIRED.some((key) => !horizonKeys.has(key))) {
+        if (HORIZON_REQUIRED.some((key) => !horizonKeys.has(key))) {
             verdicts.push(
                 `the sign's lines over Grid horizon were read at its worst on ${horizonKeys.size} job(s) but not on ${HORIZON_REQUIRED.filter((key) => !horizonKeys.has(key)).join(', ')}`,
             );
@@ -2555,7 +2556,7 @@ try {
             // nothing.
             verdicts.push('no-look-pseudo-paints-inside-a-protected-box compared no frame — vacuous green');
         }
-        if (LOOKS === 'shipped' && tideJobs !== plan.filter((j) => j.tide !== undefined).length) {
+        if (tideJobs !== plan.filter((j) => j.tide !== undefined).length) {
             // Every planned tide job held the tide (a job that did not is
             // refused by its echo); a count that differs is a walk that lost
             // some, said by name.
@@ -2564,10 +2565,10 @@ try {
         if (LOOKS === 'shipped' && plan.every((j) => j.tide === undefined)) {
             verdicts.push('the-aurora-is-read-at-both-ends-of-its-tide: the plan holds no tide job — vacuous green');
         }
-        if (LOOKS === 'shipped' && moneyRingRead === 0) {
-            // The Activity fold's receipt amount is outlined on Neo worn: a
-            // shipped run that ring-read no money figure proved the rule over
-            // nothing.
+        if ((LOOKS === 'shipped' || RAIN_REQUIRED.length > 0) && moneyRingRead === 0) {
+            // The Activity fold's receipt amount is outlined wherever the
+            // rain is worn: a run that owed the rain and ring-read no money
+            // figure proved the rule over nothing.
             verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
         }
         if (LOOKS === 'shipped' && codesRead.size === 0) {
@@ -2592,10 +2593,10 @@ try {
                 verdicts.push(`the-sellers-name-on-the-sign-reads read no name on ${unreadNames.join(', ')}`);
             }
         }
-        if (LOOKS === 'shipped' && ringTargets === 0) {
+        if ((LOOKS === 'shipped' || RAIN_REQUIRED.length > 0) && ringTargets === 0) {
             // The ring read has to have read something, or its green is
-            // vacuous: the shipped rain outlines lines on every Neo worn
-            // screen the pass samples.
+            // vacuous: the rain outlines lines on every worn screen the pass
+            // samples, Neo's and any look's that carries it.
             verdicts.push('the ring read read no outlined line — vacuous green');
         }
         if (dim.length > 0) {

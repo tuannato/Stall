@@ -2480,6 +2480,8 @@ ordinary `pnpm test:layout` never loads the kit's look or sheet
   (`pnpm workshop:start <look>`) each probed green on 2026-09-23 before
   step 2: Modern 75.0s, Neo 62.7s, Rural 71.7s; after step 2, Modern 76.9s
   and the untouched skeleton 22.7s (green, its worn half no longer painted).
+  The Neo starter went red at step 5b (`9693473`) and green again on
+  2026-10-06: "Every starter is measured as its shipped look", below.
 
 ## The skeleton is measured on every run (2026-09-23, the owner's D3)
 
@@ -3771,17 +3773,21 @@ own box included), composited over it.
   read, so it fails.
 - The stall root's image layers are read by what they are, never passed by
   where they sit (below). These are the stated exceptions, each matched on
-  its own computed form and on the class that paints it
-  (`ROOT_LAYERS_SET_ASIDE`; the aurora's washes and tint by their exact
-  shape — the stops and their places — and colours that are the stall's
-  own two accents at no more than the alpha the sheet paints, never by the
-  form alone, the critic's item 7), with the levels they leave at rest in
-  the table below:
+  its own computed form and on what paints it — a decoration's class worn
+  on the stall, or the look's own backdrop as its row states it, never a
+  look's `t-*` class (`ROOT_LAYERS_SET_ASIDE`; the aurora's washes and tint
+  by their exact shape — the stops and their places — and colours that are
+  the stall's own two accents at no more than the alpha the sheet paints,
+  never by the form alone, the critic's item 7), with the levels they leave
+  at rest in the table below:
   - the rain (`att-rainfall`), which is what the outline is for;
-  - Neo's own backdrop (`t-neo`: the cyan glow over the stall's top 480 px,
-    and a 1 px scanline every 4 px) and the aurora's washes and its tint
-    over the rain (`att-aurora`), which are gradients across the whole
-    stall that no single colour matches;
+  - the look's own backdrop (`LOOK_BACKDROP`: a layer the row's `backdrop`,
+    handed to the stall as `--s-backdrop`, computes to — Neo's: the cyan
+    glow over the stall's top 480 px, and a 1 px scanline every 4 px; keyed
+    to `t-neo` until 2026-10-06, "Every starter is measured as its shipped
+    look" below) and the aurora's washes and its tint over the rain
+    (`att-aurora`), which are gradients across the whole stall that no
+    single colour matches;
   - Neo's heading glow, which is a shadow under the heading's own outline,
     not a ground.
   Any other root layer is read like a layer under the line: a colour or a
@@ -4241,3 +4247,186 @@ worn-only sheet job's page measures no text and its echo is not read.
 `scripts/print-measure.mjs` loads the same page and so inherits the wait,
 but holds no echo of its own (its own `document.fonts.ready` after the
 prepare covers it; only an `error` face would go unsaid there).
+
+## Every starter is measured as its shipped look (2026-10-06, the 8d1 critic's item 1)
+
+`pnpm workshop:start <look>` writes a shipped look's row and rows into the
+kit under `0xff` and its sheet under `.t-workshop`, and `workshop/README.md`
+tells a creator to start there. **The Neo starter failed the kit's own
+probe**, on `main` (`6d869ca`) as on the 8d1 branch: `pnpm workshop:start
+neo` then `pnpm workshop:probe`, exit 1 — 108 failures at 390, 85 at 1280,
+19 under reduced motion, all 212 `an-outline-that-shows-at-rest` (123 on
+the ornament strip, the rest on section titles, the notice, the collection
+headings and a dozen smaller kinds), and the contrast pass's "an outline
+nobody reads" on `a.guide-link`, `button.pay-pointer`, `i`, `span`,
+`span.ghost-chip` and `span.invite-text` (91.3s). The shipped Neo, the same
+row and the same sheet, was green.
+
+**The cause was keying, not the starter.** Every rule here that a
+decoration earns was keyed to a shipped look's name rather than to what the
+page wore:
+- the at-rest rule's two backdrop exceptions (`ROOT_LAYERS_SET_ASIDE`, the
+  scanlines and the top glow) asked for `t-neo` on the root, so on
+  `t-workshop` Neo's own backdrop was read as a ground under every line and
+  the outline in `var(--s-bg)` showed against it (the 212);
+- the contrast plan's decoration jobs were keyed to Neo's id — the rain's
+  six ground screens (`RAIN_JOBS`), the horizon worn alone (`SOLO_JOBS`),
+  the aurora's tide (`TIDE_SCREENS`) — and the stilled price tag
+  (`REDUCED_JOBS`) to Rural's, so the starter's outlined lines on the rain's
+  own screens were never ring-read ("an outline nobody reads"), and the
+  Rural starter's tag label was read by nothing;
+- the runner's `RAIN_REQUIRED` and `HORIZON_REQUIRED` were lists keyed to
+  `/2/` and asked of the shipped run alone, and `probe-coverage.mjs` owed the
+  outline, at-rest and bunting coverage only where `t-neo` or `t-rural` was
+  measured — so a kit run that wore the rain owed none of it.
+
+The reproduction showed the starter itself right: once keyed by what is
+worn, it is green with no stylesheet, starter or threshold changed.
+
+**Now keyed on what the page wears.**
+- `ROOT_LAYERS_SET_ASIDE` and `SURFACE_ART_SET_ASIDE` live in
+  `layout/atRest.ts`, a pure module (`colourOf` moved there with them):
+  `rootLayerSetAside(layer, facts)` and `surfaceArtSetAside` decide from what
+  the probe read off the root (`RootFacts`: every class it wears, the
+  backdrop's layers as computed, its two accent tokens) and nothing else.
+  Every entry is a decoration class worn on the stall or `LOOK_BACKDROP` — a
+  layer the row's own `backdrop` computes to — and its form as before. The
+  backdrop's layers are computed from the stall's `--s-backdrop`, whose
+  computed value has every `var()` substituted, on a `display: none` node
+  outside `#app` (cached by that value; the follow-up commit moved it out of
+  the measured tree, the critic's item 7 — the at-rest counts below did not
+  move). For the shipped Neo it is the same rule or stricter: the layer must
+  now be the backdrop's own as well as have its shape.
+- `contrastPlan.ts`: the rain's ground jobs, the solo horizon and the tide
+  are planned on every measured look whose rows carry `att-rainfall`,
+  `att-horizon` or `att-aurora` (`carries`); the stilled price on every look
+  whose row sets `priceAnim` (`movesItsPrice`). `contrastOwed` names the
+  jobs the runner holds to having the rain flattened (`RAIN_OWED`) and the
+  horizon read at its worst (`HORIZON_OWED`), for every look that carries
+  them; the page publishes it (`window.__contrastOwed()`) and the runner
+  holds every run to it, plus the shipped run to owing both somewhere and to
+  the owner's horizon jobs (`HORIZON_WORST`, the shipped Neo's numbers —
+  pinned for the shipped run alone, printed for a kit). The ring-read and
+  money-ring vacuity checks are owed wherever the rain is owed, the tide
+  count on every run, and a sign line with no sample at the horizon's worst
+  fails on every run.
+- `probe-coverage.mjs`: the outline, at-rest and bunting owing follows the
+  verdict's `wornClasses` (every decoration class the pass painted worn),
+  beside the shipped classes the runner states. And the page's owed answer is
+  held against what the geometry passes wore, on every run
+  (`owed-follows-what-a-pass-wore`, `owedFaults`): an answer that is not a
+  rain list and a horizon list fails, and so does a pass that wore
+  `att-rainfall` or `att-horizon` while that list is empty (the critic's
+  item 4: outside the shipped run the page alone said what it owed, and a
+  malformed `{}` owed nothing).
+
+**The shipped plan is unchanged**: `contrastPlan(measuredLooks())` and
+`contrastScreens` at the three viewports, serialised on both trees, are
+byte-identical to `main`'s, and the owed keys are the old literal lists,
+now pinned by value in `the-contrast-plan-is-every-job-the-pass-owes`.
+
+**Held by three tests in `pnpm test`.**
+- `the-at-rest-exceptions-decide-the-same-for-a-starter-and-its-look`
+  (`layout/atRest.test.ts`), by behaviour: the same facts decide the same
+  under `t-neo`, `t-workshop`, the worn-only fixture's class, `t-rural`,
+  `t-modern` and no look class, every entry of the table reached; with no
+  backdrop on the row Neo's two shapes are a ground on `t-neo` as anywhere,
+  the backdrop's own layers are set aside with nothing worn, a scanline the
+  backdrop does not paint is read; the decorations' layers follow what is
+  worn and the stall's own tokens, the horizon's art the sign alone.
+- `every-starter-is-measured-as-its-shipped-look`
+  (`layout/starterParity.test.ts`): each starter's contrast plan, screens
+  and owed jobs are its base look's with the id and class taken out, the
+  door aside; the three tables (`ROOT_LAYERS_SET_ASIDE`,
+  `SURFACE_ART_SET_ASIDE`, and `OUTLINE_SURFACES` read from the probe's
+  source) name a shipped decoration's class or `LOOK_BACKDROP`, never a
+  `t-*` class; and the code of `probe.ts`, `contrastPlan.ts` and `atRest.ts`
+  — comments taken out by the TypeScript printer, so a sentence about a
+  class is not code and a string, template or selector still is — names no
+  `\bt-(modern|neo|rural)\b`, no `*_THEME_ID`, no `lookById(` with a
+  literal, no `.id` compared with a number either way round and no
+  `SHIPPED_THEMES[`; the probe calls `lookById` once, on the job's own id
+  (`lookById(themeId)` in `__contrastPrepare`), and the other two never.
+- `owed-follows-what-a-pass-wore` and the worn-keyed owing, in
+  `probe-coverage.test.mjs`.
+
+**Proved red**, each plant restored: the rain's jobs keyed back to
+`look.id === 2` (the plan case, the Neo starter's `quotes-failed` jobs
+missing); the scanlines' `paints` back to `'t-neo'` (the table case and the
+literal case); the stilled price keyed to `look.id === 3` (the plan case).
+And the critic's three, planted in the probe's `groundUnder` where the
+decision is called — `stall.matches(".t-neo")`,
+``stall.classList.contains(`t-neo`)``, and `lookById(2).theme.sheetClass` —
+each red in the code case (they were green against the first commit's
+quoted-string check); two planted in the pure decision's `paintedBy` —
+`facts.classes.includes('t-neo')` (red in the behaviour case and the code
+case) and `facts.classes.some((c) => c.endsWith('neo'))`, which names no
+class and is red in the behaviour case alone.
+
+**Measured, 2026-10-06, this machine**, every run green:
+- `workshop:probe`, each starter written by `workshop:start` and the kit put
+  back after: Modern 31.2s (128 contrast jobs), Rural 39.1s (132 — the four
+  stilled `unbuyable` jobs it now owes), Neo 129.1s and 142.4s (188 contrast
+  jobs, the rain at its brightest on 75, the tide held on 46, 605 outlined
+  lines ring-read; at rest the backdrop's scanlines and top glow set aside
+  533 times at the phone and 578 at the desk, once per outlined line, as on
+  the shipped Neo); the skeleton 20.7s. Those times were taken on a machine
+  under load and are not an A/B.
+- **The Neo starter is planned as Neo**: in the kit run's dump and a shipped
+  run's, the 194 Neo jobs and the 194 kit jobs — 188 contrast and 6
+  transparency jobs each, the dump counting both passes — are the same set
+  with the id taken out. Their boxes differ where the kit paints
+  differently — its rows carry no token, so the Wearing line has no links,
+  and the name sheet's look picker — and the horizon's worst reads the
+  owner's three numbers exactly (2.7589, 1.9153, 9.2974).
+- `pnpm test:layout`, `main` against the first commit, back to back — the
+  critic's run, one sample per side: both pass; the whole run 135.8s against
+  139.3s, the contrast pass 111.2s against 112.5s, the page passes 4.2 /
+  4.8s (390), 4.4 / 4.8s (1280), 2.3 / 2.5s (canvas), 3.5 / 3.8s (portrait),
+  2.3 / 2.5s (tablet); every verdict line identical but the renamed
+  backdrop labels, whose counts are the same (708 at 390, 753 at 1280); the
+  contrast dump 9737 boxes identical, 0 moved, 0 added, 0 removed. One
+  sample a side does not separate the 3.5s from noise. The builder's own
+  A/B attempts ran while the laptop was at 1% battery and throttled — every
+  pass four to five times slower on both trees, and three runs stopped by
+  the 300s watchdog on `main` and the branch alike — and are not results.
+- After the follow-up (the pure decision, the backdrop computed outside
+  `#app`, the owed answer held to what was worn): `pnpm test:layout` passed
+  in 142.0s, its contrast dump 9737 boxes identical to the first commit's
+  (itself identical to `main`'s), the backdrop's set-aside counts unchanged
+  (708 / 753); the Neo starter through `workshop:probe` passed in 89.1s, its
+  counts unchanged (533 / 578).
+
+**Not covered, stated.**
+- Running the real probe per starter is half a minute to two and a half
+  each and in neither command; the tests hold the keying and the decision,
+  not the paint.
+- What the shipped run owes by its own pinned numbers and names stays the
+  shipped run's alone: Grid horizon's worst, `LINE_SKIP_CEILING`, the codes
+  and the sign's names owed by name, a shipped row's sizes, the door minis,
+  and the look-pseudo vacuity check.
+- **The horizon's floor for a kit look** (the critic's item 3, the owner's
+  call): a kit run prints the sign's lines at the horizon's worst and holds
+  them to nothing, so a creator who keeps the horizon and darkens the name
+  can read below the owner's accepted 2.76 / 1.92 / 9.30 and pass. Not a
+  regression — `main` did not read the kit's horizon at its worst at all —
+  and the ring read over the horizon as painted still fails. The proposal on
+  the table: every run may read no job below `HORIZON_WORST[part].least`,
+  the equality half staying the shipped run's.
+- **A look with two moods owes the rain under its first alone** (item 5):
+  `contrastOwed` and the rain's ground jobs key on `WORN_ALL`, and the
+  second mood's all-worn variant (`wornAllFlags`) owes nothing about the
+  rain. No shipped look or starter has two moods and the rain.
+- **A price set moving by a sheet, not a row** (item 6): the stilled job
+  follows the row's `priceAnim`, which a kit's `look.json` cannot set, while
+  its sheet can animate `.item-p` on a Modern base — then "Not buyable"
+  inside the transform is padded away and its ink is read by nothing, the
+  2026-09-24 hole. True on `main` too; a lint rule or a probe report would
+  close it.
+- The rain's class is written in five places (`RAIN_CLASS`, the
+  `ROOT_LAYERS_SET_ASIDE` entry, the flattener, the coverage owing and
+  `OWED_BY_CLASS`). The table case fails an entry no shipped row carries,
+  and `owed-follows-what-a-pass-wore` fails an owed list that misses a
+  class the passes wore; a rename that reached every place but
+  `OWED_BY_CLASS` is not seen, and owes no less for it.
+
