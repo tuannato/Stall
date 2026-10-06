@@ -147,6 +147,36 @@ working accept, and there is no accept.
 
 ## Decided — do not re-argue
 
+- **Look files that are not MIT live in a private repository, joined at
+  build (owner, 2026-09-28, "option 4"; reaffirmed 2026-10-06).** The public
+  repository never tracks them (`src/looks/` and `looks/` are guarded in the
+  tree and in unpushed history); a build carries one only when it names a
+  private selection explicitly. Whether a look is paid and whether it is
+  released are public literals in `src/domain/theme.ts` (`PAID_LOOK_IDS`,
+  `RELEASED_LOOK_IDS`), so a release is a reviewable public diff, never a
+  private pin bump. `0x04` is reserved, paid and unreleased until the look
+  rail ships; until then a record naming it paints the default look. Each
+  look file opens with `/*! © 2026 tuannato (stall.cash) */` and nothing
+  more; AI use is recorded in the private design log. Payees stay pinned
+  hash160s (§ Rejected: a payee named by an NFT).
+- **Deploys through GitHub Actions run by hand, production behind the owner
+  (owner, 2026-10-06).** The private repository is read by its own job in
+  its own Environment, never by the job that builds and tests; production
+  deploys through an Environment with the owner as required reviewer; the
+  first production run is by hand, and Pages' automatic builds are turned
+  off only after it.
+- **Weight is held per bucket (owner, 2026-10-06).** Every-visitor bytes and
+  on-demand bytes each have their own ceiling (no summed ceiling that counts
+  one twice); a worn-only look has a soft target of 256,000 gzip bytes and a
+  hard cap of 512,000, and between the two it ships only when its id is on
+  the public `OVER_TARGET_LOOK_IDS` list (the owner's OK, a public diff) and
+  its own index states a reason (kept private; printed locally, never in a
+  public log).
+- **Glyphs a page prints are drawn by Stall's own faces (owner,
+  2026-10-06).** The faces are re-subset for `≈ → ◆` and the quote units'
+  currency signs when the next face is fetched; until then they are a pinned
+  exception list.
+
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)

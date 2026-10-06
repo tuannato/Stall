@@ -396,6 +396,71 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
     });
 });
 
+describe('a-carried-look-past-its-art-budget-fails-the-build', () => {
+    /**
+     * The weight-buckets critic's item 9: the art budget (D-2026-10-06-08,
+     * `lookBudgetVerdict` in `scripts/weight-buckets.mjs`) is refused at the
+     * build, beside every other check before Vite reads a byte, and not only
+     * by the suite — a road that builds without `pnpm test` cannot ship a
+     * look past it. Between the target and the cap a look is carried only
+     * with its id in `OVER_TARGET_LOOK_IDS` (planted here as the public
+     * lists a reviewed diff would give) and a `budgetReason` in its index. The fixture planted with its ground drawn as a run of
+     * fixed-seed digits gzip barely shrinks: ~390 KB between the 256,000
+     * target and the 512,000 cap, ~775 KB over the cap. The full builds of
+     * the same plants are in `src/bundle.test.ts`.
+     */
+    const digitsSvg = (count) => {
+        let seed = 0x2545f491;
+        const digits = Array.from({ length: count }, () => {
+            seed ^= seed << 13;
+            seed ^= seed >>> 17;
+            seed ^= seed << 5;
+            return String((seed >>> 0) % 10);
+        }).join('');
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`;
+    };
+    const plantHeavy = (digits, reason) =>
+        plantRepo((path, text) => {
+            if (path === 'fixture/art/ground.svg') {
+                return digitsSvg(digits);
+            }
+            if (path === 'index.json' && reason !== undefined) {
+                const json = JSON.parse(text);
+                json.looks[0].budgetReason = reason;
+                return `${JSON.stringify(json, null, 4)}\n`;
+            }
+            return text;
+        });
+    const REASON = 'A planted look: its weight is the point of the test.';
+    /** The public lists with the planted look's id over the target: the owner's OK, as a public diff would give it. */
+    const listed = { ...facts, overTarget: [0x04] };
+    const readListed = (repo) =>
+        readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir }, facts: listed, validateLook, vars, env: repo.env });
+
+    it('refuses a look between the target and the cap unless the public list names it and its index says why', () => {
+        // Neither: the budget refuses it.
+        assert.throws(() => readPlanted(plantHeavy(700_000)), /fixture: its art budget — t-planted-look: [\d,]+ gzip -9 bytes, .* not in OVER_TARGET_LOOK_IDS, and no budgetReason stated/);
+        // A reason the public list does not name, or a listing with no reason: the index check refuses it.
+        assert.throws(() => readPlanted(plantHeavy(700_000, REASON)), /states a budgetReason, and OVER_TARGET_LOOK_IDS does not name the id/);
+        assert.throws(() => readListed(plantHeavy(700_000)), /OVER_TARGET_LOOK_IDS names the id, and its entry states no budgetReason/);
+        // Both: carried.
+        const read = readListed(plantHeavy(700_000, REASON));
+        assert.deepEqual(read.looks.map((look) => look.entry.budgetReason), [REASON]);
+    });
+
+    it('refuses a look over the cap whatever the list and its index say, and never prints the reason', () => {
+        assert.throws(
+            () => readListed(plantHeavy(1_400_000, REASON)),
+            (error) => /fixture: its art budget — .* at or over the 512,000 cap/.test(error.message) && !error.message.includes(REASON),
+        );
+    });
+
+    it('carries the tracked fixture, far under the target', () => {
+        const read = readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts, validateLook, vars });
+        assert.equal(read.looks.length, 1);
+    });
+});
+
 describe('a-build-refuses-a-carried-look-that-strobes', () => {
     /**
      * The 8e1 critic's item 2: a carried sheet reached `dist` held only by

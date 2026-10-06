@@ -4874,10 +4874,14 @@ tight line-height's content area past its slot read as a cut: the wall's
 Its earlier answers were both wrong — the box's scroll size climbed a rung
 for a name that fit (44px over 50.6px slots, `scrollHeight` 103 against
 101), and the slot let stacked marks through. **The ladder does not ask the
-`clip-path` shapes**, stated: they cost the app ~2.7 KB the served ceiling
-does not have (measured 1,131,689 against 1,130,000 with them); the model
-defines them once, the app's bundle tree-shakes them, and the probe holds a
-name and its box to them. A look that clips its name with a shape is
+`clip-path` shapes**, stated: they cost every visitor ~2.7 KB (measured
+1,131,689 served with them, against the 1,130,000 served ceiling of the
+time). That ceiling is retired (2026-10-06, split by bucket); against the
+every-visitor ceiling the ~2.7 KB is a quarter of the ~11 KB a deploy
+build carrying a look has left (883,746 of 895,000), ~28 KB on the public
+build — so the shapes stay out until the owner spends that room on them.
+The model defines them once, the app's bundle tree-shakes them, and the
+probe holds a name and its box to them. A look that clips its name with a shape is
 failed here, not climbed past. The transform costs the app 476 bytes
 (every-visitor 866,652; served 1,129,498 — 502 left). Inert on the three
 looks: no app sheet and no shipped look's vars state `--name-rungs`

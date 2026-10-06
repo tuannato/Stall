@@ -50,14 +50,83 @@ import { OWN_ART_NAME } from './workshop-css.mjs';
 /** The index at the repository's root. */
 export const PRIVATE_INDEX = 'index.json';
 
-/** The index's one schema; a later one is a new number and a new reader. */
+/**
+ * The index's one schema; a later one is a new number and a new reader.
+ * An optional field **whose absence is exactly the prior reading** joins
+ * schema 1 without a new number (`PRIVATE_INDEX_OPTIONAL_FIELDS`; absent
+ * `budgetReason` is the old hard 256,000 budget): an index that does not
+ * carry it reads the same to every reader, and a reader older than the field
+ * refuses an index that does (an unknown field) — fail closed, never a
+ * misreading. A deploy moves the public commit and the private pin
+ * together, so no rollback pairs an old reader with a new index.
+ */
 export const PRIVATE_INDEX_SCHEMA = 1;
 
 /** Where a look stands: `preview` builds carry it, `release` builds may (with its id in `RELEASED_LOOK_IDS`). */
 export const PRIVATE_LOOK_STAGES = Object.freeze(['preview', 'release']);
 
-/** The fields of one index entry, every one required, nothing else. */
+/** The fields of one index entry every entry carries. */
 export const PRIVATE_INDEX_FIELDS = Object.freeze(['id', 'slug', 'cls', 'stage', 'paid']);
+
+/**
+ * The fields an entry may carry beside them, and nothing else (2026-10-06,
+ * D-2026-10-06-08). `budgetReason`: why this look may weigh more than the
+ * soft target of a look's art budget (`LOOK_ART_TARGET_GZIP` in
+ * `scripts/weight-buckets.mjs`) and still be admitted under the hard cap
+ * (`LOOK_ART_CAP_GZIP`). **The reason is private; the owner's OK is
+ * public**: an entry states one exactly when `OVER_TARGET_LOOK_IDS`
+ * (`src/domain/theme.ts`) names its id (`privateIndexProblems`), so the OK
+ * is a reviewable public diff, as a release is (PLAN § Decided).
+ * `each-look-keeps-its-art-budget` prints the reason on every run — its
+ * length alone in a public log — so a look is never admitted in silence.
+ */
+export const PRIVATE_INDEX_OPTIONAL_FIELDS = Object.freeze(['budgetReason']);
+
+/**
+ * The longest `budgetReason`, in code points: one sentence, printed on one
+ * line. Its text is printed by a local run only: a run in a public log
+ * (GitHub Actions, `printsPublicly` in `scripts/weight-buckets.mjs`) prints
+ * its length, so the deploy job's log never carries the private index's
+ * words.
+ */
+export const BUDGET_REASON_MAX = 400;
+
+/**
+ * Every code point a `budgetReason` may not hold: controls and format
+ * characters (`Cc`, `Cf` — a newline, an escape sequence, a bidi override),
+ * the line and paragraph separators (`Zl`, `Zp`: U+2028 and U+2029, which a
+ * terminal breaks a line on and `JSON.stringify` prints raw — the
+ * weight-buckets critic's item 4), lone surrogates (`Cs`), private-use
+ * (`Co`) and unassigned (`Cn`) code points: one plain printed line, or no
+ * reason.
+ */
+const REASON_REFUSED = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}\p{Co}\p{Cn}]/u;
+
+/**
+ * Why `value` is not a `budgetReason`, or undefined when it is one: a
+ * string with something to read after trimming — never empty, never only
+ * whitespace — at most `BUDGET_REASON_MAX` code points, and holding nothing
+ * `REASON_REFUSED` names, since a line break or a bidi override would let
+ * the printed line say something else than the index does. Fail closed:
+ * anything else is refused, and a refused reason refuses the whole index
+ * (`parsePrivateIndex`), so no reader ever admits a look on a reason it
+ * could not print as one line.
+ */
+export function budgetReasonProblem(value) {
+    if (typeof value !== 'string') {
+        return `budgetReason ${JSON.stringify(value)} is not a sentence`;
+    }
+    if (value.trim() === '') {
+        return 'budgetReason is empty, where it states why the look may weigh more than the target';
+    }
+    if ([...value].length > BUDGET_REASON_MAX) {
+        return `budgetReason is ${[...value].length} characters, over ${BUDGET_REASON_MAX}`;
+    }
+    if (REASON_REFUSED.test(value)) {
+        return 'budgetReason carries a control, format, separator, surrogate, private-use or unassigned character, where it is one plain line';
+    }
+    return undefined;
+}
 
 /** A look's directory name: lower-case words joined by hyphens. */
 export const PRIVATE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -152,9 +221,10 @@ const isPlainObject = (value) => typeof value === 'object' && value !== null && 
 
 /**
  * The index, parsed and shaped: `{ schema: 1, looks: [{ id, slug, cls,
- * stage, paid }] }`, no field missing and none beside them. Answers `{
- * index, problems }`; `index` is undefined whenever a problem was found, so
- * nothing downstream reads half an index.
+ * stage, paid, budgetReason? }] }`, no required field missing, the optional
+ * one well formed where present (`budgetReasonProblem`), and none beside
+ * them. Answers `{ index, problems }`; `index` is undefined whenever a
+ * problem was found, so nothing downstream reads half an index.
  */
 export function parsePrivateIndex(text) {
     let json;
@@ -186,8 +256,14 @@ export function parsePrivateIndex(text) {
             return;
         }
         for (const key of Object.keys(entry)) {
-            if (!PRIVATE_INDEX_FIELDS.includes(key)) {
+            if (!PRIVATE_INDEX_FIELDS.includes(key) && !PRIVATE_INDEX_OPTIONAL_FIELDS.includes(key)) {
                 problems.push(`${where}: an unknown field ${JSON.stringify(key)}`);
+            }
+        }
+        if (Object.hasOwn(entry, 'budgetReason')) {
+            const why = budgetReasonProblem(entry.budgetReason);
+            if (why !== undefined) {
+                problems.push(`${where}: ${why}`);
             }
         }
         if (!Number.isInteger(entry.id) || entry.id < 0 || entry.id > 0xff) {
@@ -211,8 +287,10 @@ export function parsePrivateIndex(text) {
 
 /**
  * The index against the public lists. `facts`: `{ reserved, paid, released,
- * shippedClasses }` — `PRIVATE_LOOK_IDS`, `PAID_LOOK_IDS`,
- * `RELEASED_LOOK_IDS` and the shipped rows' classes (`publicLookFacts`).
+ * overTarget, shippedClasses }` — `PRIVATE_LOOK_IDS`, `PAID_LOOK_IDS`,
+ * `RELEASED_LOOK_IDS`, `OVER_TARGET_LOOK_IDS` and the shipped rows' classes
+ * (`publicLookFacts`); facts without `overTarget` are refused outright, so a
+ * caller that forgot the list never reads as "no look is over the target".
  *
  * - **Reserved and unshared**: an entry's id is one `PRIVATE_LOOK_IDS`
  *   reserves, and no two entries share an id, a slug or a class.
@@ -220,11 +298,26 @@ export function parsePrivateIndex(text) {
  *   whether `PAID_LOOK_IDS` names the id, and `stage` is `release` exactly
  *   when `RELEASED_LOOK_IDS` does — both directions, so the public list and
  *   the private index move in one reviewed pair.
+ * - **Over the target only by the public list** (D-2026-10-06-08, the
+ *   owner's OK on CRITIC-WEIGHT-BUCKETS item 1): an entry states a
+ *   `budgetReason` exactly when `OVER_TARGET_LOOK_IDS` names its id — both
+ *   directions, so the owner's OK is a reviewable public diff and the
+ *   reason stays private — and every id that list names is a reserved one.
+ *   The tracked fixture states none: its index is public, and the public
+ *   lists are the owner's alone to move.
  * - **Its own class**: never a shipped look's, the harness's or — unless
  *   `fixture` says this is the tracked fixture — the fixture's.
  */
-export function privateIndexProblems(index, { reserved, paid, released, shippedClasses }, { fixture = false } = {}) {
+export function privateIndexProblems(index, { reserved, paid, released, overTarget, shippedClasses }, { fixture = false } = {}) {
+    if (!Array.isArray(overTarget)) {
+        throw new TypeError('private looks: the public lists include OVER_TARGET_LOOK_IDS (`overTarget`), and none was given');
+    }
     const problems = [];
+    for (const id of overTarget) {
+        if (!reserved.includes(id)) {
+            problems.push(`OVER_TARGET_LOOK_IDS names 0x${id.toString(16).padStart(2, '0')}, which PRIVATE_LOOK_IDS does not reserve`);
+        }
+    }
     const taken = new Set([...shippedClasses, ...HARNESS_LOOK_CLASSES, ...(fixture ? [] : [FIXTURE_PRIVATE_LOOK_CLASS])]);
     const seen = { id: new Map(), slug: new Map(), cls: new Map() };
     index.looks.forEach((entry, at) => {
@@ -240,6 +333,16 @@ export function privateIndexProblems(index, { reserved, paid, released, shippedC
         if ((entry.stage === 'release') !== released.includes(entry.id)) {
             problems.push(
                 `${where}: stage ${entry.stage}, and RELEASED_LOOK_IDS ${released.includes(entry.id) ? 'names' : 'does not name'} the id — a release is the public list's to make`,
+            );
+        }
+        const reasoned = Object.hasOwn(entry, 'budgetReason');
+        if (fixture && reasoned) {
+            problems.push(`${where}: the tracked fixture states a budgetReason — its index is public, and no fixture is admitted over the target`);
+        } else if (reasoned !== overTarget.includes(entry.id)) {
+            problems.push(
+                reasoned
+                    ? `${where}: states a budgetReason, and OVER_TARGET_LOOK_IDS does not name the id — the owner's OK to weigh over the target is the public list's`
+                    : `${where}: OVER_TARGET_LOOK_IDS names the id, and its entry states no budgetReason — a look admitted over the target says why, privately`,
             );
         }
         if (taken.has(entry.cls)) {
@@ -307,6 +410,7 @@ export async function publicLookFacts() {
         reserved: [...theme.PRIVATE_LOOK_IDS],
         paid: [...theme.PAID_LOOK_IDS],
         released: [...theme.RELEASED_LOOK_IDS],
+        overTarget: [...theme.OVER_TARGET_LOOK_IDS],
         shippedClasses: theme.SHIPPED_THEMES.map(({ id }) => theme.decodeTheme(id).sheetClass),
     };
 }

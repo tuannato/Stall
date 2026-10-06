@@ -83,9 +83,9 @@ async function plantedServed(rule: string, editLook: (json: string) => string = 
  *
  * **The gate's table, not the catalogue's** (moved 2026-09-18). It lived on
  * `ShippedAttachment` for one commit, on the argument that a submission
- * would carry it on the wire. It cost 204 bytes of served weight, no runtime
- * code read it, and it pushed the built output past
- * `served-weight-has-a-ceiling` — a guard that had to be run to notice,
+ * would carry it on the wire. It cost 204 bytes every visitor downloads, no
+ * runtime code read it, and it pushed the built output past the served
+ * ceiling of the time (retired 2026-10-06) — a guard that had to be run to notice,
  * which the commit that added it did not run. The declaration is still held
  * to the stylesheet here, which is the whole of what it was buying; the day
  * a submission loader exists, it moves back with a reader beside it.

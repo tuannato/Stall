@@ -13,6 +13,7 @@ import {
     PAID_LOOK_IDS,
     PRIVATE_LOOK_IDS,
     RELEASED_LOOK_IDS,
+    OVER_TARGET_LOOK_IDS,
     RURAL_THEME_ID,
     SHIPPED_THEMES,
     WORKSHOP_THEME_ID,
@@ -170,7 +171,7 @@ describe('theme-table-ids-are-pinned', () => {
         expect(rural.bg).not.toEqual(neo.bg);
     });
 
-    it('pins the reserved, paid and released ids by value, and no reserved id is a row', () => {
+    it('pins the reserved, paid, released and over-target ids by value, and no reserved id is a row', () => {
         // Step 8, the critic's item 1: whether an id is private, paid or
         // released is a public literal, so a private commit cannot free or
         // release one behind an opaque pin bump. Pinned by value, because
@@ -182,6 +183,9 @@ describe('theme-table-ids-are-pinned', () => {
         expect(PAID_LOOK_IDS).toEqual([0x04]);
         // Empty for the whole of step 8: step 9 adds 0x04 beside its price row.
         expect(RELEASED_LOOK_IDS).toEqual([]);
+        // No look is admitted over its art budget's target: an id joins this
+        // list in a public diff beside its private index's reason.
+        expect(OVER_TARGET_LOOK_IDS).toEqual([]);
         for (const id of PRIVATE_LOOK_IDS) {
             expect(isShippedThemeId(id), `0x0${id.toString(16)} is a shipped row`).toBe(false);
             expect(decodeTheme(id).known).toBe(false);
@@ -196,12 +200,13 @@ describe('theme-table-ids-are-pinned', () => {
         expect(PAID_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
         expect(FREE_PRIVATE_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
         expect(RELEASED_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
+        expect(OVER_TARGET_LOOK_IDS.every((id) => PRIVATE_LOOK_IDS.includes(id))).toBe(true);
         expect(new Set(PRIVATE_LOOK_IDS).size).toBe(PRIVATE_LOOK_IDS.length);
         // The workshop's scratch id is no private look's (the skeleton's and
         // the fixture's are pinned beside them, `layout/looks.test.ts`).
         expect(PRIVATE_LOOK_IDS).not.toContain(WORKSHOP_THEME_ID);
         // Frozen: a reader cannot widen the list at run time.
-        for (const list of [PRIVATE_LOOK_IDS, FREE_PRIVATE_LOOK_IDS, PAID_LOOK_IDS, RELEASED_LOOK_IDS]) {
+        for (const list of [PRIVATE_LOOK_IDS, FREE_PRIVATE_LOOK_IDS, PAID_LOOK_IDS, RELEASED_LOOK_IDS, OVER_TARGET_LOOK_IDS]) {
             expect(Object.isFrozen(list)).toBe(true);
         }
     });

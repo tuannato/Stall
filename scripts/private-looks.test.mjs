@@ -6,12 +6,14 @@ import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+    BUDGET_REASON_MAX,
     FIXTURE_PRIVATE_LOOK_CLASS,
     FULL_COMMIT,
     GIT_LOCATION_VARS,
     HARNESS_LOOK_CLASSES,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
+    budgetReasonProblem,
     gitFilesAt,
     gitTextAt,
     parsePrivateIndex,
@@ -311,6 +313,118 @@ describe('a-private-index-cannot-free-a-reserved-id', () => {
         const free = { ...facts, paid: [] };
         assert.match(privateLooksProblems({ ...repoOf({ paid: true }), facts: free })[0], /paid is true, and PAID_LOOK_IDS says false/);
         assert.deepEqual(privateLooksProblems({ ...repoOf({ paid: false }), facts: free }), []);
+    });
+});
+
+describe('a-budget-reason-is-one-plain-sentence-or-nothing', () => {
+    /**
+     * `budgetReason` (D-2026-10-06-08) is the one optional field of an index
+     * entry: the stated reason a look may weigh more than the art budget's
+     * soft target and still be admitted under its hard cap
+     * (`each-look-keeps-its-art-budget`, `src/bundle.test.ts`). Fail closed:
+     * absent is no reason; a string with something to read is one; anything
+     * else — not a string, empty, only whitespace, over
+     * `BUDGET_REASON_MAX`, a control, format, line or paragraph separator,
+     * surrogate, private-use or unassigned character — refuses the whole
+     * index, so a look is never admitted on a reason no single printed line
+     * could show.
+     */
+    const one = (entry) => parsePrivateIndex(indexOf(entry));
+    const reason = 'Ink wash draws its ground as four masks the owner refused to raster.';
+
+    it('reads an entry without one, and one with a sentence, and carries the sentence', () => {
+        assert.deepEqual(one({}).problems, []);
+        const { index, problems } = one({ budgetReason: reason });
+        assert.deepEqual(problems, []);
+        assert.equal(index.looks[0].budgetReason, reason);
+        assert.deepEqual(privateLooksProblems({ ...repoOf({ budgetReason: reason }), facts: { ...facts, overTarget: [0x04] } }), []);
+        assert.equal(budgetReasonProblem(reason), undefined);
+        assert.equal(budgetReasonProblem('é'.repeat(BUDGET_REASON_MAX)), undefined);
+    });
+
+    it('refuses a reason that is not one plain sentence, and the whole index with it', () => {
+        for (const bad of [
+            '',
+            ' ',
+            '\t\n ',
+            '\u00a0\u3000',
+            null,
+            42,
+            true,
+            ['a reason'],
+            { why: 'a reason' },
+            'é'.repeat(BUDGET_REASON_MAX + 1),
+            'two\nlines',
+            'an escape \u001b[31m sequence',
+            'a bidi \u202e override',
+            'a zero\u200bwidth space',
+            // One printed line only: the line and paragraph separators (the critic's item 4).
+            'ok\u2028look budget \u00b7 t-x: 1 gzip -9 bytes, within',
+            'two\u2029paragraphs',
+            'a next-line\u0085control',
+            'a vertical\u000btab',
+            'a lone \ud800 surrogate',
+            'a private \ue000 use',
+            'an unassigned \u0378 point',
+        ]) {
+            const { index, problems } = one({ budgetReason: bad });
+            assert.equal(problems.length, 1, JSON.stringify(bad));
+            assert.match(problems[0], /looks\[0\]: budgetReason/, JSON.stringify(bad));
+            assert.equal(index, undefined, 'no half an index downstream');
+            assert.notEqual(budgetReasonProblem(bad), undefined, JSON.stringify(bad));
+        }
+        // Any other field beside the required ones is still an unknown one.
+        assert.match(one({ budgetreason: reason }).problems[0], /an unknown field "budgetreason"/);
+    });
+});
+
+describe('an-over-target-look-is-a-public-diff', () => {
+    /**
+     * The owner's OK on CRITIC-WEIGHT-BUCKETS item 1 (2026-10-06): a look
+     * admitted between its art budget's target and its cap is named in
+     * `OVER_TARGET_LOOK_IDS` (`src/domain/theme.ts`), a reviewable public
+     * diff, and states its reason privately (`budgetReason`). The two agree
+     * both ways, every listed id is reserved, and the tracked fixture — a
+     * public index — states no reason.
+     */
+    const reason = 'Ink wash draws its ground as four masks the owner refused to raster.';
+    const listed = { ...facts, overTarget: [0x04] };
+
+    it('reads the public list from the theme table, empty', () => {
+        assert.deepEqual(facts.overTarget, []);
+    });
+
+    it('passes a listed look that states a reason, and one neither listed nor stating one', () => {
+        assert.deepEqual(privateLooksProblems({ ...repoOf({ budgetReason: reason }), facts: listed }), []);
+        assert.deepEqual(privateLooksProblems({ ...repoOf({}), facts }), []);
+    });
+
+    it('refuses a reason the public list does not name, and a listed look with no reason', () => {
+        const unlisted = privateLooksProblems({ ...repoOf({ budgetReason: reason }), facts });
+        assert.equal(unlisted.length, 1);
+        assert.match(unlisted[0], /looks\[0\] \(some-look\): states a budgetReason, and OVER_TARGET_LOOK_IDS does not name the id/);
+        const unreasoned = privateLooksProblems({ ...repoOf({}), facts: listed });
+        assert.equal(unreasoned.length, 1);
+        assert.match(unreasoned[0], /OVER_TARGET_LOOK_IDS names the id, and its entry states no budgetReason/);
+    });
+
+    it('refuses a listed id that is not reserved, and facts that carry no list', () => {
+        const stray = privateLooksProblems({ ...repoOf({}), facts: { ...facts, overTarget: [0x07] } });
+        assert.deepEqual(stray, ['OVER_TARGET_LOOK_IDS names 0x07, which PRIVATE_LOOK_IDS does not reserve']);
+        const { overTarget: _, ...without } = facts;
+        assert.throws(() => privateLooksProblems({ ...repoOf({}), facts: without }), /OVER_TARGET_LOOK_IDS/);
+    });
+
+    it('refuses a reason on the tracked fixture, listed or not, and passes the fixture as tracked', () => {
+        const fixtureEntry = { cls: FIXTURE_PRIVATE_LOOK_CLASS, budgetReason: reason };
+        for (const over of [facts, listed]) {
+            const problems = privateLooksProblems({ ...repoOf(fixtureEntry), facts: over, fixture: true });
+            assert.equal(problems.length, 1, JSON.stringify(over.overTarget));
+            assert.match(problems[0], /the tracked fixture states a budgetReason/);
+        }
+        const tracked = trackedFixture();
+        assert.deepEqual(privateLooksProblems({ ...tracked, facts, fixture: true }), []);
+        assert.equal(parsePrivateIndex(tracked.indexText).index.looks.some((entry) => Object.hasOwn(entry, 'budgetReason')), false);
     });
 });
 

@@ -27,7 +27,25 @@ export type WeightBuckets = {
     readonly problems: readonly string[];
 };
 
-export declare const LOOK_ART_BUDGET_GZIP: number;
+export declare const LOOK_ART_TARGET_GZIP: number;
+export declare const LOOK_ART_CAP_GZIP: number;
+
+export type LookBudgetVerdict = {
+    readonly admitted: boolean;
+    readonly state: 'within' | 'admitted-over-target' | 'refused-over-target' | 'over-cap' | 'unread';
+    /** What every run prints for the look: its figure against the target and the cap, and its reason when one admitted it. */
+    readonly line: string;
+};
+export declare function lookBudgetVerdict(input: {
+    look: string;
+    total: number;
+    reason?: string | undefined;
+    /** Its id in `OVER_TARGET_LOOK_IDS`: the owner's public OK to weigh over the target. */
+    listed?: boolean;
+    publicLog?: boolean;
+}): LookBudgetVerdict;
+export declare const PUBLIC_LOG_ENV: 'GITHUB_ACTIONS';
+export declare function printsPublicly(env?: Readonly<Record<string, string | undefined>>): boolean;
 export declare function bytesOf(part: BuiltPart): number;
 export declare function builtUrls(css: string): string[];
 export declare function weightBuckets(
