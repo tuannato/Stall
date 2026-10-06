@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build, type PluginOption } from 'vite';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { loadKitLook } from '../layout/workshopKit';
 import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
@@ -10,13 +10,17 @@ import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets
 import { wornSheets } from '../scripts/sheet-roles.mjs';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV, selectionFromEnv, withoutSelection } from '../scripts/looks-selection.mjs';
 import {
-    LOOK_ART_BUDGET_GZIP,
+    LOOK_ART_CAP_GZIP,
+    LOOK_ART_TARGET_GZIP,
     bytesOf,
     lookArtBudget,
+    lookBudgetVerdict,
     privateLookArtBudget,
     privateLookRows,
     weightBuckets,
     type BuiltPart as WeighedPart,
+    type LookBudgetVerdict,
+    type WeightBuckets,
 } from '../scripts/weight-buckets.mjs';
 import { attachmentsForTheme } from './domain/attachments';
 import { SHIPPED_THEMES, decodeTheme } from './domain/theme';
@@ -223,6 +227,9 @@ async function deployParts(selection: Readonly<Record<string, string>>): Promise
  */
 const EVERY_VISITOR_CEILING_BYTES = 895_000;
 
+/** A byte count as a run prints it. */
+const figure = (bytes: number): string => bytes.toLocaleString('en-US');
+
 describe('every-visitor-weight-has-a-ceiling', () => {
     /*
      * What a first visit to any page of the app downloads before anything
@@ -242,10 +249,12 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * fit read by ink, `src/ui/signInk.ts`, its own box only); 866,652 after
      * the critic's re-check (+476: the line measured as painted — its
      * `text-transform`, small caps and width).
-     * **This alarm can no longer fire first** (the 8f1 critic's item 5): on
-     * demand is 262,846, so `served-weight-has-a-ceiling` trips once this
-     * bucket passes about 867,154 — 30 KB under this ceiling. Not re-based
-     * here; the owner's question before 8g (below).
+     * **Kept at 895,000 when the ceilings were split by bucket**
+     * (D-2026-10-06-07): this alarm is this bucket's alone again, and the
+     * on-demand bucket has its own (`on-demand-weight-has-a-ceiling`). The
+     * served sum that read this bucket a second time, and so fired with
+     * ~28 KB of this ceiling still free, is retired. Each run prints the
+     * reading.
      */
 
     it(`keeps every visitor's download under ${EVERY_VISITOR_CEILING_BYTES} bytes`, async () => {
@@ -256,6 +265,7 @@ describe('every-visitor-weight-has-a-ceiling', () => {
         expect(files.filter((name) => name.endsWith('.js')).length, 'no entry chunk').toBeGreaterThan(0);
         expect(files.filter((name) => name.endsWith('.css')).length, 'no entry CSS').toBeGreaterThan(0);
         expect(buckets.everyVisitor.bytes, 'nothing was measured').toBeGreaterThan(500_000);
+        console.log(`weight · every visitor: ${figure(buckets.everyVisitor.bytes)} bytes against a ceiling of ${figure(EVERY_VISITOR_CEILING_BYTES)}`);
         expect(
             buckets.everyVisitor.bytes,
             `every visitor downloads ${buckets.everyVisitor.bytes} bytes against ${EVERY_VISITOR_CEILING_BYTES}`,
@@ -264,95 +274,78 @@ describe('every-visitor-weight-has-a-ceiling', () => {
 });
 
 /**
- * The served weight has a ceiling. The wasm removal (§9) took the script from
- * ~2.05 MB to ~0.39 MB, and nothing since has watched the sum — a third font
- * subset or a careless dependency would land unnoticed. Raising this number
- * is allowed and must be a deliberate diff, not a surprise.
+ * What a screen fetches when it asks — faces, decoration art the entry CSS
+ * names, pictures a script imports, chunks nothing imports statically — has
+ * its own ceiling (D-2026-10-06-07, the owner, 2026-10-06), and no ceiling
+ * sums two buckets.
  *
- * Since step 6 it counts UTF-8 BYTES (it counted `code.length`, ~660 under)
- * and everything a visitor to a stall in a BUNDLED look can be served —
- * every-visitor and on demand — but no worn-only look's sheet or art: those
- * are that look's, under its own budget (`each-look-keeps-its-art-budget`),
- * and a fifth look must not eat this ceiling's headroom for the others.
+ * It replaced `served-weight-has-a-ceiling`, which held every-visitor + on
+ * demand under one number (1,130,000 at the end) and so counted the
+ * every-visitor bucket twice: measured 1,129,498 after step 8f2, it fired
+ * with 502 bytes left while every visitor's own download had ~28 KB of its
+ * ceiling free (the 8f1 critic's item 5). Its raises, each with the
+ * feature that spent the room, are in `git log -G 'const CEILING_BYTES = '
+ * -- src/bundle.test.ts`. The sum is printed by this test as a report and
+ * gates nothing.
+ *
+ * Measured 262,846 bytes on 2026-10-06 (main 6464b67, in a vitest worker
+ * with no private look: the eight woff2 subsets, the decoration art, the
+ * door's deck pictures and the logo), the ceiling that plus the house's 4%,
+ * rounded up to the thousand — so a font subset or a picture added without
+ * a deliberate raise (an 85 KB latin-ext subset re-added by accident, say)
+ * lands past it. A deploy build is held to it too (the built case of
+ * `each-look-keeps-its-art-budget`): a private look's sheet, art and faces
+ * are its own worn bucket, never on demand. Red: a file planted on demand past the
+ * ceiling, below, over the real build's own buckets; and by hand, a
+ * 12,000-byte `?url` picture imported from `render.ts` — on demand 274,846
+ * and refused, while every visitor's bucket grew 88 bytes (the URL) and
+ * stayed green, where the served sum would have charged both.
  */
-describe('served-weight-has-a-ceiling', () => {
-    // Measured 564,858 the day the two Inter subsets landed, 649,559 the day
-    // the three design stylesheets applied directly (the owner's ruling), and
-    // 710,198 the day the direct-payment rail shipped — 691,199 the commit
-    // before it, so the whole rail is about 19 KB of code, copy and CSS —
-    // and 760,548 on the evening of 2026-09-07, when the D round, the
-    // second price feed with its sentence tables, and the embed box landed
-    // together and crossed the 760,000 line by 548 bytes. Raised to 800,000
-    // as the deliberate diff this docblock asks for; the margin is for
-    // ordinary growth, and an 85 KB latin-ext subset re-added by accident
-    // still lands past this and fails.
-    //
-    // Measured 799,933 at the commit before the shop window — 67 bytes of
-    // headroom, which is not a margin, it is a coincidence. Raised to 840,000
-    // for that feature: a second render path, its own stylesheet, an options
-    // sheet and the drivers, against the direct-payment rail's measured 19 KB
-    // for a whole rail. Deliberate, and the number to watch is the delta this
-    // docblock records rather than the ceiling, which is only ever the alarm.
-    // The 85 KB subset still fails, which is what the alarm is for.
-    //
-    // Measured 842,838 after round 16 (2026-09-20): the door's deck and
-    // tiles, the studio's four doors and the two sheets that took the recipe
-    // and the embed code off the card — about 12 KB over the previous
-    // reading, most of it the door. Raised to 860,000 as the deliberate diff
-    // this docblock asks for; the delta is the number, the ceiling the alarm.
-    // Measured 872,918 on 2026-09-21 with the surcharge round and "Pay
-    // several" in — the strip, the rows' three modes, a second pay sheet and
-    // the selection's domain module: 30,080 bytes over the previous reading
-    // of 842,838, about 1.6× the direct-payment rail's 19 KB. Raised to
-    // 900,000 as the deliberate diff; the delta is the number, the ceiling
-    // the alarm.
-    // 2026-09-22: the ticker preset and the touch wall took it to 900,403 —
-    // +27,485 over the basket round's 872,918, of which the ticker is a
-    // renderer, a scheduler and a stylesheet block and the wall is a second
-    // render branch with five controls and a frozen payment. Raised to
-    // 940,000, which is the same deliberate 4% headroom the last two
-    // readings were given; the delta is the number, the ceiling the alarm.
-    // 2026-09-26: Stall Serif, a renamed Lora (Rural), and JetBrains Mono (Neo and every mono line)
-    // self-hosted, the owner's call, so every OS paints one font: six woff2
-    // files, 148,264 bytes, took it to 1,085,256. A visitor fetches only the
-    // subsets the look on screen uses. Raised to 1,130,000, the same 4%.
-    // 2026-09-27 (step 6): 1,122,889 in bytes (1,122,220 characters), no
-    // worn-only look shipped; the ceiling unchanged.
-    // 2026-10-06, steps 8a–8f1, measured in a vitest worker with no private
-    // look: 1,124,570 at 8e2 (main 1c95aa0), +1,681 over step 6 for the
-    // join, the loader and the paid gate; 1,127,358 after 8f1's shared
-    // hooks and its critic's fixes, +2,788 more — `lookMark`,
-    // `applyNameTiers`, `scriptOf`, `chooseAttachment`, the two new mounts,
-    // `shelf()`, the printed tag's clean-up and the picker's not-worn line
-    // (`lookData`'s new messages are not in the bundle). 2,642 bytes under,
-    // and on demand is 262,846 on both sides, so this ceiling now trips
-    // before the every-visitor one can. NOT raised (the 8f1 critic's item
-    // 5): before 8g the owner decides between the usual 4% and re-basing
-    // every-visitor to served minus on demand, so the two alarms stop
-    // shadowing each other. The 8f1 critic read 99 bytes more at 68fb1a9 in
-    // a plain build; not explained.
-    // 8f2 and its critic's fixes: 1,129,022, +1,664 for the name ladder's
-    // fit read by ink (`inkFits` in src/ui/signInk.ts, the line's measured
-    // glyphs in its own box) — the probe's new rules are harness code and
-    // ship nothing. The `clip-path` shapes the probe resolves stay out of
-    // the app's bundle for this ceiling: with them it read 1,131,689. The
-    // critic's re-check: 1,129,498, +476 for the line measured as painted
-    // (its `text-transform`, small caps and width). 502 bytes under; not
-    // raised — the owner approved splitting the ceilings by bucket
-    // (D-2026-10-06-07), which retires this sum, and lands first.
-    const CEILING_BYTES = 1_130_000;
+const ON_DEMAND_CEILING_BYTES = 274_000;
 
-    it(`keeps the built output under ${CEILING_BYTES} bytes, worn-only looks apart`, async () => {
+/** The on-demand ceiling over a build's buckets: what the real build and the plant both go through. */
+function onDemandFaults(buckets: WeightBuckets): string[] {
+    return buckets.onDemand.bytes < ON_DEMAND_CEILING_BYTES
+        ? []
+        : [`on demand is ${buckets.onDemand.bytes} bytes against a ceiling of ${ON_DEMAND_CEILING_BYTES}`];
+}
+
+describe('on-demand-weight-has-a-ceiling', () => {
+    it(`keeps what a screen fetches on demand under ${ON_DEMAND_CEILING_BYTES} bytes, worn-only looks apart`, async () => {
         const parts = await appParts();
         const buckets = weightBuckets(parts, { worn: WORN });
         expect(buckets.problems).toEqual([]);
-        const total = buckets.everyVisitor.bytes + buckets.onDemand.bytes;
-        expect(total, 'nothing was built').toBeGreaterThan(100_000);
+        expect(buckets.onDemand.files.filter((name) => name.endsWith('.woff2')).length, 'the faces are on demand').toBe(8);
+        expect(buckets.onDemand.bytes, 'nothing was measured').toBeGreaterThan(100_000);
         const worn = Object.values(buckets.worn).reduce((sum, bucket) => sum + bucket.bytes, 0);
-        expect(total + worn, 'a file fell out of every bucket').toBe(
+        expect(buckets.everyVisitor.bytes + buckets.onDemand.bytes + worn, 'a file fell out of every bucket').toBe(
             parts.reduce((sum, part) => sum + bytesOf(part), 0),
         );
-        expect(total, 'the served weight grew past the stated ceiling').toBeLessThan(CEILING_BYTES);
+        console.log(
+            `weight · on demand: ${figure(buckets.onDemand.bytes)} bytes against a ceiling of ${figure(ON_DEMAND_CEILING_BYTES)}` +
+                ` · served, every visitor + on demand (a report, no ceiling): ${figure(buckets.everyVisitor.bytes + buckets.onDemand.bytes)}`,
+        );
+        expect(onDemandFaults(buckets)).toEqual([]);
+    }, 120_000);
+
+    it('refuses a file planted on demand past the ceiling, and moves no other bucket', async () => {
+        const parts = await appParts();
+        const before = weightBuckets(parts, { worn: WORN });
+        // A font-shaped file nothing names: on demand by the bucket rule, one
+        // byte more than the ceiling has left.
+        const planted: WeighedPart = {
+            type: 'asset',
+            fileName: 'assets/planted-on-demand.woff2',
+            source: new Uint8Array(Math.max(1, ON_DEMAND_CEILING_BYTES - before.onDemand.bytes + 1)),
+            originalFileNames: ['src/ui/fonts/planted-on-demand.woff2'],
+        };
+        const after = weightBuckets([...parts, planted], { worn: WORN });
+        expect(after.problems).toEqual([]);
+        expect(after.onDemand.files).toContain(planted.fileName);
+        expect(onDemandFaults(after)).toEqual([expect.stringMatching(/^on demand is \d+ bytes against a ceiling of \d+$/)]);
+        // The split is the point: a file on demand costs the every-visitor
+        // ceiling nothing, where the served sum spent both ceilings' room on it.
+        expect(after.everyVisitor).toEqual(before.everyVisitor);
     }, 120_000);
 });
 
@@ -362,7 +355,7 @@ describe('every-emitted-file-is-in-one-weight-bucket', () => {
      * look's file named anywhere else — the entry CSS, a shared decoration
      * another sheet names, another look's sheet — is a refusal: counted in
      * two places it is either under-counted by the look's budget or dropped
-     * by the served ceiling where a visitor still pays for it. The
+     * by the bucket ceilings where a visitor still pays for it. The
      * production build carries no worn-only look yet; the probe build
      * carries the harness's fixture (`layout/fixture-look.css`), which is
      * the subject until one ships. Red: the fixture sheet naming
@@ -464,19 +457,53 @@ describe('a-worn-only-look-sheet-is-not-in-the-entry-css', () => {
     }
 });
 
+/**
+ * A fixed-seed run of decimal digits in one SVG path: art the allow-list
+ * passes and gzip cannot shrink much, so a plant lands where it is meant to.
+ * gzip -9 of the SVG measured 2026-10-06: 387,656 bytes at 700,000 digits
+ * (between the art budget's target and its cap, once a look's own sheet is
+ * added) and 774,614 at 1,400,000 (over the cap).
+ */
+function digitsSvg(count: number): string {
+    let seed = 0x2545f491;
+    const digits = Array.from({ length: count }, () => {
+        seed ^= seed << 13;
+        seed ^= seed >>> 17;
+        seed ^= seed << 5;
+        return String((seed >>> 0) % 10);
+    }).join('');
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`;
+}
+const BETWEEN_DIGITS = 700_000;
+const OVER_CAP_DIGITS = 1_400_000;
+
 describe('each-look-keeps-its-art-budget', () => {
     /*
      * What one visitor to a stall in a worn-only look downloads for it, in
      * gzip -9 bytes (Node zlib): the look's sheet and the art its bare rules
-     * name, plus the largest row of each decoration slot
-     * (`lookArtBudget`), under `LOOK_ART_BUDGET_GZIP` — whose number and
-     * reason (Ink wash as drawn, 164,872 before its face) are in
-     * `scripts/weight-buckets.mjs`. The bundled looks are the every-visitor
-     * ceiling's, not this budget's. No shipped look is worn only yet, so
-     * the real subject is the harness's fixture look on the probe build,
-     * and a synthetic look holds the arithmetic: two rows in one slot count
-     * the larger, a second slot adds its own, and 600 KB of art is refused.
+     * name, plus the largest row of each decoration slot (`lookArtBudget`),
+     * read against a soft target and a hard cap (D-2026-10-06-08,
+     * `lookBudgetVerdict`; both numbers and their reasons are in
+     * `scripts/weight-buckets.mjs`). Under `LOOK_ART_TARGET_GZIP` (256,000)
+     * a look is admitted; from there up to `LOOK_ART_CAP_GZIP` (512,000)
+     * only on the `budgetReason` its private index states — the owner's OK,
+     * since that index is his and holds only what he commits — and at or
+     * over the cap never. A look with no index (the kit, the harness's
+     * fixture look, a worn-only look the role table ships) is held to the
+     * target. **Every look a run reads prints its line** (`weigh`, on stdout
+     * under this test's name): the figure against the target and the cap,
+     * and the reason when one admitted it, so a heavy look is never admitted
+     * in silence. The bundled looks are the every-visitor ceiling's, not
+     * this budget's. No shipped look is worn only yet, so the subjects are
+     * the harness's fixture look on the probe build, the workshop kit on its
+     * own build, and every private look a run reads, from its source and on
+     * a deploy build — each proved red by a plant beside it.
      */
+    const weigh = (look: string, total: number, reason?: string): LookBudgetVerdict => {
+        const verdict = lookBudgetVerdict({ look, total, reason });
+        console.log(`look budget · ${verdict.line}`);
+        return verdict;
+    };
     const budgetOf = (parts: readonly WeighedPart[], lookClass: string, rows: readonly { cls?: string; slot: string }[]) => {
         const buckets = weightBuckets(parts, { worn: WORN });
         const bucket = buckets.worn[lookClass];
@@ -490,53 +517,102 @@ describe('each-look-keeps-its-art-budget', () => {
             rows,
         });
     };
+    /** The tracked fixture planted as a repository of its own (`plantLooks`), carrying `digits` of art in one rule and its index entry edited by `index`. */
+    const plantedLook = (digits: number, index: (entry: Record<string, unknown>) => void = () => {}) =>
+        plantLooks(
+            (path, text) => {
+                if (path === 'fixture/sheet.css') {
+                    return beforeReduce(text, `.${PLANTED_CLASS} .item-n { background-image: url(./art/heavy.svg); }`);
+                }
+                if (path === 'index.json') {
+                    const json = JSON.parse(text) as { looks: Record<string, unknown>[] };
+                    index(json.looks[0]!);
+                    return `${JSON.stringify(json, null, 4)}\n`;
+                }
+                return text;
+            },
+            { 'fixture/art/heavy.svg': digitsSvg(digits) },
+        );
+    /** The planted look as a run reads it: its index validated, its entry and its files from the commit. */
+    const readPlanted = async (repo: ReturnType<typeof plantLooks>) => {
+        const row = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env })).find(
+            (candidate) => candidate.lookClass === PLANTED_CLASS,
+        );
+        if (row === undefined) throw new Error('the planted look was not read');
+        return row;
+    };
+    const REASON = 'A planted look: its weight is the point of the test.';
 
-    it(`keeps every worn-only look under ${LOOK_ART_BUDGET_GZIP} gzip bytes`, async () => {
+    it('reads the target, the cap and a reason at their edges, and pins both numbers by value', () => {
+        // By literal value: every other assertion here derives its expectation from the symbol it tests.
+        expect(LOOK_ART_TARGET_GZIP).toBe(256_000);
+        expect(LOOK_ART_CAP_GZIP).toBe(512_000);
+        const at = (total: number, reason?: string) => lookBudgetVerdict({ look: 't-x', total, reason });
+        expect(at(0)).toMatchObject({ admitted: true, state: 'within' });
+        expect(at(255_999)).toMatchObject({ admitted: true, state: 'within' });
+        expect(at(255_999).line).toBe('t-x: 255,999 gzip -9 bytes, within the 256,000 target (cap 512,000)');
+        // A reason the look no longer needs is printed all the same.
+        expect(at(1_000, REASON)).toMatchObject({ admitted: true, state: 'within' });
+        expect(at(1_000, REASON).line).toContain(`not needed under the target: ${JSON.stringify(REASON)}`);
+        expect(at(256_000)).toMatchObject({ admitted: false, state: 'needs-reason' });
+        expect(at(511_999)).toMatchObject({ admitted: false, state: 'needs-reason' });
+        expect(at(256_000, REASON)).toMatchObject({ admitted: true, state: 'reasoned' });
+        expect(at(511_999, REASON)).toMatchObject({ admitted: true, state: 'reasoned' });
+        expect(at(300_000, REASON).line).toBe(
+            `t-x: 300,000 gzip -9 bytes, 44,000 over the 256,000 target, under the 512,000 cap — admitted on its index's budgetReason: ${JSON.stringify(REASON)}`,
+        );
+        expect(at(512_000, REASON)).toMatchObject({ admitted: false, state: 'over-cap' });
+        expect(at(2_000_000, REASON)).toMatchObject({ admitted: false, state: 'over-cap' });
+        // A reason the index reader refuses is no reason here either: fail closed.
+        for (const blank of ['', ' ', '\t\n', '\u00a0', 'two\nlines', 'é'.repeat(401)]) {
+            expect(at(300_000, blank), JSON.stringify(blank)).toMatchObject({ admitted: false, state: 'needs-reason' });
+        }
+        // A reading that failed is not a light look.
+        for (const broken of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+            expect(at(broken, REASON)).toMatchObject({ admitted: false, state: 'unread' });
+        }
+    });
+
+    it(`admits every worn-only look the role table names, and the fixture look, within the ${LOOK_ART_TARGET_GZIP} target`, async () => {
         const production = await appParts();
         for (const sheet of wornSheets().filter((s) => s.role === 'look')) {
             const row = SHIPPED_THEMES.map(({ id }) => decodeTheme(id)).find((t) => t.sheetClass === sheet.lookClass)!;
             const reading = budgetOf(production, sheet.lookClass!, attachmentsForTheme(row.id));
-            expect(reading.total, `${sheet.lookClass}: ${JSON.stringify(reading)}`).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+            // A shipped look has no private index to state a reason in: the target is its limit.
+            const verdict = weigh(sheet.lookClass!, reading.total);
+            expect(verdict.admitted, `${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
         }
         const fixture = budgetOf(await probeParts(), 't-fixture-worn', []);
         expect(fixture.total, 'the fixture look was not read').toBeGreaterThan(100);
-        expect(fixture.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+        expect(weigh('t-fixture-worn', fixture.total).state).toBe('within');
     }, 120_000);
 
     /*
      * The workshop kit's look, on the kit's own build (8d1; STEP-6-PLAN v2
      * item 6.8): the kit loads its sheet the worn-only way, so what a
      * creator's look costs one visitor is a look's budget — the sheet and
-     * its art as the kit build emits them, the rows from `look.json`. The
-     * committed kit is the skeleton, a few dozen bytes; red over a planted
-     * kit whose sheet names ~600 KB of art gzip cannot shrink, in a folder
-     * shaped like the kit's (`…/workshop/theme-workshop.css`, the path the
-     * weight guard knows the kit's sheet by). Not covered, stated: the kit's
+     * its art as the kit build emits them, the rows from `look.json`. A kit
+     * has no private index, so the target is its limit. The committed kit is
+     * the skeleton, a few dozen bytes; red (`needs-reason`) over a planted
+     * kit whose sheet names ~388 KB gzip of art — between the target and the
+     * cap, where only a stated reason admits a look — in a folder shaped
+     * like the kit's (`…/workshop/theme-workshop.css`, the path the weight
+     * guard knows the kit's sheet by). Not covered, stated: the kit's
      * commands do not run this budget; a creator meets it in `pnpm test`.
      */
-    it(`keeps the workshop kit's look under ${LOOK_ART_BUDGET_GZIP} gzip bytes, on the kit's own build`, async () => {
+    it(`keeps the workshop kit's look within the ${LOOK_ART_TARGET_GZIP} target, on the kit's own build`, async () => {
         const parts = await workshopBuiltParts();
         const buckets = weightBuckets(parts, { worn: WORN });
         expect(buckets.problems).toEqual([]);
         expect(buckets.worn['t-workshop'], 'the kit build emitted no sheet of the kit’s own').toBeDefined();
         const reading = budgetOf(parts, 't-workshop', loadKitLook().rows);
         expect(reading.total, 'the kit look was not read').toBeGreaterThan(20);
-        expect(reading.total, JSON.stringify(reading)).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+        expect(weigh('t-workshop', reading.total).state, JSON.stringify(reading)).toBe('within');
 
         const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-kit-budget-')));
         try {
             mkdirSync(join(dir, 'workshop', 'art'), { recursive: true });
-            let seed = 0x2545f491;
-            const digits = Array.from({ length: 1_400_000 }, () => {
-                seed ^= seed << 13;
-                seed ^= seed >>> 17;
-                seed ^= seed << 5;
-                return String((seed >>> 0) % 10);
-            }).join('');
-            writeFileSync(
-                join(dir, 'workshop', 'art', 'heavy.svg'),
-                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`,
-            );
+            writeFileSync(join(dir, 'workshop', 'art', 'heavy.svg'), digitsSvg(BETWEEN_DIGITS));
             const sheet = join(dir, 'workshop', 'theme-workshop.css');
             writeFileSync(
                 sheet,
@@ -555,7 +631,9 @@ describe('each-look-keeps-its-art-budget', () => {
                 },
             ]);
             const planted = budgetOf(heavy, 't-workshop', []);
-            expect(planted.total, `a heavy kit look passed the budget: ${JSON.stringify(planted)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+            expect(planted.total, 'the planted kit is not between the target and the cap').toBeGreaterThanOrEqual(LOOK_ART_TARGET_GZIP);
+            expect(planted.total, 'the planted kit is not between the target and the cap').toBeLessThan(LOOK_ART_CAP_GZIP);
+            expect(lookBudgetVerdict({ look: 't-workshop', total: planted.total })).toMatchObject({ admitted: false, state: 'needs-reason' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -567,36 +645,74 @@ describe('each-look-keeps-its-art-budget', () => {
      * — the real look in a deploy job's `pnpm test`), from its source: its
      * sheet as written (the build only minifies it, so never under), its
      * art as the build writes it (SVGs re-serialised), its rows from its
-     * `look.json` (`privateLookArtBudget`). A deploy build's own worn bucket
-     * is 8e2's. Red over a planted look carrying ~600 KB of art gzip cannot
-     * shrink.
+     * `look.json` (`privateLookArtBudget`), its reason from its index entry.
+     * A deploy build's own worn bucket is the case after the plants.
      */
-    it(`keeps every private look a run reads under ${LOOK_ART_BUDGET_GZIP} gzip bytes, from its source`, async () => {
+    it('admits every private look a run reads under the target, or under the cap on a stated reason, from its source', async () => {
         const rows = privateRows(await guardSheets());
         expect(rows.some((row) => row.look.source === 'fixture'), 'the fixture is read').toBe(true);
         for (const row of rows) {
             const reading = privateLookArtBudget(row.look);
             expect(reading.total, `${row.path}: the look was not read`).toBeGreaterThan(100);
-            expect(reading.total, `${row.path}: ${JSON.stringify(reading)}`).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+            const verdict = weigh(row.lookClass, reading.total, row.look.entry.budgetReason);
+            expect(verdict.admitted, `${row.path}: ${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
         }
-        // Digits from a fixed-seed generator: an SVG the allow-list passes and gzip cannot shrink much.
-        let seed = 0x2545f491;
-        const digits = Array.from({ length: 1_400_000 }, () => {
-            seed ^= seed << 13;
-            seed ^= seed >>> 17;
-            seed ^= seed << 5;
-            return String((seed >>> 0) % 10);
-        }).join('');
-        const heavy = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`;
-        const repo = plantLooks(
-            (path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, `.${PLANTED_CLASS} .item-n { background-image: url(./art/heavy.svg); }`) : text),
-            { 'fixture/art/heavy.svg': heavy },
+    }, 60_000);
+
+    /*
+     * The verdict over planted private looks, read the way a run reads one
+     * (`servedSheets` over a repository planted from the fixture: its index
+     * validated, the entry's `budgetReason` carried, `privateLookArtBudget`).
+     */
+    it('refuses a private look between the target and the cap with no reason, and admits and prints it with one', async () => {
+        const without = await readPlanted(plantedLook(BETWEEN_DIGITS));
+        expect(without.look.entry.budgetReason).toBeUndefined();
+        const total = privateLookArtBudget(without.look).total;
+        expect(total, 'the plant is not between the target and the cap').toBeGreaterThanOrEqual(LOOK_ART_TARGET_GZIP);
+        expect(total, 'the plant is not between the target and the cap').toBeLessThan(LOOK_ART_CAP_GZIP);
+        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total, reason: without.look.entry.budgetReason })).toMatchObject({
+            admitted: false,
+            state: 'needs-reason',
+        });
+
+        const reasoned = await readPlanted(
+            plantedLook(BETWEEN_DIGITS, (entry) => {
+                entry['budgetReason'] = REASON;
+            }),
         );
-        const planted = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env })).find(
-            (row) => row.lookClass === PLANTED_CLASS,
-        )!;
-        const reading = privateLookArtBudget(planted.look);
-        expect(reading.total, `a heavy private look passed the budget: ${JSON.stringify(reading)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+        expect(reasoned.look.entry.budgetReason).toBe(REASON);
+        const log = vi.spyOn(console, 'log');
+        try {
+            const verdict = weigh(`${PLANTED_CLASS} (planted by this test)`, privateLookArtBudget(reasoned.look).total, reasoned.look.entry.budgetReason);
+            expect(verdict).toMatchObject({ admitted: true, state: 'reasoned' });
+            expect(log).toHaveBeenCalledWith(expect.stringContaining(`budgetReason: ${JSON.stringify(REASON)}`));
+        } finally {
+            log.mockRestore();
+        }
+    }, 60_000);
+
+    it('refuses a private look over the cap whatever its index says, and an index whose reason is blank', async () => {
+        const heavy = await readPlanted(
+            plantedLook(OVER_CAP_DIGITS, (entry) => {
+                entry['budgetReason'] = REASON;
+            }),
+        );
+        expect(heavy.look.entry.budgetReason).toBe(REASON);
+        const reading = privateLookArtBudget(heavy.look);
+        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: reading.total, reason: heavy.look.entry.budgetReason })).toMatchObject({
+            admitted: false,
+            state: 'over-cap',
+        });
+        // A blank reason refuses the index itself (`budgetReasonProblem`), so the look is never read, let alone admitted.
+        for (const blank of ['', '   ']) {
+            await expect(
+                readPlanted(
+                    plantedLook(BETWEEN_DIGITS, (entry) => {
+                        entry['budgetReason'] = blank;
+                    }),
+                ),
+            ).rejects.toThrow(/budgetReason is empty/);
+        }
     }, 60_000);
     afterAll(removePlants);
 
@@ -607,12 +723,15 @@ describe('each-look-keeps-its-art-budget', () => {
      * it (`deployParts`, the fixture at the commit the guards read it) — is
      * weighed from the bytes the build emits: its own sheet as built and
      * every file that sheet's `url()`s name, through `weightBuckets` like
-     * any worn-only look, its rows from its `look.json`. The bucket is the
-     * look's alone (no file of it in the every-visitor bucket, no problem
-     * over the build), and the build's every-visitor download stays under
-     * the public ceiling. Red over the planted heavy look above, built.
+     * any worn-only look, its rows from its `look.json`, its reason from its
+     * index entry. The bucket is the look's alone (no file of it in the
+     * every-visitor bucket, no problem over the build), and the build's
+     * every-visitor download and its on-demand files stay under the public
+     * ceilings. Red over the fixture planted with art over the cap and a
+     * reason stated in its index, built — which also proves a deploy build
+     * reads an index carrying a reason.
      */
-    it(`keeps every private look a run reads under ${LOOK_ART_BUDGET_GZIP} gzip bytes, on a deploy build's own worn bucket`, async () => {
+    it(`weighs every private look a run reads on a deploy build's own worn bucket, and holds that build's other buckets`, async () => {
         const rows = privateRows(await guardSheets());
         expect(rows.some((row) => row.look.source === 'fixture'), 'the fixture is read').toBe(true);
         const selected = selectionFromEnv(process.env);
@@ -641,25 +760,18 @@ describe('each-look-keeps-its-art-budget', () => {
                 rows: privateLookRows(row.look),
             });
             expect(reading.total, `${row.path}: the built look was not read`).toBeGreaterThan(100);
-            expect(reading.total, `${row.path}: ${JSON.stringify(reading)}`).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+            const verdict = weigh(`${row.lookClass} (deploy build)`, reading.total, row.look.entry.budgetReason);
+            expect(verdict.admitted, `${row.path}: ${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
             expect(
                 buckets.everyVisitor.bytes,
                 `a deploy build of ${row.path} costs every visitor ${buckets.everyVisitor.bytes} bytes against ${EVERY_VISITOR_CEILING_BYTES}`,
             ).toBeLessThan(EVERY_VISITOR_CEILING_BYTES);
+            expect(onDemandFaults(buckets), `a deploy build of ${row.path}`).toEqual([]);
         }
-        // Red: the fixture planted with ~600 KB of art gzip cannot shrink, built.
-        let seed = 0x2545f491;
-        const digits = Array.from({ length: 1_400_000 }, () => {
-            seed ^= seed << 13;
-            seed ^= seed >>> 17;
-            seed ^= seed << 5;
-            return String((seed >>> 0) % 10);
-        }).join('');
-        const heavy = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`;
-        const repo = plantLooks(
-            (path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, `.${PLANTED_CLASS} .item-n { background-image: url(./art/heavy.svg); }`) : text),
-            { 'fixture/art/heavy.svg': heavy },
-        );
+        // Red: the fixture planted with art over the cap and a reason stated in its index, built.
+        const repo = plantedLook(OVER_CAP_DIGITS, (entry) => {
+            entry['budgetReason'] = REASON;
+        });
         const planted = await deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() });
         const plantedBuckets = weightBuckets(planted, { worn: [...WORN, { lookClass: PLANTED_CLASS, source: 'fixture/sheet.css' }] });
         const plantedBucket = plantedBuckets.worn[PLANTED_CLASS]!;
@@ -670,7 +782,10 @@ describe('each-look-keeps-its-art-budget', () => {
             files: new Map(plantedBucket.art.map((name) => [name, byName.get(name)?.source ?? ''])),
             rows: [],
         });
-        expect(plantedReading.total, `a heavy private look passed the budget built: ${JSON.stringify(plantedReading)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: plantedReading.total, reason: REASON }), JSON.stringify(plantedReading)).toMatchObject({
+            admitted: false,
+            state: 'over-cap',
+        });
     }, 180_000);
 
     it('counts the bare look and the largest row of each slot, and refuses 600 KB of art', () => {
@@ -707,7 +822,7 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(reading.bare).toBeGreaterThan(10_000);
         expect(reading.slots.yard!.gzip).toBeGreaterThan(40_000);
         expect(reading.slots.yard!.gzip).toBeLessThan(40_000 + 200);
-        expect(reading.total).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+        expect(reading.total).toBeLessThan(LOOK_ART_TARGET_GZIP);
 
         // A row's class only inside `:not()`, `:is()` or `:where()` does not
         // scope a rule to that row: its art counts as bare.
@@ -724,7 +839,8 @@ describe('each-look-keeps-its-art-budget', () => {
 
         files.set('assets/paper.svg', noise(600_000));
         const heavy = lookArtBudget({ sheet, sheetFile: 'assets/look.css', files, rows });
-        expect(heavy.total, 'a 600 KB look passed the budget').toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+        expect(heavy.total, 'a 600 KB look is under the cap').toBeGreaterThan(LOOK_ART_CAP_GZIP);
+        expect(lookBudgetVerdict({ look: 't-x', total: heavy.total, reason: REASON }).state).toBe('over-cap');
     });
 });
 
@@ -847,7 +963,8 @@ describe('built-bundle-times-out-a-chronik-request', () => {
 
 describe('public-weight-has-a-ceiling', () => {
     /**
-     * `served-weight-has-a-ceiling` builds with `write: false`, so nothing in
+     * The build's ceilings (`every-visitor-weight-has-a-ceiling`,
+     * `on-demand-weight-has-a-ceiling`) build with `write: false`, so nothing in
      * `public/` is counted — Pages serves every file there whether or not
      * anything links it (`_redirects` names no assets). Measured 947,955
      * bytes on 2026-09-05 and 962,399 on 2026-09-20 against 1,000,000.
@@ -873,7 +990,7 @@ describe('public-weight-has-a-ceiling', () => {
      * deliberate diff, so the file does not eat the room the fourth look's
      * card was given. Measured 1,128,248 with it in (and the `_headers` and
      * `/guide` lines beside it), against 1,107,823 before. Emitting the file from the build instead was weighed and
-     * refused: it would move the weight onto `served-weight-has-a-ceiling`
+     * refused: it would move the weight onto the build's ceilings
      * and take every licence change out of the diffs a reviewer reads.
      */
     const PUBLIC_CEILING_BYTES = 1_360_000;

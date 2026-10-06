@@ -7,6 +7,8 @@ export type PrivateIndexEntry = {
     readonly cls: string;
     readonly stage: PrivateLookStage;
     readonly paid: boolean;
+    /** Why the look may weigh more than the art budget's soft target (`budgetReason`): one plain sentence, or absent. */
+    readonly budgetReason?: string;
 };
 
 export type PrivateIndex = { readonly schema: 1; readonly looks: readonly PrivateIndexEntry[] };
@@ -28,6 +30,8 @@ export declare const PRIVATE_INDEX: 'index.json';
 export declare const PRIVATE_INDEX_SCHEMA: 1;
 export declare const PRIVATE_LOOK_STAGES: readonly PrivateLookStage[];
 export declare const PRIVATE_INDEX_FIELDS: readonly string[];
+export declare const PRIVATE_INDEX_OPTIONAL_FIELDS: readonly string[];
+export declare const BUDGET_REASON_MAX: number;
 export declare const PRIVATE_SLUG: RegExp;
 export declare const PRIVATE_SLUG_MAX: number;
 export declare const PRIVATE_LOOK_CLASS: RegExp;
@@ -43,6 +47,7 @@ export declare const FULL_COMMIT: RegExp;
 export declare const GIT_LOCATION_VARS: readonly string[];
 export declare const TREE_PREFIX: RegExp;
 
+export declare function budgetReasonProblem(value: unknown): string | undefined;
 export declare function privateFileProblems(files: readonly PrivateFile[]): string[];
 export declare function parsePrivateIndex(text: string): { index: PrivateIndex | undefined; problems: string[] };
 export declare function privateIndexProblems(index: PrivateIndex, facts: PublicLookFacts, options?: { fixture?: boolean }): string[];

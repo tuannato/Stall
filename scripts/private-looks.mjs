@@ -50,14 +50,61 @@ import { OWN_ART_NAME } from './workshop-css.mjs';
 /** The index at the repository's root. */
 export const PRIVATE_INDEX = 'index.json';
 
-/** The index's one schema; a later one is a new number and a new reader. */
+/**
+ * The index's one schema; a later one is a new number and a new reader.
+ * An OPTIONAL field joins schema 1 without a new number
+ * (`PRIVATE_INDEX_OPTIONAL_FIELDS`): an index that does not carry it reads
+ * the same to every reader, and a reader older than the field refuses an
+ * index that does (an unknown field) — fail closed, never a misreading.
+ */
 export const PRIVATE_INDEX_SCHEMA = 1;
 
 /** Where a look stands: `preview` builds carry it, `release` builds may (with its id in `RELEASED_LOOK_IDS`). */
 export const PRIVATE_LOOK_STAGES = Object.freeze(['preview', 'release']);
 
-/** The fields of one index entry, every one required, nothing else. */
+/** The fields of one index entry every entry carries. */
 export const PRIVATE_INDEX_FIELDS = Object.freeze(['id', 'slug', 'cls', 'stage', 'paid']);
+
+/**
+ * The fields an entry may carry beside them, and nothing else (2026-10-06,
+ * D-2026-10-06-08). `budgetReason`: why this look may weigh more than the
+ * soft target of a look's art budget (`LOOK_ART_TARGET_GZIP` in
+ * `scripts/weight-buckets.mjs`) and still be admitted under the hard cap
+ * (`LOOK_ART_CAP_GZIP`). The index is the owner's — the private repository
+ * is his, and nothing reaches it but what he commits — so a reason written
+ * there is his OK; `each-look-keeps-its-art-budget` prints it on every run,
+ * so it is never admitted in silence.
+ */
+export const PRIVATE_INDEX_OPTIONAL_FIELDS = Object.freeze(['budgetReason']);
+
+/** The longest `budgetReason`, in code points: one sentence, printed on one line. */
+export const BUDGET_REASON_MAX = 400;
+
+/**
+ * Why `value` is not a `budgetReason`, or undefined when it is one: a
+ * string with something to read after trimming — never empty, never only
+ * whitespace — at most `BUDGET_REASON_MAX` code points, and with no control
+ * or format character (`\p{Cc}`, `\p{Cf}`: a newline, an escape sequence
+ * or a bidi override would let the printed line say something else than
+ * the index does). Fail closed: anything else is refused, and a refused
+ * reason refuses the whole index (`parsePrivateIndex`), so no reader ever
+ * admits a look on a reason it could not print.
+ */
+export function budgetReasonProblem(value) {
+    if (typeof value !== 'string') {
+        return `budgetReason ${JSON.stringify(value)} is not a sentence`;
+    }
+    if (value.trim() === '') {
+        return 'budgetReason is empty, where it states why the look may weigh more than the target';
+    }
+    if ([...value].length > BUDGET_REASON_MAX) {
+        return `budgetReason is ${[...value].length} characters, over ${BUDGET_REASON_MAX}`;
+    }
+    if (/[\p{Cc}\p{Cf}]/u.test(value)) {
+        return 'budgetReason carries a control or format character, where it is one plain line';
+    }
+    return undefined;
+}
 
 /** A look's directory name: lower-case words joined by hyphens. */
 export const PRIVATE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -152,9 +199,10 @@ const isPlainObject = (value) => typeof value === 'object' && value !== null && 
 
 /**
  * The index, parsed and shaped: `{ schema: 1, looks: [{ id, slug, cls,
- * stage, paid }] }`, no field missing and none beside them. Answers `{
- * index, problems }`; `index` is undefined whenever a problem was found, so
- * nothing downstream reads half an index.
+ * stage, paid, budgetReason? }] }`, no required field missing, the optional
+ * one well formed where present (`budgetReasonProblem`), and none beside
+ * them. Answers `{ index, problems }`; `index` is undefined whenever a
+ * problem was found, so nothing downstream reads half an index.
  */
 export function parsePrivateIndex(text) {
     let json;
@@ -186,8 +234,14 @@ export function parsePrivateIndex(text) {
             return;
         }
         for (const key of Object.keys(entry)) {
-            if (!PRIVATE_INDEX_FIELDS.includes(key)) {
+            if (!PRIVATE_INDEX_FIELDS.includes(key) && !PRIVATE_INDEX_OPTIONAL_FIELDS.includes(key)) {
                 problems.push(`${where}: an unknown field ${JSON.stringify(key)}`);
+            }
+        }
+        if (Object.hasOwn(entry, 'budgetReason')) {
+            const why = budgetReasonProblem(entry.budgetReason);
+            if (why !== undefined) {
+                problems.push(`${where}: ${why}`);
             }
         }
         if (!Number.isInteger(entry.id) || entry.id < 0 || entry.id > 0xff) {

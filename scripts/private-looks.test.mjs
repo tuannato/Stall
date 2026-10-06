@@ -6,12 +6,14 @@ import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+    BUDGET_REASON_MAX,
     FIXTURE_PRIVATE_LOOK_CLASS,
     FULL_COMMIT,
     GIT_LOCATION_VARS,
     HARNESS_LOOK_CLASSES,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
+    budgetReasonProblem,
     gitFilesAt,
     gitTextAt,
     parsePrivateIndex,
@@ -311,6 +313,58 @@ describe('a-private-index-cannot-free-a-reserved-id', () => {
         const free = { ...facts, paid: [] };
         assert.match(privateLooksProblems({ ...repoOf({ paid: true }), facts: free })[0], /paid is true, and PAID_LOOK_IDS says false/);
         assert.deepEqual(privateLooksProblems({ ...repoOf({ paid: false }), facts: free }), []);
+    });
+});
+
+describe('a-budget-reason-is-one-plain-sentence-or-nothing', () => {
+    /**
+     * `budgetReason` (D-2026-10-06-08) is the one optional field of an index
+     * entry: the stated reason a look may weigh more than the art budget's
+     * soft target and still be admitted under its hard cap
+     * (`each-look-keeps-its-art-budget`, `src/bundle.test.ts`). Fail closed:
+     * absent is no reason; a string with something to read is one; anything
+     * else — not a string, empty, only whitespace, over
+     * `BUDGET_REASON_MAX`, a control or format character — refuses the whole
+     * index, so a look is never admitted on a reason no line could print.
+     */
+    const one = (entry) => parsePrivateIndex(indexOf(entry));
+    const reason = 'Ink wash draws its ground as four masks the owner refused to raster.';
+
+    it('reads an entry without one, and one with a sentence, and carries the sentence', () => {
+        assert.deepEqual(one({}).problems, []);
+        const { index, problems } = one({ budgetReason: reason });
+        assert.deepEqual(problems, []);
+        assert.equal(index.looks[0].budgetReason, reason);
+        assert.deepEqual(privateLooksProblems({ ...repoOf({ budgetReason: reason }), facts }), []);
+        assert.equal(budgetReasonProblem(reason), undefined);
+        assert.equal(budgetReasonProblem('é'.repeat(BUDGET_REASON_MAX)), undefined);
+    });
+
+    it('refuses a reason that is not one plain sentence, and the whole index with it', () => {
+        for (const bad of [
+            '',
+            ' ',
+            '\t\n ',
+            '\u00a0\u3000',
+            null,
+            42,
+            true,
+            ['a reason'],
+            { why: 'a reason' },
+            'é'.repeat(BUDGET_REASON_MAX + 1),
+            'two\nlines',
+            'an escape \u001b[31m sequence',
+            'a bidi \u202e override',
+            'a zero\u200bwidth space',
+        ]) {
+            const { index, problems } = one({ budgetReason: bad });
+            assert.equal(problems.length, 1, JSON.stringify(bad));
+            assert.match(problems[0], /looks\[0\]: budgetReason/, JSON.stringify(bad));
+            assert.equal(index, undefined, 'no half an index downstream');
+            assert.notEqual(budgetReasonProblem(bad), undefined, JSON.stringify(bad));
+        }
+        // Any other field beside the required ones is still an unknown one.
+        assert.match(one({ budgetreason: reason }).problems[0], /an unknown field "budgetreason"/);
     });
 });
 

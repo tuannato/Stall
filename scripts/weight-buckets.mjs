@@ -1,7 +1,8 @@
 /**
  * What a build costs, and who pays it (step 6, 6.1 of the step-6 plan v2).
  *
- * One ceiling over the whole build (`served-weight-has-a-ceiling`) could not
+ * One ceiling over the whole build (`served-weight-has-a-ceiling`, retired
+ * 2026-10-06) could not
  * say the thing that matters once a look's sheet stops riding the entry CSS:
  * which bytes EVERY visitor downloads, which only a visitor to a stall that
  * wears one look, and which only when a screen asks for them. So every
@@ -29,7 +30,7 @@
  * also every-visitor, also another worn look's, or named by any other
  * emitted text (another sheet's `url()`, a script's string) is two buckets'
  * — the budget would count it where it is not the only cost, and the
- * served ceiling would drop it where a visitor still pays for it — so it is
+ * bucket ceilings would drop it where a visitor still pays for it — so it is
  * a problem (`every-emitted-file-is-in-one-weight-bucket`), as is a worn
  * sheet the build did not emit as a file of its own.
  *
@@ -41,36 +42,62 @@
  * (Node zlib, deterministic — a host's brotli is not ours to pin) of the
  * sheet and the art its bare rules name, plus, per decoration slot, the
  * largest row's art — one row per slot is what a record can wear (§7). Not
- * the catalogue's sum: a visitor never downloads every row of one slot.
+ * the catalogue's sum: a visitor never downloads every row of one slot. It
+ * is read against a soft target and a hard cap (`lookBudgetVerdict`, below).
+ *
+ * **Each bucket has its own ceiling, and none is a sum of two**
+ * (D-2026-10-06-07): every-visitor and on demand in `src/bundle.test.ts`,
+ * each worn-only look its budget here. The served-weight ceiling over
+ * every-visitor + on demand is retired: it counted the every-visitor bucket
+ * a second time, so it fired while every visitor's download still had room.
  */
 import { gzipSync } from 'node:zlib';
 import { sanitizeSvg } from './svg-allow.mjs';
+import { budgetReasonProblem } from './private-looks.mjs';
 import { parseSheet, splitTopLevel } from './workshop-css.mjs';
 
 /**
- * The most gzip bytes one visitor to a worn-only look may download for it:
- * its sheet, its bare art and the largest row of each slot, faces included.
+ * A look's art budget is a soft target and a hard cap (D-2026-10-06-08,
+ * the owner, 2026-10-06), both in gzip -9 bytes of what one visitor to a
+ * stall in that look can download for it — its sheet, its bare art and the
+ * largest row of each slot, faces included (`lookArtBudget`).
  *
- * Set from Ink wash as drawn (pass 6, `private/design/surfaces-2026-09-22/
- * team/shuimo/`, measured 2026-09-27 with Node zlib at level 9): the sheet
- * ~7,300 minified, the 28 bare masks 84,126, the largest row of each of its
- * seven slots 73,449 — 164,872 in all, the four big masks (reeds, range,
- * water, plum) 67,390 of it as SVG files, the form the owner kept
- * (2026-09-27: "Ảnh raster bị mờ thì không thể chấp nhận được"). Its face,
- * Noto Serif subset to Latin with small caps, was not measured; the shipped
- * Stall Serif's Latin subset is 37,740 as woff2, which gzip barely moves.
+ * **The target, 256,000** — the number that was the whole budget from step 6
+ * to 2026-10-06. Set from Ink wash as drawn (pass 6, `private/design/
+ * surfaces-2026-09-22/team/shuimo/`, measured 2026-09-27 with Node zlib at
+ * level 9): the sheet ~7,300 minified, the 28 bare masks 84,126, the largest
+ * row of each of its seven slots 73,449 — 164,872 in all, the four big masks
+ * (reeds, range, water, plum) 67,390 of it as SVG files, the form the owner
+ * kept (2026-09-27: "Ảnh raster bị mờ thì không thể chấp nhận được"). Its
+ * face, Noto Serif subset to Latin with small caps, was not measured; the
+ * shipped Stall Serif's Latin subset is 37,740 as woff2, which gzip barely
+ * moves. Against like for like: the every-visitor bucket — index.html, the
+ * entry chunk and the entry CSS — is 235,100 gzip -9 bytes (860,043 raw,
+ * measured 2026-09-27, and by the step-6 critic), so the target lets one
+ * worn-only look cost a visitor to its stall about 1.09× the whole app
+ * compressed. 164,872 measured for Ink wash, plus its unmeasured face
+ * (~40 KB by Stall Serif's measure), plus ~50 KB of headroom — a judgement,
+ * not a measurement. Every run prints each look's figure against it.
  *
- * Against like for like: the every-visitor bucket — index.html, the entry
- * chunk and the entry CSS — is 235,100 gzip -9 bytes (860,043 raw, measured
- * 2026-09-27, and by the step-6 critic). So 256,000 lets one worn-only look
- * cost a visitor to its stall about 1.09× the whole app compressed. The
- * number is 164,872 measured for Ink wash, plus its unmeasured face (~40 KB
- * by Stall Serif's measure), plus ~50 KB of headroom — a judgement, not a
- * measurement: room for Ink wash's finishing (its rows still need their art
- * finished) without a raise, and small enough that a look twice Ink wash's
- * weight is refused.
+ * **The cap, 512,000** — twice the target, the owner's number. Above it a
+ * look is refused whatever its index says: a paint waits for a worn-only
+ * sheet at most `LOOK_SHEET_WAIT_MS` (3 s, `src/ui/lookSheets.ts`) and then
+ * paints the default look, and a mask not yet loaded paints nothing where
+ * it falls, so a look a phone cannot fetch in that time is a look its
+ * visitors do not see.
+ *
+ * **Between the two, a stated reason admits a look** (`lookBudgetVerdict`):
+ * a private look whose index entry carries `budgetReason`
+ * (`scripts/private-looks.mjs`, validated fail closed there — one plain,
+ * non-blank sentence). The index is the owner's private repository, which
+ * holds nothing he did not commit, so the reason being there IS his OK;
+ * the reason is printed beside the figure on every run, so a heavy look is
+ * never admitted in silence. A look with no index to state one in — the
+ * workshop kit, the harness's fixture look, a worn-only look the role table
+ * ships — is held to the target.
  */
-export const LOOK_ART_BUDGET_GZIP = 256_000;
+export const LOOK_ART_TARGET_GZIP = 256_000;
+export const LOOK_ART_CAP_GZIP = 512_000;
 
 /** UTF-8 bytes of an emitted part. */
 export function bytesOf(part) {
@@ -361,4 +388,61 @@ export function privateLookRows(look) {
     return [...(Array.isArray(json.moods) ? json.moods : []), ...(Array.isArray(json.decorations) ? json.decorations : [])]
         .filter((row) => row !== null && typeof row === 'object' && typeof row.slot === 'string')
         .map((row) => ({ cls: typeof row.cls === 'string' ? row.cls : undefined, slot: row.slot }));
+}
+
+const n = (value) => value.toLocaleString('en-US');
+
+/**
+ * One look's budget verdict, and the line every run prints for it:
+ * `look` the name to print (its class), `total` its `lookArtBudget` total,
+ * `reason` its index's `budgetReason`, or undefined for a look with none.
+ *
+ * - under `LOOK_ART_TARGET_GZIP`: admitted (`within`), and a reason its
+ *   index states anyway is printed as not needed;
+ * - from the target up to, not including, `LOOK_ART_CAP_GZIP`: admitted with
+ *   a stated reason (`reasoned`, the reason in the line) and refused without
+ *   one (`needs-reason`);
+ * - at or over the cap: refused whatever the reason (`over-cap`).
+ *
+ * A reason `budgetReasonProblem` refuses is no reason (fail closed: the
+ * index reader refuses it first, and a caller that passes one anyway gets
+ * the refusal, never an admission). A total that is not a finite,
+ * non-negative number is refused: a reading that failed is not a light look.
+ */
+export function lookBudgetVerdict({ look, total, reason }) {
+    const head = `${look}: ${Number.isFinite(total) ? n(total) : String(total)} gzip -9 bytes`;
+    if (!Number.isFinite(total) || total < 0) {
+        return { admitted: false, state: 'unread', line: `${head} — not a reading; refused` };
+    }
+    if (total >= LOOK_ART_CAP_GZIP) {
+        return {
+            admitted: false,
+            state: 'over-cap',
+            line: `${head}, at or over the ${n(LOOK_ART_CAP_GZIP)} cap — refused whatever its index says`,
+        };
+    }
+    const stated = reason !== undefined && budgetReasonProblem(reason) === undefined;
+    if (total < LOOK_ART_TARGET_GZIP) {
+        // A reason the look no longer needs is still printed: it is the
+        // owner's to take out of the index, and silence would hide it.
+        const spare = stated ? ` — its index's budgetReason is not needed under the target: ${JSON.stringify(reason)}` : '';
+        return {
+            admitted: true,
+            state: 'within',
+            line: `${head}, within the ${n(LOOK_ART_TARGET_GZIP)} target (cap ${n(LOOK_ART_CAP_GZIP)})${spare}`,
+        };
+    }
+    const over = `${n(total - LOOK_ART_TARGET_GZIP)} over the ${n(LOOK_ART_TARGET_GZIP)} target, under the ${n(LOOK_ART_CAP_GZIP)} cap`;
+    if (!stated) {
+        return {
+            admitted: false,
+            state: 'needs-reason',
+            line: `${head}, ${over}, and no budgetReason stated in a private look index — refused`,
+        };
+    }
+    return {
+        admitted: true,
+        state: 'reasoned',
+        line: `${head}, ${over} — admitted on its index's budgetReason: ${JSON.stringify(reason)}`,
+    };
 }

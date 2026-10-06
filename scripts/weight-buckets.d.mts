@@ -27,7 +27,16 @@ export type WeightBuckets = {
     readonly problems: readonly string[];
 };
 
-export declare const LOOK_ART_BUDGET_GZIP: number;
+export declare const LOOK_ART_TARGET_GZIP: number;
+export declare const LOOK_ART_CAP_GZIP: number;
+
+export type LookBudgetVerdict = {
+    readonly admitted: boolean;
+    readonly state: 'within' | 'reasoned' | 'needs-reason' | 'over-cap' | 'unread';
+    /** What every run prints for the look: its figure against the target and the cap, and its reason when one admitted it. */
+    readonly line: string;
+};
+export declare function lookBudgetVerdict(input: { look: string; total: number; reason?: string | undefined }): LookBudgetVerdict;
 export declare function bytesOf(part: BuiltPart): number;
 export declare function builtUrls(css: string): string[];
 export declare function weightBuckets(
