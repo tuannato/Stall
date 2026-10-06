@@ -34,7 +34,7 @@ import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } 
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
 import { FIXTURE_LOOK, FIXTURE_SHEET_CLASS, SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
-import { contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
@@ -2496,14 +2496,19 @@ let outlineChecks = 0;
  *   by where they sit (`a-new-root-layer-is-not-exempt-by-position`, step
  *   5b, the same item). Each layer of the stall root is one of the named
  *   exceptions in `ROOT_LAYERS_SET_ASIDE`, matched on its own form and on
- *   the class that paints it — the rain, what the outline is for; the
- *   aurora's washes and its tint over the rain, and Neo's own backdrop (its
- *   scanlines and its top glow), gradients across the whole stall that no
- *   single colour can match, where the outline on the plain ground stays
- *   `var(--s-bg)` — or it is read like any layer under the line: a colour
- *   or a full-size gradient composited in, anything else a failure. Until
- *   step 5b every root layer was passed by its position, so a new root
- *   decoration's layer would have been exempt the day it shipped. Neo's
+ *   what paints it — a decoration's class worn on the stall, or the look's
+ *   own backdrop as the row states it (`LOOK_BACKDROP`), never a look's
+ *   `t-*` class: the rain, what the outline is for; the aurora's washes and
+ *   its tint over the rain, and the look's backdrop scanlines and top glow
+ *   (Neo's), gradients across the whole stall that no single colour can
+ *   match, where the outline on the plain ground stays `var(--s-bg)` — or it
+ *   is read like any layer under the line: a colour or a full-size gradient
+ *   composited in, anything else a failure. Until step 5b every root layer
+ *   was passed by its position, so a new root decoration's layer would have
+ *   been exempt the day it shipped. Until 2026-10-06 the backdrop's two were
+ *   keyed to `t-neo`, so the kit's Neo starter — the same row under
+ *   `t-workshop` — was read without them and failed 212 lines its look did
+ *   not paint (`every-starter-is-measured-as-its-shipped-look`). Neo's
  *   heading glow is the other stated exception: a shadow the heading paints
  *   under its own outline, not a ground, so this rule cannot see it. Their
  *   levels at rest are measured and stated (`PROBE-RULES.md`, round 10).
@@ -2528,7 +2533,7 @@ function over(colour: { rgb: Rgb; alpha: number }, under: Rgb): Rgb {
 
 /**
  * The root's image layers this rule sets aside, each by its own form and
- * the class that paints it, with the reason (`a-new-root-layer-is-not-exempt-by-position`).
+ * what paints it, with the reason (`a-new-root-layer-is-not-exempt-by-position`).
  * A root layer none of these names is read like any layer under a line.
  */
 const C = String.raw`(?:rgba?\([^)]*\)|color\(srgb [\d.]+ [\d.]+ [\d.]+(?: \/ [\d.]+)?\))`;
@@ -2554,6 +2559,51 @@ function coloursAre(layer: string, stall: HTMLElement, tokens: readonly string[]
     );
 }
 
+/**
+ * What `paints` names when a layer is the look's own backdrop rather than a
+ * decoration's: the row's `backdrop`, which the renderer hands the stall as
+ * this custom property. Read as data (`backdropLayers`), so a look is read by
+ * what its row paints and never by its class: a starter that copies Neo's
+ * row under `t-workshop` carries Neo's backdrop and is read as Neo is.
+ */
+const LOOK_BACKDROP = '--s-backdrop';
+
+/** The look's own backdrop layers as this stall computes them, cached by the backdrop's computed value. */
+const backdropComputed = new Map<string, readonly string[]>();
+function backdropLayers(stall: HTMLElement): readonly string[] {
+    // An unregistered custom property computes to its tokens with every
+    // `var()` substituted, so this string fixes the layers and a mood that
+    // swaps the accent is a new key. One still naming a `var()` fixes
+    // nothing, and is computed afresh on every call.
+    const value = getComputedStyle(stall).getPropertyValue(LOOK_BACKDROP).trim();
+    const cached = value.includes('var(') ? undefined : backdropComputed.get(value);
+    if (cached !== undefined) return cached;
+    let layers: readonly string[] = [];
+    if (value !== '' && value !== 'none') {
+        // Computed as the root's own `background-image: var(--s-backdrop)`
+        // is, inside the stall, by a node that lays nothing out and is gone
+        // before anything is measured.
+        const scratch = document.createElement('div');
+        scratch.style.display = 'none';
+        scratch.style.backgroundImage = `var(${LOOK_BACKDROP})`;
+        stall.append(scratch);
+        const computed = getComputedStyle(scratch).backgroundImage;
+        scratch.remove();
+        layers = computed === 'none' ? [] : splitLayers(computed);
+    }
+    if (!value.includes('var(')) backdropComputed.set(value, layers);
+    return layers;
+}
+
+/**
+ * Whether `paints` painted `layer` on `stall`: a decoration's class worn on
+ * the stall, or — for `LOOK_BACKDROP` — one of the look's own backdrop
+ * layers, exactly as computed.
+ */
+function paintedBy(paints: string, layer: string, stall: HTMLElement): boolean {
+    return paints === LOOK_BACKDROP ? backdropLayers(stall).includes(layer) : stall.classList.contains(paints);
+}
+
 const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test: (layer: string, stall: HTMLElement) => boolean }> = [
     // What the outline is for.
     { name: 'the rain', paints: 'att-rainfall', test: (l) => /^url\("?[^")]*\/rain-(?:near|mid|far)[^")]*"?\)$/.test(l) },
@@ -2575,9 +2625,11 @@ const ROOT_LAYERS_SET_ASIDE: ReadonlyArray<{ name: string; paints: string; test:
             new RegExp(String.raw`^linear-gradient\(140deg, ${C}, rgba\(0, 0, 0, 0\) 46%, ${C}\)$`).test(l) &&
             coloursAre(l, stall, ['--s-accent', '--s-accent-2'], 0.16),
     },
-    // Neo's own backdrop (`--s-backdrop`): a 1px scanline every 4px, and the glow in its top 480px.
-    { name: 'Neo’s scanlines', paints: 't-neo', test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
-    { name: 'Neo’s top glow', paints: 't-neo', test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
+    // The look's own backdrop (`--s-backdrop`, Neo's row's): a 1px scanline
+    // every 4px, and the glow in its top 480px — each matched on its form AND
+    // as a layer the row's backdrop paints, never on the look's class.
+    { name: 'the backdrop’s scanlines', paints: LOOK_BACKDROP, test: (l) => /^repeating-linear-gradient\(0deg, .* 0px, .* 1px, .* 1px, .* 4px\)$/.test(l) },
+    { name: 'the backdrop’s top glow', paints: LOOK_BACKDROP, test: (l) => /^linear-gradient\((?:180deg, )?[^,]*( 0%)?, rgba?\([^)]*\) 480px\)$/.test(l) },
 ];
 
 /**
@@ -2735,7 +2787,7 @@ function groundUnder(node: HTMLElement): { lo: Rgb; hi: Rgb } | { picture: Eleme
             const size = sizes[i % sizes.length]!;
             const layer = layers[i]!;
             if (el === stall) {
-                const known = ROOT_LAYERS_SET_ASIDE.find((k) => stall.classList.contains(k.paints) && k.test(layer, stall));
+                const known = ROOT_LAYERS_SET_ASIDE.find((k) => k.test(layer, stall) && paintedBy(k.paints, layer, stall));
                 if (known !== undefined) {
                     setAside(known.name);
                     continue;
@@ -3473,9 +3525,18 @@ const measured = screensToRun();
 const withQuote = new Set<string>();
 /** Every code a measured screen painted, as `screen:name` (D4's not-read list). */
 const codesPainted = new Set<string>();
+/**
+ * Every decoration class this pass painted worn: what the coverage rules
+ * owe a pass is keyed on what it wore (`probe-coverage.mjs`), so a look that
+ * carries the rain owes the outline rules whatever its class.
+ */
+const wornClassesPainted = new Set<string>();
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
         for (const worn of variantsFor(screen, look)) {
+            for (const row of worn) {
+                if (row.cls !== undefined) wornClassesPainted.add(row.cls);
+            }
             const label =
                 worn.length === 0
                     ? look.label
@@ -3952,6 +4013,8 @@ declare global {
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
         __contrastPlan: () => ContrastJob[];
+        /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
+        __contrastOwed: () => { rain: string[]; horizon: string[] };
         /** The overlay screens, so the driver can skip their `wornAll` half. */
         __noDecorScreens: string[];
         __canvasScreens: string[];
@@ -4016,6 +4079,13 @@ window.__contrastScreens = contrastScreens(
  * above, which the runner compares with the plan's at every viewport.
  */
 window.__contrastPlan = () => contrastPlan(measuredLooks());
+/*
+ * The jobs the runner holds to having worn the rain and Grid horizon at
+ * their worst, for every measured look whose rows carry them
+ * (`contrastOwed`): Neo's on the ordinary probe, the kit's when it starts
+ * from Neo.
+ */
+window.__contrastOwed = () => contrastOwed(measuredLooks());
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
 window.__themes = measuredLooks().map((look) => ({
@@ -5416,6 +5486,8 @@ const verdict = {
     outlineChecks,
     moneyChecks,
     atRestSetAside,
+    /* Every decoration class the pass painted worn (`wornClassesPainted`). */
+    wornClasses: [...wornClassesPainted].sort(),
     buntingChecks,
     haloChecks,
     outlinedTargets: [...outlinedTargets].sort(),
