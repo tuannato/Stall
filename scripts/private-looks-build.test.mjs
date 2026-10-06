@@ -700,9 +700,14 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
      * behind `CARRIES_WORN_ONLY_LOOKS`, the build's literal, so a build that
      * carries no worn-only look folds all of it away and is the bytes it was
      * before 8d2 (measured: the public `dist` identical to bee004b's). A
-     * build carrying the fixture carries every one of its sentences. Red: a
-     * hold sentence painted outside the switch (it then ships in the public
-     * build).
+     * build carrying the fixture carries every one of them. Held by what
+     * survives minification: the sentences, the loader's own give-up
+     * message, and the hold's code — the view's `lookSheets` field (a
+     * property name, never mangled; the app writes it, the renderer reads
+     * it), the picker's `look-status` line and the try-on's `aria-busy`. Red:
+     * a hold sentence painted outside the switch, and the paint-time
+     * `view.lookSheets` write moved outside it (CRITIC-STEP-8D2 item 6,
+     * plant K) — each then ships in the public build.
      */
     it('the-hold-ships-only-with-a-worn-only-look', () => {
         const HOLD = [
@@ -711,6 +716,9 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             'Loading this look',
             'This look did not load on this page, so it is not shown',
             'did not load within',
+            'lookSheets',
+            'look-status',
+            'aria-busy',
         ];
         const js = (dir) =>
             [...distFiles(dir)]

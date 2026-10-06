@@ -28,7 +28,7 @@ vi.mock('./lookSheets', async (original) => ({
     askForLookSheet: vi.fn(),
 }));
 
-const { renderStall } = await import('./render');
+const { paintedTheme, renderStall } = await import('./render');
 const { askForLookSheet, LOOK_SHEET_PROPERTY, LOOK_SHEET_WAIT_MS, loadLookSheet, resetLookSheetsForTests } =
     await import('./lookSheets');
 const { resetMarqueesForTests, setMarqueeMeasure } = await import('./marquee');
@@ -523,6 +523,31 @@ describe('a-try-on-waits-for-its-sheet-and-the-latest-press-wins', () => {
         expect(stallOf(root).classList.contains('t-neo'), 'the look the stall had').toBe(true);
         expect(links()).toHaveLength(1);
         root.remove();
+    });
+
+    it('paints no try-on whose sheet is not ready on the page, and wears none of its rows', () => {
+        // The renderer's own half (CRITIC-STEP-8D2 item 5): a view that names
+        // a try-on whose sheet is pending, failed or never asked for paints
+        // the look the record paints — the default, under the locked record —
+        // and none of the try-on's decorations. Red: the try-on's sheet not
+        // asked in `asThisPagePaints` (the paint), or in `paintedOnThisPage`
+        // (`paintedTheme` asked directly).
+        for (const sheet of ['pending', 'failed', undefined] as const) {
+            const view = locked({
+                previewLook: { themeId: FIXTURE_ID, attachmentFlags: 0b1 },
+                ...(sheet === undefined ? {} : { lookSheets: new Map([[FIXTURE_ID, sheet]]) }),
+            });
+            // Asked directly too, as the overlay's ladder asks it: the look
+            // that paints is never a try-on before its sheet.
+            expect(paintedTheme(view).sheetClass, String(sheet)).toBe('t-modern');
+            const { root } = paint(view);
+            const stall = stallOf(root);
+            expect(stall.classList.contains('t-modern'), String(sheet)).toBe(true);
+            expect(stall.classList.contains('t-fixture-private'), String(sheet)).toBe(false);
+            expect([...stall.classList].filter((cls) => cls.startsWith('att-')), String(sheet)).toEqual([]);
+            expect(root.querySelector('.stall [class^="att-"], .stall [class*=" att-"]'), String(sheet)).toBeNull();
+            root.remove();
+        }
     });
 
     it('gives up at the wait, and a sheet that lands later changes nothing', async () => {
