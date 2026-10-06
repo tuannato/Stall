@@ -1545,6 +1545,10 @@ const FIGURE_PARTS = [
     '.tk-u',
     '.tk-from',
     '.dash',
+    // A figure's mark (step 8f1, `lookHooks.ts`) rides the buyable
+    // branches alone; one beside "Not buyable" would be the stand-in for a
+    // figure CLAUDE §6 forbids, shown or not (the 8f1 critic's item 7).
+    '[data-look-mark="figure"]',
 ].join(', ');
 const unbuyableChecks: Record<string, number> = {};
 
@@ -3212,8 +3216,11 @@ function tileLetterCuts(screen: string, label: string): Failure[] {
         if (text === '' || box.width === 0 || box.height === 0) {
             continue;
         }
+        // The letters' own span (step 8f1): the tile's mark stands beside
+        // it, and a look that shows the mark would otherwise lend its box to
+        // the letters' extent (the 8f1 critic's item 8).
         const range = document.createRange();
-        range.selectNodeContents(tile);
+        range.selectNodeContents(tile.querySelector('.ic-initials') ?? tile);
         const ink = range.getBoundingClientRect();
         const cs = getComputedStyle(tile);
         const bl = Number.parseFloat(cs.borderLeftWidth) || 0;
@@ -3226,6 +3233,53 @@ function tileLetterCuts(screen: string, label: string): Failure[] {
                 check: TILE_CHECK,
                 detail: `${describe(tile)} "${text}" spans ${ink.width.toFixed(1)}×${ink.height.toFixed(1)}px in a ${tile.clientWidth}×${tile.clientHeight}px box, so its clip cuts the letters`,
             });
+        }
+    }
+    return out;
+}
+
+/*
+ * **No shipped look shows a mark** (`no-shipped-look-shows-a-mark`, step 8f1
+ * after its critic, item 2). The marks a look may dress (`lookMark`,
+ * `src/ui/lookHooks.ts`: under every figure, first in every shelf, beside a
+ * tile's initials) are inert on every look this build does not carry as a
+ * private one — the three shipped looks, the skeleton, the kit and the
+ * harness's worn-only fixture: on every screen, look and variant of every
+ * geometry pass, each `[data-look-mark]` computes `display: none`, holds
+ * nothing and is `aria-hidden`. A selector a look writes can reach a mark
+ * without naming it (`.item-a > :last-child`, `:empty`), so the static
+ * guard (`no-app-sheet-names-a-mark`) cannot be the whole of it; this reads
+ * the cascade. A carried private look is the one that may show its marks,
+ * and what measures them shown is 8f2's. Counted per look class
+ * (`markChecksByClass`); every pass owes a read on each class it painted
+ * that is not a private look's (`probe-coverage.mjs`). Red by the critic's
+ * two plants on Rural: `.item-a > :last-child { display: inline-block }`
+ * and `.item-a > :empty { display: inline-block }`.
+ */
+const MARK_CHECK = 'no-shipped-look-shows-a-mark';
+const markChecksByClass: Record<string, number> = {};
+
+function markFaults(screen: string, label: string, look: Look): Failure[] {
+    if (look.carried === 'private') {
+        return [];
+    }
+    const out: Failure[] = [];
+    const cls = look.theme.sheetClass;
+    for (const mark of document.querySelectorAll<HTMLElement>('#app [data-look-mark]')) {
+        markChecksByClass[cls] = (markChecksByClass[cls] ?? 0) + 1;
+        const display = getComputedStyle(mark).display;
+        const why =
+            display !== 'none'
+                ? `computes display: ${display}`
+                : mark.childNodes.length > 0
+                  ? 'holds something'
+                  : mark.getAttribute('aria-hidden') !== 'true'
+                    ? 'is not aria-hidden'
+                    : undefined;
+        if (why === undefined) continue;
+        const detail = `a ${mark.getAttribute('data-look-mark')} mark in ${describe(mark.parentElement ?? mark)} ${why}`;
+        if (!out.some((f) => f.detail === detail)) {
+            out.push({ screen, theme: label, check: MARK_CHECK, detail });
         }
     }
     return out;
@@ -3555,6 +3609,7 @@ for (const screen of measured) {
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
+            failures.push(...markFaults(screen, label, look));
             failures.push(...outlineFaults(screen, label));
             failures.push(...moneySetFaults(screen, label));
             failures.push(...buntingSwingFaults(screen, label));
@@ -5490,6 +5545,8 @@ const verdict = {
     lookSheetsRead: [...lookSheetsRead].sort(),
     /* Elements with words of their own asked about a mask or clip naming a file (`no-word-is-clipped-by-a-file`). */
     fileClipChecks,
+    /* Marks read hidden, per look class (`no-shipped-look-shows-a-mark`). */
+    markChecksByClass,
     /* Every policy refusal the page met before its verdict (`the-probe-page-meets-no-csp-refusal`). */
     cspRefusals: cspRefusals(),
     clipSkips,

@@ -18,10 +18,13 @@
  * (`directory-walls`) and the app's look table needs it; it imports nothing
  * but `src/domain`, so the kit's scripts still reach it through Vite's
  * `runnerImport` (Node's own type stripping cannot load an extensionless
- * import). It reads the kit's shape plus one field: a private look's row may
- * name the token that entitles it (`mintable`, 8b2). The other fields a
- * first-party look needs beyond the kit's (its sparse voice, a decoration's
- * mount and guard) arrive with the step that paints them.
+ * import). It reads the kit's shape plus three fields: a private look's row
+ * may name the token that entitles it (`mintable`, 8b2), where its node
+ * stands (`mount`) and the slots it is never worn beside (`excludes`, both
+ * 8f1) — and its slot is any lower-case word of its own, where a kit row's
+ * is one of `KIT_SLOTS` (the workshop README lists them). The other fields
+ * a first-party look needs beyond the kit's (its sparse voice, a
+ * decoration's guard) arrive with the step that paints them.
  *
  * What the file may say, and nothing else:
  *
@@ -65,7 +68,11 @@
 import { ATT_CLASS, moodClassProblems, sameOwner } from './moodClass';
 import {
     ATTACHMENT_BITS,
+    ATTACHMENT_MOUNTS,
+    KIT_SLOTS,
     SHIPPED_ATTACHMENTS,
+    attachmentMount,
+    type AttachmentMount,
     type AttachmentSlot,
     type PaletteDelta,
     type ShippedAttachment,
@@ -152,7 +159,12 @@ export const SHAPE_PX_KEYS = [
 /** The two font weights, as whole numbers. */
 export const SHAPE_WEIGHT_KEYS = ['priceWeight', 'nameWeight'] as const satisfies readonly (keyof Shape)[];
 
-const SLOTS: readonly AttachmentSlot[] = ['crest', 'fringe', 'yard', 'mood', 'badge', 'trim'];
+/**
+ * A first-party look's slot: a lower-case word, its own exclusivity key
+ * (step 8f1 — `AttachmentSlot` is a per-look string). It reaches `data-role`
+ * and focus keys in the picker, never a class or a selector.
+ */
+const SLOT_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const TOP_KEYS = [
     'label',
     'base',
@@ -166,6 +178,13 @@ const TOP_KEYS = [
     'decorations',
 ] as const;
 const ROW_KEYS = ['bit', 'slot', 'label', 'place', 'cls', 'paint', 'palette', 'motion'] as const;
+/**
+ * The fields a first-party look's row may carry beyond the kit's: the token
+ * that entitles it (8b2), where its node stands and which slots it is never
+ * worn beside (8f1). The kit's rows keep the shape the workshop README
+ * names; a kit row naming one of these is refused.
+ */
+const FIRST_PARTY_ROW_KEYS = ['tokenId', 'mount', 'excludes'] as const;
 /** The token that entitles a minted row: its genesis txid, as chronik writes it. */
 const TOKEN_ID = /^[0-9a-f]{64}$/;
 const LABEL_MAX = 32;
@@ -373,8 +392,10 @@ function rows(
             return;
         }
         const before = problems.length;
-        unknownKeys(here, raw, mintable ? [...ROW_KEYS, 'tokenId'] : ROW_KEYS, problems, {
+        unknownKeys(here, raw, mintable ? [...ROW_KEYS, ...FIRST_PARTY_ROW_KEYS] : ROW_KEYS, problems, {
             tokenId: 'a kit row is never minted',
+            mount: 'a kit row stands where its slot puts it',
+            excludes: 'a kit row is exclusive in its slot alone',
             themeId: 'the kit gives every row its own id',
         });
         const tokenId = raw['tokenId'];
@@ -390,10 +411,46 @@ function rows(
         const slot = raw['slot'];
         if (at === 'moods' && slot !== 'mood') {
             problems.push(`${here}.slot: a mood's slot is "mood"`);
-        } else if (at === 'decorations' && (typeof slot !== 'string' || !SLOTS.includes(slot as AttachmentSlot) || slot === 'mood')) {
+        } else if (
+            at === 'decorations' &&
+            (typeof slot !== 'string' ||
+                slot === 'mood' ||
+                !(mintable ? SLOT_NAME.test(slot) : (KIT_SLOTS as readonly string[]).includes(slot)))
+        ) {
             problems.push(
-                `${here}.slot: must be one of ${SLOTS.filter((s) => s !== 'mood').join(', ')} (a mood goes under "moods")`,
+                mintable
+                    ? `${here}.slot: must be a lower-case word naming the place this row is exclusive in (a mood goes under "moods")`
+                    : `${here}.slot: must be one of ${KIT_SLOTS.filter((s) => s !== 'mood').join(', ')} (a mood goes under "moods")`,
             );
+        }
+        const mount = raw['mount'];
+        const excludes = raw['excludes'];
+        if (at === 'moods' && (mount !== undefined || excludes !== undefined)) {
+            problems.push(`${here}: a mood is the whole palette — no "mount", no "excludes"`);
+        }
+        if (at === 'decorations' && mintable) {
+            if (mount !== undefined && !(ATTACHMENT_MOUNTS as readonly unknown[]).includes(mount)) {
+                problems.push(`${here}.mount: must be one of ${ATTACHMENT_MOUNTS.join(', ')}`);
+            } else if (mount !== undefined && raw['paint'] !== 'node') {
+                problems.push(`${here}.mount: only a "node" row stands somewhere — a "root" row paints on the stall`);
+            } else if (
+                mount === undefined &&
+                raw['paint'] === 'node' &&
+                typeof slot === 'string' &&
+                SLOT_NAME.test(slot) &&
+                attachmentMount({ themeId: 0, bit: 0, slot, label: '', place: '', motion: false }) === undefined
+            ) {
+                problems.push(`${here}.mount: a "node" row in slot "${slot}" stands nowhere — name one of ${ATTACHMENT_MOUNTS.join(', ')}`);
+            }
+            if (
+                excludes !== undefined &&
+                (!Array.isArray(excludes) ||
+                    excludes.length === 0 ||
+                    new Set(excludes).size !== excludes.length ||
+                    !excludes.every((s) => typeof s === 'string' && SLOT_NAME.test(s) && s !== 'mood' && s !== slot))
+            ) {
+                problems.push(`${here}.excludes: must be a list of other decorations' slots, each once — not its own, not "mood"`);
+            }
         }
         let moodPalette: PaletteDelta | undefined;
         if (at === 'moods') {
@@ -438,6 +495,8 @@ function rows(
             place: place!,
             motion: raw['motion'] as boolean,
             ...(mintable && typeof tokenId === 'string' ? { tokenId } : {}),
+            ...(mount === undefined ? {} : { mount: mount as AttachmentMount }),
+            ...(excludes === undefined ? {} : { excludes: [...(excludes as string[])] }),
             ...(at === 'moods'
                 ? { palette: moodPalette!, ...(raw['cls'] === undefined ? {} : { cls: raw['cls'] as string }) }
                 : { cls: raw['cls'] as string, paint: raw['paint'] as 'root' | 'node' }),
@@ -588,6 +647,18 @@ export function lookFromData(json: Json, place: LookPlace): LookData {
             problems.push(
                 `slot ${row.slot}: named "${word}" and "${row.place}" — rows sharing a slot share its place word`,
             );
+        }
+    }
+
+    // An exclusion names a place this look has: a slot no other decoration
+    // of it is in is a typo, and a typo here would be an exclusion that
+    // quietly excludes nothing.
+    const decorationSlots = new Set(decorations.map((row) => row.slot));
+    for (const row of decorations) {
+        for (const slot of row.excludes ?? []) {
+            if (!decorationSlots.has(slot)) {
+                problems.push(`decorations: "${row.label}" excludes slot "${slot}", which no decoration of this look is in`);
+            }
         }
     }
 

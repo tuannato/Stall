@@ -235,6 +235,13 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * same deliberate 4% the served ceiling's readings have been given.
      * The number to watch is the delta a raise records; the ceiling is the
      * alarm. Red: a ~40 KB static import from render.ts.
+     *
+     * 861,724 at 8e2 (main 1c95aa0) and 864,512 after step 8f1's hooks and
+     * its critic's fixes, measured in a vitest worker with no private look.
+     * **This alarm can no longer fire first** (the 8f1 critic's item 5): on
+     * demand is 262,846, so `served-weight-has-a-ceiling` trips once this
+     * bucket passes about 867,154 — 30 KB under this ceiling. Not re-based
+     * here; the owner's question before 8g (below).
      */
 
     it(`keeps every visitor's download under ${EVERY_VISITOR_CEILING_BYTES} bytes`, async () => {
@@ -307,6 +314,19 @@ describe('served-weight-has-a-ceiling', () => {
     // subsets the look on screen uses. Raised to 1,130,000, the same 4%.
     // 2026-09-27 (step 6): 1,122,889 in bytes (1,122,220 characters), no
     // worn-only look shipped; the ceiling unchanged.
+    // 2026-10-06, steps 8a–8f1, measured in a vitest worker with no private
+    // look: 1,124,570 at 8e2 (main 1c95aa0), +1,681 over step 6 for the
+    // join, the loader and the paid gate; 1,127,358 after 8f1's shared
+    // hooks and its critic's fixes, +2,788 more — `lookMark`,
+    // `applyNameTiers`, `scriptOf`, `chooseAttachment`, the two new mounts,
+    // `shelf()`, the printed tag's clean-up and the picker's not-worn line
+    // (`lookData`'s new messages are not in the bundle). 2,642 bytes under,
+    // and on demand is 262,846 on both sides, so this ceiling now trips
+    // before the every-visitor one can. NOT raised (the 8f1 critic's item
+    // 5): before 8g the owner decides between the usual 4% and re-basing
+    // every-visitor to served minus on demand, so the two alarms stop
+    // shadowing each other. The 8f1 critic read 99 bytes more at 68fb1a9 in
+    // a plain build; not explained.
     const CEILING_BYTES = 1_130_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes, worn-only looks apart`, async () => {

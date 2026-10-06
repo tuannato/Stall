@@ -157,6 +157,10 @@ const MAY_TAKE: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
             ['attachmentClasses', 'reads the worn set it is handed, never the catalogue'],
             ['attachmentNodesWanted', 'reads the worn set it is handed, never the catalogue'],
             ['withMood', 'reads the row and the worn set it is handed, never the catalogue'],
+            ['chooseAttachment', "reads the look's rows it is handed, never the catalogue"],
+            ['attachmentMount', 'reads the row it is handed, never the catalogue'],
+            ['ATTACHMENT_MOUNTS', 'the places a node may stand, a constant list'],
+            ['KIT_SLOTS', "the kit's slots, a constant list"],
         ]),
     ],
 ]);

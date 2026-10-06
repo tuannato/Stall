@@ -67,6 +67,27 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         assert.deepEqual(phone, ['the-skeletons-ladder-steps-the-rows-size read no tier-1 figure']);
     });
 
+    it('owes a mark read on every look a pass painted but a private one (step 8f1)', () => {
+        const painted = { sheetClasses: [...SHIPPED, 't-skeleton', 't-fixture-private'] };
+        const marks = { 't-modern': 40, 't-neo': 40, 't-rural': 40, 't-skeleton': 40 };
+        const options = { shippedClasses: SHIPPED, privateClasses: ['t-fixture-private'], skeleton: true };
+        for (const pass of ['mobile', 'desktop', 'canvas', 'portrait', 'tablet']) {
+            const read = {
+                ...full,
+                ...painted,
+                rowSizeClasses: [...SHIPPED, 't-fixture-private'],
+                markChecksByClass: marks,
+                wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': full.wallControlRoles },
+            };
+            assert.deepEqual(probeCoverageGaps(pass, read, options), [], pass);
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, markChecksByClass: { ...marks, 't-rural': 0 } }, options),
+                ['no-shipped-look-shows-a-mark read no mark on a t-rural stall'],
+                pass,
+            );
+        }
+    });
+
     it('owes a carried private look its row and its locked record, and never a door mini (8e2)', () => {
         const PRIVATE = ['t-fixture-private'];
         const options = { shippedClasses: SHIPPED, privateClasses: PRIVATE, paidPrivateClasses: PRIVATE, skeleton: true };
@@ -216,6 +237,11 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             'wall controls read: 24 · status line asked: 50 · under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)',
         );
         assert.equal(probeCoverageLine('reduced-motion', full), '');
+        // The marks read hidden, per look, on every pass that reports them.
+        const marked = { ...quiet, markChecksByClass: { 't-neo': 9, 't-modern': 7 } };
+        assert.match(probeCoverageLine('desktop', marked), / · rows read: t-modern, t-neo, t-rural · marks read hidden: t-modern 7, t-neo 9 · door minis/);
+        assert.match(probeCoverageLine('canvas', marked), /status line asked: 50 · marks read hidden: t-modern 7, t-neo 9$/);
+        assert.equal(probeCoverageLine('tablet', marked), 'wall controls read: 24 · status line asked: 50 · marks read hidden: t-modern 7, t-neo 9');
     });
 });
 

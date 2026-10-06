@@ -27,6 +27,7 @@ import { payLandingUrl, stallPath } from '../domain/route';
 import type { BroadcastParams, StallView } from '../domain/state';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
+import { lookMark } from './lookHooks';
 import { nextCard } from '../domain/window';
 import type { TokenListing } from './render';
 import {
@@ -439,7 +440,7 @@ function listingCard(view: StallView, listing: TokenListing): HTMLElement {
             figure.classList.add('pulse');
         }
         priceRow.append(figure);
-        priceRow.append(el('span', 'bc-u', copy.XEC));
+        priceRow.append(el('span', 'bc-u', copy.XEC), lookMark('figure'));
         const tier = priceTier(amount, hasFrom, paintedTheme(view).overlayTierCeilings);
         if (tier > 0) {
             priceRow.setAttribute('data-tier', String(tier));
@@ -480,7 +481,7 @@ function quoteCard(view: StallView, price: TokenPrice, tokenId: string): HTMLEle
     if (view.broadcastPulse === true) {
         node.classList.add('pulse');
     }
-    row.append(node);
+    row.append(node, lookMark('figure'));
     // The same ladder the asked figure walks, on the same 216px of plate: the
     // unit rides inside this figure, so the whole string is what is measured.
     const tier = priceTier(figure, false, paintedTheme(view).overlayTierCeilings);

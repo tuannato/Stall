@@ -415,6 +415,21 @@ export const LOOK_MEDIA = Object.freeze([
 ]);
 
 /**
+ * State the app writes for a look's own sheet and no base sheet reads (step
+ * 8f1, `src/ui/lookHooks.ts`): the rung of the sign name's measured ladder
+ * (`applyNameTiers`, one value per rung up to its `NAME_TIER_MAX`) and the
+ * script a sign line is mostly written in (`scriptOf`, `src/domain/text.ts`).
+ * Part of `STATE_ATTRIBUTES`; listed apart because "matched by a served
+ * sheet" cannot be their proof of use until a look that reads them is
+ * served — `a-look-cannot-target-one-seller` holds each to the module that
+ * writes it instead.
+ */
+export const LOOK_HOOK_ATTRIBUTES = Object.freeze({
+    'data-name-tier': Object.freeze(['1', '2', '3', '4', '5', '6']),
+    'data-script': Object.freeze(['cjk']),
+});
+
+/**
  * The attributes a look sheet may match a value on, and the values it may
  * match: state the app writes from a closed set of its own words. Read from
  * every served sheet on 2026-09-24 (the step-4 critic's item 7, re-checked:
@@ -450,6 +465,7 @@ export const STATE_ATTRIBUTES = Object.freeze({
     'data-tier': Object.freeze(['1', '2', '3']),
     'data-touch': Object.freeze(['on']),
     'data-turn': Object.freeze(['ccw', 'cw']),
+    ...LOOK_HOOK_ATTRIBUTES,
 });
 
 /** Attributes a look sheet may test for presence alone (`[open]`), never for a value. */
@@ -620,8 +636,25 @@ function lastPseudoElement(selector) {
 }
 
 /** Why one selector of a look sheet may not stand (G3's attributes, G2's pseudo-elements, G4's engine-gated ones). */
-function selectorProblems(selector) {
+/**
+ * The shared hooks a first-party look may dress (step 8f1,
+ * `src/ui/lookHooks.ts`) — the marks, by class or attribute, and the state
+ * attributes the hooks write — which the kit may not name until the
+ * workshop README does (the 8f1 critic's item 3): no fixture the kit's probe
+ * paints carries a CJK name or a name that climbs a rung, and no rule yet
+ * measures a mark shown, so a kit rule under any of them paints on a screen
+ * no pass measures. The `--name-rungs` declaration is refused beside them
+ * (`declarationProblems`). Test: `the-kit-refuses-the-first-party-hooks`.
+ */
+const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier)(?![\w-])/;
+
+function selectorProblems(selector, { kit = false } = {}) {
     const out = [];
+    if (kit && FIRST_PARTY_HOOK.test(selector)) {
+        out.push(
+            `"${echo(selector)}" names a first-party hook (a look's mark, data-script or data-name-tier): the kit names none until the workshop README does`,
+        );
+    }
     for (const inner of attributeBlocks(selector)) {
         const why = attributeProblem(inner);
         if (why !== undefined) out.push(why);
@@ -812,6 +845,89 @@ const VENDOR_PREFIX = /^-(webkit|moz|ms|o)-/;
 const PREFIXED_EVERYWHERE = new Set(['-webkit-line-clamp', '-webkit-box-orient']);
 
 /**
+ * `-webkit-mask-composite` takes the legacy compositing keywords, the
+ * standard `mask-composite` the new ones, and these four pairs name the same
+ * operation (step 8f1, the step-8 plan §4.2: a look that subtracts one mask
+ * layer from another writes `source-out` beside `subtract`). In a look sheet
+ * a prefixed `-webkit-mask-composite` stands beside a `mask-composite` whose
+ * value is the same, or the same layer for layer through this table
+ * (`a-legacy-mask-composite-is-the-same-value`). The kit keeps the plain
+ * rule — "beside its unprefixed twin at the same value", as the workshop
+ * README states it — until the owner words the README to match.
+ */
+export const MASK_COMPOSITE_LEGACY = Object.freeze({
+    'source-over': 'add',
+    'source-out': 'subtract',
+    'source-in': 'intersect',
+    xor: 'exclude',
+});
+
+/** Whether a `-webkit-mask-composite` value composes what a `mask-composite` value does, layer for layer. */
+function compositesAgree(legacy, standard) {
+    const a = legacy.toLowerCase().split(',').map((part) => part.trim());
+    const b = standard.toLowerCase().split(',').map((part) => part.trim());
+    return (
+        a.length === b.length &&
+        a.every((word, i) => word === b[i] || (Object.hasOwn(MASK_COMPOSITE_LEGACY, word) && MASK_COMPOSITE_LEGACY[word] === b[i]))
+    );
+}
+
+/**
+ * The boxes a look sheet may make `position: sticky` (step 8f1; the step-8
+ * critic's item 20 — written as a shape any look may use, never as one
+ * look's class): the sign's own box, `.stall-head`, so a look can keep the
+ * seller's sign in view while the goods scroll.
+ * One box, so at most one sticky box per look. Every other sticky box, and
+ * every fixed one, is refused: a box that follows the scroll can stand over
+ * a figure at a position no pass scrolled to. A rule is admitted only when
+ * every selector's subject is exactly the listed class (optionally on its
+ * `header`), at rest — no state pseudo-class, no attribute but `data-role`.
+ * The kit refuses every sticky box, as the workshop README says.
+ *
+ * **Measured by nothing until step 8f2's scroll pass** (STEP-8-PLAN §5:
+ * scroll the region in steps and run the cover checks at each), so
+ * `a-sticky-sign-waits-for-the-scroll-pass` refuses one in any served sheet
+ * until that pass lands — the exception is written down, not yet open.
+ */
+export const STICKY_BOXES = Object.freeze([
+    Object.freeze({
+        subject: 'stall-head',
+        why: "the seller's sign, kept in view while the goods scroll",
+    }),
+]);
+
+/** The last compound of a selector (its subject), split at the top-level combinators. */
+function subjectOf(selector) {
+    let depth = 0;
+    let start = 0;
+    const text = selector.trim();
+    for (let i = 0; i < text.length; i += 1) {
+        const c = text[i];
+        if (c === '"' || c === "'") {
+            i = skipString(text, i) - 1;
+        } else if (c === '(' || c === '[') depth += 1;
+        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+        else if (depth === 0 && (c === '>' || c === '+' || c === '~' || /\s/.test(c))) start = i + 1;
+    }
+    return text.slice(start);
+}
+
+/** Whether every selector of a rule names a box `STICKY_BOXES` admits, at rest. */
+function isStickyBox(selectors) {
+    return (
+        selectors !== undefined &&
+        selectors.length > 0 &&
+        selectors.every((selector) => {
+            const subject = subjectOf(selector);
+            return (
+                !isStateSelector(selector) &&
+                STICKY_BOXES.some((box) => subject === `.${box.subject}` || subject === `header.${box.subject}`)
+            );
+        })
+    );
+}
+
+/**
  * Why the declarations of one block may not stand, or nothing: G2 (generated
  * text and every other text road), G4 (`!important`, a fixed or sticky
  * position, a prefixed property with no twin, the ink roads). `selectors` is
@@ -834,7 +950,7 @@ function isStateSelector(selector) {
     return [...selector.matchAll(/\[\s*([\w-]+)/g)].some((m) => m[1].toLowerCase() !== 'data-role');
 }
 
-function declarationProblems(decls, selectors) {
+function declarationProblems(decls, selectors, { firstParty = false } = {}) {
     const out = [];
     for (const { prop, value } of decls) {
         const shown = `${prop}: ${echo(value, 48)}`;
@@ -887,6 +1003,9 @@ function declarationProblems(decls, selectors) {
         if (READ_PLAINLY.has(prop) && /(?<![\w-])var\s*\(/i.test(bare)) {
             out.push(`${shown} — write ${prop} plainly: a var() here carries a value past these rules`);
         }
+        if (!firstParty && prop === '--name-rungs') {
+            out.push(`${shown} — the name ladder is a first-party hook: the kit states no rungs until the workshop README does`);
+        }
         if (prop.startsWith('--') && word('text').test(keywords)) {
             out.push(`${shown} — a custom property holding "text" is how a background clipped to the text hides in a shorthand`);
         }
@@ -923,14 +1042,22 @@ function declarationProblems(decls, selectors) {
             out.push(`${shown} — reverting the colour hands a link back to the browser's own blue and visited purple, which no pass can see`);
         }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
-            out.push(
-                `${shown} — a fixed or sticky box follows the scroll, and can stand over a figure at a position the probe never scrolled to`,
-            );
+            const sign = firstParty && /^sticky$/i.test(keywords.trim()) && isStickyBox(selectors);
+            if (!sign) {
+                out.push(
+                    `${shown} — a fixed or sticky box follows the scroll, and can stand over a figure at a position the probe never scrolled to` +
+                        (firstParty ? ` (a look sheet may make sticky only ${STICKY_BOXES.map((b) => `.${b.subject}`).join(', ')}, at rest)` : ''),
+                );
+            }
         }
         const prefixed = PREFIXED_EVERYWHERE.has(prop) ? null : VENDOR_PREFIX.exec(prop);
         if (prefixed !== null) {
             const twin = prop.slice(prefixed[0].length);
-            const same = decls.some((d) => d.prop === twin && d.value.replace(/\s*!\s*important\s*$/i, '') === clean);
+            const same = decls.some((d) => {
+                if (d.prop !== twin) return false;
+                const theirs = d.value.replace(/\s*!\s*important\s*$/i, '');
+                return theirs === clean || (firstParty && prop === '-webkit-mask-composite' && compositesAgree(clean, theirs));
+            });
             if (!same) {
                 out.push(
                     `${shown} — a prefixed property paints only in the engines that read the prefix; write ${twin}: with the same value beside it`,
@@ -1141,9 +1268,9 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const selector of selectors) {
                     const escape = selectorEscape(selector, scope);
                     if (escape !== undefined) at(node.start, escape);
-                    for (const why of selectorProblems(selector)) at(node.start, why);
+                    for (const why of selectorProblems(selector, { kit })) at(node.start, why);
                 }
-                for (const why of declarationProblems(declarationsOf(node.body), selectors)) at(node.start, why);
+                for (const why of declarationProblems(declarationsOf(node.body), selectors, { firstParty: !kit })) at(node.start, why);
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
                 continue;
             }
@@ -1155,7 +1282,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 const stopErrors = [];
                 for (const stop of parseList(node.body ?? '', 0, (node.body ?? '').length, stopErrors)) {
                     if (stop.kind === 'rule') {
-                        for (const why of declarationProblems(declarationsOf(stop.body), undefined)) at(node.start, why);
+                        for (const why of declarationProblems(declarationsOf(stop.body), undefined, { firstParty: !kit })) at(node.start, why);
                         for (const why of fontProblems(declarationsOf(stop.body), ownFamilies)) at(node.start, why);
                     }
                 }

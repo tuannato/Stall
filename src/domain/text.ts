@@ -71,6 +71,51 @@ export function cutAtCodePoints(text: string, max: number): string {
 }
 
 /**
+ * Which script a name is mostly written in, as far as a look needs to know:
+ * `'cjk'` when more than half of its letters are Han, kana or Hangul, and
+ * nothing otherwise (step 8f1, the shared hooks). A look may set a CJK name
+ * differently from a Latin one — upright in a vertical line where Latin
+ * lies on its side, tracked wider — and CSS cannot see a string's script
+ * (nothing in this app sets `lang`), so the sign carries
+ * `data-script="cjk"` from this answer and the look's own sheet reads it. No shipped look reads it: on Modern, Neo and Rural the attribute
+ * paints nothing.
+ *
+ * **Graphemes, never code units** — the lamp's rule (`signName`): a name is
+ * up to 32 bytes of the seller's own text, and a surrogate pair or a
+ * combining mark counted on its own would tip the majority. A grapheme
+ * counts when its first code point is a letter (`\p{L}`): spaces, digits,
+ * punctuation and emoji take no side. It is CJK when that letter's script
+ * extensions include Han, Hiragana, Katakana or Hangul — so 々 and ー, which
+ * are written in both kana and Han, count with them. A tie is not a
+ * majority. Where `Intl.Segmenter` is missing, code points stand in for
+ * graphemes: a combining mark has no letter of its own, so the count
+ * changes only for a name stacking marks on CJK letters, which no script
+ * here does.
+ *
+ * Test: `a-name-is-cjk-when-most-of-its-letters-are`.
+ */
+export function scriptOf(text: string): 'cjk' | undefined {
+    const seg = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+    const parts =
+        seg === undefined
+            ? [...text]
+            : [...new seg(undefined, { granularity: 'grapheme' }).segment(text)].map((p) => p.segment);
+    let letters = 0;
+    let cjk = 0;
+    for (const part of parts) {
+        const first = String.fromCodePoint(part.codePointAt(0) ?? 0);
+        if (!/\p{L}/u.test(first)) {
+            continue;
+        }
+        letters += 1;
+        if (/[\p{Script_Extensions=Han}\p{Script_Extensions=Hiragana}\p{Script_Extensions=Katakana}\p{Script_Extensions=Hangul}]/u.test(first)) {
+            cjk += 1;
+        }
+    }
+    return cjk * 2 > letters ? 'cjk' : undefined;
+}
+
+/**
  * A token id at glance length: the first six and the last four hex
  * characters around an ellipsis, the shape `shortStallToken` gives a route
  * token. It tells apart two tokens that share a name or a ticker (owner,

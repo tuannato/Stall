@@ -15,6 +15,7 @@ import {
 import { offersWithinLock, suggestedLock } from '../domain/window';
 import * as copy from './copy';
 import { marqueeNode } from './marquee';
+import { lookMark } from './lookHooks';
 import type { TokenListing } from './render';
 import { glyphLabel } from './glyphs';
 import {
@@ -28,6 +29,7 @@ import {
     quoteFigure,
     quoteNaming,
     quotedItems,
+    shelf,
     unreadChosen,
     chosenIsNamed,
     stallBaseUrl,
@@ -313,7 +315,7 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
         const figure = el('span', 'item-x', formatXec(offer.askedSats));
         figure.setAttribute('data-role', 'price');
         amount.append(figure);
-        amount.append(el('span', 'item-u', copy.XEC));
+        amount.append(el('span', 'item-u', copy.XEC), lookMark('figure'));
         price.append(amount);
     }
     head.append(price);
@@ -382,7 +384,7 @@ function quoteRow(
     const amount = el('span', 'item-a');
     const figure = el('span', 'item-x', quoteFigure(item.price));
     figure.setAttribute('data-role', 'seller-price');
-    amount.append(figure);
+    amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
 
@@ -1009,7 +1011,7 @@ export function renderShopWindow(
     scroll.append(sign);
 
     const body = el('main', 'stall-body');
-    const strip = el('div', 'items sw-strip');
+    const strip = shelf('sw-strip');
     const rail = windowRail(view, params, view.windowRail ?? 'listings');
     const cycle = params.mode === 'cycle';
     // The customer's own half, on the quotes rail alone: a listing's road off

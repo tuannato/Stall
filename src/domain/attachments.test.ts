@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
     ATTACHMENT_BITS,
     ATTACHMENT_FLAGS_TAG,
+    ATTACHMENT_MOUNTS,
+    KIT_SLOTS,
     SHIPPED_ATTACHMENTS,
+    attachmentMount,
     attachmentsForTheme,
+    chooseAttachment,
     mintedAttachmentTokens,
     publishableFlags,
     attachmentClasses,
@@ -513,5 +517,107 @@ describe('a-published-mood-is-painted-as-authored', () => {
                 want(p.accent!),
             );
         }
+    });
+});
+
+/**
+ * Step 8f1: a first-party look's row may be never worn beside rows in other
+ * places. An exclusion is symmetric and the bit decides, the slot rule's
+ * own order: read upward, the lower bit stays. The picker makes the pair
+ * unrepresentable where the choice is made.
+ */
+describe('a-row-that-excludes-slots-wins-by-its-bit', () => {
+    const row = (bit: number, slot: string, over: Partial<ShippedAttachment> = {}): ShippedAttachment => ({
+        themeId: 4,
+        bit,
+        slot,
+        label: `row ${bit}`,
+        place: `the ${slot}`,
+        cls: `att-x-${bit}`,
+        paint: 'node',
+        motion: false,
+        tokenId: String(bit).repeat(64),
+        ...over,
+    });
+    const first = row(0, 'trim', { mount: 'below-goods' });
+    const second = row(1, 'perch', { mount: 'below-goods' });
+    const third = row(2, 'brim', { mount: 'below-goods' });
+    const badge = row(3, 'badge');
+    const field = row(6, 'field', { paint: 'root', excludes: ['trim', 'perch', 'brim'] });
+    const rows = [first, second, third, badge, field];
+    const worn = (flags: number, held?: ReadonlySet<string>) => wornFrom(rows, flags, held).map((r) => r.bit);
+
+    it('keeps the lower bit when a record carries both sides', () => {
+        expect(worn(bits(0, 6))).toEqual([0]);
+        expect(worn(bits(0, 1, 2, 3, 6))).toEqual([0, 1, 2, 3]);
+        // The exclusion's other direction: the excluded row, read first, wins.
+        const early = { ...field, bit: 0 };
+        const late = { ...first, bit: 6 };
+        expect(wornFrom([early, late], bits(0, 6)).map((r) => r.label)).toEqual([early.label]);
+        // A row on neither side is untouched.
+        expect(worn(bits(3, 6))).toEqual([3, 6]);
+    });
+
+    it('lets the far side through when the near side is not worn — unheld, or not set', () => {
+        expect(worn(bits(6))).toEqual([6]);
+        // The first set but not held takes no place, so it excludes nothing.
+        const held = new Set([field.tokenId!]);
+        expect(worn(bits(0, 6), held)).toEqual([6]);
+    });
+
+    it('the picker turns the other side off, either way round, and a press on the pressed row takes it off', () => {
+        let flags = bits(0, 1, 3);
+        flags = chooseAttachment(rows, flags, 6);
+        expect(flags).toBe(bits(3, 6));
+        flags = chooseAttachment(rows, flags, 2);
+        expect(flags).toBe(bits(2, 3));
+        flags = chooseAttachment(rows, flags, 2);
+        expect(flags).toBe(bits(3));
+        // Pressed off, a row leaves alone a row it only excluded: a record
+        // carrying both sides keeps the other one.
+        expect(chooseAttachment(rows, bits(0, 6), 6)).toBe(bits(0));
+        expect(chooseAttachment(rows, bits(0, 6), 0)).toBe(bits(6));
+        // A bit naming no row of the look passes through, and changes nothing.
+        expect(chooseAttachment(rows, bits(9, 3), 12)).toBe(bits(9, 3));
+        expect(chooseAttachment(rows, bits(9), 0)).toBe(bits(9, 0));
+    });
+
+    it('is the picker every shipped look already had: one per slot, and nothing else turned off', () => {
+        for (const themeId of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID]) {
+            const look = attachmentsForTheme(themeId);
+            for (const pressed of look) {
+                const before = bits(...look.map((r) => r.bit));
+                const after = chooseAttachment(look, before, pressed.bit);
+                for (const other of look) {
+                    const on = (after & (1 << other.bit)) !== 0;
+                    expect(on, `${pressed.label} pressed: ${other.label}`).toBe(other.slot !== pressed.slot);
+                }
+            }
+        }
+        expect(SHIPPED_ATTACHMENTS.every((r) => r.excludes === undefined)).toBe(true);
+    });
+});
+
+describe('a-mount-defaults-to-the-place-its-slot-had', () => {
+    /**
+     * Step 8f1: a node row stands where its `mount` says, or where its slot
+     * has always put one — so no shipped row names one, and every shipped
+     * node stands where it did. A first-party look's own slot with no mount
+     * stands nowhere.
+     */
+    it('reads every shipped row by its slot, and no shipped row names a mount or a slot outside the kit\'s', () => {
+        for (const row of SHIPPED_ATTACHMENTS) {
+            expect(row.mount, row.label).toBeUndefined();
+            expect(KIT_SLOTS as readonly string[], row.label).toContain(row.slot);
+            expect(attachmentMount(row), row.label).toBe(row.slot === 'mood' ? undefined : row.slot);
+        }
+    });
+
+    it('takes a named mount over the slot, and a slot that names no place stands nowhere', () => {
+        const base = { themeId: 4, bit: 0, label: 'x', place: 'y', motion: false, paint: 'node' as const };
+        expect(attachmentMount({ ...base, slot: 'trim', mount: 'below-goods' })).toBe('below-goods');
+        expect(attachmentMount({ ...base, slot: 'strip', mount: 'above-dock' })).toBe('above-dock');
+        expect(attachmentMount({ ...base, slot: 'perch' })).toBeUndefined();
+        expect(ATTACHMENT_MOUNTS).toEqual(['fringe', 'crest', 'badge', 'trim', 'yard', 'below-goods', 'above-dock']);
     });
 });
