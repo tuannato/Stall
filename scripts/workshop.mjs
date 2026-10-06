@@ -465,6 +465,10 @@ async function shots() {
          * The kit's look, and each private look the selection carries (8e2),
          * each under its own folder: what an owner's review of a look shoots
          * (STEP-8-PLAN §5), from the look's own plan (`__shotPlan(id)`).
+         * Stated (the 8e2 critic's item 9): the kit's checks run first
+         * (`requireKit`) and the kit's look is always shot too, so a broken
+         * kit blocks shooting a carried look; the plan's `looks:shots <id>`
+         * would decouple them, and is not built.
          */
         const subjects = [
             { id: KIT_LOOK_ID, cls: 't-workshop', look: 'workshop', dir: '', ask: 'window.__shotPlan()' },

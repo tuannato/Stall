@@ -88,7 +88,11 @@
  *   compared**: a `<ref>` from before 8e2 has a showroom that paints no
  *   private look (it publishes no `__privateLooks`), and the run stops with
  *   exit 3 before a shot is taken. With no selection the run is the one it
- *   was before 8e2.
+ *   was before 8e2. **One private commit on both sides, stated** (the 8e2
+ *   critic's item 9): the run proves a public change moved nothing on a
+ *   carried look, and can never show what a private commit changed; the
+ *   commit is the repository's (for the tracked fixture, the checkout's
+ *   HEAD), so an uncommitted private edit is invisible to it.
  *
  * What it cannot see: a difference the fixtures never paint, an animation at
  * any other instant than the one it pauses on, whatever moves under the
