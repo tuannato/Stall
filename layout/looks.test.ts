@@ -49,12 +49,44 @@ function code(file: string): string {
  * by `src/domain/lookData.ts` since step 8b1, so `workshopLook.ts` names the
  * kit's place and reads no row by id. Tests are not harness code. Proved red
  * by planting `decodeTheme(themeId)` back in `probe.ts`'s `paint()`.
+ *
+ * **The merged views and the view's look are the resolver's too** (8e2): a
+ * harness file that read the app's merged table by id (`decodeLook`,
+ * `attachmentsForLook`, `wornForLook`, `LOOK_ROWS`), asked the gate
+ * (`paintableLook`) or composed a look onto a view itself — a record
+ * (`recordTheme:`) or a try-on (`previewLook:`) — could paint a carried
+ * private look by a road `paintView` does not take: its record, which the
+ * gate paints as the default under the look's name. Each file listed with a
+ * name it may still use says why: the fittings shop sells the shipped
+ * catalogue's tokens (`fixtures.ts`, `SHIPPED_ATTACHMENTS`), and the probe
+ * paints the record road once, on purpose, to hold the gate to the default
+ * (`the-record-road-paints-a-locked-look-as-the-default`). Proved red by
+ * planting `recordTheme: look.theme` back in `probe.ts`'s `paint()`.
  */
 describe('the-harness-chooses-looks-in-one-place', () => {
     const ALLOWED = new Set(['looks.ts', 'workshopStarter.ts']);
-    const BANNED = [/\bdecodeTheme\(/, /\battachmentsForTheme\(/, /\bwornAttachments\(/, /\bwornFrom\(/, /\bSHIPPED_THEMES\b/];
+    const BANNED = [
+        /\bdecodeTheme\(/,
+        /\battachmentsForTheme\(/,
+        /\bwornAttachments\(/,
+        /\bwornFrom\(/,
+        /\bSHIPPED_THEMES\b/,
+        /\bSHIPPED_ATTACHMENTS\b/,
+        /\bdecodeLook\(/,
+        /\battachmentsForLook\(/,
+        /\bwornForLook\(/,
+        /\bLOOK_ROWS\b/,
+        /\bpaintableLook\(/,
+        /\brecordTheme\s*:/g,
+        /\bpreviewLook\s*:/,
+    ];
+    /** A name a file may still use, and how many times: each with its reason (the docblock above). */
+    const EXCUSED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+        'fixtures.ts': { [String(/\bSHIPPED_ATTACHMENTS\b/)]: 2 },
+        'probe.ts': { [String(/\brecordTheme\s*:/g)]: 1 },
+    };
 
-    it('no harness file but the resolver picks a look by id', () => {
+    it('no harness file but the resolver picks a look by id, or composes one onto a view', () => {
         const files = readdirSync(LAYOUT).filter(
             (name) => name.endsWith('.ts') && !name.endsWith('.test.ts') && !ALLOWED.has(name),
         );
@@ -66,8 +98,10 @@ describe('the-harness-chooses-looks-in-one-place', () => {
         for (const file of files) {
             const text = code(file);
             for (const banned of BANNED) {
-                if (banned.test(text)) {
-                    offences.push(`${file}: ${banned.source}`);
+                const found = text.match(new RegExp(banned.source, 'g'))?.length ?? 0;
+                const excused = EXCUSED[file]?.[String(banned)] ?? 0;
+                if (found !== excused && (found > 0 || excused > 0)) {
+                    offences.push(`${file}: ${banned.source} ×${found}${excused > 0 ? ` (excused ×${excused})` : ''}`);
                 }
             }
         }

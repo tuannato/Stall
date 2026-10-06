@@ -34,14 +34,17 @@
  * Its decorations: one paint of their own each, in the tokens, so the decor
  * gate's rules for a private row (a rule of its own that paints, colours
  * that follow the palette, no art, no motion) judge them rather than refuse
- * them.
+ * them — and each a paint the bare look does not give, so the probe's
+ * billboard, which measures the look since 8e2, finds every row on the
+ * page (the crest painted the name in the ink it already wore until then:
+ * a row that sold nothing).
  */
 .t-fixture-private.att-fixture-trim .stall-tagline {
     color: var(--s-accent);
 }
 
 .t-fixture-private.att-fixture-crest .stall-name {
-    color: var(--s-text);
+    color: var(--s-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {

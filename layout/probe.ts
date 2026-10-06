@@ -18,7 +18,7 @@ import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } fro
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
 import type { StallView } from '../src/domain/state';
-import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
+import { THEME_NOT_UNLOCKED, UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
@@ -33,7 +33,23 @@ import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
-import { FIXTURE_LOOK, FIXTURE_SHEET_CLASS, SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
+import {
+    DEFAULT_LOOK_CLASS,
+    FIXTURE_LOOK,
+    FIXTURE_SHEET_CLASS,
+    HARNESS_LICENCE,
+    SKELETON_LOOK_ID,
+    harnessGateFaults,
+    lookById,
+    looksFor,
+    measuredLooks,
+    paintView,
+    privateLooks,
+    shippedLooks,
+    wornAllFlags,
+    wornOf,
+    type Look,
+} from './looks';
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type RootFacts } from './atRest';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
@@ -553,10 +569,15 @@ function sheetClassesOn(root: ParentNode): string[] {
     return [...out].sort();
 }
 
-/** Paint one combination. A look is an object from `looks.ts`, never an id. */
+/**
+ * Paint one combination. A look is an object from `looks.ts`, never an id,
+ * and its view is composed there (`paintView`): a shipped look on its
+ * record, a carried private look through the try-on under the harness's
+ * licence, its sheet's state as the app's loader holds it.
+ */
 function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
-    const view = { ...SCREENS[screen]!, recordTheme: look.theme, worn };
+    const view = paintView(SCREENS[screen]!, look, worn);
     renderStall(root, view, handlers);
     for (const cls of sheetClassesOn(root)) {
         sheetClassesPainted.add(cls);
@@ -3502,8 +3523,13 @@ for (const screen of measured) {
             failures.push(...moneySetFaults(screen, label));
             failures.push(...buntingSwingFaults(screen, label));
             failures.push(...haloFaults(screen, label));
-            if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
+            // A carried private look's row states the sizes its own sheet
+            // paints, as a shipped look's does (8e2); only the shipped looks
+            // are on the door's deck, so only their shops are dressed for it.
+            if (screen === 'offers' && worn.length === 0 && (shippedLooks().includes(look) || look.carried === 'private')) {
                 failures.push(...rowStatesItsSizes(look, label));
+            }
+            if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 gatherShopDress(look);
             }
             if (screen === 'door') {
@@ -3517,6 +3543,59 @@ for (const screen of measured) {
 }
 
 failures.push(...doorMiniFaults());
+
+/*
+ * **The record road paints a locked look as the default**
+ * (`the-record-road-paints-a-locked-look-as-the-default`, 8e2). The harness
+ * measures a paid private look through the try-on under its own licence
+ * (`paintView`, `HARNESS_LICENCE` in `looks.ts`) because the app's gate
+ * paints no paid look from a record in step 8 — and the gate must be the
+ * app's, untouched, while the harness walks around it. So on every pass
+ * that measures `offers`, each paid look the build carries is painted once
+ * the way the app would paint a record naming it — its own sheet ready on
+ * the page, the worn set the app computes through the gate for a locked look
+ * (none) — and must come out the default's class, wearing no class of the
+ * look's own and none of its rows, with the sign saying this page does not
+ * show it (`THEME_NOT_UNLOCKED`). And the gate is asked directly, here
+ * rather than only in a unit test (`harnessGateFaults`): licensed, the look
+ * paints its own row; unlicensed, the default. The paints are counted
+ * (`recordRoadChecks`) and the runner owes one per paid look it measures.
+ * Painted with `renderStall` directly, so the default it paints is not
+ * counted among the looks this pass measured.
+ */
+const RECORD_ROAD_CHECK = 'the-record-road-paints-a-locked-look-as-the-default';
+let recordRoadChecks = 0;
+for (const fault of harnessGateFaults()) {
+    failures.push({ screen: 'probe page', theme: '-', check: RECORD_ROAD_CHECK, detail: fault });
+}
+if (measured.includes('offers')) {
+    const root = document.getElementById('app')!;
+    const defaultClass = DEFAULT_LOOK_CLASS;
+    for (const look of privateLooks().filter((candidate) => HARNESS_LICENCE.has(candidate.id))) {
+        const fail = (detail: string): void => {
+            failures.push({ screen: 'offers', theme: `${look.label} (its record)`, check: RECORD_ROAD_CHECK, detail });
+        };
+        renderStall(
+            root,
+            { ...SCREENS['offers']!, recordTheme: look.theme, recordFlags: 0xffff, worn: [], lookSheets: new Map([[look.id, 'ready']]) },
+            handlers,
+        );
+        const stall = root.querySelector('.stall:not(.deck-stall)');
+        const classes = stall === null ? [] : [...stall.classList];
+        const looks = classes.filter((cls) => cls.startsWith('t-'));
+        if (looks.join(' ') !== defaultClass) {
+            fail(`a record naming ${look.theme.sheetClass} painted ${looks.join(', ') || 'no look class'}, not the default's ${defaultClass}`);
+        }
+        const own = look.rows.flatMap((row) => (row.cls !== undefined && classes.includes(row.cls) ? [row.cls] : []));
+        if (own.length > 0) {
+            fail(`a record naming ${look.theme.sheetClass} wears ${own.join(', ')} of its own rows`);
+        }
+        if (!(root.textContent ?? '').includes(THEME_NOT_UNLOCKED)) {
+            fail(`a record naming ${look.theme.sheetClass}: its sign does not say this page does not show the look (THEME_NOT_UNLOCKED)`);
+        }
+        recordRoadChecks += 1;
+    }
+}
 
 /**
  * The billboard: a decoration nobody can see is not a product.
@@ -5226,7 +5305,7 @@ window.__cspRefusals = () => cspRefusals();
  */
 window.__wornSheetJob = async (missing: string) => {
     const root = document.getElementById('app')!;
-    renderStall(root, { ...SCREENS[NEUTRAL_SCREEN]!, recordTheme: FIXTURE_LOOK.theme, worn: [] }, handlers);
+    renderStall(root, paintView(SCREENS[NEUTRAL_SCREEN]!, FIXTURE_LOOK, []), handlers);
     const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
     const named = (): string =>
         stall === null ? '(no stall)' : getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();
@@ -5367,6 +5446,10 @@ const verdict = {
     skipChecks,
     rowSizeClasses: [...rowSizeClasses].sort(),
     doorMiniClasses: [...doorMiniClasses].sort(),
+    /* Paid private looks painted the record's way and held to the default (`the-record-road-paints-a-locked-look-as-the-default`). */
+    recordRoadChecks,
+    /* The private looks this build carries, by class (8e2): the runner holds them to the selection it named. */
+    privateClasses: privateLooks().map((look) => look.theme.sheetClass),
     wallControlChecks,
     statusLineChecks,
     wallControlRoles,
