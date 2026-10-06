@@ -4542,7 +4542,7 @@ public CI has no longer carries a dark mood, so the dark road is measured by
 nothing until a dark mood is back in the fixture; and `lookDataProblems`
 (`src/domain/lookData.ts`) accepted that incoherent palette — a mood that
 states its ground and ink and leaves the cards' grounds the base look's —
-which Ink wash's 拓本 (a near-black paper) shares in shape. Today the probe's
+which a planned private look's mood shares in shape. Today the probe's
 contrast pass is what catches it, as it did here; a validator rule that a
 mood states its grounds and inks together is not built.
 
