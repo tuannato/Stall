@@ -5229,10 +5229,13 @@ tab's frame waits are time another tab paints in.
 
 **So the walk runs on `CONTRAST_TABS` tabs** (`LAYOUT_CONTRAST_TABS`, 1–4,
 default 2). The first tab is the session every other pass uses; the rest
-are targets of the same Chrome, each created in a window of its own — a
-background tab is hidden, and a hidden page runs no animation frame, so its
-prepare would sit out the CDP bound instead of saying why — and each page
-load is held to `visible` and focused (`loadContrastPage`). Every tab gets
+are targets of the same Chrome, each created in a window of its own — by
+choice, not need: in Chrome 154 `--headless=new` a background tab in one
+window is visible and focused too, runs its animation frames and answers a
+capture as quickly (the critic, measured 2026-10-06; the first version of
+this paragraph said a background tab was hidden, which is false here) — and
+each page load is held to `visible` and focused and asked for one capture
+bounded at 5 s (`loadContrastPage`; below, "After its critic"). Every tab gets
 the fixed clock and the focus emulation, and has its own page, viewport,
 emulated media and page age. The plan is read once, from the first tab's
 page; the jobs are handed out one at a time in plan order to whichever tab
@@ -5285,10 +5288,13 @@ and pages.
 | two tabs, the same plant | 139.7s | 101.1s |
 
 Two tabs take ~51s (28%) off the run and ~51s (35%) off the contrast pass;
-a third took 8s more once. **Two is the default** because a third tab is a
-third renderer at a 1920-wide grown page on an 8 GB machine that had
-2.6 GB of swap in use just after that run, and the Linux box with four
-cores has not been measured with any tab count.
+a third took 8s more once. **Two is the default only where the overlap is
+there to take** (after its critic, below): this Mac is 6 cores and 8 GiB;
+a third tab is a third renderer at a 1920-wide grown page on it, and no
+machine smaller than it, nor the Linux box, has run two. (The first
+version's reason — "2.6 GB of swap in use just after that run" — was not a
+measurement: this Mac sits at 2.3–2.5 GB of swap at idle, so swap after a
+run cannot tell the run from the machine; the critic's P3-7.)
 
 **The projection for a look that shows every hook on every job**, as a
 method: the plant above moves the fixture's mark and its file-masked ground
@@ -5325,3 +5331,59 @@ count; three tabs more than once; the geometry passes, still one page at a
 time (~30s of the run), which are the next lever if one is needed; and
 whether a tab count above two changes anything on a machine with more
 memory.
+
+### After its critic (CRITIC-PROBE-RUNTIME, 2026-10-07)
+
+The critic reproduced the claim — the same dump at one tab, two tabs and
+two tabs under four CPU hogs — and found the safety argument resting on
+per-job hermeticity that nothing in a run held. What changed:
+
+- **`the-contrast-pass-reads-the-same-on-every-tab`** (P2-1): on every run
+  with more than one tab, a handful of jobs are read again on a tab other
+  than the one that ran them — the first job of each viewport, the first
+  read at Grid horizon's worst, the first that hid a look's marks and read
+  its file art away, and the job holding the least box — and each must hand
+  back the same record and the same boxes, byte for byte, or the pass fails
+  naming the job and both tabs. Read again, compared, never folded. ~6 jobs.
+- **The dump says how it was walked** (P2-1): `meta.contrastTabs`,
+  `meta.contrastTabsWhy`, `meta.ranOn` (job key → tab) and `meta.canary`,
+  never in `jobs` or `boxes`, which stay byte-comparable across tab counts;
+  `contrast-dump.mjs` prints both sides' tab counts first.
+- **The default is the machine's** (P3-7): 2 where there are at least 4
+  cores and 8 GiB, else 1, the reason printed on the `contrast tabs:` line;
+  ci.yml's manual `layout` job sets `LAYOUT_CONTRAST_TABS: '1'` until a
+  Linux run has compared one tab with two.
+- **A page is asked for one capture, bounded at 5 s, before any job**
+  (P3-1): the visible-and-focused check is a belt this Chrome never trips;
+  the failure that does happen is a minimised window, whose page reads
+  visible, focused and running frames and answers no capture.
+- **A throw folds only the jobs before it in the plan** (P3-2), and says how
+  many later jobs other tabs ran and are not reported; a CSP refusal is said
+  once with a count. **The answers are checked by key** (P3-3): each job's
+  record must be its own. **The phase table is a share of the tabs' time**
+  (P3-4). **The watchdog and a fault name the tab** (P3-5). **The run's dump
+  arrays are named apart from the job's** (P3-6), so a job that lost a local
+  names an undeclared array.
+
+**Measured, back to back on this Mac** (6 cores, 8 GiB, on battery at
+~70%, the tracked fixture carried, 96fe628): two tabs (the machine's
+default) **142.9s**, contrast 98.9s, tab 0 309 jobs and tab 1 388, the
+canary 6 of 6 identical; one tab (`LAYOUT_CONTRAST_TABS=1`) **183.6s**,
+contrast 145.8s. The two dumps: 13,212 boxes identical, 0 moved, and both
+identical to `main`'s dump of 1472b99 (`contrast-dump.mjs`). `pnpm test` on
+the same tree: vitest 2,321, node 388, green.
+
+**The canary proved red**, reverted: an adopted sheet on the second tab's
+pages alone (`.stall { background-color: #f4f4f4 !important }`) — "✗
+contrast: the-contrast-pass-reads-the-same-on-every-tab: mobile/offers/1/0
+(the first mobile job) ran on tab 0 and read again on tab 1: 9 of 28 box(es)
+differ …", one line for each of the six picks, each naming both tabs, exit
+1. (The plant also put 54 figures under 3:1 on the dark looks, so the floor
+failed beside it; the canary's six lines stand on their own.)
+
+**Not built, stated:** the critic's belt of comparing each dump with the
+last dump of the same kind and revision (P2-1, item 3); and P3-8 — the
+door's typing placeholder runs on `setTimeout` from module state no
+neutral screen resets, so what it shows at a door capture depends on that
+tab's history. No contrast target reads the paste box today; the day one
+does, the door's contrast jobs must paint with the typing stopped first.

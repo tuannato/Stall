@@ -22,7 +22,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { loadavg, tmpdir } from 'node:os';
+import { cpus, loadavg, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
@@ -1055,6 +1055,8 @@ function liveEcho(live, nonce, width, height) {
 let prepareSerial = 0;
 /** What the run is doing now, for the watchdog's last sentence. */
 let currentStep = 'starting';
+/** The contrast pass's tabs while it walks, each with the step it is on (`tab.step`), for the same sentence. */
+let watchedTabs = [];
 
 /**
  * The shot as PNG bytes, not yet decoded — the contrast pass times the two
@@ -1132,6 +1134,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     try {
         await (async () => {
             currentStep = `contrast job ${plannedJob.key}`;
+            tab.step = currentStep;
             const { screen, look: theme, flags } = plannedJob;
             const reduced = plannedJob.reduced === true;
             const tideHeld = plannedJob.tide;
@@ -2017,21 +2020,40 @@ const CLIP_SKIP_CEILING = 0.3;
 
 /*
  * How many tabs of the one Chrome the contrast pass walks its plan on
- * (`LAYOUT_CONTRAST_TABS`, 1–4; default 2). Measured before it was built,
- * 2026-10-06 on the Mac: Chrome's captures on two targets overlap rather
- * than queue, and a job's frame waits are idle time another tab can paint
- * in — two tabs took the run from ~182s to ~131s, three to 119s once
- * (`PROBE-RULES.md`, "The contrast pass walks on two tabs"). One tab is the
- * walk as it always ran; the answers are the same at any count
- * (`commitContrastJob`), which the per-box dump shows.
+ * (`LAYOUT_CONTRAST_TABS`, 1–4). Measured before it was built, 2026-10-06
+ * on the Mac: Chrome's captures on two targets overlap rather than queue,
+ * and a job's frame waits are idle time another tab can paint in — two tabs
+ * took the run from ~182s to ~131s, three to 119s once (`PROBE-RULES.md`,
+ * "The contrast pass walks on two tabs"). One tab is the walk as it always
+ * ran; the answers are the same at any count (`commitContrastJob`), and
+ * every run with more than one tab re-reads a few jobs on another tab to
+ * say so (`the-contrast-pass-reads-the-same-on-every-tab`).
+ *
+ * Unasked, it is 2 only where the overlap is there to take — at least
+ * `CONTRAST_TABS_MIN_CORES` cores and `CONTRAST_TABS_MIN_MEMORY` of memory —
+ * and 1 elsewhere (the critic's P3-7: on two cores the gain is not there,
+ * and no machine smaller than this Mac has run two tabs). The count and why
+ * are printed with the pass. `workshop:probe` runs this file, so the kit's
+ * probe takes the same count by the same rule.
  */
-const CONTRAST_TABS = (() => {
-    const asked = process.env.LAYOUT_CONTRAST_TABS ?? '2';
-    if (!/^[1-4]$/.test(asked)) {
-        console.error(`layout-check: LAYOUT_CONTRAST_TABS is a count of 1 to 4, not "${asked}"`);
-        process.exit(1);
+const CONTRAST_TABS_MIN_CORES = 4;
+const CONTRAST_TABS_MIN_MEMORY = 8 * 1024 ** 3;
+const { count: CONTRAST_TABS, why: CONTRAST_TABS_WHY } = (() => {
+    const asked = process.env.LAYOUT_CONTRAST_TABS;
+    if (asked !== undefined) {
+        if (!/^[1-4]$/.test(asked)) {
+            console.error(`layout-check: LAYOUT_CONTRAST_TABS is a count of 1 to 4, not "${asked}"`);
+            process.exit(1);
+        }
+        return { count: Number(asked), why: 'set by LAYOUT_CONTRAST_TABS' };
     }
-    return Number(asked);
+    const cores = cpus().length;
+    const memory = totalmem();
+    const machine = `${cores} cores, ${(memory / 1024 ** 3).toFixed(1)} GiB`;
+    if (cores < CONTRAST_TABS_MIN_CORES || memory < CONTRAST_TABS_MIN_MEMORY) {
+        return { count: 1, why: `the default under ${CONTRAST_TABS_MIN_CORES} cores or ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
+    }
+    return { count: 2, why: `the default, on ${machine}` };
 })();
 
 const RUNTIME_CEILING_S = 300;
@@ -2053,8 +2075,9 @@ const CDP_TIMEOUT_MS = 30_000;
  */
 const watchdog = setTimeout(() => {
     console.error(
-        `\n✗ runtime: past the ${RUNTIME_CEILING_S}s ceiling while on ${currentStep} — ` +
-            'the watchdog stops the run.',
+        `\n✗ runtime: past the ${RUNTIME_CEILING_S}s ceiling while on ${currentStep}` +
+            (watchedTabs.length > 1 ? ` (${watchedTabs.map((tab) => `tab ${tab.index} on ${tab.step ?? 'nothing yet'}`).join('; ')})` : '') +
+            ' — the watchdog stops the run.',
     );
     stopGroups().finally(() => process.exit(interruptedCode() ?? 1));
 }, RUNTIME_CEILING_S * 1000);
@@ -2089,15 +2112,23 @@ async function timed(phase, fn) {
         phases.set(phase, entry);
     }
 }
-function phaseTable(passMs) {
+function phaseTable(passMs, tabs = 1) {
+    // With more than one tab a phase's total is its time summed over the
+    // tabs, so the share is of the tabs' time — the pass's wall time once
+    // per tab — and what no phase accounts for includes a tab's idle time.
+    const tabMs = passMs * tabs;
     const rows = [...phases].map(([phase, { calls, ms }]) => ({ phase, calls, ms }));
     const accounted = rows.reduce((sum, row) => sum + row.ms, 0);
-    rows.push({ phase: '(unaccounted)', calls: 0, ms: Math.max(0, passMs - accounted) });
-    const lines = [`    phase             calls     total   share     mean`];
+    rows.push({ phase: '(unaccounted)', calls: 0, ms: Math.max(0, tabMs - accounted) });
+    const lines = [
+        tabs === 1
+            ? `    phase             calls     total   share     mean`
+            : `    phase             calls     total   share     mean   (summed over ${tabs} tabs; share of ${tabs} × the pass)`,
+    ];
     for (const { phase, calls, ms } of rows) {
         lines.push(
             `    ${phase.padEnd(16)} ${String(calls || '').padStart(6)} ${(ms / 1000).toFixed(1).padStart(8)}s` +
-                ` ${((ms / passMs) * 100).toFixed(0).padStart(6)}%` +
+                ` ${((ms / tabMs) * 100).toFixed(0).padStart(6)}%` +
                 ` ${calls === 0 ? '' : `${(ms / calls).toFixed(0).padStart(6)}ms`}`,
         );
     }
@@ -2107,10 +2138,19 @@ function phaseTable(passMs) {
  * The per-box dump (`contrast-dump.mjs`): every job each contrast pass ran
  * and every box it sampled, with the worst value it found, written to
  * `.layout-dump/` on every run. It is how a change to the passes' machinery
- * is shown to move nothing — or exactly what it moved.
+ * is shown to move nothing — or exactly what it moved. Named apart from
+ * `contrastJob`'s own `dumpJobs` and `dumpBoxes`, so a job that lost one of
+ * its locals would name an undeclared array (`tsc --checkJs` says so)
+ * rather than write here out of plan order.
  */
-const dumpJobs = [];
-const dumpBoxes = [];
+const runDumpJobs = [];
+const runDumpBoxes = [];
+/*
+ * How the contrast pass was walked, for the dump's `meta` and never its
+ * `jobs` or `boxes` (which stay comparable byte for byte at any tab count):
+ * the tab count and why, the tab each job ran on, and the canary's reads.
+ */
+const contrastRun = { tabs: CONTRAST_TABS, tabsWhy: CONTRAST_TABS_WHY, ranOn: {}, canary: [] };
 function gitRev() {
     const head = spawnSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' });
     if (head.status !== 0) return undefined;
@@ -2694,10 +2734,13 @@ try {
     /*
      * The tabs the contrast pass walks its plan on (`CONTRAST_TABS`): the
      * first is the session every other pass uses, the rest are targets of
-     * the same Chrome, each in a window of its own (a background tab is
-     * hidden, and a hidden page runs no animation frame). Each tab has its
-     * own page, viewport, emulated media and page age; nothing a job reads
-     * or paints is another tab's.
+     * the same Chrome, each in a window of its own — by choice: measured
+     * (the critic, 2026-10-06, Chrome 154 `--headless=new`), a background
+     * tab in one window is visible too, runs its animation frames and
+     * answers a capture as quickly, so the windows buy nothing that tabs
+     * would not; the runs that proved the dumps identical used windows.
+     * Each tab has its own page, viewport, emulated media and page age;
+     * nothing a job reads or paints is another tab's.
      */
     const tabs = [{ index: 0, cdp, sessionId, targetId: undefined }];
     for (let index = 1; index < CONTRAST_TABS; index += 1) {
@@ -2706,15 +2749,19 @@ try {
         tabs.push({ index, cdp, sessionId: attached.sessionId, targetId: target.targetId });
     }
     for (const tab of tabs) {
-        Object.assign(tab, { vp: undefined, loadedAt: 0, reducedNow: false, faces: [], refusals: [], jobs: 0, busyMs: 0 });
+        Object.assign(tab, { vp: undefined, loadedAt: 0, reducedNow: false, faces: [], refusals: [], jobs: 0, busyMs: 0, step: undefined });
         await readyTab(tab.sessionId);
     }
+    watchedTabs = tabs;
     /*
      * And no page older than a minute: the rate stamp ages out at 120 s,
      * and a pay sheet arms a timer that repaints it then. A page is loaded
      * per viewport and again whenever it has lived longer than this.
      */
     const PAGE_MAX_AGE_MS = 60_000;
+    // How long a freshly loaded page may take to answer its first capture
+    // (`loadContrastPage`): a grown 1920 page answers in well under a second.
+    const TAB_PAINT_CHECK_MS = 5_000;
     /*
      * The policy's refusals on every contrast page, asked before the page
      * is left and once more at the end: its jobs paint after the verdict
@@ -2742,13 +2789,33 @@ try {
         if (faults.length > 0) {
             throw new Error(`the ${vp.name} page was not measured in its faces (${FACES_CHECK}): ${faults.join('; ')}`);
         }
-        // Visible and focused, on every tab: a hidden page runs no animation
-        // frame, so its prepare would wait out the CDP bound instead of
-        // saying why, and an unfocused one paints no focus ring.
+        /*
+         * Every tab's page paints as a visitor's would. Visible and focused —
+         * a hidden page runs no animation frame, an unfocused one paints no
+         * focus ring — a belt this headless Chrome has never tripped: every
+         * tab reads visible and focused, in a window of its own or not, with
+         * focus emulation off, and in a minimised window (measured
+         * 2026-10-06). The minimised window is the failure that does happen:
+         * its page stays visible, focused and running frames, and answers no
+         * capture, so a job there sat out the 30 s CDP bound. So each page
+         * is also asked for one capture, bounded short, before any job — the
+         * check a minimised window turns red.
+         */
         const shown = await evalJson(cdp, tab.sessionId, '[document.visibilityState, document.hasFocus()]');
         if (shown[0] !== 'visible' || shown[1] !== true) {
             throw new Error(`contrast tab ${tab.index}'s ${vp.name} page is ${shown[0]}${shown[1] ? '' : ' and unfocused'} — it would not paint as a visitor's does`);
         }
+        await timed('paint check', async () => {
+            try {
+                await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, optimizeForSpeed: true }, tab.sessionId, {
+                    timeoutMs: TAB_PAINT_CHECK_MS,
+                });
+            } catch (err) {
+                throw new Error(
+                    `contrast tab ${tab.index}'s ${vp.name} page answered no capture within ${TAB_PAINT_CHECK_MS / 1000}s — its window paints nothing a job could read (${err.message})`,
+                );
+            }
+        });
         tab.faces.push(facesLine(echo));
     };
     /*
@@ -2757,6 +2824,7 @@ try {
      */
     const openViewport = async (tab, vp, plan) => {
         currentStep = `contrast: loading the ${vp.name} page on tab ${tab.index}`;
+        tab.step = currentStep;
         await timed('metrics', () =>
             cdp.send(
                 'Emulation.setDeviceMetricsOverride',
@@ -2852,10 +2920,13 @@ try {
         const contrastClasses = new Set();
         /*
          * The walk is the page's plan (`__contrastPlan()`, `contrastPlan.ts`),
-         * read once: every job of every viewport, in order. The runner keeps
-         * its own count of what it did, and at the end every planned job must
-         * have been done exactly once — a job that fell out of the walk, or
-         * ran twice, fails the pass rather than printing a smaller number.
+         * read once: every job of every viewport, in order. The runner counts
+         * each job as it is handed to a tab (`done`), and at the end every
+         * planned job must have been handed out exactly once — a job that
+         * fell out of the walk, or was handed out twice, fails the pass rather
+         * than printing a smaller number. That the tab then ran it is the
+         * answers' check: each job's answer must carry its own record, under
+         * its own key (`unanswered`).
          */
         let plan;
         // The jobs that owe the rain and the horizon at their worst, by key.
@@ -2891,8 +2962,8 @@ try {
         };
         const commitContrastJob = (out) => {
             if (out.dumpJobs === undefined) return;
-            dumpJobs.push(...out.dumpJobs);
-            dumpBoxes.push(...out.dumpBoxes);
+            runDumpJobs.push(...out.dumpJobs);
+            runDumpBoxes.push(...out.dumpBoxes);
             refused.push(...out.refused);
             dim.push(...out.dim);
             for (const cls of out.contrastClasses) contrastClasses.add(cls);
@@ -2986,17 +3057,30 @@ try {
          * one whose page is past its age loads it again. A job reads and
          * paints its own tab's page and nothing else, and hands back what it
          * found (`contrastJob`); the totals are folded from those answers in
-         * plan order once every tab has stopped, so a run says and dumps the
-         * same thing whichever tab ran which job (`commitContrastJob`). The
-         * first tab to throw stops the hand-out; the others finish the job
-         * they hold, and the throw of the earliest job in the plan is the
-         * pass's.
+         * plan order once every tab has stopped, so a green run says and
+         * dumps the same thing whichever tab ran which job
+         * (`commitContrastJob`), and which tab ran each is written beside the
+         * dump (`meta.ranOn`). The first tab to throw stops the hand-out; the
+         * others finish the job they hold, the throw of the earliest job in
+         * the plan is the pass's, and only the jobs before it in the plan are
+         * folded — the same jobs at any tab count.
          */
         const viewportNamed = new Map(ALL_VIEWPORTS.map((vp) => [vp.name, vp]));
         const queue = ALL_VIEWPORTS.flatMap((vp) => plan.filter((planned) => planned.viewport === vp.name));
         const answers = new Array(queue.length);
+        const ranOn = new Array(queue.length);
         let handedOut = 0;
         let fault;
+        // A tab's page at the job's viewport and under its age, then the job.
+        const runOn = async (tab, plannedJob, out) => {
+            const vp = viewportNamed.get(plannedJob.viewport);
+            if (tab.vp !== vp) {
+                await openViewport(tab, vp, plan);
+            } else if (performance.now() - tab.loadedAt > PAGE_MAX_AGE_MS) {
+                await loadContrastPage(tab, vp, 'reload');
+            }
+            await contrastJob(tab, vp, plannedJob, honestOwed, out);
+        };
         const walkTab = async (tab) => {
             while (fault === undefined && handedOut < queue.length) {
                 const n = handedOut;
@@ -3005,37 +3089,126 @@ try {
                 done.set(plannedJob.key, (done.get(plannedJob.key) ?? 0) + 1);
                 const out = {};
                 answers[n] = out;
+                ranOn[n] = tab.index;
                 const started = performance.now();
                 try {
-                    const vp = viewportNamed.get(plannedJob.viewport);
-                    if (tab.vp !== vp) {
-                        await openViewport(tab, vp, plan);
-                    } else if (performance.now() - tab.loadedAt > PAGE_MAX_AGE_MS) {
-                        await loadContrastPage(tab, vp, 'reload');
-                    }
-                    await contrastJob(tab, vp, plannedJob, honestOwed, out);
+                    await runOn(tab, plannedJob, out);
                 } catch (err) {
-                    if (fault === undefined || n < fault.n) fault = { n, key: plannedJob.key, err };
+                    if (fault === undefined || n < fault.n) fault = { n, key: plannedJob.key, tab: tab.index, err };
                 } finally {
                     tab.jobs += 1;
                     tab.busyMs += performance.now() - started;
                 }
             }
+            tab.step = 'the end of the walk';
         };
         await Promise.all(tabs.map(walkTab));
-        for (const out of answers) {
-            if (out !== undefined) commitContrastJob(out);
-        }
+        const folded = fault === undefined ? queue.length : fault.n;
+        for (let n = 0; n < folded; n += 1) commitContrastJob(answers[n]);
+        contrastRun.ranOn = Object.fromEntries(queue.slice(0, folded).map((j, n) => [j.key, ranOn[n]]));
         if (fault !== undefined) {
-            currentStep = `contrast job ${fault.key}`;
+            const later = answers.filter((out, n) => n > fault.n && out !== undefined).length;
+            if (later > 0) {
+                console.error(`    ${later} job(s) after it in the plan ran on other tabs before the hand-out stopped, and are not reported`);
+            }
+            currentStep = `contrast job ${fault.key} on tab ${fault.tab}`;
             throw fault.err;
         }
-        // Every job handed out came back with its own record: a tab that
-        // took a job and never ran it would otherwise count it done.
+        /*
+         * Every job handed out came back with its own record, under its own
+         * key: a tab that took a job and never ran it — or answered another
+         * job's — would otherwise count as done (`done` counts hand-outs).
+         */
         currentStep = 'contrast: the answers';
-        const unanswered = queue.filter((_, n) => answers[n]?.dumpJobs?.length !== 1).map((j) => j.key);
+        const keyOf = (planned) =>
+            jobKey({
+                pass: 'contrast',
+                viewport: planned.viewport,
+                screen: planned.screen,
+                look: planned.look,
+                flags: planned.flags,
+                reduced: planned.reduced === true ? true : undefined,
+                tide: planned.tide,
+            });
+        const unanswered = queue
+            .filter((planned, n) => !(answers[n]?.dumpJobs?.length === 1 && answers[n].dumpJobs[0].key === keyOf(planned)))
+            .map((j) => j.key);
         if (unanswered.length > 0) {
             throw new Error(`${unanswered.length} job(s) handed to a tab came back with no record of their own: ${unanswered.join(', ')}`);
+        }
+        /*
+         * `the-contrast-pass-reads-the-same-on-every-tab` (the critic's P2-1):
+         * the fold proves nothing about the answers it folds — that a job
+         * reads the same whichever tab ran it, after whatever that tab ran
+         * before, is the jobs' hermeticity, and this holds it on every run
+         * with more than one tab. A handful of jobs are read again on a tab
+         * other than the one that ran them — the first job of each viewport,
+         * the first read at Grid horizon's worst, the first that hid a look's
+         * marks or read its file art away, and the one holding the least box
+         * — and each must hand back the same record and the same boxes, byte
+         * for byte, or the pass fails naming the job and both tabs. The
+         * answers read again are compared and never folded.
+         */
+        const canaryFaults = [];
+        if (tabs.length > 1) {
+            currentStep = 'contrast: the cross-tab canary';
+            const picks = new Map();
+            const pick = (n, why) => {
+                if (n >= 0 && !picks.has(n)) picks.set(n, why);
+            };
+            for (const vp of ALL_VIEWPORTS) pick(queue.findIndex((j) => j.viewport === vp.name), `the first ${vp.name} job`);
+            pick(answers.findIndex((out) => out.horizonKeys.size > 0), "the first read at Grid horizon's worst");
+            pick(
+                answers.findIndex((out) => (out.dumpJobs[0].lookPseudos?.marks ?? 0) > 0 && out.dumpJobs[0].artOff !== undefined),
+                "the first with a look's marks hidden and its file art read away",
+            );
+            let least;
+            answers.forEach((out, n) => {
+                for (const box of out.dumpBoxes) {
+                    if (typeof box.worst === 'number' && (least === undefined || box.worst < least.worst)) least = { n, worst: box.worst };
+                }
+            });
+            if (least !== undefined) pick(least.n, `the job holding the least box (${least.worst.toFixed(3)}:1)`);
+            // Each pick on the next tab round from the one that ran it, the
+            // tabs at once, each walking its picks from the last viewport
+            // back (where the walk left it).
+            const byTab = new Map(tabs.map((tab) => [tab, []]));
+            for (const n of picks.keys()) byTab.get(tabs[(ranOn[n] + 1) % tabs.length]).push(n);
+            const viewportAt = (n) => ALL_VIEWPORTS.findIndex((vp) => vp.name === queue[n].viewport);
+            const readAgain = new Map();
+            const settled = await Promise.allSettled(
+                [...byTab].map(async ([tab, ns]) => {
+                    for (const n of ns.sort((a, b) => viewportAt(b) - viewportAt(a) || a - b)) {
+                        const again = {};
+                        readAgain.set(n, { tab: tab.index, again });
+                        await runOn(tab, queue[n], again);
+                    }
+                    tab.step = 'the end of the canary';
+                }),
+            );
+            for (const result of settled) {
+                if (result.status === 'rejected') throw result.reason;
+            }
+            const boxesOf = (out) => new Map(out.dumpBoxes.map((box) => [box.key, JSON.stringify(box)]));
+            contrastRun.canary = [...picks].sort(([a], [b]) => a - b).map(([n, why]) => {
+                const { tab, again } = readAgain.get(n);
+                const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
+                const sameBoxes = JSON.stringify(again.dumpBoxes) === JSON.stringify(answers[n].dumpBoxes);
+                const said = { key: queue[n].key, why, ranOn: ranOn[n], readOn: tab, same: sameRecord && sameBoxes };
+                if (!said.same) {
+                    const before = boxesOf(answers[n]);
+                    const after = boxesOf(again);
+                    const differ = [...new Set([...before.keys(), ...after.keys()])].filter((key) => before.get(key) !== after.get(key));
+                    said.boxesDiffer = differ.length;
+                    canaryFaults.push(
+                        `the-contrast-pass-reads-the-same-on-every-tab: ${queue[n].key} (${why}) ran on tab ${ranOn[n]} and read again on tab ${tab}: ` +
+                            (sameRecord ? '' : 'its record differs; ') +
+                            `${differ.length} of ${before.size} box(es) differ` +
+                            (differ.length === 0 ? '' : ` (the first: ${differ[0]} — ${before.get(differ[0]) ?? 'absent'} → ${after.get(differ[0]) ?? 'absent'})`),
+                    );
+                }
+                return said;
+            });
         }
         for (const tab of tabs) {
             if (tab.reducedNow) {
@@ -3062,10 +3235,17 @@ try {
         // Every rule that failed says so, one line each: a run that fails
         // for one reason still names the others (round 8 — a missing rain
         // key used to hide the figures under the floor).
-        const verdicts = [];
+        const verdicts = [...canaryFaults];
+        // A refusal is said once, with how many times the pages met it: a
+        // page-level one is met on every page every tab loads.
         for (const tab of tabs) await collectRefusals(tab);
+        const refusalsMet = new Map();
         for (const r of tabs.flatMap((tab) => tab.refusals)) {
-            verdicts.push(`the-probe-page-meets-no-csp-refusal: ${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}`);
+            const line = `the-probe-page-meets-no-csp-refusal: ${r.directive} refused ${r.blocked || '(inline)'}${r.source === '' ? '' : ` at ${r.source}`}`;
+            refusalsMet.set(line, (refusalsMet.get(line) ?? 0) + 1);
+        }
+        for (const [line, n] of [...refusalsMet].sort(([a], [b]) => a.localeCompare(b))) {
+            verdicts.push(n === 1 ? line : `${line} (${n} times)`);
         }
         if (boxes === 0) {
             verdicts.push('no figure boxes were sampled — vacuous green.');
@@ -3321,6 +3501,7 @@ try {
             // A tab that is already gone is not a layout defect.
         }
     }
+    watchedTabs = [];
     if (refused.length > 0) {
         failed = true;
         console.error(`✗ contrast: ${refused.length} job(s) refused — what the page answered is not the job:`);
@@ -3400,10 +3581,19 @@ try {
     // than one tab the phases are each tab's time summed, so they add up to
     // more than the pass took; each tab's own share is said first.
     console.log(
-        `    contrast tabs: ${tabs.length} — ` +
+        `    contrast tabs: ${tabs.length} (${CONTRAST_TABS_WHY}) — ` +
             tabs.map((tab) => `tab ${tab.index} ${tab.jobs} jobs, ${(tab.busyMs / 1000).toFixed(1)}s, ${tab.faces.length} page(s)`).join('; '),
     );
-    for (const line of phaseTable(performance.now() - contrastStartedAt)) console.log(line);
+    console.log(
+        `    the-contrast-pass-reads-the-same-on-every-tab: ` +
+            (tabs.length === 1
+                ? 'not asked — one tab'
+                : contrastRun.canary.length === 0
+                  ? 'not read — the walk did not finish'
+                  : `${contrastRun.canary.filter((c) => c.same).length} of ${contrastRun.canary.length} job(s) read again on another tab, the same record and boxes byte for byte: ` +
+                    contrastRun.canary.map((c) => `${c.key} (tab ${c.ranOn} → ${c.readOn}${c.same ? '' : `, ${c.boxesDiffer} box(es) differ`})`).join(', ')),
+    );
+    for (const line of phaseTable(performance.now() - contrastStartedAt, tabs.length)) console.log(line);
 
     /*
      * Pass 5: the transparent wire, in pixels.
@@ -3540,7 +3730,7 @@ try {
                         live: targets.length,
                         image: [img.width, img.height],
                     };
-                    dumpJobs.push(record);
+                    runDumpJobs.push(record);
                     const sample = (shot) => {
                         const found = [];
                         const values = [];
@@ -3580,7 +3770,7 @@ try {
                         ({ found, values } = sample(img));
                     }
                     for (const { t, ground, worst } of values) {
-                        dumpBoxes.push({
+                        runDumpBoxes.push({
                             key: boxKey(job, { ...t, ground }),
                             job: record.key,
                             i: t.i,
@@ -3656,13 +3846,19 @@ try {
                     at: new Date().toISOString(),
                     loadavg: loadavg(),
                     argv: process.argv.slice(2),
+                    // How the contrast pass was walked (P2-1): the tab count
+                    // and why, the tab each folded job ran on, the canary.
+                    contrastTabs: contrastRun.tabs,
+                    contrastTabsWhy: contrastRun.tabsWhy,
+                    ranOn: contrastRun.ranOn,
+                    canary: contrastRun.canary,
                 },
-                jobs: dumpJobs,
-                boxes: dumpBoxes,
+                jobs: runDumpJobs,
+                boxes: runDumpBoxes,
             },
             { looks: kind, stamp, rev },
         );
-        console.log(`  contrast dump: ${dumpBoxes.length} boxes over ${dumpJobs.length} jobs → ${path}`);
+        console.log(`  contrast dump: ${runDumpBoxes.length} boxes over ${runDumpJobs.length} jobs → ${path}`);
     }
     const elapsedS = (Date.now() - startedAt) / 1000;
     if (elapsedS > RUNTIME_CEILING_S) {

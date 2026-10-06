@@ -57,6 +57,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The contrast pass walks on this many tabs of one Chrome. One here, set
+    # rather than left to the machine rule in layout-check.mjs: no Linux run
+    # has compared one tab with two, and a shared runner may have two cores
+    # (layout/PROBE-RULES.md, "The contrast pass walks on two tabs").
+    env:
+      LAYOUT_CONTRAST_TABS: '1'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
