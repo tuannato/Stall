@@ -18,7 +18,7 @@ import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } fro
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
 import type { StallView } from '../src/domain/state';
-import { UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
+import { THEME_NOT_UNLOCKED, UNBUYABLE_BADGE, windowPayMore } from '../src/ui/copy';
 import rainNearSvg from '../src/ui/decor/rain-near.svg?raw';
 import rainMidSvg from '../src/ui/decor/rain-mid.svg?raw';
 import rainFarSvg from '../src/ui/decor/rain-far.svg?raw';
@@ -33,13 +33,31 @@ import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
 import type { ShippedAttachment } from '../src/domain/attachments';
-import { FIXTURE_LOOK, FIXTURE_SHEET_CLASS, SKELETON_LOOK_ID, lookById, looksFor, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
+import {
+    DEFAULT_LOOK_CLASS,
+    FIXTURE_LOOK,
+    FIXTURE_SHEET_CLASS,
+    HARNESS_LICENCE,
+    SKELETON_LOOK_ID,
+    harnessGateFaults,
+    lookById,
+    looksFor,
+    measuredLooks,
+    paintView,
+    privateLooks,
+    recordView,
+    shippedLooks,
+    wornAllFlags,
+    wornOf,
+    type Look,
+} from './looks';
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type RootFacts } from './atRest';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
+import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import {
@@ -243,6 +261,21 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
 export let clipSkips = 0;
 export let clipChecks = 0;
 
+/**
+ * **The same two halves per look** (8e2, the 8e2 critic's item 1): one
+ * ratio over the whole page let the shipped looks satisfy the ceiling for a
+ * carried look that measured nothing — every point of one look behind a
+ * clip moved the phone's ratio from 8% to about 27%, under the 30% line. So
+ * every point is also counted under the class of the look the loop is
+ * measuring (`measuringClass`, set by the loop below), and the runner holds
+ * a carried look to the ceiling on its own points (`look-tallies.mjs`) while
+ * the public looks keep the ratio they always had.
+ */
+const clipByClass: Record<string, { skips: number; checks: number }> = {};
+/** The `t-*` class of the look the main loop is measuring now; `-` outside it. */
+let measuringClass = '-';
+const clipTallyOf = (cls: string): { skips: number; checks: number } => (clipByClass[cls] ??= { skips: 0, checks: 0 });
+
 type Clip = {
     rect: DOMRect;
     el: Element;
@@ -362,9 +395,11 @@ function coveredBy(node: Element): string | undefined {
             )
         ) {
             clipSkips += 1;
+            clipTallyOf(measuringClass).skips += 1;
             continue;
         }
         clipChecks += 1;
+        clipTallyOf(measuringClass).checks += 1;
         const hit = document.elementFromPoint(x, y);
         if (hit === null) {
             continue;
@@ -553,10 +588,15 @@ function sheetClassesOn(root: ParentNode): string[] {
     return [...out].sort();
 }
 
-/** Paint one combination. A look is an object from `looks.ts`, never an id. */
+/**
+ * Paint one combination. A look is an object from `looks.ts`, never an id,
+ * and its view is composed there (`paintView`): a shipped look on its
+ * record, a carried private look through the try-on under the harness's
+ * licence, its sheet's state as the app's loader holds it.
+ */
 function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
-    const view = { ...SCREENS[screen]!, recordTheme: look.theme, worn };
+    const view = paintView(SCREENS[screen]!, look, worn);
     renderStall(root, view, handlers);
     for (const cls of sheetClassesOn(root)) {
         sheetClassesPainted.add(cls);
@@ -1763,6 +1803,8 @@ const SLIVER_ROLES = /^window-step-/;
 const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"]';
 let wallControlChecks = 0;
 const wallControlRoles: Record<string, number> = {};
+/** The same roles per look (8e2): a carried look owes every role on its own walls. */
+const wallControlRolesByClass: Record<string, Record<string, number>> = {};
 const wallSlivers = new Set<string>();
 
 /*
@@ -1909,6 +1951,8 @@ function wallCuts(screen: string, label: string): Failure[] {
             // Read whole: the only read the runner's coverage counts.
             wallControlChecks += 1;
             wallControlRoles[role] = (wallControlRoles[role] ?? 0) + 1;
+            const byLook = (wallControlRolesByClass[measuringClass] ??= {});
+            byLook[role] = (byLook[role] ?? 0) + 1;
         }
     }
     return out;
@@ -2348,6 +2392,18 @@ const CONTRAST_TEXT = [
     // read against its own.
     '[data-role$="-guide-link"]',
 ].join(', ');
+
+/**
+ * **Every contrast target**: the list above and the honest-display
+ * sentences on the four money sheets, by role (8e2, CRITIC-STEP-8E2 item
+ * 11; `layout/honestDisplay.ts`). Kept apart from the list so a prepare
+ * can put them after it — the boxes the list matched keep the index, and
+ * so the dump key, they had — and drop an honest line that is not rendered
+ * at this width before it is counted: a hidden line or the record sheets'
+ * desk-only code caption on a phone is not a target where it is not on
+ * screen. Every rule that asks "is this a contrast target" asks this.
+ */
+const CONTRAST = `${CONTRAST_TEXT}, ${HONEST_SELECTOR}`;
 
 /**
  * **The outline under a line on a decoration** (round 8, 2026-09-25; the
@@ -2837,7 +2893,7 @@ function outlineFaults(screen: string, label: string): Failure[] {
                 out.push({ screen, theme: label, check: AT_REST_CHECK, detail: `${said} over a ground painted ${painted} — an outline that shows at rest` });
             }
         }
-        const target = node.closest(CONTRAST_TEXT);
+        const target = node.closest(CONTRAST);
         if (target === null) {
             fail(node, 'wears the outline and is no contrast target — an outline nobody reads');
         } else {
@@ -2870,7 +2926,7 @@ function moneySetFaults(screen: string, label: string): Failure[] {
     const fail = (node: Element, what: string): void => {
         out.push({ screen, theme: label, check: MONEY_CHECK, detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 24)}" ${what}` });
     };
-    for (const node of app.querySelectorAll(CONTRAST_TEXT)) {
+    for (const node of app.querySelectorAll(CONTRAST)) {
         if (node.closest('.deck-stall') !== null) continue;
         if (node.matches(PROTECTED)) {
             moneyChecks += 1;
@@ -2893,7 +2949,7 @@ function moneySetFaults(screen: string, label: string): Failure[] {
     for (const node of app.querySelectorAll(MONEY)) {
         if (node.closest('.deck-stall') !== null) continue;
         moneyChecks += 1;
-        if (!node.matches(CONTRAST_TEXT)) {
+        if (!node.matches(CONTRAST)) {
             fail(node, 'is in the money set and no contrast target');
         } else if (node.closest(PROTECTED) === null && !node.matches(MONEY_OUTSIDE_PROTECTED)) {
             fail(node, 'is in the money set and stands in no protected box');
@@ -3460,6 +3516,7 @@ const codesPainted = new Set<string>();
 const wornClassesPainted = new Set<string>();
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
+        measuringClass = look.theme.sheetClass;
         for (const worn of variantsFor(screen, look)) {
             for (const row of worn) {
                 if (row.cls !== undefined) wornClassesPainted.add(row.cls);
@@ -3502,8 +3559,13 @@ for (const screen of measured) {
             failures.push(...moneySetFaults(screen, label));
             failures.push(...buntingSwingFaults(screen, label));
             failures.push(...haloFaults(screen, label));
-            if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
+            // A carried private look's row states the sizes its own sheet
+            // paints, as a shipped look's does (8e2); only the shipped looks
+            // are on the door's deck, so only their shops are dressed for it.
+            if (screen === 'offers' && worn.length === 0 && (shippedLooks().includes(look) || look.carried === 'private')) {
                 failures.push(...rowStatesItsSizes(look, label));
+            }
+            if (screen === 'offers' && worn.length === 0 && shippedLooks().includes(look)) {
                 gatherShopDress(look);
             }
             if (screen === 'door') {
@@ -3517,6 +3579,61 @@ for (const screen of measured) {
 }
 
 failures.push(...doorMiniFaults());
+// Out of the loop: no look is being measured.
+measuringClass = '-';
+
+/*
+ * **The record road paints a locked look as the default**
+ * (`the-record-road-paints-a-locked-look-as-the-default`, 8e2). The harness
+ * measures a paid private look through the try-on under its own licence
+ * (`paintView`, `HARNESS_LICENCE` in `looks.ts`) because the app's gate
+ * paints no paid look from a record in step 8 — and the gate must be the
+ * app's, untouched, while the harness walks around it. So on every pass
+ * that measures `offers`, each paid look the build carries is painted once
+ * the way the app would paint a record naming it (`recordView`: its sheet
+ * as the loader holds it, every flag set, every token held, and the worn set
+ * the app writes through the gate — so a gate that leaked rows would show
+ * them) — and must come out the default's class, wearing no class of the
+ * look's own and none of its rows, with the sign saying this page does not
+ * show it (`THEME_NOT_UNLOCKED`). And the gate is asked directly, here
+ * rather than only in a unit test (`harnessGateFaults`): licensed, the look
+ * paints its own row; unlicensed, the default. The paints are counted
+ * (`recordRoadChecks`) and the runner owes one per paid look it measures.
+ * Painted with `renderStall` directly, so the default it paints is not
+ * counted among the looks this pass measured.
+ */
+const RECORD_ROAD_CHECK = 'the-record-road-paints-a-locked-look-as-the-default';
+let recordRoadChecks = 0;
+for (const fault of harnessGateFaults()) {
+    failures.push({ screen: 'probe page', theme: '-', check: RECORD_ROAD_CHECK, detail: fault });
+}
+if (measured.includes('offers')) {
+    const root = document.getElementById('app')!;
+    const defaultClass = DEFAULT_LOOK_CLASS;
+    for (const look of privateLooks().filter((candidate) => HARNESS_LICENCE.has(candidate.id))) {
+        const fail = (detail: string): void => {
+            failures.push({ screen: 'offers', theme: `${look.label} (its record)`, check: RECORD_ROAD_CHECK, detail });
+        };
+        // The record's view as the app writes it, through the gate
+        // (`recordView`): a gate that leaked the locked look's rows would
+        // put them on the stall, and the rows half below would fail.
+        renderStall(root, recordView(SCREENS['offers']!, look, 0xffff), handlers);
+        const stall = root.querySelector('.stall:not(.deck-stall)');
+        const classes = stall === null ? [] : [...stall.classList];
+        const looks = classes.filter((cls) => cls.startsWith('t-'));
+        if (looks.join(' ') !== defaultClass) {
+            fail(`a record naming ${look.theme.sheetClass} painted ${looks.join(', ') || 'no look class'}, not the default's ${defaultClass}`);
+        }
+        const own = look.rows.flatMap((row) => (row.cls !== undefined && classes.includes(row.cls) ? [row.cls] : []));
+        if (own.length > 0) {
+            fail(`a record naming ${look.theme.sheetClass} wears ${own.join(', ')} of its own rows`);
+        }
+        if (!(root.textContent ?? '').includes(THEME_NOT_UNLOCKED)) {
+            fail(`a record naming ${look.theme.sheetClass}: its sign does not say this page does not show the look (THEME_NOT_UNLOCKED)`);
+        }
+        recordRoadChecks += 1;
+    }
+}
 
 /**
  * The billboard: a decoration nobody can see is not a product.
@@ -3779,6 +3896,8 @@ type ContrastTarget = {
     sel: string;
     /** In the money set (`layout/moneySet.ts`): read whole, never by a weaker verdict. */
     money: boolean;
+    /** An honest-display line's role (`layout/honestDisplay.ts`), which the runner holds owed screens to. */
+    role?: string;
     /**
      * The rotation of this node's frame, radians: the sum of every
      * `transform` and `rotate` from the node up to the root (step 5b). A
@@ -3874,6 +3993,8 @@ type ContrastPrepared = {
     pageH: number;
     sheetClasses: string[];
     nodes: number;
+    /** Honest-display lines in scope with no layout box at this width: not targets here (8e2). */
+    honestUnrendered?: number;
     nonce: string;
     painted: { screen: string; look: number; flags: number };
     vw: number;
@@ -3942,6 +4063,8 @@ declare global {
         __contrastPlan: () => ContrastJob[];
         /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
         __contrastOwed: () => { rain: string[]; horizon: string[] };
+        /** The honest-display roles each sampled sheet screen owes, per viewport (`layout/honestDisplay.ts`). */
+        __honestOwed: () => typeof HONEST_OWED;
         /** The overlay screens, so the driver can skip their `wornAll` half. */
         __noDecorScreens: string[];
         __canvasScreens: string[];
@@ -4013,6 +4136,7 @@ window.__contrastPlan = () => contrastPlan(measuredLooks());
  * from Neo.
  */
 window.__contrastOwed = () => contrastOwed(measuredLooks());
+window.__honestOwed = () => HONEST_OWED;
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
 window.__themes = measuredLooks().map((look) => ({
@@ -4195,6 +4319,7 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         angle,
         ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
         sel: describe(node),
+        ...(node.matches(HONEST_SELECTOR) ? { role: node.getAttribute('data-role')! } : {}),
         money,
         rects: read?.rects,
         legacyDropped: sliver,
@@ -4329,7 +4454,7 @@ function lineRectsOf(
     for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
         const owner = text.parentElement;
         if (owner === null || owner.closest('svg') !== null || (text.textContent ?? '').trim() === '') continue;
-        if (owner.closest(CONTRAST_TEXT) !== node) continue;
+        if (owner.closest(CONTRAST) !== node) continue;
         const cs = getComputedStyle(owner);
         if (cs.visibility !== 'visible') continue;
         const lineInk = owner === node ? ink : owner instanceof HTMLElement && owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
@@ -4339,7 +4464,7 @@ function lineRectsOf(
     if (fragments === 0) {
         // No text on a line: a control drawn with a glyph alone.
         for (const svg of node.querySelectorAll('svg')) {
-            if (svg.closest(CONTRAST_TEXT) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
+            if (svg.closest(CONTRAST) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
             push(svg, svg.getBoundingClientRect(), ink, true);
         }
     }
@@ -4968,7 +5093,7 @@ function uncoveredText(scope: ParentNode): string[] {
         const owner = text.parentElement;
         if (owner === null || (text.textContent ?? '').trim() === '') continue;
         if (owner.closest('.deck-stall, svg, [aria-hidden="true"], #layout-result') !== null) continue;
-        if (owner.closest(CONTRAST_TEXT) !== null) continue;
+        if (owner.closest(CONTRAST) !== null) continue;
         if (getComputedStyle(owner).visibility !== 'visible') continue;
         range.selectNodeContents(text);
         if ([...range.getClientRects()].every((r) => r.width === 0 || r.height === 0)) continue;
@@ -5075,6 +5200,18 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     // 5b, CRITIC-SAMPLER-STEP item 9; `PROBE-RULES.md`, "The door's deck is
     // not a contrast target").
     preparedNodes = [...scope.querySelectorAll<HTMLElement>(CONTRAST_TEXT)].filter((node) => node.closest('.deck-stall') === null);
+    // The honest-display lines after them (8e2): a node the list above
+    // already matched is not taken twice, and one with no layout box at
+    // this width — `hidden`, or in a fold a phone does not paint — is not a
+    // target here, so it is neither read nor counted as a skip.
+    const honestUnrendered = [...scope.querySelectorAll<HTMLElement>(HONEST_SELECTOR)].filter(
+        (node) => !node.matches(CONTRAST_TEXT) && node.getClientRects().length === 0,
+    ).length;
+    preparedNodes.push(
+        ...[...scope.querySelectorAll<HTMLElement>(HONEST_SELECTOR)].filter(
+            (node) => !node.matches(CONTRAST_TEXT) && node.getClientRects().length > 0,
+        ),
+    );
     preparedScope = scope;
     const lookPseudos = markLookPseudos(scope);
     const uncovered = uncoveredText(scope);
@@ -5159,8 +5296,10 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         pageH: pageHeight(scope),
         // What this one paint wore, for the runner's class audit.
         sheetClasses: sheetClassesOn(document.getElementById('app')!),
-        // How many nodes matched `CONTRAST_TEXT`, before any was dropped.
+        // How many nodes matched `CONTRAST`, before any was dropped — an
+        // honest line not rendered at this width aside (`honestUnrendered`).
         nodes: preparedNodes.length,
+        honestUnrendered,
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
         // The signs that wore Grid horizon, painted as they are.
@@ -5226,7 +5365,7 @@ window.__cspRefusals = () => cspRefusals();
  */
 window.__wornSheetJob = async (missing: string) => {
     const root = document.getElementById('app')!;
-    renderStall(root, { ...SCREENS[NEUTRAL_SCREEN]!, recordTheme: FIXTURE_LOOK.theme, worn: [] }, handlers);
+    renderStall(root, paintView(SCREENS[NEUTRAL_SCREEN]!, FIXTURE_LOOK, []), handlers);
     const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
     const named = (): string =>
         stall === null ? '(no stall)' : getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();
@@ -5355,6 +5494,8 @@ const verdict = {
     cspRefusals: cspRefusals(),
     clipSkips,
     clipChecks,
+    /* The same per look (8e2): what the runner holds a carried look to on its own points. */
+    clipByClass,
     screensWithQuote: [...withQuote],
     codesPainted: [...codesPainted].sort(),
     /*
@@ -5367,9 +5508,15 @@ const verdict = {
     skipChecks,
     rowSizeClasses: [...rowSizeClasses].sort(),
     doorMiniClasses: [...doorMiniClasses].sort(),
+    /* Paid private looks painted the record's way and held to the default (`the-record-road-paints-a-locked-look-as-the-default`). */
+    recordRoadChecks,
+    /* The private looks this build carries, by class (8e2): the runner holds them to the selection it named. */
+    privateClasses: privateLooks().map((look) => look.theme.sheetClass),
     wallControlChecks,
     statusLineChecks,
     wallControlRoles,
+    /* The same per look (8e2). */
+    wallControlRolesByClass,
     wallSlivers: [...wallSlivers].sort(),
     floorNamedChecks,
     outlineChecks,

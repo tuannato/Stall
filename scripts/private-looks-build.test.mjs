@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { artNamedBy, checkDist, distFiles, distLooksProblems, lookSheetNames } from './check-dist-looks.mjs';
-import { publicLookFacts } from './private-looks.mjs';
+import { artNamedBy, checkDist, distFiles, distLooksProblems, entryCss, lookSheetNames } from './check-dist-looks.mjs';
+import { HARNESS_LOOK_CLASSES, publicLookFacts } from './private-looks.mjs';
 import {
     FIXTURE_LOOKS_DIR,
     LOOKS_TARGETS,
@@ -793,6 +793,56 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             assert.ok(problems.some((p) => /its sheet names .* which is not in the dist/.test(p)), problems.join('\n'));
             assert.ok(problems.some((p) => /art\/ground\.svg is named by its sheet and is not in the dist/.test(p)), problems.join('\n'));
             assert.ok(sheetPath.startsWith('assets/'));
+        });
+
+        /**
+         * `the-dist-check-knows-a-harness-builds-own-looks` (8e2): the layout
+         * probe's and the kit's builds carry the harness's own looks beside
+         * the app — the step-6 fixture look's sheet, the kit's — and the
+         * fixture look's art is the bytes the tracked private fixture copies.
+         * Handed the harness's classes (a harness build's config alone, by
+         * `forHarness` in `vite.config.ts`), the check reads a sheet naming
+         * one, and the files it names, as the harness's; without them both
+         * are the strays they are in a deploy build. Nothing else loosens: a
+         * private look's own file no carried sheet names is still red, and a
+         * harness sheet in the entry CSS is.
+         */
+        it('the-dist-check-knows-a-harness-builds-own-looks', () => {
+            const shipped = facts.shippedClasses;
+            const base = distFiles(previewDist);
+            const given = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/art/ground.svg'));
+            const look = {
+                cls: 't-fixture-private',
+                slug: 'fixture',
+                art: [{ name: 'ground.svg', bytes: Buffer.from(sanitizeSvg(given.toString('utf8')).svg), given }],
+                named: new Set(['ground.svg']),
+            };
+            const check = (files, harnessClasses) =>
+                distLooksProblems({ files, shippedClasses: shipped, included: [look], excluded: [], harnessClasses });
+            assert.deepEqual(check(base, HARNESS_LOOK_CLASSES), []);
+            const harness = new Map(base)
+                .set('assets/fixture-look-test.css', Buffer.from('.t-fixture-worn{--look-sheet:t-fixture-worn}.stall.t-fixture-worn{background-image:url(/assets/ground-harness.svg)}'))
+                .set('assets/ground-harness.svg', given);
+            const asDeploy = check(harness, []);
+            assert.ok(asDeploy.some((p) => /^t-fixture-worn: a look sheet in assets\/fixture-look-test\.css that this build's selection does not carry$/.test(p)), asDeploy.join('\n'));
+            assert.ok(asDeploy.some((p) => /^fixture: assets\/ground-harness\.svg is one of its files, and no carried sheet names it$/.test(p)), asDeploy.join('\n'));
+            assert.deepEqual(check(harness, HARNESS_LOOK_CLASSES), []);
+            // The private look's own file, named by no sheet, is still its stray.
+            const stray = new Map(harness).set('assets/ground-stray.svg', given);
+            assert.deepEqual(check(stray, HARNESS_LOOK_CLASSES), ['fixture: assets/ground-stray.svg is one of its files, and no carried sheet names it']);
+            // And a harness sheet folded into the entry CSS is not the harness's own file.
+            const [entryPath] = [...entryCss(base)];
+            assert.ok(entryPath !== undefined && base.has(entryPath), 'the preview dist has an entry CSS');
+            const entry = [entryPath, base.get(entryPath)];
+            const folded = new Map(base).set(entry[0], Buffer.concat([entry[1], Buffer.from('.t-workshop{--look-sheet:t-workshop}')]));
+            assert.deepEqual(check(folded, HARNESS_LOOK_CLASSES), [`t-workshop: a harness look's sheet in the entry CSS (${entry[0]})`]);
+            // A harness page's own stylesheet (the showroom's chrome) is its
+            // page's entry CSS in a harness build, and a stray in a deploy build.
+            const page = new Map(base)
+                .set('layout/gallery.html', Buffer.from('<!doctype html><link rel="stylesheet" crossorigin href="/assets/gallery-test.css">'))
+                .set('assets/gallery-test.css', Buffer.from('.g-row{display:flex}'));
+            assert.deepEqual(check(page, HARNESS_LOOK_CLASSES), []);
+            assert.deepEqual(check(page, []), ["assets/gallery-test.css: a built stylesheet outside the entry CSS that is no carried look's sheet"]);
         });
 
         /**

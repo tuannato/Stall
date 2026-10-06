@@ -123,6 +123,31 @@ export function comparisonLines(result, { list = 40 } = {}) {
     return lines;
 }
 
+/**
+ * The kind of run a dump is (8e2, the 8e2 critic's item 7): `looks` (the
+ * runner's `--looks`, `shipped` or `workshop`), and for a run that carried
+ * private looks, `+` and each carried class — `shipped+t-fixture-private`.
+ * A run that carried looks writes its own latest and keeps its own twenty,
+ * so it never overwrites the public run's `shipped-latest.json`, and two
+ * dumps of different kinds are never compared (`dumpKindsDiffer`).
+ */
+export function dumpKindOf(looks, carried = []) {
+    return carried.length === 0 ? looks : `${looks}+${[...carried].sort().join('+')}`;
+}
+
+/**
+ * Why two dumps are not one kind of run, or undefined: a run that carried
+ * private looks against one that did not, or other looks, would report every
+ * job of the difference as added or removed — a diff of the selections, not
+ * of the change. A dump from before 8e2 has no `kind` and is its `looks`.
+ */
+export function dumpKindsDiffer(before, after) {
+    const kind = (dump) => dump?.meta?.kind ?? dump?.meta?.looks;
+    const a = kind(before);
+    const b = kind(after);
+    return a === b ? undefined : `the dumps are two kinds of run (${a ?? 'unknown'} against ${b ?? 'unknown'}) — compare a run with one of its own kind`;
+}
+
 /** How many timestamped dumps of one kind of run are kept; a dump is ~1.5 MB. */
 export const DUMPS_KEPT = 20;
 
@@ -132,6 +157,8 @@ export const DUMPS_KEPT = 20;
  * several times a day must not fill a disk. Returns the timestamped path.
  */
 export function writeDump(dump, { looks, stamp, rev, dir = DUMP_DIR }) {
+    // `looks` is the run's kind (`dumpKindOf`): `shipped`, `workshop`, or
+    // `shipped+<carried classes>`, whose names never start `shipped-`.
     mkdirSync(dir, { recursive: true });
     const text = `${JSON.stringify(dump, null, 1)}\n`;
     const path = join(dir, `${looks}-${stamp}${rev === undefined ? '' : `-${rev}`}.json`);
@@ -154,7 +181,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         process.exit(2);
     }
     const read = (path) => JSON.parse(readFileSync(path, 'utf8'));
-    const result = compareDumps(read(beforePath), read(afterPath));
+    const [before, after] = [read(beforePath), read(afterPath)];
+    const differ = dumpKindsDiffer(before, after);
+    if (differ !== undefined) {
+        console.error(`contrast-dump: ${differ}`);
+        process.exit(2);
+    }
+    const result = compareDumps(before, after);
     for (const line of comparisonLines(result, { list: Number(process.env.DUMP_LIST ?? 40) })) console.log(line);
     const same = result.moved.length === 0 && result.added.length === 0 && result.removed.length === 0;
     process.exit(same ? 0 : 1);

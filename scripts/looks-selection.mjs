@@ -8,17 +8,31 @@
  *   fixture's directory;
  * - `STALL_LOOKS_COMMIT` — optional, 40 lower-case hex.
  *
- * **A harness command measures the public build until 8e2 teaches it a
- * private look** (the 8b2 critic's item 2): `pnpm test:layout`,
- * `looks:diff`, the workshop's commands, the print measurement and the
- * notices each build through the app's config, which would carry whatever
- * the shell names — and a verdict over a bundle nobody asked for is worse
- * than none (measured: the probe passed green over the fixture look, and
- * said nothing). So each calls `refuseSelection` before it builds anything
- * and stops, naming the three variables, when any is set
- * (`a-harness-command-refuses-a-selection-until-it-reads-one`). A test that
+ * **A harness command reads a selection or refuses it, and says which**
+ * (8e2; the 8b2 critic's item 2). `pnpm test:layout`, `looks:diff`, the
+ * workshop's commands, the kit's lint, the print measurement and the
+ * notices each build through the app's config (or read the sheets a build
+ * serves), which carries whatever the shell names — and a verdict over a
+ * bundle nobody asked for is worse than none (measured before 8e2: the probe
+ * passed green over the fixture look a shell export had put in its bundle,
+ * and said nothing). So each command's first statement is one of two calls:
+ *
+ * - **`harnessSelection(command)`** — a command that measures what a
+ *   selection carries (`test:layout`, `looks:diff`, the workshop's serve,
+ *   shots and start, `workshop:lint`): the whole selection, or none. Half a
+ *   selection, an unknown target or a malformed commit stops it before it
+ *   builds anything, naming each problem; so does `STALL_LOOKS_REQUIRED`
+ *   with nothing selected. With none it is the command it was before 8e2,
+ *   byte for byte in what it builds.
+ * - **`refuseSelection(command, why)`** — a command that measures the public
+ *   build only (`print-measure`), stopped when any of the variables is set,
+ *   naming them and why. A reader refuses one road the same way (the kit's
+ *   probe, which measures the kit's look alone).
+ *
+ * Test: `a-harness-command-reads-a-selection-or-refuses-it`. A test that
  * starts one of them, or builds in-process, takes the variables out of its
- * environment (`withoutSelection`). Node built-ins only; a `.d.mts` beside it.
+ * environment (`withoutSelection`) unless it means to hand one over. Node
+ * built-ins only; a `.d.mts` beside it.
  */
 
 /** The environment variables that select a build's private looks. */
@@ -93,20 +107,60 @@ export function withoutSelection(env) {
     return out;
 }
 
-/** Why `command` will not run under `env`, or undefined: any of the selection's variables set, whole or not, or the one that requires one. */
-export function selectionRefusal(command, env) {
+/** Why a command that refuses a selection gives none of its own: it measures the public build. */
+export const PUBLIC_ONLY = 'this command measures the public build only';
+
+/**
+ * Why `command` will not run under `env`, or undefined: any of the
+ * selection's variables set, whole or not, or the one that requires one —
+ * `why` says what the command measures instead.
+ */
+export function selectionRefusal(command, env, why = PUBLIC_ONLY) {
     const set = LOOKS_ENV.filter((name) => present(env[name]));
     if (set.length === 0) {
         return undefined;
     }
-    return `${command}: ${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} set — until 8e2 this command measures the public build only; run it with none of ${LOOKS_ENV.join(', ')} set`;
+    return `${command}: ${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} set — ${why}; run it with none of ${LOOKS_ENV.join(', ')} set`;
 }
 
-/** Stop `command` here, before it builds anything, when `env` selects a private look. */
-export function refuseSelection(command, env = process.env) {
-    const refusal = selectionRefusal(command, env);
+/** Stop `command` here, before it builds anything, when `env` selects a private look — `why` says what it measures instead. */
+export function refuseSelection(command, why = PUBLIC_ONLY, env = process.env) {
+    const refusal = selectionRefusal(command, env, why);
     if (refusal !== undefined) {
         process.stderr.write(`${refusal}\n`);
         process.exit(2);
     }
+}
+
+/**
+ * Why `command` will not read `env`'s selection, or undefined: half a
+ * selection, an unknown target or a malformed commit (`selectionFromEnv`'s
+ * problems), or `STALL_LOOKS_REQUIRED` with nothing selected — a run that
+ * must carry its looks names them.
+ */
+export function harnessSelectionRefusal(command, env) {
+    let selection;
+    try {
+        selection = selectionFromEnv(env);
+    } catch (err) {
+        return `${command}: ${err.message}`;
+    }
+    if (selection === undefined && selectionRequired(env)) {
+        return `${command}: ${REQUIRED_ENV} is set and nothing is selected — a run that must carry its looks names them (${SELECTION_ENV.target}, ${SELECTION_ENV.dir})`;
+    }
+    return undefined;
+}
+
+/**
+ * The selection `command` reads (8e2): `env`'s, whole, or undefined for
+ * none. Stops the command, before it builds anything, when the selection is
+ * not whole (`harnessSelectionRefusal`).
+ */
+export function harnessSelection(command, env = process.env) {
+    const refusal = harnessSelectionRefusal(command, env);
+    if (refusal !== undefined) {
+        process.stderr.write(`${refusal}\n`);
+        process.exit(2);
+    }
+    return selectionFromEnv(env);
 }

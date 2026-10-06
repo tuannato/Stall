@@ -30,13 +30,18 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
     it('holds the pass’s size by value, viewport by viewport', () => {
         // Three shipped looks and the skeleton. A change here is a change to
         // what the guard samples — and, at ~0.4 s a job, to what it costs.
+        // 8e2 (CRITIC-STEP-8E2 item 11): +21 a viewport, from 228 / 258 /
+        // 515 — `pay-xec` and `pay-moved` sampled again and `pay-gone` new,
+        // seven jobs each (three looks bare and worn, the skeleton bare),
+        // because each paints an honest-display line no other sampled screen
+        // does (`layout/honestDisplay.ts`).
         expect(looks.map((look) => look.id)).toEqual([1, 2, 3, SKELETON_LOOK_ID]);
         expect({
             mobile: count(jobs, 'mobile'),
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 228, desktop: 258, canvas: 29, total: 515 });
+        }).toEqual({ mobile: 249, desktop: 279, canvas: 29, total: 557 });
     });
 
     it('samples Grid horizon worn alone on the offers screen, at the phone and the desk', () => {

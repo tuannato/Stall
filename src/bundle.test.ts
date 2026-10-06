@@ -8,11 +8,13 @@ import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
 import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets.mjs';
 import { wornSheets } from '../scripts/sheet-roles.mjs';
+import { FIXTURE_LOOKS_DIR, SELECTION_ENV, selectionFromEnv, withoutSelection } from '../scripts/looks-selection.mjs';
 import {
     LOOK_ART_BUDGET_GZIP,
     bytesOf,
     lookArtBudget,
     privateLookArtBudget,
+    privateLookRows,
     weightBuckets,
     type BuiltPart as WeighedPart,
 } from '../scripts/weight-buckets.mjs';
@@ -190,6 +192,37 @@ function cssText(parts: readonly WeighedPart[], names: readonly string[]): strin
         .join('\n');
 }
 
+/**
+ * A deploy build carrying the private looks `selection` names (8e2), in
+ * memory: the app's own config with its private-look plugin made to read
+ * that selection (`privateLooks({ env })` in `vite.config.ts`) — a vitest
+ * worker selects nothing (`VITEST`), so the selection is handed over rather
+ * than read from this process. The one difference from `appParts`.
+ */
+async function deployParts(selection: Readonly<Record<string, string>>): Promise<readonly WeighedPart[]> {
+    const { default: config, privateLooks } = await import('../vite.config');
+    const env: Record<string, string | undefined> = { ...withoutSelection(process.env), ...selection };
+    delete env['VITEST'];
+    let swapped = 0;
+    const plugins = (config.plugins ?? []).map((plugin) => {
+        if (typeof plugin === 'object' && plugin !== null && (plugin as { name?: string }).name === 'stall-private-looks') {
+            swapped += 1;
+            return privateLooks({ env });
+        }
+        return plugin;
+    });
+    expect(swapped, 'the app config carries one private-look plugin to swap').toBe(1);
+    const result = await build({ ...config, configFile: false, plugins, logLevel: 'silent', build: { ...config.build, write: false } });
+    return partsOf(result) as unknown as readonly WeighedPart[];
+}
+
+/**
+ * What a visitor's first load costs, held on the public build and — since
+ * 8e2 — on a deploy build carrying the private looks a run reads: the
+ * merged rows and the loader ride the entry, a look's sheet and art never do.
+ */
+const EVERY_VISITOR_CEILING_BYTES = 895_000;
+
 describe('every-visitor-weight-has-a-ceiling', () => {
     /*
      * What a first visit to any page of the app downloads before anything
@@ -203,7 +236,6 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * The number to watch is the delta a raise records; the ceiling is the
      * alarm. Red: a ~40 KB static import from render.ts.
      */
-    const EVERY_VISITOR_CEILING_BYTES = 895_000;
 
     it(`keeps every visitor's download under ${EVERY_VISITOR_CEILING_BYTES} bytes`, async () => {
         const buckets = weightBuckets(await appParts(), { worn: WORN });
@@ -534,6 +566,79 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(reading.total, `a heavy private look passed the budget: ${JSON.stringify(reading)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
     }, 60_000);
     afterAll(removePlants);
+
+    /*
+     * And on a deploy build's own worn bucket (8e2): every private look a run
+     * reads — the tracked fixture always, the selection when the
+     * environment names one, each built as a deploy build of it would carry
+     * it (`deployParts`, the fixture at the commit the guards read it) — is
+     * weighed from the bytes the build emits: its own sheet as built and
+     * every file that sheet's `url()`s name, through `weightBuckets` like
+     * any worn-only look, its rows from its `look.json`. The bucket is the
+     * look's alone (no file of it in the every-visitor bucket, no problem
+     * over the build), and the build's every-visitor download stays under
+     * the public ceiling. Red over the planted heavy look above, built.
+     */
+    it(`keeps every private look a run reads under ${LOOK_ART_BUDGET_GZIP} gzip bytes, on a deploy build's own worn bucket`, async () => {
+        const rows = privateRows(await guardSheets());
+        expect(rows.some((row) => row.look.source === 'fixture'), 'the fixture is read').toBe(true);
+        const selected = selectionFromEnv(process.env);
+        for (const row of rows) {
+            const selection =
+                row.look.source === 'fixture' || selected === undefined
+                    ? { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR, [SELECTION_ENV.commit]: row.look.commit }
+                    : {
+                          [SELECTION_ENV.target]: selected.target,
+                          [SELECTION_ENV.dir]: selected.dir,
+                          [SELECTION_ENV.commit]: row.look.commit,
+                      };
+            const parts = await deployParts(selection);
+            const worn = [...WORN, { lookClass: row.lookClass, source: `${row.look.entry.slug}/sheet.css` }];
+            const buckets = weightBuckets(parts, { worn });
+            expect(buckets.problems, row.path).toEqual([]);
+            const bucket = buckets.worn[row.lookClass];
+            expect(bucket, `${row.path}: the deploy build emitted no sheet of the look's own`).toBeDefined();
+            expect(buckets.everyVisitor.files.some((name) => name === bucket!.sheet || bucket!.art.includes(name))).toBe(false);
+            const byName = new Map(parts.map((part) => [part.fileName, part]));
+            const bytes = (name: string): string | Uint8Array => byName.get(name)?.source ?? '';
+            const reading = lookArtBudget({
+                sheet: String(bytes(bucket!.sheet)),
+                sheetFile: bucket!.sheet,
+                files: new Map(bucket!.art.map((name) => [name, bytes(name)])),
+                rows: privateLookRows(row.look),
+            });
+            expect(reading.total, `${row.path}: the built look was not read`).toBeGreaterThan(100);
+            expect(reading.total, `${row.path}: ${JSON.stringify(reading)}`).toBeLessThan(LOOK_ART_BUDGET_GZIP);
+            expect(
+                buckets.everyVisitor.bytes,
+                `a deploy build of ${row.path} costs every visitor ${buckets.everyVisitor.bytes} bytes against ${EVERY_VISITOR_CEILING_BYTES}`,
+            ).toBeLessThan(EVERY_VISITOR_CEILING_BYTES);
+        }
+        // Red: the fixture planted with ~600 KB of art gzip cannot shrink, built.
+        let seed = 0x2545f491;
+        const digits = Array.from({ length: 1_400_000 }, () => {
+            seed ^= seed << 13;
+            seed ^= seed >>> 17;
+            seed ^= seed << 5;
+            return String((seed >>> 0) % 10);
+        }).join('');
+        const heavy = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L${digits.replace(/(\d{6})/g, '$1 ')}"/></svg>`;
+        const repo = plantLooks(
+            (path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, `.${PLANTED_CLASS} .item-n { background-image: url(./art/heavy.svg); }`) : text),
+            { 'fixture/art/heavy.svg': heavy },
+        );
+        const planted = await deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() });
+        const plantedBuckets = weightBuckets(planted, { worn: [...WORN, { lookClass: PLANTED_CLASS, source: 'fixture/sheet.css' }] });
+        const plantedBucket = plantedBuckets.worn[PLANTED_CLASS]!;
+        const byName = new Map(planted.map((part) => [part.fileName, part]));
+        const plantedReading = lookArtBudget({
+            sheet: String(byName.get(plantedBucket.sheet)?.source ?? ''),
+            sheetFile: plantedBucket.sheet,
+            files: new Map(plantedBucket.art.map((name) => [name, byName.get(name)?.source ?? ''])),
+            rows: [],
+        });
+        expect(plantedReading.total, `a heavy private look passed the budget built: ${JSON.stringify(plantedReading)}`).toBeGreaterThan(LOOK_ART_BUDGET_GZIP);
+    }, 180_000);
 
     it('counts the bare look and the largest row of each slot, and refuses 600 KB of art', () => {
         // Bytes gzip cannot shrink: a fixed-seed generator, so the reading is the same every run.

@@ -207,13 +207,15 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
             'the build: the public table from the disk beside the looks it carries, for the checks that need every sheet at once (`crossSheetProblems`) — the merged list imports the build, so the build reads its own',
         'scripts/private-looks.test.mjs': "compares the fixture's sheet read from git with the disk: a test of the reader, no guard",
         'scripts/workshop.mjs': 'builds a kit starter out of a shipped look and the screen sheets it carries: no guard',
+        'scripts/layout-check.mjs':
+            "derives the shipped look classes it expects to see painted from the table's look rows, beside the private ones the selection carries (8e2): no guard over a sheet's text",
         'scripts/workshop-lint.test.mjs': "the kit's own sheet and a creator's scratch sheet, the kit lint's subjects",
         'layout/workshopStarter.test.ts': "the kit's starters, the kit's subject",
         'layout/auroraTide.test.ts': "stall.css's aurora rules, a shipped row's",
         'layout/anchorColour.test.ts':
-            'renders the shipped looks; no look sheet, shipped or private, brings the browser\'s link colour back (the look lint refuses `revert` and `revert-layer` on `color` and `all`), and an anchor under a private look is the harness\'s to paint (8e2)',
+            'renders the shipped looks; no look sheet, shipped or private, brings the browser\'s link colour back (the look lint refuses `revert` and `revert-layer` on `color` and `all`), and an anchor under a private look is read by the probe\'s contrast pass under every look a selection carries (8e2: the guide and wearing links are contrast targets)',
         'src/bundle.test.ts':
-            "the built buckets: a vitest build carries no private look (the virtual module is empty under vitest), so its worn sheets are the table's; the private look's source budget reads the merged list",
+            "the built buckets: a vitest build carries no private look (the virtual module is empty under vitest), so its worn sheets are the table's; every private look the merged list reads is weighed from its source and on a deploy build of its own (8e2)",
         'src/ui/theme-sheets.test.ts': "the emit side of the var table is the public build's: a var only a private sheet read is dead there",
         'src/ui/decor-ground-inks.test.ts':
             "the confetti and the rays are Rural's and Modern's rows; a private sheet's rules sit under its own class (the look lint), which never stands beside them",

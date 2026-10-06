@@ -2,16 +2,18 @@ import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { before, describe, it } from 'node:test';
-import { FONTS, NOTICES_PATH, ROOT, bundleInventory, composeNotices } from './notices.mjs';
+import { FONTS, NOTICES_PATH, ROOT, bundleInventory, composeNotices, lookFaceFiles, selectedNoticesProblems } from './notices.mjs';
 import { LICENCE_ALLOW as NOTICES_ALLOW } from './notices-lib.mjs';
-import { LOOKS_ENV } from './looks-selection.mjs';
+import { FIXTURE_LOOKS_DIR, LOOKS_ENV, SELECTION_ENV } from './looks-selection.mjs';
 
-// The notices are the public build's, which `bundleInventory` refuses to
-// build under a private-look selection: the suite measures the public build
-// whatever the shell running it names.
+// The suite starts from no selection whatever the shell running it names;
+// the one build below that is handed a selection says so.
 for (const name of LOOKS_ENV) {
     delete process.env[name];
 }
+
+/** The tracked fixture selected at `preview`, as a harness command hands it to a build. */
+const FIXTURE_SELECTION = { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR };
 
 /**
  * `public/licenses.txt` against what the bundle actually ships.
@@ -25,12 +27,63 @@ for (const name of LOOKS_ENV) {
  * which modules and assets reach a browser, and every test below reads it.
  */
 let inventory;
+/** The fixture selection's build (8e2), and the shell's variables as `bundleInventory` left them. */
+let selected;
+let shellAfter;
 before(
     async () => {
-        inventory = await bundleInventory();
+        // The public build is built with a selection in the shell, as a
+        // forgotten export would leave it: `bundleInventory` sets it aside,
+        // and every test below — the byte-for-byte one first — reads the
+        // public build, or fails (`the-notices-are-the-public-builds-under-a-selection`).
+        Object.assign(process.env, FIXTURE_SELECTION);
+        try {
+            inventory = await bundleInventory();
+            shellAfter = Object.fromEntries(LOOKS_ENV.map((name) => [name, process.env[name]]));
+        } finally {
+            for (const name of LOOKS_ENV) delete process.env[name];
+        }
+        selected = await bundleInventory({ env: FIXTURE_SELECTION });
     },
     { timeout: 300_000 },
 );
+
+describe('the-notices-are-the-public-builds-under-a-selection', () => {
+    const carriesTheModule = (inv) =>
+        inv.modules.some(({ id, renderedLength }) => id === '\0stall:private-looks' && renderedLength > 0);
+    const carriesALook = (inv) =>
+        inv.assets.some((asset) => asset.originalFileNames.some((name) => /\/stall-private-looks-[^/]+\/fixture\/sheet\.css$/.test(name)));
+
+    it('builds the public inventory with the shell’s selection set aside, and puts the variables back', () => {
+        assert.equal(carriesALook(inventory), false, 'the public inventory carries the fixture look');
+        assert.equal(carriesALook(selected), true, 'the selection’s inventory carries no fixture look');
+        assert.equal(carriesTheModule(selected), true);
+        assert.deepEqual(shellAfter, { ...Object.fromEntries(LOOKS_ENV.map((name) => [name, undefined])), ...FIXTURE_SELECTION });
+    });
+
+    it('holds a selection’s build to the public packages and the faces its looks name', () => {
+        // The fixture serves no face and a look brings no code.
+        assert.deepEqual(selectedNoticesProblems({ publicInventory: inventory, selectedInventory: selected, lookFaces: [] }), {
+            problems: [],
+            faces: [],
+        });
+        const asset = (fileName, source) => ({ fileName, originalFileNames: [source] });
+        const face = 'tmp/stall-private-looks-abc/look/art/face-latin.woff2';
+        const extra = {
+            modules: [...selected.modules, { id: `${ROOT}/node_modules/.pnpm/x@1/node_modules/left-pad/index.js`, renderedLength: 10 }],
+            assets: [...selected.assets, asset('assets/face-latin.woff2', face), asset('assets/stray.woff2', 'src/ui/fonts/stray.woff2')],
+        };
+        const { problems, faces } = selectedNoticesProblems({ publicInventory: inventory, selectedInventory: extra, lookFaces: ['face-latin.woff2'] });
+        assert.deepEqual(faces, ['face-latin.woff2']);
+        assert.equal(problems.length, 2, problems.join('\n'));
+        assert.match(problems[0], /left-pad, which the public build does not/);
+        assert.match(problems[1], /a face no notice names: src\/ui\/fonts\/stray\.woff2/);
+        // A look's face its fonts.json does not name is a stray too.
+        assert.equal(selectedNoticesProblems({ publicInventory: inventory, selectedInventory: extra, lookFaces: [] }).problems.length, 3);
+        assert.deepEqual(lookFaceFiles(JSON.stringify({ fonts: [{ name: 'X', files: { 'x-latin.woff2': 'Latin' }, licence: 'LICENSE-OFL-x.txt' }] })), ['x-latin.woff2']);
+        assert.deepEqual(lookFaceFiles(undefined), []);
+    });
+});
 
 const LICENCE_ALLOW = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD']);
 

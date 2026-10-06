@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DUMPS_KEPT, boxKey, compareDumps, comparisonLines, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
+import { DUMPS_KEPT, dumpKindOf, dumpKindsDiffer, boxKey, compareDumps, comparisonLines, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 
 const job = { pass: 'contrast', viewport: 'mobile', screen: 'offers', look: 1, flags: 0 };
 const box = (i, worst, extra = {}) => ({
@@ -68,6 +68,32 @@ describe('a-contrast-change-is-lossless-only-box-for-box', () => {
         assert.equal(r.moved[0].after, null);
         assert.deepEqual(r.removed.map((x) => x.key), [box(1, 5).key]);
         assert.deepEqual(r.added.map((x) => x.key), [box(2, 5).key]);
+    });
+
+    it('files a run that carried private looks as its own kind, and refuses to compare two kinds (8e2)', () => {
+        assert.equal(dumpKindOf('shipped', []), 'shipped');
+        assert.equal(dumpKindOf('shipped', ['t-zeta-look', 't-fixture-private']), 'shipped+t-fixture-private+t-zeta-look');
+        const dir = mkdtempSync(join(tmpdir(), 'contrast-dump-'));
+        try {
+            writeDump({ meta: { looks: 'shipped', kind: 'shipped' }, boxes: [] }, { looks: 'shipped', stamp: '2026-10-06T00-00-00-000Z', dir });
+            const before = readdirSync(dir).sort();
+            const kind = dumpKindOf('shipped', ['t-fixture-private']);
+            for (let n = 0; n < DUMPS_KEPT + 2; n += 1) {
+                writeDump({ meta: { looks: 'shipped', kind }, boxes: [] }, { looks: kind, stamp: `2026-10-06T01-00-${String(n).padStart(2, '0')}-000Z`, dir });
+            }
+            const names = readdirSync(dir).sort();
+            // The public run's latest and its dump are untouched.
+            for (const name of before) assert.ok(names.includes(name), name);
+            assert.ok(names.includes('shipped+t-fixture-private-latest.json'));
+            assert.equal(names.filter((name) => name.startsWith('shipped+t-fixture-private-2026')).length, DUMPS_KEPT);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+        const pub = { meta: { looks: 'shipped', kind: 'shipped' }, boxes: [] };
+        const old = { meta: { looks: 'shipped' }, boxes: [] };
+        const carried = { meta: { looks: 'shipped', kind: 'shipped+t-fixture-private' }, boxes: [] };
+        assert.equal(dumpKindsDiffer(pub, old), undefined);
+        assert.match(dumpKindsDiffer(pub, carried), /two kinds of run \(shipped against shipped\+t-fixture-private\)/);
     });
 
     it('keeps the newest dumps of one kind of run, and never another kind\'s', () => {

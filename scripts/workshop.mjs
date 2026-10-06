@@ -59,11 +59,16 @@ import {
 import { servedFlashReport } from './look-flash.mjs';
 import { readArt, requireCleanKitBuild } from './workshop-build-check.mjs';
 import { lintSheet, rescopeSheet, sheetHasRules } from './workshop-css.mjs';
-import { refuseSelection } from './looks-selection.mjs';
+import { harnessSelection, refuseSelection } from './looks-selection.mjs';
+import { harnessLooks } from './harness-looks.mjs';
 
-// A harness command measures the public build until 8e2 teaches it a private
-// look (the 8b2 critic's item 2): nothing is built under a selection.
-refuseSelection('workshop');
+/*
+ * The private looks the showroom offers and the shots shoot (8e2): the
+ * selection the shell names, whole, or none — half a selection stops every
+ * command before it builds (`harnessSelection`). The kit's probe refuses
+ * one (`probe` below): it measures the kit's look alone.
+ */
+const SELECTION = harnessSelection('workshop');
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 process.chdir(ROOT);
@@ -179,6 +184,24 @@ async function buildFor(command) {
     await requireCleanKitBuild({ configFile: WORKSHOP_CONFIG, artDir: join('workshop', 'art') });
 }
 
+/* ---------- the selection ---------- */
+
+/**
+ * What the selection carries, read once, its commit pinned into this
+ * process's environment (8e2): every build this command makes — the build
+ * it serves and the kit's in-memory baseline it is held against
+ * (`requireCleanKitBuild`) — then carries the same commit's looks. Says what
+ * it carries; with no selection it is nothing, and says nothing.
+ */
+async function carried() {
+    const looks = await harnessLooks(SELECTION);
+    if (SELECTION !== undefined) {
+        Object.assign(process.env, looks.env);
+        console.log(`  workshop: this build carries the private looks of ${looks.line}`);
+    }
+    return looks;
+}
+
 /* ---------- start ---------- */
 
 async function start(args) {
@@ -252,6 +275,7 @@ async function start(args) {
 async function serve() {
     stopOnSignals('workshop');
     await requireKit();
+    await carried();
     const { port } = await commandSettings('serve');
     await buildFor('serve');
     await refuseTakenPort(port, "showroom's preview server");
@@ -276,6 +300,9 @@ async function serve() {
 /* ---------- probe ---------- */
 
 async function probe() {
+    // The kit's probe judges a creator's look alone; a selection would put a
+    // look in its build that no pass reads (`layout-check.mjs` refuses it too).
+    refuseSelection('workshop:probe', "the kit's probe measures the kit's look alone and reads no private look");
     await requireKit();
     const { port } = await commandSettings('probe');
     // Not detached: a Ctrl-C at the terminal reaches `layout-check.mjs`
@@ -332,8 +359,11 @@ function escapeHtml(text) {
 
 function contactSheet(shots) {
     const byViewport = new Map();
+    // One heading per look and viewport where a selection added looks (8e2);
+    // the kit's look alone keeps the headings it always had.
+    const looks = new Set(shots.map((shot) => shot.look));
     for (const shot of shots) {
-        const key = `${shot.viewport.name} · ${shot.viewport.width}×${shot.viewport.height}`;
+        const key = `${looks.size > 1 ? `${shot.look} · ` : ''}${shot.viewport.name} · ${shot.viewport.width}×${shot.viewport.height}`;
         if (!byViewport.has(key)) byViewport.set(key, []);
         byViewport.get(key).push(shot);
     }
@@ -365,6 +395,7 @@ function contactSheet(shots) {
 async function shots() {
     stopOnSignals('workshop');
     await requireKit();
+    const { looks: privateLooks } = await carried();
     const chrome = findChrome();
     if (chrome === undefined) {
         console.error(`workshop:shots: no Chrome found. Install one of: ${CHROMES.join(', ')}`);
@@ -430,10 +461,34 @@ async function shots() {
         await metrics(390, 844);
         await cdp.send('Page.navigate', { url: `${gallery}?look=${KIT_LOOK_ID}&chrome=0` }, sessionId);
         await waitUntil('the showroom', () => evaluate(cdp, sessionId, 'window.__galleryReady === true'), { watch });
-        const plan = await evaluate(cdp, sessionId, 'window.__shotPlan()');
+        /*
+         * The kit's look, and each private look the selection carries (8e2),
+         * each under its own folder: what an owner's review of a look shoots
+         * (STEP-8-PLAN §5), from the look's own plan (`__shotPlan(id)`).
+         * Stated (the 8e2 critic's item 9): the kit's checks run first
+         * (`requireKit`) and the kit's look is always shot too, so a broken
+         * kit blocks shooting a carried look; the plan's `looks:shots <id>`
+         * would decouple them, and is not built.
+         */
+        const subjects = [
+            { id: KIT_LOOK_ID, cls: 't-workshop', look: 'workshop', dir: '', ask: 'window.__shotPlan()' },
+            ...privateLooks.map((look) => ({
+                id: look.id,
+                cls: look.cls,
+                look: look.slug,
+                dir: `private-${look.slug}/`,
+                ask: `window.__shotPlan(${look.id})`,
+            })),
+        ];
+        const plan = [];
+        for (const subject of subjects) {
+            for (const job of await evaluate(cdp, sessionId, subject.ask)) plan.push({ ...job, subject });
+        }
         const viewports = new Set(plan.map((job) => job.viewport.name)).size;
         console.log(
-            `  workshop:shots: ${plan.length} paints over ${viewports} viewports; a screen with a running ` +
+            `  workshop:shots: ${plan.length} paints over ${viewports} viewports` +
+                (subjects.length > 1 ? `, ${subjects.length} looks` : '') +
+                '; a screen with a running ' +
                 `animation takes a second instant, so up to ${plan.length * 2} PNGs.`,
         );
         rmSync(SHOTS_OUT, { recursive: true, force: true });
@@ -443,7 +498,7 @@ async function shots() {
             evaluate(
                 cdp,
                 sessionId,
-                `(async () => { window.__paint(${JSON.stringify(job.screen)}, ${KIT_LOOK_ID}, ${job.flags}); ` +
+                `(async () => { window.__paint(${JSON.stringify(job.screen)}, ${job.subject.id}, ${job.flags}); ` +
                     'await document.fonts.ready; ' +
                     'await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))); ' +
                     'const running = document.getAnimations().filter((a) => a.playState === "running"); ' +
@@ -477,10 +532,10 @@ async function shots() {
                 await metrics(width, grownH);
                 state = await settle(job);
             }
-            if (state.classes.length !== 1 || state.classes[0] !== 't-workshop') {
+            if (state.classes.length !== 1 || state.classes[0] !== job.subject.cls) {
                 throw new Error(
                     `${job.screen} painted ${state.classes.join(', ') || 'no look class'} — ` +
-                        'these shots would not be of the workshop look',
+                        `these shots would not be of ${job.subject.id === KIT_LOOK_ID ? 'the workshop look' : job.subject.cls}`,
                 );
             }
             const instants = state.longest > 0 ? [400, Math.max(800, Math.round(state.longest / 2))] : [undefined];
@@ -494,10 +549,10 @@ async function shots() {
                     );
                 }
                 const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, sessionId);
-                const file = at === undefined ? job.file : job.file.replace(/\.png$/, `--t${at}.png`);
+                const file = job.subject.dir + (at === undefined ? job.file : job.file.replace(/\.png$/, `--t${at}.png`));
                 mkdirSync(dirname(join(SHOTS_OUT, file)), { recursive: true });
                 writeFileSync(join(SHOTS_OUT, file), Buffer.from(shot.data, 'base64'));
-                written.push({ ...job, file, ...(at === undefined ? {} : { at }) });
+                written.push({ ...job, file, look: job.subject.look, ...(at === undefined ? {} : { at }) });
             }
             if (grownH !== height) {
                 await metrics(width, height);

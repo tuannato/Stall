@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig, type UserConfig } from 'vite';
-import appConfig, { CSP } from './vite.config';
+import appConfig, { CSP, forHarness } from './vite.config';
 import { ICON_HOST } from './src/domain/icons';
 
 /**
@@ -11,8 +11,10 @@ import { ICON_HOST } from './src/domain/icons';
  * **The `main` entry stays the production app.** Nothing here adds a
  * `define`, an alias or a plugin: the kit hands its look to the harness as
  * an object (`layout/looks.ts`), and the only differences from the app's
- * config are the inputs, the outDir and the preview server
- * (`the-workshop-build-serves-the-same-app`).
+ * config are the inputs, the outDir, the preview server
+ * (`the-workshop-build-serves-the-same-app`) and the private-look plugin
+ * made for a harness build (`forHarness`, 8e2: the dist check under a
+ * selection reads the kit's sheet as the harness's own).
  *
  * **Each command its own outDir**, because Vite empties an outDir on every
  * build: `pnpm workshop:shots` building into the directory `pnpm workshop` is
@@ -55,7 +57,7 @@ export const WORKSHOP_CSP = withoutIconHost.replace(CONNECT, "connect-src 'self'
 
 export function workshopConfig(command: WorkshopCommand): UserConfig {
     const { outDir, port } = WORKSHOP_COMMANDS[command];
-    return mergeConfig(appConfig, {
+    return mergeConfig(forHarness(appConfig), {
         build: {
             rollupOptions: {
                 input: {

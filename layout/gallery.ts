@@ -9,10 +9,12 @@
  * `gallery-is-not-served` in `bundle.test.ts` proves the production build
  * emits none of it.
  *
- * It offers the shipped looks and, when `workshop/look.json` reads, the
- * workshop look ("Workshop (0xff)") with its moods and decorations. A look is
- * chosen through `looks.ts` and never by id here
- * (`the-harness-chooses-looks-in-one-place`).
+ * It offers the shipped looks, every private look the build carries (8e2:
+ * none unless a selection put one there, `scripts/looks-selection.mjs`) and,
+ * when `workshop/look.json` reads, the workshop look ("Workshop (0xff)") with
+ * its moods and decorations. A look is chosen through `looks.ts` and never by
+ * id here, and its view is composed there (`paintView`;
+ * `the-harness-chooses-looks-in-one-place`).
  *
  * Read on load: `?look=` (an id — `255`, `0xff` — or `workshop`), `?screen=`,
  * `?flags=` (decoration bits, decimal or `0x…`) and `?chrome=0` (no control
@@ -22,8 +24,9 @@
  *   __paint(screen, themeId, flags) — paint one combination, return a label
  *   __seek(ms)                      — pause every animation at an instant
  *   __sheetClasses()                — the `t-*` classes the painted stall wears
- *   __shotPlan()                    — the workshop look's shot list (`shotPlan.ts`)
- *   __diffPlan()                    — the shipped looks' before/after list (`pnpm looks:diff`)
+ *   __shotPlan(id?)                 — the workshop look's shot list, or a carried private look's (`shotPlan.ts`)
+ *   __diffPlan()                    — the shipped and carried private looks' before/after list (`pnpm looks:diff`)
+ *   __privateLooks()                — the private looks this build carries, by id and class
  *   __screens()                     — every fixture screen this build paints
  *   __lookSheets()                  — each painted stall's `t-*` class and the name its sheet gives it
  *   __galleryReady                  — true once the module has evaluated, a look's sheet that did not load included
@@ -37,7 +40,17 @@
 import { renderStall } from '../src/ui/render';
 import { WORKSHOP_THEME_ID } from '../src/domain/theme';
 import { SCREENS, handlers } from './fixtures';
-import { galleryLooks, kitLook, lookById, registerWorkshopLook, shippedLooks, wornOf, type Look } from './looks';
+import {
+    galleryLooks,
+    kitLook,
+    lookById,
+    paintView,
+    privateLooks,
+    registerWorkshopLook,
+    shippedLooks,
+    wornOf,
+    type Look,
+} from './looks';
 import { diffPlan, shotPlan, type DiffJob, type ShotJob } from './shotPlan';
 import { loadLookSheet } from '../src/ui/lookSheets';
 import { loadKitLook } from './workshopKit';
@@ -62,18 +75,32 @@ try {
 
 // Every worn-only look this showroom offers, its sheet on the page before
 // the first paint — through the app's loader, after every sheet the page
-// links: the kit's lands where a private look's does in the app. A sheet
-// that does not load (or loads and does not name its look) is said, as a
-// look.json that does not read is (CRITIC-STEP-8D1 item 5): the page comes
-// up with the reason where the look would paint, and the kit's look is
-// never painted without its sheet — `__paint` and `__shotPlan` refuse it
-// with the same sentence, which `pnpm workshop:shots` then prints.
-let sheetProblem: string | undefined;
-try {
-    await Promise.all(wornSheetsOf(galleryLooks()).map(({ url, cls }) => loadLookSheet(url, cls)));
-} catch (err) {
-    sheetProblem = `the workshop look's sheet did not load, so the showroom does not paint the look: ${(err as Error).message}`;
-}
+// links: the kit's lands where a private look's does in the app, and a
+// carried private look's (8e2) is the app's own road. A sheet that does
+// not load (or loads and does not name its look) is said, as a look.json
+// that does not read is (CRITIC-STEP-8D1 item 5): the page comes up with
+// the reason where the look would paint, and that look is never painted
+// without its sheet — `__paint` and `__shotPlan` refuse it with the same
+// sentence, which `pnpm workshop:shots` then prints.
+const sheetProblems = new Map<number, string>();
+await Promise.all(
+    galleryLooks()
+        .filter((candidate) => candidate.theme.sheetLoad === 'worn')
+        .map(async (candidate) => {
+            try {
+                await Promise.all(wornSheetsOf([candidate]).map(({ url, cls }) => loadLookSheet(url, cls)));
+            } catch (err) {
+                const whose = candidate === kitLook() ? "the workshop look's" : `${candidate.label}'s`;
+                sheetProblems.set(
+                    candidate.id,
+                    `${whose} sheet did not load, so the showroom does not paint the look: ${(err as Error).message}`,
+                );
+            }
+        }),
+);
+/** Why `candidate` is not painted on this page, or undefined. */
+const sheetProblem = (candidate: Look | undefined): string | undefined =>
+    candidate === undefined ? undefined : sheetProblems.get(candidate.id);
 
 function numberParam(raw: string | null): number | undefined {
     if (raw === null || raw === '') {
@@ -97,14 +124,16 @@ let look: Look = lookParam() ?? kitLook() ?? galleryLooks()[0]!;
 let flags = numberParam(params.get('flags')) ?? 0;
 
 function paint(): string {
-    if (sheetProblem !== undefined && look === kitLook()) {
+    const problem = sheetProblem(look);
+    if (problem !== undefined) {
         // The look without its sheet is not the look: say why instead.
-        app.replaceChildren(el('pre', 'g-problem', sheetProblem));
-        return sheetProblem;
+        app.replaceChildren(el('pre', 'g-problem', problem));
+        return problem;
     }
     const worn = wornOf(look, flags);
-    const view = { ...SCREENS[screen]!, recordTheme: look.theme, worn };
-    renderStall(app, view, handlers);
+    // Composed where every harness page composes a look (`paintView`): a
+    // carried private look rides the try-on, under the harness's licence.
+    renderStall(app, paintView(SCREENS[screen]!, look, worn), handlers);
     return `${screen} · theme ${look.id} · flags ${flags} · worn [${worn
         .map((w) => w.label)
         .join(', ')}]`;
@@ -233,7 +262,7 @@ if (params.get('chrome') !== '0') {
     const panel = el('details');
     panel.open = true;
     panel.append(el('summary', undefined, 'showroom'));
-    for (const problem of [kitProblem, sheetProblem]) {
+    for (const problem of [kitProblem, ...sheetProblems.values()]) {
         if (problem !== undefined) {
             panel.append(el('pre', 'g-problem', problem));
         }
@@ -255,17 +284,19 @@ declare global {
         __paint: (screenName: string, theme: number, flagBits: number) => string;
         __seek: (ms: number) => number;
         __sheetClasses: () => string[];
-        __shotPlan: () => ShotJob[];
+        __shotPlan: (lookId?: number) => ShotJob[];
         __diffPlan: () => DiffJob[];
         __screens: () => string[];
         __lookSheets: () => LookSheetRead[];
+        __privateLooks: () => { id: number; sheetClass: string }[];
         __galleryReady: boolean;
     }
 }
 
 window.__paint = (screenName: string, theme: number, flagBits: number): string => {
-    if (sheetProblem !== undefined && theme === kitLook()?.id) {
-        throw new Error(sheetProblem);
+    const problem = sheetProblem(galleryLooks().find((candidate) => candidate.id === theme));
+    if (problem !== undefined) {
+        throw new Error(problem);
     }
     screen = screenName;
     look = lookById(theme);
@@ -278,17 +309,26 @@ window.__paint = (screenName: string, theme: number, flagBits: number): string =
 
 window.__seek = seek;
 window.__sheetClasses = sheetClasses;
-window.__shotPlan = () => {
-    const kit = kitLook();
-    if (kit === undefined) {
-        throw new Error(kitProblem ?? 'no workshop look on this page');
+window.__shotPlan = (lookId?: number) => {
+    // The kit's look by default; a carried private look's by its id (8e2:
+    // `pnpm workshop:shots` under a selection shoots each one).
+    const subject = lookId === undefined ? kitLook() : privateLooks().find((candidate) => candidate.id === lookId);
+    if (subject === undefined) {
+        throw new Error(
+            lookId === undefined ? (kitProblem ?? 'no workshop look on this page') : `no private look ${lookId} in this build`,
+        );
     }
-    if (sheetProblem !== undefined) {
-        throw new Error(sheetProblem);
+    const problem = sheetProblem(subject);
+    if (problem !== undefined) {
+        throw new Error(problem);
     }
-    return shotPlan(kit);
+    return shotPlan(subject);
 };
-window.__diffPlan = () => diffPlan(shippedLooks());
+// The shipped looks, then every private look this build carries (8e2): what
+// `pnpm looks:diff` compares, on both sides of a run that selects them.
+window.__diffPlan = () => diffPlan([...shippedLooks(), ...privateLooks()]);
+/** The private looks this build carries, by id and class (8e2): what a harness command holds to its selection. */
+window.__privateLooks = () => privateLooks().map((candidate) => ({ id: candidate.id, sheetClass: candidate.theme.sheetClass }));
 window.__screens = () => Object.keys(SCREENS);
 window.__lookSheets = () => lookSheetReads(app);
 window.__galleryReady = true;

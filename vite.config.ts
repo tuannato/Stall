@@ -12,6 +12,7 @@ import {
 } from './src/domain/theme';
 import { CHRONIK_HOSTS, PRICE_CHECK_HOST, PRICE_HOST, SECOND_FEED } from './src/net/hosts';
 import { privateLooksPlugin } from './scripts/private-looks-build.mjs';
+import { HARNESS_LOOK_CLASSES } from './scripts/private-looks.mjs';
 
 /**
  * Key derivation must not reach the bundle.
@@ -303,8 +304,18 @@ const DEV_CSP = CSP.replace("style-src 'self'", "style-src 'self' 'unsafe-inline
  * theme table's literals, and every included look's `look.json` is read by
  * the app's own validator, imported here because this file is TypeScript the
  * config bundler compiles and the plugin is plain Node.
+ *
+ * `env` is where the plugin reads a selection (this process's environment
+ * when absent). `harness` is the layout harness's builds' alone (8e2; `forHarness`): the
+ * probe's and the workshop kit's, which carry the harness's own looks
+ * (the step-6 fixture look's sheet, the kit's) beside the app, and whose
+ * dist check reads those as the harness's (`HARNESS_LOOK_CLASSES`). This
+ * file's own config — the deploy build — hands none.
  */
-function privateLooks(): Plugin {
+export function privateLooks({
+    harness = false,
+    env,
+}: { harness?: boolean; env?: Readonly<Record<string, string | undefined>> } = {}): Plugin {
     // The theme table's values, for the flash rule the build runs over every
     // sheet it serves when it carries a look (the `--s-*-anim` the base sheet
     // runs): `themeVarValues` in `scripts/look-flash.mjs`, read here directly.
@@ -323,7 +334,41 @@ function privateLooks(): Plugin {
         },
         validateLook: (text, place) => lookDataProblems(text, { ...place, sheetClass: place.sheetClass as `t-${string}` }),
         vars,
+        harnessClasses: harness ? HARNESS_LOOK_CLASSES : [],
+        // Where the selection is read: this process's environment, unless a
+        // caller builds a selection of its own in-process (8e2: the weight
+        // guard's deploy build, `src/bundle.test.ts`, whose own process is a
+        // vitest worker that selects nothing).
+        ...(env === undefined ? {} : { env }),
     });
+}
+
+/** The private-look plugin's name, as `privateLooksPlugin` names it: what `forHarness` swaps. */
+const PRIVATE_LOOKS_PLUGIN = 'stall-private-looks';
+
+/**
+ * `config` as a layout-harness build makes it (8e2): this config with its
+ * private-look plugin made for a harness build (`privateLooks({ harness:
+ * true })`) — the one difference, so a harness build carries exactly what a
+ * deploy build with the same selection carries, and its dist check knows the
+ * harness's own looks (`the-dist-check-knows-a-harness-builds-own-looks`).
+ * Used by `vite.probe.config.ts` and `vite.workshop.config.ts`; throws when
+ * the plugin is not there to swap, rather than building without it.
+ */
+export function forHarness<T extends { plugins?: unknown }>(config: T): T {
+    const plugins = (config.plugins ?? []) as unknown[];
+    let swapped = 0;
+    const next = plugins.map((plugin) => {
+        if (typeof plugin === 'object' && plugin !== null && (plugin as Plugin).name === PRIVATE_LOOKS_PLUGIN) {
+            swapped += 1;
+            return privateLooks({ harness: true });
+        }
+        return plugin;
+    });
+    if (swapped !== 1) {
+        throw new Error(`vite.config.ts: forHarness found ${swapped} ${PRIVATE_LOOKS_PLUGIN} plugins where the config carries one`);
+    }
+    return { ...config, plugins: next };
 }
 
 // Deployed copies already send no-referrer: a stall path is the seller's

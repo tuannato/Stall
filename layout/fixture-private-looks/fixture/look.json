@@ -12,7 +12,7 @@
             "label": "Fixture dusk",
             "place": "The whole stall",
             "cls": "att-fixture-dusk",
-            "palette": { "bg": [34, 36, 44], "text": [240, 240, 236] },
+            "palette": { "bg": [240, 244, 250] },
             "motion": false,
             "tokenId": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2"
         }

@@ -67,6 +67,45 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         assert.deepEqual(phone, ['the-skeletons-ladder-steps-the-rows-size read no tier-1 figure']);
     });
 
+    it('owes a carried private look its row and its locked record, and never a door mini (8e2)', () => {
+        const PRIVATE = ['t-fixture-private'];
+        const options = { shippedClasses: SHIPPED, privateClasses: PRIVATE, paidPrivateClasses: PRIVATE, skeleton: true };
+        const read = { ...full, rowSizeClasses: [...SHIPPED, ...PRIVATE], recordRoadChecks: 1 };
+        for (const pass of ['mobile', 'desktop']) {
+            assert.deepEqual(probeCoverageGaps(pass, read, options), [], pass);
+            assert.deepEqual(probeCoverageGaps(pass, { ...read, rowSizeClasses: SHIPPED }, options), [
+                'a-shipped-row-states-the-sizes-its-sheet-paints read no row for t-fixture-private',
+            ]);
+            assert.deepEqual(probeCoverageGaps(pass, { ...read, recordRoadChecks: 0 }, options), [
+                'the-record-road-paints-a-locked-look-as-the-default painted 0 record(s) where the run carries 1 paid look(s) (t-fixture-private)',
+            ]);
+        }
+        // The canvas paints no `offers`, and owes neither — but it owes the
+        // carried look's own wall controls (8e2), never the public looks'.
+        const walls = { wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': full.wallControlRoles } };
+        assert.deepEqual(probeCoverageGaps('canvas', { ...full, ...walls, rowSizeClasses: [], recordRoadChecks: 0 }, options), []);
+        assert.deepEqual(
+            probeCoverageGaps('canvas', { ...full, wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': { ...full.wallControlRoles, 'window-pay': 0 } } }, options),
+            ['nothing-on-the-wall-is-cut-from-below read no window-pay on a t-fixture-private wall'],
+        );
+        // The public count is the public looks' own: a carried look's reads
+        // never stand in for theirs.
+        assert.deepEqual(
+            probeCoverageGaps('portrait', { ...full, wallControlRolesByClass: { 't-modern': { ...full.wallControlRoles, 'pay-borrowed': 0 }, 't-fixture-private': full.wallControlRoles } }, options),
+            ['nothing-on-the-wall-is-cut-from-below read no pay-borrowed on a wall'],
+        );
+        // A free private look owes its row and no locked record; a run that
+        // carries none owes no record either — and paints none.
+        assert.deepEqual(
+            probeCoverageGaps('mobile', { ...read, recordRoadChecks: 0 }, { ...options, paidPrivateClasses: [] }),
+            [],
+        );
+        assert.deepEqual(probeCoverageGaps('mobile', { ...full, recordRoadChecks: 1 }, { shippedClasses: SHIPPED, skeleton: true }), [
+            'the-record-road-paints-a-locked-look-as-the-default painted 1 record(s) where the run carries 0 paid look(s)',
+        ]);
+        assert.match(probeCoverageLine('mobile', read), /locked records painted as the default: 1/);
+    });
+
     it('owes money nodes asked on the phone and the desk, and nowhere else', () => {
         for (const pass of ['mobile', 'desktop']) {
             assert.deepEqual(probeCoverageGaps(pass, { ...full, moneyChecks: 0 }, { shippedClasses: SHIPPED, skeleton: true }), [

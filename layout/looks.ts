@@ -18,6 +18,16 @@
  * the ordinary probe never loads the kit's sheet or look. The skeleton
  * (`SKELETON_LOOK_ID`) is the harness's own and always here: the ordinary
  * probe measures it beside the shipped looks.
+ *
+ * **The private looks a build carries are here too** (8e2): whatever the
+ * build's selection put in `virtual:stall-private-looks`, read through the
+ * app's own look table (`src/domain/lookTable.ts`) — the rows the app would
+ * paint, by reference — and nothing when the build selects none, which is
+ * every build but one a harness command was told to make
+ * (`scripts/looks-selection.mjs`). The ordinary probe and the showroom
+ * measure and offer them beside the shipped looks, each with its built
+ * sheet, and paint them the one way the app paints a paid look without a
+ * record (`paintView`).
  */
 import {
     attachmentsForTheme,
@@ -25,12 +35,23 @@ import {
     type ShippedAttachment,
 } from '../src/domain/attachments';
 import {
+    LOOK_ROWS,
+    attachmentsForLook,
+    decodeLook,
+    lookSheetOf,
+    paintableLook,
+    wornForLook,
+} from '../src/domain/lookTable';
+import type { StallView } from '../src/domain/state';
+import {
     DEFAULT_THEME_ID,
+    PAID_LOOK_IDS,
     SHIPPED_THEMES,
     WORKSHOP_THEME_ID,
     decodeTheme,
     type DecodedTheme,
 } from '../src/domain/theme';
+import { lookSheetState } from '../src/ui/lookSheets';
 
 /** A look the harness can paint. */
 export type Look = {
@@ -42,10 +63,16 @@ export type Look = {
     /**
      * A worn-only look's built sheet, which the page loads through the app's
      * loader before it paints the look (`wornSheetsOf`): the kit's
-     * (`registerWorkshopLook`). Absent for a bundled look, whose sheet is in
-     * the entry CSS.
+     * (`registerWorkshopLook`), and a carried private look's (`lookSheetOf`).
+     * Absent for a bundled look, whose sheet is in the entry CSS.
      */
     readonly sheetUrl?: string;
+    /**
+     * Set on a private look this build carries (8e2): painted through the
+     * try-on under the harness's licence, never through a record
+     * (`paintView`).
+     */
+    readonly carried?: 'private';
 };
 
 let kit: Look | undefined;
@@ -101,6 +128,178 @@ const SHIPPED: readonly Look[] = SHIPPED_THEMES.map(({ id }) => {
 
 export function shippedLooks(): readonly Look[] {
     return SHIPPED;
+}
+
+const SHIPPED_IDS: ReadonlySet<number> = new Set(SHIPPED_THEMES.map(({ id }) => id));
+
+/**
+ * Every private look this build carries (8e2), in the order the app offers
+ * them: each `LOOK_ROWS` id that is no shipped look's, its row and rows read
+ * through the app's own merged views (`decodeLook`, `attachmentsForLook` —
+ * the objects the renderer paints, by reference) and its sheet the URL the
+ * build wrote for it (`lookSheetOf`). Empty in a build that selects none —
+ * the ordinary probe, the showroom and every vitest run unless a test mocks
+ * the module with the tracked fixture (`layout/fixturePrivateLooks.ts`).
+ * A carried look with no sheet of its own is a build this harness cannot
+ * measure with its sheet, and the page says so rather than painting it bare.
+ */
+const PRIVATE: readonly Look[] = LOOK_ROWS.filter(({ id }) => !SHIPPED_IDS.has(id)).map(({ id }) => {
+    const theme = decodeLook(id);
+    const sheet = lookSheetOf(theme);
+    if (sheet === undefined) {
+        throw new Error(
+            `private look ${id} (${theme.sheetClass}) is carried with no sheet of its own — ` +
+                'the harness cannot measure it with its sheet',
+        );
+    }
+    return { id, label: theme.label, theme, rows: attachmentsForLook(id), sheetUrl: sheet.url, carried: 'private' };
+});
+
+/** The private looks this build carries (`PRIVATE`). */
+export function privateLooks(): readonly Look[] {
+    return PRIVATE;
+}
+
+/**
+ * **The harness's licence** (8e2): every paid look this page carries,
+ * derived (`PRIVATE` ∩ `PAID_LOOK_IDS`), and used for one thing — to ask the
+ * app's gate what such a look paints once licensed (`harnessGateFaults`).
+ * **It paints nothing**: a paid look is put on screen by the try-on
+ * (`paintView`), which needs no licence — looking is free — because the
+ * gate (`paintableLook`) paints a paid look only for a licensed stall and
+ * step 8 licenses none, so a probe that measured a paid look's record would
+ * measure the default under its name. The gate is untouched:
+ * `harnessGateFaults` asks it, every page, that a paid look without this
+ * set is still the default (`not-unlocked`), the probe paints the record
+ * road once and holds it to that in Chrome
+ * (`the-record-road-paints-a-locked-look-as-the-default`, `recordView`), and
+ * no app file passes the gate a licence before step 9
+ * (`no-app-site-passes-a-licence-before-step-9`).
+ */
+export const HARNESS_LICENCE: ReadonlySet<number> = new Set(
+    PRIVATE.filter((look) => PAID_LOOK_IDS.includes(look.id)).map((look) => look.id),
+);
+
+/**
+ * The class of the look the app's gate paints in a locked look's place —
+ * the default row's (`paintableLook`'s `DEFAULT_THEME`) — named here, where
+ * looks are named, for the probe's record-road check
+ * (`the-record-road-paints-a-locked-look-as-the-default`), which holds the
+ * gate to it rather than asking the gate what it is.
+ */
+export const DEFAULT_LOOK_CLASS: string = decodeTheme(DEFAULT_THEME_ID).sheetClass;
+
+/** No holdings: the gate asked what a look paints, never what it wears. */
+const NO_HOLDINGS: ReadonlySet<string> = new Set();
+
+/**
+ * Why the app's gate does not answer as the harness's licence says it
+ * should, for each carried private look — empty when it holds: licensed, a
+ * look paints its own row; without the licence, a paid look is the default
+ * (`not-unlocked`) and a free one its own row. Sentences, for the probe's
+ * failures and for a test.
+ */
+export function harnessGateFaults(looks: readonly Look[] = PRIVATE): string[] {
+    const out: string[] = [];
+    for (const look of looks) {
+        const licensed = paintableLook(look.theme, 0, NO_HOLDINGS, HARNESS_LICENCE);
+        if (licensed.theme !== look.theme || licensed.why !== undefined) {
+            out.push(
+                `${look.label} (${look.theme.sheetClass}) under the harness's licence paints ` +
+                    `${licensed.theme.sheetClass}${licensed.why === undefined ? '' : ` (${licensed.why})`}, not its own row`,
+            );
+        }
+        const record = paintableLook(look.theme, 0, NO_HOLDINGS);
+        const paid = PAID_LOOK_IDS.includes(look.id);
+        if (paid && record.why !== 'not-unlocked') {
+            out.push(
+                `${look.label} is paid, and the gate with no licence answers ${record.theme.sheetClass}` +
+                    `${record.why === undefined ? '' : ` (${record.why})`} — a record would paint it unlocked`,
+            );
+        }
+        if (!paid && record.theme !== look.theme) {
+            out.push(`${look.label} is free, and the gate with no licence answers ${record.theme.sheetClass}`);
+        }
+    }
+    return out;
+}
+
+/**
+ * The view the app paints for a stall whose published record names `look`
+ * under `flags` (8e2, the 8e2 critic's item 3): the record's look and flags,
+ * and the worn set **the app writes through the gate** — `paintableLook(…)
+ * .worn`, as `app.ts` writes `view.worn` on every road (`applyManifest`,
+ * `loadCurrent`, `refreshHoldings`) — with `heldTokens` holding every token
+ * the look's rows can be entitled by, so a gate that leaked a locked look's
+ * rows would put them on the stall. Its sheet as the loader holds it, like
+ * `paintView`. The probe paints it to hold the gate to the default
+ * (`the-record-road-paints-a-locked-look-as-the-default`); it is never how a
+ * look is measured.
+ */
+export function recordView(base: StallView, look: Look, flags: number): StallView {
+    const held: ReadonlySet<string> = new Set(look.rows.flatMap((row) => (row.tokenId === undefined ? [] : [row.tokenId])));
+    const sheet = look.sheetUrl === undefined ? undefined : lookSheetState(look.sheetUrl);
+    return {
+        ...base,
+        recordTheme: look.theme,
+        recordFlags: flags,
+        heldTokens: held,
+        worn: paintableLook(look.theme, flags, held).worn,
+        lookSheets: new Map([[look.id, sheet ?? 'pending']]),
+    };
+}
+
+/** The flags that wear `rows` — one bit per row, as a picker sets them. */
+export function flagsOf(rows: readonly ShippedAttachment[]): number {
+    return rows.reduce((bits, row) => bits | (1 << row.bit), 0);
+}
+
+/**
+ * The view that puts `look` on screen wearing `worn`, over a fixture's
+ * `base` — the one place a harness page composes a look onto a view
+ * (`the-harness-chooses-looks-in-one-place`).
+ *
+ * - **A shipped or harness look rides the record**: `recordTheme` is the
+ *   look, `worn` its rows, as the app writes them for a stall whose record
+ *   names it.
+ * - **A carried private look rides the try-on** (8e2): `previewLook` names
+ *   it with the flags that wear `worn` — the road the app paints a paid look
+ *   on with no licence (the harness's licence only asks the gate,
+ *   `HARNESS_LICENCE`) — `worn` is the try-on's own rows for
+ *   those flags (`wornForLook`, no entitlement: looking is free, so an
+ *   unminted row paints), and `lookSheets` is where the look's sheet stands
+ *   on this page **as the app's loader holds it** (`lookSheetState`), read
+ *   at paint time, the app's own rule. Only a sheet the loader holds
+ *   `ready` paints the look: one still pending, or failed, is held back by
+ *   the renderer (8d2's hold) and the page paints the stall's own look —
+ *   which the probe's class audit and `a-look-is-measured-with-its-sheet`
+ *   then refuse, so a look whose sheet did not load is never measured bare.
+ *   The record is the fixture's own (no record of the private look is ever
+ *   written: the gate would paint it as the default, rightly).
+ *
+ * A set of rows no flags can produce through the try-on — two in one slot —
+ * throws: the try-on would paint fewer rows than the harness asked for, and
+ * a measure of that paint would be of another dress.
+ */
+export function paintView(base: StallView, look: Look, worn: readonly ShippedAttachment[]): StallView {
+    if (look.carried !== 'private') {
+        return { ...base, recordTheme: look.theme, worn };
+    }
+    const flags = flagsOf(worn);
+    const tried = wornForLook(look.id, flags);
+    if (tried.length !== worn.length || worn.some((row) => !tried.includes(row))) {
+        throw new Error(
+            `${look.label}: the try-on paints [${tried.map((row) => row.label).join(', ')}] for flags ${flags}, ` +
+                `not [${worn.map((row) => row.label).join(', ')}] — at most one row per slot`,
+        );
+    }
+    const sheet = look.sheetUrl === undefined ? undefined : lookSheetState(look.sheetUrl);
+    return {
+        ...base,
+        previewLook: { themeId: look.id, attachmentFlags: flags },
+        worn: tried,
+        lookSheets: new Map([[look.id, sheet ?? 'pending']]),
+    };
 }
 
 /**
@@ -168,18 +367,22 @@ export const FIXTURE_LOOK: Look = {
     rows: [],
 };
 
-/** Every look the ordinary probe measures: the shipped looks, then the skeleton. */
-const MEASURED: readonly Look[] = [...SHIPPED, SKELETON];
+/**
+ * Every look the ordinary probe measures: the shipped looks, the private
+ * looks the build carries (none unless a selection put them there), then
+ * the skeleton.
+ */
+const MEASURED: readonly Look[] = [...SHIPPED, ...PRIVATE, SKELETON];
 
-/** What the showroom offers: the shipped looks, and the kit's when registered. */
+/** What the showroom offers: the shipped looks, the private looks the build carries, and the kit's when registered. */
 export function galleryLooks(): readonly Look[] {
-    return kit === undefined ? shippedLooks() : [...shippedLooks(), kit];
+    return kit === undefined ? [...SHIPPED, ...PRIVATE] : [...SHIPPED, ...PRIVATE, kit];
 }
 
 /**
  * What the probe measures: the kit's look **alone** on a workshop page — a
  * creator's run judges their look, not Stall's three again — and every
- * shipped look and the skeleton everywhere else.
+ * shipped look, every carried private look and the skeleton everywhere else.
  */
 export function measuredLooks(): readonly Look[] {
     return kit === undefined ? MEASURED : [kit];

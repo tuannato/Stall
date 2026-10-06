@@ -53,7 +53,7 @@ export declare function readSelectedLooks(
 export declare function crossSheetProblems(input: { root: string; looks: readonly SelectedLook[]; vars: ThemeVarValues }): string[];
 export declare function sharedRowClasses(looks: readonly SelectedLook[]): string[];
 export declare function checkSelectedDist(
-    input: { dir: string; selection: LooksSelection | undefined; root: string; facts: PublicLookFacts } & GitOptions,
+    input: { dir: string; selection: LooksSelection | undefined; root: string; facts: PublicLookFacts; harnessClasses?: readonly string[] } & GitOptions,
 ): string[];
 export declare function materialise(looks: readonly SelectedLook[], into: string): ModuleEntry[];
 export declare function jsString(value: string): string;
@@ -64,4 +64,6 @@ export declare function privateLooksPlugin(options: {
     vars?: ThemeVarValues;
     env?: Env;
     git?: string;
+    /** A harness build's own look classes (8e2), which its dist check reads as the harness's: never handed by the app's own config. */
+    harnessClasses?: readonly string[];
 }): Plugin;

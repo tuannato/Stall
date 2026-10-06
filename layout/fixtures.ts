@@ -508,6 +508,26 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'pay', tokenId: T1 },
     }),
     /*
+     * The pay sheet over a quote that left the stall (8e2, item 11): a
+     * press found the record gone (`payRecordMoved` names the token, and
+     * `prices` holds none for it), so the sheet is its title, the one
+     * sentence in `pay-lost` and its close. That sentence — "no longer on
+     * the stall … no wallet was opened" — is one of the honest-display
+     * lines (`layout/honestDisplay.ts`), and no other screen paints it.
+     * The shop behind it is on the quotes rail, so the screen mounts the
+     * seller's own figure the pay-screens audit asks of a `pay` name.
+     */
+    'pay-gone': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        overlay: { kind: 'pay', tokenId: T2 },
+        payRecordMoved: [T2],
+    }),
+    /*
      * The item tag on the poster sheet: one quoted item's print page — the
      * ink-on-white tile, the name, the chip, the figure under the seller's
      * own role, the words, the code that opens this page at the item — with
@@ -1455,6 +1475,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-xec',
     'pay-moved',
     'pay-dust',
+    // The sheet over a quote that left (8e2): its title and one sentence.
+    'pay-gone',
     // The three "Pay several" screens: the same rows and sheet shape, and the
     // decoration interactions they could stage are `offers`'.
     'pay-several-strip',
@@ -1537,16 +1559,20 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'sparse',
     /*
      * Pruned 2026-09-05 to pay for the item face, which is a screen the
-     * contrast pass samples (`item-listing`, the old `expanded`): `pay-xec`
-     * is `pay`'s sheet with one figure in another unit, `emoji-name` is the
-     * sign's ground with a different string on it. The three new sheet
-     * states are geometry from the day they shipped: `pay-moved` and
-     * `pay-dust` are `pay`'s card with one line changed, `item-quote` is the
-     * quote row's ink on the card ground `item-listing` already samples.
+     * contrast pass samples (`item-listing`, the old `expanded`):
+     * `emoji-name` is the sign's ground with a different string on it, and
+     * `item-quote` is the quote row's ink on the card ground `item-listing`
+     * already samples. `pay-xec` and `pay-moved` were here too — `pay`'s
+     * card with one line changed — and that one line is the point since
+     * 8e2: the borrowed-id warning and the valve's line are honest-display
+     * sentences (`layout/honestDisplay.ts`), owed and read by role, so the
+     * two are sampled again, beside `pay-gone`. `pay-dust` stays: its line
+     * (`pay-why`) stands where no link was composed, so the sheet's two Pay
+     * controls are `hidden` there, and a hidden control is a line target
+     * not rendered — sampled, it measured +7 a viewport over the
+     * `LINE_SKIP_CEILING` the window kept unchanged.
      */
-    'pay-xec',
     'emoji-name',
-    'pay-moved',
     'pay-dust',
     'item-quote',
     // `offers`' ink with one name too wide for its row; the marquee cell is
