@@ -168,8 +168,10 @@ working accept, and there is no accept.
 - **Weight is held per bucket (owner, 2026-10-06).** Every-visitor bytes and
   on-demand bytes each have their own ceiling (no summed ceiling that counts
   one twice); a worn-only look has a soft target of 256,000 gzip bytes and a
-  hard cap of 512,000, and between the two it ships only with a stated reason
-  in its own index, printed on every run.
+  hard cap of 512,000, and between the two it ships only when its id is on
+  the public `OVER_TARGET_LOOK_IDS` list (the owner's OK, a public diff) and
+  its own index states a reason (kept private; printed locally, never in a
+  public log).
 - **Glyphs a page prints are drawn by Stall's own faces (owner,
   2026-10-06).** The faces are re-subset for `≈ → ◆` and the quote units'
   currency signs when the next face is fetched; until then they are a pinned
