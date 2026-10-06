@@ -225,6 +225,19 @@ body {
 }
 
 /*
+ * A look's marks (step 8f1, `src/ui/lookHooks.ts`): a stroke under a
+ * figure, a ground behind a shelf, a frame around a token's tile — empty
+ * nodes the renderer builds on every look for the one look that paints
+ * them. Hidden here for every other, so they take no box, no gap and no
+ * grid track: an empty grid item still takes a gap. A look shows one from
+ * its own sheet at (0,2,0); no shipped look does (`pnpm looks:diff` reads
+ * every shot identical).
+ */
+[data-look-mark] {
+    display: none;
+}
+
+/*
  * A per-theme header strip. Label and kind are theme data, so a new theme
  * reusing a kind costs nothing here. It decorates the top edge and is nowhere
  * near the price.
@@ -2969,7 +2982,17 @@ textarea.paste-in {
     border: 0;
     border-radius: 0;
     clip-path: none;
+    /* A look that masks its tiles (step 8f1) would cut the seller's
+       picture to that shape here too: the mask is the shelf's framing,
+       like the radius. */
+    -webkit-mask: none;
+    mask: none;
     font-size: 64px;
+}
+
+/* The tile's own mark (step 8f1) is shelf framing too: never on the zoom. */
+.zoom-frame .zoom-ic [data-look-mark] {
+    display: none;
 }
 
 .zoom-frame .zoom-ic.item-ic img {

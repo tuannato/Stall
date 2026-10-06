@@ -15,7 +15,40 @@
 import type { DecodedTheme, Rgb } from './theme';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID, RURAL_THEME_ID } from './theme';
 
-export type AttachmentSlot = 'crest' | 'fringe' | 'yard' | 'mood' | 'badge' | 'trim';
+/**
+ * The slots Stall's own catalogue and the workshop kit use: a slot is a
+ * PLACE one look offers, and these five plus `mood` are the ones the
+ * renderer knows how to stand a node in (`SLOT_MOUNTS`). The kit's rows take
+ * exactly these (the workshop README lists them).
+ */
+export const KIT_SLOTS = ['crest', 'fringe', 'yard', 'mood', 'badge', 'trim'] as const;
+
+/**
+ * A slot is the look's exclusivity key — at most one row per slot is worn —
+ * and since step 8f1 it is a per-look string rather than a closed union: a
+ * first-party look names its own places, and where a node stands is the
+ * row's `mount`, not its slot. A private look's `look.json` is held to a
+ * lower-case word (`lookData.ts`); the shipped catalogue and the kit keep
+ * `KIT_SLOTS`.
+ */
+export type AttachmentSlot = string;
+
+/**
+ * Where a node row's element stands (step 8f1). The first five are the
+ * places the renderer has always used, named after the slot that put a
+ * node there — a row with no `mount` stands where its slot always put it,
+ * so no shipped row changes. The last two are new and empty until a row
+ * names them: `below-goods`, between a panel's goods and its foot inside
+ * the scroller, and `above-dock`, between the scroller and the dock.
+ * Placement is `placeAttachmentNodes`' (render.ts); a mount with no host on
+ * a screen (no ornament strip, no scroller) places nothing there, as a
+ * fringe on a look with no strip always has.
+ */
+export const ATTACHMENT_MOUNTS = ['fringe', 'crest', 'badge', 'trim', 'yard', 'below-goods', 'above-dock'] as const;
+export type AttachmentMount = (typeof ATTACHMENT_MOUNTS)[number];
+
+/** The slots whose rows stand a node by their slot alone, with no `mount` named. */
+const SLOT_MOUNTS: ReadonlySet<string> = new Set<AttachmentMount>(['fringe', 'crest', 'badge', 'trim', 'yard']);
 
 /** The palette roles a `mood` may move. Deliberately not the shape or the font. */
 export type PaletteDelta = Partial<
@@ -74,6 +107,23 @@ export type ShippedAttachment = {
      * what anything that moves or sits over the page must be.
      */
     paint?: 'root' | 'node';
+    /**
+     * Where a `node` row's element stands (`ATTACHMENT_MOUNTS`), when that is
+     * not where its slot puts one. Absent on every shipped row: the slot
+     * decides, exactly as before step 8f1 (`attachmentMount`). A first-party
+     * look's row names it: a row may keep the slot `trim` (what it is
+     * exclusive with) and stand `below-goods`.
+     */
+    mount?: AttachmentMount;
+    /**
+     * Slots this row is never worn beside (step 8f1): a first-party look's
+     * row that would clash with rows in other places. The rule is symmetric and the bit decides, the slot rule's own order:
+     * reading bits upward, a row is skipped when a row already worn excludes
+     * its slot or it excludes a slot already worn (`wornFrom`), and the
+     * picker turns the other side off when one side is pressed
+     * (`chooseAttachment`). Absent on every shipped row.
+     */
+    excludes?: readonly AttachmentSlot[];
     /** `mood` only. Merged before `themeVars`, so `legibleOn` still runs. */
     palette?: PaletteDelta;
     motion: boolean;
@@ -506,7 +556,7 @@ export function wornFrom(
         // A bit with no row in this theme's table paints nothing and says
         // nothing. Unlike an unknown theme id, which falls back and tells the
         // visitor: a missing decoration is not a lie about money.
-        if (row === undefined || bySlot.has(row.slot)) {
+        if (row === undefined || bySlot.has(row.slot) || excludedBy(row, bySlot.values())) {
             continue;
         }
         if (held !== undefined && (row.tokenId === undefined || !held.has(row.tokenId))) {
@@ -515,6 +565,60 @@ export function wornFrom(
         bySlot.set(row.slot, row);
     }
     return [...bySlot.values()];
+}
+
+/**
+ * Whether `row` may not be worn beside any of `worn`: one of them excludes
+ * its slot, or it excludes one of theirs. Symmetric on purpose — which side
+ * wrote the exclusion is the catalogue's bookkeeping, not a rank — so the
+ * lower bit, read first, is the one that stays (`wornFrom`), the slot
+ * rule's own order. Test: `a-row-that-excludes-slots-wins-by-its-bit`.
+ */
+function excludedBy(row: ShippedAttachment, worn: Iterable<ShippedAttachment>): boolean {
+    for (const other of worn) {
+        if (other.excludes?.includes(row.slot) === true || row.excludes?.includes(other.slot) === true) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * The flags after a seller presses `bit` in the picker: pressed off when it
+ * was on, otherwise on — and every other row in its slot, and every row on
+ * the other side of an exclusion, off. That makes two rows in one place,
+ * and two rows that exclude each other, unrepresentable at the place the
+ * choice is made, which is a better answer than `wornFrom` resolving them
+ * quietly after the record is signed. Bits naming no row of `rows` pass
+ * through untouched (`publishableFlags`' reason). Test:
+ * `a-row-that-excludes-slots-wins-by-its-bit`.
+ */
+export function chooseAttachment(rows: readonly ShippedAttachment[], flags: number, bit: number): number {
+    const row = rows.find((candidate) => candidate.bit === bit);
+    if (row === undefined) {
+        return flags;
+    }
+    const wasOn = (flags & (1 << bit)) !== 0;
+    let out = flags;
+    for (const other of rows) {
+        if (other.slot === row.slot || excludedBy(row, [other])) {
+            out &= ~(1 << other.bit);
+        }
+    }
+    return wasOn ? out : out | (1 << bit);
+}
+
+/**
+ * Where a node row's element stands: its `mount`, or the place its slot has
+ * always put one — and nothing for a slot that names no place (a first-party
+ * look's own slot with no mount stands nowhere, as a fringe on a look with
+ * no ornament strip always has). Test: `a-mount-defaults-to-the-place-its-slot-had`.
+ */
+export function attachmentMount(row: ShippedAttachment): AttachmentMount | undefined {
+    if (row.mount !== undefined) {
+        return row.mount;
+    }
+    return SLOT_MOUNTS.has(row.slot) ? (row.slot as AttachmentMount) : undefined;
 }
 
 /**

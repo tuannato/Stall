@@ -5,12 +5,14 @@ import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { flashSheets, servedFlashReport, themeVarValues } from './look-flash.mjs';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private-looks-plant.mjs';
-import { guardSheets, privateRows, servedSheets } from './served-sheets.mjs';
+import { guardSheets, lookRows, privateRows, servedSheets } from './served-sheets.mjs';
 import { appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
 import {
     FACE_DISPLAY,
     GENERATED_TEXT,
+    LOOK_HOOK_ATTRIBUTES,
     LOOK_MEDIA,
+    MASK_COMPOSITE_LEGACY,
     MAX_FLASHES_PER_SECOND,
     STATE_ATTRIBUTES,
     decodeEscapes,
@@ -20,6 +22,7 @@ import {
     lintSheet,
     PRESENCE_ATTRIBUTES,
     SERVED_FAMILIES,
+    STICKY_BOXES,
     parseSheet,
     foreignNamingProblems,
     rescopeSheet,
@@ -197,12 +200,134 @@ describe('a-look-cannot-target-one-seller', () => {
         }
         for (const [name, values] of Object.entries(STATE_ATTRIBUTES)) {
             for (const value of values) {
+                if (LOOK_HOOK_ATTRIBUTES[name]?.includes(value)) continue;
                 assert.ok(app.valued.get(name)?.has(value), `listed, and matched by no served sheet: [${name}="${value}"]`);
             }
+        }
+        // The hook attributes (step 8f1) are the app's state for a look to
+        // read, matched by no base sheet: each is held to the module that
+        // writes it — the name ladder's rungs to its `NAME_TIER_MAX`, the
+        // script to `scriptOf`'s one answer — and each is in the lists.
+        const hooks = read('src/ui/lookHooks.ts');
+        const max = Number(/export const NAME_TIER_MAX = (\d+);/.exec(hooks)?.[1]);
+        assert.ok(hooks.includes("'data-name-tier'") && max > 0, 'lookHooks.ts writes data-name-tier up to NAME_TIER_MAX');
+        assert.deepEqual(LOOK_HOOK_ATTRIBUTES['data-name-tier'], Array.from({ length: max }, (_, i) => String(i + 1)));
+        assert.ok(read('src/ui/render.ts').includes("setAttribute('data-script', 'cjk')"), 'render.ts writes data-script');
+        assert.match(read('src/domain/text.ts'), /export function scriptOf\(text: string\): 'cjk' \| undefined/);
+        assert.deepEqual(LOOK_HOOK_ATTRIBUTES['data-script'], ['cjk']);
+        for (const [name, values] of Object.entries(LOOK_HOOK_ATTRIBUTES)) {
+            assert.deepEqual(STATE_ATTRIBUTES[name], values, `${name} is a state attribute`);
+            assert.ok(!app.valued.has(name), `${name} is read by a served sheet now: list it as an ordinary state attribute`);
         }
         for (const name of PRESENCE_ATTRIBUTES) {
             assert.ok(app.bare.has(name) && !app.valued.has(name), `listed as presence-only: ${name}`);
         }
+    });
+});
+
+describe('a-look-may-make-only-its-sign-sticky', () => {
+    /**
+     * Step 8f1 (the step-8 critic's item 20): the one sticky box a look
+     * sheet may hold is the sign's own, written as a shape any look may use
+     * (`STICKY_BOXES`), never as one look's class. Every other sticky box,
+     * every fixed box and a sticky sign in a state rule stay refused; the
+     * kit refuses them all, as the workshop README says. Red: the lint
+     * without `isStickyBox`.
+     */
+    it('lists the sign alone', () => {
+        assert.deepEqual(STICKY_BOXES.map((box) => box.subject), ['stall-head']);
+    });
+
+    it('accepts the sign sticky in a look sheet, plainly or on its header, in a media block too', () => {
+        accepts('.t-neo .stall-head { position: sticky; top: 0; }');
+        accepts('.t-neo .stall-scroll > header.stall-head { position: sticky; top: 0; }');
+        accepts('@media (min-width: 680px) { .t-neo .stall-head { position: sticky; top: 0; } }');
+    });
+
+    it('refuses any other sticky box, a sticky sign in a state, a prefixed sticky, and every fixed box — and the kit refuses the sign', () => {
+        for (const rule of [
+            '.t-neo .item { position: sticky; top: 0; }',
+            '.t-neo .stall-head .stall-name { position: sticky; top: 0; }',
+            '.t-neo .stall-head, .t-neo .tabs { position: sticky; top: 0; }',
+            '.t-neo .stall-head.open { position: sticky; top: 0; }',
+            '.t-neo .stall-head:hover { position: sticky; top: 0; }',
+            '.t-neo .stall-head[data-x] { position: sticky; top: 0; }',
+            '.t-neo .stall-head { position: -webkit-sticky; top: 0; }',
+            '.t-neo .stall-head { position: fixed; top: 0; }',
+        ]) {
+            plant(rule, /a fixed or sticky box follows the scroll/);
+        }
+        assert.ok(
+            lintSheet(plantedKit('.t-neo .stall-head { position: sticky; top: 0; }')).some((p) => /a fixed or sticky box/.test(p)),
+            'the kit refuses the sticky sign',
+        );
+    });
+});
+
+describe('a-sticky-sign-waits-for-the-scroll-pass', () => {
+    /**
+     * The sticky sign is measured by nothing until step 8f2's scroll pass
+     * (STEP-8-PLAN §5: scroll the region in steps and run the cover checks
+     * at each), so no served sheet uses it yet. 8f2 replaces this fence
+     * with the pass; until then a look that makes its sign sticky turns
+     * `pnpm test` red here, by design — though the look rules admit it.
+     */
+    const stickyIn = (rows) =>
+        rows.filter((row) => /position\s*:\s*sticky/i.test(row.css.replace(/\/\*[\s\S]*?\*\//g, ''))).map((row) => row.path);
+
+    it('finds no sticky box in any served sheet a look owns', () => {
+        const looks = lookRows(SERVED);
+        assert.ok(looks.length >= 6, 'the shipped looks, the kit, the fixtures and every private look a run reads');
+        assert.deepEqual(stickyIn(looks), []);
+    });
+
+    it('goes red on a planted private look whose sign is sticky, which the look rules admit', async () => {
+        const sign = `.${PLANTED_CLASS} .stall-head { position: sticky; top: 0; }`;
+        const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, sign) : text));
+        const rows = lookRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+        const row = rows.find((r) => r.lookClass === PLANTED_CLASS);
+        assert.ok(row !== undefined, 'the planted look is read');
+        assert.deepEqual(lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt }), []);
+        assert.deepEqual(stickyIn(rows), [row.path]);
+    });
+});
+
+describe('a-legacy-mask-composite-is-the-same-value', () => {
+    /**
+     * Step 8f1: `-webkit-mask-composite` takes the legacy compositing
+     * keywords, `mask-composite` the standard ones, and four pairs name one
+     * operation. In a look sheet the prefixed one stands beside its twin
+     * when the two agree layer for layer through `MASK_COMPOSITE_LEGACY`;
+     * any other pairing is still a prefix with no twin. The kit keeps the
+     * plain rule the README states. Red: the twin check without
+     * `compositesAgree`.
+     */
+    it('lists the four pairs', () => {
+        assert.deepEqual(MASK_COMPOSITE_LEGACY, { 'source-over': 'add', 'source-out': 'subtract', 'source-in': 'intersect', xor: 'exclude' });
+    });
+
+    it('accepts a legacy keyword beside its standard twin, layer for layer, and the same keyword on both', () => {
+        accepts('.t-neo .item { -webkit-mask-composite: source-out; mask-composite: subtract; }');
+        accepts('.t-neo .item { -webkit-mask-composite: source-out, source-over; mask-composite: subtract, add; }');
+        accepts('.t-neo .item { -webkit-mask-composite: XOR; mask-composite: exclude; }');
+        accepts('.t-neo .item { -webkit-mask-composite: subtract; mask-composite: subtract; }');
+    });
+
+    it('refuses a pair that composes differently, a layer count that differs, and the kit’s legacy pair', () => {
+        for (const rule of [
+            '.t-neo .item { -webkit-mask-composite: source-out; mask-composite: add; }',
+            '.t-neo .item { -webkit-mask-composite: source-out, source-over; mask-composite: subtract; }',
+            '.t-neo .item { -webkit-mask-composite: source-out; }',
+            '.t-neo .item { -webkit-mask-composite: copy; mask-composite: add; }',
+        ]) {
+            plant(rule, /write mask-composite: with the same value/);
+        }
+        assert.ok(
+            lintSheet(plantedKit('.t-neo .item { -webkit-mask-composite: source-out; mask-composite: subtract; }')).some((p) =>
+                /write mask-composite: with the same value/.test(p),
+            ),
+            'the kit keeps the plain twin rule',
+        );
     });
 });
 

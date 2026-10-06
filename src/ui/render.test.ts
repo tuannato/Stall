@@ -1964,7 +1964,10 @@ describe('token icon', () => {
         expect(cell).not.toBeNull();
         expect(cell.querySelector('img')).toBeNull();
         expect(cell.textContent).toBe('RB');
-        expect(cell.childNodes).toHaveLength(1);
+        // The letters in their own span, beside the tile's inert mark
+        // (step 8f1, `lookHooks.ts`) — and nothing else.
+        expect([...cell.childNodes].map((n) => (n as Element).className)).toEqual(['look-mark mark-tile', 'ic-initials']);
+        expect(cell.querySelector('.ic-initials')?.textContent).toBe('RB');
     });
 
     it('failed-icon-keeps-the-letters', () => {
@@ -2000,8 +2003,11 @@ describe('token icon', () => {
             expect(img).not.toBeNull();
             expect(img!.parentElement).toBe(cell);
             expect(cell.textContent).toBe('');
-            expect(cell.childNodes).toHaveLength(1);
-            expect(cell.childNodes[0]).toBe(img);
+            // The picture took the letters' place and nothing else's: the
+            // tile's mark stays (step 8f1).
+            expect(cell.childNodes).toHaveLength(2);
+            expect((cell.childNodes[0] as Element).getAttribute('data-look-mark')).toBe('tile');
+            expect(cell.childNodes[1]).toBe(img);
         } finally {
             restore();
         }
@@ -2186,13 +2192,18 @@ describe('token icon', () => {
             const { root } = paint(offersView());
             const cell = root.querySelector('.item-ic') as HTMLElement;
             expect(cell.textContent).toBe('RB');
+            const mark = cell.querySelector('[data-look-mark]');
+            expect(mark).not.toBeNull();
             expect(root.isConnected).toBe(false);
             images[0]!.dispatchEvent(new Event('load'));
             const img = cell.querySelector('img');
             expect(img).not.toBeNull();
             expect(img!.parentElement).toBe(cell);
             expect(cell.textContent).toBe('');
-            expect(cell.childNodes).toHaveLength(1);
+            // The letters' span went and the tile's mark stayed first (step
+            // 8f1): the picture replaces the letters alone.
+            expect(cell.querySelector('.ic-initials')).toBeNull();
+            expect([...cell.childNodes]).toEqual([mark, img]);
         } finally {
             restore();
         }

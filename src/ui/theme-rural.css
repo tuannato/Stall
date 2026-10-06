@@ -666,12 +666,15 @@
 }
 
 /* Pinned a little crooked, as a craft fair is; straight under the hand.
-   The probe's contrast pad already covers text in transformed ancestors. */
-.t-rural .items .item:nth-child(3n + 1) {
+   The probe's contrast pad already covers text in transformed ancestors.
+   Counted `of .item`: a shelf's first child is its mark (step 8f1,
+   `lookHooks.ts`), hidden here, and a count of every child would tilt
+   each row the other way. */
+.t-rural .items .item:nth-child(3n + 1 of .item) {
     rotate: -0.6deg;
 }
 
-.t-rural .items .item:nth-child(3n + 2) {
+.t-rural .items .item:nth-child(3n + 2 of .item) {
     rotate: 0.5deg;
 }
 

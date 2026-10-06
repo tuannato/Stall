@@ -174,3 +174,99 @@ describe('a-private-row-class-is-its-looks-own', () => {
         expect(lookDataProblems(lookWith([row('att-rainfall')]), kitLike)).toEqual([]);
     });
 });
+
+/**
+ * Step 8f1: a first-party look's row names its own slot (any lower-case
+ * word), where its node stands (`mount`) and the slots it is never worn
+ * beside (`excludes`). The kit's rows keep the shape the workshop README
+ * names, and refuse all three.
+ */
+describe('a-first-party-row-names-its-slot-mount-and-exclusions', () => {
+    const lookWith = (decorations: readonly object[], moods: readonly object[] = []) =>
+        JSON.stringify({
+            label: 'Mounts',
+            base: 'modern',
+            tierCeilings: [7, 9, 12],
+            overlayTierCeilings: [5, 7, 9],
+            moods,
+            decorations,
+        });
+    const node = (bit: number, slot: string, extra: object = {}) => ({
+        bit,
+        slot,
+        label: `Row ${bit}`,
+        place: `the ${slot}`,
+        cls: `att-mounted-${bit}`,
+        paint: 'node',
+        motion: false,
+        ...extra,
+    });
+    const mounted = [
+        node(0, 'trim', { mount: 'below-goods' }),
+        node(1, 'perch', { mount: 'below-goods' }),
+        node(2, 'strip', { mount: 'above-dock' }),
+        node(3, 'badge'),
+        { ...node(6, 'field', { excludes: ['trim', 'perch'] }), paint: 'root' },
+    ];
+
+    it('reads the slots, the mounts and the exclusions onto the rows', () => {
+        const rows = lookFromData(JSON.parse(lookWith(mounted)), FIXTURE_PLACE).rows;
+        expect(rows.map((r) => [r.bit, r.slot, r.mount, r.excludes])).toEqual([
+            [0, 'trim', 'below-goods', undefined],
+            [1, 'perch', 'below-goods', undefined],
+            [2, 'strip', 'above-dock', undefined],
+            [3, 'badge', undefined, undefined],
+            [6, 'field', undefined, ['trim', 'perch']],
+        ]);
+    });
+
+    it('refuses a mount it does not know, a mount on a root row, and a node with nowhere to stand', () => {
+        const problems = (rows: readonly object[]) => lookDataProblems(lookWith(rows), FIXTURE_PLACE);
+        expect(problems([node(0, 'trim', { mount: 'aloft' })])).toEqual([
+            'decorations[0].mount: must be one of fringe, crest, badge, trim, yard, below-goods, above-dock',
+        ]);
+        expect(problems([{ ...node(0, 'trim', { mount: 'below-goods' }), paint: 'root' }])).toEqual([
+            'decorations[0].mount: only a "node" row stands somewhere — a "root" row paints on the stall',
+        ]);
+        expect(problems([node(0, 'perch')])).toEqual([
+            'decorations[0].mount: a "node" row in slot "perch" stands nowhere — name one of fringe, crest, badge, trim, yard, below-goods, above-dock',
+        ]);
+        // A root row in a slot of its own needs no mount.
+        expect(problems([{ ...node(0, 'field'), paint: 'root' }])).toEqual([]);
+        expect(problems([node(0, 'Perch')])).toEqual([
+            'decorations[0].slot: must be a lower-case word naming the place this row is exclusive in (a mood goes under "moods")',
+        ]);
+    });
+
+    it('refuses an exclusion of its own slot, of the mood, twice over, or of a slot no decoration is in', () => {
+        const problems = (excludes: unknown) =>
+            lookDataProblems(lookWith([node(0, 'trim', { mount: 'below-goods' }), node(1, 'field', { mount: 'below-goods', excludes })]), FIXTURE_PLACE);
+        const shape = "decorations[1].excludes: must be a list of other decorations' slots, each once — not its own, not \"mood\"";
+        for (const bad of [['field'], ['mood'], ['trim', 'trim'], [], 'trim', [3]]) {
+            expect(problems(bad), JSON.stringify(bad)).toEqual([shape]);
+        }
+        expect(problems(['brim'])).toEqual([
+            'decorations: "Row 1" excludes slot "brim", which no decoration of this look is in',
+        ]);
+        expect(problems(['trim'])).toEqual([]);
+    });
+
+    it('refuses a mount or an exclusion on a mood', () => {
+        const mood = { bit: 4, slot: 'mood', label: 'Dusk', place: 'the whole stall', palette: { bg: [1, 2, 3] }, motion: false };
+        expect(lookDataProblems(lookWith([], [{ ...mood, mount: 'below-goods' }]), FIXTURE_PLACE)).toEqual([
+            'moods[0]: a mood is the whole palette — no "mount", no "excludes"',
+        ]);
+    });
+
+    it('refuses all three on the kit, whose rows keep the README’s shape', () => {
+        const { mintable: _m, ...kitLike } = FIXTURE_PLACE;
+        const problems = lookDataProblems(lookWith(mounted), kitLike);
+        expect(problems).toContain(
+            'decorations[0].mount: unknown field — a kit row stands where its slot puts it (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+        );
+        expect(problems).toContain(
+            'decorations[4].excludes: unknown field — a kit row is exclusive in its slot alone (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+        );
+        expect(problems).toContain('decorations[1].slot: must be one of crest, fringe, yard, badge, trim (a mood goes under "moods")');
+    });
+});

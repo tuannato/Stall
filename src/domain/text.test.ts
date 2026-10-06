@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { isLegibleText, shortTokenId } from './text';
+import { isLegibleText, scriptOf, shortTokenId } from './text';
 
 describe('a-stored-description-holds-no-newline', () => {
     it('needs no newline clause, because no stored description can hold one', () => {
@@ -102,5 +102,38 @@ describe('short-token-id-is-six-and-four', () => {
     it('shows a string no longer than the glance whole', () => {
         expect(shortTokenId('abcdef')).toBe('abcdef');
         expect(shortTokenId('abcdef01234567')).toBe('abcdef01234567');
+    });
+});
+
+describe('a-name-is-cjk-when-most-of-its-letters-are', () => {
+    /**
+     * Step 8f1: the sign carries `data-script="cjk"` from this answer, so a
+     * look can set a CJK name apart from a Latin one. Graphemes,
+     * never code units; letters only take a side; a tie is not a majority.
+     */
+    it('answers cjk for Han, kana and Hangul names, and for a mix where they are most of the letters', () => {
+        for (const name of ['茶屋', 'さくら', 'カフェ', '찻집', '東京茶屋 Tea', '茶屋 · 2', 'ラーメン', '佐々木']) {
+            expect(scriptOf(name), name).toBe('cjk');
+        }
+    });
+
+    it('answers nothing for Latin, Vietnamese, a tie, and a name with no letters', () => {
+        for (const name of ['Roasted Beans', 'Cà phê Sữa đá', '茶 Tea', '茶a', '2024', '🍵☕', '', '茶Te']) {
+            expect(scriptOf(name), name).toBeUndefined();
+        }
+    });
+
+    it('counts a grapheme once, never its code points', () => {
+        // One Hangul syllable written as three conjoining jamo is one
+        // grapheme — three letters by code points, which would tip a name
+        // with two Latin letters to cjk. Red with the segmenter replaced by
+        // `[...text]`.
+        expect(scriptOf('한ab')).toBeUndefined();
+        expect(scriptOf('한a')).toBeUndefined();
+        expect(scriptOf('한')).toBe('cjk');
+        // Marks on Latin letters add no letters, and an emoji sequence with
+        // joiners takes no side.
+        expect(scriptOf('áé茶茶茶')).toBe('cjk');
+        expect(scriptOf('\u{1F469}‍\u{1F373}茶')).toBe('cjk');
     });
 });

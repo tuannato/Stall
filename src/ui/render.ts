@@ -68,7 +68,7 @@ import { shortAddress,
     payLandingUrl,
     stallPath,
 } from '../domain/route';
-import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints, shortTokenId } from '../domain/text';
+import { isLegibleText, TOKEN_NAME_MAX_CHARS, cutAtCodePoints, scriptOf, shortTokenId } from '../domain/text';
 import { glyph, glyphLabel, SVG_NS } from './glyphs';
 import { armDoorTyping } from './doorTyping';
 import { isWithheldToken } from '../domain/withheld';
@@ -76,7 +76,9 @@ import type { GenesisAttribution } from '../domain/genesis';
 import { recordAge } from '../domain/age';
 import {
     attachmentClasses,
+    attachmentMount,
     attachmentNodesWanted,
+    chooseAttachment,
     withMood,
     type ShippedAttachment,
 } from '../domain/attachments';
@@ -93,6 +95,7 @@ import {
     type PaintedLook,
 } from '../domain/lookTable';
 import { askForLookSheet, lookSheetState, waitForLookSheet } from './lookSheets';
+import { applyNameTiers, lookMark } from './lookHooks';
 import type {
     SelectionAsk,
     RememberedSurcharge,
@@ -910,8 +913,11 @@ export function renderStall(
                 }
             });
         }
+        // The sign's name ladder first (`lookHooks.ts`): a rung can move the
+        // column the rows stand beside. Inert on a look that names no rungs.
+        applyNameTiers(root);
         applyMarquees(root, WINDOW_MARQUEE);
-        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE, sayHiddenPayLines);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE, sayHiddenPayLines, applyNameTiers);
         // A touch wall has controls, so it has focus to keep: every socket
         // tick and the sixty-second heartbeat rebuild this tree, and without
         // the restore a customer counting on the stepper lost the control
@@ -1092,10 +1098,13 @@ export function renderStall(
 
     frame.append(stall);
     root.append(frame);
-    // The rows' cut lines: measured on the connected tree (one layout, all
-    // reads before all writes), and again when the real faces land.
+    // The sign's name ladder, then the rows' cut lines: measured on the
+    // connected tree (one layout, all reads before all writes), and again
+    // when the real faces land. The ladder is inert on a look that names
+    // no rungs (`lookHooks.ts`).
+    applyNameTiers(root);
     applyMarquees(root, ROW_MARQUEE);
-    remeasureWhenFontsReady(root, () => paintSerial === serial, ROW_MARQUEE);
+    remeasureWhenFontsReady(root, () => paintSerial === serial, ROW_MARQUEE, undefined, applyNameTiers);
     const scroller = stall.querySelector('.stall-scroll') as HTMLElement | null;
     if (sameScreen && keptScroll > 0 && scroller !== null) {
         // After the tree is connected: a browser does not keep `scrollTop`
@@ -2404,7 +2413,7 @@ function paintOffers(
                 for (const [shelfName, run] of runs) {
                     const listings = listingsOf(run);
                     body.append(shelfHead(shelfName, listings.length));
-                    const items = el('div', 'items');
+                    const items = shelf();
                     for (const listing of listings) {
                         items.append(offerRow(listing, view, handlers));
                     }
@@ -2427,7 +2436,7 @@ function paintOffers(
                     } else if (group.groupLabel !== undefined) {
                         body.append(lookHead(group.groupLabel, listings.length));
                     }
-                    const items = el('div', 'items');
+                    const items = shelf();
                     for (const listing of listings) {
                         items.append(offerRow(listing, view, handlers));
                     }
@@ -2438,7 +2447,7 @@ function paintOffers(
             // An explicit sort is one flat run: a price order that restarted at
             // every section border would not be a price order. The section and
             // collection headings return with the curated default.
-            const items = el('div', 'items');
+            const items = shelf();
             for (const listing of sortedListings(listingsOf(ordered), sort, view.tokens)) {
                 items.append(offerRow(listing, view, handlers));
             }
@@ -2697,7 +2706,10 @@ function revealLoadedIcon(
         if (!iconMatchesToken(clone, ref)) {
             continue;
         }
-        cell.replaceChildren(clone);
+        // The picture replaces the initials alone: the tile's mark stays
+        // (`lookHooks.ts`), under whatever the tile now shows.
+        const mark = [...cell.children].filter((child) => child.classList.contains('look-mark'));
+        cell.replaceChildren(...mark, clone);
     }
 }
 
@@ -2732,11 +2744,17 @@ export function itemIcon(
         ensureIcon(ref);
         const clone = cloneLoadedIcon(ref);
         if (clone !== undefined) {
-            cell.append(clone);
+            cell.append(lookMark('tile'), clone);
             return cell;
         }
     }
-    cell.textContent = initials(name);
+    // The initials in a span of their own, beside the tile's mark (step
+    // 8f1): a look that frames the tile draws the mark and leaves the
+    // letters standing, and the picture, when it lands, replaces the
+    // letters alone (`revealLoadedIcon`). `textContent` is still the
+    // initials, which is what the tile's contrast target and
+    // `a-tile-shows-its-letters-whole` read.
+    cell.append(lookMark('tile'), el('span', 'ic-initials', initials(name)));
     return cell;
 }
 
@@ -3179,7 +3197,7 @@ function quotesPanel(view: StallView, handlers: StallHandlers): HTMLElement {
     section.append(el('h2', 'section-title', copy.PAY_SEC_TITLE));
     section.append(el('p', 'fine pay-lede', copy.PAY_SEC_LEDE));
     if (items.length > 0) {
-        const rows = el('div', 'items pay-items');
+        const rows = shelf('pay-items');
         for (const item of items) {
             rows.append(payRow(item, view, handlers));
         }
@@ -3376,7 +3394,7 @@ function payRow(
     const amount = el('span', 'item-a');
     const figure = el('span', 'item-x', figureText);
     figure.setAttribute('data-role', 'seller-price');
-    amount.append(figure);
+    amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
     if (mode !== 'in') {
@@ -5212,7 +5230,7 @@ function paySheet(
     const figureRow = el('div', 'pay-x');
     const figure = el('span', 'pay-x-n', '');
     figure.setAttribute('data-role', 'price');
-    figureRow.append(figure, el('span', 'item-u', copy.XEC));
+    figureRow.append(figure, el('span', 'item-u', copy.XEC), lookMark('figure'));
     card.append(figureRow);
     const quote = el('div', 'pay-eq', '');
     quote.setAttribute('data-role', 'seller-price');
@@ -6694,7 +6712,7 @@ function paySeveralSheet(
     const figureRow = el('div', 'pay-x');
     const figure = el('span', 'pay-x-n', '');
     figure.setAttribute('data-role', 'price');
-    figureRow.append(figure, el('span', 'item-u', copy.XEC));
+    figureRow.append(figure, el('span', 'item-u', copy.XEC), lookMark('figure'));
     card.append(figureRow);
     const lines = el('dl', 'pay-lines');
     lines.setAttribute('data-role', 'pay-lines');
@@ -7929,8 +7947,14 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             previewLook(anchor, themeId, chosen);
             reportPreview(themeId, chosen);
             const behind = anchor.closest('.frame')?.parentElement;
-            if (sheet !== undefined && behind !== null && behind !== undefined) {
-                applyMarquees(behind, ROW_MARQUEE);
+            if (behind !== null && behind !== undefined) {
+                // The name's ladder is the look's own sheet's (`lookHooks.ts`):
+                // chosen again under the look now on, which also takes the
+                // rung of a look tried on before it off.
+                applyNameTiers(behind);
+                if (sheet !== undefined) {
+                    applyMarquees(behind, ROW_MARQUEE);
+                }
             }
         };
         if (sheet === undefined) {
@@ -8252,8 +8276,10 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
             const list = el('div', 'dec');
             list.setAttribute('role', 'group');
             list.setAttribute('aria-label', `${copy.DECOR_LABEL} — ${here[0]!.place}`);
+            // Every place's ticks, not only this one's: a row that excludes
+            // another place's rows turns them off too (`chooseAttachment`).
             const paintTicks = (): void => {
-                for (const tick of list.querySelectorAll('[data-bit]')) {
+                for (const tick of decorWrap.querySelectorAll('[data-bit]')) {
                     const bit = Number(tick.getAttribute('data-bit'));
                     tick.setAttribute(
                         'aria-pressed',
@@ -8282,15 +8308,11 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
                 tick.setAttribute('aria-label', row.label);
                 tick.append(glyph('check', 'dec-tick'), el('span', 'dec-name', row.label));
                 tick.addEventListener('click', () => {
-                    const wasOn = (flags & (1 << row.bit)) !== 0;
-                    // One occupant per place, enforced where the choice is
-                    // made: every other bit here goes off before this one on.
-                    for (const other of here) {
-                        flags &= ~(1 << other.bit);
-                    }
-                    if (!wasOn) {
-                        flags |= 1 << row.bit;
-                    }
+                    // One occupant per place, and no two rows that exclude
+                    // each other, enforced where the choice is made: every
+                    // other bit here, and every row on the other side of an
+                    // exclusion, goes off before this one on.
+                    flags = chooseAttachment(rows, flags, row.bit);
                     paintTicks();
                     if (CARRIES_WORN_ONLY_LOOKS) {
                         showLook(list, themeId, flags);
@@ -8368,6 +8390,19 @@ function nameSheet(view: StallView, handlers: StallHandlers): HTMLElement {
     return wrap;
 }
 
+/**
+ * One run of rows, `div.items`, with the shelf's mark as its first child
+ * (`lookHooks.ts`): a look that lays a ground behind a shelf paints it under the rows in
+ * document order, and every other look hides it. The rows follow it, so a
+ * rule that counts rows counts them `of .item` (Rural's tilt). Exported for
+ * the wall's strip, which is a shelf of the same rows.
+ */
+export function shelf(extraClass?: string): HTMLElement {
+    const items = el('div', extraClass === undefined ? 'items' : `items ${extraClass}`);
+    items.append(lookMark('shelf'));
+    return items;
+}
+
 function offerRow(
     listing: TokenListing,
     view: StallView,
@@ -8438,6 +8473,9 @@ function offerRow(
         // is one line in every design; a block unit under the number was
         // what stretched every card on every look.
         amount.append(el('span', 'item-u', copy.XEC));
+        // The figure's mark: a sibling of the money, never inside it
+        // (`lookHooks.ts`).
+        amount.append(lookMark('figure'));
         price.append(amount);
     }
     // Fiat sits beside the rate, at rate size, in its own node — never inside
@@ -8611,7 +8649,7 @@ function itemFace(
         const figure = el('div', 'face-x');
         const q = el('span', 'x pay-q', quoteFigure(item.price));
         q.setAttribute('data-role', 'seller-price');
-        figure.append(q);
+        figure.append(q, lookMark('figure'));
         card.append(figure);
         const surcharge = quoteSurchargeNode(item.price, 'div', 'pay-sub quote-surcharge face-surcharge');
         if (surcharge !== null) {
@@ -8715,7 +8753,7 @@ function itemFace(
     const asked = el('span', 'x', formatXec(offer.askedSats));
     asked.setAttribute('data-role', 'price');
     figure.append(asked);
-    figure.append(el('span', 'item-u', copy.XEC));
+    figure.append(el('span', 'item-u', copy.XEC), lookMark('figure'));
     card.append(figure);
     // The stock, summed across every listing of this token: each addend is a
     // UTXO's own remaining atoms, so the sum is chain truth. Omitted, not
@@ -9273,6 +9311,21 @@ function lampAt(name: string, parts: readonly string[]): number | undefined {
     return lit[hash % lit.length];
 }
 
+/**
+ * `data-script="cjk"` on a sign line written mostly in Han, kana or Hangul
+ * (`scriptOf`, step 8f1): CSS cannot see a string's script, and a look may
+ * set a CJK line differently from a Latin one. Each
+ * line is judged on its own text. No shipped look reads the attribute, and a
+ * line in any other script carries none. Test:
+ * `the-sign-says-when-its-name-is-written-in-cjk`.
+ */
+function withScript(node: HTMLElement, text: string): HTMLElement {
+    if (scriptOf(text) === 'cjk') {
+        node.setAttribute('data-script', 'cjk');
+    }
+    return node;
+}
+
 export function header(
     name?: string,
     sub?: string,
@@ -9293,13 +9346,13 @@ export function header(
         // The one <h1> on every screen. A screen reader needs an outline to
         // navigate by; the whole site was <div>s. `stall.css` selects on class,
         // so nothing restyles.
-        headings.append(signName(name));
+        headings.append(withScript(signName(name), name));
     }
     // The seller's own line, screened at decode like the name (tag 0x02) and
     // rendered as text through `textContent` like everything else. It is
     // their sign — the same surface class the name already is.
     if (tagline !== undefined && tagline !== '') {
-        headings.append(el('div', 'stall-tagline', tagline));
+        headings.append(withScript(el('div', 'stall-tagline', tagline), tagline));
     }
     if (sub !== undefined && sub !== '') {
         headings.append(el('div', 'stall-sub', sub));
@@ -9466,8 +9519,13 @@ const FOCUSABLE =
     'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
 /**
- * The elements a worn set needs, placed by slot rather than by row — so adding
- * a row to the catalogue is a table edit and never a change here.
+ * The elements a worn set needs, placed by mount rather than by row — so
+ * adding a row to the catalogue is a table edit and never a change here. A
+ * row's mount is the one it names, or the place its slot has always put a
+ * node (`attachmentMount`, step 8f1): no shipped row names one, so every
+ * shipped node stands where it did. `below-goods` and `above-dock` are the
+ * two mounts a first-party look's row may name that no slot had; see the
+ * loop.
  *
  * A `fringe` lives inside the ornament strip, which clips it, and is simply not
  * painted on a look that ships no strip: a decoration with nowhere to be is not
@@ -9509,20 +9567,43 @@ function placeAttachmentNodes(
             node.remove();
         }
     }
+    // The two mounts that stand outside the sign (step 8f1), each found
+    // once per paint and filled in catalogue order: `below-goods` between a
+    // panel's goods and its foot inside the scroller, `above-dock` between
+    // the scroller and the dock. Neither exists until a row names it — no
+    // shipped row does — and a screen with no scroller places nothing there.
+    const childOf = (parent: Element | undefined, cls: string): Element | undefined =>
+        parent === undefined ? undefined : [...parent.children].find((child) => child.classList.contains(cls));
+    const scroller = childOf(stall, 'stall-scroll');
+    let belowGoods = childOf(scroller, 'stall-body');
+    let aboveDock = scroller;
     for (const row of attachmentNodesWanted(worn)) {
         const node = el('div', row.cls!);
         node.setAttribute('aria-hidden', 'true');
-        if (row.slot === 'fringe') {
+        const mount = attachmentMount(row);
+        if (mount === 'below-goods' || mount === 'above-dock') {
+            const after = mount === 'below-goods' ? belowGoods : aboveDock;
+            if (after !== undefined) {
+                after.after(node);
+                if (mount === 'below-goods') {
+                    belowGoods = node;
+                } else {
+                    aboveDock = node;
+                }
+            }
+            continue;
+        }
+        if (mount === 'fringe') {
             stall.querySelector('.orn')?.append(node);
             continue;
         }
-        if (row.slot === 'crest') {
+        if (mount === 'crest') {
             // Under the seller's own name — the signature stroke's home.
             const name = stall.querySelector('.stall-name-row') ?? stall.querySelector('.stall-name');
             name?.after(node);
             continue;
         }
-        if (row.slot === 'badge') {
+        if (mount === 'badge') {
             // In flow INSIDE the headings column, under the chip — never a
             // sibling of the name row: a 50px badge beside the name wrapped
             // it at 390px. A real box the guard measures, jewellery rather
@@ -9532,14 +9613,14 @@ function placeAttachmentNodes(
             );
             continue;
         }
-        if (row.slot === 'trim') {
+        if (mount === 'trim') {
             // Behind the sign: a shallow stage before the head that paints
             // its own rays — one real box the guard can measure, folded out
             // of the flow by its own negative margin.
             stall.querySelector('.stall-head')?.before(node);
             continue;
         }
-        if (row.slot === 'yard') {
+        if (mount === 'yard') {
             // The sprite is a second real node rather than a pseudo-element:
             // `::before` has no box, so the guard cannot measure it, and it is
             // refused outright for exactly that reason. The yard sits under
@@ -10186,6 +10267,13 @@ function tagPage(item: QuotedItem, paintItem: PosterItem, landing: string): HTML
     page.append(el('p', 'poster-brand', copy.BROADCAST_BRAND));
     const tile = itemIcon(item.tokenId, paintItem.name, undefined, ICON_HERO_SIZE, !paintItem.borrowed);
     tile.className = 'tag-ic';
+    // Paper is Stall's, never a look's: the tile's mark stays off the tag,
+    // and its letters stand in the tile as they did before the mark had a
+    // sibling to stand beside (every class on the page is styled ink on
+    // white, `the-printed-tag-is-ink-on-white`).
+    tile.querySelector('[data-look-mark]')?.remove();
+    const letters = tile.querySelector('.ic-initials');
+    letters?.replaceWith(...letters.childNodes);
     page.append(tile);
     page.append(el('div', 'tag-name', paintItem.name));
     if (paintItem.ticker !== undefined && paintItem.ticker !== '') {

@@ -186,6 +186,7 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
      * default a new guard falls into.
      */
     const GUARDS = [
+        'layout/lookMarks.test.ts',
         'layout/looks.test.ts',
         'scripts/audit-shadowing.mjs',
         'scripts/fonts.test.mjs',
@@ -222,6 +223,7 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
         'src/ui/obsGuide.test.ts':
             "obsGuide.css's own declarations for its own screen; what a look sheet restates over a base sheet is the audit's to list (`shadowingReport`) and the probe's to measure",
         'src/ui/window.test.ts': "window.css's own declarations for the wall; the same",
+        'src/ui/render.hooks.test.ts': "stall.css's zoom reset, the base's own declarations for the zoom it renders; the same",
         'src/ui/render.test.ts':
             "the base and screen sheets' own declarations for the screens it renders; the per-look ladders it held moved to theme-sheets.test.ts over the served sheets (8e1)",
     };
