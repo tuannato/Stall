@@ -1,6 +1,17 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
-import { LOOK_SHEET_PROPERTY, askForLookSheet, loadLookSheet, lookSheetState, sheetNamesItself } from './lookSheets';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+    LOOK_SHEET_PROPERTY,
+    LOOK_SHEET_RETRIES,
+    LOOK_SHEET_WAIT_MS,
+    askForLookSheet,
+    loadLookSheet,
+    lookSheetRetriesLeft,
+    lookSheetState,
+    retryLookSheet,
+    sheetNamesItself,
+    waitForLookSheet,
+} from './lookSheets';
 
 /**
  * The worn-only loader (`lookSheets.ts`, step 8d1), over a page whose head
@@ -83,6 +94,12 @@ describe('a-worn-only-sheet-is-a-same-origin-link-and-no-inline-style', () => {
     });
 });
 
+/**
+ * One link per sheet per page, and a failure kept for the page's life. The
+ * one exception is the unattended screens' retry (8d2, CRITIC-STEP-8 item
+ * 18), which replaces a failed link with a fresh one only through
+ * `retryLookSheet`, capped: `a-failed-sheet-gets-a-fresh-link-only-on-a-retry-and-only-so-often`.
+ */
 describe('a-worn-only-sheet-is-fetched-once-per-page', () => {
     it('answers every later ask with the first one’s promise, and makes one link', async () => {
         const { doc, appended } = page();
@@ -208,5 +225,120 @@ describe('the-renderers-ask-puts-one-link-on-the-page-and-never-throws', () => {
             expect(lookSheetState(SHEET.url, doc), String(head)).toBe('failed');
             await expect(loadLookSheet(SHEET.url, SHEET.cls, doc)).rejects.toThrow(/could not be put on the page/);
         }
+    });
+});
+
+/**
+ * Late is failed (8d2; STEP-8-PLAN §3): a wait gives a pending sheet
+ * `LOOK_SHEET_WAIT_MS` from the moment it starts, then gives it up — failed,
+ * for the page's life — and an answer that arrives afterwards changes
+ * nothing: the page already painted the default and said so. A wait never
+ * rejects, and a sheet already settled is answered at once. Red: the load
+ * handler acting on an entry that is no longer pending; the wait with no
+ * clock.
+ */
+describe('a-late-sheet-changes-nothing-on-the-page', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('gives a pending sheet up at the wait, and a later load leaves it failed', async () => {
+        vi.useFakeTimers();
+        const { doc, appended } = page();
+        const sheet = { url: '/assets/slow.css', cls: 't-slow' };
+        const waited = waitForLookSheet(sheet, doc);
+        await vi.advanceTimersByTimeAsync(LOOK_SHEET_WAIT_MS - 1);
+        expect(lookSheetState(sheet.url, doc)).toBe('pending');
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(waited).resolves.toBe('failed');
+        expect(lookSheetState(sheet.url, doc)).toBe('failed');
+        answer(appended[0]!, { sheet: sheetOf(NAMED('t-slow')) });
+        expect(lookSheetState(sheet.url, doc), 'a late answer changes nothing').toBe('failed');
+        await expect(loadLookSheet(sheet.url, sheet.cls, doc)).rejects.toThrow(/within/);
+        expect(vi.getTimerCount(), 'no clock left running').toBe(0);
+    });
+
+    it('answers a sheet that lands in time, one already settled at once, and never rejects', async () => {
+        vi.useFakeTimers();
+        const { doc, appended } = page();
+        const ready = { url: '/assets/ready.css', cls: 't-ready' };
+        const waited = waitForLookSheet(ready, doc);
+        answer(appended[0]!, { sheet: sheetOf(NAMED('t-ready')) });
+        await expect(waited).resolves.toBe('ready');
+        expect(vi.getTimerCount(), 'the clock is cleared when the sheet lands').toBe(0);
+        await expect(waitForLookSheet(ready, doc)).resolves.toBe('ready');
+        const gone = { url: '/assets/gone.css', cls: 't-gone' };
+        const first = waitForLookSheet(gone, doc);
+        answer(appended[1]!, 'error');
+        await expect(first).resolves.toBe('failed');
+        await expect(waitForLookSheet(gone, doc)).resolves.toBe('failed');
+        await expect(waitForLookSheet({ url: 'https://elsewhere.test/x.css', cls: 't-x' }, doc)).resolves.toBe('failed');
+        expect(appended, 'a settled sheet is not asked again').toHaveLength(2);
+    });
+});
+
+/**
+ * The unattended screens' retry (8d2; CRITIC-STEP-8 item 18): a sheet that
+ * failed gets a fresh link only through `retryLookSheet` — the failed link
+ * removed from the page and its entry dropped first, so the page holds one
+ * link for it — at most `LOOK_SHEET_RETRIES` times per page, after which it
+ * stays failed: a screen nobody reloads makes a bounded number of requests,
+ * never a loop. A sheet that is pending, ready or never asked for is left as
+ * it is. A page older than a deploy asks for a hash the edge no longer has,
+ * which no retry heals; a reload is a new page, which asks again. Red: the
+ * failed link left on the page (two links), no cap (an eleventh link).
+ */
+describe('a-failed-sheet-gets-a-fresh-link-only-on-a-retry-and-only-so-often', () => {
+    /** A page whose head is a real element no document holds: links are kept and removable, and none is a request. */
+    function pageWithHead(url = `${ORIGIN}/s/qq`) {
+        const head = document.createElement('div');
+        const doc = { URL: url, baseURI: url, createElement: (tag: string) => document.createElement(tag), head } as unknown as Document;
+        return { doc, links: () => [...head.querySelectorAll('link')] };
+    }
+    const SHEET = { url: '/assets/skewed.css', cls: 't-skewed' };
+
+    it('replaces the failed link with one fresh one, and stops at its cap', async () => {
+        const { doc, links } = pageWithHead();
+        await expect(waitForLookSheet(SHEET, doc, 1)).resolves.toBe('failed');
+        expect(links()).toHaveLength(1);
+        const first = links()[0]!;
+        expect(lookSheetRetriesLeft(SHEET, doc)).toBe(LOOK_SHEET_RETRIES);
+        for (let i = 1; i <= LOOK_SHEET_RETRIES; i += 1) {
+            const failedLink = links()[0]!;
+            answer(failedLink, 'error');
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(lookSheetState(SHEET.url, doc)).toBe('failed');
+            expect(retryLookSheet(SHEET, doc), `retry ${i}`).toBe(true);
+            expect(links(), 'the failed link is gone, one fresh one in its place').toHaveLength(1);
+            expect(links()[0]).not.toBe(failedLink);
+            expect(lookSheetState(SHEET.url, doc)).toBe('pending');
+            expect(lookSheetRetriesLeft(SHEET, doc)).toBe(LOOK_SHEET_RETRIES - i);
+        }
+        expect(links()[0]).not.toBe(first);
+        answer(links()[0]!, 'error');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(retryLookSheet(SHEET, doc), 'out of retries').toBe(false);
+        expect(lookSheetState(SHEET.url, doc)).toBe('failed');
+        expect(links()).toHaveLength(1);
+        // A reload is a new page: it asks again, once.
+        const reloaded = pageWithHead();
+        const again = waitForLookSheet(SHEET, reloaded.doc);
+        expect(reloaded.links()).toHaveLength(1);
+        answer(reloaded.links()[0]!, { sheet: sheetOf(NAMED('t-skewed')) });
+        await expect(again).resolves.toBe('ready');
+    });
+
+    it('leaves a sheet that is pending, ready or never asked for as it is', async () => {
+        const { doc, links } = pageWithHead();
+        expect(retryLookSheet(SHEET, doc), 'never asked for').toBe(false);
+        expect(links()).toEqual([]);
+        const pending = loadLookSheet(SHEET.url, SHEET.cls, doc);
+        expect(retryLookSheet(SHEET, doc), 'pending').toBe(false);
+        answer(links()[0]!, { sheet: sheetOf(NAMED('t-skewed')) });
+        await pending;
+        expect(retryLookSheet(SHEET, doc), 'ready').toBe(false);
+        expect(retryLookSheet({ url: SHEET.url, cls: 't-other' }, doc), 'another look').toBe(false);
+        expect(links()).toHaveLength(1);
+        expect(lookSheetState(SHEET.url, doc)).toBe('ready');
     });
 });
