@@ -53,25 +53,31 @@
  * owes every one; `PROBE-RULES.md` has each rule and its red proof):
  *
  * - **A name ladder** (`--name-rungs`, `applyNameTiers`) in a box of bounded
- *   height, at every width: a 32-byte name climbs it and stands whole
- *   (`the-sellers-name-stands-whole`); a CJK name is set its own way.
- * - **A sticky sign in a column of its own**, at the desk and off the wall:
- *   the goods scroll beside it and never under it
- *   (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
- * - **A mark it shows**: a dot after every row's figure, at the desk
- *   (`no-look-mark-paints-inside-a-protected-box`).
- * - **File art under a word**: a mass masked by its own file behind the
- *   sign's name, at the desk, light enough that the name reads on the
- *   paper when the file does not load (`a-word-reads-when-the-art-does-not-load`).
+ *   size at every width — on a phone a 32-byte name climbs it to the last
+ *   rung — with room in the box for marks above the face's ascent (the
+ *   padding: a Vietnamese capital's stacked marks run past it), and a CJK
+ *   name set its own way (`the-sellers-name-stands-whole`).
+ * - At the desk, off the wall: **the name set vertically** in a bounded box,
+ *   so the rule's and the ladder's vertical branches run on every default
+ *   run; **the sign sticky in a column of its own**: the goods scroll beside
+ *   it and never under it (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
+ * - At the desk: **a mark it shows**, a dot after every row's figure
+ *   (`no-look-mark-paints-inside-a-protected-box`); and **file art under a
+ *   word**: a ground behind the sign's name drawn by a mask that adds a
+ *   file's shape to a plain one, so it is still drawn when the file has
+ *   failed and not drawn while it loads — tinted lightly enough that the
+ *   name reads in all three (`a-word-reads-when-the-art-does-not-load`,
+ *   both its states).
  */
 .t-fixture-private .stall-name {
     --name-rungs: 2;
     max-height: 72px;
+    padding-block: 0.2em;
     overflow: hidden;
 }
 
 .t-fixture-private .stall-name[data-name-tier='1'] {
-    font-size: 18px;
+    font-size: 22px;
 }
 
 .t-fixture-private .stall-name[data-name-tier='2'] {
@@ -86,6 +92,21 @@
     /* Two lines of the desk's name fit; a 32-byte name still climbs. */
     .t-fixture-private .stall-name {
         max-height: 110px;
+    }
+
+    .t-fixture-private .stall-name[data-name-tier='1'] {
+        font-size: 30px;
+    }
+
+    .t-fixture-private .stall-name[data-name-tier='2'] {
+        font-size: 14px;
+    }
+
+    /* On its end beside the goods: the inline axis down, bounded both ways. */
+    .t-fixture-private:not(.shop-window) .stall-name {
+        writing-mode: vertical-rl;
+        max-height: 300px;
+        max-width: 200px;
     }
 
     .t-fixture-private:not(.shop-window) .stall-scroll {
@@ -138,8 +159,14 @@
         align-self: stretch;
         z-index: -1;
         background: color-mix(in srgb, var(--s-accent) 10%, var(--s-bg));
-        -webkit-mask: url(./art/mass.svg) center / 100% 100% no-repeat;
-        mask: url(./art/mass.svg) center / 100% 100% no-repeat;
+        -webkit-mask:
+            url(./art/under-name.svg) center / 100% 100% no-repeat,
+            linear-gradient(#000, #000) center / 60% 40% no-repeat;
+        mask:
+            url(./art/under-name.svg) center / 100% 100% no-repeat,
+            linear-gradient(#000, #000) center / 60% 40% no-repeat;
+        -webkit-mask-composite: source-over;
+        mask-composite: add;
     }
 }
 

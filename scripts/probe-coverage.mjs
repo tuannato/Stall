@@ -75,10 +75,13 @@
  *   pass that found a sticky sign owes it a region that scrolled
  *   (`stickyByClass`).
  * - **The tracked fixture's subjects** (8f2, `TRACKED_FIXTURE_CLASS`): a run
- *   that carries it owes a region scrolled under its sticky sign and a mark
- *   it shows at the desk, and a rung its long name climbed on both page
- *   passes; the runner owes its mark-hide and art-off frames on the
- *   contrast pass.
+ *   that carries it owes a region scrolled under its sticky sign, a mark it
+ *   shows and a vertical name at the desk, a rung its long name climbed on
+ *   both page passes and the last rung on the phone; the runner owes its
+ *   art-off frames, pending and failed, on the contrast pass, and a
+ *   mark-hide and pending frame for any carried look with marks or file art.
+ * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
+ *   `cjk-name` owes the advance it read (`cjkFaces`).
  *
  * The phone and desk passes owe the page rules, the canvas the overlay's
  * places and the wall's controls, and the portrait and tablet passes the
@@ -219,6 +222,16 @@ export function probeCoverageGaps(
         if (PAGE_PASSES.has(pass) && Object.keys((report.nameTiersByClass ?? {})[fx] ?? {}).length === 0) {
             gaps.push(`the-sellers-name-stands-whole read no ${fx} name on a rung of its ladder`);
         }
+        if (pass === 'mobile' && !(Number(Object.keys((report.nameTiersByClass ?? {})[fx] ?? {}).sort().at(-1) ?? 0) >= 2)) {
+            gaps.push(`the-sellers-name-stands-whole read no ${fx} name on the last rung of its ladder`);
+        }
+        if (pass === 'desktop' && !(((report.nameVerticalByClass ?? {})[fx] ?? 0) > 0)) {
+            gaps.push(`the-sellers-name-stands-whole read no vertical ${fx} name`);
+        }
+    }
+    // A pass that measured the CJK screen owes the face it was set in (8f2).
+    if ((report.screensMeasured ?? []).includes('cjk-name') && !((report.cjkFaces ?? []).length > 0)) {
+        gaps.push('a-cjk-name-is-set-in-a-cjk-face read no CJK sign line on a pass that measured cjk-name');
     }
     if (WALL_PASSES.has(pass) && !((report.statusLineChecks ?? 0) > 0)) {
         gaps.push('nothing-in-the-body-reaches-the-status-line asked nothing on a wall');
@@ -360,7 +373,9 @@ export function probeCoverageLine(pass, report) {
         (Object.keys(report.nameTiersByClass ?? {}).length === 0 ? '' : ` · name rungs: ${perClass(report.nameTiersByClass)}`) +
         (Object.keys(report.marksShownByClass ?? {}).length === 0 ? '' : ` · marks shown: ${perClass(report.marksShownByClass)}`) +
         (Object.keys(report.stickyByClass ?? {}).length === 0 ? '' : ` · sticky signs (paints/scrolled/stops): ${perClass(report.stickyByClass)}`) +
-        (Object.keys(report.tryOnNamesByClass ?? {}).length === 0 ? '' : ` · stress names tried on: ${perClass(report.tryOnNamesByClass)}`);
+        (Object.keys(report.tryOnNamesByClass ?? {}).length === 0 ? '' : ` · stress names tried on: ${perClass(report.tryOnNamesByClass)}`) +
+        (Object.keys(report.nameVerticalByClass ?? {}).length === 0 ? '' : ` · vertical sign lines: ${perClass(report.nameVerticalByClass)}`) +
+        ((report.cjkFaces ?? []).length === 0 ? '' : ` · CJK advance: ${report.cjkFaces.join(', ')}`);
     const wall = WALL_PASSES.has(pass)
         ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
         : '';

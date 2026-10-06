@@ -752,7 +752,7 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         const env = (selection) => ({ ...selection });
         /**
          * The tracked fixture's art as a build writes it: every file of its
-         * `art/` (the ground, and since 8f2 the mass under the sign's name),
+         * `art/` (the ground, and since 8f2 the layer under the sign's name),
          * each re-serialised, with the bytes it was given — read from the
          * directory, so a fixture that grows a file needs no edit here.
          */

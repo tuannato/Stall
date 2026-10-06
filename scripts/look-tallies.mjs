@@ -59,11 +59,16 @@ export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
      * a closed switch's row), the same reasons the public looks' own
      * counts carry. Lowered with the change that lowers them; raised only
      * by a reviewed diff that names what the fixture now clips and why.
+     * Canvas 205 → 207 (8f2, after its critic): the fixture's name box
+     * leaves room above and below for stacked marks (`padding-block:
+     * 0.2em`, 22px at the wall's 54px), so the wall's sign is that much
+     * taller and the 35-line payment's scroller shows one line fewer — one
+     * more line scrolled out of view, on each of its two jobs.
      */
     't-fixture-private': Object.freeze({
         mobile: Object.freeze({ 'clipped-away': 16, 'not-rendered': 10 }),
         desktop: Object.freeze({ 'clipped-away': 4, 'not-rendered': 8 }),
-        canvas: Object.freeze({ 'clipped-away': 205, 'not-rendered': 0 }),
+        canvas: Object.freeze({ 'clipped-away': 207, 'not-rendered': 0 }),
     }),
 });
 

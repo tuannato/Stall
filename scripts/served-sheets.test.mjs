@@ -52,7 +52,7 @@ describe('the-served-sheets-are-the-role-table-and-the-private-looks-a-run-reads
         const [row] = rows;
         assert.equal(row.css, atHead(`${FIXTURE}/fixture/sheet.css`));
         assert.equal(row.look.lookText, atHead(`${FIXTURE}/fixture/look.json`));
-        assert.deepEqual(row.ownArt, { dir: 'art', files: ['ground.svg', 'mass.svg'] });
+        assert.deepEqual(row.ownArt, { dir: 'art', files: ['ground.svg', 'under-name.svg'] });
         assert.equal(row.artDir, `${FIXTURE}/fixture/art`);
         assert.equal(row.look.fontsText, undefined);
         assert.deepEqual(lookRows([row]), [row]);

@@ -238,7 +238,8 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      *
      * 861,724 at 8e2 (main 1c95aa0) and 864,512 after step 8f1's hooks and
      * its critic's fixes, measured in a vitest worker with no private look;
-     * 865,291 after 8f2 (+779: the name ladder's fit read by line slots).
+     * 866,176 after 8f2 and its critic's fixes (+1,664: the name ladder's
+     * fit read by ink, `src/ui/signInk.ts`, its own box only).
      * **This alarm can no longer fire first** (the 8f1 critic's item 5): on
      * demand is 262,846, so `served-weight-has-a-ceiling` trips once this
      * bucket passes about 867,154 — 30 KB under this ceiling. Not re-based
@@ -328,10 +329,13 @@ describe('served-weight-has-a-ceiling', () => {
     // every-visitor to served minus on demand, so the two alarms stop
     // shadowing each other. The 8f1 critic read 99 bytes more at 68fb1a9 in
     // a plain build; not explained.
-    // 8f2: 1,128,137, +779 for the name ladder's fit read by line slots
-    // (`realFits` in lookHooks.ts) — the probe's new rules are harness code
-    // and ship nothing. 1,863 bytes under; not raised (the owner's question
-    // above stands, and it is now the next feature's).
+    // 8f2 and its critic's fixes: 1,129,022, +1,664 for the name ladder's
+    // fit read by ink (`inkFits` in src/ui/signInk.ts, the line's measured
+    // glyphs in its own box) — the probe's new rules are harness code and
+    // ship nothing. The `clip-path` shapes the probe resolves stay out of
+    // the app's bundle for this ceiling: with them it read 1,131,689. 978
+    // bytes under; not raised (the owner's question above stands, and it is
+    // now the next feature's).
     const CEILING_BYTES = 1_130_000;
 
     it(`keeps the built output under ${CEILING_BYTES} bytes, worn-only looks apart`, async () => {

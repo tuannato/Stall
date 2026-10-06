@@ -46,6 +46,7 @@ import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-se
 import { harnessLooks } from './harness-looks.mjs';
 import { carriedTallyFaults } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
+import { privateRows, servedSheets } from './served-sheets.mjs';
 
 /*
  * The private looks this run measures (8e2): the selection the shell names,
@@ -287,9 +288,9 @@ const WINDOW_SCREENS =
     // tablet lay both out on their own.
     'shop-window-unbuyable,shop-window-cycle-unbuyable,' +
     // The sign under stress (8f2): a 32-byte name on the Cycle card and in
-    // Browse, at the desk width and at a wall size, and a CJK name
-    // (`the-sellers-name-stands-whole`).
-    'shop-window-long-name,shop-window-browse-long-name,shop-window-cjk-name,' +
+    // Browse, at the desk width and at a wall size, a name in stacked-mark
+    // capitals and a CJK name (`the-sellers-name-stands-whole`).
+    'shop-window-long-name,shop-window-browse-long-name,shop-window-stacked-name,shop-window-cjk-name,' +
     'shop-window-wall-long-name,shop-window-wall-browse-long-name';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
@@ -526,6 +527,21 @@ const RING_MASK_ALPHA = 0.5;
  * the ring on some contrast job, or the outline is one nobody reads.
  */
 const outlinedTargetsSeen = new Set();
+/** Every look class whose geometry passes showed a mark (`marksShownByClass`): each owes a mark-hide frame (8f2). */
+const marksShownSeen = new Set();
+/**
+ * The carried looks whose own sheet names a file in a mask or clip property
+ * (8f2, the 8f2 critic's P3-8), read from the sheet as the build reads it:
+ * each owes the art-off read a pending frame, so a computed miss in the
+ * probe's `markFileArt` fails the run rather than reading as no art.
+ */
+const FILE_ART_IN_SHEET = /(?:^|[;{\s])(?:-webkit-)?(?:mask(?:-image|-border(?:-source)?|-box-image(?:-source)?)?|clip-path)\s*:[^;{}]*url\(/i;
+const CARRIED_FILE_ART =
+    MEASURED_SELECTION === undefined
+        ? []
+        : privateRows(await servedSheets({ env: CARRIED.env }))
+              .filter((row) => FILE_ART_IN_SHEET.test(row.css.replace(/\/\*[\s\S]*?\*\//g, '')))
+              .map((row) => row.lookClass);
 /**
  * Every decoration class a geometry pass painted worn (the probe's
  * `wornClasses`): the contrast pass's owed jobs must follow it
@@ -1353,6 +1369,7 @@ try {
          * comparison is refused (`probe-coverage.mjs`).
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+        for (const [cls, n] of Object.entries(report.marksShownByClass ?? {})) if (n > 0) marksShownSeen.add(cls);
         for (const cls of report.wornClasses ?? []) wornClassesSeen.add(cls);
         for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
@@ -1861,6 +1878,10 @@ try {
         let artOffJobs = 0;
         let artOffTargets = 0;
         const artOffJobsByClass = {};
+        // The art-off frames read, by state and look class (`pending`,
+        // `failed`): a carried look whose sheet names a file mask owes a
+        // pending one, and the tracked fixture a failed one too.
+        const artOffFrames = {};
         // Jobs with the aurora worn alone and its tide held at an end
         // (`the-aurora-is-read-at-both-ends-of-its-tide`, `TIDE_SCREENS`).
         let tideJobs = 0;
@@ -2534,11 +2555,18 @@ try {
                             return out;
                         };
                         const both = pseudosHere && marksHere ? 'both' : pseudosHere ? 'pseudos' : 'marks';
-                        const on = await capture();
+                        // The "shown" frame is the job's own capture (8f2, the
+                        // critic's P2-4): the same blanked, frozen paint, and
+                        // every step since put back what it changed. Only a
+                        // frame that moved is shot fresh before it is believed.
+                        let on = { shot: img, why: [] };
                         await hidden(both);
                         const off = await capture();
                         await hidden('none');
                         const shields = await evalJson(cdp, sessionId, 'window.__protectedBoxes()');
+                        if (off.why.length === 0 && movedIn(on.shot, off.shot, shields).length > 0) {
+                            on = await capture();
+                        }
                         const why = [...on.why, ...off.why];
                         if (why.length > 0) {
                             retryWhy = why.map((w) => `for the look-paint frames, ${w}`);
@@ -2584,16 +2612,20 @@ try {
                     }
                     /*
                      * `a-word-reads-when-the-art-does-not-load` (8f2; the
-                     * step-8 critic's item 11, the probe's `markFileArt`):
-                     * where the job's scope paints file art — a mask image,
-                     * a mask border or a `clip-path` naming a file — every
-                     * target is read again on a frame with that art as a
-                     * failed load leaves it (`__artOff`): each target by the
-                     * reader it was read by, a line by its line rects, money
-                     * whole, an outlined line in its ring on a second frame
-                     * with its glyphs shown. Every one must clear the floor.
-                     * A frame that failed is taken again once before it is
-                     * believed. No capture where no file art is painted.
+                     * step-8 critic's item 11 and the 8f2 critic's P1-2, the
+                     * probe's `markFileArt`): where the job's scope paints
+                     * file art — a mask image, a mask border or a `clip-path`
+                     * naming a file — every target is read again in the two
+                     * states the engines paint (`__artOff`): **pending**,
+                     * each such box painting nothing, and — where it differs,
+                     * a mask stack mixing file and other layers or a file
+                     * clip (`fileArtMixed`) — **failed**, each file layer
+                     * skipped and the rest kept. Each target by the reader it
+                     * was read by, on the boxes the job read (the art moves
+                     * no box): a line by its line rects, money whole, an
+                     * outlined line in its ring on a second frame with its
+                     * glyphs shown. Every one must clear the floor; a frame
+                     * that failed is taken again once before it is believed.
                      */
                     if (retryWhy.length === 0 && (prep.fileArt ?? 0) > 0) {
                         const artStart = performance.now();
@@ -2602,39 +2634,38 @@ try {
                             if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
                             return r.result.value;
                         };
-                        const artOffRead = async () => {
-                            await page('window.__artOff(true)');
+                        const artRead = async (state) => {
+                            await page(`window.__artOff(${JSON.stringify(state)})`);
                             const blank = await capture();
-                            const read = await reread();
-                            const why = [...blank.why, ...read.why];
+                            const why = [...blank.why];
                             let shown;
-                            if (why.length === 0 && read.live.boxes.some((t) => t.ring > 0)) {
+                            if (why.length === 0 && targets.some((t) => t.ring > 0)) {
                                 await page('window.__contrastGlyphs(true)');
                                 shown = await capture();
                                 await page('window.__contrastGlyphs(false)');
                                 why.push(...shown.why);
                             }
-                            await page('window.__artOff(false)');
-                            if (why.length === 0 && read.live.boxes.length !== targets.length) {
-                                why.push(`${read.live.boxes.length} boxes with the art off where the read had ${targets.length}`);
-                            }
+                            await page("window.__artOff('off')");
                             if (why.length > 0) return { why };
-                            const reads = read.live.boxes.map((t) => ({
+                            const reads = targets.map((t) => ({
                                 t,
                                 worst: t.ring > 0 ? ringRead(blank.shot, shown.shot, t).worst : readOne(blank.shot, t).worst,
                             }));
                             return { why, reads };
                         };
-                        let art = await artOffRead();
-                        if (art.why.length === 0 && art.reads.some((r) => r.worst !== undefined && r.worst < PIXEL_CONTRAST_FLOOR)) {
-                            await sleep(250);
-                            art = await artOffRead();
-                        }
-                        if (art.why.length > 0) {
-                            retryWhy = art.why.map((w) => `for the art-off frame, ${w}`);
-                        } else {
-                            artOffJobs += 1;
-                            artOffJobsByClass[plannedJob.sheetClass] = (artOffJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
+                        const states = (prep.fileArtMixed ?? 0) > 0 ? ['pending', 'failed'] : ['pending'];
+                        const leastBy = {};
+                        for (const state of states) {
+                            let art = await artRead(state);
+                            if (art.why.length === 0 && art.reads.some((r) => r.worst !== undefined && r.worst < PIXEL_CONTRAST_FLOOR)) {
+                                await sleep(250);
+                                art = await artRead(state);
+                            }
+                            if (art.why.length > 0) {
+                                retryWhy = art.why.map((w) => `for the art-${state} frame, ${w}`);
+                                break;
+                            }
+                            (artOffFrames[state] ??= {})[plannedJob.sheetClass] = ((artOffFrames[state] ?? {})[plannedJob.sheetClass] ?? 0) + 1;
                             let least = Infinity;
                             for (const { t, worst } of art.reads) {
                                 // A target with no sample is named by the
@@ -2646,12 +2677,17 @@ try {
                                 if (worst < PIXEL_CONTRAST_FLOOR) {
                                     dim.push(
                                         `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} ` +
-                                            `reads ${worst.toFixed(2)}:1 with the look's art as a failed load leaves it (${prep.fileArt} piece(s) of file art) — ` +
+                                            `reads ${worst.toFixed(2)}:1 with the look's file art ${state === 'pending' ? 'still loading (each box it masks painting nothing)' : 'failed (each failed layer skipped, the rest kept)'} — ` +
                                             `a-word-reads-when-the-art-does-not-load`,
                                     );
                                 }
                             }
-                            record.artOff = { art: prep.fileArt, read: art.reads.length, least: dumpValue(least) };
+                            leastBy[state] = dumpValue(least);
+                        }
+                        if (retryWhy.length === 0) {
+                            artOffJobs += 1;
+                            artOffJobsByClass[plannedJob.sheetClass] = (artOffJobsByClass[plannedJob.sheetClass] ?? 0) + 1;
+                            record.artOff = { art: prep.fileArt, mixed: prep.fileArtMixed ?? 0, read: targets.length, least: leastBy };
                         }
                         const entry = phases.get('art off') ?? { calls: 0, ms: 0 };
                         entry.calls += 1;
@@ -2841,18 +2877,27 @@ try {
             verdicts.push('no-look-pseudo-paints-inside-a-protected-box compared no frame — vacuous green');
         }
         /*
-         * The two 8f2 frames owe their subject wherever the tracked fixture is
-         * carried (the default run): it shows a mark and paints file art at
-         * the desk (`TRACKED_FIXTURE_CLASS`), so a run that hid no mark or
-         * failed no art there proved neither rule on anything.
+         * The two 8f2 frames owe their subject on every look that has one
+         * (the 8f2 critic's P3-8): a look whose geometry passes showed a mark
+         * owes a mark-hide frame, and a carried look whose sheet names a file
+         * in a mask or clip property (`CARRIED_FILE_ART`, read from the sheet
+         * itself — a computed miss in `markFileArt` must not read as nothing
+         * to fail) owes a pending art-off frame. The tracked fixture paints a
+         * mixed mask stack, so it owes a failed frame too: the failed state's
+         * one committed subject.
          */
-        if (PRIVATE_SHEET_CLASSES.includes(TRACKED_FIXTURE_CLASS)) {
-            if (!((lookMarkJobsByClass[TRACKED_FIXTURE_CLASS] ?? 0) > 0)) {
-                verdicts.push(`no-look-mark-paints-inside-a-protected-box hid no mark on a ${TRACKED_FIXTURE_CLASS} job — vacuous green`);
+        for (const cls of marksShownSeen) {
+            if (!((lookMarkJobsByClass[cls] ?? 0) > 0)) {
+                verdicts.push(`no-look-mark-paints-inside-a-protected-box hid no mark on a ${cls} job, and ${cls} shows marks — vacuous green`);
             }
-            if (!((artOffJobsByClass[TRACKED_FIXTURE_CLASS] ?? 0) > 0)) {
-                verdicts.push(`a-word-reads-when-the-art-does-not-load failed no art on a ${TRACKED_FIXTURE_CLASS} job — vacuous green`);
+        }
+        for (const cls of CARRIED_FILE_ART) {
+            if (!(((artOffFrames.pending ?? {})[cls] ?? 0) > 0)) {
+                verdicts.push(`a-word-reads-when-the-art-does-not-load read no ${cls} job with its file art pending, and its sheet names a file mask — vacuous green`);
             }
+        }
+        if (PRIVATE_SHEET_CLASSES.includes(TRACKED_FIXTURE_CLASS) && !(((artOffFrames.failed ?? {})[TRACKED_FIXTURE_CLASS] ?? 0) > 0)) {
+            verdicts.push(`a-word-reads-when-the-art-does-not-load read no ${TRACKED_FIXTURE_CLASS} job with its file art failed — its mixed stack is the failed state's subject`);
         }
         if (tideJobs !== plan.filter((j) => j.tide !== undefined).length) {
             // Every planned tide job held the tide (a job that did not is
@@ -2949,7 +2994,7 @@ try {
                     `✓ contrast: ${plan.length} planned jobs done once each, ${boxes} figure boxes ` +
                         `sampled against rendered pixels, the rain at its brightest on ${rainJobs}, ` +
                         `${lookPseudoJobs} job(s) with look pseudos and ${lookMarkJobs} with a look's marks hidden and compared (${lookPseudoPixels} protected pixels), ` +
-                        `${artOffJobs} job(s) read again with the look's file art failed (${artOffTargets} targets), ` +
+                        `${artOffJobs} job(s) read again with the look's file art pending (${Object.values(artOffFrames.pending ?? {}).reduce((a, b) => a + b, 0)}) or failed (${Object.values(artOffFrames.failed ?? {}).reduce((a, b) => a + b, 0)}; ${artOffTargets} reads), ` +
                         `the aurora's tide held at an end on ${tideJobs}, ` +
                         `${lineTargets} of them over their line rects, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +

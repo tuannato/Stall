@@ -18,6 +18,8 @@ import { SCREENS, handlers } from './fixtures';
 import { measuredLooks, paintView } from './looks';
 import { MONEY } from './moneySet';
 import { guardSheets } from '../scripts/served-sheets.mjs';
+import { SHIPPED_THEMES, decodeTheme, themeVars } from '../src/domain/theme';
+import { NAME_RUNGS_PROPERTY } from '../src/ui/lookHooks';
 
 /**
  * Every sheet a run serves — the role table's, and every private look's the
@@ -160,6 +162,22 @@ describe('no-app-sheet-names-a-mark', () => {
                 const base = sheet === stall && /^(\.zoom-frame \.zoom-ic )?\[data-look-mark\]$/.test(selector);
                 expect(shows && !base, `${sheet.path}: ${selector}`).toBe(false);
             }
+        }
+    });
+
+    /*
+     * The name's ladder is as inert as the marks (8f2, the 8f2 critic's
+     * P3-11): `applyNameTiers` reads a look's rung count in `--name-rungs`
+     * and asks nothing of a name with none — so `realFits`, the ink and
+     * clip model, never runs on the three looks. Held here rather than on a
+     * grep: no app sheet states the property, and no shipped look's vars do.
+     */
+    it('states no name ladder in any app sheet or shipped look', () => {
+        for (const sheet of SERVED.filter((s) => ['base', 'look', 'screen'].includes(s.role))) {
+            expect(sheet.css.replace(/\/\*[\s\S]*?\*\//g, ''), sheet.path).not.toMatch(/--name-rungs/);
+        }
+        for (const { id } of SHIPPED_THEMES) {
+            expect(Object.keys(themeVars(decodeTheme(id))), `look ${id}`).not.toContain(NAME_RUNGS_PROPERTY);
         }
     });
 

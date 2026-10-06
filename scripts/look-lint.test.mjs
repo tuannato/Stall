@@ -239,22 +239,34 @@ describe('a-look-may-make-only-its-sign-sticky', () => {
         assert.deepEqual(STICKY_BOXES.map((box) => box.subject), ['stall-head']);
     });
 
-    it('accepts the sign sticky in a look sheet, plainly or on its header, in a media block too', () => {
-        accepts('.t-neo .stall-head { position: sticky; top: 0; }');
-        accepts('.t-neo .stall-scroll > header.stall-head { position: sticky; top: 0; }');
-        accepts('@media (min-width: 680px) { .t-neo .stall-head { position: sticky; top: 0; } }');
+    it('accepts the sign sticky in a look sheet, off the wall, plainly or on its header, in a media block too', () => {
+        accepts('.t-neo:not(.shop-window) .stall-head { position: sticky; top: 0; }');
+        accepts('.t-neo:not(.shop-window) .stall-scroll > header.stall-head { position: sticky; top: 0; }');
+        accepts('.stall.t-neo:not(.shop-window) .stall-head { position: sticky; top: 0; }');
+        accepts('@media (min-width: 680px) { .t-neo:not(.shop-window) .stall-head { position: sticky; top: 0; } }');
+    });
+
+    it('refuses the sign sticky where it could be on the wall, a turned wall above all (8f2)', () => {
+        for (const rule of [
+            '.t-neo .stall-head { position: sticky; top: 0; }',
+            '.t-neo .stall-head:not(.shop-window) { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head, .t-neo .stall-head { position: sticky; top: 0; }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => /off the wall/.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
     });
 
     it('refuses any other sticky box, a sticky sign in a state, a prefixed sticky, and every fixed box — and the kit refuses the sign', () => {
         for (const rule of [
-            '.t-neo .item { position: sticky; top: 0; }',
-            '.t-neo .stall-head .stall-name { position: sticky; top: 0; }',
-            '.t-neo .stall-head, .t-neo .tabs { position: sticky; top: 0; }',
-            '.t-neo .stall-head.open { position: sticky; top: 0; }',
-            '.t-neo .stall-head:hover { position: sticky; top: 0; }',
-            '.t-neo .stall-head[data-x] { position: sticky; top: 0; }',
-            '.t-neo .stall-head { position: -webkit-sticky; top: 0; }',
-            '.t-neo .stall-head { position: fixed; top: 0; }',
+            '.t-neo:not(.shop-window) .item { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head .stall-name { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head, .t-neo:not(.shop-window) .tabs { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head.open { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head:hover { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head[data-x] { position: sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head { position: -webkit-sticky; top: 0; }',
+            '.t-neo:not(.shop-window) .stall-head { position: fixed; top: 0; }',
         ]) {
             plant(rule, /a fixed or sticky box follows the scroll/);
         }
@@ -876,7 +888,7 @@ describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
         const planted = `${css.slice(0, reduce)}@font-face { font-family: t-fixture-private-serif; src: url(./art/serif.woff2) format("woff2"); }\n\n${css.slice(reduce)}`;
         const problems = lintLookSheet(planted, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'serif.woff2'] } });
         assert.deepEqual(problems.filter((p) => /font-display/.test(p)).length, 1, problems.join('\n'));
-        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'mass.svg'] } }), []);
+        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'under-name.svg'] } }), []);
     });
 });
 

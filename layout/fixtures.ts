@@ -207,8 +207,14 @@ export const UNBROKEN = 'A'.repeat(178);
 
 /** The widest name a record carries: 32 bytes of the widest Latin letter (`hostile-name`, and the wall's long-name screens). */
 export const LONGEST_NAME = 'W'.repeat(32);
-/** A stall named in CJK: nine ideographs, 27 of the record's 32 bytes, and a tagline in the same script (8f2). */
-export const CJK_NAME = '山間清泉茶葉老舖子';
+/** A stall named in CJK: ten ideographs, 30 of the record's 32 bytes — the record's binding CJK case — and a tagline in the same script (8f2). */
+export const CJK_NAME = '山間清泉茶葉老舖子店';
+/**
+ * A name in Vietnamese capitals with stacked marks (8f2, the 8f2 critic's
+ * P1-1): its marks reach past the face's ascent, so a box that holds a
+ * line's slot cuts them and Ẫ reads Â. 29 bytes.
+ */
+export const STACKED_NAME = 'ẪỮỆ ẤẦẨ ẪỮỆ';
 export const CJK_TAGLINE = '每週新鮮烘焙，用心包裝';
 
 export const handlers: StallHandlers = {
@@ -867,15 +873,26 @@ export const SCREENS: Record<string, StallView> = {
      * A stall named in CJK (step 8f2; DECISIONS D4): the sign says so
      * (`data-script="cjk"`, `scriptOf`), and a look may set such a name its
      * own way — so the rule that the name stands whole
-     * (`the-sellers-name-stands-whole`) is measured on one. Nine ideographs,
-     * 27 bytes, near the record's 32; a CJK tagline under it. The glyphs come
-     * from the machine's own fallback face (no CJK face is served): the
-     * layout is per OS here, stated in `PROBE-RULES.md`. Geometry only.
+     * (`the-sellers-name-stands-whole`) is measured on one. Ten ideographs,
+     * 30 bytes, the record's binding CJK case; a CJK tagline under it. The
+     * glyphs come from the machine's own fallback face (no CJK face is
+     * served): the layout is per OS here, and a machine with no CJK face
+     * fails `a-cjk-name-is-set-in-a-cjk-face` rather than measuring boxes.
+     * Geometry only.
      */
     'cjk-name': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         stallName: CJK_NAME,
         tagline: CJK_TAGLINE,
+    }),
+    /*
+     * A stall named in Vietnamese capitals with stacked marks (8f2, the 8f2
+     * critic's P1-1): the marks run past the face's ascent, so a look that
+     * bounds its name must leave them room. Geometry only.
+     */
+    'stacked-name': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        stallName: STACKED_NAME,
     }),
     /*
      * The state screens. Most sellers meet one of these before they ever see
@@ -1220,7 +1237,8 @@ export const SCREENS: Record<string, StallView> = {
      * record carries, `hostile-name`'s — on the Cycle card and in Browse, at
      * the desk width (the first two) and at the 1920x1080 a wall is hung at
      * (the last two), and every one on the portrait wall and the counter
-     * tablet (`WINDOW_SCREENS`). And a CJK name on the Cycle card. Here for
+     * tablet (`WINDOW_SCREENS`). And a stacked-mark name and a CJK name on
+     * the Cycle card. Here for
      * `the-sellers-name-stands-whole`: a look that bounds its name on a wall
      * keeps it whole or climbs its ladder, and the rule is what fails when it
      * does not. Geometry only; bare and all worn.
@@ -1235,6 +1253,12 @@ export const SCREENS: Record<string, StallView> = {
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
         stallName: LONGEST_NAME,
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-stacked-name': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        stallName: STACKED_NAME,
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
     'shop-window-cjk-name': base({
@@ -1562,8 +1586,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // for the sign; the decoration interactions they could stage are
     // `offers`' and `shop-window-cycle`'s.
     'cjk-name',
+    'stacked-name',
     'shop-window-long-name',
     'shop-window-browse-long-name',
+    'shop-window-stacked-name',
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
@@ -1677,8 +1703,10 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
      * whatever face each machine has.
      */
     'cjk-name',
+    'stacked-name',
     'shop-window-long-name',
     'shop-window-browse-long-name',
+    'shop-window-stacked-name',
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',

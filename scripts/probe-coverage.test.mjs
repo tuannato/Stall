@@ -32,7 +32,8 @@ const full = {
     // the tracked fixture's subjects — a rung climbed, a mark shown, a
     // sticky sign whose region scrolled.
     nameLinesByClass: { 't-modern': 40, 't-neo': 40, 't-rural': 40, 't-skeleton': 40, 't-fixture-private': 40 },
-    nameTiersByClass: { 't-fixture-private': { 1: 2 } },
+    nameTiersByClass: { 't-fixture-private': { 1: 2, 2: 1 } },
+    nameVerticalByClass: { 't-fixture-private': 6 },
     marksShownByClass: { 't-fixture-private': 30 },
     stickyByClass: { 't-fixture-private': { paints: 20, scrolled: 18, stops: 90 } },
     tryOnNamesByClass: { 't-fixture-private': 2 },
@@ -223,7 +224,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies, which have a case of their own below.
-        const { nameLinesByClass, nameTiersByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -256,7 +257,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         // signs, per look, on the page and wall passes.
         assert.match(
             probeCoverageLine('desktop', { ...quiet, nameLinesByClass, nameTiersByClass, marksShownByClass, stickyByClass, tryOnNamesByClass }),
-            / · sign lines read whole: t-fixture-private 40, t-modern 40, t-neo 40, t-rural 40, t-skeleton 40 · name rungs: t-fixture-private 1:2 · marks shown: t-fixture-private 30 · sticky signs \(paints\/scrolled\/stops\): t-fixture-private paints:20\/scrolled:18\/stops:90 · stress names tried on: t-fixture-private 2$/,
+            / · sign lines read whole: t-fixture-private 40, t-modern 40, t-neo 40, t-rural 40, t-skeleton 40 · name rungs: t-fixture-private 1:2\/2:1 · marks shown: t-fixture-private 30 · sticky signs \(paints\/scrolled\/stops\): t-fixture-private paints:20\/scrolled:18\/stops:90 · stress names tried on: t-fixture-private 2$/,
         );
         assert.match(probeCoverageLine('tablet', { ...quiet, nameLinesByClass: { 't-neo': 3 } }), /status line asked: 50 · sign lines read whole: t-neo 3$/);
     });
@@ -310,15 +311,25 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
     });
 
     it('owes the tracked fixture its sticky sign, its mark and its rung, where it is carried', () => {
-        const bare = { ...read, stickyByClass: {}, marksShownByClass: {}, nameTiersByClass: {} };
+        const bare = { ...read, stickyByClass: {}, marksShownByClass: {}, nameTiersByClass: {}, nameVerticalByClass: {} };
         assert.deepEqual(probeCoverageGaps('desktop', bare, options), [
             'a-sticky-sign-covers-nothing-as-the-region-scrolls scrolled no region under the t-fixture-private sign',
             'no-look-mark-paints-inside-a-protected-box has no subject: the t-fixture-private stall showed no mark',
             'the-sellers-name-stands-whole read no t-fixture-private name on a rung of its ladder',
+            'the-sellers-name-stands-whole read no vertical t-fixture-private name',
         ]);
         assert.deepEqual(probeCoverageGaps('mobile', bare, options), [
             'the-sellers-name-stands-whole read no t-fixture-private name on a rung of its ladder',
+            'the-sellers-name-stands-whole read no t-fixture-private name on the last rung of its ladder',
         ]);
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, nameTiersByClass: { 't-fixture-private': { 1: 4 } } }, options), [
+            'the-sellers-name-stands-whole read no t-fixture-private name on the last rung of its ladder',
+        ]);
+        // A pass that measured the CJK screen owes the face it read.
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, screensMeasured: ['cjk-name'] }, options), [
+            'a-cjk-name-is-set-in-a-cjk-face read no CJK sign line on a pass that measured cjk-name',
+        ]);
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, screensMeasured: ['cjk-name'], cjkFaces: ['0.945em'] }, options), []);
         // Every carried look owes its stress names on a try-on, on a page pass.
         assert.deepEqual(probeCoverageGaps('mobile', { ...read, tryOnNamesByClass: {} }, options), [
             'the-sellers-name-stands-whole measured no stress name on a try-on of t-fixture-private',
