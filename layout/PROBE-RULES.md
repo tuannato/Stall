@@ -1737,7 +1737,13 @@ what they were when step 5b landed (mobile: clipped-away 63, not-rendered
 35; desktop: 23 and 28; canvas: 726 and 0 — 964 until the wall payment's lines joined the money set and left the line read; `clipped-away` also counts a
 target whose own `clip-path` leaves under 2px). A pass that finds more
 fails and names the count; one that finds fewer says so, and the ceiling
-should come down with the change that lowered it.
+should come down with the change that lowered it. **The ceiling is the
+public run's measurement** (8e2): it counts the shipped looks' and the
+skeleton's jobs alone, and a private look a selection carries has its own
+count, printed on the run ("private looks' line targets with no line rect
+(reported, not held)") and pinned by nobody yet — the fixture's, on
+2026-10-06: mobile 16 clipped away and 10 not rendered, desktop 4 and 8,
+canvas 205 and 0.
 
 ## A halo never reaches a neighbour's text, and what no target reads is said (step 5b, 2026-09-26)
 
@@ -4429,4 +4435,114 @@ class and is red in the behaviour case alone.
   and `owed-follows-what-a-pass-wore` fails an owed list that misses a
   class the passes wore; a rename that reached every place but
   `OWED_BY_CLASS` is not seen, and owes no less for it.
+
+## The probe measures the private looks a selection carries (step 8e2, 2026-10-06)
+
+Until 8e2 every harness command refused a private-look selection (8b2's
+stop-gap: the probe had passed green over a look a shell export put in its
+bundle, and said nothing). Now `pnpm test:layout` reads one
+(`harnessSelection`, `scripts/looks-selection.mjs`): with
+`STALL_LOOKS_TARGET` and `STALL_LOOKS_DIR` set, the probe's build carries
+what a build with that selection carries — the commit read once and pinned
+into the build (`scripts/harness-looks.mjs`) — and every pass measures the
+carried looks beside the shipped three and the skeleton: the geometry
+passes, the portrait wall and the counter tablet, both reduced-motion
+passes, the contrast pass (bare, every all-worn variant per mood, D11) and
+the transparency pass. With no selection the run is the one it was.
+
+**A paid look is painted through the try-on, under the harness's own
+licence.** The app's gate paints a record naming a paid look as the default
+and step 8 licenses no stall, so a probe that measured such a look's record
+would measure the default under its name. `layout/looks.ts` holds an
+explicit licence for every paid look the page carries (`HARNESS_LICENCE`),
+asks the app's own gate what the look paints once licensed
+(`harnessGateFaults`, every page), and puts it on screen through
+`previewLook` — the one road the app paints a paid look with no licence —
+in `paintView`, the one place a harness page composes a look onto a view.
+The view's `lookSheets` is where the look's sheet stands **as the app's
+loader holds it** at paint time (`lookSheetState`), after the page loaded it
+through the loader before its first paint: a sheet not ready is held back by
+the renderer (8d2) and the class audit refuses the paint.
+
+**The gate is held, in Chrome: `the-record-road-paints-a-locked-look-as-the-default`.**
+On every pass that measures `offers`, each paid look is painted once the
+way the app would paint a record naming it — its sheet `ready`, the worn
+set the app computes through the gate for a locked look (none) — and must
+paint the default's class, none of its own rows' classes, and
+`THEME_NOT_UNLOCKED` on the sign. Painted with `renderStall` directly, so
+the default it paints is not counted among the measured looks.
+`recordRoadChecks` is echoed and the runner owes one per paid carried look on
+the phone and desk passes (`probe-coverage.mjs`).
+
+**What the runner holds.**
+- `EXPECTED_SHEET_CLASSES` is derived: the shipped classes from the role
+  table's look rows, the private ones from what the selection carries
+  (`the-runner-expects-the-classes-it-derives`). The page echoes the
+  private classes its build carries (`privateClasses`), and a pass whose
+  set is not the selection's is refused before its verdict is read — before
+  the class audit, whose sentence would only say a class was not painted.
+- Coverage owes a carried look its row read
+  (`a-shipped-row-states-the-sizes-its-sheet-paints`) and its sheet's name
+  (`a-look-is-measured-with-its-sheet`), never a door mini (the deck is the
+  three shipped looks, Q8).
+- The sign's name is owed on a carried look bare, and all worn wherever the
+  plan wears it.
+- `LINE_SKIP_CEILING`, Grid horizon's worst and the codes owed by name stay
+  the public run's; a carried look's line skips are printed.
+
+**The dist check in a harness build.** The plugin's dist check (8b2, run by
+the build itself under a selection) failed the probe's and the kit's builds
+on what the harness carries beside the app: the step-6 fixture look's sheet
+(`t-fixture-worn`), its art (the bytes the tracked private fixture copies)
+and the showroom's own stylesheet. A harness build's config hands the plugin
+`HARNESS_LOOK_CLASSES` (`forHarness` in `vite.config.ts`); a sheet naming
+one, the files it names and the stylesheets a page under `layout/` links are
+read as the harness's, and everything else holds as on a deploy build
+(`the-dist-check-knows-a-harness-builds-own-looks`).
+
+**What the probe found in the tracked fixture, the day it first measured
+it** (the fixture's to fix, never a rule's to relax): its crest painted the
+sign's name in the ink it already wore, so the billboard read three
+failures on every pass — "a paid row paints nothing the base look does
+not", "a mood erases a row worn with it" and "a worn-together row erases
+the others"; and its dark mood swapped the ground and the ink and left every
+card and chip light — 399 figures under 3:1 all worn (white on white at
+1.00:1, the tagline at 1.69:1, the wall's status line at 1.16:1) and six on
+the transparent overlay. A lighter mood still put the accent links at
+2.89–2.97:1 over the grid ground. The crest now paints the name in the
+accent, and the mood is a light cool ground, ΔE00 9.5 from the look's own.
+
+**Measured** (this Mac, 2026-10-06): no selection 138.0 s, 515 contrast
+jobs, passed; the tracked fixture selected 157.7 s, 643 jobs, 10,957 figure
+boxes, 198 boxes over black and white in the transparency pass, passed.
+Under the 240 s the critic set for sharding.
+
+**Proved red**, each with the fixture selected: the gate bypassed in
+`lookTable.ts` (the gate check and the record-road rule fail on every page
+pass, three sentences each); the private look's row-size read dropped
+(coverage: "read no row for t-fixture-private"); the private sheet never
+loaded before the first paint (every pass paints the default — the class
+audit refuses it, 128 contrast jobs are refused as "the paint wore t-modern",
+and the sign's name is owed and unread); the harness dropping the carried
+look (every page pass: "the page's build carries no private look where the
+selection carries t-fixture-private").
+
+**Not covered, stated.**
+- **The record a licensed stall would compose is not measured**: the
+  try-on is not a record, so the Studio reads back the fixture's record
+  (the default) under the look, and the name sheet over a paid try-on
+  composes no record and says `PUBLISH_LOOK_NOT_UNLOCKED` (8b2) — so
+  `publish-name` under a paid look measures the refusal, not the hex and
+  code a step-9 licensed seller would sign.
+- **The hold itself** (a look pending, then painted once its sheet lands)
+  is measured in Chrome only as far as a sheet never loaded paints the
+  default (the plant above); the pending-to-ready transition, the 3 s wait
+  and the retries are happy-dom's.
+- **The kit's probe refuses a selection** (`workshop:probe` measures the
+  kit's look alone), and so does `print-measure`.
+- A private row that moves has no reader until its `look.json` carries the
+  plan's `guard` field (8i); `every-moving-decoration-has-a-reader-or-a-reason`
+  refuses one meanwhile. The fixture has none.
+- The new probe rules of 8f2 (the sticky scroll pass, the art-off read, the
+  mark capture, the vertical name) are not built.
 
