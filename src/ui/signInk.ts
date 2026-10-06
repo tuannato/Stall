@@ -15,7 +15,11 @@
  * Vietnamese capital the stacked marks run past both: "ẪỮỆ" at 44px in
  * Inter 800 reaches 48.7px above its baseline against a face ascent of 43
  * (the critic's measurement), so a box that holds the slot cuts the marks
- * and Ẫ reads Â. Along the line, its advance, trailing letter-spacing aside.
+ * and Ẫ reads Â. The text measured is the text painted: `text-transform`
+ * applied, small caps and the width handed to the canvas (`painted`; the
+ * critic's re-check of cdedb29 — read as written, a lowercase name a look
+ * uppercases was measured 8px short of its marks). Along the line, its
+ * advance, trailing letter-spacing aside.
  * In a vertical writing mode the over side of a line is its right, so the
  * ink is turned onto the horizontal axis — exact for a sideways (rotated)
  * line, an approximation for upright glyphs, which sit on a central
@@ -31,15 +35,22 @@
  * the probe resolves a polygon itself and fails the rest. The ladder asks
  * no clip but its own box (`inkFits`): the shapes cost the app's bundle
  * ~2.7 KB the served ceiling does not have, so a look that clips its name
- * with a shape is failed by the probe rather than climbed past.
+ * with a shape is failed by the probe rather than climbed past — and the
+ * probe holds the name's own padding box inside every clip and shape above
+ * it too, so the ladder's fit (ink inside the box) and the probe's (the box
+ * inside every clip) keep a name whole at lengths no screen paints.
  */
 
 export type Box = { left: number; top: number; right: number; bottom: number };
 
 /** A clip on the axes, at a padding box: `overflow` or `contain: paint`. */
 export type AxisClip = { kind: 'axes'; box: Box; x: boolean; y: boolean; scrollsX: boolean; scrollsY: boolean };
-/** A `clip-path` shape this model resolves: whether a line's box stands inside it. */
-export type ShapeClip = { kind: 'shape'; inside: (b: Box) => boolean; what: string };
+/**
+ * A `clip-path` shape this model resolves: whether a line's box stands
+ * inside it, and for an `inset()` the box it is (read like an axis clip,
+ * which a box above a scroller has to be).
+ */
+export type ShapeClip = { kind: 'shape'; inside: (b: Box) => boolean; what: string; box?: Box };
 /** A `clip-path` this model does not resolve. */
 export type OtherClip = { kind: 'other'; what: string };
 export type PaintClip = AxisClip | ShapeClip | OtherClip;
@@ -116,6 +127,7 @@ function shapeOf(el: Element, value: string): ShapeClip | OtherClip | undefined 
         return {
             kind: 'shape',
             what: value,
+            box,
             inside: (l) => l.left >= box.left - 1 && l.right <= box.right + 1 && l.top >= box.top - 1 && l.bottom <= box.bottom + 1,
         };
     }
@@ -170,6 +182,38 @@ export function paintClips(el: Element): PaintClip[] {
 
 let measure: CanvasRenderingContext2D | null | undefined;
 
+/** `font-stretch`'s computed percentages that canvas takes as keywords. */
+const STRETCH: Readonly<Record<string, string>> = {
+    '50%': 'ultra-condensed',
+    '62.5%': 'extra-condensed',
+    '75%': 'condensed',
+    '87.5%': 'semi-condensed',
+    '112.5%': 'semi-expanded',
+    '125%': 'expanded',
+    '150%': 'extra-expanded',
+    '200%': 'ultra-expanded',
+};
+
+/**
+ * A line's text as it is painted: `text-transform` applied (the 8f2
+ * critic's re-check, item 1 — Neo's row uppercases its sign, and a seller
+ * types a lowercase Vietnamese name: "ẫữệ" measured as written reaches
+ * 40.7px above the baseline at 44px in Inter 800, "ẪỮỆ" as painted 48.7).
+ * `capitalize` raises the letter after any non-letter, which can only
+ * raise more letters than CSS does — the measure errs tall, never short.
+ * Case is mapped without a locale: the app's documents are `lang="en"`.
+ * `full-width` and `full-size-kana` are not applied, stated.
+ */
+function painted(text: string, transform: string): string {
+    return transform === 'uppercase'
+        ? text.toUpperCase()
+        : transform === 'lowercase'
+          ? text.toLowerCase()
+          : transform === 'capitalize'
+            ? text.replace(/(^|\P{L})(\p{L})/gu, (_, a: string, b: string) => a + b.toUpperCase())
+            : text;
+}
+
 /**
  * The ink of every line of `el`'s text: one box per line of each text
  * node, across the lines from the glyphs' measured reach about the
@@ -207,13 +251,19 @@ export function inkLines(el: Element): Box[] {
             words[line] += ch;
         }
         lines.forEach((r, i) => {
-            const word = words[i]!.trim();
+            const word = painted(words[i]!.trim(), cs.textTransform);
             if (word === '') return;
             let up = 0;
             let down = 0;
             let ascent = 0;
             if (ctx !== null) {
                 ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+                // Small caps and a width as painted; a stretch only a
+                // percentage states falls back to normal (canvas takes the
+                // nine keywords alone), which moves an advance, not the reach
+                // above and below the baseline this measure reads.
+                ctx.fontVariantCaps = cs.fontVariantCaps as CanvasFontVariantCaps;
+                ctx.fontStretch = (STRETCH[cs.fontStretch] ?? 'normal') as CanvasFontStretch;
                 const m = ctx.measureText(word);
                 [up, down, ascent] = [m.actualBoundingBoxAscent, m.actualBoundingBoxDescent, m.fontBoundingBoxAscent];
             }

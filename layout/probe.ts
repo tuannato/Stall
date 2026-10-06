@@ -61,7 +61,7 @@ import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
-import { inkLines, paintClips, type Box } from '../src/ui/signInk';
+import { inkLines, paddingBox, paintClips, type Box } from '../src/ui/signInk';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -3569,42 +3569,56 @@ function fileClipFaults(screen: string, label: string): Failure[] {
 
 /*
  * **The seller's name stands whole** (`the-sellers-name-stands-whole`, step
- * 8f2; the step-8 critic's item 10, and the 8f2 critic's P1-1). A look that
- * bounds the sign's name in a box of fixed size — a column, the name set on
- * its end — can cut a long name, and nothing saw it: `text-spills` reads a
- * box whose overflow is visible, `cutSideways` is sideways by design, the
- * line reads clip their rects to what shows, and the name is no protected
- * box. DECISIONS D4 measured the binding case — a 32-byte Latin name run off
- * the bottom of a wall, its last letters gone — and a cut name is an absent
- * one. So on every screen, look and variant of every geometry pass, every
- * line of the sign's name and tagline must stand whole on both axes inside
- * every clip from its own box up to the viewport — `nothing-on-the-wall-is-
- * cut-from-below`'s shape — measured by **the ink and clip model the
- * name's ladder fits by** (`src/ui/signInk.ts`):
- * - a line is its **ink**: the glyphs' measured reach about the baseline
- *   (`inkLines`), so a Vietnamese capital's stacked marks above the face's
- *   ascent are part of the name — the slot this rule first read let "ẪỮỆ"
- *   lose its top marks and read "ÂƯÊ", green;
- * - a **clip** is every paint clip on the walk (`paintClips`): `overflow` on
- *   an axis and `contain: paint` (a box; inside one that scrolls on that
- *   axis the line is reachable, and from there up it is the scroller's
- *   showing part that must hold it), a `clip-path` `inset()`, `circle()` or
- *   `ellipse()` (resolved; read before any scroller is entered), a
- *   `polygon()` through `parsePolygon`, and anything else a clip this rule
- *   cannot read — a failure, never a pass; the viewport scrolls down when the
- *   page does and never sideways;
- * - **a mask** (any `mask-image` or mask border source but `none`) on the
- *   line or above it up to the stall is refused outright, not modelled: a
- *   gradient can fade the name to nothing in any shape.
+ * 8f2; the step-8 critic's item 10, the 8f2 critic's P1-1 and its re-check
+ * of cdedb29). A look that bounds the sign's name in a box of fixed size — a
+ * column, the name set on its end — can cut a long name, and nothing saw
+ * it: `text-spills` reads a box whose overflow is visible, `cutSideways` is
+ * sideways by design, the line reads clip their rects to what shows, and the
+ * name is no protected box. DECISIONS D4 measured the binding case — a
+ * 32-byte Latin name run off the bottom of a wall, its last letters gone —
+ * and a cut name is an absent one. So on every screen, look and variant of
+ * every geometry pass, for every line of the sign's name and tagline:
+ * - **it is painted** (`unpainted`): no `content-visibility` but `visible`
+ *   on it or above it up to the stall, every text of it `visibility:
+ *   visible`, its opacity to the root at least `UNPAINTED_OPACITY` — a line
+ *   nobody sees is not whole, and its rects (of skipped content, or of
+ *   nothing drawn) would otherwise read whole;
+ * - **its ink stands whole** on both axes inside every clip from its own box
+ *   up to the viewport (`nothing-on-the-wall-is-cut-from-below`'s shape),
+ *   by the ink model the name's ladder fits by (`src/ui/signInk.ts`): the
+ *   glyphs' measured reach about the baseline (`inkLines`), of the text as
+ *   PAINTED — `text-transform` applied, small caps and the width handed to
+ *   the canvas — so a Vietnamese capital's stacked marks above the face's
+ *   ascent are part of the name, and a lowercase name a look uppercases is
+ *   measured in capitals ("ẫữệ" 40.7px above the baseline at 44px in Inter
+ *   800, "ẪỮỆ" 48.7px; read as written, the ladder never climbed and the
+ *   shot read "ÂŨỆ", green);
+ * - **its own padding box stands inside every clip and shape above it** —
+ *   the ladder keeps the ink inside that box, this keeps the box inside
+ *   every clip, so a name the ladder fits stands whole at a length no screen
+ *   paints (a curved shape is not monotonic in the name's length). Exact
+ *   for a box the look bounds — the ladder's subject; a box that shrinks to
+ *   its text is held at the lengths painted, the 32-byte names among them.
+ * A clip (`lineCut`, over `paintClips`) is `overflow` on an axis and
+ * `contain: paint` (a box), a `clip-path` `inset()` (a box, wherever it
+ * stands), `circle()` or `ellipse()` (resolved, at rest), a `polygon()`
+ * through `parsePolygon` (at rest), and anything else — or any shape but an
+ * `inset()` above a region that scrolls — a clip this rule cannot read: a
+ * failure, never a pass. Scrolling is read as where it can take the line
+ * (`lineCut`'s docblock): a region at rest at its top only carries a line
+ * up, so a cut above the scroller that takes the line's at-rest place is a
+ * cut at every scroll (the critic's `inset(150px 0 0 0)` on the stall root
+ * read "verside Goods" at 1280 on `offers`, green). **A mask** (any
+ * `mask-image` or mask border source but `none`) on the line or above it up
+ * to the stall is refused outright, not modelled: a gradient can fade the
+ * name to nothing in any shape.
  * The lines read, the vertical ones and the rungs climbed are counted per
  * look (`nameLinesByClass`, `nameVerticalByClass`, `nameTiersByClass`); the
  * phone and desk passes owe lines read on every look they painted, and the
  * tracked fixture's rungs and vertical lines (`probe-coverage.mjs`). Not
  * read: a name inside a turned wall (`[data-turn]`), whose rects are
  * axis-aligned boxes of a rotated paint, and the door's deck minis. Proved
- * red by the 32-byte fixture with the ladder off, a `clip-path: inset()` on
- * the name and the stacked-mark name with no room for its marks
- * (`PROBE-RULES.md`).
+ * red by every plant `PROBE-RULES.md` lists under "Step 8f2".
  */
 const NAME_WHOLE_CHECK = 'the-sellers-name-stands-whole';
 const nameLinesByClass: Record<string, number> = {};
@@ -3612,54 +3626,95 @@ const nameVerticalByClass: Record<string, number> = {};
 const nameTiersByClass: Record<string, Record<string, number>> = {};
 const MASK_PROPS = ['mask-image', '-webkit-mask-image', 'mask-border-source', '-webkit-mask-box-image-source'] as const;
 
-/** Why a line's ink box does not stand whole inside every clip from `from` up to the viewport, or undefined. */
+/**
+ * Why a box (a line's ink, or a line's own padding box) does not stand
+ * whole inside every clip from `from` up to the viewport, or undefined.
+ *
+ * **Where scrolling can take it** (the 8f2 critic's re-check, item 2). The
+ * walk carries, per axis, the interval of displacements the box can be
+ * moved by and still stand inside every clip read so far — `[0, 0]` at
+ * rest. A clip narrows it: the box must fit inside the clip's span at some
+ * displacement in it. A scroller widens it before its own box is read (its
+ * box does not move with its own scroll, the content does): by how far it
+ * can still scroll on and how far it has scrolled back, so a region at rest
+ * at its top can only carry a line UP — a clip above the scroller that cuts
+ * the line's at-rest place from above cuts it at every scroll. A sticky box
+ * on the walk does not move with the next scroll container's scroll, so
+ * that container widens nothing (conservative: a sticky box that runs out
+ * of its containing block does move). The page scrolls down the same way
+ * at the end of the walk, never sideways.
+ *
+ * A `clip-path` `inset()` is a box at its element, read on both axes like
+ * an axis clip wherever it stands; any other shape is read at rest where no
+ * scroller has been entered, and above a scroller fails as a clip this rule
+ * cannot read — a shape that does not move when the region scrolls, over a
+ * line that does, is a cut at some scroll no fixed reading can rule out.
+ */
 function lineCut(rect: Box, from: Element): string | undefined {
-    const span = { y: { lo: rect.top, hi: rect.bottom } as Span, x: { lo: rect.left, hi: rect.right } as Span };
+    const box = { y: { lo: rect.top, hi: rect.bottom } as Span, x: { lo: rect.left, hi: rect.right } as Span };
     const need = { y: rect.bottom - rect.top, x: rect.right - rect.left };
+    const reach = { y: { lo: 0, hi: 0 } as Span, x: { lo: 0, hi: 0 } as Span };
     const scrolled = { y: false, x: false };
+    const stuck = { y: false, x: false };
     const via = { y: '', x: '' };
     const side = { y: 'from below or above', x: 'sideways' };
+    const overlap = (s: Span, edge: Span): number => Math.max(0, Math.min(s.hi, edge.hi) - Math.max(s.lo, edge.lo));
     const clipTo = (axis: 'y' | 'x', by: string, edge: Span): string | undefined => {
-        const s = span[axis];
-        const shown = Math.max(0, Math.min(s.hi, edge.hi) - Math.max(s.lo, edge.lo));
-        if (!scrolled[axis] && !(s.lo >= edge.lo - 1 && s.hi <= edge.hi + 1)) {
-            return `is cut ${side[axis]} by ${by}${via[axis]}: ${Math.round(shown)} of its ${Math.round(need[axis])}px show (${Math.round(s.lo)}–${Math.round(s.hi)} inside ${Math.round(edge.lo)}–${Math.round(edge.hi)})`;
+        const s = box[axis];
+        const r = reach[axis];
+        const lo = Math.max(r.lo, edge.lo - 1 - s.lo);
+        const hi = Math.min(r.hi, edge.hi + 1 - s.hi);
+        if (lo <= hi) {
+            reach[axis] = { lo, hi };
+            return undefined;
         }
-        if (scrolled[axis] && shown + 1 < need[axis]) {
-            return `can never be brought whole into view${via[axis]}: ${by} shows ${Math.round(shown)} of its ${Math.round(need[axis])}px ${side[axis]}`;
+        if (!scrolled[axis]) {
+            return `is cut ${side[axis]} by ${by}: ${Math.round(overlap(s, edge))} of its ${Math.round(need[axis])}px show (${Math.round(s.lo)}–${Math.round(s.hi)} inside ${Math.round(edge.lo)}–${Math.round(edge.hi)})`;
         }
-        span[axis] = { lo: Math.max(s.lo, edge.lo), hi: Math.min(s.hi, edge.hi) };
-        return undefined;
+        // The most of it any reachable scroll shows, for the message.
+        const at = (d: number): number => overlap({ lo: s.lo + d, hi: s.hi + d }, edge);
+        const clamp = (d: number): number => Math.min(r.hi, Math.max(r.lo, d));
+        const best = Math.max(at(clamp(edge.lo - s.lo)), at(clamp(edge.hi - s.hi)));
+        return `can never be brought whole into view${via[axis]}: ${by} shows at most ${Math.round(best)} of its ${Math.round(need[axis])}px ${side[axis]}`;
     };
     for (let at: Element | null = from; at !== null && at !== document.documentElement && at !== document.body; at = at.parentElement) {
         const own = at === from ? `its own box (${describe(at)})` : describe(at);
+        const cs = getComputedStyle(at);
         for (const clip of paintClips(at)) {
             if (clip.kind === 'axes') {
                 for (const axis of ['y', 'x'] as const) {
-                    if (!clip[axis]) continue;
-                    const edge = axis === 'y' ? { lo: clip.box.top, hi: clip.box.bottom } : { lo: clip.box.left, hi: clip.box.right };
-                    if ((axis === 'y' ? clip.scrollsY : clip.scrollsX) && !scrolled[axis]) {
-                        // Reachable inside this box by scrolling it: from here up the
-                        // scroller's own box is what must show, at the line's size.
-                        span[axis] = edge;
+                    const overflow = axis === 'y' ? cs.overflowY : cs.overflowX;
+                    const container = overflow === 'hidden' || overflow === 'auto' || overflow === 'scroll';
+                    if ((axis === 'y' ? clip.scrollsY : clip.scrollsX) && at !== from) {
+                        const back = Math.abs(axis === 'y' ? at.scrollTop : at.scrollLeft);
+                        const room = (axis === 'y' ? at.scrollHeight - at.clientHeight : at.scrollWidth - at.clientWidth) - back;
+                        if (!stuck[axis]) reach[axis] = { lo: reach[axis].lo - Math.max(0, room), hi: reach[axis].hi + back };
                         via[axis] = ` (in ${describe(at)}, which scrolls)`;
                         scrolled[axis] = true;
-                        continue;
                     }
+                    if (container) stuck[axis] = false;
+                    if (!clip[axis]) continue;
+                    const edge = axis === 'y' ? { lo: clip.box.top, hi: clip.box.bottom } : { lo: clip.box.left, hi: clip.box.right };
                     const why = clipTo(axis, own, edge);
                     if (why !== undefined) return why;
                 }
                 continue;
             }
-            // A shape is read where the line still stands at its own place:
-            // past a scroller, where it is, is where the reader scrolls it.
-            if (scrolled.x || scrolled.y) continue;
+            if (clip.kind === 'shape' && clip.box !== undefined) {
+                const by = `${own}'s clip-path ${clip.what.slice(0, 60)}`;
+                const why = clipTo('y', by, { lo: clip.box.top, hi: clip.box.bottom }) ?? clipTo('x', by, { lo: clip.box.left, hi: clip.box.right });
+                if (why !== undefined) return why;
+                continue;
+            }
+            if (scrolled.x || scrolled.y) {
+                return `stands under a clip-path on ${own} above a region that scrolls${via.y || via.x}, which this rule cannot read at every scroll: ${clip.what.slice(0, 60)}`;
+            }
             if (clip.kind === 'shape') {
                 if (!clip.inside(rect)) return `is cut by ${own}'s clip-path ${clip.what}`;
                 continue;
             }
-            const box = at.getBoundingClientRect();
-            const poly = clip.what.startsWith('polygon(') ? parsePolygon(clip.what, box.width, box.height) : undefined;
+            const frame = at.getBoundingClientRect();
+            const poly = clip.what.startsWith('polygon(') ? parsePolygon(clip.what, frame.width, frame.height) : undefined;
             if (poly === undefined) return `stands under a clip-path this rule cannot read on ${own}: ${clip.what.slice(0, 60)}`;
             const corners: [number, number][] = [
                 [rect.left, rect.top],
@@ -3667,18 +3722,52 @@ function lineCut(rect: Box, from: Element): string | undefined {
                 [rect.left, rect.bottom],
                 [rect.right, rect.bottom],
             ];
-            if (corners.some(([x, y]) => !pointInPolygon(x - box.left, y - box.top, poly))) {
+            if (corners.some(([x, y]) => !pointInPolygon(x - frame.left, y - frame.top, poly))) {
                 return `is cut by ${own}'s clip-path ${clip.what.slice(0, 60)}`;
             }
         }
+        // A sticky box stays where it is while its scroll container scrolls.
+        if (cs.position === 'sticky') {
+            if (cs.top !== 'auto' || cs.bottom !== 'auto') stuck.y = true;
+            if (cs.left !== 'auto' || cs.right !== 'auto') stuck.x = true;
+        }
     }
-    const pageScrolls = document.documentElement.scrollHeight > window.innerHeight + 1;
-    if (pageScrolls && !scrolled.y) {
+    const room = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+    if (room > 1 || window.scrollY > 0) {
+        if (!stuck.y) reach.y = { lo: reach.y.lo - Math.max(0, room), hi: reach.y.hi + window.scrollY };
         scrolled.y = true;
         via.y = ' (the page scrolls)';
-        span.y = { lo: 0, hi: window.innerHeight };
     }
     return clipTo('y', 'the viewport', { lo: 0, hi: window.innerHeight }) ?? clipTo('x', 'the viewport', { lo: 0, hi: window.innerWidth });
+}
+
+/**
+ * Why a sign line is not painted at all, or undefined (the 8f2 critic's
+ * re-check, item 4): `content-visibility` other than `visible` on it or
+ * above it up to the stall (its content skipped — the rects the ink read
+ * gets are of nothing anybody sees), a text of it whose `visibility` is not
+ * `visible`, or an opacity chain to the root under `UNPAINTED_OPACITY`.
+ */
+const UNPAINTED_OPACITY = 0.1;
+function unpainted(line: HTMLElement): string | undefined {
+    for (let at: Element | null = line; at !== null; at = at.parentElement) {
+        const cv = getComputedStyle(at).getPropertyValue('content-visibility').trim();
+        if (cv !== '' && cv !== 'visible') return `is not painted: content-visibility ${cv} on ${at === line ? 'its own box' : describe(at)}`;
+        if (at.classList.contains('stall')) break;
+    }
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const owner = node.parentElement;
+        if (owner === null || (node as Text).data.trim() === '') continue;
+        const visibility = getComputedStyle(owner).visibility;
+        if (visibility !== 'visible') return `is not painted: visibility ${visibility} on ${owner === line ? 'its own box' : describe(owner)}`;
+        let opacity = 1;
+        for (let at: Element | null = owner; at !== null; at = at.parentElement) {
+            opacity *= Number.parseFloat(getComputedStyle(at).opacity) || 0;
+        }
+        if (opacity < UNPAINTED_OPACITY) return `is not painted: its opacity to the root is ${opacity.toFixed(3)}`;
+    }
+    return undefined;
 }
 
 function nameWholeFaults(screen: string, label: string): Failure[] {
@@ -3702,12 +3791,28 @@ function nameWholeFaults(screen: string, label: string): Failure[] {
         if (getComputedStyle(line).writingMode.startsWith('vertical') || getComputedStyle(line).writingMode.startsWith('sideways')) {
             nameVerticalByClass[measuringClass] = (nameVerticalByClass[measuringClass] ?? 0) + 1;
         }
+        if (fault === undefined) {
+            const why = unpainted(line);
+            if (why !== undefined) fault = `${said} ${why} — a line nobody sees is not whole`;
+        }
         for (const ink of fault === undefined ? inkLines(line) : []) {
             nameLinesByClass[measuringClass] = (nameLinesByClass[measuringClass] ?? 0) + 1;
             const why = lineCut(ink, line);
             if (why !== undefined) {
                 fault = `${said}: a line's ink at ${Math.round(ink.left)},${Math.round(ink.top)} ${why}`;
                 break;
+            }
+        }
+        // The line's own padding box inside every clip above it and every
+        // shape (the 8f2 critic's re-check, item 3): the ladder keeps the ink
+        // inside that box, this keeps the box inside every clip, so a name
+        // the ladder fits stands whole at any length — not only at the
+        // lengths a screen here paints.
+        const ownBox = paddingBox(line);
+        if (fault === undefined && ownBox.right - ownBox.left > 0 && ownBox.bottom - ownBox.top > 0) {
+            const why = lineCut(ownBox, line);
+            if (why !== undefined) {
+                fault = `${said}: its own box at ${Math.round(ownBox.left)},${Math.round(ownBox.top)} (${Math.round(ownBox.right - ownBox.left)}x${Math.round(ownBox.bottom - ownBox.top)}) ${why} — a longer name the ladder fits in that box would be cut`;
             }
         }
         if (fault !== undefined) {
@@ -5652,9 +5757,12 @@ window.__lookPaintHidden = async (which: 'none' | 'pseudos' | 'marks' | 'both') 
  * be late or fail — a slow line, a tab older than a deploy — and what a box
  * masked or clipped by a file paints then is not what the spec's sentence
  * suggests but what the engines do, measured (Chrome 154 here, the system
- * WebKit by the critic, both alike):
- * - **pending** — while a mask image, a mask border image or a `clip-path`
- *   file is loading, the box paints NOTHING, whatever its other layers;
+ * WebKit by the critic; alike on masks, not on a file `clip-path`, which
+ * WebKit never applies, loaded or not — it draws the box unclipped, which
+ * the failed frame's `none` already reads):
+ * - **pending** — while a mask image, a mask border image or (in Chrome) a
+ *   `clip-path` file is loading, the box paints NOTHING, whatever its other
+ *   layers;
  * - **failed** — once the load failed (a 404, or a 200 HTML answer, a
  *   preview's or an SPA fallback's), each failed mask layer is SKIPPED and
  *   the others stand (one failed layer alone: nothing); a failed mask border

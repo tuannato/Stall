@@ -4792,59 +4792,101 @@ protected box. A cut name is an absent one.
 
 **Now**, on every screen, look and variant of every geometry pass, every
 line of the sign's name and tagline (`.stall-head .stall-name`,
-`.stall-head .stall-tagline`) must stand whole on both axes inside every
-clip from its own box up to the viewport — `nothing-on-the-wall-is-cut-from-below`'s
-shape — by **one ink model, shared with the name's ladder, and one clip
-model** (`src/ui/signInk.ts`; the ladder asks the clip its own box gives,
-below):
-- **A line is its ink.** Each line of each text node is found (a Range per
-  character says which line it stands on) and measured: `measureText` of
-  the line's own text in its computed face gives the glyphs' reach above
-  and below the baseline, and the baseline is the line box's top plus the
-  face's ascent. Along the line, the advance, trailing letter-spacing aside.
-  In a vertical writing mode the over side of a line is its right, so the
-  ink is turned onto the horizontal axis (exact for a sideways line, an
-  approximation for upright glyphs on a central baseline).
+`.stall-head .stall-tagline`) is held to three things — painted, its ink
+whole, its own box inside every clip — by **one ink model, shared with the
+name's ladder, and one clip model** (`src/ui/signInk.ts`; the ladder asks
+the clip its own box gives, below):
+- **It is painted** (the critic's re-check of cdedb29, item 4). No
+  `content-visibility` but `visible` on the line or above it up to the
+  stall, every text of it `visibility: visible`, its opacity to the root at
+  least 0.1 (`UNPAINTED_OPACITY`). A `content-visibility: hidden` tagline
+  was lint-clean and read "whole" on six screens — skipped content still
+  gives rects — and red on six others only because those rects fell below
+  the region.
+- **A line is its ink, as painted.** Each line of each text node is found
+  (a Range per character says which line it stands on) and measured:
+  `measureText` of the line's text in its computed face gives the glyphs'
+  reach above and below the baseline, and the baseline is the line box's
+  top plus the face's ascent. The text is the text PAINTED: its
+  `text-transform` applied (upper, lower, and `capitalize` raising the
+  letter after any non-letter — more capitals than CSS paints, so the
+  measure errs tall), and the canvas handed the line's `font-variant-caps`
+  and `font-stretch` (a stretch only a percentage states falls back to
+  normal; it moves an advance, not the reach this reads). Not applied,
+  stated: `full-width` and `full-size-kana`, and a locale's case mapping
+  (the app's documents are `lang="en"`). Along the line, the advance,
+  trailing letter-spacing aside. In a vertical writing mode the over side
+  of a line is its right, so the ink is turned onto the horizontal axis
+  (exact for a sideways line, an approximation for upright glyphs on a
+  central baseline).
 - **A clip is every paint clip on the walk** (`paintClips`): `overflow` on
-  an axis and `contain: paint` (the padding box; inside a box that scrolls
-  on that axis the line is reachable, and from there up it is the
-  scroller's showing part that must hold it); a `clip-path` `inset()`
-  (and what `xywh()`/`rect()` compute to) as a box, `circle()` and
-  `ellipse()` by the line's corners, resolved against their reference box
-  and read before any scroller is entered (an `inset()`'s round corners are
-  read square, stated); a `polygon()` through `parsePolygon`; and anything
-  else — `path()`, a bare box keyword, `url()` — a clip this rule cannot
-  read, which **fails** rather than passes. The viewport scrolls down when
-  the page does and never sideways.
+  an axis and `contain: paint` (the padding box); a `clip-path` `inset()`
+  (and what `xywh()`/`rect()` compute to) as a box, read on both axes like
+  an axis clip wherever it stands; `circle()` and `ellipse()` by the line's
+  corners, resolved against their reference box, and a `polygon()` through
+  `parsePolygon` — both at rest, and above a region that scrolls a clip
+  this rule cannot read; and anything else — `path()`, a bare box keyword,
+  `url()` — a clip this rule cannot read. A clip it cannot read **fails**
+  rather than passes. An `inset()`'s round corners are read square, stated.
+- **Scrolling is where it can take the line** (the re-check, item 2). The
+  walk carries, per axis, the interval of displacements the line can be
+  moved by and still stand inside every clip read so far — `[0, 0]` at
+  rest; a clip narrows it, and a scroller widens it, before its own box is
+  read, by how far it can still scroll on and how far it has scrolled back.
+  A region at rest at its top only carries a line UP, so a cut above the
+  scroller that takes the line's at-rest place is a cut at every scroll. A
+  sticky box on the walk does not move with its scroll container's scroll
+  (conservative: a sticky box that runs out of its containing block does).
+  The page scrolls down the same way at the end of the walk, never
+  sideways. The first version skipped every shape once a scroller had been
+  entered, on the reasoning that past a scroller the reader scrolls the
+  line where it shows — which a shape on an ancestor of the scroller does
+  not follow: the critic's `inset(150px 0 0 0)` on the stall root read
+  "verside Goods" at 1280 on `offers`, the probe green there and red only on
+  the eight screens whose walk enters no scroller.
+- **Its own padding box stands inside every clip and shape above it** (the
+  re-check, item 3; zero app bytes). The ladder keeps the ink inside that
+  box, this keeps the box inside every clip, so a name the ladder fits
+  stands whole at a length no screen paints — a curved or polygonal shape
+  is not monotonic in the name's length, and the stress names paint on two
+  variants of a state screen only. Exact for a box the look bounds (the
+  ladder's subject: a box it can climb in); a box that shrinks to its text
+  is held at the lengths painted, the 32-byte names among them.
 - **A mask on the line or above it, up to the stall, is refused outright**
   (any `mask-image` or mask border source but `none`): a gradient can fade a
   name to nothing in any shape, and no model of it is worth the risk.
 
-**Two shapes the first version passed**, each the critic's, each now red
+**Shapes the first versions passed**, each the critic's, each now red
 (below): `clip-path: inset(0 0 45% 0)` on the name at the phone (the bottom
-half of "Riverside Goods" gone, every rule green); and "ẪỮỆ" at 44px in
-Inter 800, whose stacked marks reach 48.7px above the baseline against a
-face ascent of 43 — a box holding the line-height's slot cuts them and Ẫ
-reads Â, while the slot read "whole" and the ladder's box scroll size
-(52 against 51) read "fits". The line-height slot this rule read first had
-fixed the opposite error (a tight line-height's content area past its slot
-read as a cut: the wall's 1.02 at 54px, `35–56 inside 37–55`); the ink
-answers both.
+half of "Riverside Goods" gone, every rule green); "ẪỮỆ" at 44px in Inter
+800, whose stacked marks reach 48.7px above the baseline against a face
+ascent of 43 — a box holding the line-height's slot cuts them and Ẫ reads
+Â, while the slot read "whole" and the ladder's box scroll size (52 against
+51) read "fits"; the same marks under `text-transform: uppercase` on a
+lowercase name, measured as written (40.7px) — the ladder never climbed and
+the shot read "ÂŨỆ ÂÂÂ"; and the stall root's `inset()` above the scroller.
+The line-height slot this rule read first had fixed the opposite error (a
+tight line-height's content area past its slot read as a cut: the wall's
+1.02 at 54px, `35–56 inside 37–55`); the ink answers both.
 
 **The ladder fits by the same model** (`realFits` in `lookHooks.ts` →
-`inkFits`): every line's ink inside the name's padding box. Its earlier
-answers were both wrong — the box's scroll size climbed a rung for a name
-that fit (44px over 50.6px slots, `scrollHeight` 103 against 101), and the
-slot let stacked marks through. **The ladder does not ask the `clip-path`
-shapes**, stated: they cost the app ~2.7 KB the served ceiling does not
-have (measured 1,131,689 against 1,130,000 with them); the model defines
-them once, the app's bundle tree-shakes them, and the probe holds a name
-to them. A look that clips its name with a shape is failed here, not
-climbed past. Inert on the three looks: no app sheet and no shipped look's
-vars state `--name-rungs` (`states no name ladder in any app sheet or
-shipped look`, `layout/lookMarks.test.ts`; red by a planted
+`inkFits`): every line's ink, as painted, inside the name's padding box.
+Its earlier answers were both wrong — the box's scroll size climbed a rung
+for a name that fit (44px over 50.6px slots, `scrollHeight` 103 against
+101), and the slot let stacked marks through. **The ladder does not ask the
+`clip-path` shapes**, stated: they cost the app ~2.7 KB the served ceiling
+does not have (measured 1,131,689 against 1,130,000 with them); the model
+defines them once, the app's bundle tree-shakes them, and the probe holds a
+name and its box to them. A look that clips its name with a shape is
+failed here, not climbed past. The transform costs the app 476 bytes
+(every-visitor 866,652; served 1,129,498 — 502 left). Inert on the three
+looks: no app sheet and no shipped look's vars state `--name-rungs`
+(`states no name ladder in any app sheet or shipped look`,
+`layout/lookMarks.test.ts`; red by a planted
 `.t-modern .stall-name { --name-rungs: 1 }`), so `realFits` never runs
-there.
+there; `a-transformed-name-is-measured-as-it-is-painted`
+(`src/ui/signInk.test.ts`, a stood-in canvas) holds what the model hands
+the canvas, red with the transform taken out.
 
 Counted per look: the lines read (`nameLinesByClass`, owed on every page
 and wall pass for every look painted), the vertical lines
@@ -4853,7 +4895,8 @@ read: a name inside a turned wall (`[data-turn]`, axis-aligned rects of a
 rotated paint) and the door's deck minis.
 
 **The shipped looks**: no failure on any screen, the stress screens
-included.
+included — Neo's uppercased sign measured in capitals, and every look's
+own name and tagline box inside every clip above it.
 
 ### A vertical spill is read down its lines (`text-spills`, the 8f2 critic's P2-3)
 
@@ -4930,10 +4973,15 @@ art's, and with it gone the words stand on whatever is left
 P1-2). Measured on 100×50 boxes served from loopback — by this step in
 Chrome 154 headless (a mask file answered slowly, with a 404, and with a
 200 HTML body), and by the critic in Chrome and the system WebKit
-(WKWebView), the two engines alike on every case it ran:
-- **pending** — while a mask image, a mask border image or a `clip-path`
-  file is loading, the box paints **nothing**, whatever its other layers
-  (one layer; a file layer `add`ed to a gradient; one `subtract`ed);
+(WKWebView) — the two engines alike on every mask case, and apart on a
+file `clip-path`, which WebKit never applies, even loaded (a valid
+external clipPath was ignored; the critic's re-check of cdedb29): it draws
+the box unclipped, the state the failed frame's `none` reads, so the two
+frames cover it:
+- **pending** — while a mask image, a mask border image or (in Chrome) a
+  `clip-path` file is loading, the box paints **nothing**, whatever its
+  other layers (one layer; a file layer `add`ed to a gradient; one
+  `subtract`ed);
 - **failed** — once the load failed (a 404, or a 200 HTML answer — a
   preview's or an SPA fallback's), each failed mask layer is **skipped**
   and the others stand: a lone failed layer paints nothing, a failed file
@@ -4989,8 +5037,12 @@ drawn in the line's own face and compared pixel for pixel (a missing
 glyph, or a last-resort face, draws one glyph for both), and an ideograph's
 advance must be within 15% of 1em. The advance read is printed per pass
 (`CJK advance: 1.005em` here, PingFang); a pass that measured `cjk-name`
-owes one. Not verified: whether the manual Linux `layout` CI job's runner
-carries a CJK face — if not, this rule fails there, which is its job.
+owes one. The manual Linux `layout` CI job installs `fonts-noto-cjk`
+before it runs the probe (`.github/workflows/ci.yml`), since whether the
+runner's image carries a CJK face is not something the workflow can know;
+that job has not been run on this branch (no network here). The check is
+Han-only: a kana- or Hangul-only name marked `data-script="cjk"` is not
+held to a face (the re-check's P3, noted).
 
 **On a try-on** (the 8f1 critic's item 6): a seller who tries a look on
 from the name sheet gets `showLook`'s `put`, which patches the look onto
@@ -5075,14 +5127,41 @@ failure the fixture's, never a shipped look's.
   `none` (no mask at all), and with the transparent-black layer where the
   engines skip — the subtracted plant painted ink on ink in the browser and
   passed.
+- **The re-check's four** (two runs, one plant per worn variant so each
+  reads apart; every plant lint-clean). Run RD: `content-visibility:
+  hidden` on the tagline in every variant — 399, on every screen with a
+  tagline in every geometry pass, "is not painted: content-visibility
+  hidden on its own box"; the critic's `inset(150px 0 0 0)` on the stall
+  root at the desk (trim) — 59, every `offers`-like screen whose region
+  scrolls among them, "can never be brought whole into view (in
+  div.stall-scroll, which scrolls): … clip-path inset(150px 0px 0px) shows
+  at most 127 of its 170px"; and `text-transform: uppercase;
+  padding-block: 0` on the name (dusk) over a lowercase `STACKED_NAME`
+  ("ẫữệ ấầẩ ẫữệ", a code plant) — red at rung 2 on the phone's
+  `stacked-name` ("11 of its 13px show") and at the desk, where the
+  vertical name climbed to rung 2. **Its control** — the same run with the
+  transform taken out of `inkLines` — reads the phone's `stacked-name`
+  green, and at the desk the ladder never climbs (no `data-name-tier`):
+  the critic's finding, reproduced, and the fix is what turns it. Run RE:
+  `clip-path: ellipse(50% 50% at 50% 50%)` on the name (crest) — 26 where
+  every line's ink stood inside the ellipse and only the box's corners
+  did not, "its own box at 50,49 (290x42) is cut by its own box
+  (h1.stall-name)'s clip-path ellipse(…) — a longer name the ladder fits
+  in that box would be cut"; `visibility: hidden` on the tagline (dusk) —
+  172; `opacity: 0.05` on the name (trim) — 201, "its opacity to the root
+  is 0.050". `a-transformed-name-is-measured-as-it-is-painted`: 3 of 5 red
+  with the transform taken out.
 
 ### Measured
 
 This Mac, 2026-10-06, back to back with `main` (1bcdf58, a worktree):
 `pnpm test:layout` **170.6s on main, 187.6s here (+17.0s)**; the first 8f2
-commit measured +18.4s. Where it goes: the geometry passes +2–3s (the name
-read with its ink on every paint, the scroll pass over the fixture's 53
-desk paints whose region scrolls, the stress screens and the try-on job);
+commit measured +18.4s. The re-check's fixes (the painted test, the
+transform, the reach walk, the own box) are geometry-pass reads: unplanted,
+186.8s before them and 183.8s after, inside the machine's drift. Where it
+goes: the geometry passes +2–3s (the name read with its ink on every
+paint, the scroll pass over the fixture's 53 desk paints whose region
+scrolls, the stress screens and the try-on job);
 the contrast pass +14s — the look-paint frame on 60 more jobs, now ~119 ms
 a job against 194 before the "shown" frame reused the job's capture
 (look pseudos 20.0s for 168 jobs against main's 21.0s for 108), and the
