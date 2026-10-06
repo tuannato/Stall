@@ -73,11 +73,12 @@ export const PRIVATE_INDEX_FIELDS = Object.freeze(['id', 'slug', 'cls', 'stage',
  * D-2026-10-06-08). `budgetReason`: why this look may weigh more than the
  * soft target of a look's art budget (`LOOK_ART_TARGET_GZIP` in
  * `scripts/weight-buckets.mjs`) and still be admitted under the hard cap
- * (`LOOK_ART_CAP_GZIP`). Whether a reason in this index is the owner's OK
- * by itself, or a public list must name the look too, is the owner's
- * question (the weight-buckets critic's item 1, not built);
- * `each-look-keeps-its-art-budget` prints it on every run — its length
- * alone in a public log — so it is never admitted in silence.
+ * (`LOOK_ART_CAP_GZIP`). **The reason is private; the owner's OK is
+ * public**: an entry states one exactly when `OVER_TARGET_LOOK_IDS`
+ * (`src/domain/theme.ts`) names its id (`privateIndexProblems`), so the OK
+ * is a reviewable public diff, as a release is (PLAN § Decided).
+ * `each-look-keeps-its-art-budget` prints the reason on every run — its
+ * length alone in a public log — so a look is never admitted in silence.
  */
 export const PRIVATE_INDEX_OPTIONAL_FIELDS = Object.freeze(['budgetReason']);
 
@@ -286,8 +287,10 @@ export function parsePrivateIndex(text) {
 
 /**
  * The index against the public lists. `facts`: `{ reserved, paid, released,
- * shippedClasses }` — `PRIVATE_LOOK_IDS`, `PAID_LOOK_IDS`,
- * `RELEASED_LOOK_IDS` and the shipped rows' classes (`publicLookFacts`).
+ * overTarget, shippedClasses }` — `PRIVATE_LOOK_IDS`, `PAID_LOOK_IDS`,
+ * `RELEASED_LOOK_IDS`, `OVER_TARGET_LOOK_IDS` and the shipped rows' classes
+ * (`publicLookFacts`); facts without `overTarget` are refused outright, so a
+ * caller that forgot the list never reads as "no look is over the target".
  *
  * - **Reserved and unshared**: an entry's id is one `PRIVATE_LOOK_IDS`
  *   reserves, and no two entries share an id, a slug or a class.
@@ -295,11 +298,26 @@ export function parsePrivateIndex(text) {
  *   whether `PAID_LOOK_IDS` names the id, and `stage` is `release` exactly
  *   when `RELEASED_LOOK_IDS` does — both directions, so the public list and
  *   the private index move in one reviewed pair.
+ * - **Over the target only by the public list** (D-2026-10-06-08, the
+ *   owner's OK on CRITIC-WEIGHT-BUCKETS item 1): an entry states a
+ *   `budgetReason` exactly when `OVER_TARGET_LOOK_IDS` names its id — both
+ *   directions, so the owner's OK is a reviewable public diff and the
+ *   reason stays private — and every id that list names is a reserved one.
+ *   The tracked fixture states none: its index is public, and the public
+ *   lists are the owner's alone to move.
  * - **Its own class**: never a shipped look's, the harness's or — unless
  *   `fixture` says this is the tracked fixture — the fixture's.
  */
-export function privateIndexProblems(index, { reserved, paid, released, shippedClasses }, { fixture = false } = {}) {
+export function privateIndexProblems(index, { reserved, paid, released, overTarget, shippedClasses }, { fixture = false } = {}) {
+    if (!Array.isArray(overTarget)) {
+        throw new TypeError('private looks: the public lists include OVER_TARGET_LOOK_IDS (`overTarget`), and none was given');
+    }
     const problems = [];
+    for (const id of overTarget) {
+        if (!reserved.includes(id)) {
+            problems.push(`OVER_TARGET_LOOK_IDS names 0x${id.toString(16).padStart(2, '0')}, which PRIVATE_LOOK_IDS does not reserve`);
+        }
+    }
     const taken = new Set([...shippedClasses, ...HARNESS_LOOK_CLASSES, ...(fixture ? [] : [FIXTURE_PRIVATE_LOOK_CLASS])]);
     const seen = { id: new Map(), slug: new Map(), cls: new Map() };
     index.looks.forEach((entry, at) => {
@@ -315,6 +333,16 @@ export function privateIndexProblems(index, { reserved, paid, released, shippedC
         if ((entry.stage === 'release') !== released.includes(entry.id)) {
             problems.push(
                 `${where}: stage ${entry.stage}, and RELEASED_LOOK_IDS ${released.includes(entry.id) ? 'names' : 'does not name'} the id — a release is the public list's to make`,
+            );
+        }
+        const reasoned = Object.hasOwn(entry, 'budgetReason');
+        if (fixture && reasoned) {
+            problems.push(`${where}: the tracked fixture states a budgetReason — its index is public, and no fixture is admitted over the target`);
+        } else if (reasoned !== overTarget.includes(entry.id)) {
+            problems.push(
+                reasoned
+                    ? `${where}: states a budgetReason, and OVER_TARGET_LOOK_IDS does not name the id — the owner's OK to weigh over the target is the public list's`
+                    : `${where}: OVER_TARGET_LOOK_IDS names the id, and its entry states no budgetReason — a look admitted over the target says why, privately`,
             );
         }
         if (taken.has(entry.cls)) {
@@ -382,6 +410,7 @@ export async function publicLookFacts() {
         reserved: [...theme.PRIVATE_LOOK_IDS],
         paid: [...theme.PAID_LOOK_IDS],
         released: [...theme.RELEASED_LOOK_IDS],
+        overTarget: [...theme.OVER_TARGET_LOOK_IDS],
         shippedClasses: theme.SHIPPED_THEMES.map(({ id }) => theme.decodeTheme(id).sheetClass),
     };
 }

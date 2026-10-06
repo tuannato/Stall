@@ -32,7 +32,7 @@ export declare const LOOK_ART_CAP_GZIP: number;
 
 export type LookBudgetVerdict = {
     readonly admitted: boolean;
-    readonly state: 'within' | 'reasoned' | 'needs-reason' | 'over-cap' | 'unread';
+    readonly state: 'within' | 'admitted-over-target' | 'refused-over-target' | 'over-cap' | 'unread';
     /** What every run prints for the look: its figure against the target and the cap, and its reason when one admitted it. */
     readonly line: string;
 };
@@ -40,6 +40,8 @@ export declare function lookBudgetVerdict(input: {
     look: string;
     total: number;
     reason?: string | undefined;
+    /** Its id in `OVER_TARGET_LOOK_IDS`: the owner's public OK to weigh over the target. */
+    listed?: boolean;
     publicLog?: boolean;
 }): LookBudgetVerdict;
 export declare const PUBLIC_LOG_ENV: 'GITHUB_ACTIONS';

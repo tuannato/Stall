@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { loadKitLook } from '../layout/workshopKit';
 import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
-import { guardSheets, privateLookReads, privateRows, servedSheets, type PrivateLookRead } from '../scripts/served-sheets.mjs';
+import { guardSheets, privateLookReads, privateRows, type PrivateLookRead } from '../scripts/served-sheets.mjs';
 import { gitCommitOf, gitFilesAt, gitTextAt, publicLookFacts, type PublicLookFacts } from '../scripts/private-looks.mjs';
 import { wornSheets } from '../scripts/sheet-roles.mjs';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV, selectionFromEnv, withoutSelection } from '../scripts/looks-selection.mjs';
@@ -25,7 +25,7 @@ import {
     type WeightBuckets,
 } from '../scripts/weight-buckets.mjs';
 import { attachmentsForTheme } from './domain/attachments';
-import { SHIPPED_THEMES, decodeTheme } from './domain/theme';
+import { OVER_TARGET_LOOK_IDS, SHIPPED_THEMES, decodeTheme } from './domain/theme';
 
 /** This checkout's root. */
 const ROOT = join(import.meta.dirname, '..');
@@ -528,11 +528,12 @@ describe('each-look-keeps-its-art-budget', () => {
      * `lookBudgetVerdict`; both numbers and their reasons are in
      * `scripts/weight-buckets.mjs`). Under `LOOK_ART_TARGET_GZIP` (256,000)
      * a look is admitted; from there up to `LOOK_ART_CAP_GZIP` (512,000)
-     * only on the `budgetReason` its private index states (whether that is
-     * the owner's OK by itself or a public list must name the look too is
-     * put to him, not built — the weight-buckets critic's item 1), and at
-     * or over the cap never; the build refuses the same looks
-     * (`readSelectedLooks`, item 9). A look with no index (the kit, the
+     * only with its id in `OVER_TARGET_LOOK_IDS` (`src/domain/theme.ts`) —
+     * **the owner's OK is that public list**, a reviewable public diff as a
+     * release is — and a `budgetReason` in its private index, the two held
+     * to each other both ways by the index check (the owner, on the
+     * weight-buckets critic's item 1); and at or over the cap never. The
+     * build refuses the same looks (`readSelectedLooks`, item 9). A look with no index (the kit, the
      * harness's fixture look, a worn-only look the role table ships) is held
      * to the target. **Every look a run reads prints its line** (`weigh`, on
      * stdout under this test's name): the figure against the target and the
@@ -545,9 +546,19 @@ describe('each-look-keeps-its-art-budget', () => {
      * own build, and every private look a run reads, from its source and on
      * a deploy build — each proved red by a plant beside it.
      */
-    /** The verdict, printed: a reason's text in a local run, its length alone where `env` names a public log (`printsPublicly`). */
-    const weigh = (look: string, total: number, reason?: string, env: Readonly<Record<string, string | undefined>> = process.env): LookBudgetVerdict => {
-        const verdict = lookBudgetVerdict({ look, total, reason, publicLog: printsPublicly(env) });
+    /**
+     * The verdict, printed: a reason's text in a local run, its length alone
+     * where `env` names a public log (`printsPublicly`). `listed`: its id in
+     * `OVER_TARGET_LOOK_IDS`, the owner's public OK to weigh over the target.
+     */
+    const weigh = (
+        look: string,
+        total: number,
+        reason?: string,
+        listed = false,
+        env: Readonly<Record<string, string | undefined>> = process.env,
+    ): LookBudgetVerdict => {
+        const verdict = lookBudgetVerdict({ look, total, reason, listed, publicLog: printsPublicly(env) });
         console.log(`look budget · ${verdict.line}`);
         return verdict;
     };
@@ -580,54 +591,70 @@ describe('each-look-keeps-its-art-budget', () => {
             },
             { 'fixture/art/heavy.svg': digitsSvg(digits) },
         );
-    /** The planted look as a run reads it: its index validated, its entry and its files from the commit. */
-    const readPlanted = async (repo: ReturnType<typeof plantLooks>) => {
-        const row = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env })).find(
-            (candidate) => candidate.lookClass === PLANTED_CLASS,
+    /**
+     * The planted look as a run reads it: its index validated against
+     * `facts` (the theme table's public lists unless a test hands its own),
+     * its entry and its files from the commit.
+     */
+    const readPlanted = async (repo: ReturnType<typeof plantLooks>, facts?: PublicLookFacts) => {
+        const look = (await privateLookReads({ env: repo.selection, gitEnv: repo.env, ...(facts === undefined ? {} : { facts }) })).find(
+            (candidate) => candidate.entry.cls === PLANTED_CLASS,
         );
-        if (row === undefined) throw new Error('the planted look was not read');
-        return row;
+        if (look === undefined) throw new Error('the planted look was not read');
+        return { look };
     };
+    /**
+     * The public lists with the planted look's id (the fixture's, 0x04) in
+     * `OVER_TARGET_LOOK_IDS`: what the owner's reviewed diff would give it.
+     */
+    const listedFacts = async (): Promise<PublicLookFacts> => ({ ...(await publicLookFacts()), overTarget: [0x04] });
     const REASON = 'A planted look: its weight is the point of the test.';
 
     it('reads the target, the cap and a reason at their edges, and pins both numbers by value', () => {
         // By literal value: every other assertion here derives its expectation from the symbol it tests.
         expect(LOOK_ART_TARGET_GZIP).toBe(256_000);
         expect(LOOK_ART_CAP_GZIP).toBe(512_000);
-        const at = (total: number, reason?: string) => lookBudgetVerdict({ look: 't-x', total, reason });
+        const at = (total: number, reason?: string, listed = false) => lookBudgetVerdict({ look: 't-x', total, reason, listed });
         expect(at(0)).toMatchObject({ admitted: true, state: 'within' });
         expect(at(255_999)).toMatchObject({ admitted: true, state: 'within' });
         expect(at(255_999).line).toBe('t-x: 255,999 gzip -9 bytes, within the 256,000 target (cap 512,000)');
         // A reason the look no longer needs is printed all the same.
-        expect(at(1_000, REASON)).toMatchObject({ admitted: true, state: 'within' });
-        expect(at(1_000, REASON).line).toContain(`not needed under the target: ${JSON.stringify(REASON)}`);
-        expect(at(256_000)).toMatchObject({ admitted: false, state: 'needs-reason' });
-        expect(at(511_999)).toMatchObject({ admitted: false, state: 'needs-reason' });
-        expect(at(256_000, REASON)).toMatchObject({ admitted: true, state: 'reasoned' });
-        expect(at(511_999, REASON)).toMatchObject({ admitted: true, state: 'reasoned' });
-        expect(at(300_000, REASON).line).toBe(
-            `t-x: 300,000 gzip -9 bytes, 44,000 over the 256,000 target, under the 512,000 cap — admitted on its index's budgetReason: ${JSON.stringify(REASON)}`,
+        expect(at(1_000, REASON, true)).toMatchObject({ admitted: true, state: 'within' });
+        expect(at(1_000, REASON, true).line).toContain(`not needed under the target: ${JSON.stringify(REASON)}`);
+        // Between the target and the cap: the public list AND a reason (the owner, on CRITIC-WEIGHT-BUCKETS item 1).
+        expect(at(256_000)).toMatchObject({ admitted: false, state: 'refused-over-target' });
+        expect(at(511_999)).toMatchObject({ admitted: false, state: 'refused-over-target' });
+        expect(at(256_000, REASON, true)).toMatchObject({ admitted: true, state: 'admitted-over-target' });
+        expect(at(511_999, REASON, true)).toMatchObject({ admitted: true, state: 'admitted-over-target' });
+        expect(at(300_000, REASON, true).line).toBe(
+            `t-x: 300,000 gzip -9 bytes, 44,000 over the 256,000 target, under the 512,000 cap — admitted: in OVER_TARGET_LOOK_IDS, budgetReason ${JSON.stringify(REASON)}`,
         );
-        expect(at(512_000, REASON)).toMatchObject({ admitted: false, state: 'over-cap' });
-        expect(at(2_000_000, REASON)).toMatchObject({ admitted: false, state: 'over-cap' });
+        // A reason the public list does not name, and a listing with no reason: each refused, and the line says which.
+        expect(at(300_000, REASON, false)).toMatchObject({ admitted: false, state: 'refused-over-target' });
+        expect(at(300_000, REASON, false).line).toContain('a budgetReason stated, and its id not in OVER_TARGET_LOOK_IDS');
+        expect(at(300_000, REASON, false).line).not.toContain(REASON);
+        expect(at(300_000, undefined, true)).toMatchObject({ admitted: false, state: 'refused-over-target' });
+        expect(at(300_000, undefined, true).line).toContain('its id in OVER_TARGET_LOOK_IDS, and no budgetReason stated in its index');
+        expect(at(512_000, REASON, true)).toMatchObject({ admitted: false, state: 'over-cap' });
+        expect(at(2_000_000, REASON, true)).toMatchObject({ admitted: false, state: 'over-cap' });
         // A reason the index reader refuses is no reason here either: fail closed.
         for (const blank of ['', ' ', '\t\n', '\u00a0', 'two\nlines', 'é'.repeat(401)]) {
-            expect(at(300_000, blank), JSON.stringify(blank)).toMatchObject({ admitted: false, state: 'needs-reason' });
+            expect(at(300_000, blank, true), JSON.stringify(blank)).toMatchObject({ admitted: false, state: 'refused-over-target' });
         }
         // A reading that failed is not a light look.
         for (const broken of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
-            expect(at(broken, REASON)).toMatchObject({ admitted: false, state: 'unread' });
+            expect(at(broken, REASON, true)).toMatchObject({ admitted: false, state: 'unread' });
         }
         // In a public log a reason is counted, never printed (the weight-buckets critic's item 8).
         expect(printsPublicly({})).toBe(false);
         expect(printsPublicly({ GITHUB_ACTIONS: 'true' })).toBe(true);
         expect(printsPublicly({ GITHUB_ACTIONS: '' })).toBe(true);
         for (const total of [1_000, 300_000]) {
-            const hidden = lookBudgetVerdict({ look: 't-x', total, reason: REASON, publicLog: true });
+            const hidden = lookBudgetVerdict({ look: 't-x', total, reason: REASON, listed: true, publicLog: true });
             expect(hidden.admitted).toBe(true);
             expect(hidden.line).not.toContain(REASON);
             expect(hidden.line).toContain(`stated (${[...REASON].length} characters; not printed in a public log)`);
-            expect(lookBudgetVerdict({ look: 't-x', total, reason: REASON, publicLog: false }).line).toContain(JSON.stringify(REASON));
+            expect(lookBudgetVerdict({ look: 't-x', total, reason: REASON, listed: true, publicLog: false }).line).toContain(JSON.stringify(REASON));
         }
     });
 
@@ -703,7 +730,7 @@ describe('each-look-keeps-its-art-budget', () => {
             const planted = budgetOf(heavy, 't-workshop', []);
             expect(planted.total, 'the planted kit is not between the target and the cap').toBeGreaterThanOrEqual(LOOK_ART_TARGET_GZIP);
             expect(planted.total, 'the planted kit is not between the target and the cap').toBeLessThan(LOOK_ART_CAP_GZIP);
-            expect(lookBudgetVerdict({ look: 't-workshop', total: planted.total })).toMatchObject({ admitted: false, state: 'needs-reason' });
+            expect(lookBudgetVerdict({ look: 't-workshop', total: planted.total })).toMatchObject({ admitted: false, state: 'refused-over-target' });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -726,17 +753,21 @@ describe('each-look-keeps-its-art-budget', () => {
         for (const row of rows) {
             const reading = privateLookArtBudget(row.look);
             expect(reading.total, `${row.path}: the look was not read`).toBeGreaterThan(100);
-            const verdict = weigh(row.lookClass, reading.total, row.look.entry.budgetReason);
+            const verdict = weigh(row.lookClass, reading.total, row.look.entry.budgetReason, OVER_TARGET_LOOK_IDS.includes(row.look.entry.id));
             expect(verdict.admitted, `${row.path}: ${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
         }
     }, 60_000);
 
     /*
      * The verdict over planted private looks, read the way a run reads one
-     * (`servedSheets` over a repository planted from the fixture: its index
+     * (`privateLookReads` over a repository planted from the fixture: its index
      * validated, the entry's `budgetReason` carried, `privateLookArtBudget`).
      */
-    it('refuses a private look between the target and the cap with no reason, and admits and prints it with one', async () => {
+    it('admits a private look between the target and the cap only when the public list names it and its index says why, and prints it', async () => {
+        const reasoned = (entry: Record<string, unknown>) => {
+            entry['budgetReason'] = REASON;
+        };
+        // Neither: refused by the budget.
         const without = await readPlanted(plantedLook(BETWEEN_DIGITS));
         expect(without.look.entry.budgetReason).toBeUndefined();
         const total = privateLookArtBudget(without.look).total;
@@ -744,28 +775,33 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(total, 'the plant is not between the target and the cap').toBeLessThan(LOOK_ART_CAP_GZIP);
         expect(lookBudgetVerdict({ look: PLANTED_CLASS, total, reason: without.look.entry.budgetReason })).toMatchObject({
             admitted: false,
-            state: 'needs-reason',
+            state: 'refused-over-target',
         });
-
-        const reasoned = await readPlanted(
-            plantedLook(BETWEEN_DIGITS, (entry) => {
-                entry['budgetReason'] = REASON;
-            }),
+        // A reason the public list does not name: the index itself is refused, so the look is never read.
+        await expect(readPlanted(plantedLook(BETWEEN_DIGITS, reasoned))).rejects.toThrow(
+            /states a budgetReason, and OVER_TARGET_LOOK_IDS does not name the id/,
         );
-        expect(reasoned.look.entry.budgetReason).toBe(REASON);
+        // Listed, with no reason: refused the same way.
+        await expect(readPlanted(plantedLook(BETWEEN_DIGITS), await listedFacts())).rejects.toThrow(
+            /OVER_TARGET_LOOK_IDS names the id, and its entry states no budgetReason/,
+        );
+
+        // Listed and reasoned: admitted, and printed.
+        const admitted = await readPlanted(plantedLook(BETWEEN_DIGITS, reasoned), await listedFacts());
+        expect(admitted.look.entry.budgetReason).toBe(REASON);
         const log = vi.spyOn(console, 'log');
         try {
-            const total = privateLookArtBudget(reasoned.look).total;
+            const total = privateLookArtBudget(admitted.look).total;
             // A local run prints the reason's text…
-            const local = weigh(`${PLANTED_CLASS} (planted by this test)`, total, reasoned.look.entry.budgetReason, {});
-            expect(local).toMatchObject({ admitted: true, state: 'reasoned' });
-            expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`budgetReason: ${JSON.stringify(REASON)}`));
+            const local = weigh(`${PLANTED_CLASS} (planted by this test)`, total, admitted.look.entry.budgetReason, true, {});
+            expect(local).toMatchObject({ admitted: true, state: 'admitted-over-target' });
+            expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`in OVER_TARGET_LOOK_IDS, budgetReason ${JSON.stringify(REASON)}`));
             // …and a run in a public log (GitHub Actions) its length alone.
-            const inPublic = weigh(`${PLANTED_CLASS} (planted by this test, as an Actions log prints it)`, total, reasoned.look.entry.budgetReason, {
+            const inPublic = weigh(`${PLANTED_CLASS} (planted by this test, as an Actions log prints it)`, total, admitted.look.entry.budgetReason, true, {
                 GITHUB_ACTIONS: 'true',
             });
-            expect(inPublic).toMatchObject({ admitted: true, state: 'reasoned' });
-            expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`budgetReason: stated (${[...REASON].length} characters`));
+            expect(inPublic).toMatchObject({ admitted: true, state: 'admitted-over-target' });
+            expect(log).toHaveBeenLastCalledWith(expect.stringContaining(`budgetReason stated (${[...REASON].length} characters`));
             expect(log).toHaveBeenLastCalledWith(expect.not.stringContaining(REASON));
         } finally {
             log.mockRestore();
@@ -804,13 +840,13 @@ describe('each-look-keeps-its-art-budget', () => {
         expect(source).toBeLessThan(LOOK_ART_CAP_GZIP);
         const refused = viaImageSet();
         await expect(deployParts({ ...refused.selection, [SELECTION_ENV.commit]: refused.head() })).rejects.toThrow(
-            /its art budget — t-planted-look: [\d,]+ gzip -9 bytes, .* no budgetReason stated/,
+            /its art budget — t-planted-look: [\d,]+ gzip -9 bytes, .* not in OVER_TARGET_LOOK_IDS, and no budgetReason stated/,
         );
 
         const repo = viaImageSet((entry) => {
             entry['budgetReason'] = REASON;
         });
-        const parts = await deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() });
+        const parts = await deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() }, await listedFacts());
         const buckets = weightBuckets(parts, { worn: [...WORN, { lookClass: PLANTED_CLASS, source: 'fixture/sheet.css' }] });
         expect(buckets.problems).toEqual([]);
         const bucket = buckets.worn[PLANTED_CLASS]!;
@@ -822,20 +858,21 @@ describe('each-look-keeps-its-art-budget', () => {
             rows: [],
         }).total;
         expect(built, 'the built reading lost the image-set target').toBeGreaterThanOrEqual(LOOK_ART_TARGET_GZIP);
-        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: built, reason: REASON }).state).toBe('reasoned');
+        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: built, reason: REASON, listed: true }).state).toBe('admitted-over-target');
         // From its source, never under what the build serves.
         expect(source).toBeGreaterThanOrEqual(built);
     }, 120_000);
 
-    it('refuses a private look over the cap whatever its index says, and an index whose reason is blank', async () => {
+    it('refuses a private look over the cap whatever the list and its index say, and an index whose reason is blank', async () => {
         const heavy = await readPlanted(
             plantedLook(OVER_CAP_DIGITS, (entry) => {
                 entry['budgetReason'] = REASON;
             }),
+            await listedFacts(),
         );
         expect(heavy.look.entry.budgetReason).toBe(REASON);
         const reading = privateLookArtBudget(heavy.look);
-        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: reading.total, reason: heavy.look.entry.budgetReason })).toMatchObject({
+        expect(lookBudgetVerdict({ look: PLANTED_CLASS, total: reading.total, reason: heavy.look.entry.budgetReason, listed: true })).toMatchObject({
             admitted: false,
             state: 'over-cap',
         });
@@ -913,7 +950,7 @@ describe('each-look-keeps-its-art-budget', () => {
                     rows: privateLookRows(look),
                 });
                 expect(reading.total, `${look.sheetPath}: the built look was not read`).toBeGreaterThan(100);
-                const verdict = weigh(`${look.entry.cls} (deploy build)`, reading.total, look.entry.budgetReason);
+                const verdict = weigh(`${look.entry.cls} (deploy build)`, reading.total, look.entry.budgetReason, OVER_TARGET_LOOK_IDS.includes(look.entry.id));
                 expect(verdict.admitted, `${look.sheetPath}: ${verdict.line} ${JSON.stringify(reading)}`).toBe(true);
                 weighed.add(look.entry.cls);
             }
@@ -926,11 +963,11 @@ describe('each-look-keeps-its-art-budget', () => {
         expect([...weighed].sort(), 'a look this run read was weighed on no deploy build').toEqual(
             expect.arrayContaining([...new Set(rows.map((row) => row.lookClass))]),
         );
-        // Red: the fixture planted with art over the cap and a reason stated in its index — refused by the build itself.
+        // Red: the fixture planted with art over the cap, listed, and a reason stated in its index — refused by the build itself.
         const repo = plantedLook(OVER_CAP_DIGITS, (entry) => {
             entry['budgetReason'] = REASON;
         });
-        await expect(deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() })).rejects.toThrow(
+        await expect(deployParts({ ...repo.selection, [SELECTION_ENV.commit]: repo.head() }, await listedFacts())).rejects.toThrow(
             /fixture: its art budget — t-planted-look: [\d,]+ gzip -9 bytes, at or over the 512,000 cap/,
         );
     }, 180_000);

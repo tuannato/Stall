@@ -370,6 +370,17 @@ export const WORKSHOP_THEME_ID = 0xff;
  *   Literals rather than one derived from the other, pinned by value.
  * - `RELEASED_LOOK_IDS` stays empty for the whole of step 8; step 9 adds
  *   `0x04` beside its price row.
+ * - `OVER_TARGET_LOOK_IDS` (D-2026-10-06-08, the owner's OK on
+ *   CRITIC-WEIGHT-BUCKETS item 1): the private looks admitted between a
+ *   look's art-budget target (256,000 gzip bytes) and its cap (512,000).
+ *   **The owner's OK is this list** — a reviewable public diff, as a
+ *   release is — and the reason stays private, in the look's index entry
+ *   (`budgetReason`). The two agree both ways: a look stating a reason is
+ *   named here, a look named here states one, and every id here is a
+ *   reserved one (`privateIndexProblems` in `scripts/private-looks.mjs`,
+ *   which the build runs; `lookBudgetVerdict` in
+ *   `scripts/weight-buckets.mjs` admits only both). Empty: no look is over
+ *   the target.
  *
  * Literals, because this module imports nothing (`scripts/look-flash.mjs`
  * and `scripts/sheet-roles.test.mjs` load it by Node's type stripping).
@@ -381,6 +392,7 @@ export const PRIVATE_LOOK_IDS: readonly number[] = Object.freeze([0x04]);
 export const FREE_PRIVATE_LOOK_IDS: readonly number[] = Object.freeze([]);
 export const PAID_LOOK_IDS: readonly number[] = Object.freeze([0x04]);
 export const RELEASED_LOOK_IDS: readonly number[] = Object.freeze([]);
+export const OVER_TARGET_LOOK_IDS: readonly number[] = Object.freeze([]);
 
 /**
  * The default look. An id with no shipped row wears all of it — palette,

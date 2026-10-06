@@ -402,7 +402,9 @@ describe('a-carried-look-past-its-art-budget-fails-the-build', () => {
      * `lookBudgetVerdict` in `scripts/weight-buckets.mjs`) is refused at the
      * build, beside every other check before Vite reads a byte, and not only
      * by the suite — a road that builds without `pnpm test` cannot ship a
-     * look past it. The fixture planted with its ground drawn as a run of
+     * look past it. Between the target and the cap a look is carried only
+     * with its id in `OVER_TARGET_LOOK_IDS` (planted here as the public
+     * lists a reviewed diff would give) and a `budgetReason` in its index. The fixture planted with its ground drawn as a run of
      * fixed-seed digits gzip barely shrinks: ~390 KB between the 256,000
      * target and the 512,000 cap, ~775 KB over the cap. The full builds of
      * the same plants are in `src/bundle.test.ts`.
@@ -430,16 +432,25 @@ describe('a-carried-look-past-its-art-budget-fails-the-build', () => {
             return text;
         });
     const REASON = 'A planted look: its weight is the point of the test.';
+    /** The public lists with the planted look's id over the target: the owner's OK, as a public diff would give it. */
+    const listed = { ...facts, overTarget: [0x04] };
+    const readListed = (repo) =>
+        readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir }, facts: listed, validateLook, vars, env: repo.env });
 
-    it('refuses a look between the target and the cap with no reason, and carries it with one', () => {
-        assert.throws(() => readPlanted(plantHeavy(700_000)), /fixture: its art budget — t-planted-look: [\d,]+ gzip -9 bytes, .* no budgetReason stated/);
-        const read = readPlanted(plantHeavy(700_000, REASON));
+    it('refuses a look between the target and the cap unless the public list names it and its index says why', () => {
+        // Neither: the budget refuses it.
+        assert.throws(() => readPlanted(plantHeavy(700_000)), /fixture: its art budget — t-planted-look: [\d,]+ gzip -9 bytes, .* not in OVER_TARGET_LOOK_IDS, and no budgetReason stated/);
+        // A reason the public list does not name, or a listing with no reason: the index check refuses it.
+        assert.throws(() => readPlanted(plantHeavy(700_000, REASON)), /states a budgetReason, and OVER_TARGET_LOOK_IDS does not name the id/);
+        assert.throws(() => readListed(plantHeavy(700_000)), /OVER_TARGET_LOOK_IDS names the id, and its entry states no budgetReason/);
+        // Both: carried.
+        const read = readListed(plantHeavy(700_000, REASON));
         assert.deepEqual(read.looks.map((look) => look.entry.budgetReason), [REASON]);
     });
 
-    it('refuses a look over the cap whatever its index says, and never prints the reason', () => {
+    it('refuses a look over the cap whatever the list and its index say, and never prints the reason', () => {
         assert.throws(
-            () => readPlanted(plantHeavy(1_400_000, REASON)),
+            () => readListed(plantHeavy(1_400_000, REASON)),
             (error) => /fixture: its art budget — .* at or over the 512,000 cap/.test(error.message) && !error.message.includes(REASON),
         );
     });

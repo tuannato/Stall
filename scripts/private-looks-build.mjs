@@ -48,8 +48,9 @@
  * `sheet.css` through the look rules as a worn-only sheet over its own art
  * (`lintLookSheet`, `font-display` for a face included); every `art/*.svg`
  * through the allow-list (`svg-allow.mjs`, the critic's item 8); and its art
- * budget (`lookBudgetVerdict`: under the target, or under the cap on its
- * index's `budgetReason`), the same reading the weight guard prints, so a
+ * budget (`lookBudgetVerdict`: under the target, or under the cap with its
+ * id in `OVER_TARGET_LOOK_IDS` and a `budgetReason` in its index — the two
+ * held to each other by the index check), the same reading the weight guard prints, so a
  * road that builds without running the suite still refuses a look past it
  * (the weight-buckets critic's item 9). Any problem
  * fails the build, every problem listed. Then the sheet and the art are
@@ -266,7 +267,13 @@ export function readSelectedLooks({ root, selection, facts, validateLook, vars, 
                     rows: privateLookRows({ look: parsed }),
                 });
                 // A build log may be public: a refusal never carries a reason's text anyway.
-                const verdict = lookBudgetVerdict({ look: entry.cls, total: reading.total, reason: entry.budgetReason, publicLog: true });
+                const verdict = lookBudgetVerdict({
+                    look: entry.cls,
+                    total: reading.total,
+                    reason: entry.budgetReason,
+                    listed: facts.overTarget.includes(entry.id),
+                    publicLog: true,
+                });
                 if (!verdict.admitted) {
                     problems.push(`${entry.slug}: its art budget — ${verdict.line}`);
                 }
@@ -420,7 +427,7 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env, harne
 /**
  * The Vite plugin: answers `virtual:stall-private-looks`. `facts` are the
  * public lists (`PRIVATE_LOOK_IDS`, `PAID_LOOK_IDS`, `RELEASED_LOOK_IDS`,
- * the shipped classes); `validateLook` the app's validator; `env` where the
+ * `OVER_TARGET_LOOK_IDS`, the shipped classes); `validateLook` the app's validator; `env` where the
  * selection is read (`process.env`). The selection is read in `buildStart`,
  * so each build reads its own; a build that carries a look says so in one
  * line on stderr, whatever the log level, so a forgotten shell export is on

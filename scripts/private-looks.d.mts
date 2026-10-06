@@ -21,6 +21,8 @@ export type PublicLookFacts = {
     readonly reserved: readonly number[];
     readonly paid: readonly number[];
     readonly released: readonly number[];
+    /** `OVER_TARGET_LOOK_IDS`: the looks admitted over their art budget's target. */
+    readonly overTarget: readonly number[];
     readonly shippedClasses: readonly string[];
 };
 

@@ -95,20 +95,19 @@ import { parseSheet, splitTopLevel, urlTargets } from './workshop-css.mjs';
  * it falls, so a look a phone cannot fetch in that time is a look its
  * visitors do not see.
  *
- * **Between the two, a stated reason admits a look** (`lookBudgetVerdict`):
- * a private look whose index entry carries `budgetReason`
- * (`scripts/private-looks.mjs`, validated fail closed there — one plain,
- * non-blank line). The decision asks for a reason AND the owner's OK; what
- * is built reads a reason in the private index, which holds what is
- * committed to it, as both. Whether the OK needs an artifact of its own — a
- * public list beside `PAID_LOOK_IDS` and `RELEASED_LOOK_IDS`, held both ways
- * against the index, as a release is — is put to the owner and not built
- * (the weight-buckets critic's item 1); so is the tracked fixture's index,
- * which is public and could state a reason too. The reason is printed
- * beside the figure on every run (its length alone in a public log), so a
- * heavy look is never admitted in silence. A look with no index to state
- * one in — the workshop kit, the harness's fixture look, a worn-only look
- * the role table ships — is held to the target.
+ * **Between the two, a look is admitted on the owner's public OK and a
+ * private reason** (`lookBudgetVerdict`): its id in `OVER_TARGET_LOOK_IDS`
+ * (`src/domain/theme.ts`, beside `PAID_LOOK_IDS` and `RELEASED_LOOK_IDS` —
+ * a reviewable public diff, as PLAN § Decided requires of a release; the
+ * owner, on CRITIC-WEIGHT-BUCKETS item 1) **and** a `budgetReason` in its
+ * index entry (`scripts/private-looks.mjs`, validated fail closed there —
+ * one plain, non-blank line). The two agree both ways at the index check
+ * (`privateIndexProblems`), every listed id is a reserved one, and the
+ * tracked fixture, whose index is public, may state no reason. The reason
+ * is printed beside the figure on every run (its length alone in a public
+ * log), so a heavy look is never admitted in silence. A look with no index
+ * to state one in — the workshop kit, the harness's fixture look, a
+ * worn-only look the role table ships — is held to the target.
  *
  * **Enforced at the build too** (the critic's item 9): `readSelectedLooks`
  * (`scripts/private-looks-build.mjs`) runs this verdict over every look a
@@ -443,9 +442,10 @@ function shown(reason, publicLog) {
  *
  * - under `LOOK_ART_TARGET_GZIP`: admitted (`within`), and a reason its
  *   index states anyway is printed as not needed;
- * - from the target up to, not including, `LOOK_ART_CAP_GZIP`: admitted with
- *   a stated reason (`reasoned`, the reason in the line) and refused without
- *   one (`needs-reason`);
+ * - from the target up to, not including, `LOOK_ART_CAP_GZIP`: admitted
+ *   only when `listed` (its id in `OVER_TARGET_LOOK_IDS`) and a reason is
+ *   stated (`admitted-over-target`, the reason in the line), refused when
+ *   either is missing (`refused-over-target`, the line saying which);
  * - at or over the cap: refused whatever the reason (`over-cap`).
  *
  * A reason `budgetReasonProblem` refuses is no reason (fail closed: the
@@ -455,7 +455,7 @@ function shown(reason, publicLog) {
  * `publicLog` (`printsPublicly`): the line names a stated reason by its
  * length only, never its text.
  */
-export function lookBudgetVerdict({ look, total, reason, publicLog = false }) {
+export function lookBudgetVerdict({ look, total, reason, listed = false, publicLog = false }) {
     const head = `${look}: ${Number.isFinite(total) ? n(total) : String(total)} gzip -9 bytes`;
     if (!Number.isFinite(total) || total < 0) {
         return { admitted: false, state: 'unread', line: `${head} — not a reading; refused` };
@@ -479,16 +479,21 @@ export function lookBudgetVerdict({ look, total, reason, publicLog = false }) {
         };
     }
     const over = `${n(total - LOOK_ART_TARGET_GZIP)} over the ${n(LOOK_ART_TARGET_GZIP)} target, under the ${n(LOOK_ART_CAP_GZIP)} cap`;
-    if (!stated) {
+    if (!(stated && listed)) {
+        const missing = stated
+            ? 'a budgetReason stated, and its id not in OVER_TARGET_LOOK_IDS'
+            : listed
+              ? 'its id in OVER_TARGET_LOOK_IDS, and no budgetReason stated in its index'
+              : 'its id not in OVER_TARGET_LOOK_IDS, and no budgetReason stated in a private look index';
         return {
             admitted: false,
-            state: 'needs-reason',
-            line: `${head}, ${over}, and no budgetReason stated in a private look index — refused`,
+            state: 'refused-over-target',
+            line: `${head}, ${over}, ${missing} — refused (the owner's OK is the public list, the reason the index's)`,
         };
     }
     return {
         admitted: true,
-        state: 'reasoned',
-        line: `${head}, ${over} — admitted on its index's budgetReason: ${shown(reason, publicLog)}`,
+        state: 'admitted-over-target',
+        line: `${head}, ${over} — admitted: in OVER_TARGET_LOOK_IDS, budgetReason ${shown(reason, publicLog)}`,
     };
 }
