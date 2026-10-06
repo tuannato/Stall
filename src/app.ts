@@ -186,7 +186,6 @@ import {
 import { lastMarqueeRunAheadMs } from './ui/marquee';
 import {
     askForLookSheet,
-    lookSheetRetriesLeft,
     lookSheetState,
     retryLookSheet,
     waitForLookSheet,
@@ -204,6 +203,15 @@ import { wallListings, windowRail, windowTurns } from './ui/window';
  * keep their script socket and must not have this timer tear it down.
  */
 const BROADCAST_RETRY_MS = 30_000;
+
+/**
+ * The longest the stream overlay waits between two retries of a look's
+ * sheet that keeps failing (8d2; CRITIC-STEP-8D2 item 3): its retry starts at
+ * `BROADCAST_RETRY_MS` and doubles up to this, then stays here — ten minutes,
+ * so an overlay left running through a long outage asks a few times an hour
+ * and still gets its look back, never giving up.
+ */
+const OVERLAY_SHEET_RETRY_MAX_MS = 600_000;
 
 /**
  * How long one card stands in the shop window's `cycle`.
@@ -522,24 +530,40 @@ export function boot(
 
     /**
      * The stream overlay's own retry for a look's sheet that failed (8d2;
-     * CRITIC-STEP-8 item 18): an overlay has no heartbeat, and its failure
-     * retry is a full `refresh()` that only a failed read arms — so a sheet
-     * that failed on a working overlay gets a fresh link here every
-     * `BROADCAST_RETRY_MS`, while its retries last, and the overlay paints the
-     * look once it is ready. No full reload, so the card on stream is never
-     * blanked for it; the wall's retry rides its heartbeat (`refresh`).
+     * CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3): an overlay has no
+     * heartbeat, and its failure retry is a full `refresh()` that only a
+     * failed read arms — so a sheet that failed on a working overlay gets a
+     * fresh link here, `BROADCAST_RETRY_MS` after the failure and then each
+     * time twice as long after the last, up to `OVERLAY_SHEET_RETRY_MAX_MS`,
+     * and it never stops: a stream that outlasts an outage gets its look back
+     * when the network does. The overlay paints the look once it is ready. No
+     * full reload, so the card on stream is never blanked for it; the wall's
+     * retry rides its heartbeat (`refresh`). Cleared with the broadcast's
+     * timers, so a `refresh` re-arms it rather than doubling it, and the
+     * teardown leaves none (`an-overlays-sheet-retry-is-cleared-with-the-app`).
      */
     let sheetRetry: ReturnType<typeof setTimeout> | undefined;
+    /** The overlay's next sheet retry delay, and the sheet it is counted for: a new sheet starts again at `BROADCAST_RETRY_MS`. */
+    let sheetRetryMs = BROADCAST_RETRY_MS;
+    let sheetRetryFor: string | undefined;
     const syncSheetRetry = (): void => {
         if (sheetRetry !== undefined || stopped || state.view.broadcast === undefined) {
             return;
         }
         const sheet = recordSheet(state.view);
-        if (
-            sheet === undefined ||
-            lookSheetState(sheet.url, document) !== 'failed' ||
-            lookSheetRetriesLeft(sheet, document) === 0
-        ) {
+        if (sheet === undefined) {
+            return;
+        }
+        if (sheetRetryFor !== sheet.url) {
+            sheetRetryFor = sheet.url;
+            sheetRetryMs = BROADCAST_RETRY_MS;
+        }
+        const now = lookSheetState(sheet.url, document);
+        if (now === 'ready') {
+            sheetRetryMs = BROADCAST_RETRY_MS;
+            return;
+        }
+        if (now !== 'failed') {
             return;
         }
         const claimed = generation;
@@ -549,6 +573,7 @@ export function boot(
                 return;
             }
             retryLookSheet(sheet, document);
+            sheetRetryMs = Math.min(sheetRetryMs * 2, OVERLAY_SHEET_RETRY_MAX_MS);
             void waitForLookSheet(sheet, document).then(() => {
                 if (stopped || claimed !== generation) {
                     return;
@@ -556,7 +581,7 @@ export function boot(
                 livePaint();
                 syncSheetRetry();
             });
-        }, BROADCAST_RETRY_MS);
+        }, sheetRetryMs);
     };
 
     const clearBroadcastTimers = (): void => {
@@ -3418,17 +3443,29 @@ export function boot(
              * `a-look-sheet-that-does-not-load-paints-the-default-and-says-so`).
              *
              * An unattended screen — a wall, whose heartbeat is this call, or
-             * a stream overlay — first gives a sheet that failed a fresh
-             * link, while its retries last (CRITIC-STEP-8 item 18,
-             * `a-wall-retries-a-sheet-that-failed-on-its-heartbeat`). Every
+             * a stream overlay — gives a sheet that failed a fresh link, at
+             * the loader's rate and never stopping, and does NOT hold this
+             * paint for it (CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3):
+             * the beat paints at once, in the default, and paints again in
+             * the look when the link lands — so a sheet host that hangs costs
+             * a wall no closed socket and no cleared timers once a minute
+             * (`a-wall-retries-a-sheet-that-failed-on-its-heartbeat`). Every
              * other page keeps a failure for its life; its sentence offers a
              * reload.
              */
             const sheet = recordSheet(next.view);
-            if (sheet !== undefined) {
-                if (next.view.broadcast !== undefined || wallParams(next.view) !== undefined) {
-                    retryLookSheet(sheet, document);
+            const unattended = next.view.broadcast !== undefined || wallParams(next.view) !== undefined;
+            if (sheet !== undefined && unattended && lookSheetState(sheet.url, document) === 'failed') {
+                // A retry is never held: the screen paints now, in the
+                // default, and again in the look if this link lands.
+                if (retryLookSheet(sheet, document)) {
+                    void waitForLookSheet(sheet, document).then((settled) => {
+                        if (settled === 'ready' && claimed === generation && !stopped) {
+                            livePaint();
+                        }
+                    });
                 }
+            } else if (sheet !== undefined) {
                 await waitForLookSheet(sheet, document);
                 if (claimed !== generation || stopped) {
                     return;

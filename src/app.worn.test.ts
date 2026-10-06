@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { encodeCashAddress } from 'ecashaddrjs';
-import { shaRmd160, toHex } from 'ecash-lib';
+import { fromHex, shaRmd160, toHex } from 'ecash-lib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DUST_SATS } from './domain/money';
 import { encodeManifestHex } from './domain/manifest';
@@ -62,13 +62,20 @@ const chain = {
     addressTxs: [] as ChainTx[],
     txs: new Map<string, ChainTx>(),
     utxos: [] as { token?: { tokenId?: string } }[],
+    /** A holdings read that throws: the view keeps the worn set the settings road wrote. */
+    utxosThrow: false,
 };
 
 const fakeChronik = {
     address() {
         return {
             history: async (): Promise<HistoryPage> => ({ txs: chain.addressTxs, numPages: 1, numTxs: chain.addressTxs.length }),
-            utxos: async () => ({ utxos: chain.utxos }),
+            utxos: async () => {
+                if (chain.utxosThrow) {
+                    throw new Error('no index answered');
+                }
+                return { utxos: chain.utxos };
+            },
         };
     },
     lokadId() {
@@ -156,8 +163,9 @@ vi.mock('./ui', async (importOriginal) => {
 const { boot, WINDOW_BEAT_MS } = await import('./app');
 const copy = await import('./ui/copy');
 const { decodeLook, mintedLookTokens, paintableLook } = await import('./domain/lookTable');
-const { LOOK_SHEET_PROPERTY, LOOK_SHEET_RETRIES, LOOK_SHEET_WAIT_MS, lookSheetState, resetLookSheetsForTests } =
-    await import('./ui/lookSheets');
+const { LOOK_SHEET_PROPERTY, LOOK_SHEET_WAIT_MS, lookSheetState, resetLookSheetsForTests } = await import(
+    './ui/lookSheets'
+);
 const { resetMarqueesForTests, setMarqueeMeasure } = await import('./ui/marquee');
 const { fixturePrivateLooks } = await import('../layout/fixturePrivateLooks');
 
@@ -178,6 +186,7 @@ afterEach(() => {
     chain.addressTxs = [];
     chain.txs.clear();
     chain.utxos = [];
+    chain.utxosThrow = false;
 });
 
 /**
@@ -391,7 +400,15 @@ async function publish(name: string, themeId: number, txidByte: string): Promise
  * numbered (the older look put on over the newer record).
  */
 describe('a-record-that-moves-to-a-worn-only-look-repaints-once-its-sheet-loads', () => {
-    const neo = () => recordView({ stallName: 'Before', recordTheme: decodeLook(0x02), recordFlags: 0, worn: [] });
+    // Neo wearing its crest (bit 0): the new record's flags (bits 0 and 1)
+    // would put Neo's rain on too, read against the wrong table.
+    const neo = () =>
+        recordView({
+            stallName: 'Before',
+            recordTheme: decodeLook(0x02),
+            recordFlags: 0b1,
+            worn: paintableLook(decodeLook(0x02), 0b1, mintedLookTokens()).worn,
+        });
 
     it('applies the name now and the look once its sheet has loaded', async () => {
         const sheets = holdSheets();
@@ -399,9 +416,16 @@ describe('a-record-that-moves-to-a-worn-only-look-repaints-once-its-sheet-loads'
         const root = mount(stallPath(PK), neo);
         await flush();
         expect(lookOf(root)).toEqual(['t-neo']);
+        const decorBefore = decorOf(root);
+        expect(decorBefore, 'Neo wears its crest').toEqual(['att-hum']);
+        // The holdings read the record wakes fails, so what stands during
+        // the wait is the settings road's own worn set, not a holdings
+        // answer that recomputes it.
+        chain.utxosThrow = true;
         await publish('After', FIXTURE_ID, '31');
         expect(painted.get(root)?.stallName, 'the name applies at once').toBe('After');
         expect(lookOf(root), 'the look stays as it was').toEqual(['t-neo']);
+        expect(decorOf(root), 'and its decorations, read against its own flags').toEqual(decorBefore);
         expect(sheets.current()).toHaveLength(1);
         answer(sheets.current()[0]!, 'sheet');
         await flush();
@@ -426,16 +450,73 @@ describe('a-record-that-moves-to-a-worn-only-look-repaints-once-its-sheet-loads'
 });
 
 /**
- * The unattended screens retry a failed sheet with a fresh link, and only so
- * often (CRITIC-STEP-8 item 18): a wall on its heartbeat, a stream overlay on
- * its own timer — the failed link removed first, so the page holds one, and
- * at most `LOOK_SHEET_RETRIES` times, after which the screen paints the
- * default until it is reloaded (a tab older than a deploy asks for a hash the
- * edge no longer has; only a reload asks for the new one). Neither says the
- * failure in words: the wall says none of the sign's notes, and a broadcast's
- * failure paints no text. Red: the retry dropped from the wall's refresh or
- * the overlay's timer (the look never comes back), the cap removed (an
- * eleventh fresh link).
+ * A look waiting for its sheet belongs to the stall whose record named it
+ * (CRITIC-STEP-8D2 item 2): a reader who leaves for another stall before the
+ * sheet lands sees that stall's look, never the first one's — its look, its
+ * decorations and its record read back are its own, and its seller
+ * republishing signs their own. Red: the wait's generation check dropped
+ * (the first stall's look put on the second).
+ */
+describe('a-look-waiting-for-its-sheet-never-lands-on-another-stall', () => {
+    it('drops the wait when the reader goes to another stall', async () => {
+        const sheets = holdSheets();
+        const PK_B = `03${'22'.repeat(32)}`;
+        const ADDR_B = encodeCashAddress('ecash', 'p2pkh', toHex(shaRmd160(fromHex(PK_B))));
+        const other = (): StallView => ({
+            route: { kind: 'pubkey', pubkeyHex: PK_B, address: ADDR_B },
+            fetch: { kind: 'empty' },
+            overlay: { kind: 'idle' },
+            address: ADDR_B,
+            tokens: new Map(),
+            stallName: 'Other stall',
+            recordTheme: decodeLook(0x03),
+            recordFlags: 0,
+            heldTokens: new Set(),
+            worn: [],
+        });
+        const first = (): StallView =>
+            recordView({ stallName: 'Before', recordTheme: decodeLook(0x02), recordFlags: 0, worn: [] });
+        window.history.replaceState(null, '', stallPath(PK));
+        const root = document.createElement('div');
+        document.body.append(root);
+        running.push(
+            boot(root, async () =>
+                location.pathname === stallPath(PK_B)
+                    ? { view: other(), offers: [], pubkeyHex: PK_B }
+                    : { view: first(), offers: [], pubkeyHex: PK },
+            ),
+        );
+        await flush();
+        await publish('After', FIXTURE_ID, '51');
+        expect(painted.get(root)?.stallName).toBe('After');
+        expect(sheets.current(), 'the first stall’s look is waiting for its sheet').toHaveLength(1);
+        window.history.pushState(null, '', stallPath(PK_B));
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await flush();
+        expect(painted.get(root)?.stallName).toBe('Other stall');
+        expect(lookOf(root)).toEqual(['t-rural']);
+        answer(sheets.current()[0]!, 'sheet');
+        await flush();
+        expect(lookOf(root), 'the second stall keeps its own look').toEqual(['t-rural']);
+        expect(painted.get(root)?.recordTheme?.id).toBe(0x03);
+        expect(painted.get(root)?.route).toEqual({ kind: 'pubkey', pubkeyHex: PK_B, address: ADDR_B });
+        expect(decorOf(root)).toEqual([]);
+    });
+});
+
+/**
+ * The unattended screens retry a failed sheet with a fresh link, by rate and
+ * never stopping (CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3): a wall on
+ * its heartbeat — the beat paints at once, in the default, never held for the
+ * retry, and paints again in the look when the link lands — and a stream
+ * overlay on its own timer, 30 s doubling to ten minutes. The failed link is
+ * removed first, so the page holds one. A tab older than a deploy asks for a
+ * hash the edge no longer has, which no retry heals; it paints the default
+ * until reloaded. Neither screen says the failure in words: the wall says
+ * none of the sign's notes, and a broadcast's failure paints no text. Red:
+ * the retry dropped from the wall's refresh or the overlay's timer (the look
+ * never comes back), a lifetime cap put back (the asking stops), the beat
+ * held for its retry (the beat's paint waits on the link).
  */
 describe('a-wall-retries-a-sheet-that-failed-on-its-heartbeat', () => {
     const WALL = `${stallPath(PK)}?view=window&mode=cycle`;
@@ -447,41 +528,47 @@ describe('a-wall-retries-a-sheet-that-failed-on-its-heartbeat', () => {
             broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
         });
 
-    it('puts the look on a wall once a fresh link loads on a later beat', async () => {
+    it('paints a beat at once, and puts the look on the wall when the beat’s fresh link loads', async () => {
         vi.useFakeTimers();
         const sheets = holdSheets();
-        const root = mount(WALL, wallView);
+        // Each load names the stall afresh, so a paint shows which load it is.
+        let loads = 0;
+        const wall = mount(WALL, () => ({ ...wallView(), stallName: `Ink stall ${(loads += 1)}` }));
         await vi.advanceTimersByTimeAsync(0);
         answer(sheets.current()[0]!, 'error');
         await vi.advanceTimersByTimeAsync(0);
-        expect(stallOf(root).classList.contains('shop-window')).toBe(true);
-        expect(lookOf(root)).toEqual(['t-modern']);
-        expect(root.textContent).not.toContain(copy.THEME_SHEET_UNLOADED);
+        expect(stallOf(wall).classList.contains('shop-window')).toBe(true);
+        expect(lookOf(wall)).toEqual(['t-modern']);
+        expect(wall.textContent).not.toContain(copy.THEME_SHEET_UNLOADED);
         const failed = sheets.current()[0]!;
         await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS);
+        expect(painted.get(wall)?.stallName, 'the beat painted at once, its link still out').toBe('Ink stall 2');
+        expect(lookOf(wall)).toEqual(['t-modern']);
         expect(sheets.current(), 'the failed link is gone, one fresh one in its place').toHaveLength(1);
         expect(sheets.current()[0]).not.toBe(failed);
         answer(sheets.current()[0]!, 'sheet');
         await vi.advanceTimersByTimeAsync(0);
-        expect(lookOf(root)).toEqual(['t-fixture-private']);
-        expect(stallOf(root).classList.contains('shop-window')).toBe(true);
+        expect(lookOf(wall)).toEqual(['t-fixture-private']);
+        expect(stallOf(wall).classList.contains('shop-window')).toBe(true);
     });
 
-    it('stops asking after its cap, and keeps the default', async () => {
+    it('asks again on every beat, never stopping, and never piles up links', async () => {
         vi.useFakeTimers();
         const sheets = holdSheets();
         const root = mount(WALL, wallView);
         await vi.advanceTimersByTimeAsync(0);
-        for (let beat = 0; beat <= LOOK_SHEET_RETRIES + 3; beat += 1) {
-            const link = sheets.current()[0];
-            if (link !== undefined) {
-                answer(link, 'error');
-            }
+        const BEATS = 15;
+        for (let beat = 0; beat < BEATS; beat += 1) {
+            answer(sheets.current()[0]!, 'error');
             await vi.advanceTimersByTimeAsync(WINDOW_BEAT_MS);
+            expect(sheets.current(), `beat ${beat + 1}: one link on the page`).toHaveLength(1);
         }
-        expect(sheets.made(), 'the first ask and the capped retries, then nothing').toHaveLength(1 + LOOK_SHEET_RETRIES);
-        expect(sheets.current()).toHaveLength(1);
+        expect(sheets.made(), 'the first ask and one fresh link a beat').toHaveLength(1 + BEATS);
         expect(lookOf(root)).toEqual(['t-modern']);
+        // An outage that ends heals the wall on the next beat that loads.
+        answer(sheets.current()[0]!, 'sheet');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(lookOf(root)).toEqual(['t-fixture-private']);
     });
 
     it('puts the look on a stream overlay once its own retry loads, and says nothing', async () => {
@@ -530,20 +617,72 @@ describe('a-wall-retries-a-sheet-that-failed-on-its-heartbeat', () => {
         expect(lookOf(root)).toEqual(['t-fixture-private']);
     });
 
-    it('stops the overlay’s retry after its cap', async () => {
+    it('backs the overlay off from 30 s, doubling to ten minutes, and never stops', async () => {
         vi.useFakeTimers();
         const sheets = holdSheets();
         mount(OVERLAY, overlayView);
         await vi.advanceTimersByTimeAsync(0);
-        for (let tick = 0; tick <= LOOK_SHEET_RETRIES + 3; tick += 1) {
-            const link = sheets.current()[0];
-            if (link !== undefined) {
-                answer(link, 'error');
-            }
-            await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS);
+        answer(sheets.current()[0]!, 'error');
+        await vi.advanceTimersByTimeAsync(0);
+        const waits = [30, 60, 120, 240, 480, 600, 600, 600, 600, 600, 600, 600].map((s) => s * 1_000);
+        for (const [i, wait] of waits.entries()) {
+            const before = sheets.made().length;
+            await vi.advanceTimersByTimeAsync(wait - 1);
+            expect(sheets.made().length, `retry ${i + 1} not before ${wait / 1_000} s`).toBe(before);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(sheets.made().length, `retry ${i + 1} at ${wait / 1_000} s`).toBe(before + 1);
+            expect(sheets.current()).toHaveLength(1);
+            answer(sheets.current()[0]!, 'error');
+            await vi.advanceTimersByTimeAsync(0);
         }
-        expect(sheets.made()).toHaveLength(1 + LOOK_SHEET_RETRIES);
-        expect(vi.getTimerCount(), 'no retry left armed').toBe(0);
+        expect(vi.getTimerCount(), 'still armed after an hour and more').toBeGreaterThan(0);
+    });
+});
+
+/**
+ * The overlay's sheet retry is a timer of the app's, so it goes with the app
+ * and with a `refresh` (CRITIC-STEP-8D2 item 14): the teardown leaves none
+ * armed and no link appears after it, and a `refresh` re-arms it from its
+ * repaint rather than leaving the old one to fire beside the new one. Red:
+ * the timer not cleared with the broadcast's (a link at the old time after a
+ * refresh, and after the teardown).
+ */
+describe('an-overlays-sheet-retry-is-cleared-with-the-app', () => {
+    const OVERLAY = `${stallPath(PK)}?view=broadcast`;
+    const overlayView = () =>
+        recordView({
+            broadcast: { preset: 'corner', mode: 'fixed', transparent: false, cards: 'listings', side: 'right', edge: 'bottom' },
+        });
+
+    async function failedOverlay() {
+        vi.useFakeTimers();
+        const sheets = holdSheets();
+        mount(OVERLAY, overlayView);
+        await vi.advanceTimersByTimeAsync(0);
+        answer(sheets.current()[0]!, 'error');
+        await vi.advanceTimersByTimeAsync(0);
+        return sheets;
+    }
+
+    it('leaves no retry armed, and asks for nothing, once the app is torn down', async () => {
+        const sheets = await failedOverlay();
+        expect(vi.getTimerCount(), 'a retry is armed').toBeGreaterThan(0);
+        running.pop()!();
+        expect(vi.getTimerCount()).toBe(0);
+        await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS * 40);
+        expect(sheets.made()).toHaveLength(1);
+    });
+
+    it('re-arms on a refresh instead of firing the old timer beside a new one', async () => {
+        const sheets = await failedOverlay();
+        await vi.advanceTimersByTimeAsync(10_000);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(BROADCAST_RETRY_MS - 10_000);
+        expect(sheets.made(), 'the old timer was cleared by the refresh').toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(sheets.made(), 'the re-armed one fires').toHaveLength(2);
+        expect(sheets.current()).toHaveLength(1);
     });
 });
 

@@ -33,23 +33,29 @@
  * URL refused — is `failed`, and failed is sticky for the page's life: asked
  * again, the same URL answers the same failure and no second link is made
  * (`a-worn-only-sheet-is-fetched-once-per-page`). **One exception, the
- * unattended screens'** (8d2, CRITIC-STEP-8 item 18): a wall or a stream
- * overlay, which nobody reloads, gives a failed sheet a fresh link
- * (`retryLookSheet`) — the failed link removed first, so a page holds at most
- * one link per sheet, and at most `LOOK_SHEET_RETRIES` times per page, so a
- * sheet that keeps failing costs a bounded number of requests and never a
- * loop. A tab older than a deploy asks for a hash the edge no longer has
- * (Pages: 404, `no-store`), which no retry can heal: that screen paints the
- * default until it is reloaded, and a reload asks for the new hash.
+ * unattended screens'** (8d2, CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3):
+ * a wall or a stream overlay, which nobody reloads, gives a failed sheet a
+ * fresh link (`retryLookSheet`) — the failed link removed first, so a page
+ * holds at most one link per sheet, never a pile — **bounded by rate, never by
+ * a lifetime count**: at most one fresh link per `LOOK_SHEET_RETRY_MIN_MS`
+ * for one sheet on one page, and the screens never stop asking, so a shop's
+ * Wi-Fi down at opening heals when it comes back, however long that takes. A
+ * tab older than a deploy asks for a hash the edge no longer has (Pages: 404,
+ * `no-store`), which no retry can heal: that screen paints the default until
+ * it is reloaded, and a reload asks for the new hash.
  *
- * **Late is failed** (8d2): a first paint waits for the sheet at most
+ * **Late is failed** (8d2): a paint waits for the sheet at most
  * `LOOK_SHEET_WAIT_MS` (`waitForLookSheet`), and a sheet still pending then
  * is given up — `failed`, sticky like any other failure — so an answer that
  * arrives afterwards changes nothing on the page
  * (`a-late-sheet-changes-nothing-on-the-page`): the stall painted the default
  * and said so, and a look that swapped itself in under a reader a moment
  * later would be the flash the wait exists to prevent. Only a pending entry
- * takes an answer at all.
+ * takes an answer at all. **A newer wait moves the deadline, an older one
+ * never cuts it short** (CRITIC-STEP-8D2 item 12): the entry keeps the latest
+ * deadline any wait set, and gives up only there — a `refresh` superseded
+ * 2.9 s into its wait leaves the next stall its own three seconds
+ * (`a-superseded-wait-never-cuts-a-newer-one-short`).
  *
  * **What a page shows while the sheet is not ready** is the renderer's
  * (8d2's hold, `render.ts`): the default look wearing nothing until the
@@ -82,18 +88,25 @@ export type LookSheet = { readonly url: string; readonly cls: string };
 export const LOOK_SHEET_WAIT_MS = 3_000;
 
 /**
- * How many fresh links an unattended screen gives one failed sheet, per page
- * (CRITIC-STEP-8 item 18): ten, so a wall on its sixty-second heartbeat tries
- * for ten minutes and an overlay on its thirty-second retry for five, then
- * stops. Bounded on purpose — a screen nobody reloads is the one place a
- * retry that never ends would run for a week.
+ * The least time between two links for one sheet on one page
+ * (`retryLookSheet`; CRITIC-STEP-8 item 18, CRITIC-STEP-8D2 item 3): thirty
+ * seconds, the overlay's failure retry, which the wall's sixty-second
+ * heartbeat and the overlay's own backoff (30 s doubling to 10 min, `app.ts`)
+ * already keep to. The bound is the loader's own, so no caller can turn a
+ * retry into a loop; it is a rate and never a lifetime count — a screen that
+ * stopped asking after ten tries painted the default all day after a morning
+ * outage, with nothing on it to say so.
  */
-export const LOOK_SHEET_RETRIES = 10;
+export const LOOK_SHEET_RETRY_MIN_MS = 30_000;
 
 type Entry = {
     readonly cls: string;
     state: LookSheetState;
     readonly done: Promise<HTMLLinkElement>;
+    /** When its link was made, on the page's monotonic clock: a retry within `LOOK_SHEET_RETRY_MIN_MS` of it is refused. */
+    readonly askedAt: number;
+    /** The latest moment any wait gives it, on the same clock (`waitForLookSheet`). */
+    deadline?: number;
     /** The link this entry put on the page, once it exists: a retry removes it. */
     link?: HTMLLinkElement;
     /** Fail a pending entry — the wait gave up on it — and do nothing to a settled one. */
@@ -102,9 +115,6 @@ type Entry = {
 
 /** Every sheet asked for, per document, by its absolute URL. */
 const PAGES = new WeakMap<Document, Map<string, Entry>>();
-
-/** How many fresh links each sheet has been given on a page (`retryLookSheet`), by its absolute URL. */
-const RETRIED = new WeakMap<Document, Map<string, number>>();
 
 /** The URL `url` resolves to on `doc`, when it is on `doc`'s own origin. */
 function sameOrigin(url: string, doc: Document): string | undefined {
@@ -184,7 +194,7 @@ export function loadLookSheet(url: string, cls: string, doc: Document = document
             answer.reject(why);
         }
     };
-    const entry: Entry = { cls, state: 'pending', done, giveUp: fail };
+    const entry: Entry = { cls, state: 'pending', done, askedAt: performance.now(), giveUp: fail };
     page.set(href, entry);
     // A document that will not take the link (no head, a head that throws)
     // is a sheet that failed — never a throw on the renderer's paint path,
@@ -242,8 +252,10 @@ export function askForLookSheet(sheet: LookSheet, doc: Document): void {
  * Ask for `sheet` and answer once it has settled: `ready`, or `failed` — an
  * error, a load that is not the sheet, a URL refused, or no answer within
  * `ms`, when a pending entry is given up for the page's life (the module
- * docblock: late is failed). Never rejects. One clock per wait, started now:
- * a sheet already settled answers at once.
+ * docblock: late is failed). Never rejects. Each wait gives the entry `ms`
+ * from now, and the entry gives up only at the latest deadline any wait gave
+ * it, so a wait whose caller was superseded never cuts a newer one short. A
+ * sheet already settled answers at once.
  */
 export function waitForLookSheet(
     sheet: LookSheet,
@@ -260,25 +272,29 @@ export function waitForLookSheet(
     if (entry === undefined || entry.cls !== sheet.cls || entry.state !== 'pending') {
         return settledAs;
     }
-    const timer = setTimeout(
-        () => entry.giveUp(new Error(`the look sheet at ${sheet.url} did not load within ${ms} ms`)),
-        ms,
-    );
+    entry.deadline = Math.max(entry.deadline ?? 0, performance.now() + ms);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = (): void => {
+        const left = (entry.deadline ?? 0) - performance.now();
+        if (left > 0) {
+            timer = setTimeout(check, left);
+            return;
+        }
+        entry.giveUp(new Error(`the look sheet at ${sheet.url} did not load within ${ms} ms`));
+    };
+    timer = setTimeout(check, ms);
     return settledAs.finally(() => clearTimeout(timer));
 }
 
-/** How many more fresh links `retryLookSheet` would give `sheet` on `doc`. */
-export function lookSheetRetriesLeft(sheet: LookSheet, doc: Document): number {
-    const href = sameOrigin(sheet.url, doc);
-    return href === undefined ? 0 : Math.max(0, LOOK_SHEET_RETRIES - (RETRIED.get(doc)?.get(href) ?? 0));
-}
-
 /**
- * The unattended screens' retry (the module docblock; CRITIC-STEP-8 item
- * 18): a sheet that failed on `doc` gets a fresh link — the failed one
- * removed and its entry dropped first, so the page holds one link for it —
- * while retries are left. Answers whether it asked again; a sheet that is
- * pending, ready, never asked for, or out of retries is left as it is.
+ * The unattended screens' retry (the module docblock; CRITIC-STEP-8 item 18,
+ * CRITIC-STEP-8D2 item 3): a sheet that failed on `doc` gets a fresh link —
+ * the failed one removed and its entry dropped first, so the page holds one
+ * link for it — unless its last link was made less than
+ * `LOOK_SHEET_RETRY_MIN_MS` ago. No lifetime count: a screen nobody reloads
+ * keeps asking at its own rate for as long as it is on. Answers whether it
+ * asked again; a sheet that is pending, ready, never asked for, or asked for
+ * too recently is left as it is.
  */
 export function retryLookSheet(sheet: LookSheet, doc: Document): boolean {
     const href = sameOrigin(sheet.url, doc);
@@ -287,23 +303,16 @@ export function retryLookSheet(sheet: LookSheet, doc: Document): boolean {
     if (href === undefined || page === undefined || known === undefined || known.state !== 'failed' || known.cls !== sheet.cls) {
         return false;
     }
-    if (lookSheetRetriesLeft(sheet, doc) === 0) {
+    if (performance.now() - known.askedAt < LOOK_SHEET_RETRY_MIN_MS) {
         return false;
     }
-    let tried = RETRIED.get(doc);
-    if (tried === undefined) {
-        tried = new Map();
-        RETRIED.set(doc, tried);
-    }
-    tried.set(href, (tried.get(href) ?? 0) + 1);
     known.link?.remove();
     page.delete(href);
     askForLookSheet(sheet, doc);
     return true;
 }
 
-/** Forget every sheet asked for on `doc`, and its retries: a test's fresh page, where the tests share one document. */
+/** Forget every sheet asked for on `doc`: a test's fresh page, where the tests share one document. */
 export function resetLookSheetsForTests(doc: Document): void {
     PAGES.delete(doc);
-    RETRIED.delete(doc);
 }
