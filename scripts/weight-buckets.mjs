@@ -333,9 +333,11 @@ export function lookArtBudget({ sheet, sheetFile = 'sheet.css', files, rows = []
  * the allow-list, `sanitizeSvg`, which is what is emitted; one it refuses
  * counted as given, the build failing on it anyway; a face as it is), and
  * its rows from its `look.json` (its moods and decorations, `{ cls, slot }`).
- * `look`: a `PrivateLookRead`. The built bucket of a deploy build is 8e2's.
+ * `look`: a `PrivateLookRead`. The built bucket of a deploy build is read
+ * beside it in `src/bundle.test.ts` (8e2).
  */
 export function privateLookArtBudget(look) {
+    const rows = privateLookRows(look);
     const files = new Map(
         look.art
             .filter((file) => !file.name.endsWith('.txt'))
@@ -345,9 +347,18 @@ export function privateLookArtBudget(look) {
                 return [`art/${file.name}`, svg === undefined ? file.bytes : Buffer.from(svg, 'utf8')];
             }),
     );
+    return lookArtBudget({ sheet: look.css, sheetFile: 'sheet.css', files, rows });
+}
+
+/**
+ * A private look's rows from its `look.json`, `{ cls, slot }` — its moods and
+ * its decorations, as the budget counts one per slot. `look`: a
+ * `PrivateLookRead`. The budget over a deploy build's own worn bucket
+ * (8e2, `each-look-keeps-its-art-budget`) reads them here too.
+ */
+export function privateLookRows(look) {
     const json = look.look !== null && typeof look.look === 'object' ? look.look : {};
-    const rows = [...(Array.isArray(json.moods) ? json.moods : []), ...(Array.isArray(json.decorations) ? json.decorations : [])]
+    return [...(Array.isArray(json.moods) ? json.moods : []), ...(Array.isArray(json.decorations) ? json.decorations : [])]
         .filter((row) => row !== null && typeof row === 'object' && typeof row.slot === 'string')
         .map((row) => ({ cls: typeof row.cls === 'string' ? row.cls : undefined, slot: row.slot }));
-    return lookArtBudget({ sheet: look.css, sheetFile: 'sheet.css', files, rows });
 }

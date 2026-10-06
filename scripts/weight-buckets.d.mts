@@ -50,3 +50,4 @@ export declare function privateLookArtBudget(look: import('./served-sheets.mjs')
     readonly slots: Readonly<Record<string, { readonly cls: string; readonly gzip: number }>>;
     readonly total: number;
 };
+export declare function privateLookRows(look: import('./served-sheets.mjs').PrivateLookRead): { readonly cls?: string; readonly slot: string }[];

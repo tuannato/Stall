@@ -215,7 +215,7 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
         'layout/anchorColour.test.ts':
             'renders the shipped looks; no look sheet, shipped or private, brings the browser\'s link colour back (the look lint refuses `revert` and `revert-layer` on `color` and `all`), and an anchor under a private look is read by the probe\'s contrast pass under every look a selection carries (8e2: the guide and wearing links are contrast targets)',
         'src/bundle.test.ts':
-            "the built buckets: a vitest build carries no private look (the virtual module is empty under vitest), so its worn sheets are the table's; the private look's source budget reads the merged list",
+            "the built buckets: a vitest build carries no private look (the virtual module is empty under vitest), so its worn sheets are the table's; every private look the merged list reads is weighed from its source and on a deploy build of its own (8e2)",
         'src/ui/theme-sheets.test.ts': "the emit side of the var table is the public build's: a var only a private sheet read is dead there",
         'src/ui/decor-ground-inks.test.ts':
             "the confetti and the rays are Rural's and Modern's rows; a private sheet's rules sit under its own class (the look lint), which never stands beside them",

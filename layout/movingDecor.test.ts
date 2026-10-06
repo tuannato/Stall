@@ -1,13 +1,30 @@
 /**
  * `every-moving-decoration-has-a-reader-or-a-reason` (step 5b).
  */
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHIPPED_ATTACHMENTS } from '../src/domain/attachments';
+import { PLANTED_CLASS, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
+import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets.mjs';
 import { MOVING_DECORATIONS } from './movingDecor';
 import { TIDE_CLASS } from './contrastPlan';
+
+/**
+ * Every moving row of the private looks `sheets` carries that has no reader
+ * (8e2): today every one — a private row's reader travels in its own
+ * `look.json` (the plan's `guard` field, 8i), never in this public table,
+ * and until that field exists a private look that moves is a look no rule
+ * reads at its worst. Each `<class> (<look class>)`.
+ */
+function privateMoversWithoutReader(sheets: Awaited<ReturnType<typeof guardSheets>>): string[] {
+    return privateRows(sheets).flatMap((sheet) => {
+        const look = (sheet.look.look ?? {}) as { moods?: unknown[]; decorations?: unknown[] };
+        const rows = [...(look.moods ?? []), ...(look.decorations ?? [])] as { cls?: string; motion?: boolean }[];
+        return rows.filter((row) => row.motion === true).map((row) => `${row.cls ?? '(no class)'} (${sheet.lookClass})`);
+    });
+}
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -73,6 +90,35 @@ describe('every-moving-decoration-has-a-reader-or-a-reason', () => {
         expect(literal.test(strip("/* 'a-made-up-reader' */ const x = 1; // 'a-made-up-reader'"))).toBe(false);
         expect(literal.test(strip("describe('a-made-up-reader', () => {});"))).toBe(true);
     });
+
+    /*
+     * The private looks a run reads (8e2): the tracked fixture always, the
+     * selection when one is named. A private row's reader or reason lives
+     * with the row (8i's `guard` field), never in this public table, so the
+     * table names no private class, and a private row that moves fails here
+     * until its look carries one — red over the fixture planted with a
+     * moving trim.
+     */
+    it('holds every private look a run reads: no moving row without its reader, and no private class in the public table', async () => {
+        const sheets = await guardSheets();
+        const rows = privateRows(sheets).flatMap((sheet) => {
+            const look = (sheet.look.look ?? {}) as { moods?: { cls?: string }[]; decorations?: { cls?: string }[] };
+            return [...(look.moods ?? []), ...(look.decorations ?? [])];
+        });
+        expect(rows.length, 'the private looks a run reads carry rows').toBeGreaterThan(0);
+        expect(privateMoversWithoutReader(sheets)).toEqual([]);
+        for (const row of rows) {
+            if (row.cls !== undefined) expect(MOVING_DECORATIONS[row.cls], row.cls).toBeUndefined();
+        }
+        const repo = plantLooks((path, text) =>
+            path === 'fixture/look.json' ? text.replace('"paint": "root",\n            "motion": false', '"paint": "root",\n            "motion": true') : text,
+        );
+        const planted = await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env });
+        expect(privateMoversWithoutReader(planted).filter((entry) => entry.endsWith(`(${PLANTED_CLASS})`))).toEqual([
+            `att-planted-trim (${PLANTED_CLASS})`,
+        ]);
+    }, 60_000);
+    afterAll(removePlants);
 
     it('reads the aurora through the class the tide jobs key on', () => {
         expect(MOVING_DECORATIONS[TIDE_CLASS]).toBeDefined();
