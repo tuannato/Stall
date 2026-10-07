@@ -157,7 +157,11 @@ working accept, and there is no accept.
   private pin bump. `0x04` is reserved, paid and unreleased until the look
   rail ships; until then a record naming it paints the default look. Each
   look file opens with `/*! © 2026 tuannato (stall.cash) */` and nothing
-  more; AI use is recorded in the private design log. Payees stay pinned
+  more; AI use is recorded in the private design log. **The served sheet
+  carries the line too** (owner, 2026-10-07): Vite drops `/*!` comments when
+  it minifies, so a build puts that line at the head of each carried look's
+  emitted sheet and its dist check holds it there; SVG and JSON files carry
+  no comment either way. Payees stay pinned
   hash160s (§ Rejected: a payee named by an NFT).
 - **Deploys through GitHub Actions run by hand, production behind the owner
   (owner, 2026-10-06).** The private repository is read by its own job in
