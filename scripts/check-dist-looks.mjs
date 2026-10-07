@@ -35,7 +35,11 @@
  *   turn every production check red (the 8b2 critic's item 7) — and none of
  *   its files is in `dist`;
  * - **every face a carried look serves is in the notices**: `licenses.txt`
- *   names its file and carries its licence text whole (step 8e1).
+ *   names its file and carries its licence text whole (step 8e1);
+ * - **every carried look's sheet opens with the copyright line, once, and
+ *   no other stylesheet carries it** (`LOOK_COPYRIGHT_LINE`, step 8c1b):
+ *   the build puts it there (`stampCarriedSheets`), since Vite's minifier
+ *   drops every `/*!` comment.
  *
  * No selection: the build carried no private look, and `dist` may hold no
  * look sheet but the shipped ones. Run by the build itself whenever it
@@ -52,7 +56,7 @@ import { fileURLToPath } from 'node:url';
 import { LOOK_FONTS_FILE, lookFontNotices } from './look-faces.mjs';
 import { selectionFromEnv } from './looks-selection.mjs';
 import { noticedLicence } from './notices-lib.mjs';
-import { PRIVATE_FACE_LICENCE, PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
+import { LOOK_COPYRIGHT_LINE, PRIVATE_FACE_LICENCE, PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -145,6 +149,12 @@ export function artNamedBy(sheet) {
  * face file of every included look and carries each face's licence text
  * whole, as the build writes it (`noticesWithLookFonts`).
  *
+ * **A carried look's sheet opens with the copyright line, once** (PLAN §
+ * Decided, owner 2026-10-07; `the-served-sheet-carries-the-copyright-line`):
+ * its text begins with `LOOK_COPYRIGHT_LINE` and a newline, carries the line
+ * nowhere else, and no other stylesheet in `dist` carries it — it is a
+ * carried look's alone.
+ *
  * **A harness build carries the harness's own looks** (8e2): the layout
  * probe's build and the workshop kit's (`vite.probe.config.ts`,
  * `vite.workshop.config.ts`) emit the step-6 fixture look's sheet and the
@@ -224,6 +234,14 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
         if (entry.has(path)) {
             problems.push(`${look.slug}: its sheet is in the entry CSS (${path}), where a private look's sheet is its own file`);
         }
+        const served = files.get(path).toString('utf8');
+        if (!served.startsWith(`${LOOK_COPYRIGHT_LINE}\n`)) {
+            problems.push(`${look.slug}: its sheet (${path}) does not open with the copyright line ${LOOK_COPYRIGHT_LINE}`);
+        }
+        const lines = copyrightLines(served);
+        if (lines > 1) {
+            problems.push(`${look.slug}: its sheet (${path}) carries the copyright line ${lines} times, where it carries it once`);
+        }
         for (const target of cssTargets(files.get(path).toString('utf8'))) {
             const resolved = target.startsWith('/') ? target.slice(1) : posix.normalize(posix.join(posix.dirname(path), target));
             const bytes = files.get(resolved);
@@ -258,6 +276,11 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
         }
     }
     for (const [path, bytes] of files) {
+        // The copyright line is a carried look's sheet's alone: no other
+        // stylesheet a build emits or copies carries it.
+        if (path.endsWith('.css') && !sheets.has(path) && copyrightLines(bytes.toString('utf8')) > 0) {
+            problems.push(`${path}: carries the copyright line ${LOOK_COPYRIGHT_LINE}, which only a carried look's sheet carries`);
+        }
         // Vite emits every stylesheet it builds under `assets/`; the root's
         // are `public/`'s documents, copied as they are.
         if (
@@ -290,6 +313,11 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
         }
     }
     return problems;
+}
+
+/** How many times `text` carries the copyright line (`LOOK_COPYRIGHT_LINE`). */
+export function copyrightLines(text) {
+    return text.split(LOOK_COPYRIGHT_LINE).length - 1;
 }
 
 /** One index entry's art and sheet, as the build reads and writes them, from git at the selection's commit. */

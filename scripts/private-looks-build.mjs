@@ -61,7 +61,11 @@
  * where a module-to-package reader filed the sheet as a package named
  * `.cache`), removed when the build closes, and the module imports each
  * sheet from there with `?url`: emitted alone, minified, hashed, its
- * `url()`s rewritten to the built art, never in the entry CSS. The module
+ * `url()`s rewritten to the built art, never in the entry CSS — and, last,
+ * opened with the copyright line (`LOOK_COPYRIGHT_LINE`, put back by
+ * `stampCarriedSheets` in this plugin's `generateBundle`, since Vite's
+ * minifier drops every `/*!` comment; the dist check holds it there once,
+ * `the-served-sheet-carries-the-copyright-line`). The module
  * resolves to `\0stall:private-looks`, a Stall virtual module to the
  * notices' classifier; its data is `JSON.parse` of a string literal
  * (`privateLooksModuleCode`): a key named `__proto__` stays a key the
@@ -95,6 +99,7 @@ import { LOOK_FONTS_FILE, lookFaceProblems, lookFontNotices } from './look-faces
 import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { noticesWithLookFonts } from './notices-lib.mjs';
 import {
+    LOOK_COPYRIGHT_LINE,
     PRIVATE_FACE_LICENCE,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
@@ -405,6 +410,73 @@ export function privateLooksModuleCode(entries) {
 }
 
 /**
+ * `css` with `LOOK_COPYRIGHT_LINE` and a newline at its head, once: a sheet
+ * that already opens with the line (a minifier that kept it) has that one
+ * taken off first, so the line is never doubled, and the rest of the sheet
+ * is never touched. Idempotent.
+ */
+export function withCopyrightLine(css) {
+    const body = css.startsWith(LOOK_COPYRIGHT_LINE) ? css.slice(LOOK_COPYRIGHT_LINE.length).replace(/^\r?\n/, '') : css;
+    return `${LOOK_COPYRIGHT_LINE}\n${body}`;
+}
+
+/** `path` with forward slashes, and as the disk resolves it when it exists: how Vite names a module's file. */
+function samePathKey(path) {
+    let real = path;
+    try {
+        real = realpathSync(path);
+    } catch {
+        // Not on the disk (a virtual id): compared as written.
+    }
+    return real.split(sep).join('/');
+}
+
+/**
+ * Put the copyright line at the head of each carried look's emitted sheet
+ * (PLAN § Decided, owner 2026-10-07): in `bundle` (Rollup's output, as
+ * `generateBundle` hands it), the one CSS asset Vite emitted from each
+ * entry's materialised `sheetPath` — found by the asset's
+ * `originalFileNames`, which Vite's CSS plugin sets to the file it read —
+ * gets `withCopyrightLine`. Nothing else in the bundle is touched. Answers
+ * the stamped file names. Throws when an entry's sheet is not exactly one
+ * asset: a build that cannot find the sheet it carries fails rather than
+ * serve it without the line.
+ *
+ * **The file name was computed before the line was added** (Vite's CSS
+ * plugin emits the sheet with its name during `renderChunk`, from the
+ * minified text; nothing later can move the name without renaming every
+ * chunk that names it). The hash still identifies the content: the line is
+ * a constant prefix, so two served sheets differ exactly when the two hashed
+ * texts do. Vite does the same to every CSS asset already — it hashes a
+ * sheet with `/*$vite$:1*\/` appended and strips that marker in its own
+ * `generateBundle`. What the name does not follow is a change to the line
+ * itself, which would serve new bytes under the old name to a cache that
+ * kept the old ones — the line is a constant, changed only by an edit here.
+ */
+export function stampCarriedSheets(bundle, entries) {
+    const stamped = [];
+    for (const entry of entries) {
+        const want = samePathKey(entry.sheetPath);
+        const assets = Object.values(bundle).filter(
+            (file) =>
+                file.type === 'asset' &&
+                file.fileName.endsWith('.css') &&
+                (file.originalFileNames ?? []).some((name) => samePathKey(name) === want),
+        );
+        if (assets.length !== 1) {
+            throw new Error(
+                `private looks: ${assets.length} emitted stylesheets come from ${entry.sheetClass}'s sheet, where one does — its served sheet must open with ${LOOK_COPYRIGHT_LINE}`,
+            );
+        }
+        const [asset] = assets;
+        const text = typeof asset.source === 'string' ? asset.source : Buffer.from(asset.source).toString('utf8');
+        asset.source = withCopyrightLine(text);
+        stamped.push(asset.fileName);
+    }
+    return stamped;
+}
+
+/**
  * The dist check, under a build's own selection: `checkDist`'s core
  * (`check-dist-looks.mjs`) over the index at the selection's commit,
  * filtered by the target and the public lists as the build filtered it.
@@ -434,8 +506,10 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env, harne
  * selection is read (`process.env`). The selection is read in `buildStart`,
  * so each build reads its own; a build that carries a look says so in one
  * line on stderr, whatever the log level, so a forgotten shell export is on
- * screen; and a build that selected anything and wrote to the disk runs the
- * dist check over what it wrote, and fails on a problem
+ * screen; each carried look's emitted sheet opens with the copyright line
+ * (`stampCarriedSheets`, in `generateBundle`); and a build that selected
+ * anything and wrote to the disk runs the dist check over what it wrote,
+ * and fails on a problem
  * (`the-dist-holds-what-the-index-names`). `harnessClasses` is a harness
  * build's alone (8e2: the layout probe's and the kit's configs hand
  * `HARNESS_LOOK_CLASSES`): the looks that build carries of the harness's
@@ -506,6 +580,18 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
                 selection = undefined;
                 cleanup();
             }
+        },
+        // The copyright line at the head of each carried look's served
+        // sheet (`stampCarriedSheets`), after every other plugin's own
+        // `generateBundle` — Vite's CSS plugin strips its hash marker in
+        // its — so the line is the last edit before the sheet is written
+        // or handed back in memory. A build that carries no look has no
+        // entry and touches nothing: the public build, byte for byte.
+        generateBundle: {
+            order: 'post',
+            handler(_options, bundle) {
+                stampCarriedSheets(bundle, entries);
+            },
         },
         writeBundle() {
             // The notices this build serves name every face its looks serve

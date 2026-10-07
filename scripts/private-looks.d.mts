@@ -45,6 +45,8 @@ export declare const PRIVATE_LOOK_FILES: readonly string[];
 export declare const PRIVATE_LOOK_REQUIRED: readonly string[];
 export declare const PRIVATE_FACE_LICENCE: RegExp;
 export declare const PRIVATE_FILE_MODE: '100644';
+/** The line every carried look's served sheet opens with (`scripts/private-looks.mjs`). */
+export declare const LOOK_COPYRIGHT_LINE: '/*! © 2026 tuannato (stall.cash) */';
 export declare const FULL_COMMIT: RegExp;
 export declare const GIT_LOCATION_VARS: readonly string[];
 export declare const TREE_PREFIX: RegExp;

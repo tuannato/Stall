@@ -56,6 +56,13 @@ export declare function checkSelectedDist(
     input: { dir: string; selection: LooksSelection | undefined; root: string; facts: PublicLookFacts; harnessClasses?: readonly string[] } & GitOptions,
 ): string[];
 export declare function materialise(looks: readonly SelectedLook[], into: string): ModuleEntry[];
+/** `css` opened with the copyright line (`LOOK_COPYRIGHT_LINE`) and a newline, once. */
+export declare function withCopyrightLine(css: string): string;
+/** Opens each carried look's emitted sheet in `bundle` with the copyright line; answers the stamped file names. */
+export declare function stampCarriedSheets(
+    bundle: Record<string, { type: string; fileName: string; source?: string | Uint8Array; originalFileNames?: readonly string[] }>,
+    entries: readonly ModuleEntry[],
+): string[];
 export declare function jsString(value: string): string;
 export declare function privateLooksModuleCode(entries: readonly ModuleEntry[]): string;
 export declare function privateLooksPlugin(options: {
