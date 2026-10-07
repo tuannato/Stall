@@ -4658,8 +4658,10 @@ same day** — the next section.
 - **The clip-count drift between a bundled sheet and the loader's**
   (CRITIC-STEP-8D1 item 3) is still unattributed; the per-look clip counts
   above are what can attribute it.
-- **A private clone not at the pin** is not refused (no `STALL_LOOKS_DEV`,
-  no "not a deployable pair" verdict): the pin is 8c's.
+- **A private clone not at the pin** is not refused, by design (8c1): for a
+  preview selection the line the probe prints before it builds says whether
+  it measures the pinned pair (`pinnedPair`, `scripts/looks-pin.mjs`), and a
+  verdict is cited with that line.
 - **The kit's probe refuses a selection** (it measures the kit's look
   alone), and so does `print-measure`.
 - **The record a licensed stall would compose is not measured**: the try-on
