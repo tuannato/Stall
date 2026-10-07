@@ -69,6 +69,7 @@ import { fileURLToPath } from 'node:url';
 import {
     FULL_COMMIT,
     GIT_LOCATION_VARS,
+    TREE_PREFIX,
     gitCommitOf,
     gitTopOf,
     parsePrivateIndex,
@@ -211,15 +212,21 @@ function gitAt({ dir, git = 'git', env = process.env }) {
  * — its root entries (`git ls-tree -z`, not recursive) less `PACKED_OUT`,
  * hashed as git hashes a tree object (`tree <size>\0`, then per entry the
  * mode without its leading zero, the name, a NUL and the 20-byte id, in the
- * commit's own order) — as 40 lower-case hex. Writes nothing: no object
- * enters the clone. Throws when git cannot run, `dir` is not a repository's
- * root, or the commit is not there.
+ * commit's own order) — as 40 lower-case hex. With `prefix`, the same of
+ * that subtree of the commit (how this repository's tracked fixture is
+ * read: `layout/fixture-private-looks`). Writes nothing: no object enters
+ * the clone. Throws when git cannot run, `dir` is not a repository's root,
+ * or the commit (or the subtree) is not there.
  */
-export function packedTreeOf({ dir, commit, git, env }) {
+export function packedTreeOf({ dir, commit, prefix, git, env }) {
     if (typeof commit !== 'string' || !FULL_COMMIT.test(commit)) {
         throw new TypeError(`a packed tree is read at a full commit (40 lower-case hex), not ${JSON.stringify(commit)}`);
     }
-    const out = gitAt({ dir, git, env })(['ls-tree', '-z', '--full-tree', commit], 'buffer').toString('latin1');
+    if (prefix !== undefined && (typeof prefix !== 'string' || !TREE_PREFIX.test(prefix))) {
+        throw new TypeError(`a subtree is named by lower-case words and hyphens, slash-separated, not ${JSON.stringify(prefix)}`);
+    }
+    const tree = prefix === undefined ? commit : `${commit}:${prefix}`;
+    const out = gitAt({ dir, git, env })(['ls-tree', '-z', '--full-tree', tree], 'buffer').toString('latin1');
     const parts = [];
     for (const entry of out.split('\0')) {
         if (entry === '') {

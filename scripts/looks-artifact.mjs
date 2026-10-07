@@ -35,13 +35,21 @@
  * archive; a tree id carries neither. The artifact is `looks.tar` and
  * `pin`, the stamp `<commit> <tree>\n` — the pin's own 82 bytes.
  *
+ * **What the pack does not refuse, stated**: it holds files to their
+ * shapes and modes, not the index to the files. The build's index-level
+ * refusals (`privateLooksProblems`: a look directory the index does not
+ * name, an index the public lists refuse, a named look without its
+ * required files) run in the build job, after the upload; at pin time
+ * `pinLineFor` (`node scripts/looks-pin.mjs --write`) refuses all three,
+ * and a pin written by hand skips it (the 8c2 critic's items 1 and 2).
+ *
  * **The program is built from the build's own constants** and refuses to
  * load when one of them changes shape (`shapeOf`): a pack written for one
  * allow-list and run against another is the hole this step closes. The
  * test runs the shell itself over a corpus generated from those constants
  * and the build's predicate, both directions — every path the shell admits
- * the build admits, and every path the build admits the shell admits
- * (`the-pack-admits-nothing-the-build-refuses`,
+ * `privateFileProblems` admits, and every path it admits the shell admits
+ * (`the-pack-admits-exactly-the-files-privateFileProblems-admits`,
  * `the-pack-refuses-a-file-the-build-would-refuse`). Lengths are checked
  * with `length()`, never an interval expression, and every character class
  * is an explicit list, never a range: Ubuntu's awk is mawk, this Mac's is
@@ -204,8 +212,10 @@ export const PACK_ALLOW_PROGRAM = packAllowProgram({
  * docblock): the clone at the pin, the allow-list, `PACKED_TREE_SCRIPT`
  * verbatim, the tree against the pin's second hash, then the archive of
  * the tree id and the stamp into `$RUNNER_TEMP/looks-artifact`. Every
- * refusal comes before `mkdir`, so a refused pack leaves no artifact
- * directory, and none prints a path.
+ * refusal comes before `mkdir` — **before anything is archived**, not
+ * before anything is written: the tree check reads the tree `git mktree`
+ * has just written into the clone's objects — so a refused pack leaves no
+ * artifact directory, and none prints a path.
  */
 export const PACK_SCRIPT = `set -euo pipefail
 [ "$(git --no-replace-objects -C looks rev-parse --verify HEAD)" = "$PIN" ] || { echo 'the private checkout is not at the pinned commit' >&2; exit 1; }
@@ -281,6 +291,7 @@ export function readArtifactTar(tar) {
     }
     const members = [];
     const seen = new Set();
+    const dirs = new Set();
     let at = 0;
     for (;;) {
         if (at + BLOCK > tar.length) {
@@ -332,10 +343,13 @@ export function readArtifactTar(tar) {
             refuse('two members that name one file, case folded');
         }
         const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')).toLowerCase() : undefined;
-        if (parent !== undefined && !members.some((member) => member.dir && member.path.toLowerCase() === parent)) {
+        if (parent !== undefined && !dirs.has(parent)) {
             refuse('a member whose directory the tar did not write before it');
         }
         seen.add(folded);
+        if (dir) {
+            dirs.add(folded);
+        }
         const start = at + BLOCK;
         const end = start + size;
         if (end > tar.length) {
@@ -384,12 +398,31 @@ export function treeOfDisk(dir) {
     return { id: objectId('tree', body).toString('hex'), files };
 }
 
-/** Git's environment for the carried repository: no global, system or user config, no location inherited, replace objects off. */
+/**
+ * Git's environment for the carried repository: **no global or system
+ * config and no global or system attributes** — `GIT_CONFIG_GLOBAL` at
+ * `/dev/null` (`~/.gitconfig` and the XDG config unread),
+ * `GIT_CONFIG_NOSYSTEM` and `GIT_ATTR_NOSYSTEM` (the system config and the
+ * system attributes file unread; the 8c2 critic's item 5), and `SAME`'s
+ * `core.attributesFile` and `core.excludesFile` at `/dev/null` (the global
+ * attributes and ignore files) — no configuration handed down in the
+ * environment (`GIT_CONFIG`, `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`;
+ * `GIT_CONFIG_SYSTEM`, the system file's path, is git's to ignore under
+ * `GIT_CONFIG_NOSYSTEM`), neither variable that changes what this carries
+ * (`GIT_DEFAULT_HASH`, which makes `git init` write another object format,
+ * and `GIT_ATTR_SOURCE`, which reads attributes from a tree), no location
+ * inherited, replace objects off, and a fixed identity and date. `git init
+ * --template=` copies no template either. Test:
+ * `the-carried-repository-reads-no-global-or-system-git-setting`, every
+ * setting but one proved by a plant: the global ignore file is a belt
+ * (`add -A -f` adds what it names anyway).
+ */
 function carriedGitEnv(env) {
     const clean = {
         ...env,
         GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_CONFIG_NOSYSTEM: '1',
+        GIT_ATTR_NOSYSTEM: '1',
         GIT_NO_REPLACE_OBJECTS: '1',
         GIT_AUTHOR_NAME: 'Stall deploy',
         GIT_AUTHOR_EMAIL: '',
@@ -398,13 +431,33 @@ function carriedGitEnv(env) {
         GIT_COMMITTER_EMAIL: '',
         GIT_COMMITTER_DATE: '@0 +0000',
     };
-    for (const name of [...GIT_LOCATION_VARS, 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT']) {
+    for (const name of [
+        ...GIT_LOCATION_VARS,
+        'GIT_CONFIG',
+        'GIT_CONFIG_PARAMETERS',
+        'GIT_CONFIG_COUNT',
+        'GIT_DEFAULT_HASH',
+        'GIT_ATTR_SOURCE',
+    ]) {
         delete clean[name];
     }
     return clean;
 }
 
-const SAME = ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', '-c', 'core.fileMode=true', '-c', 'core.safecrlf=false', '-c', 'core.attributesFile=/dev/null'];
+const SAME = [
+    '-c',
+    'core.autocrlf=false',
+    '-c',
+    'core.eol=lf',
+    '-c',
+    'core.fileMode=true',
+    '-c',
+    'core.safecrlf=false',
+    '-c',
+    'core.attributesFile=/dev/null',
+    '-c',
+    'core.excludesFile=/dev/null',
+];
 
 /**
  * Unwrap the artifact at `artifact` into a new repository at `dest`, for

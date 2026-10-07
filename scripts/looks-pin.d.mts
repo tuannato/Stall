@@ -13,7 +13,7 @@ export declare const PIN_SCRIPT: string;
 export declare const PACKED_TREE_SCRIPT: string;
 export declare function pinProblem(bytes: Buffer | string): string | undefined;
 export declare function readLooksPin(root: string): LooksPin;
-export declare function packedTreeOf(at: GitAt & { readonly commit: string }): string;
+export declare function packedTreeOf(at: GitAt & { readonly commit: string; readonly prefix?: string }): string;
 export declare function pinLineFor(at: GitAt & { readonly commit?: string; readonly facts?: Facts }): Promise<string>;
 export declare function writeLooksPin(root: string, line: string): void;
 export declare function pairVerdict(facts: {

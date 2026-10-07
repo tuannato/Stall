@@ -67,7 +67,7 @@ function displayDir(root, read) {
 
 /** The looks `entries` of one repository read at `selection`, each with its files as git holds them. */
 function readLooks({ root, selection, facts, source, git, gitEnv }) {
-    const { commit, read, files, index } = selectedIndex({ root, selection, facts, git, env: gitEnv });
+    const { commit, packedTree, read, files, index } = selectedIndex({ root, selection, facts, git, env: gitEnv });
     const entries = source === 'fixture' ? index.looks : includedEntries(index, selection.target, facts);
     const base = displayDir(root, read);
     return entries.map((entry) => {
@@ -90,6 +90,7 @@ function readLooks({ root, selection, facts, source, git, gitEnv }) {
         return Object.freeze({
             source,
             commit,
+            packedTree,
             entry,
             sheetPath: `${base}/${entry.slug}/sheet.css`,
             artDir: `${base}/${entry.slug}/art`,
@@ -179,10 +180,16 @@ export async function servedSheets({ root = ROOT, env = process.env, fixture = f
     return Object.freeze([...rows, ...looks.map(privateRow)]);
 }
 
-/** The line the guards say which private looks they read with: each class, where it came from and its commit. */
+/**
+ * The line the guards say which private looks they read with: each class,
+ * where it came from, its commit and its packed tree — the tree a pin names
+ * beside its commit, so a deploy's public log, where the commit read is the
+ * one the road carried and not the pinned one, still names the pin's tree on
+ * this line (the 8c2 critic's item 4).
+ */
 export function guardLine(sheets) {
     const rows = privateRows(sheets);
-    return `guards read private looks: ${rows.length === 0 ? 'none' : rows.map((row) => `${row.lookClass} (${row.look.source} @${row.look.commit.slice(0, 12)})`).join(', ')}\n`;
+    return `guards read private looks: ${rows.length === 0 ? 'none' : rows.map((row) => `${row.lookClass} (${row.look.source} @${row.look.commit.slice(0, 12)}, tree ${row.look.packedTree.slice(0, 12)})`).join(', ')}\n`;
 }
 
 let guard;

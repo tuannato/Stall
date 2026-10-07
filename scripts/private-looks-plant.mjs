@@ -36,7 +36,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
  * The paths `a-private-file-outside-the-allow-list-fails`
  * (`scripts/private-looks.test.mjs`) holds the build's allow-list to — one
  * list for that test and the deploy pack's
- * (`the-pack-admits-nothing-the-build-refuses`,
+ * (`the-pack-admits-exactly-the-files-privateFileProblems-admits`,
  * `scripts/looks-artifact.test.mjs`), so a plant added here is held against
  * both: paths a private look repository may hold as plain files, paths it
  * may not hold at all, and the modes no path may have.

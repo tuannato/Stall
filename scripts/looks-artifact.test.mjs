@@ -366,7 +366,7 @@ function fileLessSubtrees(repo) {
     return roots.map((root) => repo.git(['commit-tree', root, '-m', 'planted']));
 }
 
-describe('the-pack-admits-nothing-the-build-refuses', () => {
+describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
     it('finds the build’s boundaries from its own predicate, and the program is written for them', () => {
         assert.equal(SLUG_MAX, PRIVATE_SLUG_MAX);
         assert.match(PACK_ALLOW_PROGRAM, new RegExp(`length\\(p\\[1\\]\\) <= ${SLUG_MAX}\\n`));
@@ -682,11 +682,17 @@ function packedRoad() {
 /*
  * The build job runs the unwrap after setup-node and before `pnpm install`,
  * so nothing installed has run when the private files land: the module and
- * everything it imports take Node's built-ins and each other, nothing from
- * node_modules.
+ * everything it may load take Node's built-ins and this repository's own
+ * files, nothing from node_modules. Every kind of import is read — `import
+ * … from` and `export … from`, a side-effect `import '…'`, and `import()`
+ * with a literal module (one the unwrap never reaches: `publicLookFacts`'
+ * `../src/domain/theme.ts`) — and an `import()` of anything but a literal
+ * fails the test, since what it loads cannot be read here. Not seen,
+ * stated: `require()` (no file here uses it) and a module a dependency of
+ * Node itself loads.
  */
 describe('the-unwrap-runs-before-anything-is-installed', () => {
-    it('imports only node: modules and scripts beside it, all the way down', () => {
+    it('imports only node: modules and this repository’s own files, all the way down, static, side-effect and dynamic', () => {
         const seen = new Set();
         const walk = (file) => {
             if (seen.has(file)) {
@@ -694,16 +700,29 @@ describe('the-unwrap-runs-before-anything-is-installed', () => {
             }
             seen.add(file);
             const source = readFileSync(file, 'utf8');
-            for (const m of source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)';/gms)) {
-                const spec = m[1];
-                assert.ok(spec.startsWith('node:') || spec.startsWith('./'), `${file} imports ${spec}`);
-                if (spec.startsWith('./')) {
+            const specs = [
+                ...source.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s*(['"])([^'"]+)\1/gm),
+                ...source.matchAll(/^\s*import\s*(['"])([^'"]+)\1/gm),
+                ...source.matchAll(/\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g),
+            ].map((m) => m[2]);
+            const dynamic = [...source.matchAll(/\bimport\s*\(/g)].length;
+            const literal = [...source.matchAll(/\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g)].length;
+            assert.equal(dynamic, literal, `${file} has an import() whose module is not a literal`);
+            for (const spec of specs) {
+                assert.ok(/^(?:node:|\.\.?\/)/.test(spec), `${file} imports ${spec}`);
+                if (!spec.startsWith('node:')) {
                     walk(join(dirname(file), spec));
                 }
             }
         };
         walk(join(ROOT, 'scripts', 'looks-artifact.mjs'));
-        assert.deepEqual([...seen].map((file) => file.slice(ROOT.length + 1)).sort(), ['scripts/looks-artifact.mjs', 'scripts/looks-pin.mjs', 'scripts/private-looks.mjs', 'scripts/workshop-css.mjs']);
+        assert.deepEqual([...seen].map((file) => file.slice(ROOT.length + 1)).sort(), [
+            'scripts/looks-artifact.mjs',
+            'scripts/looks-pin.mjs',
+            'scripts/private-looks.mjs',
+            'scripts/workshop-css.mjs',
+            'src/domain/theme.ts',
+        ]);
     });
 });
 
@@ -998,5 +1017,145 @@ describe('an-unwrapped-artifact-that-is-not-the-pinned-tree-is-refused', () => {
         assert.deepEqual(readdirSync(target), []);
         symlinkSync(join(linkParent, 'nowhere'), join(linkParent, 'dangling'));
         assert.throws(() => unwrapLooksArtifact({ artifact: road.artifact, dest: join(linkParent, 'dangling'), root: road.work }), /the destination is already there/);
+    });
+});
+
+/*
+ * The 8c2 critic's item 5: the unwrap's git reads no global or system
+ * setting — config or attributes — and takes none from the environment
+ * that would change what it carries. Each plant is shown to bite first
+ * (a git that reads it does something it should not), then the unwrap,
+ * handed the same plant, carries exactly the pinned tree and leaves the
+ * plant untouched. Git here offers no variable to move the system
+ * attributes file (`git var GIT_ATTR_SYSTEM` stays `/etc/gitattributes`,
+ * which needs root to write), so that plant is a stand-in: a `git` that
+ * reads a planted file as its system attributes unless `GIT_ATTR_NOSYSTEM`
+ * is true, the variable git's own documentation names, handed to the
+ * unwrap as its git.
+ */
+describe('the-carried-repository-reads-no-global-or-system-git-setting', () => {
+    /** An artifact whose pinned tree stores a CRLF file as it is — what a `* text` attribute read on add would change. */
+    function crlfArtifact() {
+        const work = scratchDir('settings');
+        const env = gitEnv(work);
+        const git = (args, input) => execFileSync('git', args, { cwd: work, env, input, encoding: 'utf8' }).trim();
+        git(['init', '-q', '.']);
+        const blob = (text) => git(['hash-object', '-w', '--stdin'], text);
+        const tree = git(['mktree'], `100644 blob ${blob('{}\n')}\tindex.json\n100644 blob ${blob(CRLF)}\tnotes.txt\n`);
+        const line = `${'c'.repeat(40)} ${tree}\n`;
+        mkdirSync(join(work, 'deploy'));
+        writeFileSync(join(work, LOOKS_PIN_FILE), line);
+        const artifact = join(work, ARTIFACT_DIR);
+        mkdirSync(artifact);
+        writeFileSync(join(artifact, ARTIFACT_STAMP), line);
+        writeFileSync(join(artifact, ARTIFACT_TAR), tarOf([{ name: 'index.json', data: '{}\n' }, { name: 'notes.txt', data: CRLF }]));
+        return { work, artifact, tree };
+    }
+    const CRLF = 'a\r\nb\r\n';
+
+    /** The unwrap of `art` under `env` (and `git`), which must carry the pinned tree. */
+    function carries(art, env, git) {
+        const dest = join(scratchDir('carried'), 'looks');
+        const result = unwrapLooksArtifact({ artifact: art.artifact, dest, root: art.work, env, git });
+        assert.equal(result.tree, art.tree);
+        return result;
+    }
+
+    /** `env` with `names` taken out — a variable a test plants must not be shadowed by one the runner's shell carries. */
+    const minus = (env, ...names) => {
+        const out = { ...env };
+        for (const name of names) {
+            delete out[name];
+        }
+        return out;
+    };
+
+    /** The blob `git add` stores for the CRLF file in a fresh repository under `env` (and `git`, and `args` before `add`). */
+    function storedUnder(env, git = 'git', args = []) {
+        const dir = scratchDir('stored');
+        execFileSync('git', ['init', '-q', '.'], { cwd: dir, env });
+        writeFileSync(join(dir, 'notes.txt'), CRLF);
+        execFileSync(git, [...args, 'add', 'notes.txt'], { cwd: dir, env, stdio: 'ignore' });
+        return execFileSync('git', ['rev-parse', ':notes.txt'], { cwd: dir, env, encoding: 'utf8' }).trim();
+    }
+    const raw = () => execFileSync('git', ['hash-object', '--stdin'], { input: CRLF, encoding: 'utf8' }).trim();
+
+    it('reads neither the system nor the global config: a trace2 target planted in each is never written', () => {
+        const art = crlfArtifact();
+        const dir = scratchDir('config');
+        const systemMark = join(dir, 'system-trace');
+        const globalMark = join(dir, 'global-trace');
+        const system = join(dir, 'system-config');
+        writeFileSync(system, `[trace2]\n\tnormalTarget = ${systemMark}\n`);
+        const home = join(dir, 'home');
+        mkdirSync(join(home, '.config', 'git'), { recursive: true });
+        writeFileSync(join(home, '.gitconfig'), `[trace2]\n\tnormalTarget = ${globalMark}\n`);
+        writeFileSync(join(home, '.config', 'git', 'config'), `[trace2]\n\tnormalTarget = ${globalMark}\n`);
+        const base = minus(process.env, 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_SYSTEM', 'GIT_TRACE2', 'GIT_TRACE2_EVENT', 'GIT_TRACE2_PERF');
+        const planted = { ...base, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), GIT_CONFIG_SYSTEM: system };
+        // The plants bite: a git that reads the system config, or the global one, writes its trace.
+        execFileSync('git', ['version'], { env: { ...planted, GIT_CONFIG_GLOBAL: '/dev/null' }, stdio: 'ignore' });
+        assert.ok(existsSync(systemMark), 'a git that reads the system config does not trace — the plant proves nothing');
+        execFileSync('git', ['version'], { env: { ...planted, GIT_CONFIG_NOSYSTEM: '1' }, stdio: 'ignore' });
+        assert.ok(existsSync(globalMark), 'a git that reads the global config does not trace — the plant proves nothing');
+        rmSync(systemMark);
+        rmSync(globalMark);
+        carries(art, planted);
+        assert.ok(!existsSync(systemMark), 'the unwrap read the system config');
+        assert.ok(!existsSync(globalMark), 'the unwrap read the global config');
+    });
+
+    it('reads neither the system nor the global attributes: a CRLF file under a planted `* text` is carried as its bytes', () => {
+        const art = crlfArtifact();
+        const dir = scratchDir('attributes');
+        const text = join(dir, 'text-attributes');
+        writeFileSync(text, '* text\n');
+        // The global attributes file: `$XDG_CONFIG_HOME/git/attributes`, read whatever `GIT_CONFIG_GLOBAL` says.
+        const home = join(dir, 'home');
+        mkdirSync(join(home, '.config', 'git'), { recursive: true });
+        writeFileSync(join(home, '.config', 'git', 'attributes'), '* text\n');
+        const base = { ...minus(process.env, 'GIT_ATTR_NOSYSTEM', 'GIT_ATTR_SOURCE'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+        const globalPlant = { ...base, HOME: home, XDG_CONFIG_HOME: join(home, '.config') };
+        assert.notEqual(storedUnder(globalPlant), raw(), 'a git that reads the global attributes stores the bytes anyway — the plant proves nothing');
+        carries(art, globalPlant);
+        // The system attributes file, by its stand-in: a git that reads `text` as its system file unless GIT_ATTR_NOSYSTEM is true.
+        const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+        const wrapper = join(dir, 'git');
+        writeFileSync(
+            wrapper,
+            [
+                '#!/bin/bash',
+                '# A git whose system attributes file is $PLANT_SYSTEM_ATTRIBUTES, read unless GIT_ATTR_NOSYSTEM is true.',
+                'pre=()',
+                'while [ $# -gt 0 ]; do',
+                '  case "$1" in',
+                '    -c) pre+=("$1" "$2"); shift 2 ;;',
+                '    --*) pre+=("$1"); shift ;;',
+                '    *) break ;;',
+                '  esac',
+                'done',
+                'case "$(printf %s "${GIT_ATTR_NOSYSTEM:-}" | tr "[:upper:]" "[:lower:]")" in',
+                '  1|true|yes|on) exec "$REAL_GIT" ${pre[@]+"${pre[@]}"} "$@" ;;',
+                'esac',
+                'exec "$REAL_GIT" ${pre[@]+"${pre[@]}"} -c "core.attributesFile=$PLANT_SYSTEM_ATTRIBUTES" "$@"',
+                '',
+            ].join('\n'),
+        );
+        chmodSync(wrapper, 0o755);
+        const systemPlant = { ...base, REAL_GIT: realGit, PLANT_SYSTEM_ATTRIBUTES: text };
+        assert.notEqual(storedUnder(systemPlant, wrapper, ['-c', 'core.attributesFile=/dev/null']), raw(), 'the stand-in reads no system attributes — the plant proves nothing');
+        assert.equal(storedUnder({ ...systemPlant, GIT_ATTR_NOSYSTEM: '1' }, wrapper), raw(), 'the stand-in reads its system attributes under GIT_ATTR_NOSYSTEM');
+        carries(art, systemPlant, wrapper);
+    });
+
+    it('takes from the environment nothing that changes what it carries: GIT_DEFAULT_HASH, GIT_ATTR_SOURCE', () => {
+        const art = crlfArtifact();
+        const base = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+        const dir = scratchDir('hash');
+        execFileSync('git', ['init', '-q', '.'], { cwd: dir, env: { ...base, GIT_DEFAULT_HASH: 'sha256' } });
+        assert.equal(execFileSync('git', ['rev-parse', '--show-object-format'], { cwd: dir, encoding: 'utf8' }).trim(), 'sha256', 'GIT_DEFAULT_HASH does not move git init — the plant proves nothing');
+        carries(art, { ...base, GIT_DEFAULT_HASH: 'sha256' });
+        assert.throws(() => storedUnder({ ...base, GIT_ATTR_SOURCE: 'HEAD' }), undefined, 'GIT_ATTR_SOURCE=HEAD in a fresh repository does not stop git add — the plant proves nothing');
+        carries(art, { ...base, GIT_ATTR_SOURCE: 'HEAD' });
     });
 });

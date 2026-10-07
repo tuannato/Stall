@@ -132,6 +132,15 @@ function build(outDir, selection = {}) {
 }
 
 const FIXTURE = { [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR };
+/**
+ * What the build's stderr line names for the fixture at HEAD: its commit and
+ * its packed tree — the fixture's subtree, read here by git itself (the
+ * fixture holds no root README or log to leave out).
+ */
+const fixtureCarriesLine = () => {
+    const [commit, tree] = ['HEAD', `HEAD:${FIXTURE_LOOKS_DIR}`].map((rev) => execFileSync('git', ['rev-parse', rev], { cwd: ROOT, encoding: 'utf8' }).trim().slice(0, 12));
+    return `private looks: this preview build carries fixture (private commit ${commit}, tree ${tree})`;
+};
 const PREVIEW = { ...FIXTURE, [SELECTION_ENV.target]: 'preview' };
 const PRODUCTION = { ...FIXTURE, [SELECTION_ENV.target]: 'production' };
 
@@ -981,7 +990,7 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             } finally {
                 process.stderr.write = write;
             }
-            assert.ok(writes.some((line) => /^private looks: this preview build carries fixture \(private commit [0-9a-f]{12}\)\n$/.test(line)), writes.join(''));
+            assert.ok(writes.includes(`${fixtureCarriesLine()}\n`), writes.join(''));
             const written = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
             assert.ok(written.length > 0, 'the build wrote its files to the temporary directory');
             // Rollup's `writeBundle`: the dist is on the disk, the one state the check runs in.
@@ -994,7 +1003,7 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         it('says on stderr which looks a build carries, and says nothing when it carries none', () => {
             const out = build(tempDir('dist-say'), PREVIEW);
             assert.equal(out.status, 0, out.stderr);
-            assert.match(out.stderr, /^private looks: this preview build carries fixture \(private commit [0-9a-f]{12}\)$/m);
+            assert.ok(out.stderr.split('\n').includes(fixtureCarriesLine()), out.stderr);
             const quiet = build(tempDir('dist-quiet'), PRODUCTION);
             assert.equal(quiet.status, 0, quiet.stderr);
             assert.doesNotMatch(quiet.stderr, /private looks/);

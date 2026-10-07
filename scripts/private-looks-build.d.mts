@@ -40,6 +40,8 @@ export declare function includedEntries(index: PrivateIndex, target: LooksTarget
 export declare function selectedTree(input: { root: string; selection: LooksSelection } & GitOptions): { dir: string; prefix: string | undefined; fixture: boolean };
 export declare function selectedIndex(input: { root: string; selection: LooksSelection; facts: PublicLookFacts } & GitOptions): {
     commit: string;
+    /** The commit's tree less its root README and log (`packedTreeOf`): the tree a pin names beside its commit. */
+    packedTree: string;
     read: { dir: string; commit: string; prefix: string | undefined } & GitOptions;
     files: PrivateFile[];
     index: PrivateIndex;
@@ -49,7 +51,7 @@ export type ThemeVarValues = Readonly<Record<string, readonly string[]>>;
 
 export declare function readSelectedLooks(
     input: { root: string; selection: LooksSelection; facts: PublicLookFacts; validateLook: ValidateLook; vars: ThemeVarValues } & GitOptions,
-): { commit: string; index: PrivateIndex; looks: SelectedLook[] };
+): { commit: string; packedTree: string; index: PrivateIndex; looks: SelectedLook[] };
 export declare function crossSheetProblems(input: { root: string; looks: readonly SelectedLook[]; vars: ThemeVarValues }): string[];
 export declare function sharedRowClasses(looks: readonly SelectedLook[]): string[];
 export declare function checkSelectedDist(
