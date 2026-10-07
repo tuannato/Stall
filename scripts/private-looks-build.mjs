@@ -61,14 +61,21 @@
  * where a module-to-package reader filed the sheet as a package named
  * `.cache`), removed when the build closes, and the module imports each
  * sheet from there with `?url`: emitted alone, minified, hashed, its
- * `url()`s rewritten to the built art, never in the entry CSS. The module
+ * `url()`s rewritten to the built art, never in the entry CSS — and, last,
+ * opened with the copyright line (`LOOK_COPYRIGHT_LINE`, put back by
+ * `stampCarriedSheets` in this plugin's `generateBundle`, since Vite's
+ * minifier drops every `/*!` comment; the dist check holds it there once,
+ * `the-served-sheet-carries-the-copyright-line`). The module
  * resolves to `\0stall:private-looks`, a Stall virtual module to the
  * notices' classifier; its data is `JSON.parse` of a string literal
  * (`privateLooksModuleCode`): a key named `__proto__` stays a key the
  * runtime validator refuses, and no character in a label can end the
  * literal. **A build that selected anything and wrote to the disk checks
  * what it wrote** (`checkSelectedDist`, `check-dist-looks.mjs`'s core) and
- * fails on a problem, so a hand-run preview build is held as a deploy's is.
+ * fails on a problem, so a hand-run preview build is held as a deploy's is —
+ * only once `writeBundle` saw the dist written, so an error thrown after the
+ * build phase (the stamp's, say) is the error the build ends with
+ * (`a-build-whose-stamp-fails-says-why`).
  *
  * **The faces a carried look serves are named in the notices it serves**
  * (step 8e1): each is checked before the build (`lookFaceProblems`: named in
@@ -90,11 +97,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
-import { artNamedBy, distFiles, distLooksProblems, lookFilesOf } from './check-dist-looks.mjs';
+import { artNamedBy, distFiles, distLooksProblems, lookFilesOf, lookSheetNames } from './check-dist-looks.mjs';
 import { LOOK_FONTS_FILE, lookFaceProblems, lookFontNotices } from './look-faces.mjs';
 import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { noticesWithLookFonts } from './notices-lib.mjs';
 import {
+    LOOK_COPYRIGHT_LINE,
     PRIVATE_FACE_LICENCE,
     PRIVATE_FILE_MODE,
     PRIVATE_INDEX,
@@ -405,6 +413,63 @@ export function privateLooksModuleCode(entries) {
 }
 
 /**
+ * `css` with `LOOK_COPYRIGHT_LINE` and a newline at its head, once: a sheet
+ * that already opens with the line (a minifier that kept it) has that one
+ * taken off first, so the line is never doubled, and the rest of the sheet
+ * is never touched. Idempotent.
+ */
+export function withCopyrightLine(css) {
+    const body = css.startsWith(LOOK_COPYRIGHT_LINE) ? css.slice(LOOK_COPYRIGHT_LINE.length).replace(/^\r?\n/, '') : css;
+    return `${LOOK_COPYRIGHT_LINE}\n${body}`;
+}
+
+/**
+ * Put the copyright line at the head of each carried look's emitted sheet
+ * (PLAN § Decided, owner 2026-10-07): in `bundle` (Rollup's output, as
+ * `generateBundle` hands it), the one CSS asset that names each entry's
+ * class as its look (`--look-sheet`, read by `lookSheetNames` — the key the
+ * dist check finds a carried sheet by, so the stamp and the check agree by
+ * construction; every look sheet names itself once, on its bare class, and
+ * the minifier keeps it) gets `withCopyrightLine`. Nothing else in the
+ * bundle is touched. Answers the stamped file names. Throws when an entry's
+ * class is named by no asset, or by more than one: a build that cannot find
+ * the sheet it carries fails rather than serve it without the line (and
+ * says so in its own words — `closeBundle` checks no dist this build never
+ * wrote). No path is compared: Vite names a module's file with
+ * `realpathSync.native`, whose spelling on a case-insensitive disk can
+ * differ from any path this build holds (CRITIC-STEP-8C1B item 2).
+ *
+ * **The file name was computed before the line was added** (Vite's CSS
+ * plugin emits the sheet with its name during `renderChunk`, from the
+ * minified text; nothing later can move the name without renaming every
+ * chunk that names it). The hash still identifies the content: the line is
+ * a constant prefix, so two served sheets differ exactly when the two hashed
+ * texts do. Vite does the same to every CSS asset already — it hashes a
+ * sheet with `/*$vite$:1*\/` appended and strips that marker in its own
+ * `generateBundle`. What the name does not follow is a change to the line
+ * itself, which would serve new bytes under the old name to a cache that
+ * kept the old ones — the line is a constant, changed only by an edit here.
+ */
+export function stampCarriedSheets(bundle, entries) {
+    const stamped = [];
+    for (const entry of entries) {
+        const textOf = (file) => (typeof file.source === 'string' ? file.source : Buffer.from(file.source).toString('utf8'));
+        const assets = Object.values(bundle).filter(
+            (file) => file.type === 'asset' && file.fileName.endsWith('.css') && lookSheetNames(textOf(file)).includes(entry.sheetClass),
+        );
+        if (assets.length !== 1) {
+            throw new Error(
+                `private looks: ${assets.length} emitted stylesheets name ${entry.sheetClass} as their look (--look-sheet), where one does — the build cannot open its served sheet with ${LOOK_COPYRIGHT_LINE}`,
+            );
+        }
+        const [asset] = assets;
+        asset.source = withCopyrightLine(textOf(asset));
+        stamped.push(asset.fileName);
+    }
+    return stamped;
+}
+
+/**
  * The dist check, under a build's own selection: `checkDist`'s core
  * (`check-dist-looks.mjs`) over the index at the selection's commit,
  * filtered by the target and the public lists as the build filtered it.
@@ -434,8 +499,10 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env, harne
  * selection is read (`process.env`). The selection is read in `buildStart`,
  * so each build reads its own; a build that carries a look says so in one
  * line on stderr, whatever the log level, so a forgotten shell export is on
- * screen; and a build that selected anything and wrote to the disk runs the
- * dist check over what it wrote, and fails on a problem
+ * screen; each carried look's emitted sheet opens with the copyright line
+ * (`stampCarriedSheets`, in `generateBundle`); and a build that selected
+ * anything and wrote to the disk runs the dist check over what it wrote
+ * (once `writeBundle` ran), and fails on a problem
  * (`the-dist-holds-what-the-index-names`). `harnessClasses` is a harness
  * build's alone (8e2: the layout probe's and the kit's configs hand
  * `HARNESS_LOOK_CLASSES`): the looks that build carries of the harness's
@@ -444,7 +511,7 @@ export function checkSelectedDist({ dir, selection, root, facts, git, env, harne
 export function privateLooksPlugin({ facts, validateLook, vars, env = process.env, git, harnessClasses = [] } = {}) {
     let root = process.cwd();
     let outDir;
-    let writes = true;
+    let wrote = false;
     let selection;
     let entries = [];
     let carried = [];
@@ -462,11 +529,11 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
         configResolved(config) {
             root = config.root;
             outDir = resolve(config.root, config.build.outDir);
-            writes = config.build.write !== false;
             publicDir = config.publicDir;
         },
         buildStart() {
             cleanup();
+            wrote = false;
             entries = [];
             carried = [];
             selection = undefined;
@@ -507,24 +574,46 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
                 cleanup();
             }
         },
+        // The copyright line at the head of each carried look's served
+        // sheet (`stampCarriedSheets`), after every other plugin's own
+        // `generateBundle` — Vite's CSS plugin strips its hash marker in
+        // its — so the line is the last edit before the sheet is written
+        // or handed back in memory. A build that carries no look has no
+        // entry and touches nothing: the public build, byte for byte.
+        generateBundle: {
+            order: 'post',
+            handler(_options, bundle) {
+                stampCarriedSheets(bundle, entries);
+            },
+        },
         writeBundle() {
             // The notices this build serves name every face its looks serve
             // (`a-deploy-build-names-every-face-it-serves`): the public file,
             // which Vite copied before writing, unchanged and first, then the
             // carried faces. A build whose looks serve no face leaves the
             // public file as it is.
-            if (!carried.some((look) => look.fonts.length > 0) || outDir === undefined) {
-                return;
+            if (carried.some((look) => look.fonts.length > 0) && outDir !== undefined) {
+                const source = publicDir ? join(publicDir, 'licenses.txt') : undefined;
+                if (source === undefined || !existsSync(source)) {
+                    throw new Error('private looks: this build serves a look\'s faces and has no public/licenses.txt to name them beside');
+                }
+                writeFileSync(join(outDir, 'licenses.txt'), noticesWithLookFonts(readFileSync(source, 'utf8'), carried));
             }
-            const source = publicDir ? join(publicDir, 'licenses.txt') : undefined;
-            if (source === undefined || !existsSync(source)) {
-                throw new Error('private looks: this build serves a look\'s faces and has no public/licenses.txt to name them beside');
-            }
-            writeFileSync(join(outDir, 'licenses.txt'), noticesWithLookFonts(readFileSync(source, 'utf8'), carried));
+            // The dist is on the disk, this plugin's own writes included:
+            // the one state in which `closeBundle` checks it.
+            wrote = true;
         },
         closeBundle() {
+            // Only a dist this build wrote is checked (CRITIC-STEP-8C1B item
+            // 1): Rollup calls `writeBundle` once the files are on the disk,
+            // and nothing hears an error thrown after the build phase — in
+            // `generateBundle` (the stamp's), `renderChunk` or a write —
+            // before Vite's `finally` closes the bundle, so a check here over
+            // the `public/` copy Vite left would throw its own complaint in
+            // place of that error. A build-phase error clears `selection` in
+            // `buildEnd` as well.
             try {
-                if (selection !== undefined && writes && outDir !== undefined) {
+                if (selection !== undefined && wrote && outDir !== undefined) {
                     const problems = checkSelectedDist({ dir: outDir, selection, root, facts, git, env, harnessClasses });
                     if (problems.length > 0) {
                         throw new Error(`private looks: ${outDir} does not hold what its selection carries:\n  - ${problems.join('\n  - ')}`);

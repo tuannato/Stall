@@ -170,6 +170,30 @@ export const PRIVATE_FACE_LICENCE = /^LICENSE-OFL(?:-[a-z0-9-]{1,64})?\.txt$/;
 /** The one mode a file of a private look may have: a plain, non-executable blob. */
 export const PRIVATE_FILE_MODE = '100644';
 
+/**
+ * The copyright line (PLAN § Decided, "Look files that are not MIT…"):
+ * PLAN asks a private look's files to open with it where they take a
+ * comment (nothing checks a source for it), and **the served
+ * sheet of every look a build carries opens with it too** (owner,
+ * 2026-10-07) — Vite drops a `/*!` comment when it minifies CSS (its
+ * resolved `esbuild.legalComments` defaults to `none`, and its CSS minify
+ * reads that option), so the build puts the line back at the head of each
+ * carried look's emitted sheet (`withCopyrightLine`, `privateLooksPlugin`'s
+ * `generateBundle`, `scripts/private-looks-build.mjs`) and the dist check
+ * holds it there, once (`distLooksProblems`, `scripts/check-dist-looks.mjs`).
+ * Its one home: both read it from here. Never required of a source sheet —
+ * the tracked fixture is MIT content and carries none; SVG and JSON files
+ * carry no comment either way. **One line for every look** (the owner's
+ * decision, CRITIC-STEP-8C1B item 5): whatever a source's own first line
+ * says, whatever its year or author, the served sheet says this — and an
+ * edit here serves new bytes under the old hashed names (the name is
+ * computed before the line), so a cache that kept a sheet keeps the old
+ * line. Test:
+ * `the-served-sheet-carries-the-copyright-line`
+ * (`scripts/private-looks-build.test.mjs`).
+ */
+export const LOOK_COPYRIGHT_LINE = '/*! © 2026 tuannato (stall.cash) */';
+
 const MODE_WHY = {
     100755: 'an executable file',
     120000: 'a symlink',

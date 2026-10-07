@@ -742,7 +742,10 @@ describe('each-look-keeps-its-art-budget', () => {
      * — the real look in a deploy job's `pnpm test`), from its source: its
      * sheet as written, every target the lint admits read (`url()` and
      * `image-set()` entries, `the-source-budget-reads-image-set-targets`) —
-     * so never under the build, which only minifies the sheet — its art as
+     * not under the build in practice, which minifies the sheet and adds the
+     * 37-byte copyright line (by construction it could be, by up to those
+     * 37 bytes; the deploy build's own bucket below reads the stamped
+     * sheet) — its art as
      * the build writes it (SVGs re-serialised), its rows from its
      * `look.json` (`privateLookArtBudget`), its reason from its index entry.
      * A deploy build's own worn bucket is the case after the plants.
