@@ -16,7 +16,11 @@ export declare const PRIVATE_MODES_REFUSED: readonly string[];
 export declare const PLANTED_CLASS: 't-planted-look';
 export declare const PLANTED_ROW_PREFIX: 'att-planted-';
 export declare function removePlants(): void;
-export declare function plantLooks(edit?: (path: string, text: string) => string, add?: Readonly<Record<string, string | Buffer>>): PlantedLooks;
+export declare function plantLooks(
+    edit?: (path: string, text: string) => string,
+    add?: Readonly<Record<string, string | Buffer>>,
+    options?: { readonly slug?: string },
+): PlantedLooks;
 export declare function beforeReduce(css: string, rule: string): string;
 export declare function syntheticWoff2(records: readonly { id: number; text: string }[]): Buffer;
 export declare function oflText(holder: string, reserved?: string): string;

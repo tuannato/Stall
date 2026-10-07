@@ -10,7 +10,9 @@
  * directory, its class renamed to
  * `t-planted-look` (the fixture's class is the fixture's alone,
  * `FIXTURE_PRIVATE_LOOK_CLASS`) and its rows' `att-fixture-…` to
- * `att-planted-…` (two looks share no row class), each text passed through
+ * `att-planted-…` (two looks share no row class), its directory and index
+ * slug `fixture` to `slug` when one is given (a preview slug, for the
+ * deploy road's gates), each text passed through
  * `edit(path, text)`
  * and the files of `add` (`{ path: text | Buffer }`) beside them, and
  * commits once — no global or system config, no user exclude file. It
@@ -124,7 +126,7 @@ function fixtureAtHead() {
  * A private look repository outside this checkout: the fixture, renamed,
  * edited and added to, committed once. See the module's docblock.
  */
-export function plantLooks(edit = (_path, text) => text, add = {}) {
+export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fixture' } = {}) {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-planted-looks-')));
     const xdg = realpathSync(mkdtempSync(join(tmpdir(), 'stall-planted-looks-xdg-')));
     planted.push(dir, xdg);
@@ -141,9 +143,13 @@ export function plantLooks(edit = (_path, text) => text, add = {}) {
     const git = (...args) => execFileSync('git', args, { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     git('init', '-q', '-b', 'main', '.');
     for (const file of fixtureAtHead()) {
-        mkdirSync(join(dir, dirname(file.path)), { recursive: true });
-        const text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
-        writeFileSync(join(dir, file.path), edit(file.path, text));
+        const path = file.path.startsWith('fixture/') ? `${slug}/${file.path.slice('fixture/'.length)}` : file.path;
+        mkdirSync(join(dir, dirname(path)), { recursive: true });
+        let text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
+        if (path === 'index.json') {
+            text = text.replace('"slug": "fixture"', `"slug": "${slug}"`);
+        }
+        writeFileSync(join(dir, path), edit(path, text));
     }
     for (const [path, contents] of Object.entries(add)) {
         mkdirSync(join(dir, dirname(path)), { recursive: true });

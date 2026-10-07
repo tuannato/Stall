@@ -36,7 +36,8 @@
  * the line for a commit, refused when the build's own read of that commit
  * — its files, its index against the public lists, its directories and
  * required files (`readPrivateLooksAt`, as `selectedIndex` reads it) —
- * refuses it, or when it names no look.
+ * refuses it, when it names no look, or when it names or holds a look
+ * `PREVIEW_SLUGS` does not ((c′): until a release only the canary travels).
  *
  * **The pinned pair is a sentence, not a refusal** (STEP-8C-PLAN v1 §3,
  * kept by v2): since 8a the private files are read from git at a commit and
@@ -69,10 +70,12 @@ import { fileURLToPath } from 'node:url';
 import {
     FULL_COMMIT,
     GIT_LOCATION_VARS,
+    PREVIEW_SLUGS,
     TREE_PREFIX,
     gitCommitOf,
     gitTopOf,
     parsePrivateIndex,
+    previewRoadProblem,
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
@@ -256,16 +259,35 @@ export function packedTreeOf({ dir, commit, prefix, git, env }) {
  * the public lists, every directory one the index names, every named look's
  * required files) and an index that names no look, which carries nothing:
  * a pin never names a commit the road would carry and the build refuse to
- * read. **Not read here**, stated: a look's own files against their
- * validators (`look.json`, the sheet's lint, the SVG allow-list, its faces,
- * its budget) — the build and `pnpm test` read those under the selection.
+ * read. **And (c′), mechanically**: while `RELEASED_LOOK_IDS` is empty a
+ * preview carries only the looks `PREVIEW_SLUGS` names, so a commit whose
+ * index names another slug, or whose tree holds another look directory, is
+ * refused too; and once a release names an id every pin is refused
+ * (`previewRoadProblem`) until step 9 rewrites this rule. **Not read
+ * here**, stated: a look's own files against their validators
+ * (`look.json`, the sheet's lint, the SVG allow-list, its faces, its
+ * budget) — the build and `pnpm test` read those under the selection.
  */
 export async function pinLineFor({ dir, commit, facts, git, env }) {
     const at = commit ?? gitCommitOf({ dir, git, env });
     const known = facts ?? (await publicLookFacts());
+    const road = previewRoadProblem(known.released);
+    if (road !== undefined) {
+        throw new Error(`private looks at ${at}: ${road}`);
+    }
     const repo = readPrivateLooksAt({ dir, commit: at, facts: known, git, env });
     const problems = [...repo.problems];
-    if (problems.length === 0 && parsePrivateIndex(repo.indexText).index.looks.length === 0) {
+    const dirs = [...new Set(repo.files.filter((file) => file.path.includes('/')).map((file) => file.path.slice(0, file.path.indexOf('/'))))].sort();
+    for (const name of dirs.filter((name) => !PREVIEW_SLUGS.includes(name))) {
+        problems.push(`${name}/: a look directory PREVIEW_SLUGS does not name — until a release a preview carries only ${PREVIEW_SLUGS.join(', ')}`);
+    }
+    const index = repo.indexText === undefined ? undefined : parsePrivateIndex(repo.indexText).index;
+    for (const entry of index?.looks ?? []) {
+        if (!PREVIEW_SLUGS.includes(entry.slug)) {
+            problems.push(`the index names ${entry.slug}, which PREVIEW_SLUGS does not — until a release a preview carries only ${PREVIEW_SLUGS.join(', ')}`);
+        }
+    }
+    if (problems.length === 0 && index.looks.length === 0) {
         problems.push('the index names no look: a pin names a commit that carries one');
     }
     if (problems.length > 0) {

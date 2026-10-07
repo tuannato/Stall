@@ -20,6 +20,7 @@ import {
 import { LOOKS_PIN_FILE, PACKED_OUT, PACKED_TREE_SCRIPT, PIN_SCRIPT as PIN_SCRIPT_ITSELF, packedTreeOf } from './looks-pin.mjs';
 import { PRIVATE_MODES_REFUSED, PRIVATE_PATHS_ADMITTED, PRIVATE_PATHS_REFUSED, plantLooks, removePlants } from './private-looks-plant.mjs';
 import {
+    PREVIEW_SLUGS,
     PRIVATE_FACE_LICENCE,
     PRIVATE_FILE_MODE,
     PRIVATE_LOOK_FILES,
@@ -28,6 +29,7 @@ import {
     PRIVATE_SLUG_MAX,
     gitFilesAt,
     privateFileProblems,
+    previewRoadProblem,
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
@@ -162,31 +164,38 @@ function without(script, ...needles) {
  * component (`fast-import`'s `invalid path`), so such a path never reaches
  * the pack; the build refuses each anyway (asserted).
  */
-const admitsAs = (path, mode) => privateFileProblems([{ path, mode }]).length === 0;
+const fileAdmitted = (path, mode) => privateFileProblems([{ path, mode }]).length === 0;
+/** (c′): a look directory travels only under a slug `PREVIEW_SLUGS` names, exactly. */
+const previewGate = (path) => !path.includes('/') || PREVIEW_SLUGS.includes(path.slice(0, path.indexOf('/')));
+/** What the pack must admit: what the build admits, at the root or under a preview slug. */
+const admitsAs = (path, mode) => fileAdmitted(path, mode) && previewGate(path);
 const admits = (path) => admitsAs(path, PRIVATE_FILE_MODE);
 
 /** The largest `k` for which `make(k)` is admitted, and `k + 1` refused. */
 function boundary(make) {
     let largest = 0;
     for (let k = 1; k <= 256; k += 1) {
-        if (admits(make(k))) {
+        if (fileAdmitted(make(k), PRIVATE_FILE_MODE)) {
             largest = k;
         }
     }
-    assert.ok(largest > 0 && !admits(make(largest + 1)), 'a boundary the build admits up to and refuses past');
+    assert.ok(largest > 0 && !fileAdmitted(make(largest + 1), PRIVATE_FILE_MODE), 'a boundary the build admits up to and refuses past');
     return largest;
 }
 
 const SLUG_MAX = boundary((k) => `${'a'.repeat(k)}/look.json`);
 const ART_MAX = boundary((k) => `a/art/${'b'.repeat(k)}.svg`);
 const LICENCE_MAX = boundary((k) => `a/art/LICENSE-OFL-${'c'.repeat(k)}.txt`);
+const CANARY = PREVIEW_SLUGS[0];
+/** Slugs one edit away from a preview slug: a prefix, a suffix, upper case, one more letter either side. */
+const NEAR_CANARY = [CANARY.slice(0, -1), CANARY.slice(1), CANARY.toUpperCase(), `${CANARY[0].toUpperCase()}${CANARY.slice(1)}`, `${CANARY}x`, `x${CANARY}`, `${CANARY}-x`, `x-${CANARY}`];
 const MAX_SLUG = 'a'.repeat(SLUG_MAX);
 const HYPHENED_SLUG = `${'a-'.repeat(Math.floor((SLUG_MAX - 2) / 2))}aa`.slice(0, SLUG_MAX);
 
 const gitRefuses = (path) => path.split('/').some((part) => part === '' || part === '.' || part === '..' || part.toLowerCase() === '.git');
 
 function corpusPaths() {
-    const slugs = ['a', '0', 'a1', 'some-look', 'a-b-c', '9-9', MAX_SLUG, HYPHENED_SLUG];
+    const slugs = [CANARY, ...NEAR_CANARY, 'a', '0', 'a1', 'some-look', 'a-b-c', '9-9', MAX_SLUG, HYPHENED_SLUG];
     const artNames = [
         'x.svg',
         'x.woff2',
@@ -225,10 +234,15 @@ function corpusPaths() {
         ...PRIVATE_PATHS_ADMITTED,
         ...PRIVATE_PATHS_REFUSED,
         ...slugs.map((slug) => `${slug}/look.json`),
-        ...['some-look', MAX_SLUG].flatMap((slug) => PRIVATE_LOOK_FILES.map((file) => `${slug}/${file}`)),
-        ...['some-look', MAX_SLUG].flatMap((slug) => artNames.map((name) => `${slug}/art/${name}`)),
+        ...[CANARY, 'some-look', MAX_SLUG].flatMap((slug) => PRIVATE_LOOK_FILES.map((file) => `${slug}/${file}`)),
+        ...[CANARY, MAX_SLUG].flatMap((slug) => artNames.map((name) => `${slug}/art/${name}`)),
         `${'a'.repeat(SLUG_MAX + 1)}/look.json`,
         `${'a'.repeat(SLUG_MAX + 1)}/art/x.svg`,
+        // The 8c2 critic's roads: an unsold look beside the canary, or in its place.
+        'ink-wash/look.json',
+        'ink-wash/sheet.css',
+        'ink-wash/art/mask.svg',
+        `${CANARY}/README.md`,
         // The 8c critic's plants, and the plan's (V2).
         'NOTES.md',
         'fixture/README.md',
@@ -276,6 +290,7 @@ function corpusPaths() {
             `${parts[0]}-/${parts.slice(1).join('/')}`,
             `-${path}`,
             path.replace('a', 'á'),
+            ...(parts.length > 1 ? NEAR_CANARY.map((near) => [near, ...parts.slice(1)].join('/')) : []),
         ];
     };
     const all = [...base, ...base.filter(admits).flatMap(mutations)];
@@ -359,17 +374,17 @@ function fileLessSubtrees(repo) {
     const blob = repo.git(['hash-object', '-w', '--stdin'], 'x\n');
     const roots = [
         mk(`040000 tree ${empty}\tjunk`),
-        mk(`040000 tree ${empty}\tsome-look`),
-        mk(`040000 tree ${mk(`040000 tree ${empty}\tart`, `100644 blob ${blob}\tlook.json`)}\tsome-look`),
-        mk(`040000 tree ${mk(`040000 tree ${empty}\tart`)}\tsome-look`),
+        mk(`040000 tree ${empty}\t${CANARY}`),
+        mk(`040000 tree ${mk(`040000 tree ${empty}\tart`, `100644 blob ${blob}\tlook.json`)}\t${CANARY}`),
+        mk(`040000 tree ${mk(`040000 tree ${empty}\tart`)}\t${CANARY}`),
     ];
     return roots.map((root) => repo.git(['commit-tree', root, '-m', 'planted']));
 }
 
 describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
-    it('finds the build’s boundaries from its own predicate, and the program is written for them', () => {
+    it('finds the build’s boundaries from its own predicate, and the program is written for them and for the preview slugs', () => {
         assert.equal(SLUG_MAX, PRIVATE_SLUG_MAX);
-        assert.match(PACK_ALLOW_PROGRAM, new RegExp(`length\\(p\\[1\\]\\) <= ${SLUG_MAX}\\n`));
+        assert.ok(PACK_ALLOW_PROGRAM.includes(`\n  s = ${PREVIEW_SLUGS.map((slug) => `p[1] == "${slug}"`).join(' || ')}\n`), 'the slug gate is the preview slugs, exactly');
         assert.match(PACK_ALLOW_PROGRAM, new RegExp(`length\\(q\\[1\\]\\) <= ${ART_MAX} `));
         assert.match(PACK_ALLOW_PROGRAM, new RegExp(`length\\(q\\[1\\]\\) <= ${'LICENSE-OFL-'.length + LICENCE_MAX}\\)`));
         assert.doesNotMatch(PACK_ALLOW_PROGRAM, /\{\d/, 'no interval expression: mawk and BWK awk read them differently');
@@ -391,7 +406,8 @@ describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
             ...paths.map((path) => ({ path, mode: PRIVATE_FILE_MODE })),
             ...paths.filter(admits).flatMap((path) => PRIVATE_MODES_REFUSED.map((mode) => ({ path, mode }))),
         ];
-        assert.ok(paths.filter(admits).length >= 40 && entries.length >= 300, `a corpus of ${entries.length} entries, ${paths.filter(admits).length} admitted`);
+        assert.ok(paths.filter(admits).length >= 15 && entries.length >= 300, `a corpus of ${entries.length} entries, ${paths.filter(admits).length} admitted`);
+        assert.ok(paths.some((path) => fileAdmitted(path, PRIVATE_FILE_MODE) && !previewGate(path)), 'the corpus holds files the build admits under a slug no preview carries');
         const SHARDS = 8;
         const disagree = [];
         await Promise.all(
@@ -459,10 +475,11 @@ describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
             assert.equal(awk.status, 0, awk.stderr);
             return awk.stdout;
         };
-        assert.equal(run([`100644 blob ${hex}\tindex.json`, `040000 tree ${hex}\tsome-look`, `100644 blob ${hex}\tsome-look/look.json`]), '0\n');
+        assert.equal(run([`100644 blob ${hex}\tindex.json`, `040000 tree ${hex}\t${CANARY}`, `100644 blob ${hex}\t${CANARY}/look.json`]), '0\n');
+        assert.equal(run([`040000 tree ${hex}\tink-wash`, `100644 blob ${hex}\tink-wash/look.json`]), '2\n');
         assert.equal(run([`100644 blob ${hex}\tindex.json\tjunk`]), '1\n');
         assert.equal(run([`100644 blob ${hex} index.json`]), '1\n');
-        assert.equal(run([`040000 tree ${hex}\tsome-look`, `040000 tree ${hex}\tsome-look/art`, `100644 blob ${hex}\tsome-look/art/NOTES.md`]), '3\n');
+        assert.equal(run([`040000 tree ${hex}\t${CANARY}`, `040000 tree ${hex}\t${CANARY}/art`, `100644 blob ${hex}\t${CANARY}/art/NOTES.md`]), '3\n');
         assert.equal(run([]), '0\n');
     });
 
@@ -475,10 +492,14 @@ describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
             rootFiles: PRIVATE_ROOT_FILES,
             lookFiles: PRIVATE_LOOK_FILES,
             fileMode: PRIVATE_FILE_MODE,
+            previewSlugs: PREVIEW_SLUGS,
         };
         assert.equal(packAllowProgram(constants), PACK_ALLOW_PROGRAM);
+        assert.match(packAllowProgram({ ...constants, previewSlugs: [CANARY, 'ink-wash'] }), /s = p\[1\] == "canary" \|\| p\[1\] == "ink-wash"\n/);
+        for (const previewSlugs of [[], [CANARY.toUpperCase()], ['a'.repeat(PRIVATE_SLUG_MAX + 1)], [`${CANARY}/art`], [`"${CANARY}"`], undefined]) {
+            assert.throws(() => packAllowProgram({ ...constants, previewSlugs }), /PREVIEW_SLUGS is/, JSON.stringify(previewSlugs));
+        }
         const moved = packAllowProgram({ ...constants, slugMax: 40, artName: /^[a-z0-9-]{1,80}\.(?:svg|woff2|png)$/, lookFiles: [...PRIVATE_LOOK_FILES, 'card.png'] });
-        assert.match(moved, /length\(p\[1\]\) <= 40\n/);
         assert.match(moved, /length\(q\[1\]\) <= 80 /);
         assert.match(moved, /q\[2\] == "png"/);
         assert.match(moved, /p\[2\] == "card\.png"/);
@@ -501,8 +522,8 @@ describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
  * applied and committed, cloned to `<scratch>/work/looks` as the job's
  * checkout clones it.
  */
-function plantedWork(plant = () => {}) {
-    const looks = plantLooks();
+function plantedWork(plant = () => {}, slug = CANARY) {
+    const looks = plantLooks(undefined, {}, { slug });
     looks.git('add', '-A');
     plant(looks);
     looks.git('add', '-A', '--', '.', ':!vendor');
@@ -521,19 +542,32 @@ const write = (looks, path, text) => {
 /** Every plant the 8c critic named (item 1) and the plan's V2 lists, on a real look, each with the names it must never print. */
 const PLANTS = [
     ['a note at the root', (l) => write(l, 'NOTES.md', 'notes\n'), ['NOTES']],
-    ['a README inside a look', (l) => write(l, 'fixture/README.md', 'r\n'), ['README']],
+    ['a README inside a look', (l) => write(l, `${CANARY}/README.md`, 'r\n'), ['README']],
     ['a link to /etc/hosts', (l) => symlinkSync('/etc/hosts', join(l.dir, 'hosts')), ['hosts']],
-    ['a link at a path the build admits', (l) => symlinkSync('ground.svg', join(l.dir, 'fixture/art/linked.svg')), ['linked']],
-    ['an executable look.json', (l) => chmodSync(join(l.dir, 'fixture/look.json'), 0o755), ['look.json']],
+    ['a link at a path the build admits', (l) => symlinkSync('ground.svg', join(l.dir, CANARY, 'art', 'linked.svg')), ['linked']],
+    ['an executable look.json', (l) => chmodSync(join(l.dir, CANARY, 'look.json'), 0o755), ['look.json']],
     ['a .gitattributes', (l) => write(l, '.gitattributes', '* export-subst\n'), ['gitattributes']],
-    ['a .gitattributes inside a look', (l) => write(l, 'fixture/art/.gitattributes', '* export-ignore\n'), ['gitattributes']],
+    ['a .gitattributes inside a look', (l) => write(l, `${CANARY}/art/.gitattributes`, '* export-ignore\n'), ['gitattributes']],
     ['a gitlink', (l) => l.git('update-index', '--add', '--cacheinfo', '160000,f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1,vendor'), ['vendor']],
     ['a lower-case log.md', (l) => write(l, 'log.md', 'l\n'), ['log.md']],
     ['a design log inside a new look', (l) => write(l, 'ink-wash/LOG.md', 'l\n'), ['ink-wash', 'LOG']],
     ['a folder of shots', (l) => write(l, 'shots/1.png', 'p\n'), ['shots', 'png']],
     ['a script', (l) => write(l, 'gen.mjs', 'export {};\n'), ['gen', 'mjs']],
-    ['a nested art folder', (l) => write(l, 'fixture/art/sub/x.svg', '<svg/>\n'), ['sub/']],
+    ['a nested art folder', (l) => write(l, `${CANARY}/art/sub/x.svg`, '<svg/>\n'), ['sub/']],
+    // The 8c2 critic's road (i): an unsold look's directory beside the canary, unindexed.
+    [
+        'an unindexed look beside the canary',
+        (l) => {
+            write(l, 'ink-wash/look.json', '{}\n');
+            write(l, 'ink-wash/sheet.css', '/* a draft note that must not travel */\n.t-ink-wash {}\n');
+            write(l, 'ink-wash/art/mask.svg', '<svg/>\n');
+        },
+        ['ink-wash', 'mask', 'draft'],
+    ],
 ];
+
+/** Every slug but the preview ones a look may sit under, indexed under it: the 8c2 critic's road (ii) (`ink-wash` at `0x04`) and the slugs one edit from the canary. */
+const UNSOLD_SLUGS = ['ink-wash', ...NEAR_CANARY.filter((slug) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug))];
 
 describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
     it('packs the planted look itself', () => {
@@ -548,7 +582,7 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
         it(`refuses each plant before it archives, prints a count and no name, writes nothing (LC_ALL=${locale})`, () => {
             for (const [name, plant, names] of PLANTS) {
                 const { work, head, tree, files } = plantedWork(plant);
-                assert.notDeepEqual(privateFileProblems(files), [], `${name}: the build refuses it`);
+                assert.ok(privateFileProblems(files).length > 0 || files.some((file) => !previewGate(file.path)), `${name}: neither the build's file list nor the preview gate refuses it`);
                 const step = pack(work, { pin: head, tree, env: { LC_ALL: locale } });
                 assert.notEqual(step.status, 0, `${name}: packed`);
                 assert.match(step.stderr, countLine, name);
@@ -560,6 +594,25 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
             }
         });
     }
+
+    /*
+     * (c′) on the road: a look indexed under any slug but a preview one —
+     * the 8c2 critic's road (ii), Ink wash at 0x04 in the canary's place,
+     * and slugs one edit from the canary — is a look the build would carry
+     * and the pack refuses, by a count.
+     */
+    it('refuses a look under any slug PREVIEW_SLUGS does not name, indexed or not, by a count', () => {
+        for (const slug of UNSOLD_SLUGS) {
+            const { work, head, tree, files } = plantedWork(() => {}, slug);
+            const step = pack(work, { pin: head, tree });
+            assert.notEqual(step.status, 0, `${slug}: packed`);
+            assert.match(step.stderr, countLine, slug);
+            assert.ok(!step.stderr.includes(slug) && !existsSync(step.artifact), `${slug}: named or written`);
+            if (/^[a-z0-9-]+$/.test(slug)) {
+                assert.deepEqual(privateFileProblems(files), [], `${slug}: the build's file list admits it — only the preview gate refuses`);
+            }
+        }
+    });
 
     /* The allow-list is what refuses: without its two lines, a note at the root is packed and archived. */
     it('needs its allow-list: without it, a plant is archived', () => {
@@ -653,7 +706,7 @@ const REPLACED = 'a replacement the pinned commit does not hold';
  * pack. Answers the job root, the artifact, the pin line and the clone.
  */
 function packedRoad() {
-    const looks = plantLooks((path, text) => (path === 'fixture/sheet.css' ? `${text}\n/* $Format:%ae %s$ */\n` : text), { 'README.md': 'what this is\n', 'LOG.md': `${LOG_WORDS}\n` });
+    const looks = plantLooks((path, text) => (path === `${CANARY}/sheet.css` ? `${text}\n/* $Format:%ae %s$ */\n` : text), { 'README.md': 'what this is\n', 'LOG.md': `${LOG_WORDS}\n` }, { slug: CANARY });
     execFileSync('git', ['commit', '-q', '--allow-empty', '-m', SUBJECT], {
         cwd: looks.dir,
         env: { ...looks.env, GIT_AUTHOR_EMAIL: MAILBOX, GIT_COMMITTER_EMAIL: MAILBOX },
@@ -665,7 +718,7 @@ function packedRoad() {
     writeFileSync(join(clone, '.git', 'info', 'attributes'), '* export-subst\n');
     const head = looks.head();
     // A local replace ref (the 8c1 critic's item 3): a plain read of the sheet's blob answers other bytes than the commit holds.
-    const sheet = execFileSync('git', ['-C', clone, 'rev-parse', `${head}:fixture/sheet.css`], { env: looks.env, encoding: 'utf8' }).trim();
+    const sheet = execFileSync('git', ['-C', clone, 'rev-parse', `${head}:${CANARY}/sheet.css`], { env: looks.env, encoding: 'utf8' }).trim();
     const other = execFileSync('git', ['-C', clone, 'hash-object', '-w', '--stdin'], { env: looks.env, input: `${REPLACED}\n`, encoding: 'utf8' }).trim();
     execFileSync('git', ['-C', clone, 'replace', sheet, other], { env: looks.env });
     const line = `${head} ${packedTreeOf({ dir: looks.dir, commit: head, env: looks.env })}\n`;
@@ -793,7 +846,7 @@ describe('the-looks-artifact-is-the-pinned-tree-without-its-log', () => {
         return publicLookFacts().then((facts) => {
             const read = readPrivateLooksAt({ dir: dest, commit: result.carried, facts });
             assert.deepEqual(read.problems, []);
-            assert.ok(read.files.some((file) => file.path === 'fixture/sheet.css'));
+            assert.ok(read.files.some((file) => file.path === `${CANARY}/sheet.css`));
             const again = unwrapLooksArtifact({ artifact: road.artifact, dest: join(scratchDir('again'), 'looks'), root: road.work });
             assert.equal(again.carried, result.carried, 'one pin carries as one commit');
         });
@@ -1157,5 +1210,33 @@ describe('the-carried-repository-reads-no-global-or-system-git-setting', () => {
         carries(art, { ...base, GIT_DEFAULT_HASH: 'sha256' });
         assert.throws(() => storedUnder({ ...base, GIT_ATTR_SOURCE: 'HEAD' }), undefined, 'GIT_ATTR_SOURCE=HEAD in a fresh repository does not stop git add — the plant proves nothing');
         carries(art, { ...base, GIT_ATTR_SOURCE: 'HEAD' });
+    });
+});
+
+/*
+ * (c′) made mechanical (the owner's call on the 8c2 critic's item 1): until
+ * a look is sold, only the looks `PREVIEW_SLUGS` names travel — the pack's
+ * slug gate and `pinLineFor` both read that list. This holds the list to
+ * its literal value, and goes red the day `RELEASED_LOOK_IDS` names an id,
+ * read from the theme table by type stripping (`publicLookFacts`): a
+ * release carries a private look, and the release commit must then decide
+ * the preview road and rewrite this rule, never inherit it.
+ */
+describe('a-preview-carries-only-the-preview-slugs-until-a-release', () => {
+    it('is the canary alone, frozen, and the pack’s slug gate is that list', () => {
+        assert.deepEqual([...PREVIEW_SLUGS], ['canary']);
+        assert.ok(Object.isFrozen(PREVIEW_SLUGS));
+        assert.ok(PACK_ALLOW_PROGRAM.includes('\n  s = p[1] == "canary"\n'));
+    });
+
+    it('holds while RELEASED_LOOK_IDS is empty, and says what to do the day it is not', async () => {
+        const { released } = await publicLookFacts();
+        const why = previewRoadProblem(released);
+        assert.equal(why, undefined, why);
+        assert.equal(
+            previewRoadProblem([0x04]),
+            "a release carries a private look: step 9 rewrites the preview road and this rule (PREVIEW_SLUGS, the pack's slug gate, pinLineFor)",
+        );
+        assert.throws(() => previewRoadProblem(undefined), /RELEASED_LOOK_IDS/);
     });
 });

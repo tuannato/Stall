@@ -132,6 +132,45 @@ export function budgetReasonProblem(value) {
 export const PRIVATE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const PRIVATE_SLUG_MAX = 32;
 
+/**
+ * **The looks a preview may carry before any release** — PLAN § Decided
+ * "Until a look is sold…", (c′), made mechanical (the owner's call on the
+ * 8c2 critic's item 1): the slugs of the look directories the deploy road
+ * may carry while `RELEASED_LOOK_IDS` is empty, today the canary alone
+ * (its bytes are the public fixture renamed, so its slug is public too).
+ * Two gates read it: the pack's allow-list admits a look directory only
+ * under one of these (`packAllowProgram`, `scripts/looks-artifact.mjs`),
+ * so an unsold look's files never reach an artifact whatever the pinned
+ * tree holds; and `pinLineFor` (`scripts/looks-pin.mjs`) refuses a commit
+ * whose index names, or whose tree holds, any other look directory. It
+ * lives here, beside `PRIVATE_SLUG`, and not with the public id lists in
+ * `src/domain/theme.ts`: a slug is the private repository's directory
+ * name, which the app never reads (it keys a look by id and class), and
+ * both gates read this module synchronously — the unwrap's road runs
+ * before anything is installed, with no type stripping asked for. It lifts
+ * only with step 9's release commit: `a-preview-carries-only-the-preview-slugs-until-a-release`
+ * (`scripts/looks-artifact.test.mjs`) fails the day `RELEASED_LOOK_IDS`
+ * names an id, and `pinLineFor` refuses every pin then
+ * (`previewRoadProblem`), so the release commit decides the preview road.
+ * Pinned by its literal value in that test.
+ */
+export const PREVIEW_SLUGS = Object.freeze(['canary']);
+
+/**
+ * Why the preview road's gate no longer holds, or undefined: once
+ * `RELEASED_LOOK_IDS` (`released`) names an id, a release carries a private
+ * look, and the gate written for "only the canary until a look is sold"
+ * must be rewritten with it, never left to stand by default.
+ */
+export function previewRoadProblem(released) {
+    if (!Array.isArray(released)) {
+        throw new TypeError('private looks: the preview road is held to RELEASED_LOOK_IDS (`released`), and none was given');
+    }
+    return released.length === 0
+        ? undefined
+        : 'a release carries a private look: step 9 rewrites the preview road and this rule (PREVIEW_SLUGS, the pack\'s slug gate, pinLineFor)';
+}
+
 /** A look's scoping class, one token under `t-` (`dressLook` adds it with `classList.add`). */
 export const PRIVATE_LOOK_CLASS = /^t-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const PRIVATE_LOOK_CLASS_MAX = 40;

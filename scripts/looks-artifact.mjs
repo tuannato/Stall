@@ -21,8 +21,10 @@
  * `privateFileProblems` admits (`scripts/private-looks.mjs`: mode `100644`,
  * the root files, a look's four files, `<slug>/art/<name>` by `OWN_ART_NAME`
  * and `PRIVATE_FACE_LICENCE`, the slug by `PRIVATE_SLUG` and
- * `PRIVATE_SLUG_MAX`) and the directories those files stand in — and
- * nothing else, so a gitlink, a link, an executable bit, a `.gitattributes`,
+ * `PRIVATE_SLUG_MAX`) **under a slug `PREVIEW_SLUGS` names** — (c′): until a
+ * release only the canary travels — and the directories those files stand
+ * in, and nothing else, so an unsold look, a gitlink, a link, an
+ * executable bit, a `.gitattributes`,
  * a note, a design log inside a look, a folder of shots or a script stops
  * the job **before anything is archived or uploaded** (the 8c critic's item
  * 1). A refusal prints a count, never a path: the log is public. Then the
@@ -98,6 +100,7 @@ import {
     GIT_LOCATION_VARS,
     PRIVATE_FACE_LICENCE,
     PRIVATE_FILE_MODE,
+    PREVIEW_SLUGS,
     PRIVATE_LOOK_FILES,
     PRIVATE_ROOT_FILES,
     PRIVATE_SLUG,
@@ -146,12 +149,22 @@ const anyOf = (variable, names) => names.map((name) => `${variable} == "${plainN
 /**
  * The allow-list program, written from the build's constants (`constants`:
  * `slug`, `slugMax`, `artName`, `faceLicence`, `rootFiles`, `lookFiles`,
- * `fileMode` — `PRIVATE_SLUG`, `PRIVATE_SLUG_MAX`, `OWN_ART_NAME`,
- * `PRIVATE_FACE_LICENCE`, `PRIVATE_ROOT_FILES`, `PRIVATE_LOOK_FILES` and
- * `PRIVATE_FILE_MODE`): a length or a list that moves moves the program
- * with it, and a regular expression in another shape than the one this was
- * written for throws (`shapeOf`), so the module refuses to load rather than
- * pack against an allow-list it does not know.
+ * `fileMode`, `previewSlugs` — `PRIVATE_SLUG`, `PRIVATE_SLUG_MAX`,
+ * `OWN_ART_NAME`, `PRIVATE_FACE_LICENCE`, `PRIVATE_ROOT_FILES`,
+ * `PRIVATE_LOOK_FILES`, `PRIVATE_FILE_MODE` and `PREVIEW_SLUGS`): a length
+ * or a list that moves moves the program with it, and a regular expression
+ * in another shape than the one this was written for throws (`shapeOf`),
+ * so the module refuses to load rather than pack against an allow-list it
+ * does not know.
+ *
+ * **A look directory is admitted only under a preview slug**
+ * (`PREVIEW_SLUGS`, (c′) made mechanical): the program compares the first
+ * component with each, exactly — never a prefix, a suffix or a case
+ * folded — so an unsold look, indexed or not, stops the job like any other
+ * refused entry, by a count. Each preview slug must itself be a slug
+ * `PRIVATE_SLUG` and `PRIVATE_SLUG_MAX` admit, or the module refuses to
+ * load; what it admits is then exactly what `privateFileProblems` admits
+ * at the root or under a preview slug.
  *
  * One awk program over `git ls-tree -r -t --full-tree` lines (`<mode>
  * <type> <object>\t<path>`, split on the tab; a line that is not exactly
@@ -162,18 +175,21 @@ const anyOf = (variable, names) => names.map((name) => `${variable} == "${plainN
  * file-less subtree, which the build's file list cannot see, is refused
  * too. It prints how many entries it refused, and nothing else.
  */
-export function packAllowProgram({ slug, slugMax, artName, faceLicence, rootFiles, lookFiles, fileMode }) {
+export function packAllowProgram({ slug, slugMax, artName, faceLicence, rootFiles, lookFiles, fileMode, previewSlugs }) {
     shapeOf(slug, /^\^\[a-z0-9\]\+\(\?:-\[a-z0-9\]\+\)\*\$$/, 'PRIVATE_SLUG');
     const art = shapeOf(artName, /^\^\[a-z0-9-\]\{1,(\d+)\}\\\.\(\?:([a-z0-9]+(?:\|[a-z0-9]+)*)\)\$$/, 'OWN_ART_NAME');
     const licence = shapeOf(faceLicence, /^\^([A-Z][A-Z-]*)\(\?:-\[a-z0-9-\]\{1,(\d+)\}\)\?\\\.txt\$$/, 'PRIVATE_FACE_LICENCE');
     if (!Number.isInteger(slugMax) || slugMax < 1 || !/^[0-7]{6}$/.test(fileMode)) {
         throw new Error('looks-artifact: PRIVATE_SLUG_MAX or PRIVATE_FILE_MODE is not what the pack was written for');
     }
+    if (!Array.isArray(previewSlugs) || previewSlugs.length === 0 || previewSlugs.some((name) => typeof name !== 'string' || !slug.test(name) || name.length > slugMax)) {
+        throw new Error(`looks-artifact: PREVIEW_SLUGS is ${JSON.stringify(previewSlugs)}, where it lists slugs PRIVATE_SLUG admits, at least one`);
+    }
     const stem = plainName(licence[1]);
     return `NF != 2 { bad++; next }
 {
   n = split($2, p, "/")
-  s = p[1] ~ /^[${LD}]+(-[${LD}]+)*$/ && length(p[1]) <= ${slugMax}
+  s = ${anyOf('p[1]', previewSlugs)}
   if ($1 ~ /^040000 tree [${HEX}]+$/) { tree[$2] = 1; next }
   ok = 0
   if ($1 ~ /^${fileMode} blob [${HEX}]+$/) {
@@ -205,6 +221,7 @@ export const PACK_ALLOW_PROGRAM = packAllowProgram({
     rootFiles: PRIVATE_ROOT_FILES,
     lookFiles: PRIVATE_LOOK_FILES,
     fileMode: PRIVATE_FILE_MODE,
+    previewSlugs: PREVIEW_SLUGS,
 });
 
 /**

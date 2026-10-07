@@ -16,6 +16,8 @@ export type AllowListConstants = {
     readonly rootFiles: readonly string[];
     readonly lookFiles: readonly string[];
     readonly fileMode: string;
+    /** `PREVIEW_SLUGS`: the one look directories the program admits, by exact equality. */
+    readonly previewSlugs: readonly string[];
 };
 
 export declare const PIN_SCRIPT: string;

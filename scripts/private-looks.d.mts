@@ -36,6 +36,8 @@ export declare const PRIVATE_INDEX_OPTIONAL_FIELDS: readonly string[];
 export declare const BUDGET_REASON_MAX: number;
 export declare const PRIVATE_SLUG: RegExp;
 export declare const PRIVATE_SLUG_MAX: number;
+export declare const PREVIEW_SLUGS: readonly string[];
+export declare function previewRoadProblem(released: readonly number[]): string | undefined;
 export declare const PRIVATE_LOOK_CLASS: RegExp;
 export declare const PRIVATE_LOOK_CLASS_MAX: number;
 export declare const HARNESS_LOOK_CLASSES: readonly string[];
