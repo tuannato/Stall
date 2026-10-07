@@ -56,16 +56,20 @@ describe('the-harness-reads-the-looks-a-selection-carries', () => {
 });
 
 /**
- * `the-harness-says-whether-it-measured-the-pinned-pair` (8c1): the line a
- * harness command prints before it builds says whether the private commit it
- * measures is the pinned pair's — the pin's commit (`deploy/looks.commit`),
- * the pin's tree that commit's packed tree, this repository's tree clean —
- * and says it as a sentence, never a refusal: every read is of a commit, so
- * a run over an unpinned commit measures exactly what it names, and what is
- * left to prevent is a verdict cited for the wrong pair. Over a private
- * repository planted from the fixture and a public one planted beside it,
- * both outside this checkout; the tracked fixture is no deploy's and gets no
- * pair.
+ * `the-harness-says-whether-it-measured-the-pinned-pair` (8c1, after its
+ * critic): the line a harness command prints before it builds says, for a
+ * preview selection, whether the private commit it measures is the pinned
+ * pair's — the pin as this repository's HEAD holds it and the disk the same,
+ * the selection's commit the pin's, the pin's tree that commit's packed
+ * tree, this repository's tree clean — and says only that: whether the
+ * private commit is on GitHub and this one is `main` is the dispatch's to
+ * find out. A sentence, never a refusal: every read is of a commit, so a run
+ * over an unpinned commit measures exactly what it names. It names this
+ * repository's HEAD tree, never its commit, so it stays true in the body of
+ * the commit that bumps the pin. Over a private repository planted from the
+ * fixture and a public one planted beside it, both outside this checkout; a
+ * production selection (a production build reads nothing private until step
+ * 9) and the tracked fixture get no pair.
  */
 describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     after(removePlants);
@@ -87,70 +91,100 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
         writeFileSync(join(dir, LOOKS_PIN_FILE), pin);
         git('add', '-A');
         git('commit', '-q', '-m', 'planted');
-        return { dir, git, head: git('rev-parse', 'HEAD') };
+        return { dir, git, tree: git('rev-parse', 'HEAD^{tree}') };
     }
 
     const facts = publicLookFacts();
-    const measure = async (looks, publicDir, commit) =>
-        harnessLooks({ target: 'preview', dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts: await facts, env: looks.env });
+    const measure = async (looks, publicDir, { commit, target = 'preview' } = {}) =>
+        harnessLooks({ target, dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts: await facts, env: looks.env });
     const PAIR = /^a preview selection at a private repository, commit [0-9a-f]{12}: fixture \(t-planted-look\) · /;
+    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, facts: await facts });
 
-    it('says a deployable pair when it measures the pin from a clean tree', async () => {
+    it('says the pinned pair when it measures the pin from a clean tree, naming the public tree', async () => {
         const looks = plantLooks(undefined, { 'README.md': 'r\n', 'LOG.md': 'l\n' });
-        const pub = publicRepo(pinLineFor({ dir: looks.dir, env: looks.env }));
+        const pub = publicRepo(await lineFor(looks));
         const carried = await measure(looks, pub.dir);
-        assert.equal(carried.pair.deployable, true);
+        assert.equal(carried.pair.pinned, true);
         assert.match(carried.line, PAIR);
-        assert.ok(carried.line.endsWith(` · the pin, with Stall ${pub.head.slice(0, 12)} clean — a deployable pair`), carried.line);
+        assert.ok(carried.line.endsWith(` · the pin, with Stall tree ${pub.tree.slice(0, 12)} clean — the pinned pair`), carried.line);
+        assert.doesNotMatch(carried.line, /deployable/);
+        // A message amend keeps the tree, and with it the line.
+        pub.git('commit', '-q', '--amend', '-m', 'the pin bump, its body carrying the line');
+        assert.equal((await measure(looks, pub.dir)).line, carried.line);
     });
 
-    it('says not a deployable pair when the commit it measures is not the pin', async () => {
+    it('says not the pinned pair when the commit it measures is not the pin', async () => {
         const looks = plantLooks();
         const pinned = looks.head();
-        const pub = publicRepo(pinLineFor({ dir: looks.dir, env: looks.env }));
+        const pub = publicRepo(await lineFor(looks));
         writeFileSync(join(looks.dir, 'index.json'), `${readFileSync(join(looks.dir, 'index.json'), 'utf8')}\n`);
         looks.git('commit', '-q', '-am', 'later');
         const carried = await measure(looks, pub.dir);
-        assert.equal(carried.pair.deployable, false);
-        assert.ok(carried.line.endsWith(` · not the pin ${pinned.slice(0, 12)} — not a deployable pair`), carried.line);
+        assert.equal(carried.pair.pinned, false);
+        assert.ok(carried.line.endsWith(` · not the pin ${pinned.slice(0, 12)} — not the pinned pair`), carried.line);
         // The pinned commit, named, is the pair again.
-        assert.equal((await measure(looks, pub.dir, pinned)).pair.deployable, true);
+        assert.equal((await measure(looks, pub.dir, { commit: pinned })).pair.pinned, true);
     });
 
-    it('says not a deployable pair when the pin’s tree is not its commit’s packed tree', async () => {
+    it('reads the pin HEAD holds: a skip-worktree file naming the measured commit is not the pinned pair', async () => {
+        const looks = plantLooks();
+        const first = looks.head();
+        const pub = publicRepo(await lineFor(looks));
+        writeFileSync(join(looks.dir, 'index.json'), `${readFileSync(join(looks.dir, 'index.json'), 'utf8')}\n`);
+        looks.git('commit', '-q', '-am', 'later');
+        // The disk names the later commit; HEAD's pin names the first; git status sees nothing.
+        pub.git('update-index', '--skip-worktree', LOOKS_PIN_FILE);
+        writeFileSync(join(pub.dir, LOOKS_PIN_FILE), await lineFor(looks));
+        assert.equal(pub.git('status', '--porcelain'), '');
+        const carried = await measure(looks, pub.dir);
+        assert.equal(carried.pair.pinned, false);
+        assert.ok(carried.line.endsWith(' · not the pinned pair: deploy/looks.commit on the disk differs from HEAD\'s'), carried.line);
+        // And the commit HEAD pins, measured, is still told the disk is not HEAD's.
+        assert.equal((await measure(looks, pub.dir, { commit: first })).pair.pinned, false);
+    });
+
+    it('says not the pinned pair when the pin’s tree is not its commit’s packed tree', async () => {
         const looks = plantLooks();
         const pub = publicRepo(`${looks.head()} ${'a'.repeat(40)}\n`);
         const carried = await measure(looks, pub.dir);
-        assert.equal(carried.pair.deployable, false);
-        assert.match(carried.line, /· the pin's commit, and the pin's tree a{12} is not its packed tree [0-9a-f]{12} — not a deployable pair$/);
+        assert.equal(carried.pair.pinned, false);
+        assert.match(carried.line, /· the pin's commit, and the pin's tree a{12} is not its packed tree [0-9a-f]{12} — not the pinned pair$/);
     });
 
-    it('says not a deployable pair when this repository’s tree has uncommitted changes', async () => {
+    it('says not the pinned pair when this repository’s tree has uncommitted changes', async () => {
         const looks = plantLooks();
-        const pub = publicRepo(pinLineFor({ dir: looks.dir, env: looks.env }));
+        const pub = publicRepo(await lineFor(looks));
         writeFileSync(join(pub.dir, 'scratch.txt'), 'not committed\n');
         const carried = await measure(looks, pub.dir);
-        assert.equal(carried.pair.deployable, false);
-        assert.ok(carried.line.endsWith(` · the pin, with Stall ${pub.head.slice(0, 12)} — not a deployable pair: the public tree has uncommitted changes`), carried.line);
+        assert.equal(carried.pair.pinned, false);
+        assert.ok(carried.line.endsWith(` · the pin, with Stall tree ${pub.tree.slice(0, 12)} — not the pinned pair: the public tree has uncommitted changes`), carried.line);
     });
 
     it('says the private repository’s uncommitted changes are not measured, and the pair stands', async () => {
         const looks = plantLooks();
-        const pub = publicRepo(pinLineFor({ dir: looks.dir, env: looks.env }));
+        const pub = publicRepo(await lineFor(looks));
         writeFileSync(join(looks.dir, 'fixture', 'sheet.css'), 'an edit no build reads\n');
         const carried = await measure(looks, pub.dir);
-        assert.equal(carried.pair.deployable, true);
-        assert.ok(carried.line.endsWith(' — a deployable pair (uncommitted changes in the private repository are not measured)'), carried.line);
+        assert.equal(carried.pair.pinned, true);
+        assert.ok(carried.line.endsWith(' — the pinned pair (uncommitted changes in the private repository are not measured)'), carried.line);
     });
 
-    it('says not a deployable pair, and goes on, when the pin does not read as one', async () => {
+    it('says not the pinned pair, and goes on, when HEAD’s pin does not read as one', async () => {
         const looks = plantLooks();
-        for (const pin of [pinLineFor({ dir: looks.dir, env: looks.env }).replace('\n', '\r\n'), '']) {
+        for (const pin of [(await lineFor(looks)).replace('\n', '\r\n'), '']) {
             const pub = publicRepo(pin);
             const carried = await measure(looks, pub.dir);
-            assert.equal(carried.pair.deployable, false);
-            assert.match(carried.line, /· deploy\/looks\.commit does not read as a pin — not a deployable pair \(deploy\/looks\.commit is \d+ bytes/);
+            assert.equal(carried.pair.pinned, false);
+            assert.match(carried.line, /· deploy\/looks\.commit at HEAD does not read as a pin — not the pinned pair \(deploy\/looks\.commit is \d+ bytes/);
         }
+    });
+
+    it('gives a production selection no pair: a production build reads nothing private until step 9', async () => {
+        const looks = plantLooks();
+        const pub = publicRepo(await lineFor(looks));
+        const carried = await measure(looks, pub.dir, { target: 'production' });
+        assert.equal(carried.pair, undefined);
+        assert.match(carried.line, /^a production selection at a private repository, commit [0-9a-f]{12}: no look$/);
     });
 
     it('gives the tracked fixture no pair: no deploy reads it', async () => {
@@ -161,10 +195,11 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('is decided from facts alone, in the order a reader needs them', () => {
-        const base = { commit: 'c'.repeat(40), pin: { commit: 'c'.repeat(40), tree: 't'.repeat(40) }, packedTree: 't'.repeat(40), publicHead: 'h'.repeat(40), publicClean: true, privateClean: true };
-        assert.deepEqual(pairVerdict(base), { deployable: true, sentence: `the pin, with Stall ${'h'.repeat(12)} clean — a deployable pair` });
-        assert.equal(pairVerdict({ ...base, commit: 'd'.repeat(40), publicClean: false }).sentence, `not the pin ${'c'.repeat(12)} — not a deployable pair`);
-        assert.equal(pairVerdict({ ...base, pin: undefined, pinError: 'why' }).deployable, false);
-        assert.equal(pairVerdict({ ...base, privateClean: false }).deployable, true);
+        const base = { commit: 'c'.repeat(40), pin: { commit: 'c'.repeat(40), tree: 't'.repeat(40) }, diskDiffers: false, packedTree: 't'.repeat(40), publicTree: 'h'.repeat(40), publicClean: true, privateClean: true };
+        assert.deepEqual(pairVerdict(base), { pinned: true, sentence: `the pin, with Stall tree ${'h'.repeat(12)} clean — the pinned pair` });
+        assert.equal(pairVerdict({ ...base, commit: 'd'.repeat(40), publicClean: false }).sentence, `not the pin ${'c'.repeat(12)} — not the pinned pair`);
+        assert.equal(pairVerdict({ ...base, diskDiffers: true, commit: 'd'.repeat(40) }).sentence, "not the pinned pair: deploy/looks.commit on the disk differs from HEAD's");
+        assert.equal(pairVerdict({ ...base, pin: undefined, pinError: 'why' }).pinned, false);
+        assert.equal(pairVerdict({ ...base, privateClean: false }).pinned, true);
     });
 });

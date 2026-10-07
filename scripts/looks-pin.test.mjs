@@ -16,6 +16,8 @@ import {
     pinProblem,
     readLooksPin,
 } from './looks-pin.mjs';
+import { plantLooks, removePlants } from './private-looks-plant.mjs';
+import { publicLookFacts } from './private-looks.mjs';
 
 /**
  * The pin (`scripts/looks-pin.mjs`, step 8c1): `deploy/looks.commit` is read
@@ -141,10 +143,32 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         }
     });
 
-    it('counts the bytes before it reads the line, and writes $GITHUB_OUTPUT in one place', () => {
+    it('opens with set -euo pipefail, refuses a link and counts the bytes before it reads, and writes $GITHUB_OUTPUT in one place', () => {
+        assert.ok(PIN_SCRIPT.startsWith(`set -euo pipefail\npin=${LOOKS_PIN_FILE}\n`), 'safe under any bash invocation, not only under shell: bash');
+        assert.ok(PIN_SCRIPT.indexOf('-L "$pin"') < PIN_SCRIPT.indexOf('wc -c'), 'a link is refused before wc reads through it');
         assert.ok(PIN_SCRIPT.indexOf('wc -c') < PIN_SCRIPT.indexOf('cat "$pin"'), 'the byte count is first: it bounds what $(cat …) reads');
         assert.equal(PIN_SCRIPT.split('GITHUB_OUTPUT').length - 1, 1);
-        assert.ok(PIN_SCRIPT.startsWith(`pin=${LOOKS_PIN_FILE}\n`));
+        assert.doesNotMatch(PIN_SCRIPT, /\n\s*\n/, 'no blank line: the workflow grammar holds a run: | block as it is');
+    });
+
+    it('refuses a pin that is a link, both ways, and the tracked pin is a plain file in git', () => {
+        const dir = pinIn(undefined);
+        writeFileSync(join(dir, 'deploy', 'real'), GOOD);
+        symlinkSync('real', join(dir, LOOKS_PIN_FILE));
+        assert.throws(() => readLooksPin(dir), /not a plain file/);
+        const step = runStep(PIN_SCRIPT, dir);
+        assert.notEqual(step.status, 0, 'the shell admits a link');
+        assert.equal(step.output, '');
+        const tracked = execFileSync('git', ['ls-files', '-s', '--', LOOKS_PIN_FILE], { cwd: ROOT, encoding: 'utf8' });
+        assert.match(tracked, /^100644 [0-9a-f]{40} 0\tdeploy\/looks\.commit\n$/, 'deploy/looks.commit is tracked as a plain, non-executable file');
+    });
+
+    it('stops on an unset $GITHUB_OUTPUT, writing nothing anywhere', () => {
+        const dir = pinIn(GOOD);
+        const file = join(scratchDir('unset'), 'step.sh');
+        writeFileSync(file, PIN_SCRIPT);
+        const run = spawnSync('bash', [file], { cwd: dir, env: { PATH: process.env.PATH }, encoding: 'utf8' });
+        assert.notEqual(run.status, 0, 'an unset $GITHUB_OUTPUT is not a file named ""');
     });
 
     /*
@@ -226,7 +250,7 @@ function looksRepo(files, gitlinks = {}, blobs = {}) {
 
 /** The tree `PACKED_TREE_SCRIPT` computes for `repo`'s HEAD, run as the workflow runs it. */
 function shellTree(repo) {
-    const step = runStep(`PIN=${repo.head}\n${PACKED_TREE_SCRIPT}\nprintf '%s' "$tree"\n`, repo.work, {
+    const step = runStep(`set -euo pipefail\nPIN=${repo.head}\n${PACKED_TREE_SCRIPT}\nprintf '%s' "$tree"\n`, repo.work, {
         GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_CONFIG_NOSYSTEM: '1',
     });
@@ -286,6 +310,39 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
         assert.match(repo.git('ls-tree', '-r', '--name-only', tree), /^a-look\/README\.md$/m);
     });
 
+    /*
+     * A local refs/replace/* makes a plain `git ls-tree <commit>` read
+     * another tree while the commit is the pin (the 8c1 critic's item 3):
+     * both sides read with replace objects off, and agree on the commit's
+     * own tree.
+     */
+    it('reads the commit’s own tree under a replace ref, on both sides', () => {
+        const repo = looksRepo({ ...LOOK, 'README.md': 'r\n' });
+        const own = packedTreeOf({ dir: repo.dir, commit: repo.head, env: repo.env });
+        const root = repo.git('rev-parse', 'HEAD^{tree}');
+        const other = repo.git('mktree', '--missing');
+        repo.git('replace', '-f', root, other);
+        assert.notEqual(repo.git('ls-tree', repo.head), repo.git('--no-replace-objects', 'ls-tree', repo.head), 'the plant: the replace ref changes what a plain read sees');
+        assert.equal(packedTreeOf({ dir: repo.dir, commit: repo.head, env: repo.env }), own);
+        assert.equal(shellTree(repo), own);
+    });
+
+    /*
+     * Why 8c2's PACK_SCRIPT opens with `set -euo pipefail` before this line:
+     * without pipefail, `git ls-tree` failing on an unreadable `$PIN` leaves
+     * `mktree` to write the empty tree, and the step carries on with it.
+     */
+    it('needs pipefail: an unreadable commit stops the step, where without it the empty tree is packed', () => {
+        const repo = looksRepo(LOOK);
+        const script = (opener) => `${opener}\nPIN=${'0'.repeat(40)}\n${PACKED_TREE_SCRIPT}\nprintf '%s' "$tree"\n`;
+        const step = runStep(script('set -euo pipefail'), repo.work);
+        assert.notEqual(step.status, 0);
+        assert.equal(step.stdout, '');
+        const unsafe = spawnSync('bash', ['--noprofile', '--norc', '-c', script('set -eu')], { cwd: repo.work, env: { PATH: process.env.PATH, HOME: repo.work }, encoding: 'utf8' });
+        assert.equal(unsafe.status, 0, 'the hazard this guards against is gone: the plant proves nothing');
+        assert.equal(unsafe.stdout, '4b825dc642cb6eb9a060e54bf8d69288fbee4904');
+    });
+
     it('refuses anything but a full commit, and a directory that is not a repository’s root', () => {
         const repo = looksRepo(LOOK);
         for (const commit of ['HEAD', repo.head.slice(0, 12), `--output=${repo.head}`, repo.head.toUpperCase()]) {
@@ -295,24 +352,73 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
     });
 });
 
-describe('the-pin-line-names-only-a-commit-the-build-would-carry', () => {
-    it('is the commit and its packed tree, 82 bytes, at HEAD or at a commit named', () => {
-        const repo = looksRepo({ ...LOOK, 'README.md': 'r\n', 'LOG.md': 'l\n' });
-        const line = pinLineFor({ dir: repo.dir, env: repo.env });
-        assert.equal(line, `${repo.head} ${shellTree(repo)}\n`);
+/**
+ * `the-pin-line-refuses-a-repository-the-build-refuses`: what the window
+ * writes when it bumps the pin (`pinLineFor`, `node scripts/looks-pin.mjs
+ * --write`) refuses what the build's own read of the commit refuses — its
+ * files, its index against the public lists, its directories, every named
+ * look's required files (`readPrivateLooksAt`, as `selectedIndex` reads it)
+ * — and an index naming no look (the 8c1 critic's item 4: a README-and-log
+ * commit got a pin to the empty tree). A look's own validators are the
+ * build's and `pnpm test`'s, not this test's. `--write` writes only once the
+ * line is computed: a refusal leaves the old pin, byte for byte.
+ */
+describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
+    after(removePlants);
+    const facts = publicLookFacts();
+    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: await facts });
+
+    it('is the commit and its packed tree, 82 bytes, at HEAD or at a commit named', async () => {
+        const looks = plantLooks(undefined, { 'README.md': 'r\n', 'LOG.md': 'l\n' });
+        const line = await lineOf(looks);
+        assert.equal(line, `${looks.head()} ${packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env })}\n`);
         assert.equal(pinProblem(line), undefined);
-        assert.equal(pinLineFor({ dir: repo.dir, commit: repo.head, env: repo.env }), line);
+        assert.equal(await lineOf(looks, looks.head()), line);
     });
 
-    it('refuses a commit holding a file the build’s allow-list refuses, naming each', () => {
-        for (const [name, files] of [
-            ['a note at the root', { 'NOTES.md': 'n\n' }],
-            ['an executable look', { 'a-look/look.json': { text: '{}\n', exec: true } }],
-            ['a symlink', { 'a-look/art/hosts.svg': { link: '/etc/hosts' } }],
-            ['a design log inside a look', { 'a-look/LOG.md': 'l\n' }],
-        ]) {
-            const repo = looksRepo({ ...LOOK, ...files });
-            assert.throws(() => pinLineFor({ dir: repo.dir, env: repo.env }), /a pin names no commit the build would refuse/, name);
+    it('refuses what the build refuses to read, and a commit that carries no look, naming each', async () => {
+        const plants = [
+            ['a README and a log alone', undefined, (dir) => ['index.json', 'fixture'].forEach((path) => rmSync(join(dir, path), { recursive: true })), { 'README.md': 'r\n', 'LOG.md': 'l\n' }, /no index\.json at the root/],
+            ['a note at the root', undefined, undefined, { 'NOTES.md': 'n\n' }, /"NOTES\.md": not a file/],
+            ['a design log inside a look', undefined, undefined, { 'fixture/LOG.md': 'l\n' }, /"fixture\/LOG\.md": not a file/],
+            ['a directory the index does not name', undefined, undefined, { 'other/look.json': '{}\n' }, /other\/: a directory the index does not name/],
+            ['an index that frees the reserved id', (path, text) => (path === 'index.json' ? text.replace('"paid": true', '"paid": false') : text), undefined, undefined, /PAID_LOOK_IDS says true/],
+            ['an index that releases it', (path, text) => (path === 'index.json' ? text.replace('"preview"', '"release"') : text), undefined, undefined, /RELEASED_LOOK_IDS does not name/],
+            ['an index naming no look', (path, text) => (path === 'index.json' ? '{ "schema": 1, "looks": [] }\n' : text), (dir) => rmSync(join(dir, 'fixture'), { recursive: true }), undefined, /the index names no look/],
+            ['a look without its sheet', undefined, (dir) => rmSync(join(dir, 'fixture', 'sheet.css')), undefined, /fixture\/sheet\.css: the index names the look and the file is not there/],
+        ];
+        for (const [name, edit, remove, add, why] of plants) {
+            const looks = plantLooks(edit ?? ((_path, text) => text), add ?? {});
+            if (remove !== undefined) {
+                remove(looks.dir);
+                looks.git('add', '-A');
+                looks.git('commit', '-q', '-m', 'removed');
+            }
+            await assert.rejects(lineOf(looks), (error) => /a pin names no commit the build would refuse/.test(error.message) && why.test(error.message), name);
         }
+    });
+
+    it('writes deploy/looks.commit with --write only once the line is computed, and a refusal leaves the old pin', () => {
+        const run = (cwd, ...args) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'looks-pin.mjs'), ...args], { cwd, env: { ...process.env }, encoding: 'utf8' });
+        const work = scratchDir('cli');
+        mkdirSync(join(work, 'deploy'));
+        writeFileSync(join(work, LOOKS_PIN_FILE), GOOD);
+        // A refusal: `looks` is a README-and-log repository.
+        const bare = looksRepo({ 'README.md': 'r\n', 'LOG.md': 'l\n' });
+        execFileSync('git', ['clone', '-q', bare.dir, join(work, 'looks')], { env: bare.env });
+        const refused = run(work, '--write');
+        assert.equal(refused.status, 1, refused.stderr);
+        assert.match(refused.stderr, /a pin names no commit the build would refuse/);
+        assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), GOOD, 'the old pin stands');
+        // A good repository: printed without --write, written with it.
+        const good = plantLooks();
+        const printed = run(work, good.dir);
+        assert.equal(printed.status, 0, printed.stderr);
+        assert.equal(pinProblem(printed.stdout), undefined);
+        assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), GOOD, 'printing writes nothing');
+        const wrote = run(work, '--write', good.dir);
+        assert.equal(wrote.status, 0, wrote.stderr);
+        assert.equal(wrote.stdout, '');
+        assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), printed.stdout);
     });
 });

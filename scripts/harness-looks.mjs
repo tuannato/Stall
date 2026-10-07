@@ -17,12 +17,14 @@
  *   listed by hand;
  * - `env` — the selection's three variables as a build reads them, the
  *   directory absolute and the commit pinned;
- * - `pair` — for a private repository (never the tracked fixture), whether
+ * - `pair` — for a preview selection of a private repository (never the
+ *   tracked fixture, and never a production selection: a production build
+ *   reads no private repository until step 9, STEP-8C-PLAN v2 V1), whether
  *   the run measures the pinned pair (`pinnedPair`, `scripts/looks-pin.mjs`):
- *   the selection's commit is the pin's in `deploy/looks.commit`, the pin's
- *   tree is that commit's packed tree, and this repository's tree is clean.
- *   A sentence, never a refusal (8c1): every read is of a commit, so a run
- *   over an unpinned commit measures what it names, and what is left to
+ *   the pin as this repository's HEAD holds it, the selection's commit the
+ *   pin's, the pin's tree that commit's packed tree, this repository's tree
+ *   clean. A sentence, never a refusal (8c1): every read is of a commit, so a
+ *   run over an unpinned commit measures what it names, and what is left to
  *   prevent is a verdict cited for the wrong pair;
  * - `line` — one sentence naming what it measures, the pair included, for
  *   the command to print before it builds, so a run's selection is on
@@ -58,8 +60,9 @@ export async function harnessLooks(selection, { root = ROOT, facts, git, env = p
         [SELECTION_ENV.commit]: commit,
     };
     const what = looks.length === 0 ? 'no look' : looks.map((look) => `${look.slug} (${look.cls})`).join(', ');
-    // The fixture is no deploy's: a pin names a private repository's commit.
-    const pair = tree.fixture ? undefined : pinnedPair({ root, dir: tree.dir, commit, git, env });
+    // The fixture is no deploy's, and a production build reads nothing
+    // private until step 9: a pin names a private commit a preview carries.
+    const pair = tree.fixture || selection.target !== 'preview' ? undefined : pinnedPair({ root, dir: tree.dir, commit, git, env });
     return {
         commit,
         fixture: tree.fixture,
