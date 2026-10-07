@@ -77,9 +77,12 @@
  * the public file followed by those faces (`noticesWithLookFonts`) — the
  * tracked `public/licenses.txt` stays the public build's.
  *
- * What this does not do yet, stated: the pin and the clean check
- * (`deploy/looks.commit`, `STALL_LOOKS_REQUIRED`) are 8c's; a look's og card
- * is 8j's. Node built-ins and one pure `src/domain` module
+ * What this does not do, stated: it reads no pin. The commit is the
+ * selection's (`STALL_LOOKS_COMMIT`, or the repository's HEAD); the pin
+ * (`deploy/looks.commit`, `scripts/looks-pin.mjs`) is the deploy road's to
+ * check, in the job that reads the private repository (8c2–8c3), and a
+ * harness run says whether the commit it measured is the pinned pair's. A
+ * look's og card is 8j's. Node built-ins and one pure `src/domain` module
  * (`moodClass.ts`'s `sameOwner`, loaded by Node's type stripping and by the
  * config bundler); a `.d.mts` beside it. Tests:
  * `scripts/private-looks-build.test.mjs`.

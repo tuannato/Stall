@@ -27,10 +27,10 @@
  * inherited `GIT_DIR`-style variables dropped (`GIT_LOCATION_VARS`); a
  * `prefix` reads one subtree of a commit instead, which is how this
  * repository's tracked fixture is read (`{ dir: <checkout>, commit,
- * prefix: 'layout/fixture-private-looks', fixture: true }`). The pin that
- * names the private commit (`deploy/looks.commit`) and the clean check arrive
- * with the deploy road (8c); the reader here takes the commit as an
- * argument.
+ * prefix: 'layout/fixture-private-looks', fixture: true }`). The reader
+ * takes the commit as an argument; the pin that names the one a deploy reads
+ * is `deploy/looks.commit` (`scripts/looks-pin.mjs`, 8c1), and a harness
+ * run says whether the commit it measured is the pinned one.
  *
  * Pure checks over facts the caller reads, plus the two git readers — Node
  * built-ins only. A `.d.mts` beside it, because a TypeScript test importing
