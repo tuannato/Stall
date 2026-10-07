@@ -9,9 +9,12 @@ import {
     ARTIFACT_DIR,
     ARTIFACT_STAMP,
     ARTIFACT_TAR,
+    CARRIED_CONFIG_SCOPES,
     PACK_ALLOW_PROGRAM,
     PACK_SCRIPT,
     PIN_SCRIPT,
+    SAME_CONFIG_KEYS,
+    configScopesOutside,
     packAllowProgram,
     readArtifactTar,
     unwrapLine,
@@ -381,7 +384,7 @@ function fileLessSubtrees(repo) {
     return roots.map((root) => repo.git(['commit-tree', root, '-m', 'planted']));
 }
 
-describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
+describe('the-pack-admits-what-privateFileProblems-admits-at-the-root-or-under-a-preview-slug', () => {
     it('finds the build’s boundaries from its own predicate, and the program is written for them and for the preview slugs', () => {
         assert.equal(SLUG_MAX, PRIVATE_SLUG_MAX);
         assert.ok(PACK_ALLOW_PROGRAM.includes(`\n  s = ${PREVIEW_SLUGS.map((slug) => `p[1] == "${slug}"`).join(' || ')}\n`), 'the slug gate is the preview slugs, exactly');
@@ -397,17 +400,21 @@ describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
      * every admitted path at each refused mode, each the only entry of its
      * commit's tree, through the whole pack: a path the shell admits is
      * packed (exit 0, a tar), one it refuses stops the job with the count
-     * line and nothing else — and the verdict is the build's
-     * (`privateFileProblems`) for every one.
+     * line and nothing else. The verdict is the build's
+     * (`privateFileProblems`) at the root and under a preview slug, and a
+     * refusal under any other slug (c′) — so the shell admits a subset of
+     * what the build admits, exactly that subset, and the corpus holds
+     * paths of the rest.
      */
-    it('admits a path exactly when the build admits it, at every mode, through the whole pack', async () => {
+    it('admits a path exactly when the build admits it at the root or under a preview slug, at every mode, through the whole pack', async () => {
         const paths = gitWritable(corpusPaths());
         const entries = [
             ...paths.map((path) => ({ path, mode: PRIVATE_FILE_MODE })),
             ...paths.filter(admits).flatMap((path) => PRIVATE_MODES_REFUSED.map((mode) => ({ path, mode }))),
         ];
         assert.ok(paths.filter(admits).length >= 15 && entries.length >= 300, `a corpus of ${entries.length} entries, ${paths.filter(admits).length} admitted`);
-        assert.ok(paths.some((path) => fileAdmitted(path, PRIVATE_FILE_MODE) && !previewGate(path)), 'the corpus holds files the build admits under a slug no preview carries');
+        const outsidePreview = paths.filter((path) => fileAdmitted(path, PRIVATE_FILE_MODE) && !previewGate(path));
+        assert.ok(outsidePreview.length >= 8, `the corpus holds ${outsidePreview.length} files the build admits under a slug no preview carries`);
         const SHARDS = 8;
         const disagree = [];
         await Promise.all(
@@ -427,7 +434,7 @@ describe('the-pack-admits-exactly-the-files-privateFileProblems-admits', () => {
                     const shell = step.status === 0;
                     const what = `${JSON.stringify(entry.path)} ${entry.mode}`;
                     if (shell !== build) {
-                        disagree.push(`${what}: the build ${build ? 'admits' : 'refuses'}, the shell ${shell ? 'admits' : 'refuses'} (${step.stderr.trim()})`);
+                        disagree.push(`${what}: the build under a preview slug ${build ? 'admits' : 'refuses'}, the shell ${shell ? 'admits' : 'refuses'} (${step.stderr.trim()})`);
                     } else if (shell) {
                         // What git archive wrote for every admitted shape — the longest paths included — is a tar the unwrap reads.
                         const tar = readArtifactTar(readFileSync(join(artifact, ARTIFACT_TAR)));
@@ -1210,6 +1217,91 @@ describe('the-carried-repository-reads-no-global-or-system-git-setting', () => {
         carries(art, { ...base, GIT_DEFAULT_HASH: 'sha256' });
         assert.throws(() => storedUnder({ ...base, GIT_ATTR_SOURCE: 'HEAD' }), undefined, 'GIT_ATTR_SOURCE=HEAD in a fresh repository does not stop git add — the plant proves nothing');
         carries(art, { ...base, GIT_ATTR_SOURCE: 'HEAD' });
+    });
+
+    it('reads a listing of git’s settings as their scopes: local, and exactly its own command-line keys', () => {
+        assert.deepEqual([...CARRIED_CONFIG_SCOPES], ['local', 'command']);
+        assert.deepEqual([...SAME_CONFIG_KEYS], ['core.autocrlf', 'core.eol', 'core.filemode', 'core.safecrlf', 'core.attributesfile', 'core.excludesfile']);
+        const own = SAME_CONFIG_KEYS.map((key) => `command\0${key}\0`).join('');
+        assert.deepEqual(configScopesOutside(`local\0core.bare\0${own}`, SAME_CONFIG_KEYS), []);
+        assert.deepEqual(configScopesOutside(`global\0user.name\0local\0core.bare\0${own}`, SAME_CONFIG_KEYS), ['global']);
+        assert.deepEqual(configScopesOutside(`system\0a.b\0unknown\0c.d\0worktree\0e.f\0local\0core.bare\0${own}`, SAME_CONFIG_KEYS), ['system', 'unknown', 'worktree']);
+        // A setting handed down in the environment is scoped `command` by git; one key more than its own, or one fewer, is refused.
+        assert.deepEqual(configScopesOutside(`local\0core.bare\0command\0stall.planted\0${own}`, SAME_CONFIG_KEYS), ['command']);
+        assert.deepEqual(configScopesOutside(`local\0core.bare\0command\0core.eol\0${own}`, SAME_CONFIG_KEYS), ['command']);
+        assert.deepEqual(configScopesOutside('local\0core.bare\0command\0core.eol\0', SAME_CONFIG_KEYS), ['command']);
+        // Silence, a broken listing and a word git would not print are not clean reads, and no word but git's reaches the log.
+        assert.deepEqual(configScopesOutside('', SAME_CONFIG_KEYS), ['?']);
+        assert.deepEqual(configScopesOutside('local\0core.bare', SAME_CONFIG_KEYS), ['?']);
+        assert.deepEqual(configScopesOutside(`local\0core.bare\0local\0${own}`, SAME_CONFIG_KEYS), ['?']);
+        assert.deepEqual(configScopesOutside(`~/.gitconfig\0a.b\0local\0core.bare\0${own}`, SAME_CONFIG_KEYS), ['?']);
+    });
+
+    /*
+     * The second 8c2 critic's item 4: `GIT_CONFIG_GLOBAL` is git 2.32's, and
+     * an older git reads `~/.gitconfig` whatever it says. A stand-in git
+     * plays each git that would leak — one ignoring `GIT_CONFIG_GLOBAL` (git
+     * 2.28–2.31), one ignoring `GIT_CONFIG_NOSYSTEM`, one handed a setting in
+     * `GIT_CONFIG_PARAMETERS`, one too old for `--show-scope` (before 2.26)
+     * — each plant proved to bite on its own first, and the unwrap refuses
+     * every one after `git init` and leaves no directory.
+     */
+    it('checks after git init that it reads only its own settings, and refuses a git that leaks a global, system or handed-down one', () => {
+        const art = crlfArtifact();
+        const dir = scratchDir('scopes');
+        const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+        const wrapper = join(dir, 'git');
+        writeFileSync(
+            wrapper,
+            [
+                '#!/bin/bash',
+                '# A stand-in git: $PLANT_MODE names the git it plays.',
+                'case "${PLANT_MODE:-}" in',
+                '  old-global) unset GIT_CONFIG_GLOBAL ;;',
+                '  no-nosystem) unset GIT_CONFIG_NOSYSTEM ;;',
+                `  handed) export GIT_CONFIG_PARAMETERS="'stall.planted'='handed'" ;;`,
+                '  no-scope) for arg in "$@"; do if [ "$arg" = --show-scope ]; then echo "error: unknown option show-scope" >&2; exit 129; fi; done ;;',
+                'esac',
+                'exec "$REAL_GIT" "$@"',
+                '',
+            ].join('\n'),
+        );
+        chmodSync(wrapper, 0o755);
+        const home = join(dir, 'home');
+        mkdirSync(home);
+        writeFileSync(join(home, '.gitconfig'), '[stall]\n\tplanted = global\n');
+        const system = join(dir, 'system-config');
+        writeFileSync(system, '[stall]\n\tplanted = system\n');
+        const base = {
+            ...minus(process.env, 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'XDG_CONFIG_HOME'),
+            HOME: home,
+            GIT_CONFIG_SYSTEM: system,
+            REAL_GIT: realGit,
+        };
+        /** The scopes the stand-in reads `stall.planted` from, in a fresh repository, under the variables the unwrap sets. */
+        const leaks = (mode) => {
+            const repo = scratchDir('leak');
+            const env = { ...base, PLANT_MODE: mode, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+            execFileSync(wrapper, ['init', '-q', '.'], { cwd: repo, env, stdio: 'ignore' });
+            const listing = spawnSync(wrapper, ['config', '--list', '--show-scope', '--name-only'], { cwd: repo, env, encoding: 'utf8' }).stdout ?? '';
+            return listing.split('\n').filter((line) => line.endsWith('\tstall.planted')).map((line) => line.split('\t')[0]);
+        };
+        assert.deepEqual(leaks('none'), [], 'the stand-in leaks nothing as itself');
+        const tooOld = spawnSync(wrapper, ['config', '--list', '--show-scope'], { cwd: dir, env: { ...base, PLANT_MODE: 'no-scope' }, encoding: 'utf8' });
+        assert.equal(tooOld.status, 129, 'the stand-in for a git before 2.26 lists scopes — the plant proves nothing');
+        carries(art, { ...base, PLANT_MODE: 'none' }, wrapper);
+        const roads = [
+            { mode: 'old-global', bites: ['global'], refusal: /outside this repository and its command line \((?:[a-z?]+, )*global(?:, [a-z?]+)*\)/ },
+            { mode: 'no-nosystem', bites: ['system'], refusal: /outside this repository and its command line \((?:[a-z?]+, )*system(?:, [a-z?]+)*\)/ },
+            { mode: 'handed', bites: ['command'], refusal: /outside this repository and its command line \((?:[a-z?]+, )*command(?:, [a-z?]+)*\)/ },
+            { mode: 'no-scope', bites: [], refusal: /git config failed \(exit 129\)/ },
+        ];
+        for (const road of roads) {
+            assert.deepEqual(leaks(road.mode), road.bites, `${road.mode}: the plant does not bite — it proves nothing`);
+            const dest = join(scratchDir('refused'), 'looks');
+            assert.throws(() => unwrapLooksArtifact({ artifact: art.artifact, dest, root: art.work, env: { ...base, PLANT_MODE: road.mode }, git: wrapper }), road.refusal, road.mode);
+            assert.ok(!existsSync(dest), `${road.mode}: a refusal leaves no directory`);
+        }
     });
 });
 

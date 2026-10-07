@@ -29,6 +29,12 @@ export declare function packAllowProgram(constants: AllowListConstants): string;
 export declare const PACK_ALLOW_PROGRAM: string;
 export declare const PACK_SCRIPT: string;
 export declare function readArtifactTar(tar: Buffer): ArtifactMember[];
+/** The configuration scopes the carried repository may read: its own file and the unwrap's own `-c` values. */
+export declare const CARRIED_CONFIG_SCOPES: readonly ['local', 'command'];
+/** The unwrap's own `-c` keys, as `git config --list` prints them. */
+export declare const SAME_CONFIG_KEYS: readonly string[];
+/** What is wrong with a `git config --list --show-scope --name-only -z` listing, as scope names; empty when it is only `local` and exactly `commandKeys` as `command`. */
+export declare function configScopesOutside(listing: string, commandKeys: readonly string[]): string[];
 export declare function treeOfDisk(dir: string): { readonly id: string; readonly files: number };
 export declare function unwrapLooksArtifact(at: { readonly artifact: string; readonly dest: string; readonly root: string; readonly git?: string; readonly env?: Env }): Unwrapped;
 export declare function unwrapLine(unwrapped: Unwrapped): string;

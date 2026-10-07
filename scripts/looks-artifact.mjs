@@ -17,13 +17,14 @@
  * step read, and `$RUNNER_TEMP` the runner's: the clone must be at the pinned
  * commit; then **every entry of the pinned tree** (`git ls-tree -r -t
  * --full-tree`, replace objects off) goes through one awk program,
- * `PACK_ALLOW_PROGRAM`, which admits exactly the files the build's own
+ * `PACK_ALLOW_PROGRAM`, which admits a subset of the files the build's own
  * `privateFileProblems` admits (`scripts/private-looks.mjs`: mode `100644`,
  * the root files, a look's four files, `<slug>/art/<name>` by `OWN_ART_NAME`
  * and `PRIVATE_FACE_LICENCE`, the slug by `PRIVATE_SLUG` and
- * `PRIVATE_SLUG_MAX`) **under a slug `PREVIEW_SLUGS` names** — (c′): until a
- * release only the canary travels — and the directories those files stand
- * in, and nothing else, so an unsold look, a gitlink, a link, an
+ * `PRIVATE_SLUG_MAX`) — exactly that subset, less every look directory
+ * whose slug `PREVIEW_SLUGS` does not name ((c′): until a release only the
+ * canary's directory travels) — and the directories those files stand in,
+ * and nothing else, so an unsold look's directory, a gitlink, a link, an
  * executable bit, a `.gitattributes`,
  * a note, a design log inside a look, a folder of shots or a script stops
  * the job **before anything is archived or uploaded** (the 8c critic's item
@@ -50,8 +51,10 @@
  * allow-list and run against another is the hole this step closes. The
  * test runs the shell itself over a corpus generated from those constants
  * and the build's predicate, both directions — every path the shell admits
- * `privateFileProblems` admits, and every path it admits the shell admits
- * (`the-pack-admits-exactly-the-files-privateFileProblems-admits`,
+ * `privateFileProblems` admits at the root or under a preview slug, and
+ * every path it admits there the shell admits; under any other slug the
+ * shell refuses what it admits
+ * (`the-pack-admits-what-privateFileProblems-admits-at-the-root-or-under-a-preview-slug`,
  * `the-pack-refuses-a-file-the-build-would-refuse`). Lengths are checked
  * with `length()`, never an interval expression, and every character class
  * is an explicit list, never a range: Ubuntu's awk is mawk, this Mac's is
@@ -73,7 +76,9 @@
  * **its tree is hashed here, as git hashes one, from the files on disk** —
  * never from git objects the artifact could carry — and must be the pinned
  * tree; only then does git run there: a repository made with no template,
- * no global or system config, the files added and written as a tree (the
+ * no global or system config (checked after `git init` by the scopes git
+ * lists, so an old git that leaks one is refused), the files added and
+ * written as a tree (the
  * pinned tree again, by git's own count) and committed with a fixed
  * identity and date, so one pin always carries as one commit. The build
  * reads that repository through `STALL_LOOKS_DIR` as it reads a clone.
@@ -160,11 +165,12 @@ const anyOf = (variable, names) => names.map((name) => `${variable} == "${plainN
  * **A look directory is admitted only under a preview slug**
  * (`PREVIEW_SLUGS`, (c′) made mechanical): the program compares the first
  * component with each, exactly — never a prefix, a suffix or a case
- * folded — so an unsold look, indexed or not, stops the job like any other
- * refused entry, by a count. Each preview slug must itself be a slug
- * `PRIVATE_SLUG` and `PRIVATE_SLUG_MAX` admit, or the module refuses to
- * load; what it admits is then exactly what `privateFileProblems` admits
- * at the root or under a preview slug.
+ * folded — so a look directory under any other name, indexed or not,
+ * stops the job like any other refused entry, by a count. Each preview
+ * slug must itself be a slug `PRIVATE_SLUG` and `PRIVATE_SLUG_MAX` admit,
+ * or the module refuses to load; what it admits is then a subset of what
+ * `privateFileProblems` admits: exactly what it admits at the root or
+ * under a preview slug.
  *
  * One awk program over `git ls-tree -r -t --full-tree` lines (`<mode>
  * <type> <object>\t<path>`, split on the tab; a line that is not exactly
@@ -429,7 +435,18 @@ export function treeOfDisk(dir) {
  * (`GIT_DEFAULT_HASH`, which makes `git init` write another object format,
  * and `GIT_ATTR_SOURCE`, which reads attributes from a tree), no location
  * inherited, replace objects off, and a fixed identity and date. `git init
- * --template=` copies no template either. Test:
+ * --template=` copies no template either. **And it is checked, not
+ * trusted** (the second 8c2 critic's item 4): `GIT_CONFIG_GLOBAL` arrived
+ * in git 2.32, and an older git ignores it in silence and reads
+ * `~/.gitconfig`; so right after `git init` the unwrap lists every setting
+ * git reads with its scope (`git config --list --show-scope`, git 2.26 and
+ * later; an older git refuses the option, which refuses the unwrap) and
+ * refuses unless every one is `local` or `command`, and the `command`
+ * ones exactly `SAME`'s (`CARRIED_CONFIG_SCOPES`, `SAME_CONFIG_KEYS`,
+ * `configScopesOutside`) — so "no global or system config" holds on any
+ * git, failing closed on an old one. What `git init` itself read before
+ * the check cannot reach the carried tree: the files were hashed before git
+ * ran, and `write-tree` must answer the pinned tree after. Test:
  * `the-carried-repository-reads-no-global-or-system-git-setting`, every
  * setting but one proved by a plant: the global ignore file is a belt
  * (`add -A -f` adds what it names anyway).
@@ -461,6 +478,43 @@ function carriedGitEnv(env) {
     return clean;
 }
 
+/** The only configuration scopes the carried repository may read: its own file, which `git init` just wrote, and `SAME`'s `-c` values. */
+export const CARRIED_CONFIG_SCOPES = Object.freeze(['local', 'command']);
+
+/**
+ * What is wrong with the settings `git config --list --show-scope
+ * --name-only -z` printed, as scope names, sorted, once each: every scope
+ * `CARRIED_CONFIG_SCOPES` does not name, and `command` when the `command`
+ * entries are not exactly `commandKeys` (`SAME`'s, lower-cased as git
+ * prints them) — git scopes a value handed down in `GIT_CONFIG_PARAMETERS`
+ * or `GIT_CONFIG_COUNT` as `command` too, so the scope alone would let one
+ * through. A word git prints that is not a plain lower-case word is
+ * reported as `?`, so the public log carries git's scope names and nothing
+ * else; a listing that is empty, or does not come in scope and name pairs,
+ * is `?` too: the repository `git init` just wrote has local settings, so
+ * silence is not a clean read.
+ */
+export function configScopesOutside(listing, commandKeys) {
+    const fields = listing.endsWith('\0') ? listing.slice(0, -1).split('\0') : [listing];
+    if (listing === '' || fields.length % 2 !== 0) {
+        return ['?'];
+    }
+    const scopes = new Set();
+    const command = [];
+    for (let i = 0; i < fields.length; i += 2) {
+        const scope = fields[i];
+        if (scope === 'command') {
+            command.push(fields[i + 1]);
+        } else if (!CARRIED_CONFIG_SCOPES.includes(scope)) {
+            scopes.add(/^[a-z]{1,16}$/.test(scope) ? scope : '?');
+        }
+    }
+    if (command.sort().join('\n') !== [...commandKeys].sort().join('\n')) {
+        scopes.add('command');
+    }
+    return [...scopes].sort();
+}
+
 const SAME = [
     '-c',
     'core.autocrlf=false',
@@ -475,6 +529,9 @@ const SAME = [
     '-c',
     'core.excludesFile=/dev/null',
 ];
+
+/** `SAME`'s keys as `git config --list` prints them: the only `command` settings the carried repository may read. */
+export const SAME_CONFIG_KEYS = Object.freeze(SAME.filter((_, i) => i % 2 === 1).map((setting) => setting.slice(0, setting.indexOf('=')).toLowerCase()));
 
 /**
  * Unwrap the artifact at `artifact` into a new repository at `dest`, for
@@ -506,6 +563,10 @@ export function unwrapLooksArtifact({ artifact, dest, root, git = 'git', env = p
                 execFileSync(git, ['--no-replace-objects', ...SAME, ...args], { cwd: target, env: clean, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(),
             );
         run(['init', '-q', '--template=', '--initial-branch=main', '.']);
+        const outside = configScopesOutside(run(['config', '--list', '--show-scope', '--name-only', '-z']), SAME_CONFIG_KEYS);
+        if (outside.length > 0) {
+            refuse(`git reads configuration from outside this repository and its command line (${outside.join(', ')}): a git that does not honour GIT_CONFIG_GLOBAL or GIT_CONFIG_NOSYSTEM, or a setting handed down another way`);
+        }
         run(['add', '-A', '-f', '.']);
         const written = run(['write-tree']);
         if (written !== pin.tree) {
