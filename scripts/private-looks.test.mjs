@@ -23,6 +23,7 @@ import {
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
+import { PRIVATE_MODES_REFUSED, PRIVATE_PATHS_ADMITTED, PRIVATE_PATHS_REFUSED } from './private-looks-plant.mjs';
 
 /**
  * A private look repository's shape (`scripts/private-looks.mjs`), over
@@ -123,63 +124,20 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
      * a symlink, a gitlink or an executable bit is refused, because nothing in
      * that repository is ever run.
      */
-    const allowed = [
-        'index.json',
-        'README.md',
-        'LOG.md',
-        'some-look/look.json',
-        'some-look/sheet.css',
-        'some-look/og.png',
-        'some-look/fonts.json',
-        'some-look/art/mark.svg',
-        'some-look/art/face-latin.woff2',
-        'some-look/art/LICENSE-OFL.txt',
-        'some-look/art/LICENSE-OFL-face.txt',
-        'a/look.json',
-    ];
+    const allowed = PRIVATE_PATHS_ADMITTED;
 
     it('passes every shape it allows', () => {
         assert.deepEqual(privateFileProblems(plain(...allowed)), []);
     });
 
     it('refuses code, pages, other files and other places, one problem each', () => {
-        for (const path of [
-            'some-look/look.ts',
-            'some-look/look.js',
-            'some-look/script.mjs',
-            'some-look/page.html',
-            'some-look/art/tool.mjs',
-            'some-look/art/mark.svg.js',
-            'some-look/extra.css',
-            'some-look/README.md',
-            'some-look/og.jpg',
-            'some-look/art/shot.png',
-            'some-look/art/face.ttf',
-            'some-look/art/face.woff',
-            'some-look/art/sub/mark.svg',
-            'some-look/art/Mark.svg',
-            'some-look/art/a mark.svg',
-            'some-look/LICENSE-OFL.txt',
-            'Some-Look/look.json',
-            'some_look/look.json',
-            '-look/look.json',
-            'look.json',
-            'sheet.css',
-            'package.json',
-            '.gitignore',
-            '.gitmodules',
-            '.DS_Store',
-            'some-look/.DS_Store',
-            'notes/plan.md',
-            'some-look/art/../look.json',
-            `${'a'.repeat(33)}/look.json`,
-        ]) {
+        for (const path of PRIVATE_PATHS_REFUSED) {
             assert.equal(privateFileProblems(plain(path)).length, 1, path);
         }
     });
 
     it('refuses a symlink, a gitlink and an executable bit on a path it allows', () => {
-        for (const mode of ['120000', '160000', '100755']) {
+        for (const mode of PRIVATE_MODES_REFUSED) {
             const problems = privateFileProblems([{ path: 'some-look/art/mark.svg', mode }]);
             assert.equal(problems.length, 1, mode);
             assert.match(problems[0], /plain files only/);

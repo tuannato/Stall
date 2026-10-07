@@ -10,6 +10,9 @@ export type PlantedLooks = {
     readonly selection: Env;
 };
 
+export declare const PRIVATE_PATHS_ADMITTED: readonly string[];
+export declare const PRIVATE_PATHS_REFUSED: readonly string[];
+export declare const PRIVATE_MODES_REFUSED: readonly string[];
 export declare const PLANTED_CLASS: 't-planted-look';
 export declare const PLANTED_ROW_PREFIX: 'att-planted-';
 export declare function removePlants(): void;

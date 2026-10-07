@@ -87,7 +87,9 @@
  * What this does not do, stated: it reads no pin. The commit is the
  * selection's (`STALL_LOOKS_COMMIT`, or the repository's HEAD); the pin
  * (`deploy/looks.commit`, `scripts/looks-pin.mjs`) is the deploy road's to
- * check, in the job that reads the private repository (8c2–8c3), and a
+ * check — the `looks` job's pin and pack steps and the build job's unwrap
+ * (`scripts/looks-artifact.mjs`), which leaves a repository whose one
+ * commit carries the pinned tree, never the pinned commit itself — and a
  * harness run says whether the commit it measured is the pinned pair's. A
  * look's og card is 8j's. Node built-ins and one pure `src/domain` module
  * (`moodClass.ts`'s `sameOwner`, loaded by Node's type stripping and by the

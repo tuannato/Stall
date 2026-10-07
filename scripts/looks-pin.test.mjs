@@ -328,7 +328,7 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
     });
 
     /*
-     * Why 8c2's PACK_SCRIPT opens with `set -euo pipefail` before this line:
+     * Why PACK_SCRIPT (`scripts/looks-artifact.mjs`) opens with `set -euo pipefail` before this line:
      * without pipefail, `git ls-tree` failing on an unreadable `$PIN` leaves
      * `mktree` to write the empty tree, and the step carries on with it.
      */

@@ -29,8 +29,8 @@
  * pinned commit's root entries less `PACKED_OUT`, hashed as git hashes a
  * tree, so asking for it on the owner's machine leaves no object in the
  * clone — and computed independently of the shell's `git mktree`
- * (`PACKED_TREE_SCRIPT`, the line the `looks` job computes its tree with,
- * 8c2), which `the-packed-tree-is-the-same-in-the-shell-and-the-scripts`
+ * (`PACKED_TREE_SCRIPT`, the line the `looks` job's `PACK_SCRIPT`
+ * computes its tree with), which `the-packed-tree-is-the-same-in-the-shell-and-the-scripts`
  * holds it to, replace objects off on both sides. `pinLineFor` is what the
  * window writes when it bumps the pin (`node scripts/looks-pin.mjs --write`):
  * the line for a commit, refused when the build's own read of that commit
@@ -143,10 +143,11 @@ function isLink(path) {
  * The pin read in shell, as the deploy workflow's `looks` job runs it, from
  * the checkout's root. It opens with `set -euo pipefail`, so it is safe
  * under any bash invocation and not only under `shell: bash` (the 8c1
- * critic's item 3; 8c2's `PACK_SCRIPT` opens with the same line). Then: a
- * link refused before anything reads it, the byte count, the shape (an
- * explicit character list, never a range a locale could widen), the whole
- * file against the line it parsed — and **one** write to `$GITHUB_OUTPUT`
+ * critic's item 3; `PACK_SCRIPT`, in `scripts/looks-artifact.mjs`, which
+ * re-exports this one, opens with the same line). Then: a link refused
+ * before anything reads it, the byte count, the shape (an explicit
+ * character list, never a range a locale could widen), the whole file
+ * against the line it parsed — and **one** write to `$GITHUB_OUTPUT`
  * carrying `commit=` and `tree=`. A refusal writes nothing and names no
  * private thing: the file is public. No blank line, so the workflow
  * grammar's `run: |` block holds it as it is (V5). The workflow test holds
@@ -168,13 +169,14 @@ printf 'commit=%s\\ntree=%s\\n' "$commit" "$tree" >> "$GITHUB_OUTPUT"
 
 /**
  * The line the deploy workflow's `looks` job computes its packed tree with
- * (8c2's `PACK_SCRIPT` holds it verbatim, after its own `set -euo
- * pipefail`, which this line needs: without `pipefail` an unreadable `$PIN`
- * assigns the empty tree and carries on): the root entries of the pinned
- * commit `$PIN` in the clone at `looks`, read with replace objects off and
- * from the tree's root whatever the directory (`--no-replace-objects`,
- * `--full-tree`, as every private-look read), less the root `README.md` and
- * `LOG.md`, written by `git mktree` — into `$tree`.
+ * (`PACK_SCRIPT` in `scripts/looks-artifact.mjs` holds it verbatim, after
+ * its own `set -euo pipefail`, which this line needs: without `pipefail`
+ * an unreadable `$PIN` assigns the empty tree and carries on): the root
+ * entries of the pinned commit `$PIN` in the clone at `looks`, read with
+ * replace objects off and from the tree's root whatever the directory
+ * (`--no-replace-objects`, `--full-tree`, as every private-look read),
+ * less the root `README.md` and `LOG.md`, written by `git mktree` — into
+ * `$tree`.
  */
 export const PACKED_TREE_SCRIPT = `tree="$(git --no-replace-objects -C looks ls-tree --full-tree "$PIN" | awk -F '\\t' '$2 != "README.md" && $2 != "LOG.md"' | git -C looks mktree)"`;
 

@@ -17,7 +17,9 @@
  * answers the directory, the environment git ran in, and `selection`: the
  * environment variables that select it at `preview`, for `servedSheets` or a
  * build. `removePlants()` deletes every repository planted in the process.
- * Node built-ins only; a `.d.mts` beside it.
+ * And the paths the build's allow-list test and the deploy pack's share
+ * (`PRIVATE_PATHS_ADMITTED`, `PRIVATE_PATHS_REFUSED`,
+ * `PRIVATE_MODES_REFUSED`). Node built-ins only; a `.d.mts` beside it.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -29,6 +31,64 @@ import { FIXTURE_LOOKS_DIR, SELECTION_ENV } from './looks-selection.mjs';
 import { gitCommitOf, gitFilesAt, gitTextAt } from './private-looks.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * The paths `a-private-file-outside-the-allow-list-fails`
+ * (`scripts/private-looks.test.mjs`) holds the build's allow-list to — one
+ * list for that test and the deploy pack's
+ * (`the-pack-admits-nothing-the-build-refuses`,
+ * `scripts/looks-artifact.test.mjs`), so a plant added here is held against
+ * both: paths a private look repository may hold as plain files, paths it
+ * may not hold at all, and the modes no path may have.
+ */
+export const PRIVATE_PATHS_ADMITTED = Object.freeze([
+    'index.json',
+    'README.md',
+    'LOG.md',
+    'some-look/look.json',
+    'some-look/sheet.css',
+    'some-look/og.png',
+    'some-look/fonts.json',
+    'some-look/art/mark.svg',
+    'some-look/art/face-latin.woff2',
+    'some-look/art/LICENSE-OFL.txt',
+    'some-look/art/LICENSE-OFL-face.txt',
+    'a/look.json',
+]);
+
+export const PRIVATE_PATHS_REFUSED = Object.freeze([
+    'some-look/look.ts',
+    'some-look/look.js',
+    'some-look/script.mjs',
+    'some-look/page.html',
+    'some-look/art/tool.mjs',
+    'some-look/art/mark.svg.js',
+    'some-look/extra.css',
+    'some-look/README.md',
+    'some-look/og.jpg',
+    'some-look/art/shot.png',
+    'some-look/art/face.ttf',
+    'some-look/art/face.woff',
+    'some-look/art/sub/mark.svg',
+    'some-look/art/Mark.svg',
+    'some-look/art/a mark.svg',
+    'some-look/LICENSE-OFL.txt',
+    'Some-Look/look.json',
+    'some_look/look.json',
+    '-look/look.json',
+    'look.json',
+    'sheet.css',
+    'package.json',
+    '.gitignore',
+    '.gitmodules',
+    '.DS_Store',
+    'some-look/.DS_Store',
+    'notes/plan.md',
+    'some-look/art/../look.json',
+    `${'a'.repeat(33)}/look.json`,
+]);
+
+export const PRIVATE_MODES_REFUSED = Object.freeze(['120000', '160000', '100755']);
 
 /** The class a planted look takes in place of the fixture's. */
 export const PLANTED_CLASS = 't-planted-look';
