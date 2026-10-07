@@ -20,6 +20,7 @@ import {
     privateLooksModuleCode,
     privateLooksPlugin,
     readSelectedLooks,
+    selectedIndex,
     selectedTree,
     selectionFromEnv,
     stampCarriedSheets,
@@ -983,6 +984,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             assert.ok(writes.some((line) => /^private looks: this preview build carries fixture \(private commit [0-9a-f]{12}\)\n$/.test(line)), writes.join(''));
             const written = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
             assert.ok(written.length > 0, 'the build wrote its files to the temporary directory');
+            // Rollup's `writeBundle`: the dist is on the disk, the one state the check runs in.
+            plugin.writeBundle();
             assert.throws(() => plugin.closeBundle(), /does not hold what its selection carries:\n {2}- fixture: the build carries it, and 0 files name its sheet/);
             const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
             assert.ok(after.length < written.length, 'and removed them, failing or not');
@@ -1052,37 +1055,38 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             assert.equal(copyrightLines(withCopyrightLine(`${sheet}${LOOK_COPYRIGHT_LINE}`)), 2);
         });
 
-        it('stamps the one asset Vite emitted from each carried sheet, and nothing else', () => {
-            const at = tempDir('stamp');
-            const sheetPath = join(at, 'sheet.css');
-            writeFileSync(sheetPath, '.t-a{}');
-            const entries = [{ id: 4, sheetClass: 't-a', sheetPath, lookText: '{}' }];
+        it('stamps the one asset that names each carried look, and nothing else', () => {
+            // Found by the key the dist check reads (`--look-sheet`), never by a path:
+            // the sheet's `originalFileNames` are not compared (CRITIC-STEP-8C1B item 2).
+            const entries = [{ id: 4, sheetClass: 't-a', sheetPath: '/nowhere/sheet.css', lookText: '{}' }];
             const bundle = () => ({
-                'assets/sheet-x.css': { type: 'asset', fileName: 'assets/sheet-x.css', source: '.t-a{--look-sheet: t-a}', originalFileNames: [sheetPath] },
+                'assets/sheet-x.css': { type: 'asset', fileName: 'assets/sheet-x.css', source: '@keyframes a{0%{opacity:1}}.t-a{--look-sheet: t-a}', originalFileNames: [] },
+                'assets/sheet-v.css': { type: 'asset', fileName: 'assets/sheet-v.css', source: '.t-b{--look-sheet: t-b}', originalFileNames: ['/nowhere/sheet.css'] },
                 'assets/index-y.css': { type: 'asset', fileName: 'assets/index-y.css', source: '.a{}', originalFileNames: [] },
-                'assets/index-z.js': { type: 'chunk', fileName: 'assets/index-z.js', code: 'export {}' },
+                'assets/index-z.js': { type: 'chunk', fileName: 'assets/index-z.js', code: 'const a = "--look-sheet: t-a"' },
             });
             const one = bundle();
             assert.deepEqual(stampCarriedSheets(one, entries), ['assets/sheet-x.css']);
-            assert.equal(one['assets/sheet-x.css'].source, `${LOOK_COPYRIGHT_LINE}\n.t-a{--look-sheet: t-a}`);
-            assert.deepEqual(one['assets/index-y.css'], bundle()['assets/index-y.css']);
-            assert.deepEqual(one['assets/index-z.js'], bundle()['assets/index-z.js']);
+            assert.equal(one['assets/sheet-x.css'].source, `${LOOK_COPYRIGHT_LINE}\n@keyframes a{0%{opacity:1}}.t-a{--look-sheet: t-a}`);
+            for (const name of ['assets/sheet-v.css', 'assets/index-y.css', 'assets/index-z.js']) {
+                assert.deepEqual(one[name], bundle()[name], name);
+            }
             // A sheet given as bytes is read as UTF-8.
             const bytes = bundle();
-            bytes['assets/sheet-x.css'].source = new TextEncoder().encode('.t-a{}');
+            bytes['assets/sheet-x.css'].source = new TextEncoder().encode('.t-a{--look-sheet:t-a}');
             stampCarriedSheets(bytes, entries);
-            assert.equal(bytes['assets/sheet-x.css'].source, `${LOOK_COPYRIGHT_LINE}\n.t-a{}`);
+            assert.equal(bytes['assets/sheet-x.css'].source, `${LOOK_COPYRIGHT_LINE}\n.t-a{--look-sheet:t-a}`);
             // No entry, nothing touched: the public build's road.
             const none = bundle();
             assert.deepEqual(stampCarriedSheets(none, []), []);
             assert.deepEqual(none, bundle());
-            // A carried sheet that is not exactly one asset fails the build.
+            // A carried look named by no asset, or by two, fails the build.
             const lost = bundle();
             delete lost['assets/sheet-x.css'];
-            assert.throws(() => stampCarriedSheets(lost, entries), /0 emitted stylesheets come from t-a's sheet, where one does/);
+            assert.throws(() => stampCarriedSheets(lost, entries), /0 emitted stylesheets name t-a as their look \(--look-sheet\), where one does/);
             const twice = bundle();
             twice['assets/sheet-w.css'] = { ...twice['assets/sheet-x.css'], fileName: 'assets/sheet-w.css' };
-            assert.throws(() => stampCarriedSheets(twice, entries), /2 emitted stylesheets come from t-a's sheet/);
+            assert.throws(() => stampCarriedSheets(twice, entries), /2 emitted stylesheets name t-a as their look/);
         });
 
         it('opens the tracked fixture’s served sheet with it, and leaves every other file as the public build has it', () => {
@@ -1127,11 +1131,19 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
                 const dir = tempDir('dist-selected');
                 const { status, stderr } = build(dir, selection);
                 assert.equal(status, 0, stderr);
+                // The looks the selection carries, from its own index — not read off the sheets.
+                const { index } = selectedIndex({ root: ROOT, selection: runSelection, facts });
+                const classes = includedEntries(index, runSelection.target, facts).map((entry) => entry.cls);
+                assert.ok(classes.length > 0, `the selection (${JSON.stringify(runSelection)}) carries no look at ${runSelection.target}`);
                 const sheets = carriedSheets(dir);
-                assert.ok(sheets.length > 0, `the selection (${JSON.stringify(runSelection)}) carries no look at ${runSelection.target}`);
+                assert.deepEqual(sheets.flatMap(([, bytes]) => lookSheetNames(bytes.toString('utf8'))).sort(), [...classes].sort());
                 for (const [path, bytes] of sheets) {
-                    const [cls] = lookSheetNames(bytes.toString('utf8'));
-                    opensOnce(path, bytes.toString('utf8'), cls);
+                    const text = bytes.toString('utf8');
+                    // No order is assumed past the line: a look may open with @font-face or @keyframes.
+                    assert.ok(text.startsWith(`${LOOK_COPYRIGHT_LINE}\n`), `${path} opens with ${JSON.stringify(text.slice(0, 48))}`);
+                    const rest = text.slice(LOOK_COPYRIGHT_LINE.length + 1);
+                    assert.equal(copyrightLines(rest), 0, `${path} carries a second line`);
+                    assert.equal(lookSheetNames(rest).filter((cls) => classes.includes(cls)).length, 1, `${path}'s rest names its look`);
                 }
                 assert.deepEqual(await checkDist({ dir, env: selection }), []);
                 process.stdout.write(`copyright line: ${sheets.map(([path]) => path).join(', ')} under ${JSON.stringify(runSelection.target)} ${stderr.trim()}\n`);
@@ -1167,5 +1179,80 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             // Restored: green again.
             assert.deepEqual(check(new Map(base).set(sheetPath, Buffer.from(served))), []);
         });
+    });
+});
+
+describe('a-build-whose-stamp-fails-says-why', () => {
+    /**
+     * CRITIC-STEP-8C1B item 1: the stamp throws in `generateBundle`, after
+     * the build phase, where Rollup calls no hook with the error; Vite's
+     * `finally` then closes the bundle, and a `closeBundle` that checked the
+     * dist would check the `public/` copy Vite left in an `outDir` it never
+     * wrote, and throw its own complaint ("no index.html: this is not a built
+     * dist", …) in place of the stamp's. `closeBundle` checks only a dist
+     * `writeBundle` saw written, so the error the build ends with is the
+     * stamp's own sentence — and so for any error thrown after the build
+     * phase. Driven through the plugin's hooks, and on a real build whose
+     * emitted sheet a planted plugin strips of its `--look-sheet` (so the
+     * stamp finds no sheet naming the look). Red: `closeBundle` checking
+     * whatever `writeBundle` said.
+     */
+    const STAMP_FAILS = /0 emitted stylesheets name t-fixture-private as their look \(--look-sheet\), where one does/;
+
+    it('ends a hook-driven build with the stamp’s own sentence, and leaves nothing written', () => {
+        const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
+        plugin.configResolved({ root: ROOT, build: { outDir: tempDir('dist-stamp-fails'), write: true } });
+        const write = process.stderr.write;
+        process.stderr.write = () => true;
+        try {
+            plugin.buildStart();
+        } finally {
+            process.stderr.write = write;
+        }
+        const before = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX)).length;
+        assert.ok(before > 0, 'the build wrote its files to the temporary directory');
+        // A bundle with no sheet naming the look: the stamp's refusal.
+        assert.throws(() => plugin.generateBundle.handler({}, {}), STAMP_FAILS);
+        // What Vite's `finally` does next: close the bundle. No dist was written, so no check, no second error.
+        assert.doesNotThrow(() => plugin.closeBundle());
+        const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX)).length;
+        assert.ok(after < before, 'and removed them');
+    });
+
+    it('ends a real build with the stamp’s own sentence, never the dist check’s', () => {
+        const outDir = tempDir('dist-stamp-fails-real');
+        const env = { ...process.env, ...PREVIEW, STALL_TEST_OUT_DIR: outDir };
+        for (const name of ['VITEST', ...LOOKS_ENV]) {
+            if (!(name in PREVIEW)) {
+                delete env[name];
+            }
+        }
+        // This checkout's config, as `vite build` reads it, and one planted
+        // plugin whose normal-order `generateBundle` (before the stamp's
+        // post-order one) takes the look's name off its emitted sheet.
+        const driver = `
+            const { build } = await import('vite');
+            const strip = {
+                name: 'plant-strip-look-sheet',
+                generateBundle(_options, bundle) {
+                    for (const file of Object.values(bundle)) {
+                        if (file.type === 'asset' && file.fileName.endsWith('.css') && typeof file.source === 'string') {
+                            file.source = file.source.replace(/--look-sheet\\s*:\\s*t-fixture-private/g, '--plant: t-fixture-private');
+                        }
+                    }
+                },
+            };
+            try {
+                await build({ configFile: 'vite.config.ts', logLevel: 'silent', build: { outDir: process.env.STALL_TEST_OUT_DIR, emptyOutDir: true }, plugins: [strip] });
+                process.stdout.write('built\\n');
+            } catch (error) {
+                process.stderr.write('BUILD FAILED: ' + error.message + '\\n');
+                process.exit(1);
+            }
+        `;
+        const out = spawnSync(process.execPath, ['--input-type=module', '-e', driver], { cwd: ROOT, env, encoding: 'utf8' });
+        assert.equal(out.status, 1, `${out.stdout}${out.stderr}`);
+        assert.match(out.stderr, /BUILD FAILED: .*0 emitted stylesheets name t-fixture-private as their look/, out.stderr);
+        assert.doesNotMatch(out.stderr, /does not hold what its selection carries|no index\.html/, out.stderr);
     });
 });

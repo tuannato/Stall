@@ -378,8 +378,11 @@ export function lookArtBudget({ sheet, sheetFile = 'sheet.css', files, rows = []
  * A private look's budget reading from its source (step 8e1), for every
  * private look a run reads (`scripts/served-sheets.mjs`: the tracked fixture
  * in public CI, the selected look in a deploy job's `pnpm test`): its sheet
- * as written — the build only minifies it, so a source sheet counts more,
- * never less — over its `art/` as a build writes it (an SVG re-serialised by
+ * as written — the build minifies it and adds the 37-byte copyright line
+ * (`LOOK_COPYRIGHT_LINE`, `stampCarriedSheets`), so a source sheet counts
+ * more in practice (a real look's source carries the line, and minifying
+ * saves far more than 37 bytes) but not by construction — over its `art/`
+ * as a build writes it (an SVG re-serialised by
  * the allow-list, `sanitizeSvg`, which is what is emitted; one it refuses
  * counted as given, the build failing on it anyway; a face as it is), and
  * its rows from its `look.json` (its moods and decorations, `{ cls, slot }`).

@@ -38,8 +38,9 @@
  *   names its file and carries its licence text whole (step 8e1);
  * - **every carried look's sheet opens with the copyright line, once, and
  *   no other stylesheet carries it** (`LOOK_COPYRIGHT_LINE`, step 8c1b):
- *   the build puts it there (`stampCarriedSheets`), since Vite's minifier
- *   drops every `/*!` comment.
+ *   the build puts it there (`stampCarriedSheets`, finding the sheet by the
+ *   same `--look-sheet` this check reads), since Vite's minifier drops every
+ *   `/*!` comment.
  *
  * No selection: the build carried no private look, and `dist` may hold no
  * look sheet but the shipped ones. Run by the build itself whenever it
