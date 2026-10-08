@@ -791,6 +791,7 @@ const WRANGLER_FACTS = {
     rootPkg: JSON.parse(ROOT_PKG),
     rootNames: readdirSync(ROOT),
     deployNames: readdirSync(join(ROOT, 'deploy')),
+    tracked: TRACKED,
 };
 /** The lockfile with one package's entry edited. */
 const lockWith = (key, change) => ({ ...DEPLOY_LOCK, packages: { ...DEPLOY_LOCK.packages, [key]: change({ ...DEPLOY_LOCK.packages[key] }) } });
@@ -812,7 +813,9 @@ const WRANGLER_PLANTS = [
     ['a lockfile that lists no package', 'wrangler-registry', { lock: { ...DEPLOY_LOCK, packages: { '': DEPLOY_LOCK.packages[''] } } }],
     ['a package with no integrity', 'wrangler-integrity', { lock: lockWith(ANOTHER, ({ integrity, ...entry }) => entry) }],
     ['a package with a sha1 integrity', 'wrangler-integrity', { lock: lockWith(ANOTHER, (entry) => ({ ...entry, integrity: `sha1-${'A'.repeat(27)}=` })) }],
-    ['a deploy/.npmrc', 'wrangler-npmrc', { deployNames: [...WRANGLER_FACTS.deployNames, '.npmrc'] }],
+    ['a deploy/.npmrc on the disk', 'npmrc', { deployNames: [...WRANGLER_FACTS.deployNames, '.npmrc'] }],
+    ['a tracked .npmrc at the root (the 8c3 critic’s re-review, item 8)', 'npmrc', { tracked: [...TRACKED, '.npmrc'] }],
+    ['a tracked .npmrc in a subdirectory', 'npmrc', { tracked: [...TRACKED, 'worker-icons/.npmrc'] }],
 ];
 
 /*
@@ -820,7 +823,8 @@ const WRANGLER_PLANTS = [
  * install is held whole: one exact version in deploy/'s package and
  * lockfile, never at the root and no wrangler config there to steer it
  * (7B-1), and — the 8c3 critic's item 5 — every package of the lockfile
- * from the npm registry with a sha512 integrity, and no deploy/.npmrc.
+ * from the npm registry with a sha512 integrity, and no tracked .npmrc
+ * anywhere (the re-review's item 8), nor one in deploy/ on the disk.
  */
 describe('the-deploy-workflow-takes-wrangler-from-its-own-pinned-package', () => {
     it('reads deploy/ as breaking no rule', () => {

@@ -67,7 +67,7 @@
  * — `pnpm install --ignore-scripts` still loads `.pnpmfile.cjs`, measured
  * by that critic on pnpm 10.24.0); and **wrangler's lockfile** resolves
  * every package from the npm registry with its integrity, with no
- * `deploy/.npmrc` to steer it (`wranglerProblems`).
+ * tracked `.npmrc` anywhere to steer it or any other install (`wranglerProblems`).
  *
  * Pure but for the two readers, `workflowFilesAt` and `trackedPathsAt`
  * (git and the disk): the caller hands in `released` (`RELEASED_LOOK_IDS`,
@@ -1090,21 +1090,26 @@ export function pnpmHookProblems({ paths, read, sha512 = PNPM_PACKAGE_MANAGER_SH
 export const NPM_REGISTRY = 'https://registry.npmjs.org/';
 
 /** Every rule `wranglerProblems` reads; the test plants each. */
-export const WRANGLER_RULES = Object.freeze(['wrangler-pin', 'wrangler-root', 'wrangler-registry', 'wrangler-integrity', 'wrangler-npmrc']);
+export const WRANGLER_RULES = Object.freeze(['wrangler-pin', 'wrangler-root', 'wrangler-registry', 'wrangler-integrity', 'npmrc']);
 
 /**
  * The problems of wrangler's install, the one package that runs holding a
  * Cloudflare token: `pkg` and `lock` `deploy/`'s `package.json` and
  * `package-lock.json`, `rootPkg` the root `package.json`, `rootNames` and
- * `deployNames` the names at the root and in `deploy/` on the disk.
+ * `deployNames` the names at the root and in `deploy/` on the disk,
+ * `tracked` the paths git tracks.
  * `wrangler-pin`: pinned exactly, and the lockfile's the same version.
  * `wrangler-root`: never in the root's dependencies, no wrangler config at
  * the root to steer it. `wrangler-registry` and `wrangler-integrity` (the
  * 8c3 critic's item 5): every package of the lockfile (its root aside)
  * resolves under `NPM_REGISTRY` and carries a sha512 integrity — `npm ci`
- * fetches from `resolved`. `wrangler-npmrc`: no `deploy/.npmrc`.
+ * fetches from `resolved`. `npmrc` (the 8c3 critic's re-review, item 8):
+ * no tracked `.npmrc` anywhere in the repository, and none in `deploy/` on
+ * the disk — a root one is read by `npm ci --prefix deploy` run from the
+ * root and by pnpm, and could carry `node-options` or a registry, which no
+ * key-specific rule reads.
  */
-export function wranglerProblems({ pkg, lock, rootPkg, rootNames, deployNames }) {
+export function wranglerProblems({ pkg, lock, rootPkg, rootNames, deployNames, tracked }) {
     const problems = [];
     const add = (rule, why) => problems.push({ rule, why });
     const version = pkg?.devDependencies?.wrangler;
@@ -1133,8 +1138,8 @@ export function wranglerProblems({ pkg, lock, rootPkg, rootNames, deployNames })
             add('wrangler-integrity', `${key} carries no sha512 integrity`);
         }
     }
-    if (deployNames.includes('.npmrc')) {
-        add('wrangler-npmrc', 'deploy/.npmrc, which could steer npm ci');
+    for (const path of [...tracked.filter((path) => basename(path) === '.npmrc'), ...(deployNames.includes('.npmrc') ? ['deploy/.npmrc (on the disk)'] : [])]) {
+        add('npmrc', `${path}: an .npmrc, which could steer npm ci or pnpm install (node-options, a registry)`);
     }
     return problems;
 }
