@@ -6,13 +6,20 @@
 #
 # Six jobs, three Environments, and no job holds two kinds of key. A secret
 # handed to one step is not kept from code that ran earlier in the same job
-# (an install script, a build plugin or a test can write `$GITHUB_ENV` or
-# read the runner), so the jobs that run project code hold no secret, and
-# the jobs that hold one run no project code: `looks` runs two shell
-# scripts and two actions, and the deploy jobs install with
-# `--ignore-scripts` and run wrangler alone.
+# (an install script, a pnpm hook, a build plugin or a test can write
+# `$GITHUB_ENV` or read the runner), so the jobs that run project code hold
+# no secret, and the jobs that hold one run no package script and no pnpm
+# hook: `looks` runs two shell scripts and two actions, and the deploy jobs
+# install with `--ignore-scripts --ignore-pnpmfile` and run wrangler alone.
 #
-# preview, carrying the canary (PLAN § Decided "Until a look is sold…"):
+# The `if:` lines are a belt, not the fence: a dispatch runs the dispatched
+# ref's own copy of this file, and GitHub compares strings ignoring case.
+# The fence is each Environment's branch rule (`main`, ref type Branch),
+# and an Environment answers any workflow file on `main`, so the test also
+# holds `.github/workflows/` to ci.yml and this file, and ci.yml to no key.
+#
+# preview, carrying the canary (PLAN.md, Decided: "Until a look is
+# sold..."):
 # - `public-checks`, no secret, no Environment: before any private byte is
 #   read, this commit's own tests prove that the canary's tree the pack
 #   admits (`CANARY_TREE`) is rebuilt from this repository's bytes, that
@@ -21,8 +28,8 @@
 #   critic's item 1; the first's item 3).
 # - `looks`, the `looks` Environment, whose secrets are the private
 #   repository's name and read token and nothing else: reads the pin,
-#   checks out that one commit, packs its tree — refusing every tree but
-#   the canary's before anything is archived — and uploads it for a day.
+#   checks out that one commit, packs its tree (refusing every tree but
+#   the canary's before anything is archived) and uploads it for a day.
 # - `build-preview`, no secret: unwraps that tree before anything is
 #   installed, then builds and tests with the selection on the job, so
 #   `pnpm build` and `pnpm test` read the same private look.
@@ -36,11 +43,12 @@
 # - `deploy-production`, the `production` Environment, the owner its
 #   required reviewer: that `dist` to the production branch, `main`.
 #
-# Every `if:` is written out whole, every action is pinned by commit with
-# its version beside it, and `scripts/deploy-workflow.test.mjs` holds every
-# line of this file that is not a comment, a step's name or the input's
-# description — in a closed subset of YAML, so a shape a YAML reader would
-# read differently from that test is refused before any rule is read.
+# Every `if:` is written out whole and every action is pinned by commit
+# with its version beside it. `scripts/deploy-workflow.test.mjs` holds
+# every line of this file, comments included, to printable ASCII and a
+# closed subset of YAML (a YAML reader ends a comment at U+2028, U+2029 or
+# U+0085, so a comment holding one could hide a step), and every line that
+# is not a comment, a step's name or the input's description to its rules.
 name: deploy
 
 on:
@@ -211,7 +219,7 @@ jobs:
       # one-commit repository at ./looks for STALL_LOOKS_DIR.
       - run: node scripts/looks-artifact.mjs unwrap "$RUNNER_TEMP/looks-artifact" looks
       - run: corepack enable && corepack prepare --activate
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-pnpmfile
       - run: pnpm build
       - run: pnpm test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -238,8 +246,10 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
       # functions/ imports packages from the root install; wrangler has its
-      # own package and lockfile. Neither install runs a package's scripts.
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # own package and lockfile. Neither install runs a package's scripts,
+      # and pnpm's loads no hook (.pnpmfile.cjs), which --ignore-scripts
+      # alone does not stop.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
       - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -275,7 +285,7 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-pnpmfile
       - run: pnpm build
       - run: pnpm test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -304,7 +314,7 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
       - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:

