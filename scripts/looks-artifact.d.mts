@@ -1,0 +1,40 @@
+/** Types for `looks-artifact.mjs` — see that file for the pack, its allow-list and the unwrap. */
+type Env = Readonly<Record<string, string | undefined>>;
+
+/** One member of an artifact's tar, as `readArtifactTar` reads it. */
+export type ArtifactMember = { readonly path: string; readonly dir: boolean; readonly exec: boolean; readonly data?: Buffer };
+
+/** What an unwrap carried: the pinned commit and tree, the carried repository's commit, and how many files it holds. */
+export type Unwrapped = { readonly commit: string; readonly tree: string; readonly carried: string; readonly files: number };
+
+/** The build's constants the allow-list program is written from (`scripts/private-looks.mjs`, `scripts/workshop-css.mjs`). */
+export type AllowListConstants = {
+    readonly slug: RegExp;
+    readonly slugMax: number;
+    readonly artName: RegExp;
+    readonly faceLicence: RegExp;
+    readonly rootFiles: readonly string[];
+    readonly lookFiles: readonly string[];
+    readonly fileMode: string;
+    /** `PREVIEW_SLUGS`: the one look directories the program admits, by exact equality. */
+    readonly previewSlugs: readonly string[];
+};
+
+export declare const PIN_SCRIPT: string;
+export declare const ARTIFACT_DIR: 'looks-artifact';
+export declare const ARTIFACT_TAR: 'looks.tar';
+export declare const ARTIFACT_STAMP: 'pin';
+export declare const ARTIFACT_TAR_MAX_BYTES: number;
+export declare function packAllowProgram(constants: AllowListConstants): string;
+export declare const PACK_ALLOW_PROGRAM: string;
+export declare const PACK_SCRIPT: string;
+export declare function readArtifactTar(tar: Buffer): ArtifactMember[];
+/** The configuration scopes the carried repository may read: its own file and the unwrap's own `-c` values. */
+export declare const CARRIED_CONFIG_SCOPES: readonly ['local', 'command'];
+/** The unwrap's own `-c` keys, as `git config --list` prints them. */
+export declare const SAME_CONFIG_KEYS: readonly string[];
+/** What is wrong with a `git config --list --show-scope --name-only -z` listing, as scope names; empty when it is only `local` and exactly `commandKeys` as `command`. */
+export declare function configScopesOutside(listing: string, commandKeys: readonly string[]): string[];
+export declare function treeOfDisk(dir: string): { readonly id: string; readonly files: number };
+export declare function unwrapLooksArtifact(at: { readonly artifact: string; readonly dest: string; readonly root: string; readonly git?: string; readonly env?: Env }): Unwrapped;
+export declare function unwrapLine(unwrapped: Unwrapped): string;

@@ -112,10 +112,10 @@ describe('the-served-sheets-are-the-role-table-and-the-private-looks-a-run-reads
         const repo = plantLooks();
         const rows = privateRows(await servedSheets({ env: repo.selection, gitEnv: repo.env, fixture: true, required: true }));
         assert.deepEqual(rows.map((row) => row.lookClass), ['t-fixture-private', PLANTED_CLASS]);
-        assert.equal(
-            guardLine(rows),
-            `guards read private looks: t-fixture-private (fixture @${head().slice(0, 12)}), ${PLANTED_CLASS} (selection @${repo.head().slice(0, 12)})\n`,
-        );
+        // Each look's commit and its packed tree, read by git itself: the fixture's subtree, and the planted repository's root tree (it holds no README or log to leave out).
+        const fixtureTree = execFileSync('git', ['rev-parse', 'HEAD:layout/fixture-private-looks'], { cwd: ROOT, encoding: 'utf8' }).trim();
+        const said = `guards read private looks: t-fixture-private (fixture @${head().slice(0, 12)}, tree ${fixtureTree.slice(0, 12)}), ${PLANTED_CLASS} (selection @${repo.head().slice(0, 12)}, tree ${repo.git('rev-parse', 'HEAD^{tree}').slice(0, 12)})`;
+        assert.equal(guardLine(rows), `${said}\n`);
         assert.equal(guardLine([]), 'guards read private looks: none\n');
         // Through guardSheets itself, in a process of its own: the line on stderr, and the refusal.
         const run = (env) =>
@@ -124,9 +124,9 @@ describe('the-served-sheets-are-the-role-table-and-the-private-looks-a-run-reads
                 env: { ...withoutSelection(process.env), ...env },
                 encoding: 'utf8',
             });
-        const said = run(repo.selection);
-        assert.equal(said.status, 0, said.stderr);
-        assert.match(said.stderr, new RegExp(`^guards read private looks: t-fixture-private \\(fixture @[0-9a-f]{12}\\), ${PLANTED_CLASS} \\(selection @[0-9a-f]{12}\\)$`, 'm'));
+        const ran = run(repo.selection);
+        assert.equal(ran.status, 0, ran.stderr);
+        assert.ok(ran.stderr.split('\n').includes(said), ran.stderr);
         const required = run({ [REQUIRED_ENV]: '1' });
         assert.notEqual(required.status, 0, 'a required run with no selection read the guards');
         assert.match(required.stderr, /STALL_LOOKS_REQUIRED is set and this run selects no private look/);

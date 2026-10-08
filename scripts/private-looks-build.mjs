@@ -87,7 +87,9 @@
  * What this does not do, stated: it reads no pin. The commit is the
  * selection's (`STALL_LOOKS_COMMIT`, or the repository's HEAD); the pin
  * (`deploy/looks.commit`, `scripts/looks-pin.mjs`) is the deploy road's to
- * check, in the job that reads the private repository (8c2–8c3), and a
+ * check — the `looks` job's pin and pack steps and the build job's unwrap
+ * (`scripts/looks-artifact.mjs`), which leaves a repository whose one
+ * commit carries the pinned tree, never the pinned commit itself — and a
  * harness run says whether the commit it measured is the pinned pair's. A
  * look's og card is 8j's. Node built-ins and one pure `src/domain` module
  * (`moodClass.ts`'s `sameOwner`, loaded by Node's type stripping and by the
@@ -99,6 +101,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { artNamedBy, distFiles, distLooksProblems, lookFilesOf, lookSheetNames } from './check-dist-looks.mjs';
 import { LOOK_FONTS_FILE, lookFaceProblems, lookFontNotices } from './look-faces.mjs';
+import { packedTreeOf } from './looks-pin.mjs';
 import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { noticesWithLookFonts } from './notices-lib.mjs';
 import {
@@ -191,7 +194,13 @@ export function selectedIndex({ root, selection, facts, git, env }) {
     if (repo.problems.length > 0 || repo.indexText === undefined) {
         throw new Error(`private looks at ${commit}:\n  - ${[...repo.problems, ...(repo.indexText === undefined ? [`no ${PRIVATE_INDEX}`] : [])].join('\n  - ')}`);
     }
-    return { commit, read, files: repo.files, index: parsePrivateIndex(repo.indexText).index };
+    // The tree a deploy pins beside the commit (`packedTreeOf`, the commit's
+    // tree less its root README and log): one value on the owner's clone at
+    // the pin and on the repository the deploy road carries, whose own
+    // commit is another — so a public log that names the read commit names
+    // the pinned tree beside it (the 8c2 critic's item 4).
+    const packedTree = packedTreeOf({ dir: read.dir, commit, prefix: read.prefix, git, env });
+    return { commit, packedTree, read, files: repo.files, index: parsePrivateIndex(repo.indexText).index };
 }
 
 /**
@@ -210,7 +219,7 @@ export function readSelectedLooks({ root, selection, facts, validateLook, vars, 
     if (vars === null || typeof vars !== 'object') {
         throw new TypeError("private looks: the cross-sheet checks read the theme table's values (`vars`, `themeVarValues`), and none were given");
     }
-    const { commit, read, files, index } = selectedIndex({ root, selection, facts, git, env });
+    const { commit, packedTree, read, files, index } = selectedIndex({ root, selection, facts, git, env });
     const problems = [];
     const looks = [];
     for (const entry of includedEntries(index, selection.target, facts)) {
@@ -299,7 +308,7 @@ export function readSelectedLooks({ root, selection, facts, validateLook, vars, 
     if (problems.length > 0) {
         throw new Error(`private looks at ${commit}:\n  - ${problems.join('\n  - ')}`);
     }
-    return { commit, index, looks };
+    return { commit, packedTree, index, looks };
 }
 
 /**
@@ -547,7 +556,7 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
                 }
                 return;
             }
-            const { commit, looks } = readSelectedLooks({ root, selection: wanted, facts, validateLook, vars, git, env });
+            const { commit, packedTree, looks } = readSelectedLooks({ root, selection: wanted, facts, validateLook, vars, git, env });
             // Held at the close only once read whole: a build that fails on
             // a look's check says why, not the dist check's complaint over a
             // dist it never wrote (which is what it said until 8e1).
@@ -559,7 +568,7 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
             entries = materialise(looks, written);
             carried = looks.map((look) => ({ fonts: look.fonts }));
             process.stderr.write(
-                `private looks: this ${selection.target} build carries ${looks.map((look) => look.entry.slug).join(', ')} (private commit ${commit.slice(0, 12)})\n`,
+                `private looks: this ${selection.target} build carries ${looks.map((look) => look.entry.slug).join(', ')} (private commit ${commit.slice(0, 12)}, tree ${packedTree.slice(0, 12)})\n`,
             );
         },
         resolveId(id) {

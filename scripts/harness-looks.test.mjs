@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { after, describe, it } from 'node:test';
 import { join } from 'node:path';
 import { ROOT, harnessLooks } from './harness-looks.mjs';
-import { LOOKS_PIN_FILE, pairVerdict, pinLineFor } from './looks-pin.mjs';
+import { LOOKS_PIN_FILE, packedTreeOf, pairVerdict, pinLineFor } from './looks-pin.mjs';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV } from './looks-selection.mjs';
-import { plantLooks, removePlants } from './private-looks-plant.mjs';
+import { plantCanary, removePlants } from './private-looks-plant.mjs';
 import { publicLookFacts } from './private-looks.mjs';
 
 /**
@@ -66,8 +66,10 @@ describe('the-harness-reads-the-looks-a-selection-carries', () => {
  * find out. A sentence, never a refusal: every read is of a commit, so a run
  * over an unpinned commit measures exactly what it names. It names this
  * repository's HEAD tree, never its commit, so it stays true in the body of
- * the commit that bumps the pin. Over a private repository planted from the
- * fixture and a public one planted beside it, both outside this checkout; a
+ * the commit that bumps the pin. Over a private repository holding the
+ * canary from public bytes (`plantCanary`: the one commit `pinLineFor`
+ * writes a pin for before a release) and a public one planted beside it,
+ * both outside this checkout; a
  * production selection (a production build reads nothing private until step
  * 9) and the tracked fixture get no pair.
  */
@@ -97,11 +99,11 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     const facts = publicLookFacts();
     const measure = async (looks, publicDir, { commit, target = 'preview' } = {}) =>
         harnessLooks({ target, dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts: await facts, env: looks.env });
-    const PAIR = /^a preview selection at a private repository, commit [0-9a-f]{12}: fixture \(t-planted-look\) · /;
+    const PAIR = /^a preview selection at a private repository, commit [0-9a-f]{12}: canary \(t-canary\) · /;
     const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, facts: await facts });
 
     it('says the pinned pair when it measures the pin from a clean tree, naming the public tree', async () => {
-        const looks = plantLooks(undefined, { 'README.md': 'r\n', 'LOG.md': 'l\n' });
+        const looks = plantCanary();
         const pub = publicRepo(await lineFor(looks));
         const carried = await measure(looks, pub.dir);
         assert.equal(carried.pair.pinned, true);
@@ -114,7 +116,7 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('says not the pinned pair when the commit it measures is not the pin', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         const pinned = looks.head();
         const pub = publicRepo(await lineFor(looks));
         writeFileSync(join(looks.dir, 'index.json'), `${readFileSync(join(looks.dir, 'index.json'), 'utf8')}\n`);
@@ -127,14 +129,15 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('reads the pin HEAD holds: a skip-worktree file naming the measured commit is not the pinned pair', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         const first = looks.head();
         const pub = publicRepo(await lineFor(looks));
         writeFileSync(join(looks.dir, 'index.json'), `${readFileSync(join(looks.dir, 'index.json'), 'utf8')}\n`);
         looks.git('commit', '-q', '-am', 'later');
         // The disk names the later commit; HEAD's pin names the first; git status sees nothing.
         pub.git('update-index', '--skip-worktree', LOOKS_PIN_FILE);
-        writeFileSync(join(pub.dir, LOOKS_PIN_FILE), await lineFor(looks));
+        // A pin naming the later commit, as a hand would write it: pinLineFor refuses its tree, which is no longer the canary's.
+        writeFileSync(join(pub.dir, LOOKS_PIN_FILE), `${looks.head()} ${packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env })}\n`);
         assert.equal(pub.git('status', '--porcelain'), '');
         const carried = await measure(looks, pub.dir);
         assert.equal(carried.pair.pinned, false);
@@ -144,7 +147,7 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('says not the pinned pair when the pin’s tree is not its commit’s packed tree', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         const pub = publicRepo(`${looks.head()} ${'a'.repeat(40)}\n`);
         const carried = await measure(looks, pub.dir);
         assert.equal(carried.pair.pinned, false);
@@ -152,7 +155,7 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('says not the pinned pair when this repository’s tree has uncommitted changes', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         const pub = publicRepo(await lineFor(looks));
         writeFileSync(join(pub.dir, 'scratch.txt'), 'not committed\n');
         const carried = await measure(looks, pub.dir);
@@ -161,16 +164,16 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('says the private repository’s uncommitted changes are not measured, and the pair stands', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         const pub = publicRepo(await lineFor(looks));
-        writeFileSync(join(looks.dir, 'fixture', 'sheet.css'), 'an edit no build reads\n');
+        writeFileSync(join(looks.dir, 'canary', 'sheet.css'), 'an edit no build reads\n');
         const carried = await measure(looks, pub.dir);
         assert.equal(carried.pair.pinned, true);
         assert.ok(carried.line.endsWith(' — the pinned pair (uncommitted changes in the private repository are not measured)'), carried.line);
     });
 
     it('says not the pinned pair, and goes on, when HEAD’s pin does not read as one', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         for (const pin of [(await lineFor(looks)).replace('\n', '\r\n'), '']) {
             const pub = publicRepo(pin);
             const carried = await measure(looks, pub.dir);
@@ -180,7 +183,7 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     });
 
     it('gives a production selection no pair: a production build reads nothing private until step 9', async () => {
-        const looks = plantLooks();
+        const looks = plantCanary();
         const pub = publicRepo(await lineFor(looks));
         const carried = await measure(looks, pub.dir, { target: 'production' });
         assert.equal(carried.pair, undefined);

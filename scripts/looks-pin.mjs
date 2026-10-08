@@ -29,14 +29,18 @@
  * pinned commit's root entries less `PACKED_OUT`, hashed as git hashes a
  * tree, so asking for it on the owner's machine leaves no object in the
  * clone — and computed independently of the shell's `git mktree`
- * (`PACKED_TREE_SCRIPT`, the line the `looks` job computes its tree with,
- * 8c2), which `the-packed-tree-is-the-same-in-the-shell-and-the-scripts`
+ * (`PACKED_TREE_SCRIPT`, the line the `looks` job's `PACK_SCRIPT`
+ * computes its tree with), which `the-packed-tree-is-the-same-in-the-shell-and-the-scripts`
  * holds it to, replace objects off on both sides. `pinLineFor` is what the
  * window writes when it bumps the pin (`node scripts/looks-pin.mjs --write`):
  * the line for a commit, refused when the build's own read of that commit
  * — its files, its index against the public lists, its directories and
  * required files (`readPrivateLooksAt`, as `selectedIndex` reads it) —
- * refuses it, or when it names no look.
+ * refuses it, when it names no look, when its packed tree is not
+ * `CANARY_TREE` (the gate: until a release only the canary's tree travels,
+ * a public literal a public test rebuilds from this repository's bytes), or
+ * when it names or holds a look `PREVIEW_SLUGS` does not (a belt that reads
+ * names only).
  *
  * **The pinned pair is a sentence, not a refusal** (STEP-8C-PLAN v1 §3,
  * kept by v2): since 8a the private files are read from git at a commit and
@@ -65,13 +69,17 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { runAsScript } from './run-as-script.mjs';
 import {
+    CANARY_TREE,
     FULL_COMMIT,
     GIT_LOCATION_VARS,
+    PREVIEW_SLUGS,
+    TREE_PREFIX,
     gitCommitOf,
     gitTopOf,
     parsePrivateIndex,
+    previewRoadProblem,
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
@@ -143,10 +151,11 @@ function isLink(path) {
  * The pin read in shell, as the deploy workflow's `looks` job runs it, from
  * the checkout's root. It opens with `set -euo pipefail`, so it is safe
  * under any bash invocation and not only under `shell: bash` (the 8c1
- * critic's item 3; 8c2's `PACK_SCRIPT` opens with the same line). Then: a
- * link refused before anything reads it, the byte count, the shape (an
- * explicit character list, never a range a locale could widen), the whole
- * file against the line it parsed — and **one** write to `$GITHUB_OUTPUT`
+ * critic's item 3; `PACK_SCRIPT`, in `scripts/looks-artifact.mjs`, which
+ * re-exports this one, opens with the same line). Then: a link refused
+ * before anything reads it, the byte count, the shape (an explicit
+ * character list, never a range a locale could widen), the whole file
+ * against the line it parsed — and **one** write to `$GITHUB_OUTPUT`
  * carrying `commit=` and `tree=`. A refusal writes nothing and names no
  * private thing: the file is public. No blank line, so the workflow
  * grammar's `run: |` block holds it as it is (V5). The workflow test holds
@@ -168,13 +177,14 @@ printf 'commit=%s\\ntree=%s\\n' "$commit" "$tree" >> "$GITHUB_OUTPUT"
 
 /**
  * The line the deploy workflow's `looks` job computes its packed tree with
- * (8c2's `PACK_SCRIPT` holds it verbatim, after its own `set -euo
- * pipefail`, which this line needs: without `pipefail` an unreadable `$PIN`
- * assigns the empty tree and carries on): the root entries of the pinned
- * commit `$PIN` in the clone at `looks`, read with replace objects off and
- * from the tree's root whatever the directory (`--no-replace-objects`,
- * `--full-tree`, as every private-look read), less the root `README.md` and
- * `LOG.md`, written by `git mktree` — into `$tree`.
+ * (`PACK_SCRIPT` in `scripts/looks-artifact.mjs` holds it verbatim, after
+ * its own `set -euo pipefail`, which this line needs: without `pipefail`
+ * an unreadable `$PIN` assigns the empty tree and carries on): the root
+ * entries of the pinned commit `$PIN` in the clone at `looks`, read with
+ * replace objects off and from the tree's root whatever the directory
+ * (`--no-replace-objects`, `--full-tree`, as every private-look read),
+ * less the root `README.md` and `LOG.md`, written by `git mktree` — into
+ * `$tree`.
  */
 export const PACKED_TREE_SCRIPT = `tree="$(git --no-replace-objects -C looks ls-tree --full-tree "$PIN" | awk -F '\\t' '$2 != "README.md" && $2 != "LOG.md"' | git -C looks mktree)"`;
 
@@ -209,15 +219,21 @@ function gitAt({ dir, git = 'git', env = process.env }) {
  * — its root entries (`git ls-tree -z`, not recursive) less `PACKED_OUT`,
  * hashed as git hashes a tree object (`tree <size>\0`, then per entry the
  * mode without its leading zero, the name, a NUL and the 20-byte id, in the
- * commit's own order) — as 40 lower-case hex. Writes nothing: no object
- * enters the clone. Throws when git cannot run, `dir` is not a repository's
- * root, or the commit is not there.
+ * commit's own order) — as 40 lower-case hex. With `prefix`, the same of
+ * that subtree of the commit (how this repository's tracked fixture is
+ * read: `layout/fixture-private-looks`). Writes nothing: no object enters
+ * the clone. Throws when git cannot run, `dir` is not a repository's root,
+ * or the commit (or the subtree) is not there.
  */
-export function packedTreeOf({ dir, commit, git, env }) {
+export function packedTreeOf({ dir, commit, prefix, git, env }) {
     if (typeof commit !== 'string' || !FULL_COMMIT.test(commit)) {
         throw new TypeError(`a packed tree is read at a full commit (40 lower-case hex), not ${JSON.stringify(commit)}`);
     }
-    const out = gitAt({ dir, git, env })(['ls-tree', '-z', '--full-tree', commit], 'buffer').toString('latin1');
+    if (prefix !== undefined && (typeof prefix !== 'string' || !TREE_PREFIX.test(prefix))) {
+        throw new TypeError(`a subtree is named by lower-case words and hyphens, slash-separated, not ${JSON.stringify(prefix)}`);
+    }
+    const tree = prefix === undefined ? commit : `${commit}:${prefix}`;
+    const out = gitAt({ dir, git, env })(['ls-tree', '-z', '--full-tree', tree], 'buffer').toString('latin1');
     const parts = [];
     for (const entry of out.split('\0')) {
         if (entry === '') {
@@ -247,22 +263,52 @@ export function packedTreeOf({ dir, commit, git, env }) {
  * the public lists, every directory one the index names, every named look's
  * required files) and an index that names no look, which carries nothing:
  * a pin never names a commit the road would carry and the build refuse to
- * read. **Not read here**, stated: a look's own files against their
- * validators (`look.json`, the sheet's lint, the SVG allow-list, its faces,
- * its budget) — the build and `pnpm test` read those under the selection.
+ * read. **And the preview road's gate**: while `RELEASED_LOOK_IDS` is
+ * empty a preview carries one tree, `CANARY_TREE`, so a commit whose packed
+ * tree is any other is refused — Ink wash's bytes under `canary/`, a
+ * `Canary/` folded into `canary/` on a case-insensitive disk, one name
+ * twice in a tree, an index naming another look beside the canary's files,
+ * a face one byte off (the second 8c2 critic's items 1, 2 and 5); behind
+ * it, the belt that reads names only — a commit whose index names a slug
+ * `PREVIEW_SLUGS` does not, or whose tree holds another look directory;
+ * and once a release names an id every pin is refused
+ * (`previewRoadProblem`) until step 9 rewrites this rule. **Not read
+ * here**, stated: a look's own files against their validators
+ * (`look.json`, the sheet's lint, the SVG allow-list, its faces, its
+ * budget) — the build and `pnpm test` read those under the selection.
  */
 export async function pinLineFor({ dir, commit, facts, git, env }) {
     const at = commit ?? gitCommitOf({ dir, git, env });
     const known = facts ?? (await publicLookFacts());
+    const road = previewRoadProblem(known.released);
+    if (road !== undefined) {
+        throw new Error(`private looks at ${at}: ${road}`);
+    }
     const repo = readPrivateLooksAt({ dir, commit: at, facts: known, git, env });
     const problems = [...repo.problems];
-    if (problems.length === 0 && parsePrivateIndex(repo.indexText).index.looks.length === 0) {
+    const dirs = [...new Set(repo.files.filter((file) => file.path.includes('/')).map((file) => file.path.slice(0, file.path.indexOf('/'))))].sort();
+    for (const name of dirs.filter((name) => !PREVIEW_SLUGS.includes(name))) {
+        problems.push(`${name}/: a look directory PREVIEW_SLUGS does not name — until a release a preview carries only ${PREVIEW_SLUGS.join(', ')}`);
+    }
+    const index = repo.indexText === undefined ? undefined : parsePrivateIndex(repo.indexText).index;
+    for (const entry of index?.looks ?? []) {
+        if (!PREVIEW_SLUGS.includes(entry.slug)) {
+            problems.push(`the index names ${entry.slug}, which PREVIEW_SLUGS does not — until a release a preview carries only ${PREVIEW_SLUGS.join(', ')}`);
+        }
+    }
+    if (index !== undefined && index.looks.length === 0) {
         problems.push('the index names no look: a pin names a commit that carries one');
     }
-    if (problems.length > 0) {
-        throw new Error(`private looks at ${at}: a pin names no commit the build would refuse:\n  - ${problems.join('\n  - ')}`);
+    const tree = packedTreeOf({ dir, commit: at, git, env });
+    if (tree !== CANARY_TREE) {
+        problems.push(
+            `its packed tree ${tree.slice(0, 12)} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's: until a release a preview carries that tree and no other (the-canary-is-public-bytes rebuilds it from this repository's own bytes)`,
+        );
     }
-    return `${at} ${packedTreeOf({ dir, commit: at, git, env })}\n`;
+    if (problems.length > 0) {
+        throw new Error(`private looks at ${at}: a pin names no commit the build would refuse, and before a release no tree but the canary's:\n  - ${problems.join('\n  - ')}`);
+    }
+    return `${at} ${tree}\n`;
 }
 
 /**
@@ -373,7 +419,7 @@ export function pinnedPair({ root, dir, commit, git, env }) {
     });
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (runAsScript(import.meta.url)) {
     const args = process.argv.slice(2);
     const write = args.includes('--write');
     const dirs = args.filter((arg) => arg !== '--write');

@@ -16,8 +16,8 @@ import {
     pinProblem,
     readLooksPin,
 } from './looks-pin.mjs';
-import { plantLooks, removePlants } from './private-looks-plant.mjs';
-import { publicLookFacts } from './private-looks.mjs';
+import { plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
+import { CANARY_TREE, PREVIEW_SLUGS, publicLookFacts } from './private-looks.mjs';
 
 /**
  * The pin (`scripts/looks-pin.mjs`, step 8c1): `deploy/looks.commit` is read
@@ -328,7 +328,7 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
     });
 
     /*
-     * Why 8c2's PACK_SCRIPT opens with `set -euo pipefail` before this line:
+     * Why PACK_SCRIPT (`scripts/looks-artifact.mjs`) opens with `set -euo pipefail` before this line:
      * without pipefail, `git ls-tree` failing on an unreadable `$PIN` leaves
      * `mktree` to write the empty tree, and the step carries on with it.
      */
@@ -359,36 +359,45 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
  * files, its index against the public lists, its directories, every named
  * look's required files (`readPrivateLooksAt`, as `selectedIndex` reads it)
  * — and an index naming no look (the 8c1 critic's item 4: a README-and-log
- * commit got a pin to the empty tree). A look's own validators are the
- * build's and `pnpm test`'s, not this test's. `--write` writes only once the
- * line is computed: a refusal leaves the old pin, byte for byte.
+ * commit got a pin to the empty tree); and, before a release, any commit
+ * whose packed tree is not `CANARY_TREE` (the gate), behind it the slug
+ * belt. The plants start from the canary from public bytes
+ * (`plantCanary`), the one commit every check admits. A look's own
+ * validators are the build's and `pnpm test`'s, not this test's. `--write`
+ * writes only once the line is computed: a refusal leaves the old pin,
+ * byte for byte.
  */
 describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
     after(removePlants);
     const facts = publicLookFacts();
-    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: await facts });
+    const lineOf = async (looks, commit, released) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: { ...(await facts), ...(released === undefined ? {} : { released }) } });
+    const CANARY = PREVIEW_SLUGS[0];
+    const canary = (edit, add) => plantCanary(edit, add);
 
     it('is the commit and its packed tree, 82 bytes, at HEAD or at a commit named', async () => {
-        const looks = plantLooks(undefined, { 'README.md': 'r\n', 'LOG.md': 'l\n' });
+        const looks = canary();
         const line = await lineOf(looks);
-        assert.equal(line, `${looks.head()} ${packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env })}\n`);
+        assert.equal(line, `${looks.head()} ${CANARY_TREE}\n`);
+        assert.equal(packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env }), CANARY_TREE);
         assert.equal(pinProblem(line), undefined);
         assert.equal(await lineOf(looks, looks.head()), line);
     });
 
     it('refuses what the build refuses to read, and a commit that carries no look, naming each', async () => {
         const plants = [
-            ['a README and a log alone', undefined, (dir) => ['index.json', 'fixture'].forEach((path) => rmSync(join(dir, path), { recursive: true })), { 'README.md': 'r\n', 'LOG.md': 'l\n' }, /no index\.json at the root/],
+            ['a README and a log alone', undefined, (dir) => ['index.json', CANARY].forEach((path) => rmSync(join(dir, path), { recursive: true })), { 'README.md': 'r\n', 'LOG.md': 'l\n' }, /no index\.json at the root/],
             ['a note at the root', undefined, undefined, { 'NOTES.md': 'n\n' }, /"NOTES\.md": not a file/],
-            ['a design log inside a look', undefined, undefined, { 'fixture/LOG.md': 'l\n' }, /"fixture\/LOG\.md": not a file/],
+            ['a design log inside a look', undefined, undefined, { [`${CANARY}/LOG.md`]: 'l\n' }, /"canary\/LOG\.md": not a file/],
             ['a directory the index does not name', undefined, undefined, { 'other/look.json': '{}\n' }, /other\/: a directory the index does not name/],
             ['an index that frees the reserved id', (path, text) => (path === 'index.json' ? text.replace('"paid": true', '"paid": false') : text), undefined, undefined, /PAID_LOOK_IDS says true/],
             ['an index that releases it', (path, text) => (path === 'index.json' ? text.replace('"preview"', '"release"') : text), undefined, undefined, /RELEASED_LOOK_IDS does not name/],
-            ['an index naming no look', (path, text) => (path === 'index.json' ? '{ "schema": 1, "looks": [] }\n' : text), (dir) => rmSync(join(dir, 'fixture'), { recursive: true }), undefined, /the index names no look/],
-            ['a look without its sheet', undefined, (dir) => rmSync(join(dir, 'fixture', 'sheet.css')), undefined, /fixture\/sheet\.css: the index names the look and the file is not there/],
+            ['an index naming no look', (path, text) => (path === 'index.json' ? '{ "schema": 1, "looks": [] }\n' : text), (dir) => rmSync(join(dir, CANARY), { recursive: true }), undefined, /the index names no look/],
+            ['a look without its sheet', undefined, (dir) => rmSync(join(dir, CANARY, 'sheet.css')), undefined, /canary\/sheet\.css: the index names the look and the file is not there/],
+            // (c′): the 8c2 critic's road (i), an unsold look's directory beside the canary, unindexed.
+            ['an unindexed look beside the canary', undefined, undefined, { 'ink-wash/look.json': '{}\n', 'ink-wash/sheet.css': '.t-ink-wash {}\n' }, /ink-wash\/: a look directory PREVIEW_SLUGS does not name/],
         ];
         for (const [name, edit, remove, add, why] of plants) {
-            const looks = plantLooks(edit ?? ((_path, text) => text), add ?? {});
+            const looks = canary(edit ?? ((_path, text) => text), add ?? {});
             if (remove !== undefined) {
                 remove(looks.dir);
                 looks.git('add', '-A');
@@ -396,6 +405,37 @@ describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
             }
             await assert.rejects(lineOf(looks), (error) => /a pin names no commit the build would refuse/.test(error.message) && why.test(error.message), name);
         }
+    });
+
+    /*
+     * (c′), mechanically: the 8c2 critic's road (ii) — the index naming Ink
+     * wash at 0x04, the canary's place — and slugs one edit from the
+     * canary, each a look the build would read whole, are refused at pin
+     * time; and once a release names an id no pin is written until step 9
+     * rewrites the rule.
+     */
+    it('refuses a look indexed under a slug PREVIEW_SLUGS does not name, and every pin once a release names an id', async () => {
+        for (const slug of ['ink-wash', CANARY.slice(0, -1), CANARY.slice(1), `${CANARY}-x`, `x${CANARY}`]) {
+            await assert.rejects(lineOf(plantLooks(undefined, {}, { slug })), (error) => error.message.includes(`the index names ${slug}, which PREVIEW_SLUGS does not`) && error.message.includes(`${slug}/: a look directory PREVIEW_SLUGS does not name`), slug);
+        }
+        const upper = plantLooks(undefined, {}, { slug: `${CANARY[0].toUpperCase()}${CANARY.slice(1)}` });
+        await assert.rejects(lineOf(upper), /Canary\/: a look directory PREVIEW_SLUGS does not name/);
+        await assert.rejects(lineOf(canary(), undefined, [0x04]), /a release carries a private look: step 9 rewrites the preview road and this rule/);
+        assert.equal(pinProblem(await lineOf(canary())), undefined, 'the canary itself is pinned');
+    });
+
+    /*
+     * The gate (the owner's (a′), the second 8c2 critic's item 1): a
+     * commit the build would read whole and the slug belt admits — the
+     * fixture's own bytes under `canary/`, as the 8c2 pin tests planted the
+     * canary until then — is refused for its tree, and for nothing else.
+     */
+    it('refuses a commit the build and the slug belt admit, for its packed tree alone', async () => {
+        const looks = plantLooks(undefined, {}, { slug: CANARY });
+        await assert.rejects(lineOf(looks), (error) => {
+            const problems = error.message.split('\n').slice(1);
+            return problems.length === 1 && problems[0].startsWith(`  - its packed tree ${packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env }).slice(0, 12)} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's`);
+        });
     });
 
     it('writes deploy/looks.commit with --write only once the line is computed, and a refusal leaves the old pin', () => {
@@ -411,7 +451,7 @@ describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
         assert.match(refused.stderr, /a pin names no commit the build would refuse/);
         assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), GOOD, 'the old pin stands');
         // A good repository: printed without --write, written with it.
-        const good = plantLooks();
+        const good = canary();
         const printed = run(work, good.dir);
         assert.equal(printed.status, 0, printed.stderr);
         assert.equal(pinProblem(printed.stdout), undefined);

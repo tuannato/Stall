@@ -15,6 +15,7 @@ import {
     PRIVATE_INDEX,
     budgetReasonProblem,
     gitFilesAt,
+    gitPathsListedTwice,
     gitTextAt,
     parsePrivateIndex,
     privateFileProblems,
@@ -23,6 +24,7 @@ import {
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
+import { PRIVATE_MODES_REFUSED, PRIVATE_PATHS_ADMITTED, PRIVATE_PATHS_REFUSED } from './private-looks-plant.mjs';
 
 /**
  * A private look repository's shape (`scripts/private-looks.mjs`), over
@@ -123,63 +125,20 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
      * a symlink, a gitlink or an executable bit is refused, because nothing in
      * that repository is ever run.
      */
-    const allowed = [
-        'index.json',
-        'README.md',
-        'LOG.md',
-        'some-look/look.json',
-        'some-look/sheet.css',
-        'some-look/og.png',
-        'some-look/fonts.json',
-        'some-look/art/mark.svg',
-        'some-look/art/face-latin.woff2',
-        'some-look/art/LICENSE-OFL.txt',
-        'some-look/art/LICENSE-OFL-face.txt',
-        'a/look.json',
-    ];
+    const allowed = PRIVATE_PATHS_ADMITTED;
 
     it('passes every shape it allows', () => {
         assert.deepEqual(privateFileProblems(plain(...allowed)), []);
     });
 
     it('refuses code, pages, other files and other places, one problem each', () => {
-        for (const path of [
-            'some-look/look.ts',
-            'some-look/look.js',
-            'some-look/script.mjs',
-            'some-look/page.html',
-            'some-look/art/tool.mjs',
-            'some-look/art/mark.svg.js',
-            'some-look/extra.css',
-            'some-look/README.md',
-            'some-look/og.jpg',
-            'some-look/art/shot.png',
-            'some-look/art/face.ttf',
-            'some-look/art/face.woff',
-            'some-look/art/sub/mark.svg',
-            'some-look/art/Mark.svg',
-            'some-look/art/a mark.svg',
-            'some-look/LICENSE-OFL.txt',
-            'Some-Look/look.json',
-            'some_look/look.json',
-            '-look/look.json',
-            'look.json',
-            'sheet.css',
-            'package.json',
-            '.gitignore',
-            '.gitmodules',
-            '.DS_Store',
-            'some-look/.DS_Store',
-            'notes/plan.md',
-            'some-look/art/../look.json',
-            `${'a'.repeat(33)}/look.json`,
-        ]) {
+        for (const path of PRIVATE_PATHS_REFUSED) {
             assert.equal(privateFileProblems(plain(path)).length, 1, path);
         }
     });
 
     it('refuses a symlink, a gitlink and an executable bit on a path it allows', () => {
-        for (const mode of ['120000', '160000', '100755']) {
+        for (const mode of PRIVATE_MODES_REFUSED) {
             const problems = privateFileProblems([{ path: 'some-look/art/mark.svg', mode }]);
             assert.equal(problems.length, 1, mode);
             assert.match(problems[0], /plain files only/);
@@ -482,6 +441,41 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         assert.ok(problems.some((p) => p.startsWith('"fixture/script.mjs": not a file')));
         assert.ok(problems.some((p) => p.startsWith('"fixture/art/linked.svg": a symlink')));
         assert.ok(problems.some((p) => p.startsWith('"fixture/art/sub.svg": a gitlink')));
+    });
+
+    /*
+     * The third 8c2 critic's item 3: `git mktree` takes a tree that lists
+     * one name twice, and a file list read from it shows one look whose
+     * sheet has two sources — or, when the second entry holds a file the
+     * first does not, nothing amiss at all. The gate keeps such a tree off
+     * the deploy road before a release (the hash); the build's own reader
+     * refuses it too, so the gap does not come back when step 9 rewrites
+     * the gate. Case folded, as a case-insensitive disk folds it.
+     */
+    it('refuses a tree that lists one path twice, as git mktree writes one', () => {
+        const repo = plantPrivateRepo();
+        assert.deepEqual(gitPathsListedTwice({ dir: repo.dir, commit: repo.head(), env: repo.env }), []);
+        const twice = (name, entries) => {
+            const sub = execFileSync('git', ['mktree'], { cwd: repo.dir, env: repo.env, input: entries, encoding: 'utf8' }).trim();
+            const root = execFileSync('git', ['mktree'], { cwd: repo.dir, env: repo.env, input: `${repo.git('ls-tree', 'HEAD')}\n040000 tree ${sub}\t${name}\n`, encoding: 'utf8' }).trim();
+            return repo.git('commit-tree', root, '-p', 'HEAD', '-m', 'twice');
+        };
+        const blob = (text) => execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo.dir, env: repo.env, input: text, encoding: 'utf8' }).trim();
+        const read = (commit) => readPrivateLooksAt({ dir: repo.dir, commit, facts, fixture: true, env: repo.env });
+        // The critic's plant: a second `fixture` holding a draft sheet.
+        const draft = twice('fixture', `100644 blob ${blob('/* a draft sheet */\n')}\tsheet.css\n`);
+        assert.equal(gitFilesAt({ dir: repo.dir, commit: draft, env: repo.env }).filter((file) => file.path === 'fixture/sheet.css').length, 2, 'the plant: the file list shows one path twice');
+        assert.deepEqual(read(draft).problems, [
+            '"fixture": listed twice in the tree (one name, two entries), which no checkout holds',
+            '"fixture/sheet.css": listed twice in the tree (one name, two entries), which no checkout holds',
+        ]);
+        // A second `fixture` holding a file the first does not: the file list shows nothing twice.
+        const og = twice('fixture', `100644 blob ${blob('png\n')}\tog.png\n`);
+        assert.deepEqual(privateFileProblems(gitFilesAt({ dir: repo.dir, commit: og, env: repo.env })), [], 'the plant: the file list alone sees nothing');
+        assert.deepEqual(read(og).problems, ['"fixture": listed twice in the tree (one name, two entries), which no checkout holds']);
+        // Two spellings of one name, which a case-insensitive disk holds as one.
+        const folded = twice('Fixture', `100644 blob ${blob('{}\n')}\tlook.json\n`);
+        assert.ok(read(folded).problems.some((problem) => /^"[Ff]ixture": listed twice in the tree/.test(problem)), read(folded).problems.join('\n'));
     });
 
     it('reads no index that is not a plain file', () => {

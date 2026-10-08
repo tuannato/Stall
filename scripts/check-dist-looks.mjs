@@ -54,6 +54,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runAsScript } from './run-as-script.mjs';
 import { LOOK_FONTS_FILE, lookFontNotices } from './look-faces.mjs';
 import { selectionFromEnv } from './looks-selection.mjs';
 import { noticedLicence } from './notices-lib.mjs';
@@ -371,7 +372,7 @@ async function main() {
     process.stdout.write(`check-dist-looks: ${dir} holds what its selection carries\n`);
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (runAsScript(import.meta.url)) {
     main().catch((error) => {
         process.stderr.write(`check-dist-looks: ${error.message}\n`);
         process.exit(1);

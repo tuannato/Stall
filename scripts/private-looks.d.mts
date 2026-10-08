@@ -36,6 +36,10 @@ export declare const PRIVATE_INDEX_OPTIONAL_FIELDS: readonly string[];
 export declare const BUDGET_REASON_MAX: number;
 export declare const PRIVATE_SLUG: RegExp;
 export declare const PRIVATE_SLUG_MAX: number;
+export declare const PREVIEW_SLUGS: readonly string[];
+/** The canary's packed tree: the one tree the preview road carries before any release (40 lower-case hex). */
+export declare const CANARY_TREE: string;
+export declare function previewRoadProblem(released: readonly number[]): string | undefined;
 export declare const PRIVATE_LOOK_CLASS: RegExp;
 export declare const PRIVATE_LOOK_CLASS_MAX: number;
 export declare const HARNESS_LOOK_CLASSES: readonly string[];
@@ -63,6 +67,8 @@ export declare function privateLooksProblems(input: {
 }): string[];
 export declare function publicLookFacts(): Promise<PublicLookFacts>;
 export declare function gitFilesAt(input: { dir: string; commit: string; prefix?: string } & GitOptions): PrivateFile[];
+/** Every path the tree of `commit` (or its `prefix` subtree) lists more than once, case folded, trees and files alike. */
+export declare function gitPathsListedTwice(input: { dir: string; commit: string; prefix?: string } & GitOptions): string[];
 export declare function gitTextAt(input: { dir: string; commit: string; prefix?: string; path: string } & GitOptions): string;
 export declare function gitBlobAt(input: { dir: string; commit: string; prefix?: string; path: string } & GitOptions): Buffer;
 export declare function gitCommitOf(input: { dir: string; ref?: string } & GitOptions): string;

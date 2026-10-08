@@ -9,6 +9,8 @@ export type PrivateLookRead = {
     /** `fixture`: the tracked fixture, read for the guards; `selection`: the looks the environment's selection carries. */
     readonly source: 'fixture' | 'selection';
     readonly commit: string;
+    /** The commit's tree less its root README and log (`packedTreeOf`): the tree a pin names beside its commit. */
+    readonly packedTree: string;
     readonly entry: PrivateIndexEntry;
     /** Where the sheet sits, for messages: from this checkout's root, or the repository's own root. */
     readonly sheetPath: string;
