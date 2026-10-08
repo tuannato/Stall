@@ -14,7 +14,14 @@
  *
  * **`PACK_SCRIPT` refuses before it archives.** In the job's root, with the
  * private clone at `looks`, `$PIN` and `$PINNED_TREE` the two hashes the pin
- * step read, and `$RUNNER_TEMP` the runner's: the clone must be at the pinned
+ * step read, and `$RUNNER_TEMP` the runner's: **first, `$PINNED_TREE` must
+ * be `CANARY_TREE`** (`scripts/private-looks.mjs`), the canary's packed
+ * tree, a public literal a public test rebuilds from this repository's own
+ * bytes — the gate (PLAN § Decided "Until a look is sold…"; the owner chose
+ * the second 8c2 critic's option (a′)): until a release the road carries
+ * that tree and no other, and the tree check below makes the archived tree
+ * this one, whatever a directory is named. A refusal there is one line
+ * naming no path and no hash. Then the clone must be at the pinned
  * commit; then **every entry of the pinned tree** (`git ls-tree -r -t
  * --full-tree`, replace objects off) goes through one awk program,
  * `PACK_ALLOW_PROGRAM`, which admits a subset of the files the build's own
@@ -22,8 +29,8 @@
  * the root files, a look's four files, `<slug>/art/<name>` by `OWN_ART_NAME`
  * and `PRIVATE_FACE_LICENCE`, the slug by `PRIVATE_SLUG` and
  * `PRIVATE_SLUG_MAX`) — exactly that subset, less every look directory
- * whose slug `PREVIEW_SLUGS` does not name ((c′): until a release only the
- * canary's directory travels) — and the directories those files stand in,
+ * whose slug `PREVIEW_SLUGS` does not name (a belt that reads names only,
+ * behind the gate) — and the directories those files stand in,
  * and nothing else, so an unsold look's directory, a gitlink, a link, an
  * executable bit, a `.gitattributes`,
  * a note, a design log inside a look, a folder of shots or a script stops
@@ -38,13 +45,15 @@
  * archive; a tree id carries neither. The artifact is `looks.tar` and
  * `pin`, the stamp `<commit> <tree>\n` — the pin's own 82 bytes.
  *
- * **What the pack does not refuse, stated**: it holds files to their
- * shapes and modes, not the index to the files. The build's index-level
- * refusals (`privateLooksProblems`: a look directory the index does not
- * name, an index the public lists refuse, a named look without its
- * required files) run in the build job, after the upload; at pin time
- * `pinLineFor` (`node scripts/looks-pin.mjs --write`) refuses all three,
- * and a pin written by hand skips it (the 8c2 critic's items 1 and 2).
+ * **The allow-list holds files to their shapes and modes, not the index to
+ * the files**; the build's index-level refusals (`privateLooksProblems`: a
+ * look directory the index does not name, an index the public lists
+ * refuse, a named look without its required files) run in the build job,
+ * after the upload, and `pinLineFor` (`node scripts/looks-pin.mjs
+ * --write`) refuses all three at pin time. Before a release the gate makes
+ * that moot: the only tree that travels is `CANARY_TREE`, whose index is
+ * the canary's own bytes, and a hand-written pin naming another tree is
+ * refused in the first line (the second 8c2 critic's items 2 and 5).
  *
  * **The program is built from the build's own constants** and refuses to
  * load when one of them changes shape (`shapeOf`): a pack written for one
@@ -110,6 +119,7 @@ import {
     PRIVATE_ROOT_FILES,
     PRIVATE_SLUG,
     PRIVATE_SLUG_MAX,
+    CANARY_TREE,
 } from './private-looks.mjs';
 import { OWN_ART_NAME } from './workshop-css.mjs';
 
@@ -163,7 +173,9 @@ const anyOf = (variable, names) => names.map((name) => `${variable} == "${plainN
  * does not know.
  *
  * **A look directory is admitted only under a preview slug**
- * (`PREVIEW_SLUGS`, (c′) made mechanical): the program compares the first
+ * (`PREVIEW_SLUGS`, a belt behind `CANARY_TREE`, which reads names only —
+ * Ink wash's bytes under `canary/` pass it, and the pack's gate refuses
+ * them): the program compares the first
  * component with each, exactly — never a prefix, a suffix or a case
  * folded — so a look directory under any other name, indexed or not,
  * stops the job like any other refused entry, by a count. Each preview
@@ -230,17 +242,25 @@ export const PACK_ALLOW_PROGRAM = packAllowProgram({
     previewSlugs: PREVIEW_SLUGS,
 });
 
+/* The pack names the canary tree in its first check: a value of another shape is refused before it is written into a shell line. */
+if (!/^[0-9a-f]{40}$/.test(CANARY_TREE)) {
+    throw new Error('looks-artifact: CANARY_TREE is not 40 lower-case hex, and the pack names it in its first check');
+}
+
 /**
  * The pack, as the deploy workflow's `looks` job runs it (see the module's
- * docblock): the clone at the pin, the allow-list, `PACKED_TREE_SCRIPT`
- * verbatim, the tree against the pin's second hash, then the archive of
- * the tree id and the stamp into `$RUNNER_TEMP/looks-artifact`. Every
- * refusal comes before `mkdir` — **before anything is archived**, not
- * before anything is written: the tree check reads the tree `git mktree`
- * has just written into the clone's objects — so a refused pack leaves no
- * artifact directory, and none prints a path.
+ * docblock): `$PINNED_TREE` against `CANARY_TREE`, interpolated from the
+ * constant as the allow-list is from the build's, the clone at the pin, the
+ * allow-list, `PACKED_TREE_SCRIPT` verbatim, the tree against the pin's
+ * second hash, then the archive of the tree id and the stamp into
+ * `$RUNNER_TEMP/looks-artifact`. Every refusal comes before `mkdir` —
+ * **before anything is archived**, not before anything is written: the
+ * tree check reads the tree `git mktree` has just written into the clone's
+ * objects — so a refused pack leaves no artifact directory, and none prints
+ * a path.
  */
 export const PACK_SCRIPT = `set -euo pipefail
+[ "$PINNED_TREE" = "${CANARY_TREE}" ] || { echo "the pin names another tree than the canary's (CANARY_TREE): until a release a preview carries that tree and no other" >&2; exit 1; }
 [ "$(git --no-replace-objects -C looks rev-parse --verify HEAD)" = "$PIN" ] || { echo 'the private checkout is not at the pinned commit' >&2; exit 1; }
 refused="$(git --no-replace-objects -C looks ls-tree -r -t --full-tree "$PIN" | awk -F '\\t' '${PACK_ALLOW_PROGRAM}')"
 [ "$refused" = 0 ] || { echo "$refused entries of the pinned tree are not files this road carries (their names are not printed in a public log)" >&2; exit 1; }

@@ -21,7 +21,14 @@
  * build. `removePlants()` deletes every repository planted in the process.
  * And the paths the build's allow-list test and the deploy pack's share
  * (`PRIVATE_PATHS_ADMITTED`, `PRIVATE_PATHS_REFUSED`,
- * `PRIVATE_MODES_REFUSED`). Node built-ins only; a `.d.mts` beside it.
+ * `PRIVATE_MODES_REFUSED`).
+ *
+ * **And the canary, from public bytes** (`canaryFiles`, `plantCanary`):
+ * the recipe that rebuilds `CANARY_TREE` from this repository at the
+ * commit the canary was made from (`CANARY_MADE_FROM`) — what
+ * `the-canary-is-public-bytes` holds the literal to, and the one repository
+ * the deploy road's gates admit, for the tests that need a canary that
+ * packs. Node built-ins only; a `.d.mts` beside it.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,7 +37,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync } from 'node:zlib';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV } from './looks-selection.mjs';
-import { gitCommitOf, gitFilesAt, gitTextAt } from './private-looks.mjs';
+import { gitBlobAt, gitCommitOf, gitFilesAt, gitTextAt } from './private-looks.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -127,6 +134,24 @@ function fixtureAtHead() {
  * edited and added to, committed once. See the module's docblock.
  */
 export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fixture' } = {}) {
+    const files = {};
+    for (const file of fixtureAtHead()) {
+        const path = file.path.startsWith('fixture/') ? `${slug}/${file.path.slice('fixture/'.length)}` : file.path;
+        let text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
+        if (path === 'index.json') {
+            text = text.replace('"slug": "fixture"', `"slug": "${slug}"`);
+        }
+        files[path] = edit(path, text);
+    }
+    return committed({ ...files, ...add });
+}
+
+/**
+ * `files` (`{ path: text | Buffer }`) committed once into a fresh repository
+ * under the OS's temporary directory, on `main`, by a planted identity with
+ * no mailbox — no global or system config, no user exclude file.
+ */
+function committed(files) {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-planted-looks-')));
     const xdg = realpathSync(mkdtempSync(join(tmpdir(), 'stall-planted-looks-xdg-')));
     planted.push(dir, xdg);
@@ -142,16 +167,7 @@ export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fix
     };
     const git = (...args) => execFileSync('git', args, { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     git('init', '-q', '-b', 'main', '.');
-    for (const file of fixtureAtHead()) {
-        const path = file.path.startsWith('fixture/') ? `${slug}/${file.path.slice('fixture/'.length)}` : file.path;
-        mkdirSync(join(dir, dirname(path)), { recursive: true });
-        let text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
-        if (path === 'index.json') {
-            text = text.replace('"slug": "fixture"', `"slug": "${slug}"`);
-        }
-        writeFileSync(join(dir, path), edit(path, text));
-    }
-    for (const [path, contents] of Object.entries(add)) {
+    for (const [path, contents] of Object.entries(files)) {
         mkdirSync(join(dir, dirname(path)), { recursive: true });
         writeFileSync(join(dir, path), contents);
     }
@@ -164,6 +180,112 @@ export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fix
         head: () => git('rev-parse', 'HEAD'),
         selection: { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: dir },
     };
+}
+
+/**
+ * The commit of this repository the canary was made from (step 8c1): its
+ * tracked fixture and its JetBrains Mono Latin subset and licence are what
+ * the canary's bytes are made of. Read there, never at HEAD, so a later
+ * edit of the fixture does not move the canary — the fixture is the
+ * guards' subject and changes with them; the canary is a pinned tree and
+ * changes only with a new pin.
+ */
+export const CANARY_MADE_FROM = '6ca82d513b2f364e63948e6d5002f3a8bc888399';
+
+/** The canary's sheet opens with the copyright line, as the canary carries it (PLAN § Decided, owner 2026-10-07). */
+const CANARY_COPYRIGHT_LINE = '/*! © 2026 tuannato (stall.cash) */\n';
+
+/** The canary's own CSS beyond the fixture's, renamed: a face of its own on the tagline, placed after the rule that names the sheet. */
+const CANARY_FACE_CSS = `@font-face {
+    font-family: t-canary-mono;
+    src: url(./art/jetbrains-mono-latin.woff2) format('woff2');
+    font-display: swap;
+}
+
+.t-canary .stall-tagline {
+    font-family: t-canary-mono;
+}
+
+`;
+
+/** Where the face's CSS goes: after the rule that names the sheet, once. */
+const CANARY_SHEET_NAMED = '.t-canary {\n    --look-sheet: t-canary;\n}\n\n';
+
+/** The canary's `fonts.json`: the face it serves, named, with its licence. */
+const CANARY_FONTS_JSON = `{
+    "fonts": [
+        {
+            "name": "JetBrains Mono",
+            "files": { "jetbrains-mono-latin.woff2": "Latin" },
+            "licence": "LICENSE-OFL-jetbrains-mono.txt"
+        }
+    ]
+}
+`;
+
+/**
+ * The byte of the face the canary changes, and to what: offset 115, the
+ * first byte of the brotli stream, 0x5B to 0x5F (the stream's window field
+ * 22 to 24) — a face of its own whose font tables are the tracked file's
+ * (CLAUDE.md §6, "A look's face is never the bytes of a face Stall serves").
+ */
+const CANARY_FACE_BYTE = Object.freeze({ at: 115, from: 0x5b, to: 0x5f });
+
+/**
+ * The canary's packed tree, as files (`{ path: text | Buffer }`): every
+ * byte read from this repository at `at` (`CANARY_MADE_FROM`), git's own
+ * bytes with replace objects off (`gitBlobAt`), the tracked fixture renamed
+ * (`t-fixture-private` to `t-canary`, `att-fixture-` to `att-canary-`, its
+ * labels' "Fixture " to "Canary ", the index's slug), the sheet opened by
+ * the copyright line and given the face's CSS, the tracked JetBrains Mono
+ * Latin subset with one byte changed, its tracked OFL licence and the
+ * `fonts.json` naming them. No `README.md` or `LOG.md`: the packed tree
+ * leaves them out. Throws when the commit no longer holds what the recipe
+ * reads in the shape it reads it.
+ */
+export function canaryFiles({ at = CANARY_MADE_FROM } = {}) {
+    const read = (path) => gitBlobAt({ dir: ROOT, commit: at, path });
+    const text = (path) => read(path).toString('utf8');
+    const rename = (from) =>
+        from.replaceAll('t-fixture-private', 't-canary').replaceAll('att-fixture-', 'att-canary-').replaceAll('"Fixture ', '"Canary ').replace('"slug": "fixture"', '"slug": "canary"');
+    const sheet = rename(text(`${FIXTURE_LOOKS_DIR}/fixture/sheet.css`));
+    if (sheet.split(CANARY_SHEET_NAMED).length !== 2) {
+        throw new Error(`the fixture's sheet at ${at.slice(0, 12)} does not name itself once in the shape the canary recipe reads`);
+    }
+    const face = Buffer.from(read('src/ui/fonts/jetbrains-mono-latin.woff2'));
+    if (face[CANARY_FACE_BYTE.at] !== CANARY_FACE_BYTE.from) {
+        throw new Error(`the tracked JetBrains Mono Latin subset at ${at.slice(0, 12)} is not the face the canary changed one byte of`);
+    }
+    face[CANARY_FACE_BYTE.at] = CANARY_FACE_BYTE.to;
+    return {
+        'index.json': rename(text(`${FIXTURE_LOOKS_DIR}/index.json`)),
+        'canary/look.json': rename(text(`${FIXTURE_LOOKS_DIR}/fixture/look.json`)),
+        'canary/sheet.css': `${CANARY_COPYRIGHT_LINE}${sheet.replace(CANARY_SHEET_NAMED, `${CANARY_SHEET_NAMED}${CANARY_FACE_CSS}`)}`,
+        'canary/fonts.json': CANARY_FONTS_JSON,
+        'canary/art/ground.svg': read(`${FIXTURE_LOOKS_DIR}/fixture/art/ground.svg`),
+        'canary/art/under-name.svg': read(`${FIXTURE_LOOKS_DIR}/fixture/art/under-name.svg`),
+        'canary/art/jetbrains-mono-latin.woff2': face,
+        'canary/art/LICENSE-OFL-jetbrains-mono.txt': read('src/ui/fonts/LICENSE-OFL-jetbrains-mono.txt'),
+    };
+}
+
+/**
+ * A private look repository holding the canary from public bytes
+ * (`canaryFiles`) and a planted `README.md` and `LOG.md`, which its packed
+ * tree leaves out — so its packed tree is `CANARY_TREE`. `edit(path,
+ * contents)` sees each canary file (a string, or a Buffer for the face) and
+ * answers what to commit, or `undefined` to leave it out; `add` puts files
+ * beside them. Committed once, as `plantLooks` commits.
+ */
+export function plantCanary(edit = (_path, contents) => contents, add = {}) {
+    const files = { 'README.md': 'a planted canary repository\n', 'LOG.md': 'a planted log\n' };
+    for (const [path, contents] of Object.entries(canaryFiles())) {
+        const kept = edit(path, contents);
+        if (kept !== undefined) {
+            files[path] = kept;
+        }
+    }
+    return committed({ ...files, ...add });
 }
 
 /** `css` with `rule` placed before its reduce block — where a look sheet's rules go. */

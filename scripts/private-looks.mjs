@@ -133,28 +133,59 @@ export const PRIVATE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const PRIVATE_SLUG_MAX = 32;
 
 /**
- * **The looks a preview may carry before any release** — PLAN § Decided
- * "Until a look is sold…", (c′), made mechanical (the owner's call on the
- * 8c2 critic's item 1): the slugs of the look directories the deploy road
- * may carry while `RELEASED_LOOK_IDS` is empty, today the canary alone
- * (its bytes are the public fixture renamed, so its slug is public too).
- * Two gates read it: the pack's allow-list admits a look directory only
- * under one of these (`packAllowProgram`, `scripts/looks-artifact.mjs`),
- * so an unsold look's files never reach an artifact whatever the pinned
- * tree holds; and `pinLineFor` (`scripts/looks-pin.mjs`) refuses a commit
- * whose index names, or whose tree holds, any other look directory. It
- * lives here, beside `PRIVATE_SLUG`, and not with the public id lists in
- * `src/domain/theme.ts`: a slug is the private repository's directory
- * name, which the app never reads (it keys a look by id and class), and
- * both gates read this module synchronously — the unwrap's road runs
- * before anything is installed, with no type stripping asked for. It lifts
- * only with step 9's release commit: `a-preview-carries-only-the-preview-slugs-until-a-release`
+ * **The look directories a preview may carry before any release, by
+ * name** — a belt behind `CANARY_TREE`, which is the gate (PLAN § Decided
+ * "Until a look is sold…": only a canary of public bytes travels, held by
+ * a hash and not by a name; the owner, 2026-10-07 and 2026-10-08, on the
+ * two 8c2 critics). Today the canary alone. Two readers: the pack's
+ * allow-list admits a look directory only under one of these, by exact
+ * equality (`packAllowProgram`, `scripts/looks-artifact.mjs`), and
+ * `pinLineFor` (`scripts/looks-pin.mjs`) refuses a commit whose index
+ * names, or whose tree holds, any other look directory. **It reads names
+ * only**: Ink wash's bytes committed under `canary/` pass it, and so does a
+ * `Canary/` written on a case-insensitive disk, which git records as
+ * `canary/` (the second 8c2 critic's item 1, roads r3 and r9) — what holds
+ * the bytes is `CANARY_TREE`. It stays because it refuses earlier, by a
+ * count, where the pin names the canary's tree and the clone holds a look
+ * directory under another name. It lives here, beside `PRIVATE_SLUG`, and
+ * not with the public id lists in `src/domain/theme.ts`: a slug is the
+ * private repository's directory name, which the app never reads (it keys
+ * a look by id and class), and both readers read this module synchronously
+ * — the unwrap's road runs before anything is installed, with no type
+ * stripping asked for. It lifts only with step 9's release commit:
+ * `a-preview-carries-only-the-preview-slugs-until-a-release`
  * (`scripts/looks-artifact.test.mjs`) fails the day `RELEASED_LOOK_IDS`
  * names an id, and `pinLineFor` refuses every pin then
  * (`previewRoadProblem`), so the release commit decides the preview road.
  * Pinned by its literal value in that test.
  */
 export const PREVIEW_SLUGS = Object.freeze(['canary']);
+
+/**
+ * **The one tree the preview road carries before any release**, the gate
+ * (PLAN § Decided "Until a look is sold…"; the owner chose the second 8c2
+ * critic's option (a′), 2026-10-08): the canary's packed tree — the root
+ * tree of the canary's commit less `README.md` and `LOG.md` (`PACKED_OUT`),
+ * as `deploy/looks.commit` pins it — written here as a public literal, so
+ * "a canary of public bytes" is a hash anyone can recompute.
+ * `the-canary-is-public-bytes` (`scripts/looks-artifact.test.mjs`) rebuilds
+ * it from this repository's own bytes, read at the commit the canary was
+ * made from (`CANARY_MADE_FROM`, `scripts/private-looks-plant.mjs`): the
+ * tracked fixture renamed, the copyright line and the face's CSS, the
+ * tracked JetBrains Mono Latin subset with one byte changed, its tracked
+ * licence and a `fonts.json` — and holds the tracked pin's tree to it.
+ * Two readers refuse every other tree: `PACK_SCRIPT` refuses a
+ * `$PINNED_TREE` that is not this before it reads the clone, and its own
+ * tree check then makes the archived tree this one; `pinLineFor` refuses a
+ * commit whose packed tree is not this. So the index travels as the
+ * canary's own bytes, and a tree holding one name twice is not this tree
+ * (the second 8c2 critic's items 2 and 5). **What moves it**: a change to
+ * the canary is a new canary commit in the private repository, a new pin,
+ * a new value here and the recipe in that test, in one public commit; step
+ * 9's release commit rewrites the gate with the road. Pinned by its literal
+ * value in that test.
+ */
+export const CANARY_TREE = '1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13';
 
 /**
  * Why the preview road's gate no longer holds, or undefined: once

@@ -16,8 +16,8 @@ import {
     pinProblem,
     readLooksPin,
 } from './looks-pin.mjs';
-import { plantLooks, removePlants } from './private-looks-plant.mjs';
-import { PREVIEW_SLUGS, publicLookFacts } from './private-looks.mjs';
+import { plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
+import { CANARY_TREE, PREVIEW_SLUGS, publicLookFacts } from './private-looks.mjs';
 
 /**
  * The pin (`scripts/looks-pin.mjs`, step 8c1): `deploy/looks.commit` is read
@@ -359,21 +359,26 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
  * files, its index against the public lists, its directories, every named
  * look's required files (`readPrivateLooksAt`, as `selectedIndex` reads it)
  * — and an index naming no look (the 8c1 critic's item 4: a README-and-log
- * commit got a pin to the empty tree). A look's own validators are the
- * build's and `pnpm test`'s, not this test's. `--write` writes only once the
- * line is computed: a refusal leaves the old pin, byte for byte.
+ * commit got a pin to the empty tree); and, before a release, any commit
+ * whose packed tree is not `CANARY_TREE` (the gate), behind it the slug
+ * belt. The plants start from the canary from public bytes
+ * (`plantCanary`), the one commit every check admits. A look's own
+ * validators are the build's and `pnpm test`'s, not this test's. `--write`
+ * writes only once the line is computed: a refusal leaves the old pin,
+ * byte for byte.
  */
 describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
     after(removePlants);
     const facts = publicLookFacts();
     const lineOf = async (looks, commit, released) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: { ...(await facts), ...(released === undefined ? {} : { released }) } });
     const CANARY = PREVIEW_SLUGS[0];
-    const canary = (edit, add) => plantLooks(edit, add, { slug: CANARY });
+    const canary = (edit, add) => plantCanary(edit, add);
 
     it('is the commit and its packed tree, 82 bytes, at HEAD or at a commit named', async () => {
-        const looks = canary(undefined, { 'README.md': 'r\n', 'LOG.md': 'l\n' });
+        const looks = canary();
         const line = await lineOf(looks);
-        assert.equal(line, `${looks.head()} ${packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env })}\n`);
+        assert.equal(line, `${looks.head()} ${CANARY_TREE}\n`);
+        assert.equal(packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env }), CANARY_TREE);
         assert.equal(pinProblem(line), undefined);
         assert.equal(await lineOf(looks, looks.head()), line);
     });
@@ -417,6 +422,20 @@ describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
         await assert.rejects(lineOf(upper), /Canary\/: a look directory PREVIEW_SLUGS does not name/);
         await assert.rejects(lineOf(canary(), undefined, [0x04]), /a release carries a private look: step 9 rewrites the preview road and this rule/);
         assert.equal(pinProblem(await lineOf(canary())), undefined, 'the canary itself is pinned');
+    });
+
+    /*
+     * The gate (the owner's (a′), the second 8c2 critic's item 1): a
+     * commit the build would read whole and the slug belt admits — the
+     * fixture's own bytes under `canary/`, as the 8c2 pin tests planted the
+     * canary until then — is refused for its tree, and for nothing else.
+     */
+    it('refuses a commit the build and the slug belt admit, for its packed tree alone', async () => {
+        const looks = plantLooks(undefined, {}, { slug: CANARY });
+        await assert.rejects(lineOf(looks), (error) => {
+            const problems = error.message.split('\n').slice(1);
+            return problems.length === 1 && problems[0].startsWith(`  - its packed tree ${packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env }).slice(0, 12)} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's`);
+        });
     });
 
     it('writes deploy/looks.commit with --write only once the line is computed, and a refusal leaves the old pin', () => {

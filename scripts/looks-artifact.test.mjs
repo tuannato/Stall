@@ -20,9 +20,10 @@ import {
     unwrapLine,
     unwrapLooksArtifact,
 } from './looks-artifact.mjs';
-import { LOOKS_PIN_FILE, PACKED_OUT, PACKED_TREE_SCRIPT, PIN_SCRIPT as PIN_SCRIPT_ITSELF, packedTreeOf } from './looks-pin.mjs';
-import { PRIVATE_MODES_REFUSED, PRIVATE_PATHS_ADMITTED, PRIVATE_PATHS_REFUSED, plantLooks, removePlants } from './private-looks-plant.mjs';
+import { LOOKS_PIN_FILE, PACKED_OUT, PACKED_TREE_SCRIPT, PIN_SCRIPT as PIN_SCRIPT_ITSELF, packedTreeOf, pinLineFor, readLooksPin } from './looks-pin.mjs';
+import { CANARY_MADE_FROM, PRIVATE_MODES_REFUSED, PRIVATE_PATHS_ADMITTED, PRIVATE_PATHS_REFUSED, canaryFiles, plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
 import {
+    CANARY_TREE,
     PREVIEW_SLUGS,
     PRIVATE_FACE_LICENCE,
     PRIVATE_FILE_MODE,
@@ -40,10 +41,14 @@ import { OWN_ART_NAME } from './workshop-css.mjs';
 
 /**
  * The deploy road's artifact (`scripts/looks-artifact.mjs`, step 8c2): the
- * `looks` job's pack refuses, before anything is archived, every entry the
- * build's allow-list would refuse; it archives the packed tree, never the
- * commit; and the build job's unwrap carries exactly the pinned tree, or
- * nothing.
+ * `looks` job's pack carries the canary's tree and no other before a
+ * release (`CANARY_TREE`, rebuilt here from this repository's own bytes);
+ * behind that gate it refuses, before anything is archived, every entry
+ * the build's allow-list would refuse; it archives the packed tree, never
+ * the commit; and the build job's unwrap carries exactly the pinned tree,
+ * or nothing. The allow-list's tests run the pack as it would be were the
+ * planted tree the canary's (`asCanary`): the same script, its one literal
+ * replaced; the gate's own tests run `PACK_SCRIPT` itself.
  *
  * The shell runs as the workflow runs a `shell: bash` step — `bash
  * --noprofile --norc -eo pipefail <file>`, in a job root holding the
@@ -132,12 +137,24 @@ function runStepAsync(script, cwd, env = {}) {
 const countLine = /^([1-9][0-9]*) entries of the pinned tree are not files this road carries \(their names are not printed in a public log\)\n$/;
 
 /**
- * `PACK_SCRIPT` (or `script`) run in `work` — the job root holding the
- * clone at `looks` — with `$PIN` and `$PINNED_TREE` given and `$RUNNER_TEMP`
- * a fresh directory. Answers the step and the artifact directory it would
- * have written.
+ * `PACK_SCRIPT` as it would be were `tree` the canary's: its one
+ * `CANARY_TREE` literal replaced by `tree` — the belt behind the gate (the
+ * allow-list, the clone at the pin, the tree check, the archive), run on a
+ * planted tree. The real script differs from it in that literal alone;
+ * `the-preview-road-carries-only-the-canary-tree` runs the real one.
  */
-function pack(work, { pin, tree, script = PACK_SCRIPT, env = {} }) {
+function asCanary(tree, script = PACK_SCRIPT) {
+    assert.equal(script.split(CANARY_TREE).length, 2, 'the pack names the canary tree once');
+    return script.replace(CANARY_TREE, tree);
+}
+
+/**
+ * The pack (`script`, by default `asCanary(tree)`) run in `work` — the job
+ * root holding the clone at `looks` — with `$PIN` and `$PINNED_TREE` given
+ * and `$RUNNER_TEMP` a fresh directory. Answers the step and the artifact
+ * directory it would have written.
+ */
+function pack(work, { pin, tree, script = asCanary(tree), env = {} }) {
     const runner = scratchDir('runner');
     const step = runStep(script, work, { PIN: pin, PINNED_TREE: tree, RUNNER_TEMP: runner, ...env });
     return { ...step, artifact: join(runner, ARTIFACT_DIR) };
@@ -398,7 +415,8 @@ describe('the-pack-admits-what-privateFileProblems-admits-at-the-root-or-under-a
     /*
      * Both directions, over every corpus path at the plain file mode and
      * every admitted path at each refused mode, each the only entry of its
-     * commit's tree, through the whole pack: a path the shell admits is
+     * commit's tree, through the whole pack (as it would be were that tree
+     * the canary's, `asCanary`): a path the shell admits is
      * packed (exit 0, a tar), one it refuses stops the job with the count
      * line and nothing else. The verdict is the build's
      * (`privateFileProblems`) at the root and under a preview slug, and a
@@ -428,7 +446,7 @@ describe('the-pack-admits-what-privateFileProblems-admits-at-the-root-or-under-a
                     }
                     repo.select(commit);
                     const runner = scratchDir('runner');
-                    const step = await runStepAsync(PACK_SCRIPT, repo.work, { PIN: commit, PINNED_TREE: repo.packed[i], RUNNER_TEMP: runner, LANG: 'C.UTF-8' });
+                    const step = await runStepAsync(asCanary(repo.packed[i]), repo.work, { PIN: commit, PINNED_TREE: repo.packed[i], RUNNER_TEMP: runner, LANG: 'C.UTF-8' });
                     const artifact = join(runner, ARTIFACT_DIR);
                     const build = admitsAs(entry.path, entry.mode);
                     const shell = step.status === 0;
@@ -624,7 +642,7 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
     /* The allow-list is what refuses: without its two lines, a note at the root is packed and archived. */
     it('needs its allow-list: without it, a plant is archived', () => {
         const { work, head, tree } = plantedWork(PLANTS[0][1]);
-        const step = pack(work, { pin: head, tree, script: withoutAllowList(PACK_SCRIPT) });
+        const step = pack(work, { pin: head, tree, script: withoutAllowList(asCanary(tree)) });
         assert.equal(step.status, 0, 'without the allow-list, the plant is refused anyway — the plant proves nothing');
         assert.ok(readArtifactTar(readFileSync(join(step.artifact, ARTIFACT_TAR))).some((member) => member.path === 'NOTES.md'));
     });
@@ -647,7 +665,7 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
         assert.notEqual(step.status, 0);
         assert.match(step.stderr, countLine);
         assert.ok(!existsSync(step.artifact));
-        const blind = pack(work, { pin: head, tree, script: PACK_SCRIPT.replace('refused="$(git --no-replace-objects -C looks ls-tree', 'refused="$(git -C looks ls-tree') });
+        const blind = pack(work, { pin: head, tree, script: asCanary(tree).replace('refused="$(git --no-replace-objects -C looks ls-tree', 'refused="$(git -C looks ls-tree') });
         assert.equal(blind.status, 0, 'without the flag the allow-list sees the note anyway — the plant proves nothing');
         assert.ok(readArtifactTar(readFileSync(join(blind.artifact, ARTIFACT_TAR))).some((member) => member.path === 'NOTES.md'), 'and the pack archives it');
     });
@@ -663,7 +681,8 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
         assert.notEqual(wrongTree.status, 0);
         assert.equal(wrongTree.stderr, `the pinned commit, without its README and log, is not the tree ${LOOKS_PIN_FILE} pins\n`);
         assert.ok(!existsSync(wrongTree.artifact));
-        const unchecked = pack(work, { pin: head, tree: tree.replace(/^./, (c) => (c === '0' ? '1' : '0')), script: without(PACK_SCRIPT, '[ "$tree" = "$PINNED_TREE" ]') });
+        const off = tree.replace(/^./, (c) => (c === '0' ? '1' : '0'));
+        const unchecked = pack(work, { pin: head, tree: off, script: without(asCanary(off), '[ "$tree" = "$PINNED_TREE" ]') });
         assert.equal(unchecked.status, 0, 'without the tree check, a tree the pin does not name is packed anyway — the plant proves nothing');
         for (const unset of ['PIN', 'PINNED_TREE', 'RUNNER_TEMP']) {
             const step = pack(work, { pin: head, tree, env: { [unset]: undefined } });
@@ -681,6 +700,12 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
         }
         const lines = PACK_SCRIPT.split('\n');
         assert.equal(lines[0], 'set -euo pipefail');
+        assert.equal(
+            lines[1],
+            `[ "$PINNED_TREE" = "${CANARY_TREE}" ] || { echo "the pin names another tree than the canary's (CANARY_TREE): until a release a preview carries that tree and no other" >&2; exit 1; }`,
+            'the gate is the first check, written from the constant',
+        );
+        assert.equal(PACK_SCRIPT.split(CANARY_TREE).length, 2, 'the pack names the canary tree once');
         assert.ok(lines.includes(PACKED_TREE_SCRIPT), 'PACKED_TREE_SCRIPT, verbatim, as one line');
         assert.doesNotMatch(PACK_SCRIPT, /\n\s*\n[^]/, 'no blank line: the workflow grammar holds a run: | block as it is');
         assert.doesNotMatch(PACK_SCRIPT, /\$\{\{|GITHUB_OUTPUT|GITHUB_ENV|GITHUB_PATH/);
@@ -689,6 +714,7 @@ describe('the-pack-refuses-a-file-the-build-would-refuse', () => {
             assert.ok(i >= 0, needle);
             return i;
         };
+        assert.ok(at(CANARY_TREE) < at('rev-parse --verify HEAD'), 'the gate before the clone is read');
         assert.ok(at('rev-parse --verify HEAD') < at('ls-tree -r -t --full-tree'));
         assert.ok(at('ls-tree -r -t --full-tree') < at(PACKED_TREE_SCRIPT), 'the allow-list runs before mktree');
         assert.ok(at(PACKED_TREE_SCRIPT) < at('[ "$tree" = "$PINNED_TREE" ]'));
@@ -821,7 +847,7 @@ describe('the-looks-artifact-is-the-pinned-tree-without-its-log', () => {
         assert.ok(!tar.includes(MAILBOX), 'the mailbox in the tar');
         assert.ok(!tar.includes(SUBJECT), 'the subject in the tar');
         assert.ok(tar.includes('$Format:%ae %s$'), 'the placeholder was substituted');
-        const mutant = pack(road.work, { pin: road.out.commit, tree: road.out.tree, script: PACK_SCRIPT.replace('archive --format=tar "$tree"', 'archive --format=tar "$PIN"') });
+        const mutant = pack(road.work, { pin: road.out.commit, tree: road.out.tree, script: asCanary(road.out.tree).replace('archive --format=tar "$tree"', 'archive --format=tar "$PIN"') });
         assert.equal(mutant.status, 0, mutant.stderr);
         const leaked = readFileSync(join(mutant.artifact, ARTIFACT_TAR));
         assert.ok(leaked.includes(MAILBOX) && leaked.includes(SUBJECT), 'archiving the commit leaks nothing here — the plant proves nothing');
@@ -831,7 +857,7 @@ describe('the-looks-artifact-is-the-pinned-tree-without-its-log', () => {
     it('reads the commit’s own bytes under a local replace ref, and the unwrap refuses a pack that did not', () => {
         const tar = readFileSync(join(road.artifact, ARTIFACT_TAR));
         assert.ok(!tar.includes(REPLACED), 'the replacement was archived');
-        const mutant = pack(road.work, { pin: road.out.commit, tree: road.out.tree, script: PACK_SCRIPT.replace('git --no-replace-objects -C looks archive', 'git -C looks archive') });
+        const mutant = pack(road.work, { pin: road.out.commit, tree: road.out.tree, script: asCanary(road.out.tree).replace('git --no-replace-objects -C looks archive', 'git -C looks archive') });
         assert.equal(mutant.status, 0, mutant.stderr);
         assert.ok(readFileSync(join(mutant.artifact, ARTIFACT_TAR)).includes(REPLACED), 'without the flag the replacement is not archived — the plant proves nothing');
         assert.throws(() => unwrapLooksArtifact({ artifact: mutant.artifact, dest: join(scratchDir('replaced'), 'looks'), root: road.work }), /hash to tree/);
@@ -1306,9 +1332,10 @@ describe('the-carried-repository-reads-no-global-or-system-git-setting', () => {
 });
 
 /*
- * (c′) made mechanical (the owner's call on the 8c2 critic's item 1): until
- * a look is sold, only the looks `PREVIEW_SLUGS` names travel — the pack's
- * slug gate and `pinLineFor` both read that list. This holds the list to
+ * The slug belt (the owner's call on the 8c2 critic's item 1, kept behind
+ * the gate the second critic's (a′) added, below): until a look is sold,
+ * only look directories `PREVIEW_SLUGS` names travel — the pack's slug gate
+ * and `pinLineFor` both read that list, by name. This holds the list to
  * its literal value, and goes red the day `RELEASED_LOOK_IDS` names an id,
  * read from the theme table by type stripping (`publicLookFacts`): a
  * release carries a private look, and the release commit must then decide
@@ -1330,5 +1357,254 @@ describe('a-preview-carries-only-the-preview-slugs-until-a-release', () => {
             "a release carries a private look: step 9 rewrites the preview road and this rule (PREVIEW_SLUGS, the pack's slug gate, pinLineFor)",
         );
         assert.throws(() => previewRoadProblem(undefined), /RELEASED_LOOK_IDS/);
+    });
+});
+
+/**
+ * `files` (`{ path: text | Buffer }`) hashed as git hashes a tree, by git
+ * itself: each blob with no filter (`hash-object -w --no-filters`), each
+ * directory a `mktree`, in a throwaway repository with no global or system
+ * config. Answers the root tree's id.
+ */
+function treeOfFiles(files) {
+    const dir = scratchDir('tree-of-files');
+    const env = gitEnv(dir);
+    const git = (args, input) => execFileSync('git', args, { cwd: dir, env, input, encoding: 'utf8' }).trim();
+    git(['init', '-q', '.']);
+    const treeUnder = (prefix) => {
+        const entries = new Map();
+        for (const [path, contents] of Object.entries(files)) {
+            if (!path.startsWith(prefix)) {
+                continue;
+            }
+            const rest = path.slice(prefix.length);
+            const slash = rest.indexOf('/');
+            if (slash < 0) {
+                entries.set(rest, `100644 blob ${git(['hash-object', '-w', '--no-filters', '--stdin'], contents)}\t${rest}\n`);
+            } else if (!entries.has(rest.slice(0, slash))) {
+                const name = rest.slice(0, slash);
+                entries.set(name, `040000 tree ${treeUnder(`${prefix}${name}/`)}\t${name}\n`);
+            }
+        }
+        return git(['mktree'], [...entries.values()].join(''));
+    };
+    return treeUnder('');
+}
+
+/*
+ * The gate's literal is public bytes (PLAN § Decided "Until a look is
+ * sold…": only a canary of public bytes travels, held by a hash; the owner
+ * chose the second 8c2 critic's option (a′)). `CANARY_TREE` is rebuilt here
+ * from this repository alone, read at the commit the canary was made from
+ * (`CANARY_MADE_FROM`): the tracked fixture renamed, the copyright line and
+ * the face's CSS, the tracked JetBrains Mono Latin subset with one byte
+ * changed, its tracked OFL licence and a `fonts.json` (`canaryFiles`,
+ * `scripts/private-looks-plant.mjs`, where the recipe's literals live) —
+ * hashed blob by blob with no filter and tree by tree by git itself, in a
+ * throwaway repository. The tracked pin is held to it. Read at that commit
+ * and never at HEAD, so a later edit of the fixture — the guards' subject,
+ * which changes with them — moves neither the canary nor this test (this
+ * test needs the full history the guards already require). **What moves
+ * it**: a change to the canary is a new canary commit in the private
+ * repository, a new `deploy/looks.commit`, a new `CANARY_TREE` and the
+ * recipe — all four in one public commit; step 9's release commit rewrites
+ * the gate with the road.
+ */
+describe('the-canary-is-public-bytes', () => {
+    it('is the literal, pinned by value, made from a full commit', () => {
+        assert.equal(CANARY_TREE, '1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13');
+        assert.equal(CANARY_MADE_FROM, '6ca82d513b2f364e63948e6d5002f3a8bc888399');
+    });
+
+    it('is rebuilt from this repository’s own bytes at the commit the canary was made from, as git hashes a tree', () => {
+        const files = canaryFiles();
+        assert.deepEqual(Object.keys(files).sort(), [
+            'canary/art/LICENSE-OFL-jetbrains-mono.txt',
+            'canary/art/ground.svg',
+            'canary/art/jetbrains-mono-latin.woff2',
+            'canary/art/under-name.svg',
+            'canary/fonts.json',
+            'canary/look.json',
+            'canary/sheet.css',
+            'index.json',
+        ]);
+        assert.equal(treeOfFiles(files), CANARY_TREE);
+    });
+
+    it('reads a commit this checkout holds, an ancestor of HEAD', () => {
+        const ancestor = spawnSync('git', ['--no-replace-objects', '-C', ROOT, 'merge-base', '--is-ancestor', CANARY_MADE_FROM, 'HEAD'], { encoding: 'utf8' });
+        assert.equal(ancestor.status, 0, `${CANARY_MADE_FROM} is not an ancestor of HEAD here: ${ancestor.stderr}`);
+    });
+
+    it('is the tree the tracked pin names', () => {
+        assert.equal(readLooksPin(ROOT).tree, CANARY_TREE);
+    });
+});
+
+/** `looks` cloned to `<scratch>/work/looks` as the job's checkout clones it: the job root, its head and its packed tree. */
+function cloneToWork(looks) {
+    const work = scratchDir('work');
+    execFileSync('git', ['clone', '-q', looks.dir, join(work, 'looks')], { env: looks.env, stdio: 'ignore' });
+    const head = looks.head();
+    return { looks, work, head, tree: packedTreeOf({ dir: looks.dir, commit: head, env: looks.env }) };
+}
+
+/** `looks` with `paths` (`{ path: text }`) written as given and committed with `git add -A` — on a case-insensitive disk, a path's case is the disk's. */
+function writeAndCommit(looks, paths, { append = [] } = {}) {
+    for (const [path, text] of Object.entries(paths)) {
+        mkdirSync(dirname(join(looks.dir, path)), { recursive: true });
+        writeFileSync(join(looks.dir, path), text, { flag: append.includes(path) ? 'a' : 'w' });
+    }
+    looks.git('add', '-A');
+    looks.git('commit', '-q', '-m', 'plant');
+    return looks;
+}
+
+/** Whether this disk folds case: a name written in one case is found in another. */
+function diskFoldsCase() {
+    const dir = scratchDir('case');
+    writeFileSync(join(dir, 'probe'), '');
+    return existsSync(join(dir, 'PROBE'));
+}
+
+/*
+ * The gate (the second 8c2 critic's items 1, 2 and 5): before a release the
+ * deploy road carries `CANARY_TREE` and no other tree. Each road the critic
+ * walked, and two of one byte, through the real `PACK_SCRIPT` — pinned at
+ * its own packed tree, as a hand-written pin would name it, refused by the
+ * first line, which names no path and no hash; pinned at the canary's
+ * tree, as a pin claiming the canary would, refused before anything is
+ * archived — and through `pinLineFor`, which refuses its tree. The slug
+ * belt alone (`asCanary`) packs every one of them — r9 on a disk that
+ * folds case — since it reads names only, and the build's file list admits
+ * each. The canary from public bytes packs, pins and unwraps.
+ */
+describe('the-preview-road-carries-only-the-canary-tree', () => {
+    after(removePlants);
+    const facts = publicLookFacts();
+    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: await facts });
+    const GATE = "the pin names another tree than the canary's (CANARY_TREE): until a release a preview carries that tree and no other\n";
+    const notTheCanary = new RegExp(`its packed tree [0-9a-f]{12} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's`);
+    const folds = diskFoldsCase();
+
+    it('packs, pins and unwraps the canary from public bytes, through the real pack', async () => {
+        const { looks, work, head, tree } = cloneToWork(plantCanary());
+        assert.equal(tree, CANARY_TREE);
+        const line = await lineOf(looks);
+        assert.equal(line, `${head} ${CANARY_TREE}\n`);
+        const step = pack(work, { pin: head, tree, script: PACK_SCRIPT });
+        assert.equal(step.status, 0, step.stderr);
+        const root = scratchDir('canary-root');
+        mkdirSync(join(root, 'deploy'));
+        writeFileSync(join(root, LOOKS_PIN_FILE), line);
+        const carried = unwrapLooksArtifact({ artifact: step.artifact, dest: join(scratchDir('canary-carried'), 'looks'), root });
+        assert.deepEqual({ tree: carried.tree, files: carried.files }, { tree: CANARY_TREE, files: 8 });
+    });
+
+    /** Each road: a planted commit, the words it must never print, and whether the slug belt alone packs it (reads names only). */
+    const ROADS = [
+        [
+            'r3: Ink wash’s bytes committed under canary/',
+            () =>
+                plantCanary(
+                    (path, contents) =>
+                        path === 'canary/sheet.css'
+                            ? '/* Ink wash: a draft that must not travel */\n.t-canary {\n    --look-sheet: t-canary;\n}\n'
+                            : path === 'canary/look.json'
+                              ? contents.replace('"Canary private look"', '"Ink wash"')
+                              : contents,
+                    { 'canary/art/ink-mask.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n' },
+                ),
+            ['Ink', 'ink-mask', 'draft'],
+            true,
+        ],
+        [
+            'r9: a "new" Canary/ written on this disk',
+            () =>
+                writeAndCommit(
+                    plantCanary(),
+                    { 'Canary/art/ink-mask.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n', 'Canary/sheet.css': '\n/* a draft rule that must not travel */\n.t-canary .stall-name { color: red; }\n' },
+                    { append: ['Canary/sheet.css'] },
+                ),
+            ['ink-mask', 'draft', 'Canary'],
+            folds,
+        ],
+        [
+            'item 2: one name twice in the root tree, made with mktree',
+            () => {
+                const looks = plantCanary();
+                const git = (args, input) => execFileSync('git', args, { cwd: looks.dir, env: looks.env, input, encoding: 'utf8' }).trim();
+                const draft = git(['hash-object', '-w', '--stdin'], '/* a draft sheet that must not travel */\n');
+                const second = git(['mktree'], `100644 blob ${draft}\tsheet.css\n`);
+                const root = git(['mktree'], `${git(['ls-tree', 'HEAD'])}\n040000 tree ${second}\tcanary\n`);
+                assert.equal(git(['ls-tree', root]).split('\n').filter((entry) => entry.endsWith('\tcanary')).length, 2, 'mktree took one name twice — the plant');
+                git(['update-ref', 'refs/heads/main', git(['commit-tree', root, '-p', 'HEAD', '-m', 'twice'])]);
+                return looks;
+            },
+            ['draft'],
+            true,
+        ],
+        [
+            'item 5: an index naming ink-wash beside the canary’s files',
+            () =>
+                plantCanary((path, contents) =>
+                    path === 'index.json'
+                        ? '{\n    "schema": 1,\n    "looks": [{ "id": 4, "slug": "ink-wash", "cls": "t-ink-wash", "stage": "preview", "paid": true, "budgetReason": "PRIVATE: a reason that must not travel" }]\n}\n'
+                        : contents,
+                ),
+            ['ink-wash', 'PRIVATE', 'reason'],
+            true,
+        ],
+        [
+            'a face one byte off: Stall’s own bytes at offset 115',
+            () =>
+                plantCanary((path, contents) => {
+                    if (path !== 'canary/art/jetbrains-mono-latin.woff2') {
+                        return contents;
+                    }
+                    const face = Buffer.from(contents);
+                    face[115] = 0x5b;
+                    return face;
+                }),
+            [],
+            true,
+        ],
+    ];
+
+    for (const [name, plant, words, beltPacks] of ROADS) {
+        it(`refuses ${name}: the real pack at its own tree and at the canary’s, and pinLineFor`, async () => {
+            const looks = plant();
+            if (name.startsWith('r9') && folds) {
+                const paths = looks.git('ls-tree', '-r', '--name-only', 'HEAD').split('\n');
+                assert.ok(paths.includes('canary/art/ink-mask.svg') && !paths.some((path) => path.startsWith('Canary/')), 'on this disk git recorded the Canary/ files under canary/ — the trap');
+            }
+            const { work, head, tree } = cloneToWork(looks);
+            assert.notEqual(tree, CANARY_TREE, `${name}: the plant is the canary`);
+            const own = pack(work, { pin: head, tree, script: PACK_SCRIPT });
+            assert.notEqual(own.status, 0, `${name}: packed at its own tree`);
+            assert.equal(own.stderr, GATE, name);
+            assert.equal(own.stdout, '');
+            const claimed = pack(work, { pin: head, tree: CANARY_TREE, script: PACK_SCRIPT });
+            assert.notEqual(claimed.status, 0, `${name}: packed under the canary's tree`);
+            for (const step of [own, claimed]) {
+                assert.ok(!existsSync(step.artifact), `${name}: an artifact directory was written`);
+                for (const word of words) {
+                    assert.ok(!step.stderr.includes(word), `${name}: printed ${word}`);
+                }
+            }
+            await assert.rejects(lineOf(looks), (error) => notTheCanary.test(error.message), `${name}: pinLineFor wrote a pin`);
+            const belt = pack(work, { pin: head, tree });
+            assert.equal(belt.status === 0, beltPacks, `${name}: the slug belt alone ${beltPacks ? 'refused' : 'packed'} it (${belt.stderr.trim()})`);
+        });
+    }
+
+    it('refuses a pin whose tree is one hex digit off the canary’s, at the canary’s own commit', async () => {
+        const { looks, work, head } = cloneToWork(plantCanary());
+        const off = `${CANARY_TREE.slice(0, -1)}${CANARY_TREE.endsWith('0') ? '1' : '0'}`;
+        const step = pack(work, { pin: head, tree: off, script: PACK_SCRIPT });
+        assert.notEqual(step.status, 0);
+        assert.equal(step.stderr, GATE);
+        assert.ok(!existsSync(step.artifact));
+        assert.equal(await lineOf(looks), `${head} ${CANARY_TREE}\n`, 'the window’s line names the canary’s tree, never the one off');
     });
 });

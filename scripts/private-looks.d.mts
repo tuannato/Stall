@@ -37,6 +37,8 @@ export declare const BUDGET_REASON_MAX: number;
 export declare const PRIVATE_SLUG: RegExp;
 export declare const PRIVATE_SLUG_MAX: number;
 export declare const PREVIEW_SLUGS: readonly string[];
+/** The canary's packed tree: the one tree the preview road carries before any release (40 lower-case hex). */
+export declare const CANARY_TREE: string;
 export declare function previewRoadProblem(released: readonly number[]): string | undefined;
 export declare const PRIVATE_LOOK_CLASS: RegExp;
 export declare const PRIVATE_LOOK_CLASS_MAX: number;

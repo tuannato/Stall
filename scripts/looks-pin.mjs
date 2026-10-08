@@ -36,8 +36,11 @@
  * the line for a commit, refused when the build's own read of that commit
  * — its files, its index against the public lists, its directories and
  * required files (`readPrivateLooksAt`, as `selectedIndex` reads it) —
- * refuses it, when it names no look, or when it names or holds a look
- * `PREVIEW_SLUGS` does not ((c′): until a release only the canary travels).
+ * refuses it, when it names no look, when its packed tree is not
+ * `CANARY_TREE` (the gate: until a release only the canary's tree travels,
+ * a public literal a public test rebuilds from this repository's bytes), or
+ * when it names or holds a look `PREVIEW_SLUGS` does not (a belt that reads
+ * names only).
  *
  * **The pinned pair is a sentence, not a refusal** (STEP-8C-PLAN v1 §3,
  * kept by v2): since 8a the private files are read from git at a commit and
@@ -68,6 +71,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFil
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+    CANARY_TREE,
     FULL_COMMIT,
     GIT_LOCATION_VARS,
     PREVIEW_SLUGS,
@@ -259,10 +263,15 @@ export function packedTreeOf({ dir, commit, prefix, git, env }) {
  * the public lists, every directory one the index names, every named look's
  * required files) and an index that names no look, which carries nothing:
  * a pin never names a commit the road would carry and the build refuse to
- * read. **And (c′), mechanically**: while `RELEASED_LOOK_IDS` is empty a
- * preview carries only the looks `PREVIEW_SLUGS` names, so a commit whose
- * index names another slug, or whose tree holds another look directory, is
- * refused too; and once a release names an id every pin is refused
+ * read. **And the preview road's gate**: while `RELEASED_LOOK_IDS` is
+ * empty a preview carries one tree, `CANARY_TREE`, so a commit whose packed
+ * tree is any other is refused — Ink wash's bytes under `canary/`, a
+ * `Canary/` folded into `canary/` on a case-insensitive disk, one name
+ * twice in a tree, an index naming another look beside the canary's files,
+ * a face one byte off (the second 8c2 critic's items 1, 2 and 5); behind
+ * it, the belt that reads names only — a commit whose index names a slug
+ * `PREVIEW_SLUGS` does not, or whose tree holds another look directory;
+ * and once a release names an id every pin is refused
  * (`previewRoadProblem`) until step 9 rewrites this rule. **Not read
  * here**, stated: a look's own files against their validators
  * (`look.json`, the sheet's lint, the SVG allow-list, its faces, its
@@ -287,13 +296,19 @@ export async function pinLineFor({ dir, commit, facts, git, env }) {
             problems.push(`the index names ${entry.slug}, which PREVIEW_SLUGS does not — until a release a preview carries only ${PREVIEW_SLUGS.join(', ')}`);
         }
     }
-    if (problems.length === 0 && index.looks.length === 0) {
+    if (index !== undefined && index.looks.length === 0) {
         problems.push('the index names no look: a pin names a commit that carries one');
     }
-    if (problems.length > 0) {
-        throw new Error(`private looks at ${at}: a pin names no commit the build would refuse:\n  - ${problems.join('\n  - ')}`);
+    const tree = packedTreeOf({ dir, commit: at, git, env });
+    if (tree !== CANARY_TREE) {
+        problems.push(
+            `its packed tree ${tree.slice(0, 12)} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's: until a release a preview carries that tree and no other (the-canary-is-public-bytes rebuilds it from this repository's own bytes)`,
+        );
     }
-    return `${at} ${packedTreeOf({ dir, commit: at, git, env })}\n`;
+    if (problems.length > 0) {
+        throw new Error(`private looks at ${at}: a pin names no commit the build would refuse, and before a release no tree but the canary's:\n  - ${problems.join('\n  - ')}`);
+    }
+    return `${at} ${tree}\n`;
 }
 
 /**
