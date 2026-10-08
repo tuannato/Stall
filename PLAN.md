@@ -175,7 +175,12 @@ working accept, and there is no accept.
   that reads no private file is the public build by construction, and an
   expired read token stops previews, never production. Before its release a
   private look is reviewed on the owner's machine only (shots, local runs);
-  only a canary of public bytes travels to previews. Pages' automatic
+  only a canary of public bytes travels to previews — held by a hash, not
+  by a name (owner, 2026-10-07 and 2026-10-08, on the 8c2 critics): until
+  step 9's release the deploy road packs one tree, the canary's, a public
+  literal that a public test rebuilds from this repository's own bytes, and
+  the pack and the pin refuse every other; step 9's release commit rewrites
+  that road. Pages' automatic
   production build goes off only after a dashboard rollback has been proved;
   after that each push is a production run waiting for the owner's Approve;
   the unattended screens' idle reload waits for step 9.
