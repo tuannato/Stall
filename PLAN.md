@@ -280,7 +280,15 @@ working accept, and there is no accept.
   never names the maker, so on a per-seller stall it can sell a competitor's
   tokens. With no action the buyer lands on the order book, where every offer
   is listed and a row can be picked. Verified in Cashtab's own source
-  (`DeepLinkBuy`, `OrderBook`).
+  (`DeepLinkBuy`, `OrderBook`). **Kept as it is (owner, 2026-10-08)**, after
+  a re-read of Cashtab at b558b928e: a BIP21 cannot take an Agora offer (the
+  take's covenant signature covers the whole transaction, so only the
+  buyer's wallet can build it at the moment of buying), and the Agora
+  deep-link standard still has no parameter naming a maker or an offer —
+  unknown parameters are ignored, so one added to `BUY` would fall back to
+  the cheapest offer of anyone on an older wallet. A one-press buy of this
+  seller's offer needs a new action upstream (one an older wallet refuses);
+  not proposed for now.
 - **Stall does not claim a purchase happened.** It cannot know. Cashtab
   closes its own tab after a successful buy; that is its behaviour, not a
   signal to us.
