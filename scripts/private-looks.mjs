@@ -181,9 +181,10 @@ export const PREVIEW_SLUGS = Object.freeze(['canary']);
  * canary's own bytes, and a tree holding one name twice is not this tree
  * (the second 8c2 critic's items 2 and 5). **What moves it**: a change to
  * the canary is a new canary commit in the private repository, a new pin,
- * a new value here and the recipe in that test, in one public commit; step
- * 9's release commit rewrites the gate with the road. Pinned by its literal
- * value in that test.
+ * a new value here and the recipe (`canaryFiles`,
+ * `scripts/private-looks-plant.mjs`), in one public commit; step 9's
+ * release commit rewrites the gate with the road. Pinned by its literal
+ * value in `the-canary-is-public-bytes`.
  */
 export const CANARY_TREE = '1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13';
 
@@ -199,7 +200,7 @@ export function previewRoadProblem(released) {
     }
     return released.length === 0
         ? undefined
-        : 'a release carries a private look: step 9 rewrites the preview road and this rule (PREVIEW_SLUGS, the pack\'s slug gate, pinLineFor)';
+        : 'a release carries a private look: step 9 rewrites the preview road and this rule (CANARY_TREE, the pack\'s gate line, PREVIEW_SLUGS, the pack\'s slug gate, pinLineFor)';
 }
 
 /** A look's scoping class, one token under `t-` (`dressLook` adds it with `classList.add`). */
@@ -659,14 +660,42 @@ export function gitTopOf({ dir, git = 'git', env = process.env }) {
 }
 
 /**
+ * Every path the tree of `commit` (or its `prefix` subtree) lists more than
+ * once, case folded, trees and files alike (`git ls-tree -r -t -z
+ * --full-tree`), sorted. Git writes no such tree, but `git mktree` takes
+ * one: two `canary` entries, the second holding a draft sheet, read as one
+ * look whose `canary/sheet.css` has two sources (the third 8c2 critic's
+ * item 3). A checkout cannot hold it, and a case-insensitive disk cannot
+ * hold two spellings of one path either.
+ */
+export function gitPathsListedTwice({ dir, commit, prefix, git, env }) {
+    const { tree } = treeOf(commit, prefix);
+    const out = gitRunner({ dir, git, env })(['ls-tree', '-r', '-t', '-z', '--full-tree', tree]);
+    const seen = new Map();
+    for (const entry of out.split('\0')) {
+        if (entry === '') {
+            continue;
+        }
+        const path = entry.slice(entry.indexOf('\t') + 1);
+        const key = path.toLowerCase();
+        seen.set(key, [...(seen.get(key) ?? []), path]);
+    }
+    return [...seen.values()].filter((paths) => paths.length > 1).map((paths) => paths[0]).sort();
+}
+
+/**
  * The private look repository at `dir`, at `commit` (or its `prefix`
  * subtree): its files and the problems `privateLooksProblems` finds with
- * `facts` and `fixture`. The index is read only when the tree holds one as a
- * plain file.
+ * `facts` and `fixture` — and, first, every path its tree lists twice
+ * (`gitPathsListedTwice`), which no file list can show. The index is read
+ * only when the tree holds one as a plain file.
  */
 export function readPrivateLooksAt({ dir, commit, prefix, facts, fixture = false, git, env }) {
     const files = gitFilesAt({ dir, commit, prefix, git, env });
+    const twice = gitPathsListedTwice({ dir, commit, prefix, git, env }).map(
+        (path) => `${JSON.stringify(path)}: listed twice in the tree (one name, two entries), which no checkout holds`,
+    );
     const index = files.find((file) => file.path === PRIVATE_INDEX && file.mode === PRIVATE_FILE_MODE);
     const indexText = index === undefined ? undefined : gitTextAt({ dir, commit, prefix, path: PRIVATE_INDEX, git, env });
-    return { files, indexText, problems: privateLooksProblems({ files, indexText, facts, fixture }) };
+    return { files, indexText, problems: [...twice, ...privateLooksProblems({ files, indexText, facts, fixture })] };
 }

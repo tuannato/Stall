@@ -192,6 +192,14 @@ function committed(files) {
  */
 export const CANARY_MADE_FROM = '6ca82d513b2f364e63948e6d5002f3a8bc888399';
 
+/**
+ * Where the fixture stood at `CANARY_MADE_FROM`, written here rather than
+ * read from HEAD's `FIXTURE_LOOKS_DIR`: the recipe reads one fixed commit,
+ * its paths included, so a later move of the fixture moves nothing here
+ * (the third 8c2 critic's item 5b).
+ */
+const CANARY_FIXTURE_DIR = 'layout/fixture-private-looks';
+
 /** The canary's sheet opens with the copyright line, as the canary carries it (PLAN § Decided, owner 2026-10-07). */
 const CANARY_COPYRIGHT_LINE = '/*! © 2026 tuannato (stall.cash) */\n';
 
@@ -233,7 +241,8 @@ const CANARY_FACE_BYTE = Object.freeze({ at: 115, from: 0x5b, to: 0x5f });
 
 /**
  * The canary's packed tree, as files (`{ path: text | Buffer }`): every
- * byte read from this repository at `at` (`CANARY_MADE_FROM`), git's own
+ * byte read from this repository at `at` (`CANARY_MADE_FROM`), by the paths
+ * that commit holds them at (`CANARY_FIXTURE_DIR`), git's own
  * bytes with replace objects off (`gitBlobAt`), the tracked fixture renamed
  * (`t-fixture-private` to `t-canary`, `att-fixture-` to `att-canary-`, its
  * labels' "Fixture " to "Canary ", the index's slug), the sheet opened by
@@ -248,7 +257,7 @@ export function canaryFiles({ at = CANARY_MADE_FROM } = {}) {
     const text = (path) => read(path).toString('utf8');
     const rename = (from) =>
         from.replaceAll('t-fixture-private', 't-canary').replaceAll('att-fixture-', 'att-canary-').replaceAll('"Fixture ', '"Canary ').replace('"slug": "fixture"', '"slug": "canary"');
-    const sheet = rename(text(`${FIXTURE_LOOKS_DIR}/fixture/sheet.css`));
+    const sheet = rename(text(`${CANARY_FIXTURE_DIR}/fixture/sheet.css`));
     if (sheet.split(CANARY_SHEET_NAMED).length !== 2) {
         throw new Error(`the fixture's sheet at ${at.slice(0, 12)} does not name itself once in the shape the canary recipe reads`);
     }
@@ -258,12 +267,12 @@ export function canaryFiles({ at = CANARY_MADE_FROM } = {}) {
     }
     face[CANARY_FACE_BYTE.at] = CANARY_FACE_BYTE.to;
     return {
-        'index.json': rename(text(`${FIXTURE_LOOKS_DIR}/index.json`)),
-        'canary/look.json': rename(text(`${FIXTURE_LOOKS_DIR}/fixture/look.json`)),
+        'index.json': rename(text(`${CANARY_FIXTURE_DIR}/index.json`)),
+        'canary/look.json': rename(text(`${CANARY_FIXTURE_DIR}/fixture/look.json`)),
         'canary/sheet.css': `${CANARY_COPYRIGHT_LINE}${sheet.replace(CANARY_SHEET_NAMED, `${CANARY_SHEET_NAMED}${CANARY_FACE_CSS}`)}`,
         'canary/fonts.json': CANARY_FONTS_JSON,
-        'canary/art/ground.svg': read(`${FIXTURE_LOOKS_DIR}/fixture/art/ground.svg`),
-        'canary/art/under-name.svg': read(`${FIXTURE_LOOKS_DIR}/fixture/art/under-name.svg`),
+        'canary/art/ground.svg': read(`${CANARY_FIXTURE_DIR}/fixture/art/ground.svg`),
+        'canary/art/under-name.svg': read(`${CANARY_FIXTURE_DIR}/fixture/art/under-name.svg`),
         'canary/art/jetbrains-mono-latin.woff2': face,
         'canary/art/LICENSE-OFL-jetbrains-mono.txt': read('src/ui/fonts/LICENSE-OFL-jetbrains-mono.txt'),
     };

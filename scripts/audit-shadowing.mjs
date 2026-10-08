@@ -38,8 +38,8 @@
  * `shadowingReport` is the pure half, held by
  * `the-audit-counts-a-private-look-as-a-look` (`scripts/served-sheets.test.mjs`).
  */
-import { basename, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename } from 'node:path';
+import { runAsScript } from './run-as-script.mjs';
 import { servedSheets } from './served-sheets.mjs';
 
 /**
@@ -262,7 +262,7 @@ export function formatReport(report) {
     return out;
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (runAsScript(import.meta.url)) {
     // What a build serves: the role table's sheets and the private looks the
     // environment selects — never the tracked fixture, which no build serves
     // unless a run selects it.

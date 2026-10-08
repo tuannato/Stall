@@ -69,7 +69,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { runAsScript } from './run-as-script.mjs';
 import {
     CANARY_TREE,
     FULL_COMMIT,
@@ -419,7 +419,7 @@ export function pinnedPair({ root, dir, commit, git, env }) {
     });
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (runAsScript(import.meta.url)) {
     const args = process.argv.slice(2);
     const write = args.includes('--write');
     const dirs = args.filter((arg) => arg !== '--write');

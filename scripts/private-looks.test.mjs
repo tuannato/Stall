@@ -15,6 +15,7 @@ import {
     PRIVATE_INDEX,
     budgetReasonProblem,
     gitFilesAt,
+    gitPathsListedTwice,
     gitTextAt,
     parsePrivateIndex,
     privateFileProblems,
@@ -440,6 +441,41 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
         assert.ok(problems.some((p) => p.startsWith('"fixture/script.mjs": not a file')));
         assert.ok(problems.some((p) => p.startsWith('"fixture/art/linked.svg": a symlink')));
         assert.ok(problems.some((p) => p.startsWith('"fixture/art/sub.svg": a gitlink')));
+    });
+
+    /*
+     * The third 8c2 critic's item 3: `git mktree` takes a tree that lists
+     * one name twice, and a file list read from it shows one look whose
+     * sheet has two sources — or, when the second entry holds a file the
+     * first does not, nothing amiss at all. The gate keeps such a tree off
+     * the deploy road before a release (the hash); the build's own reader
+     * refuses it too, so the gap does not come back when step 9 rewrites
+     * the gate. Case folded, as a case-insensitive disk folds it.
+     */
+    it('refuses a tree that lists one path twice, as git mktree writes one', () => {
+        const repo = plantPrivateRepo();
+        assert.deepEqual(gitPathsListedTwice({ dir: repo.dir, commit: repo.head(), env: repo.env }), []);
+        const twice = (name, entries) => {
+            const sub = execFileSync('git', ['mktree'], { cwd: repo.dir, env: repo.env, input: entries, encoding: 'utf8' }).trim();
+            const root = execFileSync('git', ['mktree'], { cwd: repo.dir, env: repo.env, input: `${repo.git('ls-tree', 'HEAD')}\n040000 tree ${sub}\t${name}\n`, encoding: 'utf8' }).trim();
+            return repo.git('commit-tree', root, '-p', 'HEAD', '-m', 'twice');
+        };
+        const blob = (text) => execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo.dir, env: repo.env, input: text, encoding: 'utf8' }).trim();
+        const read = (commit) => readPrivateLooksAt({ dir: repo.dir, commit, facts, fixture: true, env: repo.env });
+        // The critic's plant: a second `fixture` holding a draft sheet.
+        const draft = twice('fixture', `100644 blob ${blob('/* a draft sheet */\n')}\tsheet.css\n`);
+        assert.equal(gitFilesAt({ dir: repo.dir, commit: draft, env: repo.env }).filter((file) => file.path === 'fixture/sheet.css').length, 2, 'the plant: the file list shows one path twice');
+        assert.deepEqual(read(draft).problems, [
+            '"fixture": listed twice in the tree (one name, two entries), which no checkout holds',
+            '"fixture/sheet.css": listed twice in the tree (one name, two entries), which no checkout holds',
+        ]);
+        // A second `fixture` holding a file the first does not: the file list shows nothing twice.
+        const og = twice('fixture', `100644 blob ${blob('png\n')}\tog.png\n`);
+        assert.deepEqual(privateFileProblems(gitFilesAt({ dir: repo.dir, commit: og, env: repo.env })), [], 'the plant: the file list alone sees nothing');
+        assert.deepEqual(read(og).problems, ['"fixture": listed twice in the tree (one name, two entries), which no checkout holds']);
+        // Two spellings of one name, which a case-insensitive disk holds as one.
+        const folded = twice('Fixture', `100644 blob ${blob('{}\n')}\tlook.json\n`);
+        assert.ok(read(folded).problems.some((problem) => /^"[Ff]ixture": listed twice in the tree/.test(problem)), read(folded).problems.join('\n'));
     });
 
     it('reads no index that is not a plain file', () => {

@@ -37,6 +37,7 @@ import {
     publicLookFacts,
     readPrivateLooksAt,
 } from './private-looks.mjs';
+import { runAsScript } from './run-as-script.mjs';
 import { OWN_ART_NAME } from './workshop-css.mjs';
 
 /**
@@ -806,6 +807,7 @@ describe('the-unwrap-runs-before-anything-is-installed', () => {
             'scripts/looks-artifact.mjs',
             'scripts/looks-pin.mjs',
             'scripts/private-looks.mjs',
+            'scripts/run-as-script.mjs',
             'scripts/workshop-css.mjs',
             'src/domain/theme.ts',
         ]);
@@ -1354,7 +1356,7 @@ describe('a-preview-carries-only-the-preview-slugs-until-a-release', () => {
         assert.equal(why, undefined, why);
         assert.equal(
             previewRoadProblem([0x04]),
-            "a release carries a private look: step 9 rewrites the preview road and this rule (PREVIEW_SLUGS, the pack's slug gate, pinLineFor)",
+            "a release carries a private look: step 9 rewrites the preview road and this rule (CANARY_TREE, the pack's gate line, PREVIEW_SLUGS, the pack's slug gate, pinLineFor)",
         );
         assert.throws(() => previewRoadProblem(undefined), /RELEASED_LOOK_IDS/);
     });
@@ -1608,3 +1610,58 @@ describe('the-preview-road-carries-only-the-canary-tree', () => {
         assert.equal(await lineOf(looks), `${head} ${CANARY_TREE}\n`, 'the window’s line names the canary’s tree, never the one off');
     });
 });
+
+/*
+ * The third 8c2 critic's item 4: the four CLIs decided whether they were
+ * run by comparing `process.argv[1]`, as given, with their own real path,
+ * so a run through a linked directory — every path under `$TMPDIR` on this
+ * Mac — read as an import and exited 0 having done nothing. Each is run
+ * here through a link to `scripts/`, and must do what it does by its real
+ * path: three refuse a path that is not there, the audit prints its
+ * report. `runAsScript` compares real paths, and none of the four keeps the
+ * lexical comparison.
+ */
+describe('the-clis-run-through-a-linked-path', () => {
+    const CLIS = ['looks-pin.mjs', 'looks-artifact.mjs', 'check-dist-looks.mjs', 'audit-shadowing.mjs'];
+
+    it('answers a linked path as the run it is, where the old comparison answered an import', () => {
+        const dir = scratchDir('linked');
+        const linked = join(dir, 'scripts');
+        symlinkSync(join(ROOT, 'scripts'), linked);
+        const url = new URL('./looks-artifact.mjs', import.meta.url).href;
+        assert.notEqual(join(linked, 'looks-artifact.mjs'), fileURLToPath(url), 'the plant: the linked path is not the real one');
+        assert.equal(runAsScript(url, join(linked, 'looks-artifact.mjs')), true);
+        assert.equal(runAsScript(url, join(ROOT, 'scripts', 'looks-artifact.mjs')), true);
+        assert.equal(runAsScript(url, join(ROOT, 'scripts', 'looks-pin.mjs')), false);
+        assert.equal(runAsScript(url, join(dir, 'missing.mjs')), false);
+        assert.equal(runAsScript(url, undefined), false);
+        for (const cli of CLIS) {
+            const source = readFileSync(join(ROOT, 'scripts', cli), 'utf8');
+            assert.match(source, /^if \(runAsScript\(import\.meta\.url\)\) \{$/m, `${cli} decides it is run by runAsScript`);
+            assert.ok(!source.includes('process.argv[1]'), `${cli} compares process.argv[1] itself`);
+        }
+    });
+
+    it('runs each of the four through a link to scripts/, as by its real path', () => {
+        const dir = scratchDir('linked-run');
+        symlinkSync(join(ROOT, 'scripts'), join(dir, 'scripts'));
+        const env = { ...process.env };
+        for (const name of ['STALL_LOOKS_TARGET', 'STALL_LOOKS_DIR', 'STALL_LOOKS_COMMIT', 'STALL_LOOKS_REQUIRED']) {
+            delete env[name];
+        }
+        const missing = join(dir, 'missing');
+        const runs = [
+            ['looks-pin.mjs', [missing], 1, /^looks-pin: /],
+            ['looks-artifact.mjs', ['unwrap', missing, join(dir, 'dest')], 1, /^looks-artifact: the artifact is not a directory\n$/],
+            ['check-dist-looks.mjs', [missing], 1, /^check-dist-looks: /],
+            ['audit-shadowing.mjs', [], 0, /^$/],
+        ];
+        for (const [cli, args, status, stderr] of runs) {
+            const run = spawnSync(process.execPath, [join(dir, 'scripts', cli), ...args], { cwd: ROOT, env, encoding: 'utf8' });
+            assert.equal(run.status, status, `${cli} through a link: ${run.stderr}`);
+            assert.match(run.stderr, stderr, cli);
+            assert.ok(run.stdout.length + run.stderr.length > 0, `${cli} through a link did nothing`);
+        }
+    });
+});
+

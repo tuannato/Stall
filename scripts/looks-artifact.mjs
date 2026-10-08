@@ -108,7 +108,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { closeSync, fchmodSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { runAsScript } from './run-as-script.mjs';
 import { LOOKS_PIN_FILE, PACKED_TREE_SCRIPT, PIN_SCRIPT, pinProblem, readLooksPin } from './looks-pin.mjs';
 import {
     GIT_LOCATION_VARS,
@@ -688,7 +688,7 @@ export function unwrapLine({ commit, tree, carried, files }) {
     return `private looks: pinned commit ${commit.slice(0, 12)}, tree ${tree.slice(0, 12)} (its README and log left behind), carried as ${carried.slice(0, 12)}, ${files} files`;
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (runAsScript(import.meta.url)) {
     const [verb, artifact, dest, ...rest] = process.argv.slice(2);
     try {
         if (verb !== 'unwrap' || artifact === undefined || dest === undefined || rest.length > 0) {
