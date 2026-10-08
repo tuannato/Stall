@@ -1,83 +1,259 @@
-# The direct deploy road, preview only (step 7B-1). Pages' own Git build
-# still deploys `main` to production; this workflow never touches it. It
-# answers one question before anything depends on the answer: does
-# `wrangler pages deploy` land in the Git-connected project, serving the
-# same headers, redirects, 404 page and edge function the Git build serves?
+# The deploy road (step 8c3; STEP-8C-PLAN v2). Run by hand only, from
+# `main`, with one input, `target`: `preview` (the default) or
+# `production`. No `push` and never a `pull_request` trigger: a push would
+# deploy the commit that lands this file, and a pull request runs code that
+# is not this repository's.
 #
-# Run by hand only, from `main` (Actions → deploy → Run workflow): no `push`
-# and never a `pull_request` trigger. Two jobs, because a secret handed to
-# one step is not kept from code that ran earlier in the same job (an
-# install script, a build plugin, a test can write `$GITHUB_ENV` or
-# `$GITHUB_PATH`, or read the runner): `build` builds and tests with no
-# secret at all and hands `dist` on; `deploy` runs on a fresh machine,
-# installs with `--ignore-scripts`, runs no project code, and alone reads
-# the Cloudflare secrets, from the `cloudflare` Environment, which admits
-# `main` only. `scripts/deploy-workflow.test.mjs` holds these rules.
+# Six jobs, three Environments, and no job holds two kinds of key. A secret
+# handed to one step is not kept from code that ran earlier in the same job
+# (an install script, a pnpm hook, a build plugin or a test can write
+# `$GITHUB_ENV` or read the runner), so the jobs that run project code hold
+# no secret, and the jobs that hold one run no package script and no pnpm
+# hook: `looks` runs two shell scripts and two actions, and the deploy jobs
+# install with `--ignore-scripts --ignore-pnpmfile` and run wrangler alone.
+#
+# The `if:` lines are a belt, not the fence: a dispatch runs the dispatched
+# ref's own copy of this file, and GitHub compares strings ignoring case.
+# The fence is each Environment's branch rule (`main`, ref type Branch),
+# and an Environment answers any workflow file on `main`, so the test also
+# holds `.github/workflows/` to ci.yml and this file, and ci.yml to no key.
+#
+# preview, carrying the canary (PLAN.md, Decided: "Until a look is
+# sold..."):
+# - `public-checks`, no secret, no Environment: before any private byte is
+#   read, this commit's own tests prove that the canary's tree the pack
+#   admits (`CANARY_TREE`) is rebuilt from this repository's bytes, that
+#   this file runs the two shell scripts its test holds, and that both
+#   scripts do what their tests say on this runner (the third 8c2
+#   critic's item 1; the first's item 3).
+# - `looks`, the `looks` Environment, whose secrets are the private
+#   repository's name and read token and nothing else: reads the pin,
+#   checks out that one commit, packs its tree (refusing every tree but
+#   the canary's before anything is archived) and uploads it for a day.
+# - `build-preview`, no secret: unwraps that tree before anything is
+#   installed, then builds and tests with the selection on the job, so
+#   `pnpm build` and `pnpm test` read the same private look.
+# - `deploy-preview`, the `cloudflare` Environment: that `dist` to the
+#   `preview-direct` branch, never production.
+#
+# production, the public build (until step 9 a production build reads
+# nothing private, so an expired read token never stops it):
+# - `build-production`, no secret and no selection: ci.yml's build and
+#   tests, then `dist` uploaded for a day.
+# - `deploy-production`, the `production` Environment, the owner its
+#   required reviewer: that `dist` to the production branch, `main`.
+#
+# Every `if:` is written out whole and every action is pinned by commit
+# with its version beside it. `scripts/deploy-workflow.test.mjs` holds
+# every line of this file, comments included, to printable ASCII and a
+# closed subset of YAML (a YAML reader ends a comment at U+2028, U+2029 or
+# U+0085, so a comment holding one could hide a step), and every line that
+# is not a comment, a step's name or the input's description to its rules.
 name: deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: preview (the preview-direct branch, carrying the canary) or production (the public build, after the owner's review)
+        type: choice
+        options:
+          - preview
+          - production
+        default: preview
 
 permissions:
   contents: read
 
+# One queue for both targets: a run waiting for the owner's review holds it,
+# and a later dispatch of either target replaces any run waiting behind it.
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 jobs:
-  build:
-    if: github.ref == 'refs/heads/main'
+  public-checks:
+    if: github.ref == 'refs/heads/main' && inputs.target == 'preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The whole history: the canary's recipe reads its bytes at the
+      # commit the canary was made from (`CANARY_MADE_FROM`).
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          # ci.yml's reason: pnpm, which setup-node would ask for, is not
+          # installed here, and nothing here needs it.
+          package-manager-cache: false
+      # Node and git only, nothing installed: this file's own test, then
+      # the pin's and the pack's, which run PIN_SCRIPT and PACK_SCRIPT on
+      # this runner's bash, awk and git, and rebuild the canary's tree.
+      - run: node --experimental-strip-types --test scripts/deploy-workflow.test.mjs scripts/looks-pin.test.mjs scripts/looks-artifact.test.mjs
+
+  looks:
+    needs: public-checks
+    if: github.ref == 'refs/heads/main' && inputs.target == 'preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: looks
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # PIN_SCRIPT (scripts/looks-pin.mjs), verbatim: deploy/looks.commit,
+      # exactly `<commit> <tree>\n`, into this step's outputs.
+      - id: pin
+        name: Read the pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          pin=deploy/looks.commit
+          refuse() { echo "$pin is not one commit and its packed tree: two runs of 40 lower-case hex, one space, one newline, 82 bytes, a plain file" >&2; exit 1; }
+          [ ! -L "$pin" ] || refuse
+          [ "$(wc -c < "$pin")" -eq 82 ] || refuse
+          line="$(cat "$pin")"
+          shape='^[0123456789abcdef]{40} [0123456789abcdef]{40}$'
+          [[ "$line" =~ $shape ]] || refuse
+          commit="${line%% *}"
+          tree="${line##* }"
+          printf '%s %s\n' "$commit" "$tree" | cmp -s - "$pin" || refuse
+          printf 'commit=%s\ntree=%s\n' "$commit" "$tree" >> "$GITHUB_OUTPUT"
+      # One commit, no history, no credential left behind. The checkout
+      # prints the commit's subject: a private commit's subject is public
+      # text (STEP-8C-PLAN v2, V4).
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: ${{ secrets.LOOKS_REPO }}
+          ref: ${{ steps.pin.outputs.commit }}
+          path: looks
+          token: ${{ secrets.LOOKS_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+      # PACK_SCRIPT (scripts/looks-artifact.mjs), verbatim: the canary's
+      # tree or nothing, the allow-list, then the tree id archived into
+      # $RUNNER_TEMP/looks-artifact beside its stamp. A refusal prints a
+      # count, never a path.
+      - name: Pack the pinned tree
+        shell: bash
+        env:
+          PIN: ${{ steps.pin.outputs.commit }}
+          PINNED_TREE: ${{ steps.pin.outputs.tree }}
+        run: |
+          set -euo pipefail
+          [ "$PINNED_TREE" = "1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13" ] || { echo "the pin names another tree than the canary's (CANARY_TREE): until a release a preview carries that tree and no other" >&2; exit 1; }
+          [ "$(git --no-replace-objects -C looks rev-parse --verify HEAD)" = "$PIN" ] || { echo 'the private checkout is not at the pinned commit' >&2; exit 1; }
+          refused="$(git --no-replace-objects -C looks ls-tree -r -t --full-tree "$PIN" | awk -F '\t' 'NF != 2 { bad++; next }
+          {
+            n = split($2, p, "/")
+            s = p[1] == "canary"
+            if ($1 ~ /^040000 tree [0123456789abcdef]+$/) { tree[$2] = 1; next }
+            ok = 0
+            if ($1 ~ /^100644 blob [0123456789abcdef]+$/) {
+              if (n == 1) ok = $2 == "index.json" || $2 == "README.md" || $2 == "LOG.md"
+              else if (s && n == 2) ok = p[2] == "look.json" || p[2] == "sheet.css" || p[2] == "og.png" || p[2] == "fonts.json"
+              else if (s && n == 3 && p[2] == "art") {
+                m = split(p[3], q, /[.]/)
+                ok = m == 2 && q[1] ~ /^[abcdefghijklmnopqrstuvwxyz0123456789-]+$/ && length(q[1]) <= 64 && (q[2] == "svg" || q[2] == "woff2")
+                if (p[3] == "LICENSE-OFL.txt") ok = 1
+                if (m == 2 && q[2] == "txt" && q[1] ~ /^LICENSE-OFL-[abcdefghijklmnopqrstuvwxyz0123456789-]+$/ && length(q[1]) <= 76) ok = 1
+              }
+            }
+            if (!ok) { bad++; next }
+            if (n > 1) has[p[1]] = 1
+            if (n > 2) has[p[1] "/" p[2]] = 1
+          }
+          END {
+            for (d in tree) if (!(d in has)) bad++
+            print bad + 0
+          }')"
+          [ "$refused" = 0 ] || { echo "$refused entries of the pinned tree are not files this road carries (their names are not printed in a public log)" >&2; exit 1; }
+          tree="$(git --no-replace-objects -C looks ls-tree --full-tree "$PIN" | awk -F '\t' '$2 != "README.md" && $2 != "LOG.md"' | git -C looks mktree)"
+          [ "$tree" = "$PINNED_TREE" ] || { echo 'the pinned commit, without its README and log, is not the tree deploy/looks.commit pins' >&2; exit 1; }
+          out="$RUNNER_TEMP/looks-artifact"
+          mkdir "$out"
+          git --no-replace-objects -C looks archive --format=tar "$tree" > "$out/looks.tar"
+          printf '%s %s\n' "$PIN" "$tree" > "$out/pin"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: looks
+          path: ${{ runner.temp }}/looks-artifact
+          if-no-files-found: error
+          retention-days: 1
+
+  build-preview:
+    needs: looks
+    if: github.ref == 'refs/heads/main' && inputs.target == 'preview'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The selection, on the job: the build and `pnpm test` read the same
+    # private look, and under STALL_LOOKS_REQUIRED a build or a guard that
+    # reads none fails. No STALL_LOOKS_COMMIT: the carried repository holds
+    # one commit, and the build reads its HEAD.
+    env:
+      STALL_LOOKS_TARGET: preview
+      STALL_LOOKS_DIR: ${{ github.workspace }}/looks
+      STALL_LOOKS_REQUIRED: '1'
     steps:
-      # The whole history and origin/main, for ci.yml's reason: `pnpm test`
-      # holds src/looks empty in every unpushed commit. No credential is
-      # left in the checkout: nothing here pushes.
-      - uses: actions/checkout@v5
+      # ci.yml's reason for the history and origin/main: `pnpm test` holds
+      # src/looks empty in every unpushed commit.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
       - run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .nvmrc
-          # ci.yml's reason: pnpm arrives from corepack in the next step.
           package-manager-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: looks
+          path: ${{ runner.temp }}/looks-artifact
+      # Before anything is installed (Node built-ins and git): the stamp
+      # against deploy/looks.commit, the tar read and written by the
+      # script itself, the files hashed against the pinned tree, then a
+      # one-commit repository at ./looks for STALL_LOOKS_DIR.
+      - run: node scripts/looks-artifact.mjs unwrap "$RUNNER_TEMP/looks-artifact" looks
       - run: corepack enable && corepack prepare --activate
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-pnpmfile
       - run: pnpm build
       - run: pnpm test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dist
+          name: dist-preview
           path: dist
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
 
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main'
+  deploy-preview:
+    needs: build-preview
+    if: github.ref == 'refs/heads/main' && inputs.target == 'preview'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: cloudflare
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
       # functions/ imports packages from the root install; wrangler has its
-      # own package and lockfile. Neither install runs a package's scripts.
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # own package and lockfile. Neither install runs a package's scripts,
+      # and pnpm's loads no hook (.pnpmfile.cjs), which --ignore-scripts
+      # alone does not stop.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
       - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: dist
+          name: dist-preview
           path: dist
       # From the repository root, so wrangler compiles ./functions. The
       # first call fails when the project does not exist, so the deploy
@@ -90,3 +266,65 @@ jobs:
         run: |
           deploy/node_modules/.bin/wrangler pages deployment list --project-name stall > /dev/null
           deploy/node_modules/.bin/wrangler pages deploy dist --project-name stall --branch preview-direct --commit-hash "$GITHUB_SHA" --commit-dirty=false
+
+  # No `needs`, no selection, nothing downloaded: the public build by
+  # construction, until step 9's release rewrites this road
+  # (`the-production-build-carries-no-private-look-until-a-release`).
+  build-production:
+    if: github.ref == 'refs/heads/main' && inputs.target == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare --activate
+      - run: pnpm install --frozen-lockfile --ignore-pnpmfile
+      - run: pnpm build
+      - run: pnpm test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-production
+          path: dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Waits for the owner's review in the `production` Environment. Approve
+  # only a run whose commit is `main`'s head, within the day: its `dist`
+  # is kept one day, and re-running an old run rebuilds an old commit.
+  deploy-production:
+    needs: build-production
+    if: github.ref == 'refs/heads/main' && inputs.target == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare --activate
+      - run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+      - run: npm ci --prefix deploy --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist-production
+          path: dist
+      - name: Deploy dist to production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          deploy/node_modules/.bin/wrangler pages deployment list --project-name stall > /dev/null
+          deploy/node_modules/.bin/wrangler pages deploy dist --project-name stall --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=false

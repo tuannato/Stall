@@ -1,21 +1,34 @@
-# The gate AGENTS.md §4 kept asking a person to be: the runner's own exit
+# The gate AGENTS.md section 4 kept asking a person to be: the runner's own exit
 # code, on every push, with the summary in the log. `pnpm build` type-checks
-# before it bundles (vitest never does), so the deploy's own failure mode —
-# a bad cast that passed every test and broke the Pages build — is caught
+# before it bundles (vitest never does), so the deploy's own failure mode,
+# a bad cast that passed every test and broke the Pages build, is caught
 # here first. The layout probe is not in this job: it needs a Chrome and a
 # box whose speed is part of its 300 s ceiling (layout/PROBE-RULES.md
 # "Budget"), so it runs on demand below and never blocks a push.
 #
-# pnpm comes from corepack, pinned by `packageManager` in package.json — no
+# pnpm comes from corepack, pinned by `packageManager` in package.json: no
 # third-party action for it, and nothing pinned twice. The two GitHub actions
 # are the v5 lines, which target the Node 24 runtime the runners now force.
+#
+# This file holds no key: no Environment, no secret, a token that reads the
+# repository and nothing more, and no trigger but push, pull_request and
+# workflow_dispatch. Every Environment's branch rule answers any workflow
+# file on `main`, so scripts/deploy-workflow.test.mjs holds that, every
+# line here to printable ASCII and the same closed subset of YAML as
+# deploy.yml, and .github/workflows/ to this file and deploy.yml alone.
+# Every install skips pnpm's hook file (`--ignore-pnpmfile`), as the deploy
+# road's do.
 name: ci
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -38,14 +51,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           # setup-node v5 turns dependency caching on by default and
-          # detects pnpm from `packageManager` — then runs `pnpm store
+          # detects pnpm from `packageManager`, then runs `pnpm store
           # path` before pnpm exists on the runner ("Unable to locate
           # executable file: pnpm"). pnpm arrives from corepack in the
           # next step, so the cache is off; an install from the registry
           # costs a minute and pins nothing twice.
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-pnpmfile
       - run: pnpm build
       - run: pnpm test
 
@@ -69,14 +82,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           # setup-node v5 turns dependency caching on by default and
-          # detects pnpm from `packageManager` — then runs `pnpm store
+          # detects pnpm from `packageManager`, then runs `pnpm store
           # path` before pnpm exists on the runner ("Unable to locate
           # executable file: pnpm"). pnpm arrives from corepack in the
           # next step, so the cache is off; an install from the registry
           # costs a minute and pins nothing twice.
           package-manager-cache: false
       - run: corepack enable && corepack prepare --activate
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-pnpmfile
       # The probe holds a CJK sign line to a CJK face
       # (`a-cjk-name-is-set-in-a-cjk-face`). The app serves none, so the
       # runner must carry one, or every Linux run is red for its environment
