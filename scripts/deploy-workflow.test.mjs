@@ -703,7 +703,9 @@ const readTracked = (path) => readFileSync(join(ROOT, path), 'utf8');
 /** `read` with `over` (`{ path: text }`) standing in for those files. */
 const readWith = (over) => (path) => (Object.prototype.hasOwnProperty.call(over, path) ? over[path] : readTracked(path));
 const ROOT_PKG = readTracked('package.json');
-const withPackageManager = (value) => once(ROOT_PKG, `"packageManager": "${PNPM_PACKAGE_MANAGER}"`, `"packageManager": ${JSON.stringify(value)}`);
+/** The root's `packageManager` as tracked: the version and its pinned hash. */
+const PINNED_PNPM = `${PNPM_PACKAGE_MANAGER}+sha512.${PNPM_PACKAGE_MANAGER_SHA512}`;
+const withPackageManager = (value) => once(ROOT_PKG, `"packageManager": "${PINNED_PNPM}"`, `"packageManager": ${JSON.stringify(value)}`);
 const HASH = 'ab'.repeat(64);
 
 /** Each hook plant: what it is, the rule it must yield, the tracked paths, the files read in their place, the hash pinned. */
@@ -719,9 +721,10 @@ const HOOK_PLANTS = [
     ['another pnpm version', 'package-manager', TRACKED, { 'package.json': withPackageManager('pnpm@10.24.1') }],
     ['pnpm from a URL', 'package-manager', TRACKED, { 'package.json': withPackageManager('pnpm@https://example.invalid/pnpm.tgz') }],
     ['a hash that is not 128 hex', 'package-manager', TRACKED, { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.abc`) }],
-    ['no packageManager', 'package-manager', TRACKED, { 'package.json': once(ROOT_PKG, `  "packageManager": "${PNPM_PACKAGE_MANAGER}",\n`, '') }],
-    ['the hash left out once one is pinned', 'package-manager', TRACKED, {}, HASH],
-    ['another hash than the pinned one', 'package-manager', TRACKED, { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.${'cd'.repeat(64)}`) }, HASH],
+    ['no packageManager', 'package-manager', TRACKED, { 'package.json': once(ROOT_PKG, `  "packageManager": "${PINNED_PNPM}",\n`, '') }],
+    ['the hash left out once one is pinned', 'package-manager', TRACKED, { 'package.json': withPackageManager(PNPM_PACKAGE_MANAGER) }],
+    ['another hash than the pinned one', 'package-manager', TRACKED, { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.${'cd'.repeat(64)}`) }],
+    ['the pinned hash in capitals', 'package-manager', TRACKED, { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.${PNPM_PACKAGE_MANAGER_SHA512.toUpperCase()}`) }],
     ['no package.json tracked at the root', 'package-manager', TRACKED.filter((path) => path !== 'package.json'), {}],
     ['a packageManager in deploy/package.json', 'package-manager', TRACKED, { 'deploy/package.json': readTracked('deploy/package.json').replace('{', '{\n  "packageManager": "npm@10.0.0",') }],
 ];
@@ -733,22 +736,27 @@ const HOOK_PLANTS = [
  * with it), and corepack runs `packageManager` as pnpm before any install.
  * So every install in both workflow files carries `--ignore-pnpmfile`
  * (rules `installs` and `ci-installs`), and the tracked tree holds no hook,
- * names none, and pins pnpm: `pnpm@10.24.0`, with its `+sha512.` hash
- * accepted beside it and, once `PNPM_PACKAGE_MANAGER_SHA512` is set after
- * the owner's yes for one registry lookup, required.
+ * names none, and pins pnpm: `pnpm@10.24.0` with its `+sha512.` hash,
+ * required since `PNPM_PACKAGE_MANAGER_SHA512` was set (2026-10-09, the
+ * owner's yes for one registry lookup: npm's `dist.integrity` for the
+ * tarball, read as hex). corepack refuses a tarball that does not match it.
  */
 describe('no-install-loads-a-pnpm-hook', () => {
     it('reads the tracked tree as loading no hook, and pins pnpm by value', () => {
         assert.deepEqual(pnpmHookProblems({ paths: TRACKED, read: readTracked }), []);
         assert.equal(PNPM_PACKAGE_MANAGER, 'pnpm@10.24.0');
-        assert.equal(PNPM_PACKAGE_MANAGER_SHA512, undefined, 'the hash waits for one registry lookup and the owner’s yes');
-        assert.equal(JSON.parse(ROOT_PKG).packageManager, PNPM_PACKAGE_MANAGER);
+        assert.equal(
+            PNPM_PACKAGE_MANAGER_SHA512,
+            '01ff8ae71b4419903b65c60fb2dc9d34cf8bb6e06d03bde112ef38f7a34d6904c424ba66bea5cdcf12890230bf39f9580473140ed9c946fef328b6e5238a345a',
+            'the sha512 npm states for pnpm 10.24.0, read 2026-10-09',
+        );
+        assert.equal(JSON.parse(ROOT_PKG).packageManager, PINNED_PNPM);
     });
 
-    it('accepts a +sha512 hash beside the version while none is pinned, and the pinned one once it is', () => {
+    it('holds packageManager to whichever hash it is handed', () => {
         const hashed = { 'package.json': withPackageManager(`${PNPM_PACKAGE_MANAGER}+sha512.${HASH}`) };
-        assert.deepEqual(pnpmHookProblems({ paths: TRACKED, read: readWith(hashed) }), []);
         assert.deepEqual(pnpmHookProblems({ paths: TRACKED, read: readWith(hashed), sha512: HASH }), []);
+        assert.ok(pnpmHookProblems({ paths: TRACKED, read: readWith(hashed) }).some((problem) => problem.rule === 'package-manager'));
     });
 
     it('carries --ignore-pnpmfile on every pnpm install of both workflow files', () => {

@@ -1019,13 +1019,15 @@ export const PNPM_PACKAGE_MANAGER = 'pnpm@10.24.0';
 
 /**
  * The sha512 of `PNPM_PACKAGE_MANAGER`'s tarball, as corepack writes it
- * after `+sha512.` (128 lower-case hex), or undefined. Undefined today: the
- * hash needs one registry lookup, which waits for the owner's yes. While it
- * is undefined `packageManager` is the version alone or the version with any
- * such hash (corepack refuses a hash that does not match what it fetched);
- * once it is set, the hash is required and must be this one.
+ * after `+sha512.` (128 lower-case hex), or undefined. Set 2026-10-09 on the
+ * owner's yes: the npm registry's `dist.integrity` for pnpm 10.24.0
+ * (`sha512-Af+K5xtEGZA7…`, base64) read as hex — the digest of the tarball
+ * corepack fetches, so corepack refuses any other bytes. While it is set the
+ * hash is required in `packageManager` and must be this one; undefined, the
+ * version alone or with any such hash would pass.
  */
-export const PNPM_PACKAGE_MANAGER_SHA512 = undefined;
+export const PNPM_PACKAGE_MANAGER_SHA512 =
+    '01ff8ae71b4419903b65c60fb2dc9d34cf8bb6e06d03bde112ef38f7a34d6904c424ba66bea5cdcf12890230bf39f9580473140ed9c946fef328b6e5238a345a';
 
 /** Every rule `pnpmHookProblems` reads; the test plants each. */
 export const HOOK_RULES = Object.freeze(['hook-file', 'hook-settings', 'package-manager']);
