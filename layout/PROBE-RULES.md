@@ -4161,22 +4161,31 @@ both). Those are held statically now, beside this rule:
   characters (controls, format characters such as the picker's isolates)
   left out — held to the WOFF2 `cmap` (`woff2CodePoints`,
   `scripts/look-faces.mjs`) of the face whose `unicode-range` covers it, on
-  each of Inter, Stall Serif, Stall Serif italic and JetBrains Mono. What no
-  served face draws today is pinned, each with where it prints: `≈` (the
-  unit rate under a listing and the pay sheets' rate row,
-  `[data-role="rate"]`, a money node), `→` (`DESC_SUB`, the first-stall
-  checklist's "Share your link" step, `OBS_RECIPE_SOURCE`), `◆` (the
-  ticker's separator, `GENERATED_TEXT`), and `元 ₹ ₪ ₩ ₦ ₱ ₺ р` (a quote's
-  `seller-price`, a money node, in CNY, INR, ILS, KRW, NGN, PHP, TRY, RUB).
-  Each is drawn by a font of the reader's machine, so differently per OS,
-  and the probe measures this Mac's. Whether to re-subset the faces for
-  them is the owner's call; the list is the statement until then. A second
+  each of Inter, Stall Serif, Stall Serif italic and JetBrains Mono. The
+  owner decided the faces draw them (PLAN § Decided, 2026-10-06), and
+  `scripts/subset-faces.py` cut the four Latin subsets again from their
+  upstream fonts with every one each font draws: `≈` (the unit rate and the
+  pay sheets' rate row, `[data-role="rate"]`, a money node) and `р` (RUB)
+  are drawn by all four now. What is pinned is what an upstream font
+  lacks, each with where it prints and the faces that lack it: `→`
+  (`DESC_SUB`, the first-stall checklist's "Share your link" step,
+  `OBS_RECIPE_SOURCE`) and `◆` (the ticker's separator, `GENERATED_TEXT`)
+  in Stall Serif; `₹ ₪ ₩ ₦ ₱` (a quote's `seller-price`, a money node, in
+  INR, ILS, KRW, NGN, PHP) in Stall Serif and JetBrains Mono; `₺` (TRY) in
+  JetBrains Mono; `元` (CNY) in all four. Wherever such a face is the face,
+  the glyph is drawn by a font of the reader's machine, so differently per
+  OS, and the probe measures this Mac's. A second
   pinned list holds the code points a face's `unicode-range` names on its
   own that its file lacks — Fontsource's family ranges are wider than the
   subsets: `₫` in Stall Serif's two Vietnamese files, `↑ ↓` in its two
   Latin ones, U+2215 in Inter's Latin, U+0329 in all eight, U+FFFD in the
   four Latin files of Inter, Stall Serif and JetBrains Mono — none printed
-  by the app today (VND prints `đ`), which the test holds too.
+  by the app today (VND prints `đ`), which the test holds too. That list
+  reads only a code point a range names on its own, and `rangePairs`
+  merges neighbours into a span, so the glyphs `subset-faces.py` cuts in
+  are held one by one on every face (`names in a face's range only the
+  re-subset glyphs its own file holds`; red on U+20B9 planted beside
+  Stall Serif's U+20BA, which the list read as one span and passed).
 
 **The incident (8d1's critic, measured with an instrumented probe, never
 committed).** The geometry passes are one synchronous task — the module

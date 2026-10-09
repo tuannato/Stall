@@ -93,39 +93,49 @@ const EVERY_FACE = ['Inter', 'Stall Serif', 'Stall Serif italic', 'JetBrains Mon
 const quoteIn = (code) =>
     `the seller's own figure (\`seller-price\`, a money node) on every quote surface, for a quote in ${code} (\`FIAT_CURRENCIES\`' symbol, through \`QUOTE_UNITS\`)`;
 
+/** The code points `scripts/subset-faces.py` cuts into every Latin face whose upstream font draws them (its `WANTED`). */
+const RE_SUBSET = [...read('scripts/subset-faces.py').match(/^WANTED = \[([^\]]*)\]/m)[1].matchAll(/0x([0-9A-Fa-f]+)/g)].map((m) => Number.parseInt(m[1], 16));
+
+/** The face sets that lack a currency sign upstream: Lora (Stall Serif) and JetBrains Mono 2.211 draw none of ₦ ₩ ₪ ₱ ₹. */
+const NOT_SERIF_OR_MONO = ['Stall Serif', 'Stall Serif italic', 'JetBrains Mono'];
+const SERIF = ['Stall Serif', 'Stall Serif italic'];
+
 /**
- * **What the app prints today that no served face draws** — pinned, each
- * with where it prints. Every one is drawn by a font of the reader's
- * machine, so it differs per OS, and the probe measures this machine's. The
- * owner's call is whether to re-subset the faces for them (a product
- * change) or keep them stated here; until then a glyph leaves this list
- * only when a face gains it, and joins it only with a line saying where it
- * prints.
+ * **What the app prints that a served face does not draw** — pinned, each
+ * with where it prints and the face sets that lack it (`faces`). Wherever
+ * one of those is the face, the glyph is drawn by a font of the reader's
+ * machine, so it differs per OS, and the probe measures this machine's.
+ * The owner decided the faces draw what a page prints (2026-10-06, PLAN §
+ * Decided "Glyphs a page prints are drawn by Stall's own faces"), and
+ * `scripts/subset-faces.py` cut every Latin subset again from its upstream
+ * font with each of these that font draws — `≈` and `р` left this list
+ * then, drawn by all four. What is left is what the upstream font itself
+ * lacks: Lora has no `→ ◆` and no `₦ ₩ ₪ ₱ ₹`, JetBrains Mono none of the
+ * six signs, and no face a CJK ideograph (`元`; a CJK face is not shipped
+ * for one sign). A glyph leaves this list, or a face leaves its `faces`,
+ * only when a face gains it; a glyph joins it only with a line saying where
+ * it prints.
  */
 const PRINTED_NOT_HELD = [
     {
-        cp: 0x2248,
-        in: ['src/ui/copy.ts'],
-        where: 'the unit rate under a listing ("≈ 1,200 XEC/token", `tokenRate`) and the pay sheets\' rate row ("≈ at 1 XEC = $…", `payRateLine`): `[data-role="rate"]`, a money node',
-    },
-    {
         cp: 0x2192,
         in: ['src/ui/copy.ts', 'src/ui/obsGuide.ts'],
-        where: '`DESC_SUB` on the describe sheet, the first-stall checklist\'s "Share your link" step, and `OBS_RECIPE_SOURCE` on the stream sheet',
+        faces: SERIF,
+        where: '`DESC_SUB` on the describe sheet, the first-stall checklist\'s "Share your link" step, and `OBS_RECIPE_SOURCE` on the stream sheet: a Rural stall\'s copy, in Stall Serif',
     },
     {
         cp: 0x25c6,
         in: ['src/ui/broadcast.css', 'GENERATED_TEXT'],
-        where: "the ticker's separator between items, and any look's generated text (`GENERATED_TEXT`)",
+        faces: SERIF,
+        where: "the ticker's separator between items, and any look's generated text (`GENERATED_TEXT`): on Rural, in Stall Serif",
     },
-    { cp: 0x0440, in: ['src/domain/fiat.ts'], where: quoteIn('RUB ("р.")') },
-    { cp: 0x20a6, in: ['src/domain/fiat.ts'], where: quoteIn('NGN') },
-    { cp: 0x20a9, in: ['src/domain/fiat.ts'], where: quoteIn('KRW') },
-    { cp: 0x20aa, in: ['src/domain/fiat.ts'], where: quoteIn('ILS') },
-    { cp: 0x20b1, in: ['src/domain/fiat.ts'], where: quoteIn('PHP') },
-    { cp: 0x20b9, in: ['src/domain/fiat.ts'], where: quoteIn('INR') },
-    { cp: 0x20ba, in: ['src/domain/fiat.ts'], where: quoteIn('TRY') },
-    { cp: 0x5143, in: ['src/domain/fiat.ts'], where: quoteIn('CNY') },
+    { cp: 0x20a6, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('NGN') },
+    { cp: 0x20a9, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('KRW') },
+    { cp: 0x20aa, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('ILS') },
+    { cp: 0x20b1, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('PHP') },
+    { cp: 0x20b9, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('INR') },
+    { cp: 0x20ba, in: ['src/domain/fiat.ts'], faces: ['JetBrains Mono'], where: quoteIn('TRY') },
+    { cp: 0x5143, in: ['src/domain/fiat.ts'], faces: EVERY_FACE, where: quoteIn('CNY') },
 ];
 
 /**
@@ -206,7 +216,7 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
             for (const where of exception.in) {
                 assert.ok(printed.get(exception.cp)?.has(where), `${name} is no longer printed from ${where} — say where it prints now, or take it off`);
             }
-            assert.deepEqual(missing.get(exception.cp) ?? [], EVERY_FACE, `${name}: a face holds it now — take it off the list`);
+            assert.deepEqual(missing.get(exception.cp) ?? [], exception.faces, `${name}: the faces that lack it moved — a face holds it now, or lost it`);
         }
     });
 
@@ -217,6 +227,25 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
             const cp = Number.parseInt(line.split('U+')[1], 16);
             assert.ok(!printed.has(cp), `${line}: the app prints it now`);
         }
+    });
+
+    it("names in a face's range only the re-subset glyphs its own file holds", () => {
+        // `declaredNotHeld` counts only a code point a range names on its
+        // own, and `rangePairs` merges neighbours (U+20B9, U+20BA is one
+        // span), so the glyphs scripts/subset-faces.py cuts in (its `WANTED`)
+        // are held here one by one, on every face: a range naming one its file
+        // lacks would load the face for it and draw it from the machine's fonts.
+        assert.ok(RE_SUBSET.includes(0x2248) && RE_SUBSET.length >= 11, 'WANTED is read from scripts/subset-faces.py');
+        for (const exception of PRINTED_NOT_HELD) assert.ok(RE_SUBSET.includes(exception.cp), cpName(exception.cp));
+        const claimed = [];
+        for (const set of sets) {
+            for (const face of set.faces) {
+                for (const cp of RE_SUBSET) {
+                    if (face.ranges.some(([lo, hi]) => cp >= lo && cp <= hi) && !face.held.has(cp)) claimed.push(`${face.file} ${cpName(cp)}`);
+                }
+            }
+        }
+        assert.deepEqual(claimed, []);
     });
 
     it('goes red on a glyph printed in no face', () => {
