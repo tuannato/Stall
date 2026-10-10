@@ -26,9 +26,12 @@
  * **And the canary, from public bytes** (`canaryFiles`, `plantCanary`):
  * the recipe that rebuilds `CANARY_TREE` from this repository at the
  * commit the canary was made from (`CANARY_MADE_FROM`) — what
- * `the-canary-is-public-bytes` holds the literal to, and the one repository
- * the deploy road's gates admit, for the tests that need a canary that
- * packs. Node built-ins only; a `.d.mts` beside it.
+ * `the-canary-is-public-bytes` holds the literal to, and the one tree the
+ * deploy road's tree gates admit, for the tests that need a canary that
+ * packs. Its commit is the plant's own and never `CANARY_COMMIT` (a commit
+ * carries an author line and a date), so the pin step's commit gate refuses
+ * it unless a test hands its commit over (`canaryCommit`, or the gate's
+ * literal replaced). Node built-ins only; a `.d.mts` beside it.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';

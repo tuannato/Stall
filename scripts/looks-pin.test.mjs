@@ -85,16 +85,34 @@ const C = '0123456789abcdef0123456789abcdef01234567';
 const T = 'fedcba9876543210fedcba9876543210fedcba98';
 const GOOD = `${C} ${T}\n`;
 
+/** What the shape check prints when it refuses, last: `refuse()`'s sentence. */
+const REFUSED = `${LOOKS_PIN_FILE} is not one commit and its packed tree: two runs of 40 lower-case hex, one space, one newline, ${LOOKS_PIN_BYTES} bytes, a plain file\n`;
+
+/** What the commit gate prints when it refuses: no shape plant may print it. */
+const GATED = "the pin names another commit than the canary's (CANARY_COMMIT): until a release a preview fetches that commit and no other\n";
+
 /**
- * `PIN_SCRIPT` as it would be were `commit` the canary's: its one
- * `CANARY_COMMIT` literal replaced (the `asCanary` pattern of the pack's
- * tests). The shape tests below run it over pins naming `C`, so what they
- * prove is the shape and not the gate; the gate's own tests run
- * `PIN_SCRIPT` itself.
+ * `PIN_SCRIPT` without its commit gate (the step 8g-pre critic's item 2):
+ * the shape tests run it, so a plant whose commit half is malformed is
+ * refused by the shape or not at all — run whole, the gate refuses every
+ * commit but one, and a widened shape for the commit half passed every
+ * shape test unseen. The gate's own tests run `PIN_SCRIPT` itself.
  */
-function asCanaryCommit(commit, script = PIN_SCRIPT) {
-    assert.equal(script.split(CANARY_COMMIT).length, 2, 'the pin step names the canary commit once');
-    return script.replace(CANARY_COMMIT, commit);
+function withoutGate(script = PIN_SCRIPT) {
+    const lines = script.split('\n');
+    const kept = lines.filter((line) => !line.includes(CANARY_COMMIT));
+    assert.equal(kept.length, lines.length - 1, 'the pin step names the canary commit on one line');
+    return kept.join('\n');
+}
+
+/**
+ * A step's refusal is the shape's: its last line is `refuse()`'s sentence
+ * (bash may print its own words before it — a missing file, or bash 4.4's
+ * warning that command substitution dropped a NUL), and the gate's never.
+ */
+function refusedByShape(step, name) {
+    assert.ok(step.stderr.endsWith(REFUSED), `${name}: not refused by the shape check: ${JSON.stringify(step.stderr)}`);
+    assert.ok(!step.stderr.includes(GATED), `${name}: refused by the commit gate`);
 }
 
 /**
@@ -140,7 +158,7 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         const dir = pinIn(GOOD);
         assert.equal(pinProblem(Buffer.from(GOOD)), undefined);
         assert.deepEqual(readLooksPin(dir), { commit: C, tree: T });
-        const step = runStep(asCanaryCommit(C), dir);
+        const step = runStep(withoutGate(), dir);
         assert.equal(step.status, 0, step.stderr);
         assert.equal(step.output, `commit=${C}\ntree=${T}\n`);
     });
@@ -149,10 +167,15 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         for (const [name, text] of [...PLANTS, ['no pin at all', undefined]]) {
             const dir = pinIn(text);
             assert.throws(() => readLooksPin(dir), /deploy\/looks\.commit/, `readLooksPin admits ${name}`);
-            const step = runStep(asCanaryCommit(C), dir);
+            const step = runStep(withoutGate(), dir);
             assert.notEqual(step.status, 0, `the shell admits ${name}`);
             assert.equal(step.output, '', `the shell wrote an output over ${name}`);
             assert.doesNotMatch(step.stdout + step.stderr, /[0-9a-f]{40}/, `the shell printed a hash over ${name}`);
+            refusedByShape(step, name);
+            // The whole step refuses it at the shape too, before the gate is reached.
+            const whole = runStep(PIN_SCRIPT, dir);
+            assert.notEqual(whole.status, 0, `the whole step admits ${name}`);
+            refusedByShape(whole, `${name}, the whole step`);
         }
     });
 
@@ -169,8 +192,9 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         writeFileSync(join(dir, 'deploy', 'real'), GOOD);
         symlinkSync('real', join(dir, LOOKS_PIN_FILE));
         assert.throws(() => readLooksPin(dir), /not a plain file/);
-        const step = runStep(asCanaryCommit(C), dir);
+        const step = runStep(withoutGate(), dir);
         assert.notEqual(step.status, 0, 'the shell admits a link');
+        refusedByShape(step, 'a link');
         assert.equal(step.output, '');
         const tracked = execFileSync('git', ['ls-files', '-s', '--', LOOKS_PIN_FILE], { cwd: ROOT, encoding: 'utf8' });
         assert.match(tracked, /^100644 [0-9a-f]{40} 0\tdeploy\/looks\.commit\n$/, 'deploy/looks.commit is tracked as a plain, non-executable file');
@@ -179,7 +203,7 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
     it('stops on an unset $GITHUB_OUTPUT, writing nothing anywhere', () => {
         const dir = pinIn(GOOD);
         const file = join(scratchDir('unset'), 'step.sh');
-        writeFileSync(file, asCanaryCommit(C));
+        writeFileSync(file, withoutGate());
         const run = spawnSync('bash', [file], { cwd: dir, env: { PATH: process.env.PATH }, encoding: 'utf8' });
         assert.notEqual(run.status, 0, 'an unset $GITHUB_OUTPUT is not a file named ""');
     });
@@ -200,9 +224,9 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
             assert.ok(at >= 0, needle);
             return [...lines.slice(0, at), ...lines.slice(at + 1)].join('\n');
         };
-        const noShape = runStep(without('=~ $shape', asCanaryCommit(C.toUpperCase())), pinIn(`${C.toUpperCase()} ${T}\n`));
+        const noShape = runStep(without('=~ $shape', withoutGate()), pinIn(`${C.toUpperCase()} ${T}\n`));
         assert.equal(noShape.status, 0, 'without the shape check, upper case is refused anyway — the plant proves nothing');
-        const noCompare = runStep(without('cmp -s', asCanaryCommit(C)), pinIn(`${C} ${T}\0`));
+        const noCompare = runStep(without('cmp -s', withoutGate()), pinIn(`${C} ${T}\0`));
         assert.equal(noCompare.status, 0, 'without the whole-file compare, a NUL is refused anyway — the plant proves nothing');
         assert.equal(noCompare.output, `commit=${C}\ntree=${T}\n`);
     });
@@ -477,7 +501,10 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
  * commit got a pin to the empty tree); and, before a release, any commit
  * whose packed tree is not `CANARY_TREE` (the gate), behind it the slug
  * belt. The plants start from the canary from public bytes
- * (`plantCanary`), the one commit every check admits. A look's own
+ * (`plantCanary`): the one tree every check admits, under a commit of the
+ * plant's own, never `CANARY_COMMIT` — so each pin is asked with
+ * `canaryCommit` set to that commit, and the commit gate is
+ * `the-pin-step-fetches-only-the-canary-commit`'s. A look's own
  * validators are the build's and `pnpm test`'s, not this test's. `--write`
  * writes only once the line is computed: a refusal leaves the old pin,
  * byte for byte.

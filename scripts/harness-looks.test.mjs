@@ -67,8 +67,10 @@ describe('the-harness-reads-the-looks-a-selection-carries', () => {
  * over an unpinned commit measures exactly what it names. It names this
  * repository's HEAD tree, never its commit, so it stays true in the body of
  * the commit that bumps the pin. Over a private repository holding the
- * canary from public bytes (`plantCanary`: the one commit `pinLineFor`
- * writes a pin for before a release) and a public one planted beside it,
+ * canary from public bytes (`plantCanary`: the one tree `pinLineFor`
+ * writes a pin for before a release, under a commit of the plant's own,
+ * which the pin is asked with as `canaryCommit`) and a public one planted
+ * beside it,
  * both outside this checkout; a
  * production selection (a production build reads nothing private until step
  * 9) and the tracked fixture get no pair.
