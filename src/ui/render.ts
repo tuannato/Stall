@@ -21,6 +21,7 @@ import {
     quoteUnitExponent,
     satsForQuote,
     satsWithSurcharge,
+    withSymbol,
 } from '../domain/fiat';
 import { isPriceable, sectionsOf, type Category } from '../domain/category';
 import { ICON_HERO_SIZE, ICON_ROW_SIZE, iconUrl, type IconSize } from '../domain/icons';
@@ -3030,12 +3031,9 @@ export function quoteFigure(price: TokenPrice): string {
         return `${figure} ${copy.XEC}`;
     }
     const currency = fiatCurrency(price.code);
-    if (currency === undefined) {
-        return figure;
-    }
-    return currency.symbolAfter === undefined
-        ? `${currency.symbol}${figure}`
-        : `${figure}${currency.symbolAfter}${currency.symbol}`;
+    // The sign goes where `withSymbol` puts it, the composer the converted
+    // glance uses too, so the two can never place one sign two ways.
+    return currency === undefined ? figure : withSymbol(currency, figure);
 }
 
 /**

@@ -95,7 +95,7 @@ import {
     encodeRemovalHex,
 } from '../domain/description';
 import { OP_RETURN_BUDGET, encodeManifestHex } from '../domain/manifest';
-import { QUOTE_UNITS, scaleRate } from '../domain/fiat';
+import { FIAT_CURRENCIES, QUOTE_UNITS, scaleRate, withSymbol } from '../domain/fiat';
 import * as copy from './copy';
 import { SHIPPED_ATTACHMENTS, wornAttachments, type ShippedAttachment } from '../domain/attachments';
 import { LIST_IN_CASHTAB_LINK, PUBLISH_OPEN_CASHTAB, PUBLISH_OPEN_PAY, DESC_LEDE, DESC_TOO_LONG, DESC_REMOVE, DESC_REMOVE_PAY, descBytesLeft, summaryLine, SUMMARY_WORDS, SUMMARY_NOTHING, TOKEN_DESCRIPTION_LABEL, NFT_GROUPS_TRUNCATED, SECTION_UNSORTED_WHY, itemsForSale } from './copy';
@@ -9071,6 +9071,39 @@ function payView(over: Partial<StallView> = {}): StallView {
         ...over,
     });
 }
+
+describe('a-quote-figure-puts-a-trailing-sign-after-the-figure', () => {
+    /**
+     * `quoteFigure` prints the seller's figure on every quote surface — the
+     * row, the face, the pay sheet, Pay several, the tag, the stream card, the
+     * wall and the studio row — and it places the sign through `withSymbol`,
+     * the one composer the converted glance uses too. It was a second copy of
+     * that composer, and no test sent it down the trailing-sign branch: RUB's
+     * `100.00 ₽` (the critic's re-review, P3-6) was pinned nowhere a buyer
+     * reads it.
+     */
+    it('prints RUB, VND and NOK after the figure, and USD and XEC as before', () => {
+        expect(quoteFigure({ code: 'rub', exponent: 2, amount: 10_000n })).toBe('100.00 ₽');
+        expect(quoteFigure({ code: 'vnd', exponent: 0, amount: 25_000n })).toBe('25,000đ');
+        expect(quoteFigure({ code: 'nok', exponent: 2, amount: 4_950n })).toBe('49.50 kr');
+        expect(quoteFigure(QUOTE_USD)).toBe('$5.00');
+        expect(quoteFigure({ code: 'usd', exponent: 2, amount: 123_456_789n })).toBe('$1,234,567.89');
+        expect(quoteFigure({ code: 'xec', exponent: 2, amount: 500_000n })).toBe('5,000.00 XEC');
+    });
+
+    it('places every currency sign exactly as the glance does', () => {
+        for (const currency of FIAT_CURRENCIES) {
+            expect(quoteFigure({ code: currency.code, exponent: 2, amount: 123_456n }), currency.code).toBe(
+                withSymbol(currency, '1,234.56'),
+            );
+        }
+    });
+
+    it('paints a RUB quote on the row as 100.00 ₽', () => {
+        const { root } = paint(payView({ prices: new Map([[TOKEN_ID, { code: 'rub', exponent: 2, amount: 10_000n }]]) }));
+        expect(root.querySelector('[data-role="pay-row"] [data-role="seller-price"]')?.textContent).toBe('100.00 ₽');
+    });
+});
 
 describe('the-quotes-rail-paints-on-a-shop-and-on-an-empty-stall', () => {
     /**

@@ -275,14 +275,15 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * re-subset (+118: the four Latin `unicode-range`s of stall.css's
      * `@font-face` rules, which the entry CSS carries — the faces themselves
      * are on demand; +16: RUB's sign `₽` written after the figure, its
-     * `symbolAfter` in the entry chunk).
+     * `symbolAfter` in the entry chunk); 866,719 once `quoteFigure` took its
+     * sign from `withSymbol` (−67: the second copy of that composer gone).
      * **Kept at 895,000 when the ceilings were split by bucket**
      * (D-2026-10-06-07): this alarm is this bucket's alone again, and the
      * on-demand bucket has its own (`on-demand-weight-has-a-ceiling`). The
      * served sum that read this bucket a second time is retired. **The room
      * is two numbers** (the weight-buckets critic's item 2), and the second
-     * is the one that ships: 28,348 bytes on this public build, and 11,254
-     * on a deploy build carrying the tracked fixture (883,746, 2026-10-06 —
+     * is the one that ships: 28,281 bytes on this public build, and 11,187
+     * on a deploy build carrying the tracked fixture (883,813, 2026-10-10 —
      * the merged rows, the loader and the paid gate ride the entry, and a
      * real look's `look.json` costs more than the fixture's 1,173). Each run
      * prints both: this build's here, the deploy build's in

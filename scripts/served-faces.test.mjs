@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { themeVarValues } from './look-flash.mjs';
 import { declaredFaces, declaredStallFaces } from './probe-faces.mjs';
 import { guardSheets, privateRows } from './served-sheets.mjs';
@@ -13,6 +13,7 @@ import {
     declaredNotHeld,
     glyphsNotHeld,
     lettersOfAnotherScript,
+    MAX_RANGE_CODE_POINTS,
     literalsOf,
     printedCodePoints,
     servedFaceSets,
@@ -188,8 +189,12 @@ const DECLARED_NOT_HELD = [
 ];
 
 describe('every-glyph-the-app-prints-is-in-its-face', () => {
-    const printed = printedCodePoints(SERVED);
-    const sets = servedFaceSets();
+    let printed;
+    let sets;
+    before(() => {
+        printed = printedCodePoints(SERVED);
+        sets = servedFaceSets();
+    });
 
     it('reads the four face sets stall.css declares, from their own files', () => {
         assert.deepEqual(sets.map((set) => set.name), EVERY_FACE);
@@ -296,30 +301,52 @@ describe('a-face-range-never-takes-one-letter-of-another-script', () => {
     // The glyph re-subset first put `р` (U+0440, for RUB's "р.") in every
     // Latin range, so a seller's Cyrillic word drew its `р` in the shipped
     // face and every other letter in the machine's (the critic's P2-1,
-    // 2026-10-09). RUB prints ₽ now; this holds every range to letters of its
-    // subset's own script, Common or Inherited. Computed inside each `it`,
-    // never in the `describe` body, whose throw `node --test` reports and
-    // still exits 0.
+    // 2026-10-09). RUB prints ₽ now; this holds every range to letters whose
+    // Script_Extensions hold its subset's script, or are Common or Inherited
+    // (the re-review's P3-7: `Script` alone passed `ー`, Common by script and
+    // Japanese by use). Everything is computed inside an `it`: a describe
+    // body only registers.
     it("names in every face's unicode-range only letters of its subset's script, Common or Inherited", () => {
         const sets = servedFaceSets();
-        const { count, letters } = lettersOfAnotherScript(sets);
-        assert.deepEqual(letters.map(({ file, cp }) => `${file} ${cpName(cp)}`), []);
-        // Eight faces, and the Latin ones' first span alone is 256 code points.
-        assert.equal(sets.flatMap((set) => set.faces).length, 8);
+        const faces = sets.flatMap((set) => set.faces);
+        assert.equal(faces.length, 8);
+        // A face with no range is refused by name, before anything walks it (P3-8).
+        assert.deepEqual(
+            faces.filter((face) => face.declared.trim() === '').map((face) => face.file),
+            [],
+            'a served face declares no unicode-range: it would be asked for every character, every script included',
+        );
+        for (const face of faces) assert.equal(subsetScript(face.file), 'Latin', face.file);
+        const { count, letters, unbounded } = lettersOfAnotherScript(sets);
+        assert.deepEqual(unbounded, [], `a range wider than ${MAX_RANGE_CODE_POINTS} code points is not walked`);
+        assert.equal(
+            letters.length,
+            0,
+            `${letters.length} letters of another script; the first 20: ${letters.slice(0, 20).map(({ file, cp }) => `${file} ${cpName(cp)}`).join('; ')}`,
+        );
         assert.ok(count > 8 * 100, `${count} code points read`);
-        for (const face of sets.flatMap((set) => set.faces)) assert.equal(subsetScript(face.file), 'Latin', face.file);
     });
 
-    it('allows a Common letter and a Latin one, and refuses a Cyrillic, a Greek and a Han letter', () => {
-        // µ (U+00B5) is a letter of no script (Common) and ª (U+00AA) Latin; both sit in U+0000-00FF.
+    it('allows a Common letter and a Latin one, and refuses a letter another script owns, by script or by use', () => {
+        // µ (U+00B5) has scx Common and ª (U+00AA) Latin; both sit in U+0000-00FF.
         const inter = servedFaceSets().find((set) => set.name === 'Inter').faces.find((face) => face.file.endsWith('inter-latin.woff2'));
         assert.ok(inter.ranges.some(([lo, hi]) => lo <= 0xb5 && 0xb5 <= hi && lo <= 0xaa && 0xaa <= hi));
         const plant = (cps) => [{ name: 'Inter', faces: [{ file: inter.file, ranges: [...inter.ranges, ...cps.map((cp) => [cp, cp])] }] }];
-        assert.deepEqual(lettersOfAnotherScript(plant([0x20bd])).letters, []);
-        assert.deepEqual(
-            lettersOfAnotherScript(plant([0x0440, 0x03bc, 0x5143])).letters.map(({ cp }) => cp),
-            [0x0440, 0x03bc, 0x5143],
-        );
+        // ₽ is a sign; ʼ (U+02BC) is Script=Common with scx holding Latin.
+        assert.deepEqual(lettersOfAnotherScript(plant([0x20bd, 0x02bc])).letters, []);
+        // р Cyrillic, μ Greek, 元 Han by script; ー (U+30FC) and ｰ (U+FF70)
+        // Hiragana and Katakana, and ـ (U+0640) Arabic, by Script_Extensions
+        // alone — each is Script=Common, which `Script` would have passed.
+        const refused = [0x0440, 0x03bc, 0x5143, 0x30fc, 0xff70, 0x0640];
+        assert.deepEqual(lettersOfAnotherScript(plant(refused)).letters.map(({ cp }) => cp), refused);
+    });
+
+    it('refuses a face with no range by name and without walking it', () => {
+        const planted = [{ name: 'JetBrains Mono', faces: [{ file: 'src/ui/fonts/jetbrains-mono-latin.woff2', ranges: [[0, 0x10ffff]] }] }];
+        const { count, letters, unbounded } = lettersOfAnotherScript(planted);
+        assert.deepEqual(unbounded, [{ file: 'src/ui/fonts/jetbrains-mono-latin.woff2', size: 0x110000 }]);
+        assert.equal(count, 0);
+        assert.equal(letters.length, 0);
     });
 
     it('knows the script of every subset it is handed, or refuses it', () => {

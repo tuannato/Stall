@@ -345,8 +345,16 @@ export function formatFiat(
     return withSymbol(currency, groupSubUnits(subUnits, digits));
 }
 
-/** The `< ` marker stays at the front either way: it qualifies the figure. */
-function withSymbol(currency: FiatCurrency, figure: string): string {
+/**
+ * A figure with its currency's sign, where the language puts it
+ * (`symbolAfter`): `$5.00`, `100.00 ₽`, `9đ`. **The one composer that places
+ * a sign**: the converted glance (`formatFiat`) and the seller's quote as
+ * written (`quoteFigure` in `src/ui/render.ts`) both call it, so a sign
+ * cannot sit after the figure on one surface and before it on another
+ * (`a-quote-figure-puts-a-trailing-sign-after-the-figure`). `formatFiat`'s
+ * `< ` marker stays at the front either way: it qualifies the figure.
+ */
+export function withSymbol(currency: FiatCurrency, figure: string): string {
     return currency.symbolAfter === undefined
         ? `${currency.symbol}${figure}`
         : `${figure}${currency.symbolAfter}${currency.symbol}`;

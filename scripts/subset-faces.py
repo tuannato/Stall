@@ -58,13 +58,17 @@ from fontTools.varLib import instancer
 OUT = Path(__file__).resolve().parent.parent / 'src' / 'ui' / 'fonts'
 
 # ≈ → ◆ (the rate line, `DESC_SUB` and the checklist, the ticker's separator),
-# the quote units' signs ₹ ₪ ₩ ₦ ₱ ₺ ₽, and CNY's 元. Signs and symbols only,
-# never a letter of another script: a Latin subset's unicode-range that named
-# one Cyrillic letter would draw that letter, and only that letter, of every
-# Cyrillic word a seller writes in the shipped face and the rest in the
-# machine's (`a-face-range-never-takes-one-letter-of-another-script`). RUB
-# prints ₽ for that reason, not "р.". The served-faces test reads this list
-# back, so it stays one line of hex literals.
+# the quote units' signs ₹ ₪ ₩ ₦ ₱ ₺ ₽, and CNY's 元. What a Latin range may
+# name from here is signs and symbols, never a letter of another script: a
+# Latin subset's unicode-range that named one Cyrillic letter would draw that
+# letter, and only that letter, of every Cyrillic word a seller writes in the
+# shipped face and the rest in the machine's
+# (`a-face-range-never-takes-one-letter-of-another-script`). RUB prints ₽ for
+# that reason, not "р.". 元 is a Han letter and stays on this list because the
+# test's pinned list of printed glyphs names it and must find it here; no font
+# this script cuts draws it, so no Latin file or range takes it. The
+# served-faces test reads this list back, so it stays one line of hex
+# literals.
 WANTED = [0x2248, 0x2192, 0x25C6, 0x20B9, 0x20AA, 0x20A9, 0x20A6, 0x20B1, 0x20BA, 0x20BD, 0x5143]
 
 UPSTREAM = {
