@@ -31,5 +31,9 @@ export declare function plantCanary(
     add?: Readonly<Record<string, string | Buffer>>,
 ): PlantedLooks;
 export declare function beforeReduce(css: string, rule: string): string;
-export declare function syntheticWoff2(records: readonly { id: number; text: string }[]): Buffer;
+/** A WOFF2 with a `name` table of `records`, and with `codePoints` a `cmap` mapping exactly those. */
+export declare function syntheticWoff2(
+    records: readonly { id: number; text: string }[],
+    options?: { readonly codePoints?: readonly number[] },
+): Buffer;
 export declare function oflText(holder: string, reserved?: string): string;

@@ -48,7 +48,7 @@ export const NOT_PRINTED = Object.freeze(['src/domain/withheld-data.ts']);
 export const PRINTING_ROLES = Object.freeze(['base', 'look', 'screen', 'kit', 'private']);
 
 /** Characters that draw no glyph of their own: controls, format characters (the describe picker's directional isolates), line and paragraph separators. */
-const NO_GLYPH = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
+export const NO_GLYPH = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
 
 /** Every app TypeScript file under `dir`, as a repository path: tests, declarations and `NOT_PRINTED` aside. */
 export function appSourceFiles(dir = 'src') {

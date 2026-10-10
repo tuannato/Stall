@@ -324,11 +324,51 @@ function base128(value) {
 }
 
 /**
+ * A `cmap` table mapping `codePoints` to glyphs (one Windows Unicode
+ * full-repertoire subtable of format 12, glyph ids from 1): the coverage a
+ * face is read for (`woff2CodePoints`), and nothing a browser would draw a
+ * glyph from.
+ */
+function cmapTable(codePoints) {
+    const groups = [];
+    for (const cp of [...new Set(codePoints)].sort((a, b) => a - b)) {
+        const last = groups[groups.length - 1];
+        if (last !== undefined && cp === last.end + 1) {
+            last.end = cp;
+        } else {
+            groups.push({ start: cp, end: cp });
+        }
+    }
+    const subtable = Buffer.alloc(16 + groups.length * 12);
+    subtable.writeUInt16BE(12, 0);
+    subtable.writeUInt32BE(subtable.length, 4);
+    subtable.writeUInt32BE(groups.length, 12);
+    let glyph = 1;
+    groups.forEach((group, i) => {
+        const at = 16 + i * 12;
+        subtable.writeUInt32BE(group.start, at);
+        subtable.writeUInt32BE(group.end, at + 4);
+        subtable.writeUInt32BE(glyph, at + 8);
+        glyph += group.end - group.start + 1;
+    });
+    const head = Buffer.alloc(12);
+    head.writeUInt16BE(1, 2);
+    head.writeUInt16BE(3, 4);
+    head.writeUInt16BE(10, 6);
+    head.writeUInt32BE(head.length, 8);
+    return Buffer.concat([head, subtable]);
+}
+
+/**
  * A WOFF2 holding one table, `name`, with `records` (`{ id, text }`, each
  * a Windows-platform UTF-16BE string): enough for the face checks' reader,
- * nothing a browser would draw a glyph from. Deterministic.
+ * nothing a browser would draw a glyph from. With `codePoints` it holds a
+ * `cmap` table too, mapping exactly those (`woff2CodePoints` reads them
+ * back) — the coverage the range and stack guards read
+ * (`scripts/private-faces.mjs`). Deterministic; without `codePoints` the
+ * bytes are what they always were.
  */
-export function syntheticWoff2(records) {
+export function syntheticWoff2(records, { codePoints } = {}) {
     const strings = records.map((record) => Buffer.from(record.text, 'utf16le').swap16());
     const storage = 6 + records.length * 12;
     const table = Buffer.alloc(storage + strings.reduce((sum, s) => sum + s.length, 0));
@@ -347,15 +387,16 @@ export function syntheticWoff2(records) {
         strings[i].copy(table, storage + offset);
         offset += strings[i].length;
     });
-    const stream = brotliCompressSync(table);
-    // One directory entry: flags 5 is the known tag `name`, version 0 (untransformed).
-    const directory = Buffer.concat([Buffer.from([5]), base128(table.length)]);
+    // Directory entries: flags 0 is the known tag `cmap`, 5 `name`, both version 0 (untransformed).
+    const tables = [...(codePoints === undefined ? [] : [{ flags: 0, data: cmapTable(codePoints) }]), { flags: 5, data: table }];
+    const stream = brotliCompressSync(Buffer.concat(tables.map((t) => t.data)));
+    const directory = Buffer.concat(tables.flatMap((t) => [Buffer.from([t.flags]), base128(t.data.length)]));
     const head = Buffer.alloc(48);
     head.write('wOF2', 0, 'latin1');
     head.writeUInt32BE(0x00010000, 4);
     head.writeUInt32BE(48 + directory.length + stream.length, 8);
-    head.writeUInt16BE(1, 12);
-    head.writeUInt32BE(12 + 16 + table.length, 16);
+    head.writeUInt16BE(tables.length, 12);
+    head.writeUInt32BE(12 + 16 * tables.length + tables.reduce((sum, t) => sum + t.data.length, 0), 16);
     head.writeUInt32BE(stream.length, 20);
     head.writeUInt16BE(1, 24);
     return Buffer.concat([head, directory, stream]);

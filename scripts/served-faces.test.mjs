@@ -1,10 +1,13 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { before, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
+import ts from 'typescript';
 import { themeVarValues } from './look-flash.mjs';
 import { declaredFaces, declaredStallFaces } from './probe-faces.mjs';
-import { guardSheets, privateRows } from './served-sheets.mjs';
+import { PLANTED_CLASS, beforeReduce, plantCanary, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
+import { SELLER_WORDS_ONLY, generatedTextOn, ownFaceSet, privateFacesLine, rangeProblems, rootStackOf, sellerWordsOnly, servedFamilies, stackReport } from './private-faces.mjs';
+import { guardSheets, privateRows, servedSheets } from './served-sheets.mjs';
 import {
     ROOT,
     appSourceFiles,
@@ -354,5 +357,347 @@ describe('a-face-range-never-takes-one-letter-of-another-script', () => {
         assert.equal(subsetScript('src/ui/fonts/jetbrains-mono-latin.woff2'), 'Latin');
         assert.throws(() => subsetScript('src/ui/fonts/inter-cyrillic.woff2'), /SUBSET_SCRIPTS does not name/);
         assert.throws(() => subsetScript('src/ui/fonts/inter-constructor.woff2'), /SUBSET_SCRIPTS does not name/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// A private look's own faces (`scripts/private-faces.mjs`, the 8g-pre row of
+// the step-8 plan, "by recommendation"): the shipped faces' range and
+// stack checks, applied to every private look a run reads — the tracked
+// fixture always, the selection when one is named — and proved red over
+// repositories planted outside this checkout (`scripts/private-looks-plant.mjs`)
+// holding a synthetic face with a `cmap`. Everything computed is computed in
+// a `before()` hook, an `it` or at module top: a describe body only registers.
+// ---------------------------------------------------------------------------
+
+after(removePlants);
+
+/** The pinned list as the stack guard reads it: code point to the entry naming the face sets that lack it. */
+const PINNED = new Map(PRINTED_NOT_HELD.map((entry) => [entry.cp, entry]));
+const PRIVATE_ROWS = privateRows(SERVED);
+
+const ASCII = Array.from({ length: 0x7f - 0x20 }, (_, i) => 0x20 + i);
+const PLANT_FACE = 'plant-serif-latin.woff2';
+const PLANT_FAMILY = `${PLANTED_CLASS}-serif`;
+/** A synthetic face holding `codePoints`; its name table is a plant's own. */
+const faceBytes = (codePoints) => syntheticWoff2([{ id: 1, text: 'Plant Serif' }, { id: 0, text: 'Copyright 2024 The Plant Type Authors' }], { codePoints });
+/** An `@font-face` for `file` in `family`, with the extra descriptors given. */
+const faceRule = (file, family, extra = '') => `@font-face { font-family: ${family}; src: url(./art/${file}) format("woff2"); font-display: swap;${extra} }`;
+const withRange = (range) => (range === undefined ? '' : ` unicode-range: ${range};`);
+
+/** A planted private look (the fixture, renamed, with `rules` before its reduce block and `art` beside its own), read through the merged list. */
+async function plantedRow(rules, art) {
+    const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, rules) : text), art);
+    const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+    const row = rows.find((r) => r.lookClass === PLANTED_CLASS);
+    assert.ok(row !== undefined && rows.some((r) => r.look.source === 'fixture'), 'the planted look and the fixture are both read');
+    return row;
+}
+
+let canaryRead;
+/** The canary from public bytes (`plantCanary`: a JetBrains Mono face on its tagline), read once through the merged list. */
+function canaryRow() {
+    canaryRead ??= (async () => {
+        const repo = plantCanary();
+        const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+        const row = rows.find((r) => r.lookClass === 't-canary');
+        assert.ok(row !== undefined, 'the canary is read');
+        return row;
+    })();
+    return canaryRead;
+}
+
+const mem = (codePoints, name = 'mem.woff2') => ({ name, bytes: faceBytes(codePoints) });
+
+describe('a-private-face-claims-only-what-its-file-draws', () => {
+    let reads;
+    before(() => {
+        reads = PRIVATE_ROWS.map((row) => {
+            const read = ownFaceSet({ css: row.css, art: row.look.art });
+            return { cls: row.lookClass, source: row.look.source, read, count: read.faces.length };
+        });
+        process.stderr.write(privateFacesLine('private face range guard (a-private-face-claims-only-what-its-file-draws)', reads, 'face'));
+    });
+
+    it('reads every @font-face of every private look a run reads, the tracked fixture among them, and none claims a code point its file lacks', () => {
+        assert.ok(reads.some((r) => r.source === 'fixture'), 'the fixture is read');
+        for (const r of reads) assert.deepEqual(rangeProblems(r.read), [], r.cls);
+    });
+
+    it('passes the canary from public bytes, whose face states no range at all', async () => {
+        const row = await canaryRow();
+        const read = ownFaceSet({ css: row.css, art: row.look.art });
+        assert.equal(read.faces.length, 1);
+        assert.equal(read.faces[0].family, 't-canary-mono');
+        assert.equal(read.faces[0].declared, '');
+        assert.ok(read.faces[0].held.size > 100);
+        assert.deepEqual(rangeProblems(read), []);
+    });
+
+    it('goes red on a planted look whose range names ≈ on its own where its file has no glyph for it, and passes the same look without that token', async () => {
+        const art = { [`fixture/art/${PLANT_FACE}`]: faceBytes(ASCII) };
+        const red = await plantedRow(faceRule(PLANT_FACE, PLANT_FAMILY, withRange('U+20-7E, U+2248')), art);
+        const problems = rangeProblems(ownFaceSet({ css: red.css, art: red.look.art }));
+        assert.equal(problems.length, 1, problems.join('\n'));
+        assert.match(problems[0], /art\/plant-serif-latin\.woff2: unicode-range names U\+2248 ≈ on its own and the file holds no glyph for it/);
+        const green = await plantedRow(faceRule(PLANT_FACE, PLANT_FAMILY, withRange('U+20-7E')), art);
+        const read = ownFaceSet({ css: green.css, art: green.look.art });
+        assert.equal(read.faces.length, 1);
+        assert.deepEqual(rangeProblems(read), []);
+    });
+
+    it('reads each token of the range, so two neighbouring single code points are two claims, and counts a span or a wildcard for none', () => {
+        const art = [mem(ASCII)];
+        const css = (range) => faceRule('mem.woff2', 't-mem-serif', withRange(range));
+        const claimed = rangeProblems(ownFaceSet({ css: css('U+20-7E, U+2248, U+2249'), art })).join('\n');
+        assert.match(claimed, /U\+2248 ≈, U\+2249 ≉ on their own/);
+        // The shipped check merges neighbours, so it cannot see this pair as singles.
+        for (const range of ['U+0-FF', 'U+2??', 'U+20-7E', 'U+41', '']) assert.deepEqual(rangeProblems(ownFaceSet({ css: css(range), art })), [], range);
+        assert.match(rangeProblems(ownFaceSet({ css: css('U+20-7E, U+FEFF, U+263A'), art })).join('\n'), /U\+263A ☺ on its own/);
+        assert.doesNotMatch(rangeProblems(ownFaceSet({ css: css('U+FEFF, U+263A'), art })).join('\n'), /FEFF/, 'a character that draws no glyph is not a claim');
+    });
+
+    it('refuses what it cannot read: a face the art lacks, a file that is no WOFF2 or holds no cmap, a src outside art/, a range it cannot parse', () => {
+        const rule = (src, range = '') => `@font-face { font-family: t-mem-serif; src: url(${src}); font-display: swap;${range} }`;
+        const cases = [
+            [rule('./art/gone.woff2'), [mem(ASCII)], /art\/gone\.woff2 is not there/],
+            [rule('./art/mem.woff2'), [{ name: 'mem.woff2', bytes: Buffer.from('not a font at all, just some bytes ...........................') }], /its cmap cannot be read/],
+            [rule('./art/mem.woff2'), [{ name: 'mem.woff2', bytes: syntheticWoff2([{ id: 1, text: 'No cmap' }]) }], /its cmap cannot be read \(no cmap table\)/],
+            [rule('https://example.test/mem.woff2'), [mem(ASCII)], /is not a file in the look's art\//],
+            [rule('./art/mem.woff2', ' unicode-range: U+zz;'), [mem(ASCII)], /unicode-range "U\+zz" is not one this reader parses/],
+        ];
+        for (const [css, art, pattern] of cases) {
+            const problems = rangeProblems(ownFaceSet({ css, art }));
+            assert.ok(problems.some((p) => pattern.test(p)), `${pattern}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+});
+
+describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () => {
+    let printed;
+    let served;
+    before(() => {
+        printed = printedCodePoints(SERVED);
+        served = servedFamilies();
+    });
+
+    /** The report for a sheet whose face `t-mem-serif` holds `codePoints` (ASCII unless given) and whose rules are `rules`. */
+    const report = (rules, { codePoints = ASCII, rootStack, face = faceRule('mem.woff2', 't-mem-serif') } = {}) =>
+        stackReport({ path: 'mem.css', css: `${face}\n${rules}`, art: [mem(codePoints)], rootStack, printed, pinned: PINNED, served });
+    const SERIF = 't-mem-serif';
+    /** Every code point some walked reading of the report leaves to the machine. */
+    const gapCps = (result) => new Set(result.gaps.flatMap((gap) => gap.cps));
+
+    it('reads every private look a run reads, the tracked fixture among them, and each names a served face for what its faces lack', () => {
+        const reads = PRIVATE_ROWS.map((row) => {
+            const rootStack = rootStackOf(row.look.look, theme);
+            assert.ok(rootStack !== undefined, `${row.lookClass}: the theme's stack for its row is read`);
+            const result = stackReport({ path: row.path, css: row.css, art: row.look.art, rootStack, printed, pinned: PINNED, served });
+            assert.deepEqual(result.problems, [], row.lookClass);
+            const note = result.exempt > 0 ? `${result.exempt} on the tagline line, not walked` : undefined;
+            return { cls: row.lookClass, source: row.look.source, count: result.read, note };
+        });
+        assert.ok(reads.some((r) => r.source === 'fixture'), 'the fixture is read');
+        process.stderr.write(privateFacesLine('private stack guard (a-private-stack-falls-to-a-served-face-for-what-its-faces-lack)', reads, 'font stack'));
+    });
+
+    it('passes the canary from public bytes: its one stack is the tagline line\'s, which holds the seller\'s words, and walking it anyway is red', async () => {
+        const row = await canaryRow();
+        const result = stackReport({ path: row.path, css: row.css, art: row.look.art, rootStack: rootStackOf(row.look.look, theme), printed, pinned: PINNED, served });
+        assert.deepEqual(result.problems, []);
+        assert.equal(result.read, 1, 'the canary sets one stack');
+        assert.equal(result.exempt, 1, 'and it is the tagline line\'s');
+        assert.equal(result.walked, 0);
+        // The same sheet with that rule on another line: the face is a JetBrains Mono Latin subset with no served face after it.
+        const moved = stackReport({ path: row.path, css: row.css.replace('.t-canary .stall-tagline {', '.t-canary .stall-sub {'), art: row.look.art, rootStack: undefined, printed, pinned: PINNED, served });
+        assert.equal(moved.problems.length, 1, moved.problems.join('\n'));
+        assert.ok(gapCps(moved).has(0x2248), 'the rate line\'s ≈ is left to the machine');
+    });
+
+    it('goes red on a planted look whose stack names only its own face, which lacks ≈, and passes the same stack with \'Stall Serif\' after it', async () => {
+        const art = { [`fixture/art/${PLANT_FACE}`]: faceBytes(ASCII) };
+        const stackOf = (families) => `${faceRule(PLANT_FACE, PLANT_FAMILY)}\n.${PLANTED_CLASS} .stall-body { --s-font: ${families}; }`;
+        const bare = await plantedRow(stackOf(PLANT_FAMILY), art);
+        const red = stackReport({ path: bare.path, css: bare.css, art: bare.look.art, rootStack: rootStackOf(bare.look.look, theme), printed, pinned: PINNED, served });
+        assert.equal(red.problems.length, 1, red.problems.join('\n'));
+        assert.match(red.problems[0], /--s-font: t-planted-look-serif leaves .*\(src\/ui\/copy\.ts/);
+        assert.ok(gapCps(red).has(0x2248), 'the rate line\'s ≈ is left to the machine');
+        assert.deepEqual(printed.get(0x2248) !== undefined && [...printed.get(0x2248)].includes('src/ui/copy.ts'), true);
+        const served2 = await plantedRow(stackOf(`${PLANT_FAMILY}, 'Stall Serif', 'Iowan Old Style', serif`), art);
+        const green = stackReport({ path: served2.path, css: served2.css, art: served2.look.art, rootStack: rootStackOf(served2.look.look, theme), printed, pinned: PINNED, served });
+        assert.deepEqual(green.problems, []);
+        assert.ok(green.walked >= 1, 'a stack was walked');
+    });
+
+    it('walks a stack as a browser does: a family the machine supplies before a served face leaves the character to the machine', () => {
+        assert.deepEqual(report(`.x { font-family: ${SERIF}, 'Stall Serif', serif; }`).problems, []);
+        const system = report(`.x { font-family: ${SERIF}, Georgia, 'Stall Serif', serif; }`);
+        assert.equal(system.problems.length, 1, system.problems.join('\n'));
+        assert.ok(gapCps(system).has(0x2248));
+        for (const stack of [`${SERIF}, 'Stall Serif'`, `${SERIF}, Inter, sans-serif`, `${SERIF}, 'JetBrains Mono', monospace`]) {
+            assert.deepEqual(report(`.x { font-family: ${stack}; }`).problems, [], stack);
+        }
+    });
+
+    it('excuses a pinned glyph for a served family the stack names whose every face lacks it, and for no stack that names none', () => {
+        // → and ◆ are pinned for Stall Serif (upstream Lora draws neither): the shipped situation.
+        const named = report(`.x { font-family: ${SERIF}, 'Stall Serif', serif; }`);
+        assert.deepEqual(named.problems, []);
+        // The pins are the list's: with none, the same stack leaves them to the machine.
+        const unpinned = stackReport({ path: 'mem.css', css: `${faceRule('mem.woff2', 't-mem-serif')}\n.x { font-family: ${SERIF}, 'Stall Serif'; }`, art: [mem(ASCII)], printed, pinned: new Map(), served });
+        for (const cp of [0x2192, 0x25c6, 0x5143, 0x20a6]) assert.ok(gapCps(unpinned).has(cp), cpName(cp));
+        const none = gapCps(report(`.x { font-family: ${SERIF}, serif; }`));
+        for (const cp of [0x2192, 0x25c6, 0x5143, 0x20a6]) assert.ok(none.has(cp), cpName(cp));
+        assert.equal(named.walked, 1);
+        assert.ok(!gapCps(named).has(0x2192) && !gapCps(named).has(0x25c6) && !gapCps(named).has(0x5143));
+        // Inter draws → and ◆: with Inter named they are covered, not excused; 元 (pinned for every face) is excused by any served family.
+        assert.deepEqual(report(`.x { font-family: ${SERIF}, Inter; }`).problems, []);
+        // A pinned glyph that a face the look names draws is drawn: ₦ is pinned for Stall Serif and drawn by Inter.
+        assert.deepEqual(report(`.x { font-family: ${SERIF}, Inter, 'Stall Serif'; }`).problems, []);
+        // The pin is not a reason to leave an unpinned glyph: ≈ stays red with 'Georgia' standing in for a served face.
+        assert.ok(gapCps(report(`.x { font-family: ${SERIF}, Georgia; }`)).has(0x2248));
+    });
+
+    it('reads a face by its range and its cmap together, and a family by every one of its variants', () => {
+        // The range names ≈ and the file holds no glyph for it: the browser goes on to the next family.
+        const claims = faceRule('mem.woff2', 't-mem-serif', withRange('U+20-7E, U+2248'));
+        assert.ok(gapCps(report(`.x { font-family: ${SERIF}; }`, { face: claims })).has(0x2248));
+        assert.deepEqual(report(`.x { font-family: ${SERIF}, 'Stall Serif'; }`, { face: claims }).problems, []);
+        // The file holds ≈ and the range does not name it.
+        const outside = faceRule('mem.woff2', 't-mem-serif', withRange('U+20-7E'));
+        assert.ok(gapCps(report(`.x { font-family: ${SERIF}; }`, { face: outside, codePoints: [...ASCII, 0x2248] })).has(0x2248));
+        // Both: drawn by the look's own face, with no served face in the stack.
+        const both = faceRule('mem.woff2', 't-mem-serif', withRange('U+20-7E, U+2248'));
+        const own = report(`.x { font-family: ${SERIF}; }`, { face: both, codePoints: [...ASCII, 0x2248] });
+        assert.ok(own.gaps.length === 1 && !gapCps(own).has(0x2248), 'drawn by the look\'s own face');
+        // A family draws a character only if every variant of it does: the italic lacks ≈.
+        const italic = `${faceRule('mem.woff2', 't-mem-serif')}\n${faceRule('mem-italic.woff2', 't-mem-serif', ' font-style: italic;')}`;
+        const art = [mem([...ASCII, 0x2248]), mem(ASCII, 'mem-italic.woff2')];
+        const variants = stackReport({ path: 'mem.css', css: `${italic}\n.x { font-family: ${SERIF}; }`, art, printed, pinned: PINNED, served });
+        assert.ok(gapCps(variants).has(0x2248));
+    });
+
+    it('holds the theme\'s own three stacks to the rule, so the pinned list and the rule agree on what the shipped looks leave to the machine', () => {
+        assert.equal(theme.FONT_STACKS.length, 3);
+        for (const rootStack of theme.FONT_STACKS) {
+            const result = report('.x { font-family: var(--s-font); }', { rootStack });
+            assert.deepEqual(result.problems, [], rootStack);
+            assert.equal(result.walked, 1);
+        }
+    });
+
+    it('reads var(--s-font) as every value the sheet gives it and the theme\'s own, and refuses what it cannot resolve', () => {
+        const serif = theme.FONT_STACKS[2];
+        assert.deepEqual(report(`.x { font-family: ${SERIF}, var(--s-font); }`, { rootStack: serif }).problems, []);
+        const sys = report(`.x { font-family: ${SERIF}, var(--s-font); }`, { rootStack: 'Georgia, serif' });
+        assert.equal(sys.problems.length, 1, sys.problems.join('\n'));
+        assert.match(sys.problems[0], /\[read as t-mem-serif, Georgia, serif\]/);
+        // A restatement is one more reading: the root's value stays one, because the theme sets it inline and a sheet cannot override it on the same element.
+        const restated = (value) => `.b { --s-font: ${value}; }\n.c { font-family: ${SERIF}, var(--s-font); }`;
+        assert.deepEqual(report(restated("'Stall Serif'"), { rootStack: serif }).problems, []);
+        assert.match(report(restated('Georgia, serif'), { rootStack: serif }).problems.join('\n'), /\[read as t-mem-serif, Georgia, serif\]/);
+        // A fallback stands in for a --s-font… nothing sets; without one it is a refusal, as is a var the theme does not own.
+        assert.deepEqual(report(`.x { font-family: ${SERIF}, var(--s-font-body, 'Stall Serif'); }`).problems, []);
+        const refusals = [
+            [`.x { font-family: ${SERIF}, var(--s-font-body); }`, {}, /var\(--s-font-body\) is set by no rule of the sheet/],
+            [`.x { font-family: ${SERIF}, var(--other-font); }`, {}, /only the theme's --s-font… is resolved here/],
+            [`.x { --s-font: ${SERIF}, var(--s-font); }`, { rootStack: serif }, /--s-font refers to itself/],
+            [`.x { font-family: ${SERIF}, var(--s-font); }`, {}, /names no stack this reader can read/],
+            [`.a { --s-font-a: ${SERIF}, var(--s-font-b); } .b { --s-font-b: ${SERIF}, var(--s-font-a); } .x { font-family: var(--s-font-a); }`, {}, /refers to itself/],
+        ];
+        for (const [rules, options, pattern] of refusals) {
+            const problems = report(rules, options).problems;
+            assert.ok(problems.some((p) => pattern.test(p) && /cannot decide/.test(p)), `${pattern}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        // Too many readings is a refusal, not a long walk.
+        const many = Array.from({ length: 5 }, (_, i) => `.d${i} { --s-font-k: 'Stall Serif'; } .e${i} { --s-font-k: Inter; }`).join('\n');
+        assert.ok(report(`${many} .x { font-family: var(--s-font-k), var(--s-font-k), var(--s-font-k), var(--s-font-k), var(--s-font-k); }`).problems.some((p) => /more than 16 readings/.test(p)));
+    });
+
+    it('reads the family list of a font shorthand, and refuses one it cannot read', () => {
+        assert.deepEqual(report(`.x { font: 600 12px/1.2 ${SERIF}, 'Stall Serif', serif; }`).problems, []);
+        const bare = report(`.x { font: 12px ${SERIF}; }`);
+        assert.match(bare.problems.join('\n'), /font: 12px t-mem-serif/);
+        assert.ok(gapCps(bare).has(0x2248));
+        assert.match(report('.x { font: caption; }').problems.join('\n'), /a font shorthand whose family this reader cannot read/);
+        assert.deepEqual(report('.x { font: inherit; font-family: inherit; }').problems, []);
+    });
+
+    it('does not walk a rule whose every selector ends in the tagline line, and walks the pseudo-element, the name and a mixed list', () => {
+        const rule = (selector) => report(`${selector} { font-family: ${SERIF}; }`);
+        for (const selector of ['.t-mem .stall-tagline', '.stall-tagline', '.t-mem .stall-head > .stall-tagline', '.t-mem .stall-tagline[data-script="cjk"]']) {
+            const result = rule(selector);
+            assert.deepEqual(result.problems, [], selector);
+            assert.equal(result.exempt, 1, selector);
+        }
+        const nested = report(`@media (min-width: 680px) { .t-mem .stall-tagline { font-family: ${SERIF}; } }`);
+        assert.deepEqual([nested.problems, nested.exempt], [[], 1]);
+        for (const selector of [
+            '.t-mem .stall-tagline::before',
+            '.t-mem .stall-tagline:before',
+            '.t-mem .stall-tagline::first-line',
+            '.t-mem .stall-name',
+            '.t-mem .stall-tagline, .t-mem .stall-name',
+            '.t-mem .stall-taglines',
+            '.t-mem .stall-tagline-x',
+            '.t-mem .stall-tagline *',
+            '.t-mem :is(.stall-tagline)',
+            '.t-mem .item-x',
+        ]) {
+            const result = rule(selector);
+            assert.ok(gapCps(result).has(0x2248), selector);
+            assert.equal(result.exempt, 0, selector);
+        }
+        // Generated text on the line prints the app's string in the line's own font: the exemption goes, wherever the rule sits.
+        const generated = (content) => report(`.t-mem .stall-tagline { font-family: ${SERIF}; } .t-mem .stall-tagline::after { content: ${content}; }`);
+        for (const content of ["'\\25c6'", '"// "', "' '"]) {
+            const printing = generated(content);
+            assert.deepEqual(printing.voided, ['stall-tagline'], content);
+            assert.equal(printing.exempt, 0, content);
+            assert.ok(gapCps(printing).has(0x2248), content);
+        }
+        for (const content of ['none', 'normal']) assert.deepEqual([generated(content).voided, generated(content).exempt], [[], 1], content);
+        // A keyframe stop has no selector to be exempt by.
+        assert.ok(report(`@keyframes k { to { font-family: ${SERIF}; } }`).problems.length > 0);
+        assert.deepEqual(SELLER_WORDS_ONLY.map((e) => e.subject), ['stall-tagline']);
+        assert.equal(sellerWordsOnly('.t-x .stall-tagline'), true);
+    });
+
+    it('holds the tagline line to the source: one line, written in header() from its tagline, and every call passes the seller\'s', () => {
+        // Every string of the app that names the class: exactly one, in render.ts.
+        const naming = appSourceFiles().filter((path) => literalsOf(read(path), path).some((text) => text.split(/\s+/).includes('stall-tagline')));
+        assert.deepEqual(naming, ['src/ui/render.ts']);
+        const render = read('src/ui/render.ts');
+        assert.ok(/export function header\(\s*name\?: string,\s*sub\?: string,\s*address\?: string,\s*tagline\?: string,/.test(render), 'header()\'s fourth parameter is the tagline');
+        assert.equal(render.split("el('div', 'stall-tagline', tagline)").length, 2, 'the line is written from header()\'s own tagline, once');
+        // And no served sheet, the shared ones and every private look a run reads, prints generated text on it.
+        for (const sheet of SERVED) assert.deepEqual([...generatedTextOn(sheet.css)], [], sheet.path);
+        // Every call of header() with a fourth argument passes the seller's tagline, or the door's fixture (shipped looks only).
+        const fourth = [];
+        for (const path of appSourceFiles()) {
+            const file = ts.createSourceFile(path, read(path), ts.ScriptTarget.ES2022, true);
+            const visit = (node) => {
+                if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'header' && node.arguments.length >= 4) {
+                    fourth.push(node.arguments[3].getText(file));
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(file);
+        }
+        assert.ok(fourth.length >= 5, `${fourth.length} calls read`);
+        for (const text of fourth) assert.ok(['view.tagline', 'copy.HOME_PREVIEW.tagline'].includes(text), text);
+    });
+
+    it('refuses a look whose face it cannot read, and reads the theme\'s stack for a look\'s row', () => {
+        const unread = stackReport({ path: 'mem.css', css: `${faceRule('gone.woff2', 't-mem-serif')}\n.x { font-family: ${SERIF}, 'Stall Serif'; }`, art: [], printed, pinned: PINNED, served });
+        assert.ok(unread.problems.some((p) => /art\/gone\.woff2 is not there/.test(p)));
+        assert.equal(rootStackOf({ base: 'rural' }, theme), theme.FONT_STACKS[2]);
+        assert.equal(rootStackOf({ base: 'neo' }, theme), theme.FONT_STACKS[1]);
+        assert.equal(rootStackOf({ base: 'modern', fontIndex: 2 }, theme), theme.FONT_STACKS[2]);
+        assert.equal(rootStackOf({ base: 'modern' }, theme), theme.FONT_STACKS[0]);
+        assert.equal(rootStackOf({ base: 'constructor' }, theme), undefined);
+        assert.equal(rootStackOf(undefined, theme), undefined);
+        // The base names the reader takes are the ones the look data takes.
+        assert.match(read('src/domain/lookData.ts'), /modern: DEFAULT_THEME_ID,\s*neo: NEO_CITY_THEME_ID,\s*rural: RURAL_THEME_ID,/);
     });
 });
