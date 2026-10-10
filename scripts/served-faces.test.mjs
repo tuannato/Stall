@@ -12,9 +12,11 @@ import {
     cpName,
     declaredNotHeld,
     glyphsNotHeld,
+    lettersOfAnotherScript,
     literalsOf,
     printedCodePoints,
     servedFaceSets,
+    subsetScript,
 } from './served-faces.mjs';
 import { SERVED_FAMILIES, familyListProblem, sheetFontProblems } from './workshop-css.mjs';
 
@@ -93,8 +95,26 @@ const EVERY_FACE = ['Inter', 'Stall Serif', 'Stall Serif italic', 'JetBrains Mon
 const quoteIn = (code) =>
     `the seller's own figure (\`seller-price\`, a money node) on every quote surface, for a quote in ${code} (\`FIAT_CURRENCIES\`' symbol, through \`QUOTE_UNITS\`)`;
 
-/** The code points `scripts/subset-faces.py` cuts into every Latin face whose upstream font draws them (its `WANTED`). */
-const RE_SUBSET = [...read('scripts/subset-faces.py').match(/^WANTED = \[([^\]]*)\]/m)[1].matchAll(/0x([0-9A-Fa-f]+)/g)].map((m) => Number.parseInt(m[1], 16));
+/**
+ * The code points `scripts/subset-faces.py` cuts into every Latin face whose
+ * upstream font draws them (its `WANTED`), read strictly: exactly one line
+ * assigns it, and that line is `WANTED = [0x…, 0x…]` — hex literals and
+ * commas and nothing else, so a reformatted list or a comment holding a hex
+ * number cannot widen or narrow what this test reads; and no other line
+ * changes the list. Anything else throws at module load, which fails the
+ * file (a throw in a `describe` body would not).
+ */
+function readWanted(python) {
+    const lines = python.split('\n');
+    const assigns = lines.filter((line) => /^WANTED\b/.test(line));
+    if (assigns.length !== 1) throw new Error(`scripts/subset-faces.py: ${assigns.length} lines start with WANTED; the test reads exactly one`);
+    const m = /^WANTED = \[(0x[0-9A-F]{4,6}(?:, 0x[0-9A-F]{4,6})*)\]$/.exec(assigns[0]);
+    if (m === null) throw new Error(`scripts/subset-faces.py: WANTED must be one line of upper-case hex literals and commas, "WANTED = [0x2248, …]"; read: ${assigns[0]}`);
+    const changed = lines.filter((line) => line !== assigns[0] && /\bWANTED\s*(?:[-+*|&]?=(?!=)|\.\w+\s*\(|\[)/.test(line));
+    if (changed.length > 0) throw new Error(`scripts/subset-faces.py: a line changes WANTED after it is assigned: ${changed[0].trim()}`);
+    return m[1].split(', ').map((hex) => Number.parseInt(hex, 16));
+}
+const RE_SUBSET = readWanted(read('scripts/subset-faces.py'));
 
 /** The face sets that lack a currency sign upstream: Lora (Stall Serif) and JetBrains Mono 2.211 draw none of ₦ ₩ ₪ ₱ ₹. */
 const NOT_SERIF_OR_MONO = ['Stall Serif', 'Stall Serif italic', 'JetBrains Mono'];
@@ -108,8 +128,8 @@ const SERIF = ['Stall Serif', 'Stall Serif italic'];
  * The owner decided the faces draw what a page prints (2026-10-06, PLAN §
  * Decided "Glyphs a page prints are drawn by Stall's own faces"), and
  * `scripts/subset-faces.py` cut every Latin subset again from its upstream
- * font with each of these that font draws — `≈` and `р` left this list
- * then, drawn by all four. What is left is what the upstream font itself
+ * font with each of these that font draws — `≈` and RUB's `₽` are drawn by
+ * all four and are not on it. What is left is what the upstream font itself
  * lacks: Lora has no `→ ◆` and no `₦ ₩ ₪ ₱ ₹`, JetBrains Mono none of the
  * six signs, and no face a CJK ideograph (`元`; a CJK face is not shipped
  * for one sign). A glyph leaves this list, or a face leaves its `faces`,
@@ -236,6 +256,8 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
         // are held here one by one, on every face: a range naming one its file
         // lacks would load the face for it and draw it from the machine's fonts.
         assert.ok(RE_SUBSET.includes(0x2248) && RE_SUBSET.length >= 11, 'WANTED is read from scripts/subset-faces.py');
+        // RUB prints ₽, which every face draws; `р` (U+0440) is a Cyrillic letter and no Latin face takes it.
+        assert.ok(RE_SUBSET.includes(0x20bd) && !RE_SUBSET.includes(0x0440));
         for (const exception of PRINTED_NOT_HELD) assert.ok(RE_SUBSET.includes(exception.cp), cpName(exception.cp));
         const claimed = [];
         for (const set of sets) {
@@ -248,9 +270,62 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
         assert.deepEqual(claimed, []);
     });
 
+    it('reads WANTED strictly, and refuses a list it could misread', () => {
+        const real = read('scripts/subset-faces.py');
+        assert.deepEqual(readWanted(real), RE_SUBSET);
+        const line = real.split('\n').find((l) => l.startsWith('WANTED = ['));
+        // A reformatted list whose comment holds a hex number: the old read took 0x0440 from the comment.
+        const multi = real.replace(line, 'WANTED = [\n    0x2248,  # not 0x0440\n]');
+        assert.throws(() => readWanted(multi), /one line of upper-case hex literals/);
+        assert.throws(() => readWanted(real.replace(line, `${line}  # and 0x0440`)), /one line of upper-case hex literals/);
+        assert.throws(() => readWanted(real.replace(line, line.replace('0x2248', '0x2248 + 1'))), /one line of upper-case hex literals/);
+        assert.throws(() => readWanted(real.replace(line, `${line}\nWANTED = WANTED + [0x0440]`)), /2 lines start with WANTED/);
+        assert.throws(() => readWanted(real.replace(line, `${line}\n    WANTED.append(0x0440)`)), /changes WANTED/);
+        assert.throws(() => readWanted(real.replace(line, `${line}\nif True:\n    WANTED += [0x0440]`)), /changes WANTED/);
+        assert.throws(() => readWanted(real.replace(line, '')), /0 lines start with WANTED/);
+    });
+
     it('goes red on a glyph printed in no face', () => {
         const planted = new Map(printed);
         planted.set(0x2605, new Set(['planted']));
         assert.deepEqual(glyphsNotHeld(planted, sets).get(0x2605), EVERY_FACE);
+    });
+});
+
+describe('a-face-range-never-takes-one-letter-of-another-script', () => {
+    // The glyph re-subset first put `р` (U+0440, for RUB's "р.") in every
+    // Latin range, so a seller's Cyrillic word drew its `р` in the shipped
+    // face and every other letter in the machine's (the critic's P2-1,
+    // 2026-10-09). RUB prints ₽ now; this holds every range to letters of its
+    // subset's own script, Common or Inherited. Computed inside each `it`,
+    // never in the `describe` body, whose throw `node --test` reports and
+    // still exits 0.
+    it("names in every face's unicode-range only letters of its subset's script, Common or Inherited", () => {
+        const sets = servedFaceSets();
+        const { count, letters } = lettersOfAnotherScript(sets);
+        assert.deepEqual(letters.map(({ file, cp }) => `${file} ${cpName(cp)}`), []);
+        // Eight faces, and the Latin ones' first span alone is 256 code points.
+        assert.equal(sets.flatMap((set) => set.faces).length, 8);
+        assert.ok(count > 8 * 100, `${count} code points read`);
+        for (const face of sets.flatMap((set) => set.faces)) assert.equal(subsetScript(face.file), 'Latin', face.file);
+    });
+
+    it('allows a Common letter and a Latin one, and refuses a Cyrillic, a Greek and a Han letter', () => {
+        // µ (U+00B5) is a letter of no script (Common) and ª (U+00AA) Latin; both sit in U+0000-00FF.
+        const inter = servedFaceSets().find((set) => set.name === 'Inter').faces.find((face) => face.file.endsWith('inter-latin.woff2'));
+        assert.ok(inter.ranges.some(([lo, hi]) => lo <= 0xb5 && 0xb5 <= hi && lo <= 0xaa && 0xaa <= hi));
+        const plant = (cps) => [{ name: 'Inter', faces: [{ file: inter.file, ranges: [...inter.ranges, ...cps.map((cp) => [cp, cp])] }] }];
+        assert.deepEqual(lettersOfAnotherScript(plant([0x20bd])).letters, []);
+        assert.deepEqual(
+            lettersOfAnotherScript(plant([0x0440, 0x03bc, 0x5143])).letters.map(({ cp }) => cp),
+            [0x0440, 0x03bc, 0x5143],
+        );
+    });
+
+    it('knows the script of every subset it is handed, or refuses it', () => {
+        assert.equal(subsetScript('src/ui/fonts/stall-serif-vietnamese-italic.woff2'), 'Latin');
+        assert.equal(subsetScript('src/ui/fonts/jetbrains-mono-latin.woff2'), 'Latin');
+        assert.throws(() => subsetScript('src/ui/fonts/inter-cyrillic.woff2'), /SUBSET_SCRIPTS does not name/);
+        assert.throws(() => subsetScript('src/ui/fonts/inter-constructor.woff2'), /SUBSET_SCRIPTS does not name/);
     });
 });

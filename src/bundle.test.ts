@@ -271,10 +271,11 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * 866,176 after 8f2 and its critic's fixes (+1,664: the name ladder's
      * fit read by ink, `src/ui/signInk.ts`, its own box only); 866,652 after
      * the critic's re-check (+476: the line measured as painted — its
-     * `text-transform`, small caps and width); 866,770 after the face
+     * `text-transform`, small caps and width); 866,786 after the face
      * re-subset (+118: the four Latin `unicode-range`s of stall.css's
-     * `@font-face` rules, which the entry CSS carries; the faces themselves
-     * are on demand).
+     * `@font-face` rules, which the entry CSS carries — the faces themselves
+     * are on demand; +16: RUB's sign `₽` written after the figure, its
+     * `symbolAfter` in the entry chunk).
      * **Kept at 895,000 when the ceilings were split by bucket**
      * (D-2026-10-06-07): this alarm is this bucket's alone again, and the
      * on-demand bucket has its own (`on-demand-weight-has-a-ceiling`). The
@@ -330,9 +331,9 @@ describe('every-visitor-weight-has-a-ceiling', () => {
  * not "before anything is painted"). A code split that moves bytes out of
  * the entry (or an `import()` boot always awaits) is filed here and spends
  * this margin where the sum was neutral. The face re-subset PLAN § Decided
- * names spent 2,572 bytes of it (the four Latin subsets cut again with the
- * `≈ → ◆` and currency signs their upstream fonts draw,
- * `scripts/subset-faces.py`): 265,418 after it, in the same worker.
+ * names spent 2,540 bytes of it (the four Latin subsets cut again with the
+ * `≈ → ◆` and currency signs their upstream fonts draw, `₽` among them,
+ * `scripts/subset-faces.py`): 265,386 after it, in the same worker.
  *
  * Measured 262,846 bytes on 2026-10-06 (main 6464b67, in a vitest worker
  * with no private look: the eight woff2 subsets, the decoration art, the

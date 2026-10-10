@@ -19,7 +19,7 @@
  *   names, pictures a script imports, chunks nothing imports statically.
  *   Fetched when a screen asks — which is **not** rarely: the door alone
  *   paints three minis in the three looks' faces wearing Neon rain and
- *   Bunting, so an apex visit fetches three Latin faces (~126 KB), the rain,
+ *   Bunting, so an apex visit fetches three Latin faces (~129 KB), the rain,
  *   the bunting, the deck pictures and likely the logo (read from the CSS,
  *   not measured in a browser; the weight-buckets critic's item 6). Faces
  *   stay here all the same: `font-display: swap`, so not "before anything

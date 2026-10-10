@@ -14,7 +14,7 @@ Run it by hand after any change to the Lora source files (the owner's
 decision, 2026-09-26); it needs fontTools and brotli, which are not project
 dependencies. The Vietnamese inputs are Fontsource 5.3.0's own files; the two
 Latin ones are Fontsource's subsets cut again from upstream Lora 3.008 with
-the glyphs the app prints that Lora draws (≈ ₺ р), by scripts/subset-faces.py,
+the glyphs the app prints that Lora draws (≈ ₺ ₽), by scripts/subset-faces.py,
 which puts all four in the directory this script reads:
 
     python3 -m venv <venv> && <venv>/bin/pip install fonttools brotli

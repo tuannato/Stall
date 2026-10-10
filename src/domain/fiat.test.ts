@@ -41,6 +41,15 @@ describe('symbol-sits-where-the-language-puts-it', () => {
         expect(out.startsWith('kr')).toBe(false);
     });
 
+    it('writes the ruble sign after the number, with a space', () => {
+        // 1,000,000 sats = 10,000 XEC; at 0.0003 RUB/XEC that is 3 roubles.
+        // The sign is ₽ and never "р.": the Latin faces draw ₽, and a
+        // Cyrillic letter in their ranges would split every Cyrillic word a
+        // seller writes across two fonts (scripts/served-faces.test.mjs).
+        expect(formatFiat(1_000_000n, scaleRate(0.0003), 'rub')).toBe('3.00 ₽');
+        expect(formatFiat(1n, scaleRate(0.0000001), 'rub')).toBe('< 0.01 ₽');
+    });
+
     it('leaves every prefix currency exactly where it was', () => {
         // 1,200 XEC = 120,000 sats. At $0.00003/XEC that is $0.036 -> $0.04.
         expect(formatFiat(120_000n, USD_RATE, 'usd')).toBe('$0.04');

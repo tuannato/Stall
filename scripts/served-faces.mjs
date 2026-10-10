@@ -181,5 +181,51 @@ export function declaredNotHeld(sets = servedFaceSets()) {
     return out;
 }
 
+/**
+ * The script each subset is cut for, by the subset part of its file name
+ * (`inter-latin.woff2`, `stall-serif-vietnamese-italic.woff2`): Fontsource's
+ * Latin and Vietnamese subsets are both Latin script. A subset this table
+ * does not name is an error, never a pass — a Cyrillic or Greek subset is
+ * added here with its own script, on purpose.
+ */
+export const SUBSET_SCRIPTS = Object.freeze({ latin: 'Latin', vietnamese: 'Latin' });
+
+/** The script a served face file is cut for (`SUBSET_SCRIPTS`), or a thrown error naming the file. */
+export function subsetScript(file) {
+    const subset = file.replace(/^.*\//, '').replace(/\.woff2$/, '').replace(/-italic$/, '').split('-').pop();
+    const script = Object.hasOwn(SUBSET_SCRIPTS, subset) ? SUBSET_SCRIPTS[subset] : undefined;
+    if (script === undefined) throw new Error(`${file}: a subset ("${subset}") whose script SUBSET_SCRIPTS does not name`);
+    return script;
+}
+
+/**
+ * Every letter (`\p{L}`) a face's `unicode-range` names that is neither of
+ * its subset's own script (`subsetScript`) nor Common or Inherited, as
+ * `{ file, cp }`. A range that names one letter of another script draws
+ * that letter, and only that letter, of every word a seller writes in that
+ * script in the shipped face, and the rest of the word in the machine's —
+ * the glyph re-subset's `р` (U+0440) in every Latin range was that. Signs
+ * (`₽`, `≈`) are not letters, and Common letters (`µ` U+00B5, the modifier
+ * letters `ʻ ʼ ˆ`) belong to no script. `count` is how many code points were
+ * read, so a check that read nothing can be told from one that passed.
+ */
+export function lettersOfAnotherScript(sets = servedFaceSets()) {
+    const out = [];
+    let count = 0;
+    for (const set of sets) {
+        for (const face of set.faces) {
+            const own = new RegExp(`^[\\p{Script=${subsetScript(face.file)}}\\p{Script=Common}\\p{Script=Inherited}]$`, 'u');
+            for (const [lo, hi] of face.ranges) {
+                for (let cp = lo; cp <= hi; cp += 1) {
+                    count += 1;
+                    const ch = String.fromCodePoint(cp);
+                    if (/^\p{L}$/u.test(ch) && !own.test(ch)) out.push({ file: face.file, cp });
+                }
+            }
+        }
+    }
+    return { count, letters: out };
+}
+
 /** `U+2248 ≈`, for a message. */
 export const cpName = (cp) => `U+${cp.toString(16).toUpperCase().padStart(4, '0')} ${String.fromCodePoint(cp)}`;

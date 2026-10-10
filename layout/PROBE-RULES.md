@@ -4165,9 +4165,10 @@ both). Those are held statically now, beside this rule:
   owner decided the faces draw them (PLAN § Decided, 2026-10-06), and
   `scripts/subset-faces.py` cut the four Latin subsets again from their
   upstream fonts with every one each font draws: `≈` (the unit rate and the
-  pay sheets' rate row, `[data-role="rate"]`, a money node) and `р` (RUB)
-  are drawn by all four now. What is pinned is what an upstream font
-  lacks, each with where it prints and the faces that lack it: `→`
+  pay sheets' rate row, `[data-role="rate"]`, a money node) and `₽` (RUB,
+  written after the figure, `100 ₽`) are drawn by all four now. What is
+  pinned is what an upstream font lacks, each with where it prints and the
+  faces that lack it: `→`
   (`DESC_SUB`, the first-stall checklist's "Share your link" step,
   `OBS_RECIPE_SOURCE`) and `◆` (the ticker's separator, `GENERATED_TEXT`)
   in Stall Serif; `₹ ₪ ₩ ₦ ₱` (a quote's `seller-price`, a money node, in
@@ -4186,6 +4187,16 @@ both). Those are held statically now, beside this rule:
   are held one by one on every face (`names in a face's range only the
   re-subset glyphs its own file holds`; red on U+20B9 planted beside
   Stall Serif's U+20BA, which the list read as one span and passed).
+- **`a-face-range-never-takes-one-letter-of-another-script`**: every letter
+  (`\p{L}`) a served face's `unicode-range` names is of its subset's own
+  script (`SUBSET_SCRIPTS`: Latin for the Latin and Vietnamese subsets; a
+  subset it does not name is an error) or Common or Inherited (`µ` U+00B5,
+  the modifier letters `ʻ ʼ ˆ`). The re-subset's first cut put `р` (U+0440,
+  for RUB's old `р.`) in all four Latin ranges, so a seller's Cyrillic
+  word drew that one letter in the shipped face and the rest in the
+  machine's (measured by its critic with `CSS.getPlatformFontsForNode`).
+  RUB prints `₽` now. Red on that commit's `stall.css` (the four Latin
+  files named) and on U+0440 planted back into JetBrains Mono's Latin range.
 
 **The incident (8d1's critic, measured with an instrumented probe, never
 committed).** The geometry passes are one synchronous task — the module
