@@ -22,9 +22,11 @@ import { spec, tap } from 'node:test/reporters';
  * constant read before its declaration all end here. Nothing else is added: a
  * green run and an ordinarily red one print what they printed before.
  *
- * Only the `test` script uses it: a bare `node --test file` run, and the
- * deploy road's `public-checks` job, which runs three of these files with
- * nothing installed, keep Node's own behaviour.
+ * The `test` script uses it, and so does the deploy road's `public-checks`
+ * job (`PUBLIC_CHECKS_RUN`, `scripts/deploy-workflow-lib.mjs`), which runs
+ * three of these files with nothing installed — so this file imports Node's
+ * built-ins and nothing else (held by the workflow's own test). A bare
+ * `node --test file` run keeps Node's own behaviour.
  */
 export default async function* nodeTestReporter(source) {
     let failures = 0;

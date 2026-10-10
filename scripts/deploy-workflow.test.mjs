@@ -15,6 +15,7 @@ import {
     PNPM_PACKAGE_MANAGER_SHA512,
     PRODUCTION_RELEASE_SENTENCE,
     PUBLIC_CHECK_TESTS,
+    PUBLIC_CHECKS_REPORTER,
     PUBLIC_CHECKS_RUN,
     RULES,
     SKIPS,
@@ -412,7 +413,9 @@ const PLANTS = [
 
     // public-checks
     ['public-checks without the pack’s tests', 'public-checks', inJobEdit('public-checks', ' scripts/looks-artifact.test.mjs\n', '\n')],
-    ['public-checks by a name pattern', 'public-checks', inJobEdit('public-checks', '--test scripts/', '--test --test-name-pattern=the-canary-is-public-bytes scripts/')],
+    ['public-checks by a name pattern', 'public-checks', inJobEdit('public-checks', '--test --test-reporter=', '--test --test-name-pattern=the-canary-is-public-bytes --test-reporter=')],
+    ['public-checks under Node’s own reporter, which exits 0 for a describe body that throws (the describe-guard critic’s P3-3)', 'public-checks', inJobEdit('public-checks', ` --test-reporter=${PUBLIC_CHECKS_REPORTER}`, '')],
+    ['public-checks under another reporter', 'public-checks', inJobEdit('public-checks', `--test-reporter=${PUBLIC_CHECKS_REPORTER}`, '--test-reporter=tap')],
     [
         'the canary’s suite renamed in its file',
         'public-checks',
@@ -491,6 +494,18 @@ describe('the-deploy-workflow-keeps-its-keys-apart', () => {
     it('plants every rule, and names no rule the reader does not hold', () => {
         const planted = new Set(PLANTS.map(([, rule]) => rule));
         assert.deepEqual([...RULES].sort(), [...planted].sort());
+    });
+
+    it('runs public-checks through the test script’s reporter, which loads with nothing installed', () => {
+        assert.ok(PUBLIC_CHECKS_RUN.startsWith(`node --experimental-strip-types --test --test-reporter=${PUBLIC_CHECKS_REPORTER} `), PUBLIC_CHECKS_RUN);
+        const script = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts.test;
+        assert.ok(script.includes(` --test-reporter=${PUBLIC_CHECKS_REPORTER} `), 'the reporter the test script names');
+        // public-checks installs nothing: every module the reporter imports is one of Node's own, and it loads none at run time.
+        const source = readFileSync(join(ROOT, PUBLIC_CHECKS_REPORTER), 'utf8');
+        const specifiers = [...source.matchAll(/^import\s(?:[^'"]*?\sfrom\s)?['"]([^'"]+)['"]/gm)].map((match) => match[1]);
+        assert.ok(specifiers.length > 0 && specifiers.every((specifier) => specifier.startsWith('node:')), `the reporter imports ${specifiers.join(', ')}`);
+        assert.equal((source.match(/\bimport\b/g) ?? []).length, specifiers.length, 'an import the line reader above did not see');
+        assert.doesNotMatch(source, /\brequire\s*\(/);
     });
 
     it('reads a grammar refusal as the only problem: no rule reads a tree the grammar refused', () => {
