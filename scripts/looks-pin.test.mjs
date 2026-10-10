@@ -11,13 +11,14 @@ import {
     PACKED_OUT,
     PACKED_TREE_SCRIPT,
     PIN_SCRIPT,
+    looksPinCommand,
     packedTreeOf,
     pinLineFor,
     pinProblem,
     readLooksPin,
 } from './looks-pin.mjs';
 import { plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
-import { CANARY_TREE, PREVIEW_SLUGS, publicLookFacts } from './private-looks.mjs';
+import { CANARY_COMMIT, CANARY_TREE, PREVIEW_SLUGS, publicLookFacts } from './private-looks.mjs';
 
 /**
  * The pin (`scripts/looks-pin.mjs`, step 8c1): `deploy/looks.commit` is read
@@ -85,6 +86,18 @@ const T = 'fedcba9876543210fedcba9876543210fedcba98';
 const GOOD = `${C} ${T}\n`;
 
 /**
+ * `PIN_SCRIPT` as it would be were `commit` the canary's: its one
+ * `CANARY_COMMIT` literal replaced (the `asCanary` pattern of the pack's
+ * tests). The shape tests below run it over pins naming `C`, so what they
+ * prove is the shape and not the gate; the gate's own tests run
+ * `PIN_SCRIPT` itself.
+ */
+function asCanaryCommit(commit, script = PIN_SCRIPT) {
+    assert.equal(script.split(CANARY_COMMIT).length, 2, 'the pin step names the canary commit once');
+    return script.replace(CANARY_COMMIT, commit);
+}
+
+/**
  * Every pin both readers refuse: the 8c critic's item 8 (a `$(cat …)` strips
  * every trailing newline, so the shell alone read "no final newline" and
  * "two newlines" as good) and V3's list, plus what command substitution
@@ -127,7 +140,7 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         const dir = pinIn(GOOD);
         assert.equal(pinProblem(Buffer.from(GOOD)), undefined);
         assert.deepEqual(readLooksPin(dir), { commit: C, tree: T });
-        const step = runStep(PIN_SCRIPT, dir);
+        const step = runStep(asCanaryCommit(C), dir);
         assert.equal(step.status, 0, step.stderr);
         assert.equal(step.output, `commit=${C}\ntree=${T}\n`);
     });
@@ -136,7 +149,7 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         for (const [name, text] of [...PLANTS, ['no pin at all', undefined]]) {
             const dir = pinIn(text);
             assert.throws(() => readLooksPin(dir), /deploy\/looks\.commit/, `readLooksPin admits ${name}`);
-            const step = runStep(PIN_SCRIPT, dir);
+            const step = runStep(asCanaryCommit(C), dir);
             assert.notEqual(step.status, 0, `the shell admits ${name}`);
             assert.equal(step.output, '', `the shell wrote an output over ${name}`);
             assert.doesNotMatch(step.stdout + step.stderr, /[0-9a-f]{40}/, `the shell printed a hash over ${name}`);
@@ -156,7 +169,7 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
         writeFileSync(join(dir, 'deploy', 'real'), GOOD);
         symlinkSync('real', join(dir, LOOKS_PIN_FILE));
         assert.throws(() => readLooksPin(dir), /not a plain file/);
-        const step = runStep(PIN_SCRIPT, dir);
+        const step = runStep(asCanaryCommit(C), dir);
         assert.notEqual(step.status, 0, 'the shell admits a link');
         assert.equal(step.output, '');
         const tracked = execFileSync('git', ['ls-files', '-s', '--', LOOKS_PIN_FILE], { cwd: ROOT, encoding: 'utf8' });
@@ -166,7 +179,7 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
     it('stops on an unset $GITHUB_OUTPUT, writing nothing anywhere', () => {
         const dir = pinIn(GOOD);
         const file = join(scratchDir('unset'), 'step.sh');
-        writeFileSync(file, PIN_SCRIPT);
+        writeFileSync(file, asCanaryCommit(C));
         const run = spawnSync('bash', [file], { cwd: dir, env: { PATH: process.env.PATH }, encoding: 'utf8' });
         assert.notEqual(run.status, 0, 'an unset $GITHUB_OUTPUT is not a file named ""');
     });
@@ -181,17 +194,119 @@ describe('the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', () => {
      * hold every length plant: not provable red, and said so.
      */
     it('needs its shape check and its whole-file compare: without either, a plant gets through', () => {
-        const without = (needle) => {
-            const lines = PIN_SCRIPT.split('\n');
+        const without = (needle, script) => {
+            const lines = script.split('\n');
             const at = lines.findIndex((line) => line.includes(needle));
             assert.ok(at >= 0, needle);
             return [...lines.slice(0, at), ...lines.slice(at + 1)].join('\n');
         };
-        const noShape = runStep(without('=~ $shape'), pinIn(`${C.toUpperCase()} ${T}\n`));
+        const noShape = runStep(without('=~ $shape', asCanaryCommit(C.toUpperCase())), pinIn(`${C.toUpperCase()} ${T}\n`));
         assert.equal(noShape.status, 0, 'without the shape check, upper case is refused anyway — the plant proves nothing');
-        const noCompare = runStep(without('cmp -s'), pinIn(`${C} ${T}\0`));
+        const noCompare = runStep(without('cmp -s', asCanaryCommit(C)), pinIn(`${C} ${T}\0`));
         assert.equal(noCompare.status, 0, 'without the whole-file compare, a NUL is refused anyway — the plant proves nothing');
         assert.equal(noCompare.output, `commit=${C}\ntree=${T}\n`);
+    });
+});
+
+/*
+ * The commit gate (step 8g-pre; the 8g plan's v2.4, its critic's N2 and
+ * N3): until a release the pin's commit half is the canary's
+ * (`CANARY_COMMIT`) and no other. The deploy workflow's private checkout
+ * runs between the pin step and the pack and prints the commit's subject,
+ * so a hand-edited pin naming another commit of the private repository
+ * beside the canary's tree used to fetch that commit onto a public runner
+ * before the pack's tree check refused it. The gate is a line of its own
+ * in `PIN_SCRIPT`, written from the constant (as the pack's first line is
+ * from `CANARY_TREE`), after the shape and before the outputs; the shape
+ * readers `readLooksPin` and `pinProblem` stay without it, since the
+ * harness's pinned-pair reads share them over planted canaries; and
+ * `pinLineFor` requires the commit and the tree at once.
+ */
+describe('the-pin-step-fetches-only-the-canary-commit', () => {
+    after(removePlants);
+    const OTHER = '89abcdef0123456789abcdef0123456789abcdef';
+    const GATE = "the pin names another commit than the canary's (CANARY_COMMIT): until a release a preview fetches that commit and no other\n";
+    let facts;
+    before(async () => {
+        facts = await publicLookFacts();
+    });
+
+    it('is the literal, pinned by value, and the tracked pin names it', () => {
+        assert.equal(CANARY_COMMIT, '760237c8e9f246c7b7f28a8a91ce933832100930');
+        assert.equal(readLooksPin(ROOT).commit, CANARY_COMMIT);
+    });
+
+    it('is a line of its own, written from the constant, after the shape is read and before the outputs are written', () => {
+        const lines = PIN_SCRIPT.split('\n');
+        const gate = `[ "$commit" = "${CANARY_COMMIT}" ] || { echo "${GATE.slice(0, -1)}" >&2; exit 1; }`;
+        assert.equal(lines.filter((line) => line === gate).length, 1, 'the gate, one line, as the constant writes it');
+        assert.equal(PIN_SCRIPT.split(CANARY_COMMIT).length, 2, 'the pin step names the canary commit once');
+        const at = (needle) => lines.findIndex((line) => line.includes(needle));
+        assert.ok(at('cmp -s') < lines.indexOf(gate), 'after the whole-file compare: the shape is read whole first, as readLooksPin reads it');
+        assert.ok(lines.indexOf(gate) < at('GITHUB_OUTPUT'), 'before the one write the private checkout reads');
+        assert.doesNotMatch(GATE, /[0-9a-f]{40}|deploy\/|looks\.commit/, 'its refusal names no hash and no path');
+    });
+
+    it('refuses a pin whose tree is the canary’s and whose commit is another, writing nothing, and readLooksPin still reads its shape', () => {
+        const pin = `${OTHER} ${CANARY_TREE}\n`;
+        const dir = pinIn(pin);
+        const step = runStep(PIN_SCRIPT, dir);
+        assert.equal(step.status, 1);
+        assert.equal(step.stderr, GATE);
+        assert.equal(step.stdout, '');
+        assert.equal(step.output, '', 'no output: the checkout has no commit to fetch');
+        assert.equal(pinProblem(Buffer.from(pin)), undefined, 'the shape reader admits it: the gate is not pinProblem’s');
+        assert.deepEqual(readLooksPin(dir), { commit: OTHER, tree: CANARY_TREE }, 'nor readLooksPin’s');
+    });
+
+    it('needs its gate line: without it, that pin is written to the outputs', () => {
+        const lines = PIN_SCRIPT.split('\n');
+        const open = lines.filter((line) => !line.includes(CANARY_COMMIT)).join('\n');
+        assert.equal(open.split('\n').length, lines.length - 1);
+        const step = runStep(open, pinIn(`${OTHER} ${CANARY_TREE}\n`));
+        assert.equal(step.status, 0, 'without the gate the pin is refused anyway — the plant proves nothing');
+        assert.equal(step.output, `commit=${OTHER}\ntree=${CANARY_TREE}\n`);
+    });
+
+    it('reads the commit half alone: the canary’s commit beside another tree passes it, for the pack’s first line to refuse', () => {
+        const step = runStep(PIN_SCRIPT, pinIn(`${CANARY_COMMIT} ${T}\n`));
+        assert.equal(step.status, 0, step.stderr);
+        assert.equal(step.output, `commit=${CANARY_COMMIT}\ntree=${T}\n`);
+    });
+
+    it('keeps the gate out of the shape readers the harness’s pinned-pair reads share', () => {
+        for (const fn of [pinProblem, readLooksPin]) {
+            assert.doesNotMatch(String(fn), /CANARY/, `${fn.name} reads the canary's commit`);
+        }
+    });
+
+    it('refuses, in pinLineFor, a canary planted under another commit for its commit alone, and admits it when that is the commit it is told', async () => {
+        const looks = plantCanary();
+        assert.equal(packedTreeOf({ dir: looks.dir, commit: looks.head(), env: looks.env }), CANARY_TREE, 'the plant: the canary’s own tree');
+        await assert.rejects(pinLineFor({ dir: looks.dir, env: looks.env, facts }), (error) => {
+            const problems = error.message.split('\n').slice(1);
+            return problems.length === 1 && problems[0].startsWith(`  - it is not CANARY_COMMIT ${CANARY_COMMIT.slice(0, 12)}, the canary's commit`);
+        });
+        assert.equal(await pinLineFor({ dir: looks.dir, env: looks.env, facts, canaryCommit: looks.head() }), `${looks.head()} ${CANARY_TREE}\n`);
+    });
+
+    it('requires both literals at once: the canary’s commit with another tree is said to be the two literals drifting apart', async () => {
+        const looks = plantLooks(undefined, {}, { slug: PREVIEW_SLUGS[0] });
+        await assert.rejects(pinLineFor({ dir: looks.dir, env: looks.env, facts, canaryCommit: looks.head() }), (error) => {
+            const problems = error.message.split('\n').slice(1);
+            return problems.length === 1 && problems[0].includes('is not CANARY_TREE') && problems[0].includes('the commit is CANARY_COMMIT: the two literals no longer name one canary');
+        });
+        await assert.rejects(pinLineFor({ dir: looks.dir, env: looks.env, facts }), (error) => {
+            const problems = error.message.split('\n').slice(1);
+            return problems.length === 2 && !error.message.includes('the two literals');
+        }, 'another commit with another tree is refused for both, and is no drift');
+    });
+
+    it('refuses a canary commit that is not a full commit', async () => {
+        const looks = plantCanary();
+        for (const canaryCommit of [looks.head().slice(0, 12), looks.head().toUpperCase(), 'HEAD', '']) {
+            await assert.rejects(pinLineFor({ dir: looks.dir, env: looks.env, facts, canaryCommit }), /the canary's commit is a full commit/, canaryCommit);
+        }
     });
 });
 
@@ -375,7 +490,9 @@ describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
         facts = await publicLookFacts();
         CANARY = PREVIEW_SLUGS[0];
     });
-    const lineOf = async (looks, commit, released) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: { ...facts, ...(released === undefined ? {} : { released }) } });
+    // A planted canary's commit is its own, never `CANARY_COMMIT`: each pin is asked as were that commit the canary's, so what these plants prove is the rest (the commit gate is `the-pin-step-fetches-only-the-canary-commit`'s).
+    const lineOf = async (looks, commit, released) =>
+        pinLineFor({ dir: looks.dir, env: looks.env, commit, canaryCommit: commit ?? looks.head(), facts: { ...facts, ...(released === undefined ? {} : { released }) } });
     const canary = (edit, add) => plantCanary(edit, add);
 
     it('is the commit and its packed tree, 82 bytes, at HEAD or at a commit named', async () => {
@@ -442,7 +559,14 @@ describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
         });
     });
 
-    it('writes deploy/looks.commit with --write only once the line is computed, and a refusal leaves the old pin', () => {
+    /*
+     * The command line pins the canary's own commit or nothing: it never
+     * sets `pinLineFor`'s `canaryCommit`, so a canary planted under another
+     * commit is refused by the real CLI, the old pin standing; the write
+     * itself is driven in-process (`looksPinCommand`, the CLI's whole body)
+     * with the planted commit as the fact.
+     */
+    it('writes deploy/looks.commit with --write only once the line is computed, and a refusal leaves the old pin', async () => {
         const run = (cwd, ...args) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'looks-pin.mjs'), ...args], { cwd, env: { ...process.env }, encoding: 'utf8' });
         const work = scratchDir('cli');
         mkdirSync(join(work, 'deploy'));
@@ -454,13 +578,19 @@ describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
         assert.equal(refused.status, 1, refused.stderr);
         assert.match(refused.stderr, /a pin names no commit the build would refuse/);
         assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), GOOD, 'the old pin stands');
-        // A good repository: printed without --write, written with it.
+        // A canary planted under its own commit: the real command line refuses it for that commit alone.
         const good = canary();
-        const printed = run(work, good.dir);
+        const planted = run(work, '--write', good.dir);
+        assert.equal(planted.status, 1, planted.stderr);
+        assert.match(planted.stderr, /- it is not CANARY_COMMIT [0-9a-f]{12}, the canary's commit/);
+        assert.doesNotMatch(planted.stderr, /is not CANARY_TREE/);
+        assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), GOOD, 'the old pin stands');
+        // Told that commit is the canary's: printed without --write, written with it.
+        const printed = await looksPinCommand([good.dir], { cwd: work, canaryCommit: good.head() });
         assert.equal(printed.status, 0, printed.stderr);
         assert.equal(pinProblem(printed.stdout), undefined);
         assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), GOOD, 'printing writes nothing');
-        const wrote = run(work, '--write', good.dir);
+        const wrote = await looksPinCommand(['--write', good.dir], { cwd: work, canaryCommit: good.head() });
         assert.equal(wrote.status, 0, wrote.stderr);
         assert.equal(wrote.stdout, '');
         assert.equal(readFileSync(join(work, LOOKS_PIN_FILE), 'utf8'), printed.stdout);

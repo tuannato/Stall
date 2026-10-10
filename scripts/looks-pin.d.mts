@@ -14,7 +14,7 @@ export declare const PACKED_TREE_SCRIPT: string;
 export declare function pinProblem(bytes: Buffer | string): string | undefined;
 export declare function readLooksPin(root: string): LooksPin;
 export declare function packedTreeOf(at: GitAt & { readonly commit: string; readonly prefix?: string }): string;
-export declare function pinLineFor(at: GitAt & { readonly commit?: string; readonly facts?: Facts }): Promise<string>;
+export declare function pinLineFor(at: GitAt & { readonly commit?: string; readonly facts?: Facts; readonly canaryCommit?: string }): Promise<string>;
 export declare function writeLooksPin(root: string, line: string): void;
 export declare function pairVerdict(facts: {
     readonly commit: string;
@@ -27,3 +27,7 @@ export declare function pairVerdict(facts: {
     readonly privateClean: boolean;
 }): PairVerdict;
 export declare function pinnedPair(at: GitAt & { readonly root: string; readonly commit: string }): PairVerdict;
+export declare function looksPinCommand(
+    args: readonly string[],
+    options?: { readonly cwd?: string; readonly canaryCommit?: string },
+): Promise<{ readonly status: number; readonly stdout: string; readonly stderr: string }>;

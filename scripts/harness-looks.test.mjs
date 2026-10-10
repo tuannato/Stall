@@ -103,7 +103,8 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     const measure = async (looks, publicDir, { commit, target = 'preview' } = {}) =>
         harnessLooks({ target, dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts, env: looks.env });
     const PAIR = /^a preview selection at a private repository, commit [0-9a-f]{12}: canary \(t-canary\) · /;
-    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, facts });
+    // A planted canary's commit is its own: its pin is asked as were that commit the canary's (`CANARY_COMMIT` is the pin step's gate, not this sentence's).
+    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, canaryCommit: looks.head(), facts });
 
     it('says the pinned pair when it measures the pin from a clean tree, naming the public tree', async () => {
         const looks = plantCanary();
