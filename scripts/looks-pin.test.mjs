@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
     LOOKS_PIN_BYTES,
@@ -369,9 +369,13 @@ describe('the-packed-tree-is-the-same-in-the-shell-and-the-scripts', () => {
  */
 describe('the-pin-line-refuses-a-repository-the-build-refuses', () => {
     after(removePlants);
-    const facts = publicLookFacts();
-    const lineOf = async (looks, commit, released) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: { ...(await facts), ...(released === undefined ? {} : { released }) } });
-    const CANARY = PREVIEW_SLUGS[0];
+    let facts;
+    let CANARY;
+    before(async () => {
+        facts = await publicLookFacts();
+        CANARY = PREVIEW_SLUGS[0];
+    });
+    const lineOf = async (looks, commit, released) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: { ...facts, ...(released === undefined ? {} : { released }) } });
     const canary = (edit, add) => plantCanary(edit, add);
 
     it('is the commit and its packed tree, 82 bytes, at HEAD or at a commit named', async () => {

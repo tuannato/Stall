@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { themeVarValues } from './look-flash.mjs';
 import { declaredFaces, declaredStallFaces } from './probe-faces.mjs';
 import { guardSheets, privateRows } from './served-sheets.mjs';
@@ -158,8 +158,12 @@ const DECLARED_NOT_HELD = [
 ];
 
 describe('every-glyph-the-app-prints-is-in-its-face', () => {
-    const printed = printedCodePoints(SERVED);
-    const sets = servedFaceSets();
+    let printed;
+    let sets;
+    before(() => {
+        printed = printedCodePoints(SERVED);
+        sets = servedFaceSets();
+    });
 
     it('reads the four face sets stall.css declares, from their own files', () => {
         assert.deepEqual(sets.map((set) => set.name), EVERY_FACE);

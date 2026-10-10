@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
 import { ROOT, harnessLooks } from './harness-looks.mjs';
 import { LOOKS_PIN_FILE, packedTreeOf, pairVerdict, pinLineFor } from './looks-pin.mjs';
@@ -96,11 +96,14 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
         return { dir, git, tree: git('rev-parse', 'HEAD^{tree}') };
     }
 
-    const facts = publicLookFacts();
+    let facts;
+    before(async () => {
+        facts = await publicLookFacts();
+    });
     const measure = async (looks, publicDir, { commit, target = 'preview' } = {}) =>
-        harnessLooks({ target, dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts: await facts, env: looks.env });
+        harnessLooks({ target, dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts, env: looks.env });
     const PAIR = /^a preview selection at a private repository, commit [0-9a-f]{12}: canary \(t-canary\) · /;
-    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, facts: await facts });
+    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, facts });
 
     it('says the pinned pair when it measures the pin from a clean tree, naming the public tree', async () => {
         const looks = plantCanary();

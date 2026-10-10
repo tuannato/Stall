@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
     BUDGET_REASON_MAX,
@@ -125,10 +125,8 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
      * a symlink, a gitlink or an executable bit is refused, because nothing in
      * that repository is ever run.
      */
-    const allowed = PRIVATE_PATHS_ADMITTED;
-
     it('passes every shape it allows', () => {
-        assert.deepEqual(privateFileProblems(plain(...allowed)), []);
+        assert.deepEqual(privateFileProblems(plain(...PRIVATE_PATHS_ADMITTED)), []);
     });
 
     it('refuses code, pages, other files and other places, one problem each', () => {
@@ -347,7 +345,10 @@ describe('an-over-target-look-is-a-public-diff', () => {
      * public index — states no reason.
      */
     const reason = 'Ink wash draws its ground as four masks the owner refused to raster.';
-    const listed = { ...facts, overTarget: [0x04] };
+    let listed;
+    before(() => {
+        listed = { ...facts, overTarget: [0x04] };
+    });
 
     it('reads the public list from the theme table, empty', () => {
         assert.deepEqual(facts.overTarget, []);

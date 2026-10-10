@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { flashSheets, servedFlashReport, themeVarValues } from './look-flash.mjs';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private-looks-plant.mjs';
@@ -863,7 +863,10 @@ describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
      * Red by plants in the fixture's worn-only sheet and in the private-look
      * fixture's (the subject the build lints, `private-looks-build.mjs`).
      */
-    const art = { dir: FIXTURE_ART.dir, files: [...FIXTURE_ART.files, 'serif.woff2'] };
+    let art;
+    before(() => {
+        art = { dir: FIXTURE_ART.dir, files: [...FIXTURE_ART.files, 'serif.woff2'] };
+    });
     const face = (display) =>
         `@font-face { font-family: t-fixture-worn-serif; src: url(./fixture-look/serif.woff2) format("woff2");${display} }`;
 

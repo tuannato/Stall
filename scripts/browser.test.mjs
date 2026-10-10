@@ -80,18 +80,29 @@ function pixelsFor(width, height, bpp, seed) {
     return out;
 }
 
+/**
+ * One case per pixel width and filter row, with its title: built here, at
+ * module top, because the titles are read when the tests are registered and a
+ * throw in a `describe` body does not fail a `node --test` run.
+ */
+const FILTER_CASES = [3, 4].flatMap((bpp) =>
+    [[0], [1], [2], [3], [4], [4, 3, 2, 1, 0], [2, 4, 0, 3, 1]].map((filters) => ({
+        bpp,
+        filters,
+        title: `reads ${bpp} bytes a pixel under filter${filters.length > 1 ? 's' : ''} ${filters.join(',')}`,
+    })),
+);
+
 describe('decode-png-undoes-every-filter', () => {
-    for (const bpp of [3, 4]) {
-        for (const filters of [[0], [1], [2], [3], [4], [4, 3, 2, 1, 0], [2, 4, 0, 3, 1]]) {
-            it(`reads ${bpp} bytes a pixel under filter${filters.length > 1 ? 's' : ''} ${filters.join(',')}`, () => {
-                const width = 13;
-                const height = 9;
-                const pixels = pixelsFor(width, height, bpp, bpp * 31 + filters.join('').length);
-                const img = decodePng(encode(width, height, bpp, pixels, filters));
-                assert.deepEqual([img.width, img.height, img.bpp], [width, height, bpp]);
-                assert.ok(img.data.equals(pixels));
-            });
-        }
+    for (const { bpp, filters, title } of FILTER_CASES) {
+        it(title, () => {
+            const width = 13;
+            const height = 9;
+            const pixels = pixelsFor(width, height, bpp, bpp * 31 + filters.join('').length);
+            const img = decodePng(encode(width, height, bpp, pixels, filters));
+            assert.deepEqual([img.width, img.height, img.bpp], [width, height, bpp]);
+            assert.ok(img.data.equals(pixels));
+        });
     }
 
     it('refuses a filter the specification does not have, and data shorter than the header', () => {
