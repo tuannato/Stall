@@ -192,9 +192,18 @@ working accept, and there is no accept.
   its own index states a reason (kept private; printed locally, never in a
   public log).
 - **Glyphs a page prints are drawn by Stall's own faces (owner,
-  2026-10-06).** The faces are re-subset for `≈ → ◆` and the quote units'
-  currency signs when the next face is fetched; until then they are a pinned
-  exception list.
+  2026-10-06; carried out 2026-10-10 as far as the faces' own fonts go).**
+  The four Latin subsets are cut again from the fonts Google Fonts cut them
+  from, with every glyph the app prints that those fonts draw: `≈` and `₽`
+  on every look, and `→ ◆` and every quote unit's sign on Modern. What a
+  font lacks stays on a pinned exception list, drawn by the reader's
+  machine: `→ ◆ ₹ ₪ ₩ ₦ ₱` on Rural, `₹ ₪ ₩ ₦ ₱ ₺` on Neo, and `元`
+  everywhere. Borrowing those from Inter for Rural and Neo is a taste call
+  shown to the owner on a picture first; a CJK face for one sign is a new
+  licence and his call. **RUB prints `₽` after the figure ("100 ₽"; owner,
+  2026-10-10)**, not `р.`: a Cyrillic `р` in a Latin range drew one letter
+  of every Cyrillic word a seller writes in Stall's face and the rest in the
+  reader's, so no face's range takes a letter of another script.
 
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
