@@ -127,7 +127,9 @@ export const faceSetName = (face) => (face.style.trim() === 'normal' ? face.fami
 /**
  * Every face `stall.css` declares, with its file and the code points the file
  * holds, grouped by family and style (`Inter`, `Stall Serif`, `Stall Serif
- * italic`, `JetBrains Mono`): `{ name, faces: [{ file, ranges, held }] }`.
+ * italic`, `JetBrains Mono`): `{ name, faces: [{ file, ranges, declared,
+ * held }] }` — `declared` the `unicode-range` as written, '' when the rule
+ * has none (`ranges` is then every code point).
  */
 export function servedFaceSets() {
     const sets = new Map();
@@ -137,7 +139,7 @@ export function servedFaceSets() {
         if (ranges === undefined) throw new Error(`${file}: an unreadable unicode-range`);
         const name = faceSetName(face);
         if (!sets.has(name)) sets.set(name, { name, faces: [] });
-        sets.get(name).faces.push({ file, ranges, held: woff2CodePoints(readFileSync(join(ROOT, file))) });
+        sets.get(name).faces.push({ file, ranges, declared: face.unicodeRange ?? '', held: woff2CodePoints(readFileSync(join(ROOT, file))) });
     }
     return [...sets.values()];
 }
@@ -179,6 +181,76 @@ export function declaredNotHeld(sets = servedFaceSets()) {
         }
     }
     return out;
+}
+
+/**
+ * The script each subset is cut for, by the subset part of its file name
+ * (`inter-latin.woff2`, `stall-serif-vietnamese-italic.woff2`): Fontsource's
+ * Latin and Vietnamese subsets are both Latin script. A subset this table
+ * does not name is an error, never a pass — a Cyrillic or Greek subset is
+ * added here with its own script, on purpose.
+ */
+export const SUBSET_SCRIPTS = Object.freeze({ latin: 'Latin', vietnamese: 'Latin' });
+
+/** The script a served face file is cut for (`SUBSET_SCRIPTS`), or a thrown error naming the file. */
+export function subsetScript(file) {
+    const subset = file.replace(/^.*\//, '').replace(/\.woff2$/, '').replace(/-italic$/, '').split('-').pop();
+    const script = Object.hasOwn(SUBSET_SCRIPTS, subset) ? SUBSET_SCRIPTS[subset] : undefined;
+    if (script === undefined) throw new Error(`${file}: a subset ("${subset}") whose script SUBSET_SCRIPTS does not name`);
+    return script;
+}
+
+/**
+ * The most code points one subset's `unicode-range` may name before this
+ * module refuses to walk it: a whole plane. The widest served range names
+ * 397 (Inter's Latin); a face with no range names all 1,114,112
+ * (`rangePairs` reads an absent range as every code point), 138,568 of them
+ * letters of another script, and a test that compared that list with `[]`
+ * was killed at 1.45 GB with no face named (the critic's re-review, P3-8).
+ */
+export const MAX_RANGE_CODE_POINTS = 0x10000;
+
+/**
+ * Every letter (`\p{L}`) a face's `unicode-range` names that does not belong
+ * to its subset's own script (`subsetScript`), as `{ file, cp }`, read by
+ * `Script_Extensions`: a letter belongs when its scx holds the subset's
+ * script, or when its scx is Common or Inherited — which in Unicode is only
+ * ever the whole set, never Common beside a script, so `\p{scx=Common}` is
+ * "exactly Common". `Script` alone would let a letter through that one other
+ * script owns: `ー` (U+30FC) is `Script=Common` with scx Hiragana and
+ * Katakana, and in a Latin range it would split Japanese words exactly as
+ * `р` (U+0440) split Cyrillic ones in the glyph re-subset's first cut —
+ * the shipped face drawing that one letter of a seller's word, the
+ * machine's font the rest. Signs (`₽`, `≈`) are not letters; `µ` (U+00B5),
+ * `ʻ` (U+02BB) and `ˆ` (U+02C6) are scx Common, and `ʼ` (U+02BC) holds Latin.
+ *
+ * A face whose range names more than `MAX_RANGE_CODE_POINTS` is not walked
+ * and is listed in `unbounded` (`{ file, size }`), so a face with no range
+ * fails fast and by name. `count` is how many code points were read, so a
+ * check that read nothing can be told from one that passed.
+ */
+export function lettersOfAnotherScript(sets = servedFaceSets()) {
+    const letters = [];
+    const unbounded = [];
+    let count = 0;
+    for (const set of sets) {
+        for (const face of set.faces) {
+            const size = face.ranges.reduce((n, [lo, hi]) => n + hi - lo + 1, 0);
+            if (size > MAX_RANGE_CODE_POINTS) {
+                unbounded.push({ file: face.file, size });
+                continue;
+            }
+            const own = new RegExp(`^[\\p{scx=${subsetScript(face.file)}}\\p{scx=Common}\\p{scx=Inherited}]$`, 'u');
+            for (const [lo, hi] of face.ranges) {
+                for (let cp = lo; cp <= hi; cp += 1) {
+                    count += 1;
+                    const ch = String.fromCodePoint(cp);
+                    if (/^\p{L}$/u.test(ch) && !own.test(ch)) letters.push({ file: face.file, cp });
+                }
+            }
+        }
+    }
+    return { count, letters, unbounded };
 }
 
 /** `U+2248 ≈`, for a message. */

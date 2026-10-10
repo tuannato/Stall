@@ -44,7 +44,8 @@ export type FiatCurrency = {
     /**
      * Present when the symbol is written **after** the number, and the value is
      * what sits between them: `''` for a sign that hugs the digits (`9đ`), `' '`
-     * for a symbol that is a word (`9 kr`). A prefix is the default because most
+     * for a symbol that is a word (`9 kr`) or a sign its language sets apart
+     * from the figure (`9 ₽`). A prefix is the default because most
      * of this table takes one, not because it is neutral — `đ9` is not how the
      * amount is written anywhere it is spent.
      */
@@ -78,7 +79,7 @@ export const FIAT_CURRENCIES: readonly FiatCurrency[] = [
     { code: 'nzd', name: 'New Zealand Dollar', symbol: '$' },
     { code: 'nok', name: 'Norwegian Krone', symbol: 'kr', symbolAfter: ' ' },
     { code: 'php', name: 'Philippine Peso', symbol: '₱' },
-    { code: 'rub', name: 'Russian Ruble', symbol: 'р.' },
+    { code: 'rub', name: 'Russian Ruble', symbol: '₽', symbolAfter: ' ' },
     { code: 'twd', name: 'New Taiwan Dollar', symbol: 'NT$' },
     { code: 'sar', name: 'Saudi Riyal', symbol: 'SAR' },
     { code: 'zar', name: 'South African Rand', symbol: 'R' },
@@ -344,8 +345,16 @@ export function formatFiat(
     return withSymbol(currency, groupSubUnits(subUnits, digits));
 }
 
-/** The `< ` marker stays at the front either way: it qualifies the figure. */
-function withSymbol(currency: FiatCurrency, figure: string): string {
+/**
+ * A figure with its currency's sign, where the language puts it
+ * (`symbolAfter`): `$5.00`, `100.00 ₽`, `9đ`. **The one composer that places
+ * a sign**: the converted glance (`formatFiat`) and the seller's quote as
+ * written (`quoteFigure` in `src/ui/render.ts`) both call it, so a sign
+ * cannot sit after the figure on one surface and before it on another
+ * (`a-quote-figure-puts-a-trailing-sign-after-the-figure`). `formatFiat`'s
+ * `< ` marker stays at the front either way: it qualifies the figure.
+ */
+export function withSymbol(currency: FiatCurrency, figure: string): string {
     return currency.symbolAfter === undefined
         ? `${currency.symbol}${figure}`
         : `${figure}${currency.symbolAfter}${currency.symbol}`;

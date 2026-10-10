@@ -15,7 +15,17 @@
  * beside the files. `assetsInlineLimit: 0` in vite.config.ts keeps these as
  * real files: Vite would otherwise inline anything under 4096 bytes as a
  * `data:` URL, which this CSP blocks — the face would silently fall back.
- * Weight range 400–700, one variable file per subset, no italic.
+ * Inter is declared 400–700, one variable file per subset, roman only (the
+ * other two families' weights and styles are stated above their own rules).
+ *
+ * Each family's Latin range is its own: the Latin subsets are cut again from
+ * their upstream fonts (scripts/subset-faces.py) with the glyphs the app
+ * prints that each font draws — Inter ≈ → ◆ ₹ ₪ ₩ ₦ ₱ ₺ ₽, JetBrains Mono
+ * ≈ → ◆ ₽, Stall Serif ≈ ₺ ₽ — and a range names exactly those
+ * (`every-glyph-the-app-prints-is-in-its-face`). Signs only, never a letter
+ * of another script: a Latin range naming one Cyrillic letter would draw
+ * that one letter of a seller's Cyrillic words in the shipped face and the
+ * rest in the machine's (`a-face-range-never-takes-one-letter-of-another-script`).
  */
 @font-face {
     font-family: 'Inter';
@@ -24,8 +34,9 @@
     font-display: swap;
     src: url('./fonts/inter-latin.woff2') format('woff2');
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20A6, U+20A9-20AA, U+20AC,
+        U+20B1, U+20B9-20BA, U+20BD, U+2122, U+2191-2193, U+2212, U+2215, U+2248,
+        U+25C6, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -61,8 +72,8 @@
     font-display: swap;
     src: url('./fonts/stall-serif-latin.woff2') format('woff2');
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20BA, U+20BD, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+2248, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -83,8 +94,8 @@
     font-display: swap;
     src: url('./fonts/stall-serif-latin-italic.woff2') format('woff2');
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20BA, U+20BD, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+2248, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -105,8 +116,8 @@
     font-display: swap;
     src: url('./fonts/jetbrains-mono-latin.woff2') format('woff2');
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-        U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20BD, U+2122,
+        U+2191-2193, U+2212, U+2215, U+2248, U+25C6, U+FEFF, U+FFFD;
 }
 
 @font-face {

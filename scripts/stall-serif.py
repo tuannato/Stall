@@ -12,13 +12,20 @@ The glyphs, metrics and axes are untouched.
 
 Run it by hand after any change to the Lora source files (the owner's
 decision, 2026-09-26); it needs fontTools and brotli, which are not project
-dependencies:
+dependencies. The Vietnamese inputs are Fontsource 5.3.0's own files; the two
+Latin ones are Fontsource's subsets cut again from upstream Lora 3.008 with
+the glyphs the app prints that Lora draws (≈ ₺ ₽), by scripts/subset-faces.py,
+which puts all four in the directory this script reads:
 
-    python3 -m venv /tmp/ft && /tmp/ft/bin/pip install fonttools brotli
-    /tmp/ft/bin/python scripts/stall-serif.py <fontsource-variable-lora>/package/files
+    python3 -m venv <venv> && <venv>/bin/pip install fonttools brotli
+    <venv>/bin/python scripts/subset-faces.py <upstream dir> <fontsource dir> <lora dir>
+    SOURCE_DATE_EPOCH=1790404501 <venv>/bin/python scripts/stall-serif.py <lora dir>
 
-It writes src/ui/fonts/stall-serif-*.woff2. The node test
-`stall-serif-carries-no-reserved-name` reads the result back.
+It writes src/ui/fonts/stall-serif-*.woff2. SOURCE_DATE_EPOCH is the
+`head.modified` the committed files carry (fontTools stamps a save with the
+clock otherwise), so the two Vietnamese files come out byte for byte as
+committed. The node test `stall-serif-carries-no-reserved-name` reads the
+result back.
 """
 
 import sys
@@ -30,7 +37,7 @@ FAMILY = 'Stall Serif'
 PS_FAMILY = 'StallSerif'
 OUT = Path(__file__).resolve().parent.parent / 'src' / 'ui' / 'fonts'
 
-# source file (Fontsource 5.3.0) -> (output file, style name)
+# source file (Fontsource 5.3.0's name; the Latin two cut by subset-faces.py) -> (output file, style name)
 FILES = {
     'lora-latin-wght-normal.woff2': ('stall-serif-latin.woff2', 'Regular'),
     'lora-latin-wght-italic.woff2': ('stall-serif-latin-italic.woff2', 'Italic'),

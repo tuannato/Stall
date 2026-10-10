@@ -4161,22 +4161,51 @@ both). Those are held statically now, beside this rule:
   characters (controls, format characters such as the picker's isolates)
   left out — held to the WOFF2 `cmap` (`woff2CodePoints`,
   `scripts/look-faces.mjs`) of the face whose `unicode-range` covers it, on
-  each of Inter, Stall Serif, Stall Serif italic and JetBrains Mono. What no
-  served face draws today is pinned, each with where it prints: `≈` (the
-  unit rate under a listing and the pay sheets' rate row,
-  `[data-role="rate"]`, a money node), `→` (`DESC_SUB`, the first-stall
-  checklist's "Share your link" step, `OBS_RECIPE_SOURCE`), `◆` (the
-  ticker's separator, `GENERATED_TEXT`), and `元 ₹ ₪ ₩ ₦ ₱ ₺ р` (a quote's
-  `seller-price`, a money node, in CNY, INR, ILS, KRW, NGN, PHP, TRY, RUB).
-  Each is drawn by a font of the reader's machine, so differently per OS,
-  and the probe measures this Mac's. Whether to re-subset the faces for
-  them is the owner's call; the list is the statement until then. A second
+  each of Inter, Stall Serif, Stall Serif italic and JetBrains Mono. The
+  owner decided the faces draw them (PLAN § Decided, 2026-10-06), and
+  `scripts/subset-faces.py` cut the four Latin subsets again from their
+  upstream fonts with every one each font draws: `≈` (the unit rate and the
+  pay sheets' rate row, `[data-role="rate"]`, a money node) and `₽` (RUB,
+  written after the figure, `100 ₽`) are drawn by all four now. What is
+  pinned is what an upstream font lacks, each with where it prints and the
+  faces that lack it: `→`
+  (`DESC_SUB`, the first-stall checklist's "Share your link" step,
+  `OBS_RECIPE_SOURCE`) and `◆` (the ticker's separator, `GENERATED_TEXT`)
+  in Stall Serif; `₹ ₪ ₩ ₦ ₱` (a quote's `seller-price`, a money node, in
+  INR, ILS, KRW, NGN, PHP) in Stall Serif and JetBrains Mono; `₺` (TRY) in
+  JetBrains Mono; `元` (CNY) in all four. Wherever such a face is the face,
+  the glyph is drawn by a font of the reader's machine, so differently per
+  OS, and the probe measures this Mac's. A second
   pinned list holds the code points a face's `unicode-range` names on its
   own that its file lacks — Fontsource's family ranges are wider than the
   subsets: `₫` in Stall Serif's two Vietnamese files, `↑ ↓` in its two
   Latin ones, U+2215 in Inter's Latin, U+0329 in all eight, U+FFFD in the
   four Latin files of Inter, Stall Serif and JetBrains Mono — none printed
-  by the app today (VND prints `đ`), which the test holds too.
+  by the app today (VND prints `đ`), which the test holds too. That list
+  reads only a code point a range names on its own, and `rangePairs`
+  merges neighbours into a span, so the glyphs `subset-faces.py` cuts in
+  are held one by one on every face (`names in a face's range only the
+  re-subset glyphs its own file holds`; red on U+20B9 planted beside
+  Stall Serif's U+20BA, which the list read as one span and passed).
+- **`a-face-range-never-takes-one-letter-of-another-script`**: every letter
+  (`\p{L}`) a served face's `unicode-range` names has a `Script_Extensions`
+  that holds its subset's own script (`SUBSET_SCRIPTS`: Latin for the Latin
+  and Vietnamese subsets; a subset it does not name is an error) or is Common
+  or Inherited (`µ` U+00B5, `ʻ ˆ`; `ʼ` U+02BC holds Latin). `Script` alone
+  would pass `ー` (U+30FC), `ｰ` (U+FF70) and `ـ` (U+0640), Common by script
+  and owned by one script in use (the re-review's P3-7). A face with no range,
+  which `rangePairs` reads as every code point, is refused by name and not
+  walked (`MAX_RANGE_CODE_POINTS`; P3-8: walking it listed 138,568 letters
+  and the runner was killed at 1.45 GB with no face named; now 1.4 s and a
+  message). The re-subset's first cut put `р` (U+0440,
+  for RUB's old `р.`) in all four Latin ranges, so a seller's Cyrillic
+  word drew that one letter in the shipped face and the rest in the
+  machine's (measured by its critic with `CSS.getPlatformFontsForNode`).
+  RUB prints `₽` now. Red on that commit's `stall.css` (the four Latin
+  files named), on U+0440 planted back into JetBrains Mono's Latin range, on
+  U+30FC planted into Inter's (and, with the check read by `Script`, the
+  plant case misses U+30FC, U+FF70 and U+0640), and on JetBrains Mono's Latin
+  range removed.
 
 **The incident (8d1's critic, measured with an instrumented probe, never
 committed).** The geometry passes are one synchronous task — the module
