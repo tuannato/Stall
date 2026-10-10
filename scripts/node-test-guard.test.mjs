@@ -1,0 +1,282 @@
+import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { REGISTRARS, describeBodyProblems, nodeTestFiles, nodeTestFilesOf, problemLine } from './node-test-guard.mjs';
+
+/**
+ * `no-node-test-computes-in-a-describe-body`. On Node 22.22.0 a `describe`
+ * callback that throws before it registers a test is a suite-level `not ok`
+ * in the TAP stream and nothing more: `# fail 0`, exit status 0, the suite
+ * gone (`a-describe-body-that-throws-is-not-a-failed-run-on-this-node`
+ * measures it). AGENTS section 4 is about this shape: the runner's own exit
+ * code and its summary line both read green. The rule and its reasons are in
+ * `node-test-guard.mjs`; here it is read over every file the package's `test`
+ * script runs with `node --test`, and each rule is planted.
+ */
+
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const REPORTER = join(ROOT, 'scripts', 'node-test-reporter.mjs');
+
+const scratch = [];
+after(() => {
+    for (const dir of scratch) {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+/** The problems a describe body holds, as `file:line` lines: the plant's source is the body. */
+const problemsIn = (body) => describeBodyProblems('planted.test.mjs', `import { describe, it, before } from 'node:test';\ndescribe('s', () => {\n${body}\n});\n`).problems;
+
+describe('no-node-test-computes-in-a-describe-body', () => {
+    let files;
+    before(() => {
+        files = nodeTestFiles(ROOT);
+    });
+
+    it("holds in every file the package's node test list names", () => {
+        const found = [];
+        for (const file of files) {
+            const { problems } = describeBodyProblems(file, readFileSync(join(ROOT, file), 'utf8'));
+            found.push(...problems);
+        }
+        assert.deepEqual(found.map(problemLine), [], `a describe body computes: move it into a before() hook, or to the module top\n${found.map(problemLine).join('\n')}`);
+    });
+
+    it('reads the list from package.json, finds every file, this one included, and sees a describe in each', () => {
+        assert.ok(files.length >= 25, `${files.length} files`);
+        assert.ok(files.includes('scripts/node-test-guard.test.mjs'), 'this guard is not in the list it reads');
+        assert.ok(files.includes('worker-icons/src/index.test.ts'));
+        for (const file of files) {
+            assert.ok(existsSync(join(ROOT, file)), `${file} is named by the test script and is not there`);
+            const text = readFileSync(join(ROOT, file), 'utf8');
+            assert.ok(describeBodyProblems(file, text).describes > 0, `${file}: the guard found no describe in it`);
+        }
+    });
+
+    it('reads every node --test command of the script, and only those', () => {
+        const script = (test) => JSON.stringify({ scripts: { test } });
+        assert.deepEqual(nodeTestFilesOf(script('vitest run && node --experimental-strip-types --test a.ts b.mjs')), ['a.ts', 'b.mjs']);
+        assert.deepEqual(nodeTestFilesOf(script('node --test x.mjs && node --test y.mjs')), ['x.mjs', 'y.mjs']);
+        assert.deepEqual(nodeTestFilesOf(script('vitest run')), []);
+        assert.throws(() => nodeTestFilesOf(JSON.stringify({ scripts: {} })), /no scripts\.test/);
+    });
+
+    it('passes what a describe body may hold', () => {
+        assert.deepEqual(
+            problemsIn(`
+    let slot;
+    let other;
+    before(() => { slot = compute(); });
+    const NAME = 'a' + 'b';
+    const PATTERN = /x/;
+    const LIST = [1, -2, 'c', ['d']];
+    const OBJECT = { a: 1, 'b': 'c', 3: [true, null] };
+    const TEMPLATE = \`plain\`;
+    const helper = (x) => x + compute();
+    function declared() { return compute(); }
+    after(helper);
+    it('a', () => {});
+    it(\`b \${NAME.length}\`, { timeout: 5, skip }, async () => { await compute(); });
+    for (const [one, two] of CASES) {
+        it(\`c \${one}\`, () => {});
+        for (const item of [1, 2]) it('d', () => {});
+    }
+    describe('inner', () => { before(() => {}); it('e', () => {}); });
+`),
+            [],
+        );
+        assert.deepEqual(REGISTRARS, ['describe', 'it', 'test', 'before', 'after', 'beforeEach', 'afterEach']);
+    });
+
+    for (const [name, body, why] of [
+        ['a const that reads a file', "const text = readFileSync(join(ROOT, 'a'), 'utf8');", /a const that computes its value/],
+        ['a const that calls a function it was handed', 'const closure = productionPackages(ROOT);', /a const that computes its value/],
+        ['a const of a new Set', "const compared = new Set(['a']);", /a const that computes its value/],
+        ['a const spread of another', 'const listed = { ...facts, overTarget: [4] };', /a const that computes its value/],
+        ['a template with a call in it', 'const t = `a ${f()}`;', /a const that computes its value/],
+        ['a destructured const', 'const { tree } = parse(TEXT);', /a const that computes its value/],
+        ['a let with a value', 'let road = packedRoad();', /a let with a value/],
+        ['a var', 'var x;', /a var declaration/],
+        ['a bare call', 'prepare();', /a call to `prepare\(\)`/],
+        ['an assignment', 'slot = compute();', /BinaryExpression expression/],
+        ['an if', 'if (process.env.X) { it("a", () => {}); }', /IfStatement/],
+        ['a try', 'try { compute(); } catch {}', /TryStatement/],
+        ['a for over a call', 'for (const x of items()) { it("a", () => {}); }', /for\.\.\.of over something that is computed/],
+        ['a for over a let a hook fills', 'let items;\nbefore(() => { items = f(); });\nfor (const x of items) { it(`a ${x}`, () => {}); }', /for\.\.\.of over `items`, a let of a describe body/],
+        ['a computing statement inside a for', 'for (const x of LIST) { const y = f(x); it("a", () => {}); }', /inside a for\.\.\.of: a const that computes/],
+        ['a for await', 'for await (const x of LIST) { it("a", () => {}); }', /a for await loop/],
+        ['a classic for', 'for (let i = 0; i < 3; i += 1) { it("a", () => {}); }', /ForStatement/],
+        ['a forEach', 'LIST.forEach((x) => it("a", () => {}));', /a call to `LIST.forEach`/],
+        ['it.skip', 'it.skip("a", () => {});', /a call to `it.skip`/],
+        ['describe.only', 'describe.only("a", () => {});', /a call to `describe.only`/],
+        ['it.todo', 'it.todo("a");', /a call to `it.todo`/],
+        ['a title that calls', 'it(titleOf(1), () => {});', /an argument of it\(\) that computes \(CallExpression\)/],
+        ['a title with a conditional', 'it(`a ${n > 1 ? "s" : ""}`, () => {});', /an argument of it\(\) that computes \(TemplateExpression\)/],
+        ['an option that computes', 'it("a", { skip: want() ? "x" : false }, () => {});', /an argument of it\(\) that computes \(ObjectLiteralExpression\)/],
+        ['an index in a title', 'it(TITLES[0], () => {});', /an argument of it\(\) that computes \(ElementAccessExpression\)/],
+        ['a hook argument that calls', 'after(remover());', /an argument of after\(\) that computes \(CallExpression\)/],
+    ]) {
+        it(`refuses ${name}`, () => {
+            const problems = problemsIn(body);
+            assert.ok(problems.length >= 1, 'the plant passed');
+            assert.match(problems[0].why, why);
+            assert.equal(problems[0].file, 'planted.test.mjs');
+            // The body starts on line 3 of the planted file; the message names the line and the statement.
+            assert.ok(problems[0].line >= 3);
+            assert.match(problemLine(problems[0]), /^planted\.test\.mjs:\d+: /);
+            assert.ok(problems[0].statement.length > 0);
+        });
+    }
+
+    it('names the line of the statement, not of the describe', () => {
+        const [problem] = problemsIn("it('a', () => {});\n\nconst text = read();");
+        assert.equal(problem.line, 5);
+        assert.equal(problem.statement, 'const text = read();');
+    });
+
+    it('reads a nested describe and one with a concise arrow body, and refuses a callback it cannot read', () => {
+        const nested = describeBodyProblems('n.test.mjs', "describe('a', () => { describe('b', () => { const x = f(); }); });").problems;
+        assert.equal(nested.length, 1);
+        assert.match(nested[0].why, /a const that computes/);
+        const concise = describeBodyProblems('c.test.mjs', "describe('a', () => compute());").problems;
+        assert.equal(concise.length, 1);
+        assert.match(concise[0].why, /a call to `compute\(\)`/);
+        const named = describeBodyProblems('d.test.mjs', "describe('a', body);").problems;
+        assert.equal(named.length, 1);
+        assert.match(named[0].why, /callback is not a function written in place/);
+        const withOptions = describeBodyProblems('e.test.mjs', "describe('a', { timeout: 5 }, () => { const x = f(); });").problems;
+        assert.equal(withOptions.length, 1);
+        // A let of an enclosing describe also makes a for...of in the inner one refuse.
+        const outerLet = describeBodyProblems('f.test.mjs', "describe('a', () => { let items; describe('b', () => { for (const x of items) { it('c', () => {}); } }); });").problems;
+        assert.equal(outerLet.length, 1);
+        assert.match(outerLet[0].why, /for\.\.\.of over `items`/);
+    });
+
+    it('refuses node:test imported in a form the guard cannot follow', () => {
+        for (const line of ["import test from 'node:test';", "import * as t from 'node:test';", "import { describe as suite } from 'node:test';"]) {
+            const { problems } = describeBodyProblems('i.test.mjs', `${line}\n`);
+            assert.equal(problems.length, 1, line);
+            assert.match(problems[0].why, /node:test imported by default, as a namespace or under another name/);
+        }
+        assert.deepEqual(describeBodyProblems('i.test.mjs', "import { describe, it, before } from 'node:test';\n").problems, []);
+    });
+
+    it('reads a TypeScript file', () => {
+        const { problems, describes } = describeBodyProblems('t.test.ts', "describe('a', () => { const x: number = f(); it('b', () => {}); });");
+        assert.equal(describes, 1);
+        assert.equal(problems.length, 1);
+    });
+});
+
+/**
+ * The premise, measured on the Node this repository pins (`.nvmrc`,
+ * `engines`): a throw in a `describe` body is a suite `not ok` that the
+ * summary and the exit status do not count; the same throw in a hook or at
+ * module top fails the run. When a Node upgrade changes the first, this test
+ * goes red and says so: the guard above may then be retired or relaxed, which
+ * is the owner's call.
+ */
+describe('a-describe-body-that-throws-is-not-a-failed-run-on-this-node', () => {
+    let dir;
+    before(() => {
+        dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-node-test-')));
+        scratch.push(dir);
+        const head = "import { describe, it, before } from 'node:test';\n";
+        writeFileSync(join(dir, 'in-body.test.mjs'), `${head}describe('s', () => { const v = (() => { throw new Error('boom'); })(); it('t', () => {}); });\nit('u', () => {});\n`);
+        writeFileSync(join(dir, 'in-hook.test.mjs'), `${head}describe('s', () => { before(() => { throw new Error('boom'); }); it('t', () => {}); });\nit('u', () => {});\n`);
+        writeFileSync(join(dir, 'at-top.test.mjs'), `${head}throw new Error('boom');\n`);
+    });
+
+    /** `node --test <file>` as a top-level run: the runner's own context variable would make it a child of this one. */
+    function run(file) {
+        const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+        const out = spawnSync(process.execPath, ['--test', '--test-reporter=tap', join(dir, file)], { cwd: dir, env, encoding: 'utf8', timeout: 60_000 });
+        return { status: out.status, out: `${out.stdout}${out.stderr}` };
+    }
+
+    it('counts it as neither a failure nor a failed run, though the stream says not ok', () => {
+        const { status, out } = run('in-body.test.mjs');
+        assert.match(out, /^not ok \d+ - s$/m, out);
+        assert.match(out, /^# fail 0$/m, `this Node counts a describe body that throws: ${out}`);
+        assert.equal(status, 0, `this Node fails a run whose describe body throws: the guard may be relaxed (the owner's call)\n${out}`);
+    });
+
+    it('fails the run for the same throw in a before() hook and at module top', () => {
+        for (const file of ['in-hook.test.mjs', 'at-top.test.mjs']) {
+            const { status, out } = run(file);
+            assert.equal(status, 1, `${file}: ${out}`);
+            assert.match(out, /^not ok \d+ - /m, file);
+        }
+    });
+});
+
+/**
+ * The runtime half (`scripts/node-test-reporter.mjs`, named by the `test`
+ * script as `--test-reporter`): the exit status 1 for a failure the summary
+ * does not count, with the output of Node's own TAP reporter otherwise
+ * untouched. The spec reporter, which Node picks on a terminal and this one
+ * wraps the same way, was compared by hand over a pseudo-terminal, colours
+ * included; no test here owns a terminal.
+ */
+describe('the-test-reporter-fails-the-run-for-a-failure-the-summary-does-not-count', () => {
+    const HEAD = "import { describe, it, after } from 'node:test';\n";
+    let dir;
+    before(() => {
+        dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-node-reporter-')));
+        scratch.push(dir);
+        const files = {
+            'in-body.test.mjs': "describe('s', () => { const v = (() => { throw new Error('boom'); })(); it('t', () => {}); });\nit('u', () => {});\n",
+            'in-after.test.mjs': "describe('s', () => { after(() => { throw new Error('boom'); }); it('t', () => {}); });\n",
+            'green.test.mjs': "describe('s', () => { it('t', () => {}); it('u', () => {}); });\n",
+            'plain-fail.test.mjs': "describe('s', () => { it('t', () => { throw new Error('boom'); }); });\n",
+            'todo.test.mjs': "it('t', { todo: true }, () => { throw new Error('expected'); });\nit('u', () => {});\n",
+        };
+        for (const [name, body] of Object.entries(files)) {
+            writeFileSync(join(dir, name), `${HEAD}${body}`);
+        }
+    });
+
+    /** `node --test` as a top-level run, with Node's own reporter (TAP, as on a pipe) or this one. */
+    function run(file, reporter) {
+        const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
+        const args = ['--test', ...(reporter ? [`--test-reporter=${REPORTER}`] : []), join(dir, file)];
+        const out = spawnSync(process.execPath, args, { cwd: dir, env, encoding: 'utf8', timeout: 60_000 });
+        return { status: out.status, stdout: out.stdout.replace(/duration_ms.*/g, ''), stderr: out.stderr };
+    }
+
+    it('exits 1 for a describe body that throws, saying why on stderr, where Node exits 0', () => {
+        assert.equal(run('in-body.test.mjs', false).status, 0);
+        const { status, stdout, stderr } = run('in-body.test.mjs', true);
+        assert.equal(status, 1, stdout);
+        assert.match(stdout, /^# fail 0$/m, 'the summary is Node\'s own, and still does not count it');
+        assert.match(stdout, /^not ok \d+ - s$/m);
+        assert.match(stderr, /^node-test-reporter: 1 failed test or suite event\(s\) above were not counted by the summary/m);
+    });
+
+    it('exits 1 for an after() hook inside a describe that throws', () => {
+        assert.equal(run('in-after.test.mjs', false).status, 0);
+        assert.equal(run('in-after.test.mjs', true).status, 1);
+    });
+
+    it('prints what Node prints for a green run and for an ordinary failure, with no note and the same status', () => {
+        for (const file of ['green.test.mjs', 'plain-fail.test.mjs', 'todo.test.mjs']) {
+            const node = run(file, false);
+            const ours = run(file, true);
+            assert.equal(ours.status, node.status, file);
+            assert.equal(ours.stdout, node.stdout, file);
+            assert.equal(ours.stderr, '', file);
+        }
+        assert.equal(run('green.test.mjs', true).status, 0);
+        assert.equal(run('plain-fail.test.mjs', true).status, 1);
+        assert.equal(run('todo.test.mjs', true).status, 0, 'a todo that fails is not a failed run');
+    });
+
+    it('is the reporter the test script names', () => {
+        const script = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts.test;
+        assert.ok(script.includes('--test-reporter=./scripts/node-test-reporter.mjs'), script);
+    });
+});
