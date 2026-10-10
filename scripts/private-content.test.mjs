@@ -5,8 +5,20 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { UNPUSHED_LOG_ARGS, UNPUSHED_REVS } from './git-unpushed.mjs';
 import { FIXTURE_LOOKS_DIR, REQUIRED_ENV, SELECTION_ENV } from './looks-selection.mjs';
-import { CONTENT_GUARD, EMPTY_BLOB, blobId, canaryBlobIds, contentGuard, privateBlobIds, privateContentProblems, publicBlobs } from './private-content.mjs';
+import {
+    CONTENT_GUARD,
+    COPY_BOTH_WAYS,
+    EMPTY_BLOB,
+    blobId,
+    canaryBlobIds,
+    contentGuard,
+    privateBlobIds,
+    privateContentProblems,
+    publicBlobs,
+    workingBytes,
+} from './private-content.mjs';
 import { plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 
@@ -23,7 +35,13 @@ import { sanitizeSvg } from './svg-allow.mjs';
  * one of its SVGs (`scripts/private-content.mjs`). The canary's blobs
  * (public bytes, from the recipe), the empty blob, and a reflog-only blob
  * `origin/main` already holds are no evidence. A match names the tracked
- * path, never the private one.
+ * path, never the private one, and says both ways the copy may have gone
+ * and the way out of each (the step critic's re-review, R2). The private
+ * side reads its ignored files too (R4); a worktree git lists as
+ * `prunable` is skipped, one that cannot be read is named with the way to
+ * mend it, and a file gone between git's listing and its read is no file
+ * (R1); and no failure on the private side prints a private path, an entry
+ * or git's own words (R3).
  *
  * Without a selection the first case says so on stderr and passes; under
  * `STALL_LOOKS_REQUIRED` with none it fails, as the guards over sheets do.
@@ -33,7 +51,11 @@ import { sanitizeSvg } from './svg-allow.mjs';
  * the empty blob, and a reflog-only private copy of a public file
  * `origin/main` holds (the owner's canary clone's case). Whole-file copies
  * only: a fragment or a redrawn picture is the words rule's and the
- * reviews'.
+ * reviews'. With no selection, no case here reads a worktree of this
+ * checkout but its own: the canary twin reads the root's own worktree
+ * alone (`worktrees: 'own'`), and the worktree reader is held on planted
+ * repositories; only the first case, under a selection, reads every
+ * worktree on the machine, which is the guard's job.
  *
  * `node --test`: a TypeScript test importing an `.mjs` breaks `tsc` (TS7016).
  * Git runs locally and only locally.
@@ -91,6 +113,31 @@ const privateRepo = () => plantLooks(undefined, { [SECRET_PATH]: SECRET });
 
 /** The guard over `pub` with `priv` selected, git run in the planted environment; `exempt` the canary's ids unless given. */
 const guard = (pub, priv, exempt) => contentGuard({ root: pub.dir, env: priv.selection, gitEnv: pub.env, ...(exempt === undefined ? {} : { exempt }) });
+
+/**
+ * A git that answers `ls-files --stage` with an entry no git writes —
+ * naming a path a private repository could hold — and is git for every
+ * other command.
+ */
+function strangeGit() {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-git-')));
+    scratch.push(dir);
+    const path = join(dir, 'git-standin');
+    writeFileSync(path, `#!/bin/sh\nfor arg in "$@"; do\n  if [ "$arg" = "--stage" ]; then printf '100644 not-an-id 0\\tsecret-look/draft.css\\000'; exit 0; fi\ndone\nexec git "$@"\n`, { mode: 0o755 });
+    return path;
+}
+
+/** A failure's message, which must match `pattern` and name none of `hidden`: the private repository's directories and what it holds. */
+function assertSaysNothingPrivate(fn, hidden, pattern) {
+    assert.throws(fn, (error) => {
+        assert.match(error.message, pattern);
+        assert.ok(!error.message.includes('Command failed') && !error.message.includes('--no-replace-objects'), `a raw command line: ${error.message}`);
+        for (const word of hidden) {
+            assert.ok(!error.message.includes(word), `the message names ${JSON.stringify(word)}: ${error.message}`);
+        }
+        return true;
+    });
+}
 
 /** The one problem a plant must yield: its tracked path and where it stands, and neither the private path nor a byte of the private file. */
 function assertCaught(result, path, where) {
@@ -386,13 +433,15 @@ describe('no-tracked-file-is-a-private-look-file', () => {
     it('stays green on the canary over this checkout, though its files are tracked ones, and is red there without the exemption', () => {
         const canary = plantCanary();
         const priv = privateBlobIds({ dir: canary.dir, env: canary.env });
-        const pub = publicBlobs({ root: ROOT });
+        // This checkout's own worktree alone: this case holds the exemption, and the worktree reader is (j)'s and R1's.
+        const pub = publicBlobs({ root: ROOT, worktrees: 'own' });
+        assert.ok(!pub.entries.some((entry) => entry.where.includes('(worktree ')), 'the plant reads this worktree alone');
         const shared = pub.entries.filter((entry) => priv.ids.has(entry.id) && entry.id !== EMPTY_BLOB);
         assert.ok(shared.length >= 3, `the plant: the canary shares files with this checkout (${shared.map((e) => e.path).join(', ')})`);
         assert.ok(shared.every((entry) => canaryBlobIds().has(entry.id)), 'every shared file is one of the recipe’s');
         const env = { ...canary.selection };
-        assert.deepEqual(contentGuard({ root: ROOT, env, gitEnv: canary.env }).problems, []);
-        assert.ok(contentGuard({ root: ROOT, env, gitEnv: canary.env, exempt: new Set() }).problems.length >= 3);
+        assert.deepEqual(contentGuard({ root: ROOT, env, gitEnv: canary.env, worktrees: 'own' }).problems, []);
+        assert.ok(contentGuard({ root: ROOT, env, gitEnv: canary.env, worktrees: 'own', exempt: new Set() }).problems.length >= 3);
     });
 
     it('treats the empty blob as no evidence, on either side', () => {
@@ -411,5 +460,141 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         pub.write('copied/mark.svg', SECRET.replace('M0 0h4', 'M0 0h5'));
         pub.git('add', 'copied/mark.svg');
         assert.deepEqual(guard(pub, priv).problems, []);
+    });
+    /* The step critic's re-review, R2: a copy either way is one match, and its sentence says both ways and the way out of each. */
+    it('(m) says both ways a copy may have gone, and the way out of each, when a private worktree holds a byte copy of a tracked public file', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        // A port's natural first move: a tracked public file copied into the private clone, untracked and not yet edited.
+        writeFileSync(join(priv.dir, 'fixture', 'template.txt'), 'a public file\n');
+        assert.deepEqual(guard(pub, priv).problems, [`"a.txt" (index): ${COPY_BOTH_WAYS}`]);
+        assert.match(COPY_BOTH_WAYS, /a private file was copied here \(take it out of this repository\)/);
+        assert.match(COPY_BOTH_WAYS, /the private repository holds a byte copy of this public file \(make the private file differ\)/);
+        assert.doesNotMatch(COPY_BOTH_WAYS, /its bytes are a private look's file/, 'the sentence no longer calls a public file a private one');
+    });
+
+    /* R4: the private side reads its ignored files, so a draft under an ignored directory copied out is seen. */
+    it('(n) catches a draft under a directory the private repository ignores', () => {
+        const priv = plantLooks(undefined, { '.gitignore': 'drafts/\n' });
+        const draft = SECRET.replace('M0 0h4', 'M5 5h1');
+        mkdirSync(join(priv.dir, 'drafts'));
+        writeFileSync(join(priv.dir, 'drafts', 'draft.svg'), draft);
+        assert.equal(priv.git('status', '--porcelain'), '', 'the plant: git sees nothing to add');
+        assert.match(priv.git('status', '--porcelain', '--ignored'), /^!! drafts\/$/m, 'the plant: the draft is ignored');
+        const pub = publicRepo();
+        pub.write('notes/draft.svg', draft);
+        assertCaught(guard(pub, priv), 'notes/draft.svg', 'untracked');
+    });
+
+    /* R1: a worktree git lists as prunable holds nothing to read; one that cannot be read is named, with the way to mend it, never git's command line. */
+    it('skips a worktree git lists as prunable, and names one it cannot read with the way to mend it', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const base = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-worktrees-')));
+        scratch.push(base);
+        const gone = join(base, 'gone-tree');
+        pub.git('worktree', 'add', '-q', '-b', 'gone', gone);
+        rmSync(join(gone, '.git'));
+        assert.match(pub.git('worktree', 'list', '--porcelain'), /^prunable /m, 'the plant: git lists it as prunable');
+        assert.deepEqual(guard(pub, priv).problems, [], 'a prunable worktree is skipped, not a failure');
+        const broken = join(base, 'broken-tree');
+        pub.git('worktree', 'add', '-q', '-b', 'broken', broken);
+        writeFileSync(join(broken, '.git'), 'gitdir: /nonexistent/stall-content-worktree\n');
+        const listed = pub
+            .git('worktree', 'list', '--porcelain')
+            .split('\n\n')
+            .find((block) => block.startsWith(`worktree ${broken}\n`));
+        assert.ok(listed !== undefined && !/^prunable/m.test(listed), `the plant: git lists it, and not as prunable: ${listed}`);
+        assert.throws(
+            () => guard(pub, priv),
+            (error) => {
+                assert.ok(error.message.startsWith(`${CONTENT_GUARD}: the worktree at ${broken} could not be read: git ls-files -z --stage failed (exit 128)`), error.message);
+                assert.match(error.message, /`git worktree repair`/);
+                assert.match(error.message, /`git worktree prune`/);
+                assert.ok(!error.message.includes('Command failed') && !error.message.includes('--no-replace-objects'), `a raw command line: ${error.message}`);
+                return true;
+            },
+        );
+    });
+
+    it('reads a file gone between git’s listing and the read as no file, and words any other read failure by who it is', () => {
+        const file = { isSymbolicLink: () => false, isFile: () => true };
+        const link = { isSymbolicLink: () => true, isFile: () => false };
+        const failing = (code) => () => {
+            throw Object.assign(new Error(`${code}: open '/secret-look/art/x.svg'`), { code });
+        };
+        const quiet = { where: 'the selected private repository', quiet: true };
+        const loud = { where: 'this checkout', quiet: false };
+        for (const code of ['ENOENT', 'ENOTDIR', 'EISDIR']) {
+            for (const stat of [file, link]) {
+                assert.equal(workingBytes('/secret-look/art/x.svg', quiet, { lstat: () => stat, readFile: failing(code), readlink: failing(code) }), undefined, code);
+            }
+        }
+        assert.equal(workingBytes('/nowhere', quiet, { lstat: failing('ENOENT'), readFile: failing('EACCES'), readlink: failing('EACCES') }), undefined, 'nothing there');
+        const eacces = { lstat: () => file, readFile: failing('EACCES'), readlink: failing('EACCES') };
+        assert.throws(() => workingBytes('/secret-look/art/x.svg', quiet, eacces), (error) => {
+            assert.equal(error.message, `${CONTENT_GUARD}: the selected private repository could not be read: a file could not be read (EACCES)`);
+            return true;
+        });
+        assert.throws(() => workingBytes('/public/a.txt', loud, eacces), /this checkout could not be read: a file could not be read \(EACCES\): \/public\/a\.txt$/);
+        assert.deepEqual(workingBytes('/a', loud, { lstat: () => file, readFile: () => Buffer.from('bytes'), readlink: failing('EINVAL') }), Buffer.from('bytes'));
+    });
+
+    /* R3: no failure on the private side prints a private path, an entry, or git's own words. */
+    it('names no private path when a private worktree’s index is corrupt, a private entry is one it does not know, or the selection is no repository', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const base = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-private-wt-')));
+        scratch.push(base);
+        const draft = join(base, 'secret-look-draft-wt');
+        priv.git('worktree', 'add', '-q', '-b', 'draft', draft);
+        const gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: draft, env: priv.env, encoding: 'utf8' }).trim();
+        writeFileSync(join(gitDir, 'index'), 'not an index\n');
+        const privatePaths = [priv.dir, draft, gitDir, 'secret-look-draft-wt', 'secret-mark'];
+        assertSaysNothingPrivate(() => guard(pub, priv), privatePaths, /a linked worktree of the selected private repository could not be read: git ls-files -z --stage failed \(exit 128\) — if it moved, run `git worktree repair` in that repository/);
+        rmSync(join(gitDir, 'index'));
+        priv.git('worktree', 'remove', '--force', draft);
+        // An index entry this reader does not know: on the private side its path is not printed, on the public side it is.
+        const git = strangeGit();
+        assertSaysNothingPrivate(() => privateBlobIds({ dir: priv.dir, env: priv.env, git }), [...privatePaths, 'secret-look/draft.css', 'not-an-id'], /the selected private repository could not be read: git ls-files --stage printed an entry this reader does not know$/);
+        assert.throws(() => publicBlobs({ root: pub.dir, env: pub.env, git }), /this checkout could not be read: git ls-files --stage printed an entry this reader does not know: "100644 not-an-id 0\\tsecret-look\/draft\.css"/);
+        // A selection that names no repository: the build's own read of it would print the directory and git's command line.
+        const nowhere = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-secret-look-')));
+        scratch.push(nowhere);
+        assertSaysNothingPrivate(
+            () => contentGuard({ root: pub.dir, env: { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: nowhere }, gitEnv: pub.env }),
+            [nowhere, 'secret-look'],
+            /the selected private repository could not be read: STALL_LOOKS_DIR names no repository root git can read/,
+        );
+        // And a private root git cannot read at all.
+        assertSaysNothingPrivate(() => privateBlobIds({ dir: nowhere, env: pub.env }), [nowhere, 'secret-look'], /the selected private repository could not be read: git rev-parse --show-toplevel failed \(exit 128\)$/);
+    });
+
+    /* R5: the look-art guard's walk and this one are one definition. */
+    it('walks the refs a push could publish exactly as the look-art guard walks them', () => {
+        assert.deepEqual(UNPUSHED_LOG_ARGS.slice(-UNPUSHED_REVS.length), [...UNPUSHED_REVS], 'the log walk ends with the revs the blob walk reads');
+        // The look-art guard's arguments, as they stood before the walk was shared: byte for byte the same.
+        assert.deepEqual(
+            [...UNPUSHED_LOG_ARGS],
+            [
+                'log',
+                '-z',
+                '--root',
+                '--diff-merges=separate',
+                '--ignore-submodules=none',
+                '--no-show-signature',
+                '--full-history',
+                '--no-renames',
+                '--raw',
+                '--no-abbrev',
+                '--format=%x01%H',
+                '--branches',
+                '--tags',
+                'HEAD',
+                '--not',
+                '--remotes=origin',
+            ],
+        );
+        assert.ok(Object.isFrozen(UNPUSHED_LOG_ARGS) && Object.isFrozen(UNPUSHED_REVS));
     });
 });

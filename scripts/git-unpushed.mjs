@@ -28,13 +28,21 @@ import { execFileSync } from 'node:child_process';
 import { GITLINK_MODE } from './licence-map-lib.mjs';
 
 /**
+ * The refs a push could publish from, and the ones it would not: the one
+ * walk both readers make — `UNPUSHED_LOG_ARGS` ends with it, so the
+ * look-art guard's walk and the content guard's cannot drift apart (the
+ * step-8g-pre critic's re-review, R5).
+ */
+export const UNPUSHED_REVS = Object.freeze(['--branches', '--tags', 'HEAD', '--not', '--remotes=origin']);
+
+/**
  * The log arguments, each option a repository's or a user's config would
  * otherwise decide stated: `--root` (log.showRoot false hides a root
  * commit's files), `--ignore-submodules=none` (diff.ignoreSubmodules all
  * hides every gitlink), `--diff-merges=separate` (log.diffMerges narrows or
  * combines a merge's diff), `--no-show-signature` (log.showSignature prints
  * lines this reader does not know). `--no-renames` keeps every status to one
- * path; `--no-abbrev` keeps every object id whole.
+ * path; `--no-abbrev` keeps every object id whole. Then `UNPUSHED_REVS`.
  */
 export const UNPUSHED_LOG_ARGS = Object.freeze([
     'log',
@@ -48,15 +56,8 @@ export const UNPUSHED_LOG_ARGS = Object.freeze([
     '--raw',
     '--no-abbrev',
     '--format=%x01%H',
-    '--branches',
-    '--tags',
-    'HEAD',
-    '--not',
-    '--remotes=origin',
+    ...UNPUSHED_REVS,
 ]);
-
-/** The refs a push could publish from, and the ones it would not: the walk both readers make. */
-export const UNPUSHED_REVS = Object.freeze(['--branches', '--tags', 'HEAD', '--not', '--remotes=origin']);
 
 /** A git runner over `root`, replace objects off on every command. */
 function runnerAt({ root, git = 'git', env = process.env }) {

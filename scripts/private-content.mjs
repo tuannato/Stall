@@ -9,28 +9,39 @@
  * **The public side** (`publicBlobs`), everything a commit or a push from
  * this repository could carry: in **every worktree** (`git worktree list
  * --porcelain`, the step critic's item 7 — a copy staged in one worktree
- * while the selected run happens in another), every blob in the index (`git
- * ls-files --stage`, gitlinks skipped), the working bytes of every tracked
- * path (a copy written over a tracked file and not staged is seen whatever
- * git's stat cache says), and every untracked file git does not ignore
- * (`git ls-files --others --exclude-standard`); and every blob a push could
- * add to `origin` (`readUnpushedBlobs`, `scripts/git-unpushed.mjs`: `git
- * rev-list --objects --branches --tags HEAD --not --remotes=origin`, replace
- * objects off — so a commit a replace ref hides, a tag at a blob and a tag
- * at a tree are read, item 3). A shallow clone or a missing `origin/main`
- * fails rather than passing over nothing. Working bytes are hashed as `git
- * hash-object --no-filters` hashes them (`blobId`); a link as the text git
- * stores for it.
+ * while the selected run happens in another; one git lists as `prunable`,
+ * whose directory or `.git` is gone, holds nothing to read and is skipped),
+ * every blob in the index (`git ls-files --stage`, gitlinks skipped), the
+ * working bytes of every tracked path (a copy written over a tracked file
+ * and not staged is seen whatever git's stat cache says), and every
+ * untracked file git does not ignore (`git ls-files --others
+ * --exclude-standard`); and every blob a push could add to `origin`
+ * (`readUnpushedBlobs`, `scripts/git-unpushed.mjs`: `git rev-list --objects
+ * --branches --tags HEAD --not --remotes=origin`, replace objects off — so a
+ * commit a replace ref hides, a tag at a blob and a tag at a tree are read,
+ * item 3). A shallow clone or a missing `origin/main` fails rather than
+ * passing over nothing. Working bytes are hashed as `git hash-object
+ * --no-filters` hashes them (`blobId`); a link as the text git stores for
+ * it; a file gone between git's listing and its read is no file. A worktree
+ * that cannot be read fails with a sentence naming it and the way to mend it
+ * (`git worktree repair`, `git worktree prune`), never git's command line
+ * (the re-review's R1).
  *
  * **The private side** (`privateBlobIds`), the same in every worktree of the
  * selected repository — its index, the working bytes of its tracked paths,
- * its untracked files (item 4: an uncommitted draft copied out is seen) —
- * and every blob reachable from a ref (`git rev-list --objects --all`) or
- * from a reflog entry (`--reflog`: a draft amended or reset away, and every
- * stash entry past `stash@{0}`), replace objects off, location variables
- * dropped; plus each SVG's re-serialisation by the build's own sanitizer
- * (`sanitizeSvg`, `scripts/svg-allow.mjs`) hashed as a blob, the form a
- * build emits.
+ * its untracked files (item 4: an uncommitted draft copied out is seen), and
+ * its ignored files too (`git ls-files --others --ignored
+ * --exclude-standard`, the re-review's R4: a draft under an ignored
+ * directory; never a path under a `.git` directory) — and every blob
+ * reachable from a ref (`git rev-list --objects --all`) or from a reflog
+ * entry (`--reflog`: a draft amended or reset away, and every stash entry
+ * past `stash@{0}`), replace objects off, location variables dropped; plus
+ * each SVG's re-serialisation by the build's own sanitizer (`sanitizeSvg`,
+ * `scripts/svg-allow.mjs`) hashed as a blob, the form a build emits. **A
+ * failure on this side names no private path, no entry and none of git's
+ * own words** (which name its directories): only the selected private
+ * repository, which of its worktrees, and which read failed (the
+ * re-review's R3).
  *
  * **Exempt**: every blob of the canary, computed from the public recipe
  * (`canaryFiles`, `scripts/private-looks-plant.mjs`), with its SVGs'
@@ -44,7 +55,11 @@
  * owner's canary clone keeps a reset-away draft that held one of Stall's
  * served faces byte for byte. A reflog-only draft of new bytes is caught,
  * and nothing a ref, an index or a working tree holds is exempted this way.
- * `origin/main`'s objects are listed only when such a match happens.
+ * `origin/main`'s objects are listed only when such a match happens. Any
+ * other match is a problem whichever way the copy went, and its sentence
+ * names both ways and the way out of each (the re-review's R2): a private
+ * file copied here comes out, and a private file that is a byte copy of a
+ * public one is made to differ.
  *
  * **Stated limits**: whole-file copies only — a pasted fragment of a sheet, a
  * picture redrawn by hand, a shot or a plate of a private look, or the
@@ -63,7 +78,7 @@ import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from 
 import { basename, join } from 'node:path';
 import { readUnpushedBlobs } from './git-unpushed.mjs';
 import { GITLINK_MODE } from './licence-map-lib.mjs';
-import { REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
+import { REQUIRED_ENV, SELECTION_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { selectedTree } from './private-looks-build.mjs';
 import { canaryFiles } from './private-looks-plant.mjs';
 import { GIT_LOCATION_VARS } from './private-looks.mjs';
@@ -119,16 +134,59 @@ function cleanEnv(env) {
     return clean;
 }
 
-/** A git runner in `dir`: replace objects off, location variables dropped, bytes out. Throws on any failure. */
-function gitIn(dir, { git = 'git', env = process.env } = {}) {
+/**
+ * Who a read is, in a message: `where` its name, `quiet` whether a message
+ * may name nothing it holds (the private side: no path, no entry and none
+ * of git's own words, which name its directories — the re-review's R3), and
+ * `mend` what to do when it cannot be read, if anything.
+ */
+const THIS_CHECKOUT = Object.freeze({ where: 'this checkout', quiet: false });
+const SELECTED = Object.freeze({ where: 'the selected private repository', quiet: true });
+const publicWorktree = (dir) =>
+    Object.freeze({
+        where: `the worktree at ${dir}`,
+        quiet: false,
+        mend: 'if it moved, run `git worktree repair` in this checkout; if it is gone, `git worktree prune`',
+    });
+const PRIVATE_WORKTREE = Object.freeze({
+    where: 'a linked worktree of the selected private repository',
+    quiet: true,
+    mend: 'if it moved, run `git worktree repair` in that repository; if it is gone, `git worktree prune` there',
+});
+
+/** A read that failed, as a sentence: who could not be read, what failed, and the way to mend it. */
+function unreadable(who, what) {
+    return new Error(`${CONTENT_GUARD}: ${who.where} could not be read: ${what}${who.mend === undefined ? '' : ` — ${who.mend}`}`);
+}
+
+/** The first line of what git wrote to stderr, or nothing. */
+function gitSaid(error) {
+    const text = Buffer.isBuffer(error?.stderr) ? error.stderr.toString('utf8') : typeof error?.stderr === 'string' ? error.stderr : '';
+    return text.split('\n').find((line) => line.trim() !== '')?.trim();
+}
+
+/**
+ * A git runner in `dir`: replace objects off, location variables dropped,
+ * bytes out. A failure throws `unreadable(who, …)`: the subcommand and its
+ * options (never the `-C` directory), the exit status, and — on a side that
+ * is not quiet — git's first line on stderr.
+ */
+function gitIn(dir, who, { git = 'git', env = process.env } = {}) {
     const clean = cleanEnv(env);
-    return (args, input) =>
-        execFileSync(git, ['--no-replace-objects', '-C', dir, ...args], {
-            env: clean,
-            input,
-            maxBuffer: 1024 * 1024 * 1024,
-            stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-        });
+    return (args, input) => {
+        try {
+            return execFileSync(git, ['--no-replace-objects', '-C', dir, ...args], {
+                env: clean,
+                input,
+                maxBuffer: 1024 * 1024 * 1024,
+                stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+            });
+        } catch (error) {
+            const status = typeof error?.status === 'number' ? ` (exit ${error.status})` : error?.code === undefined ? '' : ` (${error.code})`;
+            const said = who.quiet ? undefined : gitSaid(error);
+            throw unreadable(who, `git ${args.join(' ')} failed${status}${said === undefined ? '' : `: ${said}`}`);
+        }
+    };
 }
 
 /** A repository's object format must be the one `blobId` writes, or no id here would mean equal bytes. */
@@ -141,9 +199,10 @@ function requireSha1(run, where) {
 
 /**
  * Every worktree of the repository `run` reads, as `git worktree list
- * --porcelain -z` lists them: the checked-out ones whose directory stands
- * (a bare entry, or one whose directory is gone, holds no index or working
- * tree to read).
+ * --porcelain -z` lists them: the checked-out ones whose directory stands —
+ * a bare entry, one whose directory is gone and one git lists as `prunable`
+ * (its directory or its `.git` gone: the re-review's R1) hold no index or
+ * working tree to read.
  */
 function worktreesOf(run) {
     const out = run(['worktree', 'list', '--porcelain', '-z']).toString('utf8');
@@ -151,41 +210,67 @@ function worktreesOf(run) {
     for (const block of out.split('\0\0')) {
         const fields = block.split('\0').filter((field) => field !== '');
         const path = fields.find((field) => field.startsWith('worktree '))?.slice('worktree '.length);
-        if (path !== undefined && !fields.includes('bare') && existsSync(path)) {
+        const prunable = fields.some((field) => field === 'prunable' || field.startsWith('prunable '));
+        if (path !== undefined && !fields.includes('bare') && !prunable && existsSync(path)) {
             trees.push(path);
         }
     }
     return trees;
 }
 
+/** The read errors that mean the file went away between git's listing and the read: no file, not a failure (the re-review's R1). */
+const GONE = new Set(['ENOENT', 'ENOTDIR', 'EISDIR']);
+
+/** Node's own file system calls, as `workingBytes` reads through them. */
+const NODE_FS = Object.freeze({ lstat: lstatSync, readFile: readFileSync, readlink: (path) => readlinkSync(path, { encoding: 'buffer' }) });
+
+/**
+ * The working bytes at `full`: a link as its text, a file as its bytes, or
+ * undefined when there is no file there — nothing at all, something that is
+ * not a file or a link, or one that went away between the `lstat` and the
+ * read (`GONE`). Any other failure throws `unreadable(who, …)`, naming the
+ * path only where `who` is not quiet. `fs` stands in for Node's own calls.
+ */
+export function workingBytes(full, who, fs = NODE_FS) {
+    let stat;
+    try {
+        stat = fs.lstat(full);
+    } catch {
+        return undefined;
+    }
+    if (!stat.isSymbolicLink() && !stat.isFile()) {
+        return undefined;
+    }
+    try {
+        const bytes = stat.isSymbolicLink() ? fs.readlink(full) : fs.readFile(full);
+        return Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    } catch (error) {
+        if (GONE.has(error?.code)) {
+            return undefined;
+        }
+        throw unreadable(who, `a file could not be read (${error?.code ?? 'an error'})${who.quiet ? '' : `: ${full}`}`);
+    }
+}
+
+/** Whether `path` lies under a `.git` directory: never read, on either side. */
+const underGit = (path) => path.split('/').includes('.git');
+
 /**
  * What one worktree at `dir` holds outside its commits: `{ entries,
  * indexIds }` — each entry `{ path, id, where, svg? }` (`svg` the
  * sanitizer's id of working bytes that read as an SVG), `indexIds` the
  * index's blob ids, whose bytes a caller may read from the object store.
- * `label` says which worktree, in `where`.
+ * `label` says which worktree, in `where`; `who` names it in a failure;
+ * `ignored` reads its ignored files too (the private side, R4).
  */
-function checkoutBlobs(run, dir, label) {
+function checkoutBlobs(run, dir, label, who, { ignored = false } = {}) {
     const at = label === '' ? '' : ` (${label})`;
     const list = (args) =>
         run(args)
             .toString('utf8')
             .split('\0')
             .filter((entry) => entry !== '');
-    /** The working bytes at `path`: a link as its text, a file as its bytes, or undefined when there is no file there. */
-    const onDisk = (path) => {
-        const full = join(dir, path);
-        let stat;
-        try {
-            stat = lstatSync(full);
-        } catch {
-            return undefined;
-        }
-        if (stat.isSymbolicLink()) {
-            return Buffer.from(readlinkSync(full, { encoding: 'buffer' }));
-        }
-        return stat.isFile() ? readFileSync(full) : undefined;
-    };
+    const onDisk = (path) => workingBytes(join(dir, path), who);
     const entries = [];
     const indexIds = [];
     const fromDisk = (path, where) => {
@@ -199,7 +284,7 @@ function checkoutBlobs(run, dir, label) {
         // "<mode> <object> <stage>\t<path>"; a line this reader does not know throws.
         const m = /^(\d{6}) ([0-9a-f]{40}) \d\t(.+)$/s.exec(entry);
         if (m === null) {
-            throw new Error(`git ls-files --stage: an entry this reader does not know: ${JSON.stringify(entry)}`);
+            throw unreadable(who, `git ls-files --stage printed an entry this reader does not know${who.quiet ? '' : `: ${JSON.stringify(entry)}`}`);
         }
         if (m[1] === GITLINK_MODE) {
             continue;
@@ -213,21 +298,45 @@ function checkoutBlobs(run, dir, label) {
     }
     for (const path of list(['ls-files', '-z', '--others', '--exclude-standard'])) {
         // A repository embedded in the tree lists as `dir/`: not a file, and the look-art guard's to refuse.
-        if (!path.endsWith('/')) {
+        if (!path.endsWith('/') && !underGit(path)) {
             fromDisk(path, 'untracked');
+        }
+    }
+    if (ignored) {
+        for (const path of list(['ls-files', '-z', '--others', '--ignored', '--exclude-standard'])) {
+            if (!path.endsWith('/') && !underGit(path)) {
+                fromDisk(path, 'ignored');
+            }
         }
     }
     return { entries, indexIds };
 }
 
-/** Every worktree of the repository at `root`: the entries of each, the root's own unlabelled. */
-function everyCheckout(run, root, { git, env }) {
+/**
+ * Every worktree of the repository at `root` (or, with `worktrees: 'own'`,
+ * its own alone): the entries of each, the root's own unlabelled. `side` is
+ * `public` or `private`: who each worktree is in a failure, and whether its
+ * ignored files are read.
+ */
+function everyCheckout(run, root, { git, env, side, worktrees = 'every' }) {
     const entries = [];
     const indexIds = [];
     const here = realpathSync(root);
+    const own = side === 'private' ? SELECTED : THIS_CHECKOUT;
     for (const tree of worktreesOf(run)) {
-        const own = realpathSync(tree) === here;
-        const read = checkoutBlobs(own ? run : gitIn(tree, { git, env }), tree, own ? '' : `worktree ${basename(tree)}`);
+        let real;
+        try {
+            real = realpathSync(tree);
+        } catch {
+            // Gone between the listing and now: nothing to read.
+            continue;
+        }
+        const isOwn = real === here;
+        if (!isOwn && worktrees === 'own') {
+            continue;
+        }
+        const who = isOwn ? own : side === 'private' ? PRIVATE_WORKTREE : publicWorktree(tree);
+        const read = checkoutBlobs(isOwn ? run : gitIn(tree, who, { git, env }), tree, isOwn ? '' : `worktree ${basename(tree)}`, who, { ignored: side === 'private' });
         entries.push(...read.entries);
         indexIds.push(...read.indexIds);
     }
@@ -291,18 +400,25 @@ function blobsAmong(run, objects) {
  * the sanitizer's id of each SVG among them), `reflogOnly` those only a
  * reflog entry reaches. Throws when git cannot run, `dir` is not a
  * repository's own root, or a listing is one this reader does not know:
- * never an empty set for a failure.
+ * never an empty set for a failure, and never a message naming a path,
+ * an entry or git's own words (`SELECTED`, `PRIVATE_WORKTREE`).
  */
 export function privateBlobIds({ dir, git, env = process.env }) {
-    const run = gitIn(dir, { git, env });
+    const run = gitIn(dir, SELECTED, { git, env });
     const top = run(['rev-parse', '--show-toplevel']).toString('utf8').trim();
-    if (top !== realpathSync(dir)) {
+    let here;
+    try {
+        here = realpathSync(dir);
+    } catch (error) {
+        throw unreadable(SELECTED, `its directory could not be resolved (${error?.code ?? 'an error'})`);
+    }
+    if (top !== here) {
         throw new Error(`${CONTENT_GUARD}: the selection is not a repository's own root (git reads another)`);
     }
     requireSha1(run, 'the private repository');
     const refObjects = objectsOf(run, ['--all']);
     const reflogObjects = objectsOf(run, ['--all', '--reflog']);
-    const checkouts = everyCheckout(run, dir, { git, env });
+    const checkouts = everyCheckout(run, dir, { git, env, side: 'private' });
     const indexIds = new Set(checkouts.indexIds);
     const blobs = blobsAmong(run, new Set([...reflogObjects, ...indexIds]));
     const ids = new Set();
@@ -338,12 +454,15 @@ export function privateBlobIds({ dir, git, env = process.env }) {
  * — each with its worktree when it is another — or `unpushed`), with the
  * facts a guard over unpushed history needs: `{ entries, shallow, upstream,
  * published }`, `published(id)` whether `origin/main`'s history holds the
- * blob, its objects listed on the first ask.
+ * blob, its objects listed on the first ask. `worktrees: 'own'` reads the
+ * root's own worktree alone, for a test that holds something else than the
+ * worktree reader and must not depend on every worktree on the machine (the
+ * re-review's R1); the guard reads every one.
  */
-export function publicBlobs({ root, git, env = process.env }) {
-    const run = gitIn(root, { git, env });
+export function publicBlobs({ root, git, env = process.env, worktrees = 'every' }) {
+    const run = gitIn(root, THIS_CHECKOUT, { git, env });
     requireSha1(run, 'this repository');
-    const { entries } = everyCheckout(run, root, { git, env });
+    const { entries } = everyCheckout(run, root, { git, env, side: 'public', worktrees });
     const pushed = readUnpushedBlobs({ root, git, env: cleanEnv(env) });
     for (const blob of pushed.blobs) {
         entries.push({ path: blob.name === '' ? '(a blob no path or ref names)' : blob.name, id: blob.id, where: 'unpushed' });
@@ -355,6 +474,14 @@ export function publicBlobs({ root, git, env = process.env }) {
     };
     return { entries: entries.map(({ path, id, where }) => ({ path, id, where })), shallow: pushed.shallow, upstream: pushed.upstream, published };
 }
+
+/**
+ * What a match says, whichever way the copy went (the re-review's R2): the
+ * guard cannot tell a private file copied here from a public file copied
+ * into the private repository, so it names both, and the way out of each.
+ */
+export const COPY_BOTH_WAYS =
+    'its bytes equal a file of the selected private repository: either a private file was copied here (take it out of this repository), or the private repository holds a byte copy of this public file (make the private file differ)';
 
 /**
  * The problems: a shallow clone or no `origin/main` (the unpushed history
@@ -381,7 +508,7 @@ export function privateContentProblems({ entries, shallow, upstream, published, 
         if (!privateIds.has(id) && !(reflogOnly.has(id) && !published(id))) {
             continue;
         }
-        const problem = `${JSON.stringify(path)} (${where}): its bytes are a private look's file, whole — a private look's bytes never enter this repository`;
+        const problem = `${JSON.stringify(path)} (${where}): ${COPY_BOTH_WAYS}`;
         if (!problems.includes(problem)) {
             problems.push(problem);
         }
@@ -395,9 +522,10 @@ export function privateContentProblems({ entries, shallow, upstream, published, 
  * as the guards over sheets throw); `{ selected: true, fixture: true }` for
  * the tracked fixture, which is this checkout's own files; otherwise
  * `{ selected: true, problems, compared }`. `exempt` is the canary's ids
- * unless a test hands another set; `gitEnv` the environment git runs in.
+ * unless a test hands another set; `gitEnv` the environment git runs in;
+ * `worktrees` as `publicBlobs` takes it.
  */
-export function contentGuard({ root, env = process.env, gitEnv = process.env, git, exempt }) {
+export function contentGuard({ root, env = process.env, gitEnv = process.env, git, exempt, worktrees }) {
     const selection = selectionFromEnv(env);
     if (selection === undefined) {
         if (selectionRequired(env)) {
@@ -405,7 +533,13 @@ export function contentGuard({ root, env = process.env, gitEnv = process.env, gi
         }
         return { selected: false };
     }
-    const tree = selectedTree({ root, selection, git, env: gitEnv });
+    let tree;
+    try {
+        tree = selectedTree({ root, selection, git, env: gitEnv });
+    } catch {
+        // The build's own read words its failures with the selection's directory and git's command line: neither is said here (R3).
+        throw unreadable(SELECTED, `${SELECTION_ENV.dir} names no repository root git can read (the build's own read of the selection says more)`);
+    }
     if (tree.fixture) {
         return { selected: true, fixture: true };
     }
@@ -413,7 +547,7 @@ export function contentGuard({ root, env = process.env, gitEnv = process.env, gi
         throw new Error(`${CONTENT_GUARD}: the selection names this checkout itself, which is no private look repository`);
     }
     const priv = privateBlobIds({ dir: tree.dir, git, env: gitEnv });
-    const pub = publicBlobs({ root, git, env: gitEnv });
+    const pub = publicBlobs({ root, git, env: gitEnv, ...(worktrees === undefined ? {} : { worktrees }) });
     const exemptIds = exempt ?? canaryBlobIds();
     const problems = privateContentProblems({ ...pub, privateIds: priv.ids, reflogOnly: priv.reflogOnly, exempt: exemptIds });
     const matched = pub.entries.filter((entry) => priv.ids.has(entry.id) || priv.reflogOnly.has(entry.id));
