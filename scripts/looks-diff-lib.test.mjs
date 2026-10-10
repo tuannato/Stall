@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { LOADS_PER_PAGE, NOISE_PX, classify, diffMap, lookSheetRefusal, lookSlug, pageIsSpent, parseExpect, summarize } from './looks-diff-lib.mjs';
 
 /** A 10×10 RGBA frame, grey, with `paint` pixels set to red. */
@@ -106,7 +106,10 @@ describe('looks-diff-classifies-a-shot', () => {
 });
 
 describe('looks-diff-says-what-the-run-proves', () => {
-    const compared = new Set(['offers', 'unbuyable', 'item-unbuyable']);
+    let compared;
+    before(() => {
+        compared = new Set(['offers', 'unbuyable', 'item-unbuyable']);
+    });
 
     it('passes a run whose only real differences are on the screens it was told to expect', () => {
         const out = summarize(
@@ -177,7 +180,10 @@ describe('a-page-is-renewed-before-its-renderer-gives-out', () => {
 });
 
 describe('looks-diff-expects-by-screen-look-and-variant', () => {
-    const compared = new Set(['offers', 'activity', 'unbuyable']);
+    let compared;
+    before(() => {
+        compared = new Set(['offers', 'activity', 'unbuyable']);
+    });
     const shot = (screen, look, variant, verdict = 'real') => ({ screen, look, variant, verdict });
 
     it('reads a token as a screen, or a screen qualified by a look and a variant', () => {

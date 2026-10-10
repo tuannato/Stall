@@ -3,7 +3,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
     ARTIFACT_DIR,
@@ -815,7 +815,10 @@ describe('the-unwrap-runs-before-anything-is-installed', () => {
 });
 
 describe('the-looks-artifact-is-the-pinned-tree-without-its-log', () => {
-    const road = packedRoad();
+    let road;
+    before(() => {
+        road = packedRoad();
+    });
 
     it('is a tar and a stamp, the stamp the pin byte for byte, and the tar the packed tree without the README, the log or a repository', () => {
         assert.deepEqual(readdirSync(road.artifact).sort(), [ARTIFACT_TAR, ARTIFACT_STAMP].sort());
@@ -943,9 +946,14 @@ function tarOf(members, { end = true } = {}) {
 }
 
 describe('an-unwrapped-artifact-that-is-not-the-pinned-tree-is-refused', () => {
-    const road = packedRoad();
-    const goodTar = readFileSync(join(road.artifact, ARTIFACT_TAR));
-    const members = readArtifactTar(goodTar);
+    let road;
+    let goodTar;
+    let members;
+    before(() => {
+        road = packedRoad();
+        goodTar = readFileSync(join(road.artifact, ARTIFACT_TAR));
+        members = readArtifactTar(goodTar);
+    });
 
     /** A copy of the good artifact, with `change(dir)` applied; answers its directory. */
     function artifactWith(change) {
@@ -1469,6 +1477,83 @@ function diskFoldsCase() {
     return existsSync(join(dir, 'PROBE'));
 }
 
+/**
+ * Whether this disk folds case, read once at module top: the roads below take
+ * it as a value when the tests are registered, and a throw here fails the
+ * file, where one in a `describe` body would not fail the run.
+ */
+const folds = diskFoldsCase();
+
+/** Each road: a planted commit, the words it must never print, and whether the slug belt alone packs it (reads names only). */
+const ROADS = [
+    [
+        'r3: Ink wash’s bytes committed under canary/',
+        () =>
+            plantCanary(
+                (path, contents) =>
+                    path === 'canary/sheet.css'
+                        ? '/* Ink wash: a draft that must not travel */\n.t-canary {\n    --look-sheet: t-canary;\n}\n'
+                        : path === 'canary/look.json'
+                          ? contents.replace('"Canary private look"', '"Ink wash"')
+                          : contents,
+                { 'canary/art/ink-mask.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n' },
+            ),
+        ['Ink', 'ink-mask', 'draft'],
+        true,
+    ],
+    [
+        'r9: a "new" Canary/ written on this disk',
+        () =>
+            writeAndCommit(
+                plantCanary(),
+                { 'Canary/art/ink-mask.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n', 'Canary/sheet.css': '\n/* a draft rule that must not travel */\n.t-canary .stall-name { color: red; }\n' },
+                { append: ['Canary/sheet.css'] },
+            ),
+        ['ink-mask', 'draft', 'Canary'],
+        folds,
+    ],
+    [
+        'item 2: one name twice in the root tree, made with mktree',
+        () => {
+            const looks = plantCanary();
+            const git = (args, input) => execFileSync('git', args, { cwd: looks.dir, env: looks.env, input, encoding: 'utf8' }).trim();
+            const draft = git(['hash-object', '-w', '--stdin'], '/* a draft sheet that must not travel */\n');
+            const second = git(['mktree'], `100644 blob ${draft}\tsheet.css\n`);
+            const root = git(['mktree'], `${git(['ls-tree', 'HEAD'])}\n040000 tree ${second}\tcanary\n`);
+            assert.equal(git(['ls-tree', root]).split('\n').filter((entry) => entry.endsWith('\tcanary')).length, 2, 'mktree took one name twice — the plant');
+            git(['update-ref', 'refs/heads/main', git(['commit-tree', root, '-p', 'HEAD', '-m', 'twice'])]);
+            return looks;
+        },
+        ['draft'],
+        true,
+    ],
+    [
+        'item 5: an index naming ink-wash beside the canary’s files',
+        () =>
+            plantCanary((path, contents) =>
+                path === 'index.json'
+                    ? '{\n    "schema": 1,\n    "looks": [{ "id": 4, "slug": "ink-wash", "cls": "t-ink-wash", "stage": "preview", "paid": true, "budgetReason": "PRIVATE: a reason that must not travel" }]\n}\n'
+                    : contents,
+            ),
+        ['ink-wash', 'PRIVATE', 'reason'],
+        true,
+    ],
+    [
+        'a face one byte off: Stall’s own bytes at offset 115',
+        () =>
+            plantCanary((path, contents) => {
+                if (path !== 'canary/art/jetbrains-mono-latin.woff2') {
+                    return contents;
+                }
+                const face = Buffer.from(contents);
+                face[115] = 0x5b;
+                return face;
+            }),
+        [],
+        true,
+    ],
+];
+
 /*
  * The gate (the second 8c2 critic's items 1, 2 and 5): before a release the
  * deploy road carries `CANARY_TREE` and no other tree. Each road the critic
@@ -1483,11 +1568,14 @@ function diskFoldsCase() {
  */
 describe('the-preview-road-carries-only-the-canary-tree', () => {
     after(removePlants);
-    const facts = publicLookFacts();
-    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts: await facts });
+    let facts;
+    let notTheCanary;
+    before(async () => {
+        facts = await publicLookFacts();
+        notTheCanary = new RegExp(`its packed tree [0-9a-f]{12} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's`);
+    });
+    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts });
     const GATE = "the pin names another tree than the canary's (CANARY_TREE): until a release a preview carries that tree and no other\n";
-    const notTheCanary = new RegExp(`its packed tree [0-9a-f]{12} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's`);
-    const folds = diskFoldsCase();
 
     it('packs, pins and unwraps the canary from public bytes, through the real pack', async () => {
         const { looks, work, head, tree } = cloneToWork(plantCanary());
@@ -1502,76 +1590,6 @@ describe('the-preview-road-carries-only-the-canary-tree', () => {
         const carried = unwrapLooksArtifact({ artifact: step.artifact, dest: join(scratchDir('canary-carried'), 'looks'), root });
         assert.deepEqual({ tree: carried.tree, files: carried.files }, { tree: CANARY_TREE, files: 8 });
     });
-
-    /** Each road: a planted commit, the words it must never print, and whether the slug belt alone packs it (reads names only). */
-    const ROADS = [
-        [
-            'r3: Ink wash’s bytes committed under canary/',
-            () =>
-                plantCanary(
-                    (path, contents) =>
-                        path === 'canary/sheet.css'
-                            ? '/* Ink wash: a draft that must not travel */\n.t-canary {\n    --look-sheet: t-canary;\n}\n'
-                            : path === 'canary/look.json'
-                              ? contents.replace('"Canary private look"', '"Ink wash"')
-                              : contents,
-                    { 'canary/art/ink-mask.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n' },
-                ),
-            ['Ink', 'ink-mask', 'draft'],
-            true,
-        ],
-        [
-            'r9: a "new" Canary/ written on this disk',
-            () =>
-                writeAndCommit(
-                    plantCanary(),
-                    { 'Canary/art/ink-mask.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n', 'Canary/sheet.css': '\n/* a draft rule that must not travel */\n.t-canary .stall-name { color: red; }\n' },
-                    { append: ['Canary/sheet.css'] },
-                ),
-            ['ink-mask', 'draft', 'Canary'],
-            folds,
-        ],
-        [
-            'item 2: one name twice in the root tree, made with mktree',
-            () => {
-                const looks = plantCanary();
-                const git = (args, input) => execFileSync('git', args, { cwd: looks.dir, env: looks.env, input, encoding: 'utf8' }).trim();
-                const draft = git(['hash-object', '-w', '--stdin'], '/* a draft sheet that must not travel */\n');
-                const second = git(['mktree'], `100644 blob ${draft}\tsheet.css\n`);
-                const root = git(['mktree'], `${git(['ls-tree', 'HEAD'])}\n040000 tree ${second}\tcanary\n`);
-                assert.equal(git(['ls-tree', root]).split('\n').filter((entry) => entry.endsWith('\tcanary')).length, 2, 'mktree took one name twice — the plant');
-                git(['update-ref', 'refs/heads/main', git(['commit-tree', root, '-p', 'HEAD', '-m', 'twice'])]);
-                return looks;
-            },
-            ['draft'],
-            true,
-        ],
-        [
-            'item 5: an index naming ink-wash beside the canary’s files',
-            () =>
-                plantCanary((path, contents) =>
-                    path === 'index.json'
-                        ? '{\n    "schema": 1,\n    "looks": [{ "id": 4, "slug": "ink-wash", "cls": "t-ink-wash", "stage": "preview", "paid": true, "budgetReason": "PRIVATE: a reason that must not travel" }]\n}\n'
-                        : contents,
-                ),
-            ['ink-wash', 'PRIVATE', 'reason'],
-            true,
-        ],
-        [
-            'a face one byte off: Stall’s own bytes at offset 115',
-            () =>
-                plantCanary((path, contents) => {
-                    if (path !== 'canary/art/jetbrains-mono-latin.woff2') {
-                        return contents;
-                    }
-                    const face = Buffer.from(contents);
-                    face[115] = 0x5b;
-                    return face;
-                }),
-            [],
-            true,
-        ],
-    ];
 
     for (const [name, plant, words, beltPacks] of ROADS) {
         it(`refuses ${name}: the real pack at its own tree and at the canary’s, and pinLineFor`, async () => {

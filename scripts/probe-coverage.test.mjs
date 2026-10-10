@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
@@ -274,16 +274,21 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
      * rung its long name climbed on both page passes — so a fixture edit
      * that took one away fails the run.
      */
-    const painted = { sheetClasses: [...SHIPPED, 't-skeleton', 't-fixture-private'] };
     const marks = { 't-modern': 40, 't-neo': 40, 't-rural': 40, 't-skeleton': 40 };
-    const options = { shippedClasses: SHIPPED, privateClasses: ['t-fixture-private'], skeleton: true };
-    const read = {
-        ...full,
-        ...painted,
-        rowSizeClasses: [...SHIPPED, 't-fixture-private'],
-        markChecksByClass: marks,
-        wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': full.wallControlRoles },
-    };
+    let painted;
+    let options;
+    let read;
+    before(() => {
+        painted = { sheetClasses: [...SHIPPED, 't-skeleton', 't-fixture-private'] };
+        options = { shippedClasses: SHIPPED, privateClasses: ['t-fixture-private'], skeleton: true };
+        read = {
+            ...full,
+            ...painted,
+            rowSizeClasses: [...SHIPPED, 't-fixture-private'],
+            markChecksByClass: marks,
+            wallControlRolesByClass: { 't-modern': full.wallControlRoles, 't-fixture-private': full.wallControlRoles },
+        };
+    });
 
     it('passes every pass that read every subject it owes', () => {
         for (const pass of ['mobile', 'desktop', 'canvas', 'portrait', 'tablet']) {

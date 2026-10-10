@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { woff2NameRecords } from './look-faces.mjs';
 import { guardSheets, privateRows } from './served-sheets.mjs';
@@ -28,7 +28,10 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FONTS = join(ROOT, 'src', 'ui', 'fonts');
 
 describe('stall-serif-carries-no-reserved-name', () => {
-    const serif = readdirSync(FONTS).filter((f) => f.startsWith('stall-serif-') && f.endsWith('.woff2'));
+    let serif;
+    before(() => {
+        serif = readdirSync(FONTS).filter((f) => f.startsWith('stall-serif-') && f.endsWith('.woff2'));
+    });
 
     it('ships the four renamed subsets and no file named for Lora', () => {
         assert.deepEqual(serif.sort(), [
