@@ -6,28 +6,34 @@ import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { FIXTURE_LOOKS_DIR, REQUIRED_ENV, SELECTION_ENV } from './looks-selection.mjs';
-import { CONTENT_GUARD, EMPTY_BLOB, blobId, canaryBlobIds, contentGuard, privateBlobIds, publicBlobs } from './private-content.mjs';
+import { CONTENT_GUARD, EMPTY_BLOB, blobId, canaryBlobIds, contentGuard, privateBlobIds, privateContentProblems, publicBlobs } from './private-content.mjs';
 import { plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 
 /**
  * `no-tracked-file-is-a-private-look-file` (step 8g-pre; the 8g plan's
- * v2.7, as its critic's re-review corrected it, N1): under a private-look
- * selection, no blob this checkout could carry into a commit or a push — in
- * the index, in the working tree over a tracked path, untracked and not
- * ignored, or added by an unpushed commit — is a blob the selected private
- * repository holds anywhere in its history, or the re-serialisation the
- * build emits for one of its SVGs (`scripts/private-content.mjs`). The
- * canary's blobs (public bytes, from the recipe) and the empty blob are no
- * evidence. A match names the tracked path, never the private one.
+ * v2.7, as its critic's re-review corrected it, N1, and as the step's own
+ * critic widened it): under a private-look selection, no blob this
+ * repository could carry into a commit or a push — in any worktree's index,
+ * over a tracked path in any worktree, untracked and not ignored in any
+ * worktree, or anywhere a push could add to `origin` (a commit, a commit a
+ * replace ref hides, a tag at a blob or a tree) — is a blob the selected
+ * private repository holds: on a ref, in a reflog entry or a stash, in its
+ * index or working trees, or as the re-serialisation the build emits for
+ * one of its SVGs (`scripts/private-content.mjs`). The canary's blobs
+ * (public bytes, from the recipe), the empty blob, and a reflog-only blob
+ * `origin/main` already holds are no evidence. A match names the tracked
+ * path, never the private one.
  *
  * Without a selection the first case says so on stderr and passes; under
  * `STALL_LOOKS_REQUIRED` with none it fails, as the guards over sheets do.
  * The red proofs plant a private repository and a public one, both outside
  * this checkout; the twins that stay green are the canary from public bytes
- * over this checkout (three of its files are tracked ones, byte for byte)
- * and the empty blob. Whole-file copies only: a fragment or a redrawn
- * picture is the words rule's and the reviews'.
+ * over this checkout (three of its files are tracked ones, byte for byte),
+ * the empty blob, and a reflog-only private copy of a public file
+ * `origin/main` holds (the owner's canary clone's case). Whole-file copies
+ * only: a fragment or a redrawn picture is the words rule's and the
+ * reviews'.
  *
  * `node --test`: a TypeScript test importing an `.mjs` breaks `tsc` (TS7016).
  * Git runs locally and only locally.
@@ -162,7 +168,8 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         pub.git('rm', '-q', 'copied/mark.svg');
         pub.git('commit', '-q', '-m', 'remove');
         assert.equal(pub.git('status', '--porcelain'), '', 'the tree holds nothing of it');
-        assertCaught(guard(pub, priv), 'copied/mark.svg', `commit ${added.slice(0, 12)}`);
+        assert.ok(added.length === 40, 'the plant: the commit that added it');
+        assertCaught(guard(pub, priv), 'copied/mark.svg', 'unpushed');
         // Pushed, it is the remote's already: nothing a push from here adds.
         pub.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
         assert.deepEqual(guard(pub, priv).problems, []);
@@ -193,13 +200,93 @@ describe('no-tracked-file-is-a-private-look-file', () => {
     });
 
     /*
-     * The reflog is not read, stated: a draft amended away is reached by no
-     * ref, so no push or build carries it — and the owner's own canary clone
-     * keeps such a draft holding one of Stall's served faces byte for byte,
-     * public bytes copied into the private repository, which a guard
-     * counting the reflog called a leak.
+     * The step critic's item 3: what a push packs, read with replace
+     * objects off — `rev-list --objects --branches --tags HEAD --not
+     * --remotes=origin` — so a commit a replace ref hides, and a blob a tag
+     * points at straight or through a tree, are read as a push sends them.
      */
-    it('does not read a draft only the private reflog reaches', () => {
+    it('(g) catches a copy in a commit a replace ref hides', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const base = pub.git('rev-parse', 'HEAD');
+        pub.write('copied/mark.svg', SECRET);
+        pub.git('add', 'copied/mark.svg');
+        pub.git('commit', '-q', '-m', 'add');
+        const added = pub.git('rev-parse', 'HEAD');
+        pub.git('rm', '-q', 'copied/mark.svg');
+        pub.git('commit', '-q', '-m', 'remove');
+        const clean = pub.git('commit-tree', `${base}^{tree}`, '-p', base, '-m', 'clean');
+        pub.git('replace', added, clean);
+        const secret = blobId(Buffer.from(SECRET));
+        assert.ok(!pub.git('rev-list', '--objects', '--branches').includes(secret), 'the plant: through the replace ref, no commit holds it');
+        assert.ok(pub.git('--no-replace-objects', 'rev-list', '--objects', '--branches').includes(secret), 'the plant: the real commit does');
+        assertCaught(guard(pub, priv), 'copied/mark.svg', 'unpushed');
+    });
+
+    it('(h) catches a copy a lightweight tag points at, one an annotated tag points at, and one in a tree an annotated tag points at', () => {
+        const priv = privateRepo();
+        const plant = (tag) => {
+            const pub = publicRepo();
+            const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: pub.dir, env: pub.env, input: SECRET, encoding: 'utf8' }).trim();
+            tag(pub, blob);
+            assert.equal(pub.git('status', '--porcelain'), '', 'the plant: no worktree holds it');
+            return pub;
+        };
+        assertCaught(guard(plant((pub, blob) => pub.git('tag', 'light', blob)), priv), 'refs/tags/light', 'unpushed');
+        assertCaught(guard(plant((pub, blob) => pub.git('tag', '-a', 'ann', blob, '-m', 'a tag at a blob')), priv), 'refs/tags/ann', 'unpushed');
+        const tree = plant((pub, blob) => {
+            const at = execFileSync('git', ['mktree'], { cwd: pub.dir, env: pub.env, input: `100644 blob ${blob}\tin-tree.svg\n`, encoding: 'utf8' }).trim();
+            pub.git('tag', '-a', 'tree', at, '-m', 'a tag at a tree');
+        });
+        assertCaught(guard(tree, priv), 'in-tree.svg', 'unpushed');
+    });
+
+    /* The step critic's item 4: a draft in the private repository's index or working tree, never committed. */
+    it('(i) catches a private draft staged, written over a tracked file, or left untracked, never committed', () => {
+        const priv = privateRepo();
+        const staged = '.t-planted-look .stall-tagline { letter-spacing: 0.02em; }\n';
+        const over = SECRET.replace('M0 0h4', 'M1 1h2');
+        const loose = '.t-planted-look .stall-sub { letter-spacing: 0.04em; }\n';
+        writeFileSync(join(priv.dir, 'fixture', 'staged.css'), staged);
+        priv.git('add', 'fixture/staged.css');
+        writeFileSync(join(priv.dir, SECRET_PATH), over);
+        writeFileSync(join(priv.dir, 'fixture', 'loose.css'), loose);
+        const pub = publicRepo();
+        pub.write('notes/staged.css', staged);
+        pub.write('notes/over.svg', over);
+        pub.write('notes/loose.css', loose);
+        const result = guard(pub, priv);
+        assertCaught(result, 'notes/staged.css', 'untracked');
+        assertCaught(result, 'notes/over.svg', 'untracked');
+        assertCaught(result, 'notes/loose.css', 'untracked');
+    });
+
+    /* The step critic's item 7: a copy staged or left untracked in another worktree of this repository. */
+    it('(j) catches a copy staged in another worktree and one left untracked there', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const other = join(realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-worktree-'))), 'other-tree');
+        scratch.push(dirname(other));
+        pub.git('worktree', 'add', '-q', '-b', 'other', other);
+        mkdirSync(join(other, 'copied'));
+        writeFileSync(join(other, 'copied', 'mark.svg'), SECRET);
+        execFileSync('git', ['add', 'copied/mark.svg'], { cwd: other, env: pub.env });
+        writeFileSync(join(other, 'copied', 'loose.svg'), sanitizeSvg(SECRET).svg);
+        assert.equal(pub.git('status', '--porcelain'), '', 'the plant: this worktree holds nothing of it');
+        const result = guard(pub, priv);
+        assertCaught(result, 'copied/mark.svg', 'index (worktree other-tree)');
+        assertCaught(result, 'copied/loose.svg', 'untracked (worktree other-tree)');
+    });
+
+    /*
+     * The step critic's item 5, option (b): the reflog is read — a draft
+     * amended away, and every stash past `stash@{0}` — and a reflog-only
+     * private blob is no evidence only when `origin/main`'s history already
+     * holds its public copy: public bytes copied into the private
+     * repository, which is what the owner's canary clone keeps (a reset-away
+     * draft holding one of Stall's served faces byte for byte).
+     */
+    it('(k) catches a draft only the private reflog reaches, and an older stash entry', () => {
         const priv = privateRepo();
         const amended = '.t-planted-look .stall-name { letter-spacing: 0.05em; }\n';
         writeFileSync(join(priv.dir, 'fixture', 'amended.css'), amended);
@@ -207,11 +294,62 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         priv.git('commit', '-q', '-m', 'a draft');
         priv.git('rm', '-q', 'fixture/amended.css');
         priv.git('commit', '-q', '--amend', '--allow-empty', '-m', 'amended away');
-        assert.ok(!priv.git('rev-list', '--objects', '--all').includes(blobId(Buffer.from(amended))), 'the plant: no ref reaches the amended draft');
-        assert.ok(priv.git('rev-list', '--objects', '--all', '--reflog').includes(blobId(Buffer.from(amended))), 'the plant: the reflog does');
+        const stashed = SECRET.replace('M0 0h4', 'M2 2h3');
+        writeFileSync(join(priv.dir, SECRET_PATH), stashed);
+        priv.git('stash', '-q');
+        writeFileSync(join(priv.dir, SECRET_PATH), SECRET.replace('M0 0h4', 'M3 3h1'));
+        priv.git('stash', '-q');
+        for (const bytes of [amended, stashed]) {
+            assert.ok(!priv.git('rev-list', '--objects', '--all').includes(blobId(Buffer.from(bytes))), 'the plant: no ref reaches it');
+            assert.ok(priv.git('rev-list', '--objects', '--all', '--reflog').includes(blobId(Buffer.from(bytes))), 'the plant: a reflog does');
+        }
         const pub = publicRepo();
         pub.write('notes/amended.css', amended);
-        assert.deepEqual(guard(pub, priv).problems, []);
+        pub.write('notes/stashed.svg', stashed);
+        const result = guard(pub, priv);
+        assertCaught(result, 'notes/amended.css', 'untracked');
+        assertCaught(result, 'notes/stashed.svg', 'untracked');
+    });
+
+    it('(l) spares a reflog-only private copy of a file origin/main holds, and nothing else', () => {
+        const published = 'public words\n';
+        const pending = 'public words not yet pushed\n';
+        // The canary clone's case: public files copied into private drafts that were reset away.
+        const reset = privateRepo();
+        for (const [name, bytes] of [['copied.txt', published], ['pending.txt', pending]]) {
+            writeFileSync(join(reset.dir, 'fixture', name), bytes);
+            reset.git('add', '-A');
+            reset.git('commit', '-q', '-m', 'a draft holding a public file');
+            reset.git('reset', '-q', '--hard', 'HEAD~1');
+            assert.ok(!reset.git('rev-list', '--objects', '--all').includes(blobId(Buffer.from(bytes))), 'the plant: only the reflog holds it');
+        }
+        const pub = publicRepo();
+        assert.deepEqual(guard(pub, reset).problems, [], 'docs/readme.txt is on origin/main: public bytes copied in');
+        // The other draft's bytes, committed here and not yet on origin/main: no exemption until they are.
+        pub.write('notes/pending.txt', pending);
+        pub.git('add', 'notes/pending.txt');
+        pub.git('commit', '-q', '-m', 'pending');
+        const before = guard(pub, reset);
+        assertCaught(before, 'notes/pending.txt', 'index');
+        assertCaught(before, 'notes/pending.txt', 'unpushed');
+        pub.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+        assert.deepEqual(guard(pub, reset).problems, [], 'once origin/main holds it, a reflog-only copy is no evidence (which came first is not something this guard can tell)');
+        // A ref, not the reflog, holding a copy of a published file: no exemption.
+        const kept = privateRepo();
+        writeFileSync(join(kept.dir, 'fixture', 'copied.txt'), published);
+        kept.git('add', '-A');
+        kept.git('commit', '-q', '-m', 'a public file kept');
+        assertCaught(guard(pub, kept), 'docs/readme.txt', 'index');
+    });
+
+    it('asks origin/main only for a reflog-only match, so a run with none never lists its history', () => {
+        const never = () => {
+            throw new Error('origin/main asked');
+        };
+        const base = { shallow: false, upstream: 'u', exempt: new Set(), published: never };
+        assert.deepEqual(privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(), reflogOnly: new Set() }), []);
+        assert.equal(privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(['x']), reflogOnly: new Set() }).length, 1);
+        assert.throws(() => privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(), reflogOnly: new Set(['x']) }), /origin\/main asked/);
     });
 
     it('(f) catches the sanitizer’s re-serialisation of a private SVG, the form a build emits', () => {

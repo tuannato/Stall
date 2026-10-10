@@ -458,6 +458,25 @@ describe('look-art-waits-for-its-licence', () => {
         assert.deepEqual(lookArtProblems(readGitFacts(dir)), []);
     });
 
+    /*
+     * The step 8g-pre critic's item 3: a local refs/replace/* made every
+     * read see another commit while a push still sent the real one. The
+     * reader turns replace objects off (`scripts/git-unpushed.mjs`).
+     */
+    it('reads the commits a replace ref would hide', () => {
+        const { dir, git, plant } = plantRepo();
+        const base = git('rev-parse', 'HEAD').trim();
+        plant('src/looks/r.svg');
+        git('commit', '-q', '-m', 'add');
+        const added = git('rev-parse', 'HEAD').trim();
+        git('update-index', '--force-remove', 'src/looks/r.svg');
+        git('commit', '-q', '-m', 'remove');
+        const clean = git('commit-tree', `${base}^{tree}`, '-p', base, '-m', 'clean').trim();
+        git('replace', added, clean);
+        assert.doesNotMatch(git('log', '--raw', '--format=%H', 'HEAD'), /src\/looks/, 'the plant: through the replace ref, no commit touches it');
+        assert.equal(lookArtProblems(readGitFacts(dir)).length, 2, 'the real commits, added and removed, a push would publish');
+    });
+
     it('fails on a shallow clone, with no origin/main, and when git cannot run', () => {
         const { dir, git } = plantRepo();
         git('commit', '-q', '--allow-empty', '-m', 'second');
