@@ -151,6 +151,67 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         });
     }
 
+    /*
+     * The 6978ade re-review's R-P3-1: a name reads its nearest binding, so a
+     * hook-filled `let` of a describe body is refused only where nothing
+     * between it and the reading binds the name again. Each shape below has
+     * an outer `let` of the same name that a hook fills, and passes.
+     */
+    for (const [name, body] of [
+        ['a for...of head that binds the name again', "let name;\nbefore(() => { name = compute(); });\nit('reads the slot', () => { name; });\nfor (const name of NAMES) { it(name, () => {}); }\nfor (const name of NAMES) it(`b ${name}`, { skip: name }, () => {});\nfor (const [name, other] of CASES) it(name, () => { other; });"],
+        ['an inner describe’s const of the same name', "let x;\nbefore(() => { x = compute(); });\ndescribe('inner', () => { const x = 'lit'; it(x, () => {}); describe('deeper', () => { it(x, () => {}); }); });"],
+        ['an inner describe’s function declaration of the same name', "let check;\nbefore(() => { check = compute(); });\ndescribe('inner', () => { function check() {} it('t', check); });"],
+        ['a describe callback’s parameter of the same name', "let t;\nbefore(() => { t = compute(); });\ndescribe('inner', (t) => { it(t.name, () => {}); });"],
+        ['a helper’s initialised let, read by the describe it builds', "let title;\nbefore(() => { title = compute(); });\nconst make = (n) => {\n    let title = `t ${n}`;\n    describe('made', () => { it(title, () => {}); });\n};"],
+        ['a helper’s bare let, set in its own body before the describe it builds', "const make = (n) => {\n    let title;\n    title = `t ${n}`;\n    describe('made', () => { it(title, () => {}); });\n};"],
+    ]) {
+        it(`passes ${name}`, () => {
+            assert.deepEqual(problemsIn(body).map(problemLine), []);
+        });
+    }
+
+    it('passes a let at module top, which no describe body declares', () => {
+        assert.deepEqual(describeBodyProblems('m.test.mjs', "let shared;\nshared = compute();\ndescribe('s', () => { it(shared, () => {}); });").problems, []);
+    });
+
+    it('still refuses a hook-filled let where the nearest binding is one: an inner describe’s own bare let, a for...of block’s, and an outer one past a binding of another name', () => {
+        for (const [body, name] of [
+            ["let x;\nbefore(() => { x = compute(); });\ndescribe('inner', () => { let x; before(() => { x = 1; }); it(x, () => {}); });", 'x'],
+            ["for (const n of [1, 2]) { let t; before(() => { t = n; }); it(t, () => {}); }", 't'],
+            ["let t;\nbefore(() => { t = compute(); });\nfor (const other of NAMES) { it(t, () => {}); }\ndescribe('inner', (s) => { const u = 'lit'; it(t, () => {}); });", 't'],
+            ["let t;\nbefore(() => { t = compute(); });\nconst make = (t2) => { describe('made', () => { it(t, () => {}); }); };", 't'],
+        ]) {
+            const problems = problemsIn(body);
+            assert.ok(problems.length >= 1, `passed: ${body}`);
+            assert.ok(
+                problems.every((problem) => problem.why.includes(`reads \`${name}\`, a let of a describe body`)),
+                problems.map(problemLine).join('\n'),
+            );
+        }
+    });
+
+    /* The 6978ade re-review's R-P3-2: a describe reached through .call, .apply or .bind is refused wherever it stands. */
+    it('refuses a describe reached through .call, .apply or .bind, wherever it stands', () => {
+        for (const shape of [
+            "describe.call(null, 's', () => { const v = f(); });",
+            "describe.apply(null, ['s', () => { const v = f(); }]);",
+            "suite.call(null, 's', () => {});",
+            "test.describe.call(null, 's', () => {});",
+            "it.suite.apply(null, ['s', () => {}]);",
+            "describe.skip.apply(null, ['s', () => {}]);",
+            "const d = describe.bind(null, 's');",
+            "it('t', () => { describe.call(null, 's', () => {}); });",
+        ]) {
+            const { problems } = describeBodyProblems('a.test.mjs', shape);
+            assert.equal(problems.length, 1, `${shape}: ${problems.map(problemLine).join('\n')}`);
+            assert.match(problems[0].why, /^a describe reached through \.(call|apply|bind): write the describe itself/, shape);
+        }
+        // Not a describe: a test reached through .call (a describe body's own rule refuses that), and a name that merely ends in describe.
+        for (const shape of ["it.call(null, 't', () => {});", 'other.describe.call(null);', 'fn.call(null);']) {
+            assert.deepEqual(describeBodyProblems('a.test.mjs', shape).problems, [], shape);
+        }
+    });
+
     it('names the line of the statement, not of the describe', () => {
         const [problem] = problemsIn("it('a', () => {});\n\nconst text = read();");
         assert.equal(problem.line, 5);

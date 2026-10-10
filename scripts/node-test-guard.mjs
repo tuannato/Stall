@@ -29,7 +29,7 @@ import ts from 'typescript';
  *   - a `for...of` over a bare name or an array literal, whose body is held
  *     to these same rules, so tests can be generated one per item (the items
  *     are built at module top, where a throw fails the file). The name must
- *     not be a `let` of a describe body: it is empty until a hook has run,
+ *     not read a `let` of a describe body: it is empty until a hook has run,
  *     and the loop runs first.
  *
  * What an argument of those calls may hold: a function or arrow expression,
@@ -42,11 +42,20 @@ import ts from 'typescript';
  * substitution: the registration reads it before any hook has filled it, so a
  * title becomes `undefined`, a `{ skip }` option is lost, a callback is not
  * one, and a property read on it throws in the body. A `let` is for what a
- * test or a hook body reads when it runs.
+ * test or a hook body reads when it runs. "Reads" is by scope (the 6978ade
+ * re-review's R-P3-1): a name reads the nearest binding of it, walking out
+ * from where it stands, and only a bare `let` declared directly in a
+ * describe body (or in the block of a `for...of` standing in one) is refused
+ * — a `for...of` head, a callback's parameter, an inner body's `const`,
+ * function or class declaration, or a helper's own `let`, met first, is the
+ * binding the name reads.
  *
  * `describe` is also `suite`, `test.describe`, `test.suite`, `it.describe` and
  * `it.suite` on Node 22.22.0, each with `.skip`, `.only` and `.todo`
  * (`describe === suite`, checked); the guard reads all of them as a describe.
+ * Reached through `.call`, `.apply` or `.bind` it is refused wherever it
+ * stands (R-P3-2): the guard reads a describe written as one, and a callback
+ * passed through those is one it would have to find among other arguments.
  *
  * Not decided here, stated: that a bare name names an iterable, a function or
  * an initialised binding; what a hook or a test does when it runs (a failure
@@ -54,6 +63,9 @@ import ts from 'typescript';
  * counted either (measured) and is not read here: the reporter
  * (`scripts/node-test-reporter.mjs`) fails the run for it.
  */
+
+/** The ways to call a function that are not a call of it written out: a describe reached through one is refused. */
+const THROUGH = ['call', 'apply', 'bind'];
 
 /** The registering calls, by bare name. */
 export const REGISTRARS = ['describe', 'suite', 'it', 'test', 'before', 'after', 'beforeEach', 'afterEach'];
@@ -169,46 +181,134 @@ function isPlainArgument(node) {
     return false;
 }
 
-/**
- * The name of a `let` of a describe body that `node` reads when it is
- * evaluated, or undefined: a bare name, the root of a property chain, a
- * shorthand property, a property value, a template substitution. A function's
- * body runs later and is not read.
- */
-function letRead(node, lets) {
-    switch (node.kind) {
-        case K.Identifier:
-            return lets.has(node.text) ? node.text : undefined;
-        case K.PropertyAccessExpression:
-            return letRead(node.expression, lets);
-        case K.ParenthesizedExpression:
-            return letRead(node.expression, lets);
-        case K.ShorthandPropertyAssignment:
-            return lets.has(node.name.text) ? node.name.text : undefined;
-        case K.PropertyAssignment:
-            return letRead(node.initializer, lets);
-        case K.TemplateExpression:
-            return node.templateSpans.map((span) => letRead(span.expression, lets)).find((name) => name !== undefined);
-        case K.ObjectLiteralExpression:
-            return node.properties.map((property) => letRead(property, lets)).find((name) => name !== undefined);
-        default:
-            return undefined;
-    }
-}
-
-/** The `let` names declared directly in a statement list. */
-function letNamesOf(statements) {
-    const names = new Set();
-    for (const statement of statements) {
-        if (statement.kind === K.VariableStatement && statement.declarationList.flags & ts.NodeFlags.Let) {
-            for (const declaration of statement.declarationList.declarations) {
-                if (declaration.name.kind === K.Identifier) {
-                    names.add(declaration.name.text);
-                }
+/** Every name a binding pattern binds. */
+function boundNames(name, into = new Set()) {
+    if (name.kind === K.Identifier) {
+        into.add(name.text);
+    } else {
+        for (const element of name.elements) {
+            if (element.kind !== K.OmittedExpression) {
+                boundNames(element.name, into);
             }
         }
     }
-    return names;
+    return into;
+}
+
+/** The describe call whose in-place callback `fn` is, or undefined: the callback is its last argument that is not an object literal. */
+function describeOf(fn) {
+    const call = fn.parent;
+    if (!call || call.kind !== K.CallExpression || !isDescribeCallee(call.expression)) {
+        return undefined;
+    }
+    return [...call.arguments].reverse().find((argument) => argument.kind !== K.ObjectLiteralExpression) === fn ? call : undefined;
+}
+
+/** Whether `block` is a describe body: a describe callback's own block, or the block of a `for...of` standing in one. */
+function isDescribeBlock(block) {
+    const parent = block.parent;
+    if (block.kind !== K.Block || !parent) {
+        return false;
+    }
+    if (isFunction(parent)) {
+        return parent.body === block && describeOf(parent) !== undefined;
+    }
+    return parent.kind === K.ForOfStatement && parent.statement === block && standsInDescribeBody(parent);
+}
+
+/** Whether `statement` stands directly in a describe body, or as the unbraced body of a `for...of` that does. */
+function standsInDescribeBody(statement) {
+    const parent = statement.parent;
+    if (parent?.kind === K.Block) {
+        return isDescribeBlock(parent);
+    }
+    return parent?.kind === K.ForOfStatement && parent.statement === statement && standsInDescribeBody(parent);
+}
+
+/**
+ * How `statements` bind `name`, or undefined: `'hook'` for a `let` with no
+ * initializer (the slot a `before()` hook fills), `'bound'` for any other
+ * declaration of it — a `let` with a value, a `const`, a `var`, a function,
+ * a class, an import.
+ */
+function bindingIn(statements, name) {
+    for (const statement of statements) {
+        if (statement.kind === K.VariableStatement) {
+            const isLet = (statement.declarationList.flags & ts.NodeFlags.Let) !== 0;
+            for (const declaration of statement.declarationList.declarations) {
+                if (boundNames(declaration.name).has(name)) {
+                    return isLet && declaration.name.kind === K.Identifier && !declaration.initializer ? 'hook' : 'bound';
+                }
+            }
+        } else if ((statement.kind === K.FunctionDeclaration || statement.kind === K.ClassDeclaration) && statement.name?.text === name) {
+            return 'bound';
+        } else if (statement.kind === K.ImportDeclaration) {
+            const clause = statement.importClause;
+            const bindings = clause?.namedBindings;
+            if (clause?.name?.text === name || bindings?.name?.text === name || bindings?.elements?.some((element) => element.name.text === name)) {
+                return 'bound';
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Whether the identifier `id` reads a `let` of a describe body: the nearest
+ * binding of its name, walking out from where `id` stands, is a `let` with
+ * no initializer declared directly in a describe body. A `for...of` head
+ * (for the loop's body), a function's parameters or its own name, and any
+ * other declaration met first are the binding it reads.
+ */
+function readsHookLet(id) {
+    const name = id.text;
+    let from = id;
+    for (let up = id.parent; up; from = up, up = up.parent) {
+        if (up.kind === K.ForOfStatement && from === up.statement && up.initializer.kind === K.VariableDeclarationList) {
+            if (up.initializer.declarations.some((declaration) => boundNames(declaration.name).has(name))) {
+                return false;
+            }
+        }
+        if (isFunction(up) || up.kind === K.FunctionDeclaration) {
+            if (up.parameters.some((parameter) => boundNames(parameter.name).has(name)) || (up.kind === K.FunctionExpression && up.name?.text === name)) {
+                return false;
+            }
+        }
+        if (up.kind === K.Block || up.kind === K.SourceFile) {
+            const binding = bindingIn(up.statements, name);
+            if (binding !== undefined) {
+                return binding === 'hook' && isDescribeBlock(up);
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * The name of a `let` of a describe body that `node` reads when it is
+ * evaluated, or undefined: a bare name, the root of a property chain, a
+ * shorthand property, a property value, a template substitution — each read
+ * by scope (`readsHookLet`). A function's body runs later and is not read.
+ */
+function letRead(node) {
+    switch (node.kind) {
+        case K.Identifier:
+            return readsHookLet(node) ? node.text : undefined;
+        case K.PropertyAccessExpression:
+            return letRead(node.expression);
+        case K.ParenthesizedExpression:
+            return letRead(node.expression);
+        case K.ShorthandPropertyAssignment:
+            return readsHookLet(node.name) ? node.name.text : undefined;
+        case K.PropertyAssignment:
+            return letRead(node.initializer);
+        case K.TemplateExpression:
+            return node.templateSpans.map((span) => letRead(span.expression)).find((name) => name !== undefined);
+        case K.ObjectLiteralExpression:
+            return node.properties.map((property) => letRead(property)).find((name) => name !== undefined);
+        default:
+            return undefined;
+    }
 }
 
 function bindingIsPlain(name) {
@@ -218,17 +318,14 @@ function bindingIsPlain(name) {
     return name.elements.every((element) => element.kind !== K.OmittedExpression && !element.initializer && bindingIsPlain(element.name));
 }
 
-/**
- * Why `statement` may not stand in a describe body, or undefined. `lets` is
- * every `let` name of the describe bodies around it.
- */
-function statementProblem(statement, lets) {
+/** Why `statement` may not stand in a describe body, or undefined. */
+function statementProblem(statement) {
     switch (statement.kind) {
         case K.EmptyStatement:
         case K.FunctionDeclaration:
             return undefined;
         case K.ExpressionStatement:
-            return expressionProblem(statement.expression, lets);
+            return expressionProblem(statement.expression);
         case K.VariableStatement: {
             const list = statement.declarationList;
             if (list.flags & ts.NodeFlags.Const) {
@@ -253,7 +350,7 @@ function statementProblem(statement, lets) {
             }
             const list = statement.expression;
             if (list.kind === K.Identifier) {
-                if (lets.has(list.text)) {
+                if (readsHookLet(list)) {
                     return `a for...of over \`${list.text}\`, a let of a describe body: it is empty until a hook has run, and this loop runs first; build it at module top`;
                 }
             } else if (!(list.kind === K.ArrayLiteralExpression && isLiteral(list))) {
@@ -261,7 +358,7 @@ function statementProblem(statement, lets) {
             }
             const body = statement.statement.kind === K.Block ? statement.statement.statements : [statement.statement];
             for (const inner of body) {
-                const problem = statementProblem(inner, lets);
+                const problem = statementProblem(inner);
                 if (problem !== undefined) {
                     return `inside a for...of: ${problem}`;
                 }
@@ -273,7 +370,7 @@ function statementProblem(statement, lets) {
     }
 }
 
-function expressionProblem(expression, lets) {
+function expressionProblem(expression) {
     if (expression.kind !== K.CallExpression) {
         return `a ${ts.SyntaxKind[expression.kind]} expression, which runs when the suite is registered`;
     }
@@ -288,7 +385,7 @@ function expressionProblem(expression, lets) {
         if (!isPlainArgument(argument)) {
             return `an argument of ${callee.text}() that computes (${ts.SyntaxKind[argument.kind]}): build it at module top`;
         }
-        const name = letRead(argument, lets);
+        const name = letRead(argument);
         if (name !== undefined) {
             return `an argument of ${callee.text}() that reads \`${name}\`, a let of a describe body: it is empty until a hook has run, and this registration reads it first; build it at module top`;
         }
@@ -329,36 +426,25 @@ export function describeBodyProblems(name, text) {
                 report(node, 'node:test imported by default, as a namespace or under another name: `test.describe` is a describe, and the guard follows the bare names only');
             }
         }
+        if (node.kind === K.PropertyAccessExpression && THROUGH.includes(node.name.text) && isDescribeCallee(node.expression)) {
+            report(node, `a describe reached through .${node.name.text}: write the describe itself, which the guard reads (it does not look for the callback among another call's arguments)`);
+        }
         if (node.kind === K.CallExpression) {
             if (isDescribeCallee(node.expression)) {
                 describes += 1;
                 const callback = [...node.arguments].reverse().find((argument) => argument.kind !== K.ObjectLiteralExpression);
                 if (!callback || !isFunction(callback)) {
                     report(node, 'a describe whose callback is not a function written in place');
-                } else {
-                    // Every `let` of the describe bodies around this one, and of this one.
-                    const lets = new Set();
-                    for (let up = node.parent; up; up = up.parent) {
-                        if (up.kind === K.Block && up.parent && isFunction(up.parent)) {
-                            for (const name of letNamesOf(up.statements)) {
-                                lets.add(name);
-                            }
-                        }
+                } else if (callback.body.kind !== K.Block) {
+                    const why = expressionProblem(callback.body);
+                    if (why !== undefined) {
+                        report(callback.body, why);
                     }
-                    if (callback.body.kind !== K.Block) {
-                        const why = expressionProblem(callback.body, lets);
+                } else {
+                    for (const statement of callback.body.statements) {
+                        const why = statementProblem(statement);
                         if (why !== undefined) {
-                            report(callback.body, why);
-                        }
-                    } else {
-                        for (const name of letNamesOf(callback.body.statements)) {
-                            lets.add(name);
-                        }
-                        for (const statement of callback.body.statements) {
-                            const why = statementProblem(statement, lets);
-                            if (why !== undefined) {
-                                report(statement, why);
-                            }
+                            report(statement, why);
                         }
                     }
                 }
