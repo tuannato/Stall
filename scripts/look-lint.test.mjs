@@ -21,6 +21,8 @@ import {
     keyframeFlashes,
     lintLookSheet,
     lintSheet,
+    masksWithAFile,
+    sheetMasksWithAFile,
     PRESENCE_ATTRIBUTES,
     SERVED_FAMILIES,
     STICKY_BOXES,
@@ -926,10 +928,15 @@ describe('a-file-mask-arrives-at-rest', () => {
             '.t-neo .mini[aria-pressed="true"] { clip-path: url(./x.svg); }',
             '.t-neo details[open] .x { mask: url(./x.svg) no-repeat; }',
             '.t-neo .addr[data-copied="true"] { -webkit-mask-box-image-source: url(./x.svg); }',
+            // Step 8g-pre, the critic's P2-1: a file named through image-set(), which the url-only test let through.
+            '.t-neo .item-n:hover { mask-image: image-set("./x.svg" 1x); }',
+            '.t-neo .item-n:hover { mask: image-set("./x.svg" 1x) no-repeat; }',
+            '.t-neo .item-n:hover { mask-image: var(--x, url(./x.svg)); }',
         ]) {
             plant(rule, /a file's mask or clip in a state rule/);
         }
         plant('@keyframes t-neo-veil { from { mask-image: url(./x.svg); } to { mask-image: none; } }', /a file's mask or clip in a keyframe/);
+        plant('@keyframes t-neo-veil { from { mask-image: image-set("./x.svg" 1x); } to { mask-image: none; } }', /a file's mask or clip in a keyframe/);
     });
 
     it('accepts a mask with no file, a clip shape, and a file mask at rest', () => {
@@ -937,6 +944,66 @@ describe('a-file-mask-arrives-at-rest', () => {
         accepts('.t-neo .item-n:hover { clip-path: inset(0 2px); }');
         accepts('.t-neo .item-n { mask-image: url(./x.svg); }');
         accepts('.t-neo [data-role="price"] { mask-image: url(./x.svg); }');
+        accepts('.t-neo .item-n { mask-image: image-set("./x.svg" 1x); }');
+    });
+});
+
+describe('the-owed-art-off-frame-reads-every-file-a-mask-names', () => {
+    /**
+     * Step 8g-pre (the critic's P2-1): one reader for "this masking value
+     * names a file" — `masksWithAFile`, the lint's own `urlTargets` (every
+     * `url()` and `image-set()` entry, prefixed forms included) over a
+     * masking property — asked by the look rules' state-rule and keyframe
+     * refusal above and, over a whole sheet (`sheetMasksWithAFile`), by the
+     * probe runner for the carried looks that owe a pending art-off frame
+     * (`CARRIED_FILE_ART`, `scripts/layout-check.mjs`), whose own regex read
+     * `url(` alone: a look whose only file mask is an `image-set()` owed no
+     * frame. The runner is not run here (it needs a browser); its source is
+     * held to the reader.
+     */
+    it('reads a file in a mask wherever it is written: a state rule, the shorthand, a keyframe, at rest, in a media block, through image-set()', () => {
+        const sheet = (rule) => `.t-x {\n    --look-sheet: t-x;\n}\n\n${rule}\n\n@media (prefers-reduced-motion: reduce) {\n}\n`;
+        for (const rule of [
+            '.t-x .stall-name:hover { mask-image: image-set("./art/ground.svg" 1x); }',
+            '.t-x .stall-name:hover { mask: image-set("./art/ground.svg" 1x) no-repeat; }',
+            '@keyframes t-x-veil { from { mask-image: image-set("./art/ground.svg" 1x); } to { mask-image: none; } }',
+            '.t-x .stall-name { mask-image: image-set("./art/ground.svg" 1x); }',
+            '.t-x .stall-name { -webkit-mask-image: -webkit-image-set(url(./art/ground.svg) 1x); mask-image: image-set(url(./art/ground.svg) 1x); }',
+            '@media (min-width: 680px) { .t-x .stall-name { clip-path: url(./art/ground.svg#c); } }',
+            '.t-x .stall-name { mask-border-source: url(./art/ground.svg); }',
+            '.t-x .stall-name { mask-image: var(--x, url(./art/ground.svg)); }',
+            '.t-x .stall-name { mask-image: u\\72l(./art/ground.svg); }',
+        ]) {
+            assert.equal(sheetMasksWithAFile(sheet(rule)), true, rule);
+        }
+        for (const rule of [
+            '.t-x .stall-name { mask-image: linear-gradient(#000, #0000); }',
+            '.t-x .stall-name { clip-path: inset(0 2px); }',
+            '.t-x .stall-name { background-image: url(./art/ground.svg); }',
+            '@font-face { font-family: t-x-face; src: url(./art/face.woff2) format("woff2"); font-display: swap; }',
+            '/* .t-x .stall-name { mask-image: url(./art/ground.svg); } */',
+        ]) {
+            assert.equal(sheetMasksWithAFile(sheet(rule)), false, rule);
+        }
+        assert.equal(masksWithAFile('mask-image', 'image-set("./a.svg" 1x)'), true);
+        assert.equal(masksWithAFile('background-image', 'url(./a.svg)'), false);
+    });
+
+    it('finds a file mask in the tracked fixture’s sheet, and in no shipped look’s or the kit’s', () => {
+        const fixture = PRIVATE.find((row) => row.look.source === 'fixture');
+        assert.equal(sheetMasksWithAFile(fixture.css), true, 'the tracked fixture owes its frame');
+        for (const sheet of LOOKS) {
+            assert.equal(sheetMasksWithAFile(read(sheet.path)), false, sheet.path);
+        }
+        assert.equal(sheetMasksWithAFile(read('workshop/theme-workshop.css')), false);
+    });
+
+    it('is the reader the probe runner’s owed frame is computed with', () => {
+        const runner = read('scripts/layout-check.mjs');
+        assert.match(runner, /^import \{ sheetMasksWithAFile \} from '\.\/workshop-css\.mjs';$/m);
+        assert.match(runner, /\.filter\(\(row\) => sheetMasksWithAFile\(row\.css\)\)/);
+        assert.doesNotMatch(runner, /FILE_ART_IN_SHEET/, 'the url-only regex is gone');
+        assert.doesNotMatch(runner, /clip-path\)\\s\*:/, 'no second reader of a mask declaration in the runner');
     });
 });
 
@@ -948,7 +1015,8 @@ describe('a-look-writes-each-url-in-the-property-that-paints-it', () => {
      * it, never in a custom property. Carried through `var()`, a file
      * switches off two belts that read the painting property's own value:
      * the art-off frames the probe owes a look whose sheet names a file in a
-     * mask or a clip (`FILE_ART_IN_SHEET`, `scripts/layout-check.mjs`), and
+     * mask or a clip (`CARRIED_FILE_ART`, `scripts/layout-check.mjs`, over
+     * `sheetMasksWithAFile`), and
      * the look rules' refusal of a file mask in a state rule or a keyframe.
      * Inert today: no served sheet, and not the tracked private fixture's,
      * carries the shape. Proved red on a copy of the private fixture's sheet
