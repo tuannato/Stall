@@ -30,6 +30,7 @@ import {
     rowFor,
     vendorNoticeProblems,
 } from './licence-map-lib.mjs';
+import { readUnpushed } from './git-unpushed.mjs';
 import { FONTS } from './notices.mjs';
 import { LICENCE_ALLOW } from './notices-lib.mjs';
 
@@ -67,7 +68,6 @@ function readGitFacts(root, git = 'git', env = process.env) {
             stdio: ['ignore', 'pipe', 'pipe'],
         });
     const list = (args) => run(args).split('\0').filter((path) => path !== '');
-    const shallow = run(['rev-parse', '--is-shallow-repository']).trim() === 'true';
     const tracked = list(['ls-files', '-z', '--cached']);
     const tree = list(['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
     // What every exclude source hides, a wholly ignored directory as one
@@ -86,72 +86,10 @@ function readGitFacts(root, git = 'git', env = process.env) {
         })
         .filter((m) => m[1] === GITLINK_MODE)
         .map((m) => m[2]);
-    let upstream;
-    try {
-        upstream = run(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main^{commit}']).trim();
-    } catch (error) {
-        // --verify --quiet exits 1 for a ref that is not there; anything
-        // else (no git, not a repository) is not an answer.
-        if (error?.status !== 1) {
-            throw error;
-        }
-    }
-    // One record per commit (and per parent of a merge): "\x01<hash>", then
-    // per path a raw header ":<old mode> <new mode> <old> <new> <status>" and
-    // the path, each NUL-terminated, the first header after a newline git
-    // adds. --no-renames keeps every status to one path. The options that a
-    // repository's or a user's config would otherwise decide are stated:
-    // --root (log.showRoot false hides a root commit's files),
-    // --ignore-submodules=none (diff.ignoreSubmodules all hides every
-    // gitlink), --diff-merges=separate (log.diffMerges narrows or combines a
-    // merge's diff), --no-show-signature (log.showSignature prints lines this
-    // reader does not know).
-    const unpushed = [];
-    const out = run([
-        'log',
-        '-z',
-        '--root',
-        '--diff-merges=separate',
-        '--ignore-submodules=none',
-        '--no-show-signature',
-        '--full-history',
-        '--no-renames',
-        '--raw',
-        '--no-abbrev',
-        '--format=%x01%H',
-        '--branches',
-        '--tags',
-        'HEAD',
-        '--not',
-        '--remotes=origin',
-    ]);
-    let current;
-    let modes;
-    for (const raw of out.split('\0')) {
-        const token = modes === undefined && raw.startsWith('\n') ? raw.slice(1) : raw;
-        if (modes !== undefined) {
-            // The path that follows a raw header, whatever it starts with.
-            current.paths.push(token);
-            if (modes.includes(GITLINK_MODE)) {
-                current.gitlinks.push(token);
-            }
-            modes = undefined;
-        } else if (token.startsWith('\x01')) {
-            current = unpushed.find((entry) => entry.commit === token.slice(1));
-            if (current === undefined) {
-                current = { commit: token.slice(1), paths: [], gitlinks: [] };
-                unpushed.push(current);
-            }
-        } else if (token.startsWith(':') && current !== undefined) {
-            const header = /^:(\d{6}) (\d{6}) [0-9a-f]+ [0-9a-f]+ [A-Z]$/.exec(token);
-            if (header === null) {
-                throw new Error(`git log --raw: a record this reader does not know: ${JSON.stringify(token)}`);
-            }
-            modes = [header[1], header[2]];
-        } else if (token !== '') {
-            throw new Error(`git log --raw: an unexpected token ${JSON.stringify(token)}`);
-        }
-    }
+    // Every commit a push could publish, with every path it touches: the
+    // shared reader, its options stated (`scripts/git-unpushed.mjs`), which
+    // the content guard reads too.
+    const { shallow, upstream, unpushed } = readUnpushed({ root, git, env });
     return { tracked, tree, ignored, gitlinks, shallow, upstream, unpushed };
 }
 
