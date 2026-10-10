@@ -146,6 +146,31 @@ export const QUOTE_WORDS = new Map<string, string>([
 ]);
 
 /**
+ * One quote in each currency whose sign a served face does not draw itself
+ * (INR ₹, ILS ₪, KRW ₩, NGN ₦, PHP ₱, TRY ₺): the money node (`seller-price`)
+ * carries the sign beside the digits, so these are the screens that show
+ * whose glyph it is — the shipped face's, or a font of the reader's machine
+ * (CLAUDE §6, "Every look's face is shipped"; `quotes-signs`, `pay-inr`).
+ * Exponents are `QUOTE_UNITS`' own: a won is written whole.
+ */
+const SIGN_QUOTES = [
+    { id: 'b1'.repeat(32), name: 'Scarf', words: 'Cotton, packed the day it ships', price: { code: 'inr', exponent: 2, amount: 49_900n } },
+    { id: 'b2'.repeat(32), name: 'Soap', words: 'Cold-pressed, six bars', price: { code: 'ils', exponent: 2, amount: 3_500n } },
+    { id: 'b3'.repeat(32), name: 'Ginseng', words: 'Fifty bags, sealed', price: { code: 'krw', exponent: 0, amount: 12_000n } },
+    { id: 'b4'.repeat(32), name: 'Shea', words: 'Raw, one jar', price: { code: 'ngn', exponent: 2, amount: 450_000n } },
+    { id: 'b5'.repeat(32), name: 'Mango', words: 'Cebu, a bag of ten', price: { code: 'php', exponent: 2, amount: 25_000n } },
+    { id: 'b6'.repeat(32), name: 'Tile', words: 'Hand painted, boxed', price: { code: 'try', exponent: 2, amount: 12_000n } },
+] as const;
+
+/** The six sign quotes as the view holds them: tokens read, prices, words and attribution. */
+const signQuoteView = (): Partial<StallView> => ({
+    tokens: new Map([...tokens, ...SIGN_QUOTES.map((q) => [q.id, meta(q.id, q.name, 'SLP_TOKEN_TYPE_FUNGIBLE')] as const)]),
+    prices: new Map<string, TokenPrice>(SIGN_QUOTES.map((q) => [q.id, q.price] as const)),
+    descriptions: new Map(SIGN_QUOTES.map((q) => [q.id, q.words] as const)),
+    genesis: new Map(SIGN_QUOTES.map((q) => [q.id, 'attributed' as GenesisAttribution] as const)),
+});
+
+/**
  * The rate the pay sheet froze. **Stamped now, not at a frozen instant**
  * (2026-09-22): a stamp from 2025 is past `PAY_RATE_MAX_AGE_MS` on every run,
  * so every pay screen painted `PAY_QR_STALE` where its code belongs and the
@@ -538,6 +563,32 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
         overlay: { kind: 'pay', tokenId: T2 },
         payRecordMoved: [T2],
+    }),
+    /*
+     * The quote rail with one quote in each of the six currencies whose sign a
+     * served face may not draw (`SIGN_QUOTES`): an empty book, the rail on the
+     * quotes, and every row's figure is `seller-price` with the sign beside
+     * its digits. Named `quotes-` so the pay-screens audit binds.
+     * On the state and geometry-only lists: the rows are `offers`' quote rows
+     * and the ink is theirs; what the screen is here for is the glyph's width.
+     */
+    'quotes-signs': base({
+        fetch: { kind: 'empty' },
+        ...signQuoteView(),
+        shopTab: 'quotes',
+    }),
+    /*
+     * The pay sheet over a quote in rupees: the seller's figure with ₹ in it,
+     * the rate row, the XEC the wallet signs. Geometry only, like `pay`'s
+     * other states. Named `pay-` so the pay-screens audit binds.
+     */
+    'pay-inr': base({
+        fetch: { kind: 'empty' },
+        ...signQuoteView(),
+        shopTab: 'quotes',
+        overlay: { kind: 'pay', tokenId: SIGN_QUOTES[0].id },
+        // About 0.0017 rupees a XEC: ₹499 is some 290,000 XEC.
+        payRate: { rate: scaleRate(0.0017)!, atMs: Date.now() },
     }),
     /*
      * The item tag on the poster sheet: one quoted item's print page — the
@@ -1563,6 +1614,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-dust',
     // The sheet over a quote that left (8e2): its title and one sentence.
     'pay-gone',
+    // The sign quotes (`SIGN_QUOTES`): `offers`' quote rows and the pay
+    // sheet's shape, in six currencies; the glyph is what they stage.
+    'quotes-signs',
+    'pay-inr',
     // The three "Pay several" screens: the same rows and sheet shape, and the
     // decoration interactions they could stage are `offers`'.
     'pay-several-strip',
@@ -1672,6 +1727,12 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'emoji-name',
     'pay-dust',
     'item-quote',
+    // The sign quotes (`SIGN_QUOTES`): the quote row's and the pay sheet's
+    // ink on grounds `offers` and `pay` already sample; the screens exist
+    // for the width of the currency sign beside the digits, in whichever
+    // font draws it (geometry), and for looks:diff to see the money node.
+    'quotes-signs',
+    'pay-inr',
     // `offers`' ink with one name too wide for its row; the marquee cell is
     // a geometry rule, and the contrast pass has sampled that ground.
     'long-item-name',

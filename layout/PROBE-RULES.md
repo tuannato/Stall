@@ -5418,3 +5418,27 @@ door's typing placeholder runs on `setTimeout` from module state no
 neutral screen resets, so what it shows at a door capture depends on that
 tab's history. No contrast target reads the paste box today; the day one
 does, the door's contrast jobs must paint with the typing stopped first.
+
+## The sign quotes: `quotes-signs` and `pay-inr` (glyph segment, 2026-10-10)
+
+Two fixture screens, no new rule. `quotes-signs` is the quote rail with one
+quote in each currency whose sign a served face may not draw itself — INR
+`₹`, ILS `₪`, KRW `₩`, NGN `₦`, PHP `₱`, TRY `₺` — and `pay-inr` the pay
+sheet over the rupee quote, with its rate. They exist because the seller's
+own figure (`seller-price`, a protected box) carries the sign beside its
+digits, and until they stood in the table the probe and `looks:diff` saw that
+node only with a `$` in it: a sign drawn by a face of Stall's, or by whatever
+font the reader's machine falls back to, changes the figure's width and so
+the price tag's, and no screen measured it.
+
+Both are on `STATE_SCREENS` and `GEOMETRY_ONLY_SCREENS`: the rows are
+`offers`' quote rows and the sheet is `pay`'s, on grounds the contrast pass
+already samples, so what these add is geometry (the name column against a
+wider or narrower figure, the tag's width, the sheet's bound). Their names
+bind the pay-screens audit (`quotes` / `pay`): each must mount a
+`seller-price`. Which face drew a glyph is still held statically, not here
+(`every-glyph-the-app-prints-is-in-its-face`); the probe's face check reads
+status, never a glyph.
+
+Added without a probe run: the first `pnpm test:layout` after them owes
+both screens a green.
