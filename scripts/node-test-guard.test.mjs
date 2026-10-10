@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { REGISTRARS, describeBodyProblems, nodeTestFiles, nodeTestFilesOf, problemLine } from './node-test-guard.mjs';
+import { REGISTRARS, describeBodyProblems, nodeTestFiles, nodeTestFilesOf, nodeTestFilesOnDisk, problemLine } from './node-test-guard.mjs';
 
 /**
  * `no-node-test-computes-in-a-describe-body`. On Node 22.22.0 a `describe`
@@ -19,6 +19,8 @@ import { REGISTRARS, describeBodyProblems, nodeTestFiles, nodeTestFilesOf, probl
  */
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+/** `node:test` as a namespace, to read what it exports; a static namespace import is one the guard refuses. */
+const nodeTest = await import('node:test');
 const REPORTER = join(ROOT, 'scripts', 'node-test-reporter.mjs');
 
 const scratch = [];
@@ -57,6 +59,13 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         }
     });
 
+    it('finds no node:test file under scripts/ or worker-icons/ that the list does not name', () => {
+        const unlisted = nodeTestFilesOnDisk(ROOT).filter((file) => !files.includes(file));
+        assert.deepEqual(unlisted, [], `these import node:test and no node --test command of the test script names them, so they are never run: ${unlisted.join(', ')}`);
+        assert.ok(nodeTestFilesOnDisk(ROOT).length >= files.length, 'the walk found fewer files than the script names');
+        assert.ok(files.every((file) => nodeTestFilesOnDisk(ROOT).includes(file)), 'the script names a node:test file the walk does not find');
+    });
+
     it('reads every node --test command of the script, and only those', () => {
         const script = (test) => JSON.stringify({ scripts: { test } });
         assert.deepEqual(nodeTestFilesOf(script('vitest run && node --experimental-strip-types --test a.ts b.mjs')), ['a.ts', 'b.mjs']);
@@ -79,7 +88,7 @@ describe('no-node-test-computes-in-a-describe-body', () => {
     const helper = (x) => x + compute();
     function declared() { return compute(); }
     after(helper);
-    it('a', () => {});
+    it('a', () => { slot; other; });
     it(\`b \${NAME.length}\`, { timeout: 5, skip }, async () => { await compute(); });
     for (const [one, two] of CASES) {
         it(\`c \${one}\`, () => {});
@@ -89,7 +98,7 @@ describe('no-node-test-computes-in-a-describe-body', () => {
 `),
             [],
         );
-        assert.deepEqual(REGISTRARS, ['describe', 'it', 'test', 'before', 'after', 'beforeEach', 'afterEach']);
+        assert.deepEqual(REGISTRARS, ['describe', 'suite', 'it', 'test', 'before', 'after', 'beforeEach', 'afterEach']);
     });
 
     for (const [name, body, why] of [
@@ -119,6 +128,16 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         ['an option that computes', 'it("a", { skip: want() ? "x" : false }, () => {});', /an argument of it\(\) that computes \(ObjectLiteralExpression\)/],
         ['an index in a title', 'it(TITLES[0], () => {});', /an argument of it\(\) that computes \(ElementAccessExpression\)/],
         ['a hook argument that calls', 'after(remover());', /an argument of after\(\) that computes \(CallExpression\)/],
+        ['a title that reads a let a hook fills', 'let title;\nbefore(() => { title = "x"; });\nit(title, () => {});', /an argument of it\(\) that reads `title`, a let of a describe body: it is empty until a hook has run, and this registration reads it first; build it at module top/],
+        ['a title template that reads a let a hook fills', 'let CANARY;\nbefore(() => { CANARY = "x"; });\nit(`names ${CANARY}`, () => {});', /an argument of it\(\) that reads `CANARY`, a let of a describe body/],
+        ['an option that reads a let a hook fills (the value form)', 'let reason;\nbefore(() => { reason = "x"; });\nit("t", { skip: reason }, () => {});', /an argument of it\(\) that reads `reason`, a let of a describe body/],
+        ['an option that reads a let a hook fills (the shorthand form)', 'let skip;\nbefore(() => { skip = "x"; });\nit("t", { skip }, () => {});', /an argument of it\(\) that reads `skip`, a let of a describe body/],
+        ['a callback that is a let a hook fills', 'let fn;\nbefore(() => { fn = () => {}; });\nit("t", fn);', /an argument of it\(\) that reads `fn`, a let of a describe body/],
+        ['a property read on a let a hook fills', 'let facts;\nbefore(() => { facts = { title: "x" }; });\nit(facts.title, () => {});', /an argument of it\(\) that reads `facts`, a let of a describe body/],
+        ['a let a hook fills read by a hook argument', 'let fn;\nbefore(() => { fn = () => {}; });\nafter(fn);', /an argument of after\(\) that reads `fn`, a let of a describe body/],
+        ['a let read by a test inside a for', 'let t;\nbefore(() => { t = "x"; });\nfor (const n of [1, 2]) { it(`a ${n} ${t}`, () => {}); }', /inside a for\.\.\.of: an argument of it\(\) that reads `t`/],
+        ['suite.skip', 'suite.skip("a", () => {});', /a call to `suite.skip`/],
+        ['test.describe inside a body', 'test.describe("a", () => {});', /a call to `test.describe`/],
     ]) {
         it(`refuses ${name}`, () => {
             const problems = problemsIn(body);
@@ -154,6 +173,21 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         const outerLet = describeBodyProblems('f.test.mjs', "describe('a', () => { let items; describe('b', () => { for (const x of items) { it('c', () => {}); } }); });").problems;
         assert.equal(outerLet.length, 1);
         assert.match(outerLet[0].why, /for\.\.\.of over `items`/);
+    });
+
+    it('reads Node\'s own aliases of describe, with .skip, .only and .todo, as a describe', () => {
+        for (const callee of ['suite', 'suite.skip', 'suite.only', 'suite.todo', 'describe.skip', 'describe.only', 'describe.todo', 'test.describe', 'test.suite', 'it.describe', 'it.suite', 'test.describe.skip', 'it.suite.todo']) {
+            const { problems, describes } = describeBodyProblems('a.test.mjs', `${callee}('a', () => { const x = f(); });`);
+            assert.equal(describes, 1, callee);
+            assert.equal(problems.length, 1, `${callee}: a body that computes passed`);
+            assert.match(problems[0].why, /a const that computes/, callee);
+        }
+        // Not describes: tests, hooks, and a name that merely ends in describe.
+        for (const callee of ['it', 'test', 'it.skip', 'test.only', 'other.describe', 'describe.describe']) {
+            assert.equal(describeBodyProblems('a.test.mjs', `${callee}('a', () => { const x = f(); });`).describes, 0, callee);
+        }
+        // Node really exports them as one function (22.22.0).
+        assert.ok(nodeTest.suite === nodeTest.describe && nodeTest.test.describe === nodeTest.describe && nodeTest.it.suite === nodeTest.describe && nodeTest.test.suite === nodeTest.describe && nodeTest.it.describe === nodeTest.describe);
     });
 
     it('refuses node:test imported in a form the guard cannot follow', () => {
@@ -234,6 +268,9 @@ describe('the-test-reporter-fails-the-run-for-a-failure-the-summary-does-not-cou
             'green.test.mjs': "describe('s', () => { it('t', () => {}); it('u', () => {}); });\n",
             'plain-fail.test.mjs': "describe('s', () => { it('t', () => { throw new Error('boom'); }); });\n",
             'todo.test.mjs': "it('t', { todo: true }, () => { throw new Error('expected'); });\nit('u', () => {});\n",
+            'todo-empty.test.mjs': "it('t', { todo: '' }, () => { throw new Error('expected'); });\n",
+            'skip-then-throw.test.mjs': "it('t', async (t) => { t.skip(); throw new Error('after the skip'); });\n",
+            'skip-empty.test.mjs': "it('t', { skip: '' }, () => { throw new Error('skipped'); });\n",
         };
         for (const [name, body] of Object.entries(files)) {
             writeFileSync(join(dir, name), `${HEAD}${body}`);
@@ -254,7 +291,8 @@ describe('the-test-reporter-fails-the-run-for-a-failure-the-summary-does-not-cou
         assert.equal(status, 1, stdout);
         assert.match(stdout, /^# fail 0$/m, 'the summary is Node\'s own, and still does not count it');
         assert.match(stdout, /^not ok \d+ - s$/m);
-        assert.match(stderr, /^node-test-reporter: 1 failed test or suite event\(s\) above were not counted by the summary/m);
+        assert.match(stderr, /^node-test-reporter: 1 failed test or suite event\(s\) above were not counted by the summary; exit status 1$/m);
+        assert.doesNotMatch(stderr, /describe body|after\(\)/, 'the note names no cause');
     });
 
     it('exits 1 for an after() hook inside a describe that throws', () => {
@@ -263,7 +301,7 @@ describe('the-test-reporter-fails-the-run-for-a-failure-the-summary-does-not-cou
     });
 
     it('prints what Node prints for a green run and for an ordinary failure, with no note and the same status', () => {
-        for (const file of ['green.test.mjs', 'plain-fail.test.mjs', 'todo.test.mjs']) {
+        for (const file of ['green.test.mjs', 'plain-fail.test.mjs', 'todo.test.mjs', 'todo-empty.test.mjs', 'skip-then-throw.test.mjs', 'skip-empty.test.mjs']) {
             const node = run(file, false);
             const ours = run(file, true);
             assert.equal(ours.status, node.status, file);
@@ -273,6 +311,9 @@ describe('the-test-reporter-fails-the-run-for-a-failure-the-summary-does-not-cou
         assert.equal(run('green.test.mjs', true).status, 0);
         assert.equal(run('plain-fail.test.mjs', true).status, 1);
         assert.equal(run('todo.test.mjs', true).status, 0, 'a todo that fails is not a failed run');
+        assert.equal(run('todo-empty.test.mjs', true).status, 0, 'an empty todo is still a todo, as Node counts it');
+        assert.equal(run('skip-then-throw.test.mjs', true).status, 0, 'a throw after t.skip() is a skip, as Node counts it');
+        assert.equal(run('skip-empty.test.mjs', true).status, 0);
     });
 
     it('is the reporter the test script names', () => {
