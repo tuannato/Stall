@@ -38,9 +38,11 @@
  * required files (`readPrivateLooksAt`, as `selectedIndex` reads it) —
  * refuses it, when it names no look, when its packed tree is not
  * `CANARY_TREE` (the gate: until a release only the canary's tree travels,
- * a public literal a public test rebuilds from this repository's bytes), or
- * when it names or holds a look `PREVIEW_SLUGS` does not (a belt that reads
- * names only).
+ * a public literal a public test rebuilds from this repository's bytes),
+ * when the commit is not `CANARY_COMMIT` (the canary's commit: until a
+ * release the road fetches that commit and no other — both literals are
+ * required at once), or when it names or holds a look `PREVIEW_SLUGS` does
+ * not (a belt that reads names only).
  *
  * **The pinned pair is a sentence, not a refusal** (STEP-8C-PLAN v1 §3,
  * kept by v2): since 8a the private files are read from git at a commit and
@@ -71,6 +73,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync, renameSync, writeFil
 import { join, resolve } from 'node:path';
 import { runAsScript } from './run-as-script.mjs';
 import {
+    CANARY_COMMIT,
     CANARY_TREE,
     FULL_COMMIT,
     GIT_LOCATION_VARS,
@@ -94,6 +97,11 @@ export const LOOKS_PIN_BYTES = 82;
 export const PACKED_OUT = Object.freeze(['README.md', 'LOG.md']);
 
 const PIN_SHAPE = /^[0-9a-f]{40} [0-9a-f]{40}\n$/;
+
+/* The pin step names the canary's commit in its gate: a value of another shape is refused before it is written into a shell line. */
+if (!FULL_COMMIT.test(CANARY_COMMIT)) {
+    throw new Error('looks-pin: CANARY_COMMIT is not 40 lower-case hex, and the pin step names it in its gate');
+}
 
 /**
  * Why `bytes` (a Buffer, or a string read as bytes) is not a pin, or
@@ -155,11 +163,19 @@ function isLink(path) {
  * re-exports this one, opens with the same line). Then: a link refused
  * before anything reads it, the byte count, the shape (an explicit
  * character list, never a range a locale could widen), the whole file
- * against the line it parsed — and **one** write to `$GITHUB_OUTPUT`
- * carrying `commit=` and `tree=`. A refusal writes nothing and names no
- * private thing: the file is public. No blank line, so the workflow
- * grammar's `run: |` block holds it as it is (V5). The workflow test holds
- * the step to this string verbatim (8c3).
+ * against the line it parsed — the shape `readLooksPin` reads too —
+ * **then the gate, a line of its own written from `CANARY_COMMIT`** (step
+ * 8g-pre): until a release the commit half is the canary's and no other,
+ * refused in one line naming no path and no hash, before the outputs the
+ * private checkout reads are written — so another commit of the private
+ * repository is never fetched onto a public runner, where the checkout
+ * prints its subject — and **one** write to `$GITHUB_OUTPUT` carrying
+ * `commit=` and `tree=`. A refusal writes nothing and names no private
+ * thing: the file is public. No blank line, so the workflow grammar's
+ * `run: |` block holds it as it is (V5). The workflow test holds the step
+ * to this string verbatim (8c3). The gate is not `readLooksPin`'s or
+ * `pinProblem`'s: the harness's pinned-pair reads share that shape over
+ * planted canaries, whose commit is another.
  */
 export const PIN_SCRIPT = `set -euo pipefail
 pin=${LOOKS_PIN_FILE}
@@ -172,6 +188,7 @@ shape='^[0123456789abcdef]{40} [0123456789abcdef]{40}$'
 commit="\${line%% *}"
 tree="\${line##* }"
 printf '%s %s\\n' "$commit" "$tree" | cmp -s - "$pin" || refuse
+[ "$commit" = "${CANARY_COMMIT}" ] || { echo "the pin names another commit than the canary's (CANARY_COMMIT): until a release a preview fetches that commit and no other" >&2; exit 1; }
 printf 'commit=%s\\ntree=%s\\n' "$commit" "$tree" >> "$GITHUB_OUTPUT"
 `;
 
@@ -272,12 +289,20 @@ export function packedTreeOf({ dir, commit, prefix, git, env }) {
  * it, the belt that reads names only — a commit whose index names a slug
  * `PREVIEW_SLUGS` does not, or whose tree holds another look directory;
  * and once a release names an id every pin is refused
- * (`previewRoadProblem`) until step 9 rewrites this rule. **Not read
- * here**, stated: a look's own files against their validators
- * (`look.json`, the sheet's lint, the SVG allow-list, its faces, its
- * budget) — the build and `pnpm test` read those under the selection.
+ * (`previewRoadProblem`) until step 9 rewrites this rule. **And the
+ * commit**: one that is not `canaryCommit` (`CANARY_COMMIT` unless a test
+ * plants a canary under a commit of its own — its tree is the canary's,
+ * its commit cannot be) is refused, and both literals are required at
+ * once: the commit `CANARY_COMMIT` with any other packed tree is said to
+ * be the two literals drifting apart (step 8g-pre). **Not read here**,
+ * stated: a look's own files against their validators (`look.json`, the
+ * sheet's lint, the SVG allow-list, its faces, its budget) — the build and
+ * `pnpm test` read those under the selection.
  */
-export async function pinLineFor({ dir, commit, facts, git, env }) {
+export async function pinLineFor({ dir, commit, facts, canaryCommit = CANARY_COMMIT, git, env }) {
+    if (typeof canaryCommit !== 'string' || !FULL_COMMIT.test(canaryCommit)) {
+        throw new TypeError(`the canary's commit is a full commit (40 lower-case hex), not ${JSON.stringify(canaryCommit)}`);
+    }
     const at = commit ?? gitCommitOf({ dir, git, env });
     const known = facts ?? (await publicLookFacts());
     const road = previewRoadProblem(known.released);
@@ -300,13 +325,21 @@ export async function pinLineFor({ dir, commit, facts, git, env }) {
         problems.push('the index names no look: a pin names a commit that carries one');
     }
     const tree = packedTreeOf({ dir, commit: at, git, env });
+    if (at !== canaryCommit) {
+        problems.push(
+            `it is not CANARY_COMMIT ${canaryCommit.slice(0, 12)}, the canary's commit: until a release a preview fetches that commit and no other (the pin step refuses every other before the private checkout)`,
+        );
+    }
     if (tree !== CANARY_TREE) {
         problems.push(
-            `its packed tree ${tree.slice(0, 12)} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's: until a release a preview carries that tree and no other (the-canary-is-public-bytes rebuilds it from this repository's own bytes)`,
+            `its packed tree ${tree.slice(0, 12)} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's: until a release a preview carries that tree and no other (the-canary-is-public-bytes rebuilds it from this repository's own bytes)` +
+                (at === canaryCommit
+                    ? ' — and the commit is CANARY_COMMIT: the two literals no longer name one canary (a canary change moves both, the pin and the recipe in one public commit)'
+                    : ''),
         );
     }
     if (problems.length > 0) {
-        throw new Error(`private looks at ${at}: a pin names no commit the build would refuse, and before a release no tree but the canary's:\n  - ${problems.join('\n  - ')}`);
+        throw new Error(`private looks at ${at}: a pin names no commit the build would refuse, and before a release no commit or tree but the canary's:\n  - ${problems.join('\n  - ')}`);
     }
     return `${at} ${tree}\n`;
 }
@@ -419,23 +452,37 @@ export function pinnedPair({ root, dir, commit, git, env }) {
     });
 }
 
-if (runAsScript(import.meta.url)) {
-    const args = process.argv.slice(2);
+/**
+ * The command line, `node scripts/looks-pin.mjs [--write] [dir]` run from
+ * `cwd` (the checkout's root): the pin line for the private repository at
+ * `dir` (`looks` by default) printed, or with `--write` written to
+ * `deploy/looks.commit` — only once the line is computed, so a refusal
+ * leaves the old pin. Answers `{ status, stdout, stderr }`. `canaryCommit`
+ * is the fact `pinLineFor` reads; the command line never sets it, so it
+ * pins the canary's own commit or nothing — a test hands it a planted
+ * canary's commit, in-process, to drive the write.
+ */
+export async function looksPinCommand(args, { cwd = process.cwd(), canaryCommit } = {}) {
     const write = args.includes('--write');
     const dirs = args.filter((arg) => arg !== '--write');
     try {
         if (dirs.length > 1 || dirs.some((arg) => arg.startsWith('-'))) {
             throw new Error('usage: node scripts/looks-pin.mjs [--write] [dir], from the checkout root');
         }
-        const line = await pinLineFor({ dir: resolve(dirs[0] ?? 'looks') });
+        const line = await pinLineFor({ dir: resolve(cwd, dirs[0] ?? 'looks'), ...(canaryCommit === undefined ? {} : { canaryCommit }) });
         if (write) {
-            writeLooksPin(process.cwd(), line);
-            process.stderr.write(`looks-pin: wrote ${LOOKS_PIN_FILE}: ${line}`);
-        } else {
-            process.stdout.write(line);
+            writeLooksPin(cwd, line);
+            return { status: 0, stdout: '', stderr: `looks-pin: wrote ${LOOKS_PIN_FILE}: ${line}` };
         }
+        return { status: 0, stdout: line, stderr: '' };
     } catch (error) {
-        process.stderr.write(`looks-pin: ${error.message}\n`);
-        process.exit(1);
+        return { status: 1, stdout: '', stderr: `looks-pin: ${error.message}\n` };
     }
+}
+
+if (runAsScript(import.meta.url)) {
+    const { status, stdout, stderr } = await looksPinCommand(process.argv.slice(2));
+    process.stdout.write(stdout);
+    process.stderr.write(stderr);
+    process.exitCode = status;
 }

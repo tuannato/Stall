@@ -23,6 +23,7 @@ import {
 import { LOOKS_PIN_FILE, PACKED_OUT, PACKED_TREE_SCRIPT, PIN_SCRIPT as PIN_SCRIPT_ITSELF, packedTreeOf, pinLineFor, readLooksPin } from './looks-pin.mjs';
 import { CANARY_MADE_FROM, PRIVATE_MODES_REFUSED, PRIVATE_PATHS_ADMITTED, PRIVATE_PATHS_REFUSED, canaryFiles, plantCanary, plantLooks, removePlants } from './private-looks-plant.mjs';
 import {
+    CANARY_COMMIT,
     CANARY_TREE,
     PREVIEW_SLUGS,
     PRIVATE_FACE_LICENCE,
@@ -159,6 +160,17 @@ function pack(work, { pin, tree, script = asCanary(tree), env = {} }) {
     const runner = scratchDir('runner');
     const step = runStep(script, work, { PIN: pin, PINNED_TREE: tree, RUNNER_TEMP: runner, ...env });
     return { ...step, artifact: join(runner, ARTIFACT_DIR) };
+}
+
+/**
+ * `PIN_SCRIPT` as it would be were `commit` the canary's: its one
+ * `CANARY_COMMIT` literal replaced, for a road over a canary planted under
+ * a commit of its own (the commit gate's own tests are in
+ * `scripts/looks-pin.test.mjs`).
+ */
+function pinAsCanaryCommit(commit) {
+    assert.equal(PIN_SCRIPT.split(CANARY_COMMIT).length, 2, 'the pin step names the canary commit once');
+    return PIN_SCRIPT.replace(CANARY_COMMIT, commit);
 }
 
 /** `PACK_SCRIPT` without its allow-list — the awk step, all its lines, and the refusal after it: a mutation. */
@@ -758,7 +770,7 @@ function packedRoad() {
     const line = `${head} ${packedTreeOf({ dir: looks.dir, commit: head, env: looks.env })}\n`;
     mkdirSync(join(work, 'deploy'));
     writeFileSync(join(work, LOOKS_PIN_FILE), line);
-    const pinStep = runStep(PIN_SCRIPT, work);
+    const pinStep = runStep(pinAsCanaryCommit(head), work);
     assert.equal(pinStep.status, 0, pinStep.stderr);
     const out = Object.fromEntries(pinStep.output.trim().split('\n').map((kv) => kv.split('=')));
     const step = pack(work, { pin: out.commit, tree: out.tree });
@@ -1364,7 +1376,7 @@ describe('a-preview-carries-only-the-preview-slugs-until-a-release', () => {
         assert.equal(why, undefined, why);
         assert.equal(
             previewRoadProblem([0x04]),
-            "a release carries a private look: step 9 rewrites the preview road and this rule (CANARY_TREE, the pack's gate line, PREVIEW_SLUGS, the pack's slug gate, pinLineFor)",
+            "a release carries a private look: step 9 rewrites the preview road and this rule (CANARY_TREE, CANARY_COMMIT, the pin's and the pack's gate lines, PREVIEW_SLUGS, the pack's slug gate, pinLineFor)",
         );
         assert.throws(() => previewRoadProblem(undefined), /RELEASED_LOOK_IDS/);
     });
@@ -1424,6 +1436,7 @@ describe('the-canary-is-public-bytes', () => {
     it('is the literal, pinned by value, made from a full commit', () => {
         assert.equal(CANARY_TREE, '1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13');
         assert.equal(CANARY_MADE_FROM, '6ca82d513b2f364e63948e6d5002f3a8bc888399');
+        assert.equal(CANARY_COMMIT, '760237c8e9f246c7b7f28a8a91ce933832100930');
     });
 
     it('is rebuilt from this repository’s own bytes at the commit the canary was made from, as git hashes a tree', () => {
@@ -1448,6 +1461,18 @@ describe('the-canary-is-public-bytes', () => {
 
     it('is the tree the tracked pin names', () => {
         assert.equal(readLooksPin(ROOT).tree, CANARY_TREE);
+    });
+
+    /*
+     * Step 8g-pre (the 8g plan's critic, N2): the commit half too. No test
+     * here can tie `CANARY_COMMIT` to `CANARY_TREE` — the commit object
+     * carries its author line, date and message, which this repository does
+     * not hold — so each literal is held to the tracked pin, and the pair
+     * meets only where the clone is read (`pinLineFor`, and the pack's
+     * clone-at-the-pin and tree checks), where a drift fails closed.
+     */
+    it('is the commit the tracked pin names beside it', () => {
+        assert.equal(readLooksPin(ROOT).commit, CANARY_COMMIT);
     });
 });
 
@@ -1574,7 +1599,8 @@ describe('the-preview-road-carries-only-the-canary-tree', () => {
         facts = await publicLookFacts();
         notTheCanary = new RegExp(`its packed tree [0-9a-f]{12} is not CANARY_TREE ${CANARY_TREE.slice(0, 12)}, the canary's`);
     });
-    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, facts });
+    // Each plant asked as were its own commit the canary's: these roads are the tree gate's (the commit gate is the pin step's, `scripts/looks-pin.test.mjs`).
+    const lineOf = async (looks, commit) => pinLineFor({ dir: looks.dir, env: looks.env, commit, canaryCommit: commit ?? looks.head(), facts });
     const GATE = "the pin names another tree than the canary's (CANARY_TREE): until a release a preview carries that tree and no other\n";
 
     it('packs, pins and unwraps the canary from public bytes, through the real pack', async () => {

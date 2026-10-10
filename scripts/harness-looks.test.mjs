@@ -67,8 +67,10 @@ describe('the-harness-reads-the-looks-a-selection-carries', () => {
  * over an unpinned commit measures exactly what it names. It names this
  * repository's HEAD tree, never its commit, so it stays true in the body of
  * the commit that bumps the pin. Over a private repository holding the
- * canary from public bytes (`plantCanary`: the one commit `pinLineFor`
- * writes a pin for before a release) and a public one planted beside it,
+ * canary from public bytes (`plantCanary`: the one tree `pinLineFor`
+ * writes a pin for before a release, under a commit of the plant's own,
+ * which the pin is asked with as `canaryCommit`) and a public one planted
+ * beside it,
  * both outside this checkout; a
  * production selection (a production build reads nothing private until step
  * 9) and the tracked fixture get no pair.
@@ -103,7 +105,8 @@ describe('the-harness-says-whether-it-measured-the-pinned-pair', () => {
     const measure = async (looks, publicDir, { commit, target = 'preview' } = {}) =>
         harnessLooks({ target, dir: looks.dir, ...(commit === undefined ? {} : { commit }) }, { root: publicDir, facts, env: looks.env });
     const PAIR = /^a preview selection at a private repository, commit [0-9a-f]{12}: canary \(t-canary\) · /;
-    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, facts });
+    // A planted canary's commit is its own: its pin is asked as were that commit the canary's (`CANARY_COMMIT` is the pin step's gate, not this sentence's).
+    const lineFor = async (looks) => pinLineFor({ dir: looks.dir, env: looks.env, canaryCommit: looks.head(), facts });
 
     it('says the pinned pair when it measures the pin from a clean tree, naming the public tree', async () => {
         const looks = plantCanary();

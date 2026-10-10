@@ -32,7 +32,7 @@ import {
     wranglerProblems,
 } from './deploy-workflow-lib.mjs';
 import { PACK_SCRIPT, PIN_SCRIPT } from './looks-artifact.mjs';
-import { CANARY_TREE, publicLookFacts } from './private-looks.mjs';
+import { CANARY_COMMIT, CANARY_TREE, publicLookFacts } from './private-looks.mjs';
 
 /**
  * `.github/workflows/deploy.yml` holds three kinds of key — the private
@@ -303,6 +303,21 @@ const PLANTS = [
         'verbatim',
         inJobEdit('looks', `"${CANARY_TREE}"`, `"${CANARY_TREE.slice(0, -1)}${CANARY_TREE.endsWith('0') ? '1' : '0'}"`),
     ],
+    // Step 8g-pre: the pin step's commit gate, edited or dropped in the YAML alone.
+    [
+        'the pin’s CANARY_COMMIT edited in the YAML alone',
+        'verbatim',
+        inJobEdit('looks', `"${CANARY_COMMIT}"`, `"${CANARY_COMMIT.slice(0, -1)}${CANARY_COMMIT.endsWith('0') ? '1' : '0'}"`),
+    ],
+    [
+        'the pin step’s commit gate dropped',
+        'verbatim',
+        inJobEdit(
+            'looks',
+            `          [ "$commit" = "${CANARY_COMMIT}" ] || { echo "the pin names another commit than the canary's (CANARY_COMMIT): until a release a preview fetches that commit and no other" >&2; exit 1; }\n`,
+            '',
+        ),
+    ],
     ['the pin step without set -euo pipefail', 'verbatim', inJobEdit('looks', '        run: |\n          set -euo pipefail\n          pin=deploy/looks.commit\n', '        run: |\n          pin=deploy/looks.commit\n')],
     [
         'the allow-list’s refusal dropped from the pack',
@@ -504,6 +519,7 @@ describe('the-workflow-runs-the-scripts-it-was-tested-with', () => {
         assert.equal(pin.shell, 'bash');
         assert.equal(pack.shell, 'bash');
         assert.ok(PACK_SCRIPT.includes(`[ "$PINNED_TREE" = "${CANARY_TREE}" ]`), 'the pack in the file names the canary’s tree, the literal the-canary-is-public-bytes rebuilds');
+        assert.ok(PIN_SCRIPT.includes(`[ "$commit" = "${CANARY_COMMIT}" ]`), 'the pin step in the file names the canary’s commit, the commit the tracked pin names');
     });
 
     it('holds each script’s lines in the file as they are, ten spaces in', () => {

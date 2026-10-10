@@ -974,6 +974,45 @@ function isStickyBox(selectors) {
 const MASKING = /^(?:-webkit-)?mask(?:-|$)|^clip-path$|^-webkit-mask-box-image/;
 
 /**
+ * Whether a declaration masks or clips a box with a file (step 8g-pre, the
+ * step critic's P2-1): a masking property (`MASKING`: a mask, its
+ * shorthand, longhands and border, the legacy box image, a clip path)
+ * whose value names a file target as the build reads one — `urlTargets`,
+ * every `url()` and every `image-set()` / `-webkit-image-set()` entry —
+ * read with every escape decoded. The one reader for "this masking value
+ * names a file": the look rules' refusal of a file mask in a state rule or
+ * a keyframe asks it, and so does the probe runner's owed art-off frame
+ * (`sheetMasksWithAFile`, `CARRIED_FILE_ART` in `scripts/layout-check.mjs`).
+ * A file a custom property carries in through `var()` is the custom
+ * property rule's to refuse in a first-party sheet; a `var(--x, url(…))`
+ * fallback names its file here.
+ */
+export function masksWithAFile(prop, value) {
+    return MASKING.test(prop) && urlTargets(decodeEscapes(value)).length > 0;
+}
+
+/**
+ * Whether a sheet masks or clips anything with a file, anywhere — a rule at
+ * rest, a state rule, a media block, a keyframe stop: `masksWithAFile` over
+ * every declaration of the parsed, comment-blanked sheet. The probe runner
+ * reads it for the carried looks that owe an art-off frame
+ * (`the-owed-art-off-frame-reads-every-file-a-mask-names`).
+ */
+export function sheetMasksWithAFile(css) {
+    const anyIn = (list) =>
+        list.some((node) => {
+            if (node.kind === 'rule') {
+                return declarationsOf(node.body).some(({ prop, value }) => masksWithAFile(prop, value));
+            }
+            if (node.body !== undefined) {
+                return anyIn(parseList(node.body, 0, node.body.length, []));
+            }
+            return anyIn(node.children ?? []);
+        });
+    return anyIn(parseSheet(css).nodes);
+}
+
+/**
  * Pseudo-classes and attributes a box reaches only after the page is used:
  * the probe measures every screen at rest, so a rule gated on one of these
  * paints on a screen no pass measured.
@@ -998,14 +1037,41 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * that arrives with a hover, a pressed state or an animation step
          * would hide words on a screen the probe never measured. Refused
          * where it is written; a mask on a box at rest is the probe's to
-         * judge. Not seen, stated: a `url()` carried in by `var()`.
+         * judge. A file is every target `urlTargets` reads (`masksWithAFile`:
+         * a `url()`, an `image-set()` entry, prefixed forms included — the
+         * step 8g-pre critic's P2-1, where `image-set()` passed). A file
+         * carried in by a custom property is not seen here, so a first-party
+         * sheet may not write one there (below); in the kit's, not seen,
+         * stated.
          */
-        if (MASKING.test(prop) && /(?<![\w-])url\(/i.test(value)) {
+        if (masksWithAFile(prop, value)) {
             if (selectors === undefined) {
                 out.push(`${shown} — a file's mask or clip in a keyframe: the probe reads one frozen instant, so a mask that animates in is measured by no pass`);
             } else if (selectors.some(isStateSelector)) {
                 out.push(`${shown} — a file's mask or clip in a state rule: the probe measures every screen at rest, so a mask that arrives with a state is measured by no pass`);
             }
+        }
+        /*
+         * A file named inside a custom property (step 8g-pre; the 8g plan's
+         * critic, P2-2): in a first-party look sheet — a shipped look's,
+         * the harness's fixture look's, a private look's — every `url()`
+         * and `image-set()` is written in the property that paints it.
+         * Carried through `var()`, a file switches off two belts that read
+         * the painting property's own value: the art-off frames the probe
+         * owes a look whose sheet names a file in a mask or a clip
+         * (`CARRIED_FILE_ART` in `scripts/layout-check.mjs`, over
+         * `sheetMasksWithAFile`), and the
+         * refusal above of a file mask in a state rule or a keyframe. Read
+         * with every escape decoded and inside strings too, so `u\72l(`
+         * and a quoted `url(` are the same function (an escape outside a
+         * string is refused on its own as well, below). The kit keeps its
+         * own rules: its README states them, and a rule added there is the
+         * owner's line to write.
+         */
+        if (firstParty && prop.startsWith('--') && /(?:url|image-set)\(/i.test(decodeEscapes(value))) {
+            out.push(
+                `${shown} — a file named in a custom property: write each url() and image-set() in the property that paints it, where the file-art checks read it`,
+            );
         }
         if (/!\s*important/i.test(bare)) {
             out.push(
@@ -1411,7 +1477,10 @@ export function lintSheet(css, { art = [] } = {}) {
  * A shipped look's sheet under the rules every look sheet obeys (rules 1, 2,
  * 5 and 6 of `lintSheet`, scoped to the look's own class, and no escape
  * outside a string). The kit's art and keyframe-name rules are the kit's:
- * a shipped sheet is Stall's own, built and reviewed here.
+ * a shipped sheet is Stall's own, built and reviewed here. And the
+ * first-party rules the kit does not carry: the sign sticky off the wall,
+ * the legacy mask-composite pairs, the hooks, and no file named in a custom
+ * property (`a-look-writes-each-url-in-the-property-that-paints-it`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });

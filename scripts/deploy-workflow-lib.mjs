@@ -110,7 +110,8 @@ export const PRODUCTION_IF = "github.ref == 'refs/heads/main' && inputs.target =
 /**
  * The tests `public-checks` runs before the `looks` job reads a private
  * byte, by file, with the suites each must hold: this file's own test, the
- * pin's (`PIN_SCRIPT` on the runner's bash) and the pack's (`PACK_SCRIPT`
+ * pin's (`PIN_SCRIPT` on the runner's bash, its commit gate among them) and
+ * the pack's (`PACK_SCRIPT`
  * on its bash, awk and git, and `the-canary-is-public-bytes`, which
  * rebuilds `CANARY_TREE` from this repository's bytes — the third 8c2
  * critic's item 1). Whole files, never a name pattern: a pattern that
@@ -127,7 +128,7 @@ export const PUBLIC_CHECK_TESTS = Object.freeze({
         'no-install-loads-a-pnpm-hook',
         'the-deploy-workflow-takes-wrangler-from-its-own-pinned-package',
     ]),
-    'scripts/looks-pin.test.mjs': Object.freeze(['the-pin-is-read-the-same-way-by-the-shell-and-the-scripts']),
+    'scripts/looks-pin.test.mjs': Object.freeze(['the-pin-is-read-the-same-way-by-the-shell-and-the-scripts', 'the-pin-step-fetches-only-the-canary-commit']),
     'scripts/looks-artifact.test.mjs': Object.freeze([
         'the-pack-refuses-a-file-the-build-would-refuse',
         'the-canary-is-public-bytes',

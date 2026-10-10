@@ -47,6 +47,7 @@ import { harnessLooks } from './harness-looks.mjs';
 import { carriedTallyFaults } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
+import { sheetMasksWithAFile } from './workshop-css.mjs';
 
 /*
  * The private looks this run measures (8e2): the selection the shell names,
@@ -533,14 +534,18 @@ const marksShownSeen = new Set();
  * The carried looks whose own sheet names a file in a mask or clip property
  * (8f2, the 8f2 critic's P3-8), read from the sheet as the build reads it:
  * each owes the art-off read a pending frame, so a computed miss in the
- * probe's `markFileArt` fails the run rather than reading as no art.
+ * probe's `markFileArt` fails the run rather than reading as no art. The
+ * reader is the look rules' own (`sheetMasksWithAFile`,
+ * `scripts/workshop-css.mjs`): every file target a mask names — a `url()`,
+ * an `image-set()` entry — in any rule, media block or keyframe (step 8g-pre,
+ * the critic's P2-1: the regex this replaced read `url(` alone;
+ * `the-owed-art-off-frame-reads-every-file-a-mask-names`).
  */
-const FILE_ART_IN_SHEET = /(?:^|[;{\s])(?:-webkit-)?(?:mask(?:-image|-border(?:-source)?|-box-image(?:-source)?)?|clip-path)\s*:[^;{}]*url\(/i;
 const CARRIED_FILE_ART =
     MEASURED_SELECTION === undefined
         ? []
         : privateRows(await servedSheets({ env: CARRIED.env }))
-              .filter((row) => FILE_ART_IN_SHEET.test(row.css.replace(/\/\*[\s\S]*?\*\//g, '')))
+              .filter((row) => sheetMasksWithAFile(row.css))
               .map((row) => row.lookClass);
 /**
  * Every decoration class a geometry pass painted worn (the probe's

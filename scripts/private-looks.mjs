@@ -189,6 +189,34 @@ export const PREVIEW_SLUGS = Object.freeze(['canary']);
 export const CANARY_TREE = '1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13';
 
 /**
+ * **The one commit the preview road fetches before any release** (step
+ * 8g-pre): the canary's commit, as `deploy/looks.commit` pins it.
+ * `CANARY_TREE` holds what travels; this holds what is fetched. The deploy
+ * workflow's private checkout runs between the pin step and the pack, and
+ * prints the commit's subject, so a hand-edited pin naming another commit
+ * of the private repository beside the canary's tree fetched that commit
+ * onto a public runner, and printed its subject in a public log, before
+ * the pack's tree check refused it. Two readers refuse every other commit:
+ * `PIN_SCRIPT` (`scripts/looks-pin.mjs`), in a line of its own written from
+ * this constant, after the pin is parsed and before its outputs are
+ * written — so before the checkout; and `pinLineFor`, which requires this
+ * commit and `CANARY_TREE` at once. **Not in `readLooksPin` or
+ * `pinProblem`**: those read the pin's shape, which the harness's
+ * pinned-pair reads share over planted canaries, whose tree is the
+ * canary's and whose commit is another. **No public test can tie it to
+ * `CANARY_TREE`**: a commit object carries its author line, date and
+ * message, so it cannot be rebuilt from this repository's bytes. The two
+ * meet only where the clone is read — `pinLineFor` on the owner's machine,
+ * `PACK_SCRIPT`'s clone-at-the-pin and tree checks on the runner — so a
+ * drift between them fails closed at the dispatch, and fetches no other
+ * commit. **What moves it**: a canary change, with `CANARY_TREE`, the pin
+ * and the recipe, in one public commit; step 9's release rewrites it with
+ * the road. Pinned by its literal value in `the-canary-is-public-bytes`,
+ * which holds the tracked pin's commit half to it.
+ */
+export const CANARY_COMMIT = '760237c8e9f246c7b7f28a8a91ce933832100930';
+
+/**
  * Why the preview road's gate no longer holds, or undefined: once
  * `RELEASED_LOOK_IDS` (`released`) names an id, a release carries a private
  * look, and the gate written for "only the canary until a look is sold"
@@ -200,7 +228,7 @@ export function previewRoadProblem(released) {
     }
     return released.length === 0
         ? undefined
-        : 'a release carries a private look: step 9 rewrites the preview road and this rule (CANARY_TREE, the pack\'s gate line, PREVIEW_SLUGS, the pack\'s slug gate, pinLineFor)';
+        : 'a release carries a private look: step 9 rewrites the preview road and this rule (CANARY_TREE, CANARY_COMMIT, the pin\'s and the pack\'s gate lines, PREVIEW_SLUGS, the pack\'s slug gate, pinLineFor)';
 }
 
 /** A look's scoping class, one token under `t-` (`dressLook` adds it with `classList.add`). */

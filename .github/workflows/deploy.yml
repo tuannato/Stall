@@ -27,7 +27,8 @@
 #   scripts do what their tests say on this runner (the third 8c2
 #   critic's item 1; the first's item 3).
 # - `looks`, the `looks` Environment, whose secrets are the private
-#   repository's name and read token and nothing else: reads the pin,
+#   repository's name and read token and nothing else: reads the pin
+#   (refusing every commit but the canary's before anything is fetched),
 #   checks out that one commit, packs its tree (refusing every tree but
 #   the canary's before anything is archived) and uploads it for a day.
 # - `build-preview`, no secret: unwraps that tree before anything is
@@ -105,7 +106,9 @@ jobs:
         with:
           persist-credentials: false
       # PIN_SCRIPT (scripts/looks-pin.mjs), verbatim: deploy/looks.commit,
-      # exactly `<commit> <tree>\n`, into this step's outputs.
+      # exactly `<commit> <tree>\n`, the canary's commit (CANARY_COMMIT)
+      # or nothing, into this step's outputs - so the checkout below never
+      # fetches another commit of the private repository.
       - id: pin
         name: Read the pin
         shell: bash
@@ -121,6 +124,7 @@ jobs:
           commit="${line%% *}"
           tree="${line##* }"
           printf '%s %s\n' "$commit" "$tree" | cmp -s - "$pin" || refuse
+          [ "$commit" = "760237c8e9f246c7b7f28a8a91ce933832100930" ] || { echo "the pin names another commit than the canary's (CANARY_COMMIT): until a release a preview fetches that commit and no other" >&2; exit 1; }
           printf 'commit=%s\ntree=%s\n' "$commit" "$tree" >> "$GITHUB_OUTPUT"
       # One commit, no history, no credential left behind. The checkout
       # prints the commit's subject: a private commit's subject is public
