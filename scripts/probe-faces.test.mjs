@@ -37,8 +37,9 @@ describe('every-face-is-loaded-before-the-probe-measures', () => {
         const families = new Set(declared.map((face) => face.family));
         assert.ok(declared.every((face) => /^\.\/fonts\/[a-z-]+\.woff2$/.test(face.src)), 'every face names its file');
         assert.deepEqual([...families].sort(), ['Inter', 'JetBrains Mono', 'Stall Serif']);
-        // Each family ships a Latin and a Vietnamese subset, Stall Serif an italic pair too.
-        assert.equal(declared.length, 8);
+        // Each family ships a Latin and a Vietnamese subset (Stall Serif an italic pair too: 8),
+        // and Stall Serif (roman, italic) and JetBrains Mono each a segment of Inter's Latin file: 11.
+        assert.equal(declared.length, 11);
         assert.ok(declared.every((face) => face.unicodeRange !== ''));
     });
 
@@ -83,7 +84,7 @@ describe('every-face-is-loaded-before-the-probe-measures', () => {
     it('counts what it waited for on the pass line', () => {
         assert.equal(
             facesLine(echoOf(declared)),
-            '8 of 8 loaded before measuring (Inter 2, Stall Serif 4, JetBrains Mono 2); 8 asked, 12 ms',
+            '11 of 11 loaded before measuring (Inter 2, Stall Serif 6, JetBrains Mono 3); 11 asked, 12 ms',
         );
         assert.equal(facesLine(undefined), 'no faces echoed');
     });

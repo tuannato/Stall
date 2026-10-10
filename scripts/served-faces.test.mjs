@@ -11,6 +11,8 @@ import {
     contentStringsOf,
     cpName,
     declaredNotHeld,
+    descriptorProblems,
+    drawsItself,
     glyphsNotHeld,
     lettersOfAnotherScript,
     MAX_RANGE_CODE_POINTS,
@@ -117,10 +119,6 @@ function readWanted(python) {
 }
 const RE_SUBSET = readWanted(read('scripts/subset-faces.py'));
 
-/** The face sets that lack a currency sign upstream: Lora (Stall Serif) and JetBrains Mono 2.211 draw none of ₦ ₩ ₪ ₱ ₹. */
-const NOT_SERIF_OR_MONO = ['Stall Serif', 'Stall Serif italic', 'JetBrains Mono'];
-const SERIF = ['Stall Serif', 'Stall Serif italic'];
-
 /**
  * **What the app prints that a served face does not draw** — pinned, each
  * with where it prints and the face sets that lack it (`faces`). Wherever
@@ -130,34 +128,15 @@ const SERIF = ['Stall Serif', 'Stall Serif italic'];
  * Decided "Glyphs a page prints are drawn by Stall's own faces"), and
  * `scripts/subset-faces.py` cut every Latin subset again from its upstream
  * font with each of these that font draws — `≈` and RUB's `₽` are drawn by
- * all four and are not on it. What is left is what the upstream font itself
- * lacks: Lora has no `→ ◆` and no `₦ ₩ ₪ ₱ ₹`, JetBrains Mono none of the
- * six signs, and no face a CJK ideograph (`元`; a CJK face is not shipped
- * for one sign). A glyph leaves this list, or a face leaves its `faces`,
- * only when a face gains it; a glyph joins it only with a line saying where
- * it prints.
+ * all four. What Lora and JetBrains Mono do not draw (`→ ◆ ₹ ₪ ₩ ₦ ₱`, and
+ * `₺` in JetBrains Mono) stall.css draws from Inter's Latin file in those
+ * families' names, one segment each (`a segment names exactly what its
+ * family's own files lack`), so no face set lacks them. What is left is no
+ * face's: a CJK ideograph (`元`; a CJK face is not shipped for one sign). A
+ * glyph leaves this list, or a face leaves its `faces`, only when a face
+ * gains it; a glyph joins it only with a line saying where it prints.
  */
-const PRINTED_NOT_HELD = [
-    {
-        cp: 0x2192,
-        in: ['src/ui/copy.ts', 'src/ui/obsGuide.ts'],
-        faces: SERIF,
-        where: '`DESC_SUB` on the describe sheet, the first-stall checklist\'s "Share your link" step, and `OBS_RECIPE_SOURCE` on the stream sheet: a Rural stall\'s copy, in Stall Serif',
-    },
-    {
-        cp: 0x25c6,
-        in: ['src/ui/broadcast.css', 'GENERATED_TEXT'],
-        faces: SERIF,
-        where: "the ticker's separator between items, and any look's generated text (`GENERATED_TEXT`): on Rural, in Stall Serif",
-    },
-    { cp: 0x20a6, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('NGN') },
-    { cp: 0x20a9, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('KRW') },
-    { cp: 0x20aa, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('ILS') },
-    { cp: 0x20b1, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('PHP') },
-    { cp: 0x20b9, in: ['src/domain/fiat.ts'], faces: NOT_SERIF_OR_MONO, where: quoteIn('INR') },
-    { cp: 0x20ba, in: ['src/domain/fiat.ts'], faces: ['JetBrains Mono'], where: quoteIn('TRY') },
-    { cp: 0x5143, in: ['src/domain/fiat.ts'], faces: EVERY_FACE, where: quoteIn('CNY') },
-];
+const PRINTED_NOT_HELD = [{ cp: 0x5143, in: ['src/domain/fiat.ts'], faces: EVERY_FACE, where: quoteIn('CNY') }];
 
 /**
  * **Code points a face's `unicode-range` names on its own that its file
@@ -199,8 +178,10 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
     it('reads the four face sets stall.css declares, from their own files', () => {
         assert.deepEqual(sets.map((set) => set.name), EVERY_FACE);
         for (const set of sets) {
-            // A Latin subset and a Vietnamese one each.
-            assert.equal(set.faces.length, 2, set.name);
+            // A Latin subset and a Vietnamese one each, and for the two
+            // families whose fonts lack glyphs the app prints, one segment
+            // of Inter's Latin file (`a segment names exactly what…`).
+            assert.equal(set.faces.length, set.name === 'Inter' ? 2 : 3, set.name);
             for (const face of set.faces) assert.ok(face.held.size > 100, `${face.file} holds ${face.held.size} code points`);
         }
     });
@@ -242,6 +223,35 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
                 assert.ok(printed.get(exception.cp)?.has(where), `${name} is no longer printed from ${where} — say where it prints now, or take it off`);
             }
             assert.deepEqual(missing.get(exception.cp) ?? [], exception.faces, `${name}: the faces that lack it moved — a face holds it now, or lost it`);
+        }
+    });
+
+    it("credits Inter's glyphs to Stall Serif and JetBrains Mono through one segment each, naming exactly what the family's own files lack", () => {
+        // The segment is a rule in the family's name over Inter's Latin file.
+        // Its range is derived here and not copied: the code points
+        // `subset-faces.py` cuts in (`WANTED`) that Inter draws and the
+        // family's own files do not. A range wider than that claims a glyph
+        // the family draws itself (the segment, declared later, would take
+        // it from the family); a range narrower leaves a glyph to the
+        // machine's fonts; and the family's own ranges may not name one of
+        // them (where two ranges name a code point, which rule draws it
+        // would rest on the order of the sheet).
+        const interFile = 'src/ui/fonts/inter-latin.woff2';
+        const isInter = (face) => face.file.startsWith('src/ui/fonts/inter-');
+        const inter = sets.find((set) => set.name === 'Inter');
+        for (const set of sets.filter((s) => s.name !== 'Inter')) {
+            const segments = set.faces.filter(isInter);
+            const own = { name: set.name, faces: set.faces.filter((face) => !isInter(face)) };
+            assert.deepEqual(segments.map((face) => face.file), [interFile], `${set.name}: one segment, of Inter's Latin file`);
+            const claimed = segments[0].ranges.flatMap(([lo, hi]) => {
+                assert.ok(hi - lo < 16, `${set.name}: a segment range ${cpName(lo)}–${cpName(hi)} that wide is not a sign`);
+                return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+            });
+            const expected = RE_SUBSET.filter((cp) => !drawsItself(own, cp) && drawsItself(inter, cp)).sort((a, b) => a - b);
+            assert.deepEqual(claimed.map(cpName), expected.map(cpName), set.name);
+            for (const cp of claimed) {
+                assert.ok(!own.faces.some((face) => face.ranges.some(([lo, hi]) => cp >= lo && cp <= hi)), `${set.name}: its own files' ranges also name ${cpName(cp)}`);
+            }
         }
     });
 
@@ -309,7 +319,8 @@ describe('a-face-range-never-takes-one-letter-of-another-script', () => {
     it("names in every face's unicode-range only letters of its subset's script, Common or Inherited", () => {
         const sets = servedFaceSets();
         const faces = sets.flatMap((set) => set.faces);
-        assert.equal(faces.length, 8);
+        // Eight subsets, and the segment of Inter's file in each of the other three families' names.
+        assert.equal(faces.length, 11);
         // A face with no range is refused by name, before anything walks it (P3-8).
         assert.deepEqual(
             faces.filter((face) => face.declared.trim() === '').map((face) => face.file),
@@ -354,5 +365,80 @@ describe('a-face-range-never-takes-one-letter-of-another-script', () => {
         assert.equal(subsetScript('src/ui/fonts/jetbrains-mono-latin.woff2'), 'Latin');
         assert.throws(() => subsetScript('src/ui/fonts/inter-cyrillic.woff2'), /SUBSET_SCRIPTS does not name/);
         assert.throws(() => subsetScript('src/ui/fonts/inter-constructor.woff2'), /SUBSET_SCRIPTS does not name/);
+    });
+});
+
+describe('every-face-of-a-family-shares-its-descriptors', () => {
+    // A segment of Inter's file in another family's name (stall.css) is only
+    // safe while it states what the family states. Declared `400 700` beside
+    // JetBrains Mono's `100 800`, it made Chrome 154 pick the segment's
+    // descriptor group and drop the family's own Latin face at the weights
+    // inside it: Neo's weight-400 and 700 text drew in Menlo (800 did not)
+    // with every face `loaded`, which the probe's status check cannot see
+    // (the glyph-segment critic, 2026-10-10). Computed in `before`: a
+    // describe body only registers.
+    let css;
+    before(() => {
+        css = read('src/ui/stall.css');
+    });
+
+    /** `css` with `change` applied to the one @font-face block `pick` selects. */
+    const planted = (pick, change) => {
+        let hit = 0;
+        const out = css.replace(/@font-face\s*\{[^}]*\}/g, (block) => {
+            if (!pick(block)) return block;
+            hit += 1;
+            return change(block);
+        });
+        assert.equal(hit, 1, 'the plant selects exactly one rule');
+        assert.notEqual(out, css);
+        return out;
+    };
+    const segmentOf = (family) => (block) => block.includes(`'${family}'`) && block.includes('inter-latin.woff2');
+    const ownLatinOf = (family) => (block) => block.includes(`'${family}'`) && /fonts\/(?!inter-)[a-z-]*latin\.woff2/.test(block);
+
+    it('holds on stall.css, over every rule of the four groups it reads', () => {
+        assert.deepEqual(descriptorProblems(css), []);
+        const counts = new Map();
+        for (const face of declaredStallFaces()) {
+            const key = `${face.family} ${face.style.trim()}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        // Two subsets each, and a segment of Inter's file in the two other families' names.
+        assert.deepEqual([...counts].sort(), [['Inter normal', 2], ['JetBrains Mono normal', 3], ['Stall Serif italic', 3], ['Stall Serif normal', 3]]);
+    });
+
+    it("goes red on the footgun: a JetBrains Mono segment declared 400 700 beside the family's 100 800", () => {
+        const problems = descriptorProblems(planted(segmentOf('JetBrains Mono'), (block) => block.replace('font-weight: 100 800', 'font-weight: 400 700')));
+        assert.equal(problems.length, 1);
+        assert.match(problems[0], /^JetBrains Mono normal: font-weight differs between its rules/);
+        assert.match(problems[0], /"400 700" on inter-latin\.woff2/);
+        assert.match(problems[0], /"100 800" on jetbrains-mono-latin\.woff2/);
+    });
+
+    it('goes red the other way round too: the family moved and its segment did not', () => {
+        const problems = descriptorProblems(planted(ownLatinOf('Stall Serif'), (block) => block.replace('font-weight: 400 700', 'font-weight: 400 800')));
+        assert.equal(problems.length, 1);
+        assert.match(problems[0], /^Stall Serif normal: font-weight differs/);
+    });
+
+    it('reads a descriptor left out as its initial value, and a different display as a difference', () => {
+        const italicSegment = (b) => segmentOf('Stall Serif')(b) && b.includes('font-style: italic');
+        const noDisplay = descriptorProblems(planted(italicSegment, (b) => b.replace(/\s*font-display: swap;/, '')));
+        assert.equal(noDisplay.length, 1, noDisplay.join('\n'));
+        assert.match(noDisplay[0], /^Stall Serif italic: font-display differs/);
+        assert.match(noDisplay[0], /"auto" on inter-latin\.woff2/);
+        const block = descriptorProblems(planted(ownLatinOf('JetBrains Mono'), (b) => b.replace('font-display: swap', 'font-display: block')));
+        assert.equal(block.length, 1);
+        assert.match(block[0], /^JetBrains Mono normal: font-display differs/);
+    });
+
+    it('does not read a respelling as a difference, and does not let one hide a difference', () => {
+        // Extra space, a keyword, and the other quote mark: the same descriptors.
+        assert.deepEqual(descriptorProblems(planted(segmentOf('JetBrains Mono'), (block) => block.replace('font-weight: 100 800', 'font-weight:   100   800').replace("'JetBrains Mono'", '"JetBrains Mono"'))), []);
+        assert.deepEqual(descriptorProblems(planted(ownLatinOf('Stall Serif'), (block) => block.replace('font-weight: 400 700', 'font-weight: normal 700'))), []);
+        // The footgun in the other quote mark, and in another case, is still the footgun: the group is the family, not its spelling.
+        const quoted = planted(segmentOf('JetBrains Mono'), (block) => block.replace('font-weight: 100 800', 'font-weight: 400 700').replace("'JetBrains Mono'", '"jetbrains mono"'));
+        assert.equal(descriptorProblems(quoted).length, 1);
     });
 });
