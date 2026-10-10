@@ -143,6 +143,19 @@ const fixtureCarriesLine = () => {
 };
 const PREVIEW = { ...FIXTURE, [SELECTION_ENV.target]: 'preview' };
 const PRODUCTION = { ...FIXTURE, [SELECTION_ENV.target]: 'production' };
+/**
+ * The selection this run's own environment names, and whether the run must
+ * read one. Read here, at module top, and never in a `describe` body: the
+ * skip below is decided at registration, and a throw in a `describe` body is
+ * counted by `node --test` as neither a failure nor a pass (the exit stays 0),
+ * where a throw at module top fails the file.
+ */
+const runSelection = selectionFromEnv(process.env);
+const mustRead = selectionRequired(process.env);
+const NO_RUN_SELECTION_SKIP =
+    runSelection === undefined && !mustRead
+        ? 'this run names no private-look selection; the tracked fixture and a planted repository stand in above'
+        : false;
 
 describe('an-unnamed-selection-carries-no-private-look', () => {
     /**
@@ -296,15 +309,16 @@ describe('a-private-svg-outside-the-element-list-fails-the-build', () => {
      * screenshot from headless Chrome in 90 s. `use` is off the list; the
      * plant is kept so a list that grows it back meets the bomb first.
      */
-    const USE_BOMB = (() => {
+    function useBomb() {
         const groups = ['<g id="g0"><rect width="1" height="1"/></g>'];
         for (let n = 1; n <= 6; n += 1) {
             groups.push(`<g id="g${n}">${Array.from({ length: 10 }, () => `<use href="#g${n - 1}"/>`).join('')}</g>`);
         }
         return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><defs>${groups.join('')}</defs><use href="#g6"/></svg>`;
-    })();
+    }
 
     it('refuses every road §13.4 closes, and the elements it named and no art uses', () => {
+        const USE_BOMB = useBomb();
         assert.ok(USE_BOMB.length < 1_400, `the bomb is small: ${USE_BOMB.length} bytes`);
         for (const element of ['use', 'feTurbulence', 'feDisplacementMap']) {
             assert.ok(!SVG_ELEMENTS.includes(element), element);
@@ -448,7 +462,10 @@ describe('a-carried-look-past-its-art-budget-fails-the-build', () => {
         });
     const REASON = 'A planted look: its weight is the point of the test.';
     /** The public lists with the planted look's id over the target: the owner's OK, as a public diff would give it. */
-    const listed = { ...facts, overTarget: [0x04] };
+    let listed;
+    before(() => {
+        listed = { ...facts, overTarget: [0x04] };
+    });
     const readListed = (repo) =>
         readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: repo.dir }, facts: listed, validateLook, vars, env: repo.env });
 
@@ -518,7 +535,10 @@ describe('a-private-row-class-is-its-looks-own', () => {
      * the public lists are planted with a second for this case. A shipped
      * row's class is the validator's to refuse (`lookData.test.ts`).
      */
-    const twoIds = { ...facts, reserved: [4, 5], paid: [4, 5] };
+    let twoIds;
+    before(() => {
+        twoIds = { ...facts, reserved: [4, 5], paid: [4, 5] };
+    });
     function plantTwo(secondTrim) {
         const repo = plantRepo((path, text) =>
             path === 'index.json'
@@ -583,16 +603,19 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
     after(removePlants);
     const FACE = 'plant-serif-latin.woff2';
     const LICENCE = 'LICENSE-OFL-plant-serif.txt';
-    const PUBLIC_NOTICES = readFileSync(join(ROOT, 'public', 'licenses.txt'));
+    let PUBLIC_NOTICES;
+    before(() => {
+        PUBLIC_NOTICES = readFileSync(join(ROOT, 'public', 'licenses.txt'));
+    });
     const face = (family = 'Plant Serif') =>
         syntheticWoff2([
             { id: 0, text: 'Copyright 2024 The Plant Type Authors' },
             { id: 1, text: family },
         ]);
-    const fontFace = `@font-face { font-family: ${PLANTED_CLASS}-serif; src: url(./art/${FACE}) format("woff2"); font-display: swap; }`;
+    const fontFace = () => `@font-face { font-family: ${PLANTED_CLASS}-serif; src: url(./art/${FACE}) format("woff2"); font-display: swap; }`;
     /** A planted look serving one synthetic face; `licence` the OFL text beside it, or `null` for none. */
     const plantFace = ({ licence = oflText('The Plant Type Authors'), family } = {}) =>
-        plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, fontFace) : text), {
+        plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, fontFace()) : text), {
             [`fixture/art/${FACE}`]: face(family),
             ...(licence === null ? {} : { [`fixture/art/${LICENCE}`]: licence }),
             'fixture/fonts.json': JSON.stringify({ fonts: [{ name: 'Plant Serif', files: { [FACE]: 'Latin' }, licence: LICENCE }] }),
@@ -1129,11 +1152,9 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             opensOnce(path, bytes.toString('utf8'), PLANTED_CLASS);
         });
 
-        const runSelection = selectionFromEnv(process.env);
-        const mustRead = selectionRequired(process.env);
         it(
             'serves it once on every look the run’s own selection carries',
-            { skip: runSelection === undefined && !mustRead ? 'this run names no private-look selection; the tracked fixture and a planted repository stand in above' : false },
+            { skip: NO_RUN_SELECTION_SKIP },
             async () => {
                 assert.ok(runSelection !== undefined, `${REQUIRED_ENV} is set and this run names no private-look selection`);
                 const selection = Object.fromEntries(LOOKS_ENV.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]]));

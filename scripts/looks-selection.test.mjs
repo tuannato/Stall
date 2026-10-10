@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { FIXTURE_LOOKS_DIR, REQUIRED_ENV, SELECTION_ENV, harnessSelectionRefusal, selectionFromEnv, selectionRefusal, withoutSelection } from './looks-selection.mjs';
 
@@ -61,7 +61,10 @@ function firstStatement(text) {
 }
 
 describe('a-harness-command-reads-a-selection-or-refuses-it', () => {
-    const whole = { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR };
+    let whole;
+    before(() => {
+        whole = { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR };
+    });
     const run = (args, env) =>
         spawnSync(process.execPath, args, { cwd: ROOT, env: { ...withoutSelection(process.env), ...env }, encoding: 'utf8', timeout: 60_000 });
 

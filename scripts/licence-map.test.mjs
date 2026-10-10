@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
     FONT_FILE,
@@ -221,7 +221,10 @@ describe('the-licence-allow-list-is-the-owners', () => {
 });
 
 describe('every-production-dependency-is-on-the-allow-list', () => {
-    const closure = productionPackages(ROOT);
+    let closure;
+    before(() => {
+        closure = productionPackages(ROOT);
+    });
 
     it('refuses a licence off the list and a licence that is not a string', () => {
         assert.deepEqual(dependencyProblems([{ name: 'a', version: '1.0.0', licence: 'MIT' }], LICENCE_ALLOW), []);
@@ -256,12 +259,15 @@ describe('every-production-dependency-is-on-the-allow-list', () => {
 });
 
 describe('every-font-sits-beside-its-own-licence', () => {
-    const licenceTexts = Object.fromEntries(
-        FONTS.filter((font) => existsSync(join(ROOT, font.licence))).map((font) => [
-            font.licence,
-            readFileSync(join(ROOT, font.licence), 'utf8'),
-        ]),
-    );
+    let licenceTexts;
+    before(() => {
+        licenceTexts = Object.fromEntries(
+            FONTS.filter((font) => existsSync(join(ROOT, font.licence))).map((font) => [
+                font.licence,
+                readFileSync(join(ROOT, font.licence), 'utf8'),
+            ]),
+        );
+    });
     const ofl = 'This Font Software is licensed under the SIL Open Font License, Version 1.1.';
 
     it('refuses a font FONTS does not name, a licence elsewhere, and a licence that is not the OFL', () => {
@@ -292,7 +298,10 @@ describe('every-font-sits-beside-its-own-licence', () => {
 });
 
 describe('every-licence-file-is-on-the-map', () => {
-    const fontLicences = FONTS.map((font) => font.licence);
+    let fontLicences;
+    before(() => {
+        fontLicences = FONTS.map((font) => font.licence);
+    });
 
     it('refuses a licence-looking file in any case that no row names', () => {
         const tracked = ['LICENSE', 'vendor/NOTICE.md', 'public/licenses.txt', ...fontLicences];
@@ -599,7 +608,10 @@ describe('the-private-looks-directory-is-ignored-and-still-guarded', () => {
      * staged; and no exclude source may hide `src/looks/`.
      */
     const clean = { tree: ['src/app.ts'], ignored: [], gitlinks: [], shallow: false, upstream: 'abc', unpushed: [] };
-    const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8');
+    let gitignore;
+    before(() => {
+        gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8');
+    });
 
     it('refuses the clone, a .gitmodules, a gitlink and an embedded repository, in any case and at any depth', () => {
         for (const path of ['looks', 'looks/', 'looks/index.json', 'Looks/some-look/sheet.css', 'LOOKS/a.svg']) {
@@ -794,7 +806,10 @@ describe('the-ignore-rule-for-private-looks-is-exact', () => {
      * and again in this checkout, through every exclude source it has.
      */
     const base = 'node_modules\n.DS_Store\n';
-    const all = [...PRIVATE_LOOKS_HIDDEN, ...PRIVATE_LOOKS_SEEN];
+    let all;
+    before(() => {
+        all = [...PRIVATE_LOOKS_HIDDEN, ...PRIVATE_LOOKS_SEEN];
+    });
     const problemsOf = (text) => ignoreRuleProblems({ text, ignored: plantRepo({ gitignore: text }).ignored(all) });
 
     it('passes the exact rule and refuses a missing, doubled, negated or wider one', () => {
@@ -844,8 +859,12 @@ describe('the-ignore-rule-for-private-looks-is-exact', () => {
 });
 
 describe('every-vendored-package-is-named-with-its-holders', () => {
-    const noticeText = readFileSync(join(ROOT, 'vendor', 'NOTICE.md'), 'utf8');
-    const tarballs = facts.tracked.filter((path) => /^vendor\/[^/]+\.tgz$/.test(path)).map((path) => path.slice('vendor/'.length));
+    let noticeText;
+    let tarballs;
+    before(() => {
+        noticeText = readFileSync(join(ROOT, 'vendor', 'NOTICE.md'), 'utf8');
+        tarballs = facts.tracked.filter((path) => /^vendor\/[^/]+\.tgz$/.test(path)).map((path) => path.slice('vendor/'.length));
+    });
 
     it('refuses a tarball with no line, a line with no holder, a stale line and a missing MIT text', () => {
         const mit =
