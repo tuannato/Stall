@@ -940,6 +940,67 @@ describe('a-file-mask-arrives-at-rest', () => {
     });
 });
 
+describe('a-look-writes-each-url-in-the-property-that-paints-it', () => {
+    /**
+     * Step 8g-pre (the 8g plan's critic, P2-2): a first-party look sheet —
+     * a shipped look's, the harness's fixture look's, a private look's —
+     * writes every `url()` and `image-set()` in the property that paints
+     * it, never in a custom property. Carried through `var()`, a file
+     * switches off two belts that read the painting property's own value:
+     * the art-off frames the probe owes a look whose sheet names a file in a
+     * mask or a clip (`FILE_ART_IN_SHEET`, `scripts/layout-check.mjs`), and
+     * the look rules' refusal of a file mask in a state rule or a keyframe.
+     * Inert today: no served sheet, and not the tracked private fixture's,
+     * carries the shape. Proved red on a copy of the private fixture's sheet
+     * (its art is `./art/`), plainly, escaped and quoted; the kit keeps its
+     * own rules, which its README states.
+     */
+    const WHY = /a file named in a custom property/;
+    let PRIVATE_FIXTURE;
+    before(() => {
+        PRIVATE_FIXTURE = PRIVATE.find((row) => row.look.source === 'fixture');
+    });
+    const lintPrivate = (css) => lintLookSheet(css, { lookClass: PRIVATE_FIXTURE.lookClass, load: 'worn', ownArt: PRIVATE_FIXTURE.ownArt });
+    const plantedPrivate = (rule) => lintPrivate(beforeReduce(PRIVATE_FIXTURE.css, rule));
+
+    it('finds the shape in no first-party look sheet a run serves, the private looks it reads among them', () => {
+        const firstParty = lookRows(SERVED).filter((sheet) => sheet.role !== 'kit');
+        assert.ok(firstParty.some((sheet) => sheet.role === 'look') && firstParty.some((sheet) => sheet.role === 'private'), 'the shipped looks and a private look are read');
+        for (const sheet of firstParty) {
+            const options = sheet.role === 'private' ? { lookClass: sheet.lookClass, load: 'worn', ownArt: sheet.ownArt } : { lookClass: sheet.lookClass, load: sheet.load, ownArt: sheet.load === 'worn' ? ownArtOf(sheet) : undefined };
+            const problems = lintLookSheet(sheet.css, options).filter((p) => WHY.test(p));
+            assert.deepEqual(problems, [], sheet.path);
+        }
+    });
+
+    it('refuses a file carried into a mask by var(), plainly, escaped, quoted, through image-set() and in a keyframe', () => {
+        for (const rule of [
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: url(./art/ground.svg); mask-image: var(--m); }`,
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: u\\72l(./art/ground.svg); mask-image: var(--m); }`,
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: URL("./art/ground.svg"); mask-image: var(--m); }`,
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: "u\\72l(./art/ground.svg)"; }`,
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: image-set("./art/ground.svg" 1x); mask-image: var(--m); }`,
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: -webkit-image-set(url(./art/ground.svg) 1x); }`,
+            `.${PRIVATE_FIXTURE.lookClass} .stall-name { --layer: linear-gradient(#000, #0000), url(./art/ground.svg); background: var(--layer); }`,
+            `@keyframes ${PRIVATE_FIXTURE.lookClass}-veil { from { --m: url(./art/ground.svg); } to { --m: none; } }`,
+        ]) {
+            const problems = plantedPrivate(rule);
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('accepts the same file written in the property that paints it, and a custom property that names no file', () => {
+        assert.deepEqual(lintPrivate(PRIVATE_FIXTURE.css), [], 'the fixture itself passes');
+        assert.deepEqual(plantedPrivate(`.${PRIVATE_FIXTURE.lookClass} .stall-name { mask-image: url(./art/ground.svg); }`), []);
+        assert.deepEqual(plantedPrivate(`.${PRIVATE_FIXTURE.lookClass} .stall-name { --m: linear-gradient(#000, #0000); mask-image: var(--m); }`), []);
+    });
+
+    it('leaves the kit under its own rules', () => {
+        const kit = lintSheet(plantedKit('.t-neo .item-n { --m: url(art/x.svg); mask-image: var(--m); }'));
+        assert.ok(!kit.some((p) => WHY.test(p)), kit.join('\n'));
+    });
+});
+
 describe('a-look-names-only-a-served-face', () => {
     /**
      * The probe-fonts critic's P2-2: a look sheet could name any family, so

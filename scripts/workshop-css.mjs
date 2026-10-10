@@ -998,7 +998,9 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * that arrives with a hover, a pressed state or an animation step
          * would hide words on a screen the probe never measured. Refused
          * where it is written; a mask on a box at rest is the probe's to
-         * judge. Not seen, stated: a `url()` carried in by `var()`.
+         * judge. A `url()` carried in by `var()` is not seen here, so a
+         * first-party sheet may not write one there (below); in the kit's,
+         * not seen, stated.
          */
         if (MASKING.test(prop) && /(?<![\w-])url\(/i.test(value)) {
             if (selectors === undefined) {
@@ -1006,6 +1008,27 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
             } else if (selectors.some(isStateSelector)) {
                 out.push(`${shown} — a file's mask or clip in a state rule: the probe measures every screen at rest, so a mask that arrives with a state is measured by no pass`);
             }
+        }
+        /*
+         * A file named inside a custom property (step 8g-pre; the 8g plan's
+         * critic, P2-2): in a first-party look sheet — a shipped look's,
+         * the harness's fixture look's, a private look's — every `url()`
+         * and `image-set()` is written in the property that paints it.
+         * Carried through `var()`, a file switches off two belts that read
+         * the painting property's own value: the art-off frames the probe
+         * owes a look whose sheet names a file in a mask or a clip
+         * (`FILE_ART_IN_SHEET`, `scripts/layout-check.mjs`), and the
+         * refusal above of a file mask in a state rule or a keyframe. Read
+         * with every escape decoded and inside strings too, so `u\72l(`
+         * and a quoted `url(` are the same function (an escape outside a
+         * string is refused on its own as well, below). The kit keeps its
+         * own rules: its README states them, and a rule added there is the
+         * owner's line to write.
+         */
+        if (firstParty && prop.startsWith('--') && /(?:url|image-set)\(/i.test(decodeEscapes(value))) {
+            out.push(
+                `${shown} — a file named in a custom property: write each url() and image-set() in the property that paints it, where the file-art checks read it`,
+            );
         }
         if (/!\s*important/i.test(bare)) {
             out.push(
@@ -1411,7 +1434,10 @@ export function lintSheet(css, { art = [] } = {}) {
  * A shipped look's sheet under the rules every look sheet obeys (rules 1, 2,
  * 5 and 6 of `lintSheet`, scoped to the look's own class, and no escape
  * outside a string). The kit's art and keyframe-name rules are the kit's:
- * a shipped sheet is Stall's own, built and reviewed here.
+ * a shipped sheet is Stall's own, built and reviewed here. And the
+ * first-party rules the kit does not carry: the sign sticky off the wall,
+ * the legacy mask-composite pairs, the hooks, and no file named in a custom
+ * property (`a-look-writes-each-url-in-the-property-that-paints-it`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });
