@@ -14459,7 +14459,7 @@ describe('every-tappable-control-keeps-a-44px-floor', () => {
         const missing: string[] = [];
         // The fields stand on the same floor: a thumb lands on a field as
         // often as on a button, and the two share one block.
-        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.door .pinned-open', '.door-nav a', '.door-more', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.paste-in, .share-url, .share-embed', '.step'];
+        const controls = ['.buy', '.mini', '.another', '.pinned-drop', '.door .pinned-open', '.door-nav a', '.door-more', '.seg-b', '.dec-chip', '.pay-pointer', '.item-back', '.token-link-url', '.addr', '.wearing-link', '.cta', '.paste-in, .share-url, .share-embed', '.step'];
         for (const selector of controls) {
             const body = blocks.get(selector);
             if (body === undefined || !/min-height:\s*44px/.test(body)) missing.push(selector);
