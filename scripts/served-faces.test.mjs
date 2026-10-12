@@ -473,6 +473,13 @@ describe('a-private-face-claims-only-what-its-file-draws', () => {
         assert.doesNotMatch(rangeProblems(ownFaceSet({ css: css('U+FEFF, U+263A'), art })).join('\n'), /FEFF/, 'a character that draws no glyph is not a claim');
     });
 
+    it('reads an @font-face inside an at-rule as one at the top of the sheet', () => {
+        const nested = `@media (min-width: 680px) { ${faceRule('mem.woff2', 't-mem-serif', withRange('U+20-7E, U+2248'))} }`;
+        const read = ownFaceSet({ css: nested, art: [mem(ASCII)] });
+        assert.deepEqual(read.faces.map((face) => face.family), ['t-mem-serif']);
+        assert.match(rangeProblems(read).join('\n'), /U\+2248 ≈ on its own/);
+    });
+
     it('refuses what it cannot read: a face the art lacks, a file that is no WOFF2 or holds no cmap, a src outside art/, a range it cannot parse', () => {
         const rule = (src, range = '') => `@font-face { font-family: t-mem-serif; src: url(${src}); font-display: swap;${range} }`;
         const cases = [
@@ -523,6 +530,9 @@ describe('a-private-face-range-is-refused-as-published-or-malformed', () => {
             ['U+1234567', /token "U\+1234567" is not one this reader parses/],
             ['U+4???????', /is not one this reader parses/],
             ['U+20zz', /token "U\+20zz" is not one this reader parses/],
+            // Seven positions: a browser takes at most six, and the second reads in range, so only the length cap refuses it.
+            ['U+12345??', /token "U\+12345\?\?" is not one this reader parses/],
+            ['U+00001??', /token "U\+00001\?\?" is not one this reader parses/],
         ]) {
             const read = ownFaceSet({ css: css(range), art });
             assert.equal(read.faces.length, 0, `${range}: the face is left out, not read with a lenient range`);
@@ -709,7 +719,7 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
         assert.ok(gapCps(variants).has(0x2248));
     });
 
-    it('requires a served family before any family the machine supplies, its own families first, whatever its own face draws', () => {
+    it('requires a served family before any family the machine supplies, the look\'s own families not counted wherever they stand, whatever its own face draws', () => {
         // A face that holds every code point the app prints and its case forms: nothing is left to the machine, and the stack is still refused.
         const everything = [...new Set([...printed.keys(), ...ASCII, 0x110, 0x1ed2])];
         const alone = report(`.x { font-family: ${SERIF}; }`, { codePoints: everything });
@@ -727,6 +737,17 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
         // The structure is the stack's own, read from the family names: a font shorthand and a --s-font… are stacks too.
         assert.ok(report(`.x { font: 12px ${SERIF}, serif; }`, { codePoints: everything }).gaps[0].structure);
         assert.ok(report(`.x { --s-font: ${SERIF}; }`, { codePoints: everything }).gaps[0].structure);
+        // The roads a stack is read on beside a plain rule: a block of @media (every desk-width stack) and a keyframe stop.
+        for (const rule of [`@media (min-width: 680px) { .x { font-family: ${SERIF}; } }`, `@keyframes k { to { font-family: ${SERIF}; } }`]) {
+            const result = report(rule, { codePoints: everything });
+            assert.equal(result.read, 1, rule);
+            assert.ok(result.gaps.length === 1 && result.gaps[0].structure, `${rule}:\n  ${result.problems.join('\n  ') || '(no problem)'}`);
+        }
+        // Only inherit is skipped: initial is the browser's default family, and unset is refused as the look rules refuse it.
+        for (const keyword of ['initial', 'unset', 'INITIAL !important']) {
+            const result = report(`.x { font-family: ${keyword}; }`, { codePoints: everything });
+            assert.ok(result.gaps.length === 1 && result.gaps[0].structure, keyword);
+        }
     });
 
     it('walks the upper and lower case forms of what the app prints, since a look may uppercase a line', () => {
