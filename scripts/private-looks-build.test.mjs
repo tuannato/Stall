@@ -29,7 +29,7 @@ import {
 import { MAX_SVG_ELEMENTS, SVG_ELEMENTS, sanitizeSvg } from './svg-allow.mjs';
 import { LOOK_FONTS_HEADING, noticedLicence } from './notices-lib.mjs';
 import { LOOKS_ENV, REQUIRED_ENV, selectionRequired } from './looks-selection.mjs';
-import { PLANTED_CLASS, PLANTED_FACE, PLANTED_FACE_LICENCE, beforeReduce, oflText, plantFace, plantLooks, plantedFaceBytes, removePlants } from './private-looks-plant.mjs';
+import { PLANTED_CLASS, PLANTED_FACE, beforeReduce, oflText, plantFace, plantLooks, plantedFaceBytes, removePlants } from './private-looks-plant.mjs';
 
 /**
  * The private-look join at build time (`scripts/private-looks-build.mjs`,
@@ -601,13 +601,10 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
      * (`scripts/private-looks-plant.mjs`). Real `vite build`s, ~1 s each.
      */
     after(removePlants);
-    const FACE = PLANTED_FACE;
-    const LICENCE = PLANTED_FACE_LICENCE;
     let PUBLIC_NOTICES;
     before(() => {
         PUBLIC_NOTICES = readFileSync(join(ROOT, 'public', 'licenses.txt'));
     });
-    const face = plantedFaceBytes;
 
     let repo;
     let dist;
@@ -623,7 +620,7 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
         assert.ok(served.subarray(0, PUBLIC_NOTICES.length).equals(PUBLIC_NOTICES), 'the public notices come first, byte for byte');
         const added = served.subarray(PUBLIC_NOTICES.length).toString('utf8');
         assert.match(added, new RegExp(`^\n${LOOK_FONTS_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n`));
-        assert.ok(added.includes(`- Plant Serif, the Latin subset this site serves for a look it carries (${FACE})`), added);
+        assert.ok(added.includes(`- Plant Serif, the Latin subset this site serves for a look it carries (${PLANTED_FACE})`), added);
         assert.ok(added.includes(noticedLicence(oflText('The Plant Type Authors'))), 'the licence text, whole');
         assert.match(served.toString('latin1'), /^[\x00-\x7f]*$/, 'ASCII, as the public notices are');
         assert.ok(served.toString('utf8').endsWith('\n') && !served.toString('utf8').endsWith('\n\n'));
@@ -634,11 +631,11 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
     it('emits the face it names, and every emitted face is named', () => {
         const files = distFiles(dist);
         const faces = [...files].filter(([path]) => path.endsWith('.woff2'));
-        assert.ok(faces.some(([, bytes]) => bytes.equals(face())), 'the planted face is emitted');
+        assert.ok(faces.some(([, bytes]) => bytes.equals(plantedFaceBytes())), 'the planted face is emitted');
         const notices = files.get('licenses.txt').toString('utf8');
         for (const [path, bytes] of faces) {
-            if (bytes.equals(face())) {
-                assert.ok(notices.includes(FACE), `${path} is the planted face and the notices name it`);
+            if (bytes.equals(plantedFaceBytes())) {
+                assert.ok(notices.includes(PLANTED_FACE), `${path} is the planted face and the notices name it`);
             }
         }
     });
@@ -657,7 +654,7 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
         );
         assert.equal(look.fonts.length, 1, 'the dist check reads the face');
         const problems = distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [look], excluded: [] });
-        assert.ok(problems.some((p) => p === `fixture: it serves art/${FACE} and licenses.txt does not name it`), problems.join('\n'));
+        assert.ok(problems.some((p) => p === `fixture: it serves art/${PLANTED_FACE} and licenses.txt does not name it`), problems.join('\n'));
         assert.ok(problems.some((p) => p === 'fixture: it serves Plant Serif and licenses.txt does not carry its licence whole'), problems.join('\n'));
     });
 
