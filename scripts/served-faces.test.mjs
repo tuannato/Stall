@@ -790,6 +790,22 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
         assert.ok(report(`${many} .x { font-family: var(--s-font-k), var(--s-font-k), var(--s-font-k), var(--s-font-k), var(--s-font-k); }`).problems.some((p) => /more than 16 readings/.test(p)));
     });
 
+    it('refuses an all that resets font-family to the browser\'s default, on the canary from public bytes and in memory', async () => {
+        // The re-review's R-1: `all: initial` sets no family list, and resets font-family to its initial value, a font of the reader's machine.
+        const WHY = /all: initial — resets font-family to the browser's default, a font of the reader's machine/;
+        for (const rule of ['.t-canary .item-x { all: initial; }', ".t-canary .stall-name::after { all: initial; content: '\\25c6'; }"]) {
+            const repo = plantCanary((path, contents) => (path === 'canary/sheet.css' ? beforeReduce(contents, rule) : contents));
+            const row = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env })).find((r) => r.lookClass === 't-canary');
+            const result = stackReport({ path: row.path, css: row.css, art: row.look.art, rootStack: rootStackOf(row.look.look, theme), printed, pinned: PINNED, served, cls: 't-canary', tree: row.look.packedTree });
+            assert.ok(result.problems.some((p) => WHY.test(p)), `${rule}:\n  ${result.problems.join('\n  ') || '(no problem)'}`);
+        }
+        for (const rule of ['.t-mem .x { all: initial; }', ".t-mem .x::after { all: initial; content: '\\25c6'; }", '.t-mem .x { all: INITIAL !important; }', '@keyframes k { to { all: initial; } }']) {
+            assert.ok(report(rule).problems.some((p) => /resets font-family to the browser's default/.test(p)), rule);
+        }
+        // `inherit` and `unset` let font-family inherit.
+        assert.deepEqual(report('.t-mem .x { all: inherit; } .t-mem .y { all: unset; }').problems, []);
+    });
+
     it('reads the family list of a font shorthand, and refuses one it cannot read', () => {
         assert.deepEqual(report(`.x { font: 600 12px/1.2 ${SERIF}, 'Stall Serif', serif; }`).problems, []);
         const bare = report(`.x { font: 12px ${SERIF}; }`);

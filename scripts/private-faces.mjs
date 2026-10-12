@@ -61,8 +61,10 @@
  * a family list set through a `var()` other than the theme's `--s-font…`, a
  * `--s-font…` the sheet and the theme leave undefined and give no fallback, a
  * custom property that refers to itself, a `font` shorthand whose family it
- * cannot read, more than `MAX_STACK_VARIANTS` readings of one list, and a
- * face whose file the art does not hold or whose `cmap` it cannot read.
+ * cannot read, an `all` other than `inherit` or `unset` (it resets
+ * `font-family` to the browser's default and writes no list), more than
+ * `MAX_STACK_VARIANTS` readings of one list, and a face whose file the art
+ * does not hold or whose `cmap` it cannot read.
  * `var(--s-font…)` is read as every value the sheet gives the property
  * **and** the theme's own (`FONT_STACKS[fontIndex]` of the look's row) for
  * `--s-font` itself: the root's value is set inline by the theme and a sheet
@@ -354,17 +356,29 @@ function readings(list, { defs, rootStack }, seen = new Set()) {
     return { lists: options };
 }
 
-/** The stacks a sheet sets, each as `{ line, prop, list, raw, selectors }`; `list` undefined for a `font` shorthand this reader cannot read, `selectors` undefined in a keyframe stop. */
+/**
+ * The stacks a sheet sets, each as `{ line, prop, list, raw, selectors,
+ * refusal }`; `list` undefined, and `refusal` the sentence, for a `font`
+ * shorthand this reader cannot read and for an `all` that resets
+ * `font-family` (anything but `inherit` or `unset`: `all: initial` sets the
+ * browser's default family, a machine font, with no list to read — the
+ * re-review's R-1, refused here as the look rules refuse it, so this guard
+ * does not lean on them); `selectors` undefined in a keyframe stop.
+ */
 function stacksOf(css) {
     const out = [];
     for (const rule of sheetParts(css).rules) {
         for (const { prop, value } of rule.decls) {
             const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
             if (clean.toLowerCase() === 'inherit') continue;
+            const at = { line: rule.line, prop, raw: clean, selectors: rule.selectors };
             if (prop === 'font-family' || /^--s-font[\w-]*$/.test(prop)) {
-                out.push({ line: rule.line, prop, list: clean, raw: clean, selectors: rule.selectors });
+                out.push({ ...at, list: clean });
             } else if (prop === 'font') {
-                out.push({ line: rule.line, prop, list: shorthandFamilies(clean), raw: clean, selectors: rule.selectors });
+                const list = shorthandFamilies(clean);
+                out.push({ ...at, list, refusal: list === undefined ? 'a font shorthand whose family this reader cannot read; write the family in font-family' : undefined });
+            } else if (prop === 'all' && clean.toLowerCase() !== 'unset') {
+                out.push({ ...at, list: undefined, refusal: "resets font-family to the browser's default, a font of the reader's machine; write all only as inherit or unset, and the family in font-family" });
             }
         }
     }
@@ -435,7 +449,7 @@ export function stackReport({ path = 'sheet.css', css, art, rootStack, printed, 
         const mine = [];
         const mineGaps = [];
         if (stack.list === undefined) {
-            mine.push(`${where} — a font shorthand whose family this reader cannot read; write the family in font-family`);
+            mine.push(`${where} — ${stack.refusal}`);
         } else {
             const read = readings(stack.list, { defs, rootStack });
             if (read.refusal !== undefined) {

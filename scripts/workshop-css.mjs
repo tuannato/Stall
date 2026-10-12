@@ -1143,6 +1143,18 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if ((prop === 'color' || prop === 'all') && /(?<![\w-])revert(?:-layer)?(?![\w-])/i.test(keywords)) {
             out.push(`${shown} — reverting the colour hands a link back to the browser's own blue and visited purple, which no pass can see`);
         }
+        /*
+         * `all` other than `inherit` or `unset` (the private face guards'
+         * re-review, R-1): `all: initial` resets `font-family` to its
+         * initial value, the browser's default — a font of the reader's
+         * machine, on a money node as readily as anywhere — and writes no
+         * family list for the served-face rules to read. `unset` lets
+         * `font-family` inherit, as `inherit` does. A first-party sheet's
+         * rule; the kit keeps the rules its README states.
+         */
+        if (firstParty && prop === 'all' && !/^(?:inherit|unset)$/i.test(clean)) {
+            out.push(`${shown} — resets font-family to the browser's default, a font of the reader's machine; a look sheet writes all only as inherit or unset`);
+        }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
             const sign = firstParty && /^sticky$/i.test(keywords.trim()) && isStickyBox(selectors);
             if (!sign) {

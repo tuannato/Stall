@@ -4,7 +4,7 @@ import { dirname, join, relative } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { flashSheets, servedFlashReport, themeVarValues } from './look-flash.mjs';
-import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private-looks-plant.mjs';
+import { PLANTED_CLASS, beforeReduce, canaryFiles, plantLooks, removePlants } from './private-looks-plant.mjs';
 import { FIXTURE_PRIVATE_LOOK_CLASS } from './private-looks.mjs';
 import { guardSheets, lookRows, privateRows, servedSheets } from './served-sheets.mjs';
 import { appSheets, lookSheets, sheetsWithRole, wornSheets } from './sheet-roles.mjs';
@@ -1128,6 +1128,27 @@ describe('a-look-names-only-a-served-face', () => {
         // Named without the face that declares it, the family is a face nobody serves.
         const problems = lintFixture(plantedFixture('.t-fixture-worn .item-n { font-family: t-fixture-worn-brush, serif; }'), art);
         assert.ok(problems.some((p) => /opens with "t-fixture-worn-brush".*\(a-look-names-only-a-served-face\)/.test(p)), problems.join('\n'));
+    });
+
+    it('refuses an all that resets font-family to the browser\'s default in a first-party sheet, the canary\'s own among them, and leaves the kit under its own rules', () => {
+        // The private face guards' re-review, R-1: `all: initial` puts the line in a font of the reader's machine and writes no family list for these rules to read.
+        const WHY = /resets font-family to the browser's default, a font of the reader's machine/;
+        const files = canaryFiles();
+        const canary = { css: files['canary/sheet.css'], ownArt: { dir: 'art', files: Object.keys(files).filter((path) => path.startsWith('canary/art/') && !path.endsWith('.txt')).map((path) => path.slice('canary/art/'.length)) } };
+        const lintCanary = (css) => lintLookSheet(css, { lookClass: 't-canary', load: 'worn', ownArt: canary.ownArt });
+        assert.deepEqual(lintCanary(canary.css), [], 'the canary from public bytes passes');
+        for (const rule of ['.t-canary .item-x { all: initial; }', ".t-canary .stall-name::after { all: initial; content: '\\25c6'; }"]) {
+            const problems = lintCanary(beforeReduce(canary.css, rule));
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        for (const rule of ['.t-neo .item-x { all: initial; }', '.t-neo .item-x { all: INITIAL !important; }', '.t-neo .item-x { all: var(--x); }', '@keyframes t-neo-all { to { all: initial; } }']) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        // `inherit` and `unset` leave font-family to inherit.
+        accepts('.t-neo .item-x { all: inherit; }');
+        accepts('.t-neo .item-x { all: unset; }');
+        assert.ok(!lintSheet(plantedKit('.t-neo .item-x { all: initial; }')).some((p) => WHY.test(p)), 'the kit keeps the rules its README states');
     });
 
     it('holds every shipped look sheet, the kit and every private look sheet a run reads', () => {
