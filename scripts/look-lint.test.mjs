@@ -1189,3 +1189,98 @@ describe('a-look-names-only-a-served-face', () => {
         }
     });
 });
+
+describe('a-look-names-no-container-of-its-own', () => {
+    /**
+     * The 8g0 critic's P2-2. `@container` is refused in a look sheet for
+     * sizing rules to a box the probe does not choose, and
+     * `container-name`, `container-type` and the `container` shorthand were
+     * the same door from the other side: `window.css` makes the shop
+     * window's frame the one size container, named `sw`, and its
+     * `@container sw` conditions and bare `cqw` / `cqh` units resolve
+     * against the nearest container, so a look that made any box below the
+     * frame one answered them with a box of its own. A first-party sheet's
+     * rule (a shipped look's, the fixture's, a private look's); the kit
+     * keeps the rules its README states.
+     */
+    const WHY = /would re-point the wall's container queries .* at a box the look picks/;
+
+    it('reads the frame window.css makes the wall\'s one container, which is the premise of the refusal', () => {
+        const window = read('src/ui/window.css');
+        assert.match(window, /container-type:\s*size;/);
+        assert.match(window, /container-name:\s*sw;/);
+        assert.match(window, /@container sw \(/);
+    });
+
+    it('refuses each of the three, on any value, in any rule, on a copy of Neo under its class', () => {
+        for (const rule of [
+            '.t-neo.shop-window .stall-body { container-type: size; }',
+            '.t-neo .item { container-type: inline-size; }',
+            '.t-neo .item { container-type: normal; }',
+            '.t-neo .item { container-name: sw; }',
+            '.t-neo .item { container: sw / size; }',
+            '.t-neo .item { container: inline-size; }',
+            '.t-neo .item { Container-Type: SIZE; }',
+            '.t-neo .item { container-type: size !important; }',
+            '.t-neo .item { --t-neo-c: size; container-type: var(--t-neo-c); }',
+            '@media (min-width: 680px) { .t-neo .item { container-type: size; } }',
+            '@keyframes t-neo-box { to { container-type: size; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        // The sentence names the property that was written, and says what it would do.
+        const problems = lintLookSheet(plantedNeo('.t-neo .item { container-name: sw; }'), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => /^line \d+: container-name: sw — container-name would re-point the wall's container queries/.test(p)), problems.join('\n'));
+    });
+
+    it('leaves alone what only looks like it: a custom property, a class, the containment it is not', () => {
+        accepts('.t-neo .item { --container: size; }');
+        accepts('.t-neo .item-container { color: red; }');
+        accepts('.t-neo .item { contain: layout; }');
+        accepts('.t-neo .item { content-visibility: visible; }');
+    });
+
+    it('refuses it in a worn-only look the way it refuses it in a shipped one: the canary from public bytes', () => {
+        const files = canaryFiles();
+        const ownArt = { dir: 'art', files: Object.keys(files).filter((path) => path.startsWith('canary/art/') && !path.endsWith('.txt')).map((path) => path.slice('canary/art/'.length)) };
+        const lintCanary = (css) => lintLookSheet(css, { lookClass: 't-canary', load: 'worn', ownArt });
+        assert.deepEqual(lintCanary(files['canary/sheet.css']), [], 'the canary from public bytes passes');
+        for (const rule of ['.t-canary .stall-body { container-type: size; }', '.t-canary .stall-body { container-name: sw; }', '.t-canary .stall-body { container: sw / size; }']) {
+            const problems = lintCanary(beforeReduce(files['canary/sheet.css'], rule));
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('refuses it in a planted private look, read through the merged list as a build reads it', async () => {
+        for (const rule of [
+            `.${PLANTED_CLASS} .stall-body { container-type: size; }`,
+            `.${PLANTED_CLASS} .stall-body { container-name: sw; }`,
+            `.${PLANTED_CLASS} .stall-body { container: sw / size; }`,
+        ]) {
+            const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, rule) : text));
+            const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+            const row = rows.find((r) => r.lookClass === PLANTED_CLASS);
+            assert.ok(row !== undefined && rows.some((r) => r.look.source === 'fixture'), 'the planted look and the fixture are both read');
+            const problems = lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt });
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('finds the shape in no look sheet a run serves, and leaves the kit under its own rules', () => {
+        for (const sheet of LOOKS) {
+            assert.deepEqual(lintLookSheet(read(sheet.path), { lookClass: sheet.lookClass }).filter((p) => WHY.test(p)), [], sheet.path);
+        }
+        for (const row of PRIVATE) {
+            assert.deepEqual(lintLookSheet(row.css, { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt }).filter((p) => WHY.test(p)), [], row.path);
+        }
+        // Not a lint but a grep over every look sheet a run serves, the harness's fixture look and the kit's skeleton among them.
+        for (const row of lookRows(SERVED)) {
+            assert.doesNotMatch(row.css.replace(/\/\*[\s\S]*?\*\//g, ''), /(?<![\w-])container(?:-name|-type)?\s*:/i, row.path);
+        }
+        // The kit keeps the rules its README states: a line there is the owner's to write.
+        for (const rule of ['.t-neo .item { container-type: size; }', '.t-neo .item { container-name: sw; }', '.t-neo .item { container: sw / size; }']) {
+            assert.ok(!lintSheet(plantedKit(rule)).some((p) => WHY.test(p)), `the kit, ${rule}`);
+        }
+    });
+});

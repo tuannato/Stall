@@ -769,6 +769,14 @@ const REFUSED_PROPERTIES = Object.freeze({
 });
 
 /**
+ * The properties that make a box a query container, which a first-party look
+ * sheet may not set (`declarationProblems`, the 8g0 critic's P2-2): the
+ * shop window's `@container sw` conditions and `cqw` / `cqh` units are the
+ * wall's, not the look's.
+ */
+const CONTAINER_PROPERTIES = new Set(['container-name', 'container-type', 'container']);
+
+/**
  * Properties whose value these rules read for a keyword — a fixed box, a
  * right-to-left run, a list marker, a clip to the text — so a `var()` there
  * would carry the keyword past them. Written plainly in a look sheet; none of
@@ -1169,6 +1177,25 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && /(?<![\w-])(?:full-width|full-size-kana)(?![\w-])/i.test(bare)) {
             out.push(`${shown} — full-width and full-size-kana paint characters no served face draws (the fullwidth forms, the full-size kana): the line falls to a font of the reader's machine`);
         }
+        /*
+         * `container-name`, `container-type` and the `container` shorthand
+         * (the 8g0 critic's P2-2): `@container` is refused above for sizing
+         * rules to a box the probe does not choose, and these three are the
+         * same door from the other side. `window.css` makes the shop
+         * window's frame the one size container, named `sw`, and every
+         * `@container sw` condition in it and every bare `cqw` / `cqh` unit
+         * resolves against the nearest container that matches, so a look
+         * that makes any box below the frame a container answers them with
+         * a box of its own choosing. A first-party sheet's rule: no served
+         * look sheet sets one (grepped), so the refusal is inert on the
+         * tree. The kit keeps the rules its README states, and a line there
+         * is the owner's to write.
+         */
+        if (firstParty && CONTAINER_PROPERTIES.has(prop)) {
+            out.push(
+                `${shown} — ${prop} would re-point the wall's container queries (window.css's @container sw conditions and its cqw and cqh units) at a box the look picks, one the probe does not choose; @container is refused for the same reason`,
+            );
+        }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
             const sign = firstParty && /^sticky$/i.test(keywords.trim()) && isStickyBox(selectors);
             if (!sign) {
@@ -1509,7 +1536,10 @@ export function lintSheet(css, { art = [] } = {}) {
  * property (`a-look-writes-each-url-in-the-property-that-paints-it`), and
  * nothing that puts a line in a font of the reader's machine past the
  * served-face rules: no `all` but `inherit` or `unset`, no `full-width` or
- * `full-size-kana` (`a-look-names-only-a-served-face`).
+ * `full-size-kana` (`a-look-names-only-a-served-face`), and no
+ * `container-name`, `container-type` or `container`, which would re-point
+ * the wall's `@container sw` conditions at a box the look picks
+ * (`a-look-names-no-container-of-its-own`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });
