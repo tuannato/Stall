@@ -1946,10 +1946,21 @@ body {
    link blue and its visited purple — `#0000EE` on the skeleton, unreadable on a
    dark palette — and no pass can see a visited colour
    (`every-anchor-the-app-builds-sets-its-own-colour`, which renders the
-   skeleton too). The three shipped looks restate `.t-* .cta` (0,2,0), which
-   out-ranks this (0,1,0) whatever the order, so they are unchanged. */
+   skeleton too). It also declares the tap floor every control declares in its
+   shipped block (`every-tappable-control-keeps-a-44px-floor`), centred the
+   way `.wearing-link` is: a flex box, so the word sits in the middle of the
+   44px and not at its top, and `justify-content` keeps it in the middle of a
+   box a look makes wider than the word, as the empty block's `text-align:
+   center` did for the inline box. The three shipped looks restate
+   `.t-* .cta` (0,2,0), which out-ranks this (0,1,0) for what they name
+   (colour, ground, padding, border, type) and none of them names `display`
+   or `min-height`, so they take both: their buttons stood 40 to 43.25px
+   tall before the floor and are 44px now. */
 .cta {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
     color: var(--s-accent);
     text-decoration: none;
     cursor: pointer;
