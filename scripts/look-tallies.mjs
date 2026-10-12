@@ -75,8 +75,10 @@ export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
      * targets as they stand, on its bare variant alone (it carries no
      * worn variant yet, so each count is about half the fixture's): its
      * sheet clips nothing the pass measures, so its skips are the base
-     * sheets' on the skeleton's markup — the wall's rows past its strip
-     * and the ticker's ribbon past its cell (the canvas), the halves a
+     * sheets' on the skeleton's markup — on the canvas, the wall
+     * payment's lines past its plate's scroller (99 on the 35-item
+     * fixture, 2 on the 3-item one) and the ticker's ribbon past its cell
+     * (3); on a phone and a desk, the halves a
      * phone hides (the desk-only controls, a closed switch's row), the
      * reasons the fixture's entry gives. Lowered with the change that
      * lowers them; raised only by a reviewed diff that names what the
