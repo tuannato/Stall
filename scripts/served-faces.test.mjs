@@ -569,7 +569,7 @@ describe('a-private-face-range-never-takes-one-letter-of-another-script', () => 
         reads = PRIVATE_ROWS.map((row) => {
             const read = ownFaceSet({ css: row.css, art: row.look.art });
             const report = scriptReport({ path: row.path, read, fontsText: row.look.fontsText, cls: row.lookClass, tree: row.look.packedTree });
-            return { cls: row.lookClass, source: row.look.source, report, count: read.faces.length };
+            return { cls: row.lookClass, source: row.look.source, report, count: read.faces.length, note: report.excused.length === 0 ? undefined : `${report.excused.length} excused by name` };
         });
         process.stderr.write(privateFacesLine('private face script guard (a-private-face-range-never-takes-one-letter-of-another-script)', reads, 'face'));
     });
