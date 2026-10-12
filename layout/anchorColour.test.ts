@@ -100,7 +100,10 @@ describe('every-anchor-the-app-builds-sets-its-own-colour', () => {
         expect(skeletons, 'the skeleton is painted on the screens that wear a look').toBeGreaterThan(30);
         expect(anchors, 'the fixtures build anchors to read').toBeGreaterThan(50);
         expect([...new Set(bare)]).toEqual([]);
-    });
+        // Every fixture screen under four looks: 7 s alone, 24 s inside a loaded
+        // run (the suite's 20 s default timed it out once), so the bound is the
+        // other heavy layout tests'.
+    }, 60_000);
 
     it('counts a rule that colours the anchor itself, at rest, and nothing else', () => {
         const selectors = colourSelectors();
