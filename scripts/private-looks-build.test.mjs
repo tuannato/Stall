@@ -72,6 +72,30 @@ const tempDir = (name) => {
     return dir;
 };
 
+/**
+ * `run(dir)` with the temporary directory pointed at a folder of its own:
+ * other processes on the machine build in the shared one too, and a count
+ * there reads their folders as this build's (a second session's build
+ * turned one red). `os.tmpdir()` reads `TMPDIR` on every call.
+ */
+function inOwnTmpdir(run) {
+    const own = tempDir('tmpdir');
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = own;
+    try {
+        return run(own);
+    } finally {
+        if (saved === undefined) {
+            delete process.env.TMPDIR;
+        } else {
+            process.env.TMPDIR = saved;
+        }
+    }
+}
+
+/** The materialised folders standing in `dir`. */
+const materialisedIn = (dir) => readdirSync(dir).filter((name) => name.startsWith(MATERIALISED_PREFIX));
+
 /** The tracked fixture's files as HEAD holds them, from the fixture's root. */
 function trackedFixturePaths() {
     return execFileSync('git', ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', FIXTURE_LOOKS_DIR], { cwd: ROOT, encoding: 'utf8' })
@@ -988,24 +1012,24 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             // The plugin runs the check itself on every build that selected
             // anything and wrote to the disk (the critic's item 7a): planted
             // here over the public build's dist, under a preview selection.
-            const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
-            plugin.configResolved({ root: ROOT, build: { outDir: publicDist, write: true } });
-            const writes = [];
-            const write = process.stderr.write;
-            process.stderr.write = (chunk) => writes.push(String(chunk)) > 0;
-            try {
-                plugin.buildStart();
-            } finally {
-                process.stderr.write = write;
-            }
-            assert.ok(writes.includes(`${fixtureCarriesLine()}\n`), writes.join(''));
-            const written = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
-            assert.ok(written.length > 0, 'the build wrote its files to the temporary directory');
-            // Rollup's `writeBundle`: the dist is on the disk, the one state the check runs in.
-            plugin.writeBundle();
-            assert.throws(() => plugin.closeBundle(), /does not hold what its selection carries:\n {2}- fixture: the build carries it, and 0 files name its sheet/);
-            const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
-            assert.ok(after.length < written.length, 'and removed them, failing or not');
+            inOwnTmpdir((own) => {
+                const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
+                plugin.configResolved({ root: ROOT, build: { outDir: publicDist, write: true } });
+                const writes = [];
+                const write = process.stderr.write;
+                process.stderr.write = (chunk) => writes.push(String(chunk)) > 0;
+                try {
+                    plugin.buildStart();
+                } finally {
+                    process.stderr.write = write;
+                }
+                assert.ok(writes.includes(`${fixtureCarriesLine()}\n`), writes.join(''));
+                assert.ok(materialisedIn(own).length > 0, 'the build wrote its files to the temporary directory');
+                // Rollup's `writeBundle`: the dist is on the disk, the one state the check runs in.
+                plugin.writeBundle();
+                assert.throws(() => plugin.closeBundle(), /does not hold what its selection carries:\n {2}- fixture: the build carries it, and 0 files name its sheet/);
+                assert.deepEqual(materialisedIn(own), [], 'and removed them, failing or not');
+            });
         });
 
         it('says on stderr which looks a build carries, and says nothing when it carries none', () => {
@@ -1215,23 +1239,24 @@ describe('a-build-whose-stamp-fails-says-why', () => {
     const STAMP_FAILS = /0 emitted stylesheets name t-fixture-private as their look \(--look-sheet\), where one does/;
 
     it('ends a hook-driven build with the stamp’s own sentence, and leaves nothing written', () => {
-        const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
-        plugin.configResolved({ root: ROOT, build: { outDir: tempDir('dist-stamp-fails'), write: true } });
-        const write = process.stderr.write;
-        process.stderr.write = () => true;
-        try {
-            plugin.buildStart();
-        } finally {
-            process.stderr.write = write;
-        }
-        const before = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX)).length;
-        assert.ok(before > 0, 'the build wrote its files to the temporary directory');
-        // A bundle with no sheet naming the look: the stamp's refusal.
-        assert.throws(() => plugin.generateBundle.handler({}, {}), STAMP_FAILS);
-        // What Vite's `finally` does next: close the bundle. No dist was written, so no check, no second error.
-        assert.doesNotThrow(() => plugin.closeBundle());
-        const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX)).length;
-        assert.ok(after < before, 'and removed them');
+        const outDir = tempDir('dist-stamp-fails');
+        inOwnTmpdir((own) => {
+            const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
+            plugin.configResolved({ root: ROOT, build: { outDir, write: true } });
+            const write = process.stderr.write;
+            process.stderr.write = () => true;
+            try {
+                plugin.buildStart();
+            } finally {
+                process.stderr.write = write;
+            }
+            assert.ok(materialisedIn(own).length > 0, 'the build wrote its files to the temporary directory');
+            // A bundle with no sheet naming the look: the stamp's refusal.
+            assert.throws(() => plugin.generateBundle.handler({}, {}), STAMP_FAILS);
+            // What Vite's `finally` does next: close the bundle. No dist was written, so no check, no second error.
+            assert.doesNotThrow(() => plugin.closeBundle());
+            assert.deepEqual(materialisedIn(own), [], 'and removed them');
+        });
     });
 
     it('ends a real build with the stamp’s own sentence, never the dist check’s', () => {
