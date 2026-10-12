@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { themeVarValues } from './look-flash.mjs';
 import { declaredFaces, declaredStallFaces } from './probe-faces.mjs';
-import { PLANTED_CLASS, beforeReduce, plantCanary, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
-import { PINNED_STACKS, ownFaceSet, privateFacesLine, rangeProblems, rootStackOf, servedFamilies, stackMatchesPin, stackReport } from './private-faces.mjs';
+import { PLANTED_CLASS, beforeReduce, canaryFiles, plantCanary, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
+import { CANARY_TREE } from './private-looks.mjs';
+import { PINNED_STACKS, ownFaceSet, privateFacesLine, rangeProblems, rootStackOf, servedFamilies, sheetParts, stackMatchesPin, stackReport } from './private-faces.mjs';
 import { guardSheets, privateRows, servedSheets } from './served-sheets.mjs';
 import {
     ROOT,
@@ -422,6 +423,12 @@ const mem = (codePoints, name = 'mem.woff2') => ({ name, bytes: faceBytes(codePo
 const CANARY_FACE = faceRule('mem.woff2', 't-canary-mono');
 const CANARY_ART = [mem(ASCII)];
 
+/** The `content` declarations of a sheet that print text: every one but `none`, `normal` and an empty string. */
+const printingContent = (css) =>
+    sheetParts(css).rules.flatMap((rule) =>
+        rule.decls.filter((decl) => decl.prop === 'content' && !/^(?:none|normal|''|"")$/i.test(decl.value.trim())).map((decl) => `${rule.selectors?.join(', ') ?? 'a keyframe stop'} { content: ${decl.value} }`),
+    );
+
 describe('a-private-face-claims-only-what-its-file-draws', () => {
     let reads;
     before(() => {
@@ -563,7 +570,7 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
     it('reads every private look a run reads, the tracked fixture among them, and each ends its stacks in a served face', () => {
         const results = PRIVATE_ROWS.map((row) => {
             const rootStack = rootStackOf(row.look.look, theme);
-            const result = rootStack === undefined ? undefined : stackReport({ path: row.path, css: row.css, art: row.look.art, rootStack, printed, pinned: PINNED, served, cls: row.lookClass });
+            const result = rootStack === undefined ? undefined : stackReport({ path: row.path, css: row.css, art: row.look.art, rootStack, printed, pinned: PINNED, served, cls: row.lookClass, tree: row.look.packedTree });
             return { row, rootStack, result };
         });
         // What it read is said before anything is asserted: a red run names the looks too.
@@ -583,16 +590,18 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
         const fixture = results.find(({ row }) => row.look.source === 'fixture');
         assert.equal(fixture.result.read, 1, 'the fixture sets one stack');
         assert.equal(fixture.result.walked, 1);
+        assert.equal(fixture.result.excused.length, 0, 'no pin is the fixture\'s');
     });
 
     it('excuses by name the canary\'s one stack and nothing else, and holds the pin live: the canary from public bytes goes red without it', async () => {
         const row = await canaryRow();
-        const input = { path: row.path, css: row.css, art: row.look.art, rootStack: rootStackOf(row.look.look, theme), printed, pinned: PINNED, served, cls: 't-canary' };
-        // The pins are pinned by value: a second is a public diff of this test.
+        const input = { path: row.path, css: row.css, art: row.look.art, rootStack: rootStackOf(row.look.look, theme), printed, pinned: PINNED, served, cls: 't-canary', tree: row.look.packedTree };
+        // The pins are pinned by value, the canary's packed tree among them: a second is a public diff of this test.
         assert.deepEqual(
-            PINNED_STACKS.map((pin) => [pin.cls, pin.selector, pin.stack]),
-            [['t-canary', '.t-canary .stall-tagline', 't-canary-mono']],
+            PINNED_STACKS.map((pin) => [pin.cls, pin.tree, pin.prop, pin.selector, pin.stack]),
+            [['t-canary', CANARY_TREE, 'font-family', '.t-canary .stall-tagline', 't-canary-mono']],
         );
+        assert.equal(row.look.packedTree, CANARY_TREE, 'the canary from public bytes is the canary\'s packed tree');
         for (const pin of PINNED_STACKS) assert.ok(pin.why.length > 40 && Object.isFrozen(pin), pin.selector);
         const pinned = stackReport(input);
         assert.deepEqual(pinned.problems, []);
@@ -602,16 +611,50 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
         assert.equal(pinned.failures.length, 1);
         // The tripwire: without the pin the pinned stack fails, for both reasons, and a pin that matches no failing stack is a failure of this test.
         const bare = stackReport({ ...input, pins: [] });
-        for (const pin of PINNED_STACKS) assert.ok(bare.failures.some((f) => stackMatchesPin(pin, 't-canary', f)), `the pin for ${pin.selector} excuses no failing stack`);
+        for (const pin of PINNED_STACKS) assert.ok(bare.failures.some((f) => stackMatchesPin(pin, { cls: 't-canary', tree: row.look.packedTree }, f)), `the pin for ${pin.selector} excuses no failing stack`);
         assert.equal(bare.problems.length, 1, bare.problems.join('\n'));
         assert.ok(bare.gaps[0].structure, 'it names no served family');
         assert.ok(gapCps(bare).has(0x2248) && gapCps(bare).has(0x20bd), 'and leaves ≈ and ₽ to the machine');
-        // A pin for another class excuses nothing here.
+        // A pin for another class, or for this class in another tree, excuses nothing here; the second says why.
         assert.equal(stackReport({ ...input, cls: 't-other' }).problems.length, 1);
+        const untreed = stackReport({ ...input, tree: undefined });
+        assert.equal(untreed.problems.length, 1);
+        assert.match(untreed.problems[0], /the pin for this rule excuses it only in the canary's packed tree 1a92f4fc0ed2, and this look's is not given/);
+        // What the pin excuses is everything the face lacks on whatever its line paints (the re-review's R-3): today the seller's
+        // words alone, because the canary's sheet prints no text of its own — read over the whole sheet, since a selector that
+        // never names the tagline reaches its pseudo-elements (the critic's E1–E5). A canary that prints some fails here.
+        assert.deepEqual(printingContent(row.css), [], 'the canary prints no generated text');
+        for (const rule of [".t-canary .stall-tagline::after { content: '\\25c6'; }", ".t-canary .stall-headings > h1 + div::after { content: '\\25c6'; }"]) {
+            assert.equal(printingContent(beforeReduce(row.css, rule)).length, 1, rule);
+        }
+    });
+
+    it('binds the pin to the canary\'s packed tree and to font-family: the canary\'s names over other bytes, or the stack in another property, are walked', async () => {
+        // The re-review's R-2: a pin held by names would excuse any look whose index names t-canary over any face.
+        const row = await canaryRow();
+        assert.equal(row.look.packedTree, CANARY_TREE, 'the canary from public bytes is the canary\'s packed tree');
+        const read = async (repo) => privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env })).find((r) => r.lookClass === 't-canary');
+        const reportOf = (look) => stackReport({ path: look.path, css: look.css, art: look.art ?? look.look.art, rootStack: rootStackOf(look.look.look, theme), printed, pinned: PINNED, served, cls: 't-canary', tree: look.look.packedTree });
+        // The canary's sheet over a face holding one glyph, under the canary's class and file name; and the canary's own bytes beside one art file nothing names.
+        const oneGlyph = await read(plantCanary((path, contents) => (path === 'canary/art/jetbrains-mono-latin.woff2' ? faceBytes([0x41]) : contents)));
+        const extra = await read(plantCanary(undefined, { 'canary/art/extra.svg': canaryFiles()['canary/art/ground.svg'] }));
+        for (const [name, look] of [['one glyph', oneGlyph], ['an extra file', extra]]) {
+            assert.notEqual(look.look.packedTree, CANARY_TREE, name);
+            const result = reportOf(look);
+            assert.equal(result.excused.length, 0, `${name}: excused by names alone`);
+            assert.ok(result.problems.some((p) => /font-family: t-canary-mono/.test(p) && /names no served family/.test(p)), `${name}:\n  ${result.problems.join('\n  ') || '(no problem)'}`);
+        }
+        // The pinned selector and stack in a custom property: the pin names font-family, so it excuses neither.
+        for (const prop of ['--s-font', '--s-font-x']) {
+            const result = stackReport({ path: 'canary.css', css: `${CANARY_FACE}\n.t-canary .stall-tagline { ${prop}: t-canary-mono; }`, art: CANARY_ART, rootStack: theme.FONT_STACKS[0], printed, pinned: PINNED, served, cls: 't-canary', tree: CANARY_TREE });
+            assert.equal(result.excused.length, 0, prop);
+            assert.ok(result.problems.some((p) => /names no served family/.test(p)), `${prop}:\n  ${result.problems.join('\n  ') || '(no problem)'}`);
+        }
     });
 
     it('lets the pin excuse that stack alone: another selector, another stack, another class or a second copy of it is walked', () => {
-        const stack = (css, options = {}) => stackReport({ path: 'canary.css', css: `${CANARY_FACE}\n${css}`, art: CANARY_ART, rootStack: theme.FONT_STACKS[0], printed, pinned: PINNED, served, cls: 't-canary', ...options });
+        // The canary's packed tree stands in for an in-memory sheet, so what is tested here is the names; the tree is the test above.
+        const stack = (css, options = {}) => stackReport({ path: 'canary.css', css: `${CANARY_FACE}\n${css}`, art: CANARY_ART, rootStack: theme.FONT_STACKS[0], printed, pinned: PINNED, served, cls: 't-canary', tree: CANARY_TREE, ...options });
         const pinnedRule = '.t-canary .stall-tagline { font-family: t-canary-mono; }';
         const ok = stack(pinnedRule);
         assert.deepEqual([ok.problems, ok.excused.length], [[], 1]);
@@ -637,9 +680,9 @@ describe('a-private-stack-falls-to-a-served-face-for-what-its-faces-lack', () =>
         const served2 = stack(".t-mem .stall-tagline { font-family: t-canary-mono, 'Stall Serif'; }", { cls: 't-mem' });
         assert.deepEqual(served2.problems, []);
         // A pin a caller hands in works the same way, and is live or a failure.
-        const mine = { cls: 't-mem', selector: '.x', stack: 't-canary-mono', why: 'a test' };
-        assert.deepEqual(stack('.x { font-family: t-canary-mono; }', { cls: 't-mem', pins: [mine] }).problems, []);
-        assert.match(stack('.y { font-family: t-canary-mono; }', { cls: 't-mem', pins: [mine] }).problems.join('\n'), /matches no stack of this sheet/);
+        const mine = { cls: 't-mem', tree: 'mem-tree', prop: 'font-family', selector: '.x', stack: 't-canary-mono', why: 'a test' };
+        assert.deepEqual(stack('.x { font-family: t-canary-mono; }', { cls: 't-mem', tree: 'mem-tree', pins: [mine] }).problems, []);
+        assert.match(stack('.y { font-family: t-canary-mono; }', { cls: 't-mem', tree: 'mem-tree', pins: [mine] }).problems.join('\n'), /matches no stack of this sheet/);
     });
 
     it('goes red on a planted look whose stack names only its own face, which lacks ≈, and passes the same stack with \'Stall Serif\' after it', async () => {

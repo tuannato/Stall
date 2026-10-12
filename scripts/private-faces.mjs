@@ -83,13 +83,18 @@
  *
  * **One named pin, and nothing else is excused** (`PINNED_STACKS`): the
  * canary's own tagline stack, which names its one face and no served family.
- * A pin is a look class, a selector, a stack and the reason, public like the
- * canary's CSS it names, and it is live or it is a failure: a pin that
- * matches no stack of its look, or a stack that passes, is a problem in the
- * same run, and the test that reads the canary rebuilt from public bytes
- * (`canaryFiles`) fails if the stack no longer fails without the pin. Every
- * other stack of every look — a private look's tagline stack included — is
- * walked like any other.
+ * A pin is a look class, **the look's packed tree** (`CANARY_TREE`, the
+ * tree a deploy pins, read by the merged list through `packedTreeOf`), a
+ * property, a selector, a stack and the reason, public like the canary's CSS
+ * it names. It is held by the hash and not by the names (the re-review's
+ * R-2): `t-canary` is reserved nowhere, so a look whose index names the
+ * class over other bytes — another face under the canary's file name, one
+ * file more — is another look, and walked. It is live or it is a failure: a
+ * pin that matches no stack of its look, or a stack that passes, is a
+ * problem in the same run, and the test that reads the canary rebuilt from
+ * public bytes (`canaryFiles`) fails if the stack no longer fails without
+ * the pin. Every other stack of every look — a private look's tagline stack
+ * included — is walked like any other.
  *
  * Pure over strings and buffers, and the shipped faces' readers. The tests
  * that drive it over every private look a run reads, over planted
@@ -98,6 +103,7 @@
  */
 import { woff2CodePoints } from './look-faces.mjs';
 import { rangePairs } from './probe-faces.mjs';
+import { CANARY_TREE } from './private-looks.mjs';
 import { NO_GLYPH, cpName, servedFaceSets } from './served-faces.mjs';
 import { declarationsOf, echo, firstFamily, parseSheet, shorthandFamilies, splitTopLevel } from './workshop-css.mjs';
 
@@ -112,12 +118,15 @@ const MAX_CODE_POINT = 0x10ffff;
 
 /**
  * The stacks excused by name, each live or a failure (`stackReport`,
- * `stackMatchesPin`): a look class, the one rule's selector, the stack as
- * written, and why. The canary's tagline stack names `t-canary-mono` alone —
- * a JetBrains Mono Latin subset from before the glyph re-subset — so a
- * Vietnamese tagline draws its bare letters in that face and its marked
- * letters per OS, and it lacks `≈ ₽ đ ồ`. The canary is preview-only (a
- * try-on reaches it) and public bytes (`canaryFiles`). Fixing it moves
+ * `stackMatchesPin`): a look class and its packed tree, the property, the
+ * one rule's selector, the stack as written, and why. The canary's tagline
+ * stack names `t-canary-mono` alone — a JetBrains Mono Latin subset from
+ * before the glyph re-subset, which lacks `≈ ₽ đ ồ` and every letter with a
+ * mark under or above it — so **the pin excuses everything that face lacks
+ * on whatever that line paints; today, the seller's marked letters**, drawn
+ * per OS (the re-review's R-3; the canary test holds that the canary's
+ * sheet prints no generated text). The canary is preview-only (a try-on
+ * reaches it) and public bytes (`canaryFiles`). Fixing it moves
  * `CANARY_TREE`, `CANARY_COMMIT`, the pin and the recipe, and an owner commit
  * in the private repository; the stack that does it is
  * `t-canary-mono, 'JetBrains Mono'`, and the pin leaves in the same diff
@@ -126,17 +135,27 @@ const MAX_CODE_POINT = 0x10ffff;
 export const PINNED_STACKS = Object.freeze([
     Object.freeze({
         cls: 't-canary',
+        tree: CANARY_TREE,
+        prop: 'font-family',
         selector: '.t-canary .stall-tagline',
         stack: 't-canary-mono',
-        why: "the canary's one stack: its own Latin face and no served face after it, so the tagline's marked letters draw per OS; preview-only public bytes, kept until the next canary change",
+        why: "the canary's one stack: its own Latin face and no served face after it, so whatever that line paints and the face lacks — today the seller's marked letters — draws per OS; preview-only public bytes, kept until the next canary change",
     }),
 ]);
 
 const normal = (text) => String(text).replace(/\s+/g, ' ').trim();
 
-/** True when `stack` (`{ selectors, raw }`) is exactly the rule a pin names, for a look of the pin's class. */
-export function stackMatchesPin(pin, cls, stack) {
-    return pin.cls === cls && stack.selectors?.length === 1 && normal(stack.selectors[0]) === normal(pin.selector) && normal(stack.raw) === normal(pin.stack);
+/** True when `stack` (`{ prop, selectors, raw }`) is the rule a pin names — its property, its one selector, its stack — in whatever look. */
+function namesPinnedRule(pin, stack) {
+    return stack.prop === pin.prop && stack.selectors?.length === 1 && normal(stack.selectors[0]) === normal(pin.selector) && normal(stack.raw) === normal(pin.stack);
+}
+
+/** True when a pin is for this look (`{ cls, tree }`): its class and its packed tree, so the class over other bytes is another look. */
+const pinIsFor = (pin, look) => pin.cls === look.cls && pin.tree === look.tree;
+
+/** True when `stack` is exactly the rule a pin names, in the look the pin is for (`{ cls, tree }`, the look's class and packed tree). */
+export function stackMatchesPin(pin, look, stack) {
+    return pinIsFor(pin, look) && namesPinnedRule(pin, stack);
 }
 
 /** The rules, `@font-face` blocks and keyframe stops of a sheet, each with its line; a keyframe stop has no selectors. */
@@ -415,8 +434,10 @@ function servedBeforeMachine(names, own, served) {
  * Guard 2 (`a-private-stack-falls-to-a-served-face-for-what-its-faces-lack`).
  * `printed` is `printedCodePoints`' map; `pinned` the pinned list as a map
  * from code point to `{ faces }` (the set names that lack it); `rootStack`
- * the theme's `--s-font` for the look's row; `cls` the look's class and
- * `pins` the named stacks excused (`PINNED_STACKS`). Answers `{ problems,
+ * the theme's `--s-font` for the look's row; `cls` the look's class,
+ * `tree` its packed tree (the merged list's `look.packedTree`; a pin
+ * excuses nothing in a look without one) and `pins` the named stacks
+ * excused (`PINNED_STACKS`). Answers `{ problems,
  * failures, excused, read, walked }`: the sentences of every stack that
  * fails and is not pinned (and of a pin that is not live), every stack that
  * fails as `{ line, prop, raw, selectors, problems, gaps, pin }` (`pin` set
@@ -424,7 +445,8 @@ function servedBeforeMachine(names, own, served) {
  * excused, the stacks the sheet sets and the distinct readings walked.
  * `gaps` are `{ line, prop, names, structure, cps }`.
  */
-export function stackReport({ path = 'sheet.css', css, art, rootStack, printed, pinned, served = servedFamilies(), cls, pins = PINNED_STACKS }) {
+export function stackReport({ path = 'sheet.css', css, art, rootStack, printed, pinned, served = servedFamilies(), cls, tree, pins = PINNED_STACKS }) {
+    const look = { cls, tree };
     const faces = ownFaceSet({ css, art });
     const problems = [...faces.problems];
     const own = ownFamilies(faces.faces);
@@ -492,23 +514,26 @@ export function stackReport({ path = 'sheet.css', css, art, rootStack, printed, 
                 }
             }
         }
-        const pin = pins.find((candidate) => stackMatchesPin(candidate, cls, stack));
+        const pin = pins.find((candidate) => stackMatchesPin(candidate, look, stack));
         if (pin !== undefined) live.add(pin);
+        // The pinned rule in a look of the pin's class whose packed tree is not the pin's: said, so the walk is not read as the pin having gone.
+        const other = pin === undefined ? pins.find((candidate) => candidate.cls === cls && candidate.tree !== tree && namesPinnedRule(candidate, stack)) : undefined;
+        const said = other === undefined ? mine : mine.map((line) => `${line} [the pin for this rule excuses it only in the canary's packed tree ${other.tree.slice(0, 12)}, and this look's is ${tree === undefined ? 'not given' : tree.slice(0, 12)}]`);
         if (mine.length > 0) {
-            failures.push({ line: stack.line, prop: stack.prop, raw: stack.raw, selectors: stack.selectors, problems: mine, gaps: mineGaps, pin });
+            failures.push({ line: stack.line, prop: stack.prop, raw: stack.raw, selectors: stack.selectors, problems: said, gaps: mineGaps, pin });
         }
         if (pin === undefined) {
-            problems.push(...mine);
+            problems.push(...said);
             gaps.push(...mineGaps);
         } else if (mine.length > 0) {
             excused.push({ pin, line: stack.line, problems: mine });
         } else {
-            problems.push(`${where} — the pin for ${pin.selector} { font-family: ${pin.stack} } excuses a stack that passes; remove the pin (${pin.why})`);
+            problems.push(`${where} — the pin for ${pin.selector} { ${pin.prop}: ${pin.stack} } excuses a stack that passes; remove the pin (${pin.why})`);
         }
     }
     for (const pin of pins) {
-        if (pin.cls === cls && !live.has(pin)) {
-            problems.push(`${path}: the pin for ${pin.selector} { font-family: ${pin.stack} } matches no stack of this sheet; the stack changed or went, so remove the pin (${pin.why})`);
+        if (pinIsFor(pin, look) && !live.has(pin)) {
+            problems.push(`${path}: the pin for ${pin.selector} { ${pin.prop}: ${pin.stack} } matches no stack of this sheet; the stack changed or went, so remove the pin (${pin.why})`);
         }
     }
     return { problems, gaps, failures, excused, read: stacks.length, walked };
