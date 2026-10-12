@@ -130,8 +130,8 @@ const RE_SUBSET = readWanted(read('scripts/subset-faces.py'));
  * font with each of these that font draws — `≈` and RUB's `₽` are drawn by
  * all four. What Lora and JetBrains Mono do not draw (`→ ◆ ₹ ₪ ₩ ₦ ₱`, and
  * `₺` in JetBrains Mono) stall.css draws from Inter's Latin file in those
- * families' names, one segment each (`a segment names exactly what its
- * family's own files lack`), so no face set lacks them. What is left is no
+ * families' names, one segment each (`a-segment-names-exactly-what-its-familys-own-files-lack`),
+ * so no face set lacks them. What is left is no
  * face's: a CJK ideograph (`元`; a CJK face is not shipped for one sign). A
  * glyph leaves this list, or a face leaves its `faces`, only when a face
  * gains it; a glyph joins it only with a line saying where it prints.
@@ -180,7 +180,7 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
         for (const set of sets) {
             // A Latin subset and a Vietnamese one each, and for the two
             // families whose fonts lack glyphs the app prints, one segment
-            // of Inter's Latin file (`a segment names exactly what…`).
+            // of Inter's Latin file (`a-segment-names-exactly-what-its-familys-own-files-lack`).
             assert.equal(set.faces.length, set.name === 'Inter' ? 2 : 3, set.name);
             for (const face of set.faces) assert.ok(face.held.size > 100, `${face.file} holds ${face.held.size} code points`);
         }
@@ -226,7 +226,7 @@ describe('every-glyph-the-app-prints-is-in-its-face', () => {
         }
     });
 
-    it("credits Inter's glyphs to Stall Serif and JetBrains Mono through one segment each, naming exactly what the family's own files lack", () => {
+    it('a-segment-names-exactly-what-its-familys-own-files-lack', () => {
         // The segment is a rule in the family's name over Inter's Latin file.
         // Its range is derived here and not copied: the code points
         // `subset-faces.py` cuts in (`WANTED`) that Inter draws and the
@@ -375,7 +375,7 @@ describe('every-face-of-a-family-shares-its-descriptors', () => {
     // descriptor group and drop the family's own Latin face at the weights
     // inside it: Neo's weight-400 and 700 text drew in Menlo (800 did not)
     // with every face `loaded`, which the probe's status check cannot see
-    // (the glyph-segment critic, 2026-10-10). Computed in `before`: a
+    // (the glyph-subset critic's item 4). Computed in `before`: a
     // describe body only registers.
     let css;
     before(() => {

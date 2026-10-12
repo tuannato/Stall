@@ -30,8 +30,10 @@
          failover order, so the others are usually never dialled. `crossorigin`
          matches the anonymous CORS pool fetch/axios use; the icon host serves
          plain <img> (no-cors), so its preconnect must not carry it. Fonts are
-         deliberately not preloaded: only Modern's stack downloads Inter, and
-         an unconditional preload would tax every Neo and Rural stall 48KB. -->
+         deliberately not preloaded: Modern's stack is the only one that always
+         downloads Inter (Rural and Neo fetch its Latin file only when a page
+         prints a sign their own faces lack), and an unconditional preload
+         would tax every Neo and Rural stall 48KB. -->
     <link rel="preconnect" href="https://chronik-native1.fabien.cash" crossorigin />
     <!-- No preconnect to a price feed: the door needs no rate, and a static
          preconnect told a third party every visitor's IP before any screen

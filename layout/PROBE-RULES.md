@@ -5440,5 +5440,4 @@ bind the pay-screens audit (`quotes` / `pay`): each must mount a
 (`every-glyph-the-app-prints-is-in-its-face`); the probe's face check reads
 status, never a glyph.
 
-Added without a probe run: the first `pnpm test:layout` after them owes
-both screens a green.
+Measured green on 2a6578a: `pnpm test:layout`, 136.9 s (the window's run).

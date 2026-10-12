@@ -137,7 +137,8 @@ export const faceSetName = (face) => (face.style.trim() === 'normal' ? face.fami
  * it is declared for, and what it draws is what its FILE holds inside its
  * range — which is how `drawsItself` credits Inter's glyphs to those two
  * looks. What it must state, and what its range may name, are held by
- * `descriptorProblems` and the `segment` test in `served-faces.test.mjs`.
+ * `descriptorProblems` and `a-segment-names-exactly-what-its-familys-own-files-lack`
+ * in `served-faces.test.mjs`.
  */
 export function servedFaceSets() {
     const sets = new Map();
@@ -166,7 +167,7 @@ const INITIAL_DESCRIPTORS = Object.freeze({ 'font-weight': 'normal', 'font-displ
  * `JetBrains Mono` segment declared `400 700` beside the family's `100 800`
  * made Chrome 154 draw pure-Latin text at weights 400 and 700 in the
  * machine's font (Menlo here) with every face `loaded`, weight 800 still in
- * the family's own (the glyph-segment critic, 2026-10-10, and measured
+ * the family's own (the glyph-subset critic's item 4, and measured
  * again on this branch). `css` is the sheet
  * to read, `src/ui/stall.css` by default; the answer is one line per group
  * that disagrees, naming the descriptor and each rule's value, and `[]` when
