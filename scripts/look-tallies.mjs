@@ -70,6 +70,23 @@ export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
         desktop: Object.freeze({ 'clipped-away': 4, 'not-rendered': 8 }),
         canvas: Object.freeze({ 'clipped-away': 207, 'not-rendered': 0 }),
     }),
+    /*
+     * The private look at 0x04, measured 2026-10-12 over the contrast
+     * targets as they stand, on its bare variant alone (it carries no
+     * worn variant yet, so each count is about half the fixture's): its
+     * sheet clips nothing the pass measures, so its skips are the base
+     * sheets' on the skeleton's markup — the wall's rows past its strip
+     * and the ticker's ribbon past its cell (the canvas), the halves a
+     * phone hides (the desk-only controls, a closed switch's row), the
+     * reasons the fixture's entry gives. Lowered with the change that
+     * lowers them; raised only by a reviewed diff that names what the
+     * look now clips and why.
+     */
+    't-inkwash': Object.freeze({
+        mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
+        desktop: Object.freeze({ 'clipped-away': 2, 'not-rendered': 4 }),
+        canvas: Object.freeze({ 'clipped-away': 104, 'not-rendered': 0 }),
+    }),
 });
 
 /**
