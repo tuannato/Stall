@@ -88,6 +88,13 @@
     letter-spacing: 0.12em;
 }
 
+/* A stack with no face of its own, so the stack guard has a subject on every
+   run (`a-private-stack-falls-to-a-served-face-for-what-its-faces-lack`): a
+   served family first, then the generic. */
+.t-fixture-private .stall-sub {
+    font-family: 'Stall Serif', serif;
+}
+
 @media (min-width: 680px) {
     /* Two lines of the desk's name fit; a 32-byte name still climbs. */
     .t-fixture-private .stall-name {
