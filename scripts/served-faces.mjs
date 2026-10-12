@@ -48,7 +48,7 @@ export const NOT_PRINTED = Object.freeze(['src/domain/withheld-data.ts']);
 export const PRINTING_ROLES = Object.freeze(['base', 'look', 'screen', 'kit', 'private']);
 
 /** Characters that draw no glyph of their own: controls, format characters (the describe picker's directional isolates), line and paragraph separators. */
-const NO_GLYPH = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
+export const NO_GLYPH = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u;
 
 /** Every app TypeScript file under `dir`, as a repository path: tests, declarations and `NOT_PRINTED` aside. */
 export function appSourceFiles(dir = 'src') {
@@ -253,10 +253,20 @@ export function declaredNotHeld(sets = servedFaceSets()) {
  */
 export const SUBSET_SCRIPTS = Object.freeze({ latin: 'Latin', vietnamese: 'Latin' });
 
+/**
+ * The script a subset named exactly as `SUBSET_SCRIPTS` keys it is cut for,
+ * or undefined for a subset the table does not name. A served face's name
+ * is already lower case (`subsetScript`); a private look's `fonts.json`
+ * writes `Latin`, which its guard lower-cases first.
+ */
+export function scriptOfSubset(subset) {
+    return Object.hasOwn(SUBSET_SCRIPTS, subset) ? SUBSET_SCRIPTS[subset] : undefined;
+}
+
 /** The script a served face file is cut for (`SUBSET_SCRIPTS`), or a thrown error naming the file. */
 export function subsetScript(file) {
     const subset = file.replace(/^.*\//, '').replace(/\.woff2$/, '').replace(/-italic$/, '').split('-').pop();
-    const script = Object.hasOwn(SUBSET_SCRIPTS, subset) ? SUBSET_SCRIPTS[subset] : undefined;
+    const script = scriptOfSubset(subset);
     if (script === undefined) throw new Error(`${file}: a subset ("${subset}") whose script SUBSET_SCRIPTS does not name`);
     return script;
 }
@@ -289,6 +299,12 @@ export const MAX_RANGE_CODE_POINTS = 0x10000;
  * and is listed in `unbounded` (`{ file, size }`), so a face with no range
  * fails fast and by name. `count` is how many code points were read, so a
  * check that read nothing can be told from one that passed.
+ *
+ * A served face's script is read from its file name (`subsetScript`). A
+ * face that carries its own `script` — a private look's, which says which
+ * subset it is in `fonts.json` (`scripts/private-faces.mjs`,
+ * `scriptReport`) — is held to that one: the same reading, the same
+ * refusal of a face with no range.
  */
 export function lettersOfAnotherScript(sets = servedFaceSets()) {
     const letters = [];
@@ -301,7 +317,7 @@ export function lettersOfAnotherScript(sets = servedFaceSets()) {
                 unbounded.push({ file: face.file, size });
                 continue;
             }
-            const own = new RegExp(`^[\\p{scx=${subsetScript(face.file)}}\\p{scx=Common}\\p{scx=Inherited}]$`, 'u');
+            const own = new RegExp(`^[\\p{scx=${face.script ?? subsetScript(face.file)}}\\p{scx=Common}\\p{scx=Inherited}]$`, 'u');
             for (const [lo, hi] of face.ranges) {
                 for (let cp = lo; cp <= hi; cp += 1) {
                     count += 1;

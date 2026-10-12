@@ -769,6 +769,14 @@ const REFUSED_PROPERTIES = Object.freeze({
 });
 
 /**
+ * The properties that make a box a query container, which a first-party look
+ * sheet may not set (`declarationProblems`, the 8g0 critic's P2-2): the
+ * shop window's `@container sw` conditions and `cqw` / `cqh` units are the
+ * wall's, not the look's.
+ */
+const CONTAINER_PROPERTIES = new Set(['container-name', 'container-type', 'container']);
+
+/**
  * Properties whose value these rules read for a keyword — a fixed box, a
  * right-to-left run, a list marker, a clip to the text — so a `var()` there
  * would carry the keyword past them. Written plainly in a look sheet; none of
@@ -1143,6 +1151,51 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if ((prop === 'color' || prop === 'all') && /(?<![\w-])revert(?:-layer)?(?![\w-])/i.test(keywords)) {
             out.push(`${shown} — reverting the colour hands a link back to the browser's own blue and visited purple, which no pass can see`);
         }
+        /*
+         * `all` other than `inherit` or `unset` (the private face guards'
+         * re-review, R-1): `all: initial` resets `font-family` to its
+         * initial value, the browser's default — a font of the reader's
+         * machine, on a money node as readily as anywhere — and writes no
+         * family list for the served-face rules to read. `unset` lets
+         * `font-family` inherit, as `inherit` does. A first-party sheet's
+         * rule; the kit keeps the rules its README states.
+         */
+        if (firstParty && prop === 'all' && !/^(?:inherit|unset)$/i.test(clean)) {
+            out.push(`${shown} — resets font-family to the browser's default, a font of the reader's machine; a look sheet writes all only as inherit or unset`);
+        }
+        /*
+         * `text-transform: full-width` and `full-size-kana` (the re-review,
+         * R-6) paint other characters than the page's — the fullwidth forms
+         * (U+FF01–FF5E), the full-size kana — which no served face draws, so
+         * the line falls to a font of the reader's machine whatever its
+         * stack says. Refused as a keyword anywhere in a first-party
+         * declaration, a function's arguments and a custom property
+         * included: stall.css's `text-transform: var(--s-sign-case)` takes
+         * it from a variable. No served sheet uses either. The kit keeps the
+         * rules its README states.
+         */
+        if (firstParty && /(?<![\w-])(?:full-width|full-size-kana)(?![\w-])/i.test(bare)) {
+            out.push(`${shown} — full-width and full-size-kana paint characters no served face draws (the fullwidth forms, the full-size kana): the line falls to a font of the reader's machine`);
+        }
+        /*
+         * `container-name`, `container-type` and the `container` shorthand
+         * (the 8g0 critic's P2-2): `@container` is refused above for sizing
+         * rules to a box the probe does not choose, and these three are the
+         * same door from the other side. `window.css` makes the shop
+         * window's frame the one size container, named `sw`, and every
+         * `@container sw` condition in it and every bare `cqw` / `cqh` unit
+         * resolves against the nearest container that matches, so a look
+         * that makes any box below the frame a container answers them with
+         * a box of its own choosing. A first-party sheet's rule: no served
+         * look sheet sets one (grepped), so the refusal is inert on the
+         * tree. The kit keeps the rules its README states, and a line there
+         * is the owner's to write.
+         */
+        if (firstParty && CONTAINER_PROPERTIES.has(prop)) {
+            out.push(
+                `${shown} — ${prop} would re-point the wall's container queries (window.css's @container sw conditions and its cqw and cqh units) at a box the look picks, one the probe does not choose; @container is refused for the same reason`,
+            );
+        }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
             const sign = firstParty && /^sticky$/i.test(keywords.trim()) && isStickyBox(selectors);
             if (!sign) {
@@ -1479,8 +1532,14 @@ export function lintSheet(css, { art = [] } = {}) {
  * outside a string). The kit's art and keyframe-name rules are the kit's:
  * a shipped sheet is Stall's own, built and reviewed here. And the
  * first-party rules the kit does not carry: the sign sticky off the wall,
- * the legacy mask-composite pairs, the hooks, and no file named in a custom
- * property (`a-look-writes-each-url-in-the-property-that-paints-it`).
+ * the legacy mask-composite pairs, the hooks, no file named in a custom
+ * property (`a-look-writes-each-url-in-the-property-that-paints-it`), and
+ * nothing that puts a line in a font of the reader's machine past the
+ * served-face rules: no `all` but `inherit` or `unset`, no `full-width` or
+ * `full-size-kana` (`a-look-names-only-a-served-face`), and no
+ * `container-name`, `container-type` or `container`, which would re-point
+ * the wall's `@container sw` conditions at a box the look picks
+ * (`a-look-names-no-container-of-its-own`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });
