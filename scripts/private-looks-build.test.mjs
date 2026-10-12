@@ -29,7 +29,7 @@ import {
 import { MAX_SVG_ELEMENTS, SVG_ELEMENTS, sanitizeSvg } from './svg-allow.mjs';
 import { LOOK_FONTS_HEADING, noticedLicence } from './notices-lib.mjs';
 import { LOOKS_ENV, REQUIRED_ENV, selectionRequired } from './looks-selection.mjs';
-import { PLANTED_CLASS, beforeReduce, oflText, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
+import { PLANTED_CLASS, PLANTED_FACE, PLANTED_FACE_LICENCE, beforeReduce, oflText, plantFace, plantLooks, plantedFaceBytes, removePlants } from './private-looks-plant.mjs';
 
 /**
  * The private-look join at build time (`scripts/private-looks-build.mjs`,
@@ -601,25 +601,13 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
      * (`scripts/private-looks-plant.mjs`). Real `vite build`s, ~1 s each.
      */
     after(removePlants);
-    const FACE = 'plant-serif-latin.woff2';
-    const LICENCE = 'LICENSE-OFL-plant-serif.txt';
+    const FACE = PLANTED_FACE;
+    const LICENCE = PLANTED_FACE_LICENCE;
     let PUBLIC_NOTICES;
     before(() => {
         PUBLIC_NOTICES = readFileSync(join(ROOT, 'public', 'licenses.txt'));
     });
-    const face = (family = 'Plant Serif') =>
-        syntheticWoff2([
-            { id: 0, text: 'Copyright 2024 The Plant Type Authors' },
-            { id: 1, text: family },
-        ]);
-    const fontFace = () => `@font-face { font-family: ${PLANTED_CLASS}-serif; src: url(./art/${FACE}) format("woff2"); font-display: swap; }`;
-    /** A planted look serving one synthetic face; `licence` the OFL text beside it, or `null` for none. */
-    const plantFace = ({ licence = oflText('The Plant Type Authors'), family } = {}) =>
-        plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, fontFace()) : text), {
-            [`fixture/art/${FACE}`]: face(family),
-            ...(licence === null ? {} : { [`fixture/art/${LICENCE}`]: licence }),
-            'fixture/fonts.json': JSON.stringify({ fonts: [{ name: 'Plant Serif', files: { [FACE]: 'Latin' }, licence: LICENCE }] }),
-        });
+    const face = plantedFaceBytes;
 
     let repo;
     let dist;

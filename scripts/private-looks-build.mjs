@@ -535,6 +535,15 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
     return {
         name: 'stall-private-looks',
         enforce: 'pre',
+        // What this build's selection carries, for a reader that holds a
+        // build's output against another build of the same config: the kit's
+        // check (`workshop-build-check.mjs`) asks the in-memory baseline,
+        // which writes nothing, which faces the carried looks serve so that
+        // it can make the deploy notices a `writeBundle` wrote beside them.
+        // Read-only: a copy, the faces as `lookFontNotices` takes them.
+        api: {
+            carriedFaces: () => carried.map((look) => ({ fonts: look.fonts.map((font) => ({ ...font })) })),
+        },
         configResolved(config) {
             root = config.root;
             outDir = resolve(config.root, config.build.outDir);

@@ -33,3 +33,11 @@ export declare function plantCanary(
 export declare function beforeReduce(css: string, rule: string): string;
 export declare function syntheticWoff2(records: readonly { id: number; text: string }[]): Buffer;
 export declare function oflText(holder: string, reserved?: string): string;
+/** The synthetic face `plantFace` serves, its family and the licence file beside it. */
+export declare const PLANTED_FACE: 'plant-serif-latin.woff2';
+export declare const PLANTED_FACE_FAMILY: 'Plant Serif';
+export declare const PLANTED_FACE_LICENCE: 'LICENSE-OFL-plant-serif.txt';
+/** The planted face's bytes: a name table with a copyright notice and `family`. */
+export declare function plantedFaceBytes(family?: string): Buffer;
+/** A planted look serving one synthetic face; `licence` the OFL text beside it, or `null` for none. */
+export declare function plantFace(options?: { readonly licence?: string | null; readonly family?: string }): PlantedLooks;
