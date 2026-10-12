@@ -614,8 +614,9 @@ describe('a-poster-draws-again-once-its-faces-load', () => {
         document.body.replaceChildren();
     });
 
-    function withFonts(): { asked: string[]; settle: () => void } {
+    function withFonts(): { asked: string[]; texts: string[]; settle: () => void } {
         const asked: string[] = [];
+        const texts: string[] = [];
         let release: () => void = () => {};
         const gate = new Promise<void>((resolve) => {
             release = resolve;
@@ -623,13 +624,14 @@ describe('a-poster-draws-again-once-its-faces-load', () => {
         Object.defineProperty(document, 'fonts', {
             configurable: true,
             value: {
-                load: (font: string) => {
+                load: (font: string, text?: string) => {
                     asked.push(font);
+                    texts.push(text ?? '');
                     return gate.then(() => []);
                 },
             },
         });
-        return { asked, settle: () => release() };
+        return { asked, texts, settle: () => release() };
     }
 
     function countingCanvas(): { canvas: HTMLCanvasElement; draws: () => number } {
@@ -654,6 +656,26 @@ describe('a-poster-draws-again-once-its-faces-load', () => {
         fonts.settle();
         await new Promise((r) => setTimeout(r, 0));
         expect(draws()).toBe(2);
+    });
+
+    it('waits for the sign the tag draws in its figure, and for its surcharge line', () => {
+        // Rural's and Neo's signs for ₹ and the like are Inter's, a face
+        // loaded only for its own code points (stall.css, the segments): the
+        // tag draws the figure in the look's font, so a draw before that file
+        // lands keeps the machine's sign unless the figure is among the words.
+        const fonts = withFonts();
+        const { canvas } = countingCanvas();
+        document.body.append(canvas);
+        const figure = '\u20b91,200.00';
+        const surcharge = '+5% surcharge \u00b7 the seller\u2019s record';
+        const item: PosterItem = { ...ITEM, figure, surcharge };
+        drawPosterWhenFontsLoad(canvas, posterSpec('tag', paint({ font: '"Stall Serif", serif', item, url: TAG_LINK })));
+        const serif = fonts.asked.flatMap((f, i) => (f.includes('"Stall Serif", serif') ? [fonts.texts[i]] : []));
+        expect(serif.length).toBeGreaterThan(0);
+        for (const text of serif) {
+            expect(text).toContain(figure);
+            expect(text).toContain(surcharge);
+        }
     });
 
     it('does not draw on a canvas that left the page', async () => {

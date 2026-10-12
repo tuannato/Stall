@@ -36,7 +36,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { woff2CodePoints } from './look-faces.mjs';
-import { STALL_CSS, declaredStallFaces, rangePairs } from './probe-faces.mjs';
+import { STALL_CSS, declaredStallFaces, fontFaceBlocks, normalRange, normalWeight, rangePairs, unquote } from './probe-faces.mjs';
 import { GENERATED_TEXT, blankComments, decodeEscapes } from './workshop-css.mjs';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -130,6 +130,15 @@ export const faceSetName = (face) => (face.style.trim() === 'normal' ? face.fami
  * italic`, `JetBrains Mono`): `{ name, faces: [{ file, ranges, declared,
  * held }] }` — `declared` the `unicode-range` as written, '' when the rule
  * has none (`ranges` is then every code point).
+ *
+ * A **segment** is a rule in one family's name over another family's file
+ * (stall.css names Inter's Latin file in Stall Serif's and JetBrains Mono's
+ * names, over the signs those families' fonts lack): it is a face of the set
+ * it is declared for, and what it draws is what its FILE holds inside its
+ * range — which is how `drawsItself` credits Inter's glyphs to those two
+ * looks. What it must state, and what its range may name, are held by
+ * `descriptorProblems` and `a-segment-names-exactly-what-its-familys-own-files-lack`
+ * in `served-faces.test.mjs`.
  */
 export function servedFaceSets() {
     const sets = new Map();
@@ -142,6 +151,58 @@ export function servedFaceSets() {
         sets.get(name).faces.push({ file, ranges, declared: face.unicodeRange ?? '', held: woff2CodePoints(readFileSync(join(ROOT, file))) });
     }
     return [...sets.values()];
+}
+
+/** The descriptors a rule states for itself: which file, and which code points. Every other one selects the family's face and must agree. */
+const PER_RULE_DESCRIPTORS = new Set(['src', 'unicode-range']);
+
+/** What a descriptor means when a rule leaves it out, so a missing `font-display` is read as `auto` and not as agreeing with `swap`. */
+const INITIAL_DESCRIPTORS = Object.freeze({ 'font-weight': 'normal', 'font-display': 'auto', 'font-stretch': 'normal' });
+
+/**
+ * **Every rule of one family and style states the same descriptors**, the
+ * file and the code points aside — weight range and display above all. A
+ * rule that differs makes the browser treat it as another face of the
+ * family, and the family's own Latin face can be dropped for it: a
+ * `JetBrains Mono` segment declared `400 700` beside the family's `100 800`
+ * made Chrome 154 draw pure-Latin text at weights 400 and 700 in the
+ * machine's font (Menlo here) with every face `loaded`, weight 800 still in
+ * the family's own (the glyph-subset critic's item 4, and measured
+ * again on this branch). `css` is the sheet
+ * to read, `src/ui/stall.css` by default; the answer is one line per group
+ * that disagrees, naming the descriptor and each rule's value, and `[]` when
+ * every group agrees.
+ */
+export function descriptorProblems(css = readFileSync(STALL_CSS, 'utf8')) {
+    const groups = new Map();
+    for (const block of fontFaceBlocks(css)) {
+        const family = unquote(block.get('font-family') ?? '');
+        const style = (block.get('font-style') ?? 'normal').trim().toLowerCase();
+        const stated = new Map();
+        for (const [name, raw] of block) {
+            if (PER_RULE_DESCRIPTORS.has(name) || name === 'font-family' || name === 'font-style') continue;
+            stated.set(name, raw.replace(/\s+/g, ' ').trim().toLowerCase());
+        }
+        for (const [name, initial] of Object.entries(INITIAL_DESCRIPTORS)) if (!stated.has(name)) stated.set(name, initial);
+        if (stated.has('font-weight')) stated.set('font-weight', normalWeight(stated.get('font-weight')));
+        const file = /url\(\s*(['"]?)([^'")]+)\1\s*\)/.exec(block.get('src') ?? '')?.[2]?.replace(/^.*\//, '') ?? 'no src';
+        const rule = `${file} [U+${normalRange(block.get('unicode-range') ?? '').split(',')[0]}…]`;
+        // Family names match case-blind, quotes aside; the group is named as the first rule spells it.
+        const key = `${family.toLowerCase()} ${style}`;
+        if (!groups.has(key)) groups.set(key, { label: `${family} ${style}`, rules: [] });
+        groups.get(key).rules.push({ rule, stated });
+    }
+    const problems = [];
+    for (const { label, rules } of groups.values()) {
+        const names = new Set(rules.flatMap((r) => [...r.stated.keys()]));
+        for (const name of [...names].sort()) {
+            const values = new Set(rules.map((r) => r.stated.get(name) ?? '(unstated)'));
+            if (values.size > 1) {
+                problems.push(`${label}: ${name} differs between its rules — ${rules.map((r) => `"${r.stated.get(name) ?? '(unstated)'}" on ${r.rule}`).join(', ')}`);
+            }
+        }
+    }
+    return problems;
 }
 
 const inRanges = (ranges, cp) => ranges.some(([lo, hi]) => cp >= lo && cp <= hi);

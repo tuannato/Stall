@@ -132,6 +132,52 @@
 }
 
 /*
+ * Segments of Inter's Latin file in the two other families' names. Lora has
+ * no `→ ◆` and none of `₦ ₩ ₪ ₱ ₹`; JetBrains Mono has none of those six
+ * signs and no `₺`; Inter draws all of them. Each rule below is the family's
+ * name, style and weights over Inter's own file and a range naming exactly
+ * what that family's files lack, so the glyph is drawn by a shipped face
+ * rather than by whatever font the reader's machine falls back to. No new
+ * file: a page fetches Inter's Latin file for these only when it prints one.
+ * Held by `every-glyph-the-app-prints-is-in-its-face`.
+ *
+ * Every rule of one family and style states the same descriptors, weight
+ * range above all (`every-face-of-a-family-shares-its-descriptors`): a
+ * segment declared 400-700 beside a family declared 100-800 made Chrome 154
+ * take the segment's descriptor group for every weight inside 400-700 and
+ * drop the family's own Latin face there, so pure-Latin text at those
+ * weights drew in a system font with every face `loaded`.
+ * The ranges are signs, never a letter, and disjoint from the family's own
+ * files' (where two ranges name one code point the later rule wins it).
+ */
+@font-face {
+    font-family: 'Stall Serif';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./fonts/inter-latin.woff2') format('woff2');
+    unicode-range: U+20A6, U+20A9-20AA, U+20B1, U+20B9, U+2192, U+25C6;
+}
+
+@font-face {
+    font-family: 'Stall Serif';
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./fonts/inter-latin.woff2') format('woff2');
+    unicode-range: U+20A6, U+20A9-20AA, U+20B1, U+20B9, U+2192, U+25C6;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url('./fonts/inter-latin.woff2') format('woff2');
+    unicode-range: U+20A6, U+20A9-20AA, U+20B1, U+20B9-20BA;
+}
+
+/*
  * The stall must reach the edges, or the theme is a card on somebody else's
  * page. `--s-bg` is set on `.stall`, so everything outside it is painted by the
  * browser, not by the seller: with no reset, `body` keeps its default 8px
