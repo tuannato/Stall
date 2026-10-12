@@ -27,11 +27,18 @@
  * a file of `WHOLE_UNDER` bytes or more in chunks, so no size is too big to
  * read); a link as the text git stores for it; a file gone between git's
  * listing and its read is no file, and any other failure to read one — its
- * `lstat` included — fails. A listing git warns about (a directory it could
- * not open, whose files it therefore never listed) fails too. A worktree
- * that cannot be read fails with a sentence naming it and the way to mend
- * it (`git worktree repair`, `git worktree prune`), never git's command
- * line (the re-review's R1).
+ * `lstat` included — fails. A listing of files outside the index, on either
+ * side, that writes anything to stderr fails too, since a directory git could not open is a directory whose files it
+ * never listed (the fail-open the stderr rule closes) and a line this guard
+ * does not know may be as much; the listing runs with no fsmonitor hook and
+ * no untracked cache, and with every `GIT_TRACE*` variable dropped, so what
+ * is left to write there is a listing that could not finish (the
+ * fences-followup re-review's item 2); the failure carries git's line,
+ * quoted and cut on the public side. A worktree that cannot be read fails
+ * with a sentence naming it and the way to mend it (`git worktree repair`,
+ * `git worktree prune`), never git's command line (the re-review's R1); one
+ * whose path cannot be examined (`lstat`, not `existsSync`: only ENOENT and
+ * ENOTDIR mean gone) fails too.
  *
  * **The private side** (`privateBlobIds`): what the selected repository
  * **holds** — the selected commit's tree (the selection's commit, else
@@ -40,17 +47,18 @@
  * worktree, the working bytes of its tracked paths, its untracked files
  * (item 4: an uncommitted draft copied out is seen) and its ignored files
  * (`git ls-files --others --ignored --exclude-standard`, the re-review's
- * R4; never a path under a `.git` directory) — and what only its
- * **history** reaches: every blob on a ref or in a reflog entry (`git
- * rev-list --objects --all --reflog`: another branch, an older commit, a
- * draft amended or reset away, every stash entry) that it does not hold;
- * replace objects off, location variables dropped; plus each SVG's
- * re-serialisation by the build's own sanitizer (`sanitizeSvg`,
- * `scripts/svg-allow.mjs`) hashed as a blob, the form a build emits. A
- * linked worktree git lists as `prunable` while its directory still stands
- * fails the run (the fences-followup critic's P2): its index is read, but
- * its files cannot be read through git, and a draft left there is a
- * private byte on this machine. **A failure on this side names no private
+ * R4; never a path under a `.git` directory) — and every blob any ref
+ * reaches (`git rev-list --objects --all`: every branch and tag, every
+ * older commit on one), which it holds too; what only its **reflog**
+ * reaches (`--all --reflog` less that: a draft amended or reset away, every
+ * stash entry past the newest) is the `reflogOnly` set; replace objects
+ * off, location variables dropped; plus each SVG's re-serialisation by the
+ * build's own sanitizer (`sanitizeSvg`, `scripts/svg-allow.mjs`) hashed as
+ * a blob, the form a build emits. A linked worktree git lists as `prunable`
+ * while its directory still stands (or cannot be examined) fails the run
+ * (the fences-followup critic's P2): its index is read, but its files
+ * cannot be read through git, and a draft left there is a private byte on
+ * this machine. **A failure on this side names no private
  * path, no entry and none of git's own words** (which name its
  * directories): only the selected private repository, which of its
  * worktrees, which read failed and — for a file it lists and cannot read —
@@ -61,20 +69,23 @@
  * re-serialisations (N1: three canary files are tracked files byte for
  * byte, so a guard that counted them would fail the very dispatch that
  * carries the canary); the empty blob, which is no evidence of anything;
- * and — among the blobs only the private history reaches (the step
- * critic's item 5, option (b), widened from the reflog by the
- * fences-followup critic's item 2) — one whose public copy `origin/main`'s
- * history already holds. That is public bytes copied *into* the private
- * repository, which the guard cannot otherwise tell from private bytes
- * copied out: the owner's canary clone keeps a reset-away draft that held
- * one of Stall's served faces byte for byte, and a port that starts by
- * committing a copy of a public file and then edits it leaves the copy in
- * its history for good. A history-only blob of new bytes is caught, and
- * nothing the selected commit, an index or a working tree holds is
- * exempted this way. `origin/main`'s objects are listed only when such a
- * match happens. Any other match is a problem whichever way the copy went,
- * and its sentence names both ways and the way out of each
- * (`COPY_BOTH_WAYS`, the re-review's R2).
+ * and — among the blobs only a private reflog entry reaches (the step
+ * critic's item 5, option (b); the fences-followup re-review's item 1, the
+ * window's decision: not widened to history) — one whose public copy
+ * `origin/main`'s history already holds. That is public bytes copied *into*
+ * the private repository, which the guard cannot otherwise tell from
+ * private bytes copied out: the owner's canary clone keeps a reset-away
+ * draft that held one of Stall's served faces byte for byte. A blob a
+ * branch, a tag, an index or a working tree holds — or the selected
+ * commit's tree — is never exempted this way, so a copy the private
+ * repository committed stays red until a rewrite leaves it to the reflog,
+ * or until the owner's reviewed exemption list (not built) names it; and a
+ * reflog-only blob of new bytes is caught. `origin/main`'s objects are
+ * listed only when such a match happens, and the run's line counts those
+ * spares apart from the canary's (`compared.reflogSpared`, by public path).
+ * Any other match is a problem whichever way the copy went, and its
+ * sentence names both ways and the way out of each (`COPY_BOTH_WAYS`, the
+ * re-review's R2).
  *
  * **Stated limits**: whole-file copies only — a pasted fragment of a sheet, a
  * picture redrawn by hand, a shot or a plate of a private look, or the
@@ -97,7 +108,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readSync, readlinkSync, realpathSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, openSync, readFileSync, readSync, readlinkSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readUnpushedBlobs } from './git-unpushed.mjs';
 import { GITLINK_MODE } from './licence-map-lib.mjs';
@@ -148,14 +159,33 @@ export function canaryBlobIds() {
     return ids;
 }
 
-/** `env` with the variables that tell git where a repository is dropped, and replace objects off — as every private-look read runs. */
+/**
+ * `env` with the variables that tell git where a repository is dropped, every
+ * `GIT_TRACE*` variable dropped (`GIT_TRACE`, `GIT_TRACE2`, `GIT_TRACE_PERFORMANCE`, …: each
+ * writes to stderr, and a listing that wrote there would fail the stderr
+ * rule over nothing — the fences-followup re-review's item 2), and replace
+ * objects off — as every private-look read runs.
+ */
 function cleanEnv(env) {
     const clean = { ...env, GIT_NO_REPLACE_OBJECTS: '1' };
     for (const name of GIT_LOCATION_VARS) {
         delete clean[name];
     }
+    for (const name of Object.keys(clean)) {
+        if (name.toUpperCase().startsWith('GIT_TRACE')) {
+            delete clean[name];
+        }
+    }
     return clean;
 }
+
+/**
+ * The configuration the two listings of files outside the index run under:
+ * no fsmonitor hook and no untracked cache. A guard wants the full scan, and
+ * either can only make git look at less — or, with a hook that talks, write
+ * to stderr on a run that succeeded.
+ */
+const FULL_SCAN = Object.freeze(['core.fsmonitor=false', 'core.untrackedCache=false']);
 
 /**
  * Who a read is, in a message: `where` its name, `quiet` whether a message
@@ -183,30 +213,75 @@ const PRIVATE_WORKTREE = Object.freeze({
 /** The mend for a private worktree git lists as prunable while its directory still stands (the fences-followup critic's P2). */
 const PRUNABLE_MEND = 'run `git worktree list` in that repository to find it, then `git worktree repair <its directory>`, or move its files out and `git worktree prune`';
 
+/** The mend for a private worktree whose path could not be examined (a parent it may not search, say). */
+const STAT_MEND = 'run `git worktree list` in that repository to find it, and make its path readable';
+
 /** A read that failed, as a sentence: who could not be read, what failed, and the way to mend it (`mend: false` for none). */
 function unreadable(who, what, { mend = who.mend } = {}) {
     return new Error(`${CONTENT_GUARD}: ${who.where} could not be read: ${what}${typeof mend === 'string' ? ` — ${mend}` : ''}`);
 }
 
-/** The first line git wrote to stderr, or undefined. */
-function gitSaid(stderr) {
+/** The errors of an `lstat` that mean there is nothing at the path: gone, and only gone. */
+const ABSENT = new Set(['ENOENT', 'ENOTDIR']);
+
+/**
+ * Whether something stands at `path`, by `lstat` — not `existsSync`, which
+ * answers false for a path it may not search and so reads an unreadable
+ * worktree as a gone one (the re-review's item 3). Only `ABSENT` means gone;
+ * any other failure is `unreadable(who, what + its code, options)`, naming
+ * no path.
+ */
+function standsAt(path, who, what, options) {
+    try {
+        lstatSync(path);
+        return true;
+    } catch (error) {
+        if (ABSENT.has(error?.code)) {
+            return false;
+        }
+        throw unreadable(who, `${what} (${error?.code ?? 'an error'})`, options);
+    }
+}
+
+/** Every non-empty line git wrote to stderr, trimmed. */
+function gitLines(stderr) {
     const text = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : typeof stderr === 'string' ? stderr : '';
-    return text.split('\n').find((line) => line.trim() !== '')?.trim();
+    return text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '');
+}
+
+/** The most code points of a line git printed that a message carries. */
+const SAID_MAX = 160;
+
+/**
+ * A line git printed, as a message may carry it: cut at `SAID_MAX` code
+ * points, quoted, and every control, format and line-separator character
+ * written out as an escape — what git says can name a file, and a file's
+ * name is the stall's neighbour's to choose.
+ */
+function quoted(line) {
+    const points = [...line];
+    const cut = points.length > SAID_MAX ? `${points.slice(0, SAID_MAX).join('')}…` : line;
+    return JSON.stringify(cut).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (char) => `\\u{${char.codePointAt(0).toString(16)}}`);
 }
 
 /**
  * A git runner in `dir`: replace objects off, location variables dropped,
  * bytes out. A failure throws `unreadable(who, …)`: the subcommand and its
  * options (never the `-C` directory), the exit status, and — on a side that
- * is not quiet — git's first line on stderr. `warned`, where a listing's
- * warning means files it never listed, turns any stderr of a run that
- * succeeded into a failure too (`warned(said)` its sentence, `said` git's
- * line where the side is not quiet).
+ * is not quiet — git's first line on stderr, quoted. `config` is `-c`
+ * settings for one call, never named in a message. `warned`, where a
+ * listing's warning means files it never listed, turns any stderr of a run
+ * that succeeded into a failure too (`warned(lines)` its sentence, `lines`
+ * every line git wrote — the sentence prints one only where its side is not
+ * quiet).
  */
 function gitIn(dir, who, { git = 'git', env = process.env } = {}) {
     const clean = cleanEnv(env);
-    return (args, input, { warned } = {}) => {
-        const out = spawnSync(git, ['--no-replace-objects', '-C', dir, ...args], {
+    return (args, input, { warned, config = [] } = {}) => {
+        const out = spawnSync(git, ['--no-replace-objects', ...config.flatMap((setting) => ['-c', setting]), '-C', dir, ...args], {
             env: clean,
             input,
             maxBuffer: 1024 * 1024 * 1024,
@@ -214,11 +289,12 @@ function gitIn(dir, who, { git = 'git', env = process.env } = {}) {
         });
         if (out.error !== undefined || out.status !== 0) {
             const status = out.error !== undefined ? ` (${out.error.code ?? 'an error'})` : out.status === null ? ` (${out.signal})` : ` (exit ${out.status})`;
-            const said = who.quiet ? undefined : gitSaid(out.stderr);
-            throw unreadable(who, `git ${args.join(' ')} failed${status}${said === undefined ? '' : `: ${said}`}`);
+            const said = who.quiet ? undefined : gitLines(out.stderr)[0];
+            throw unreadable(who, `git ${args.join(' ')} failed${status}${said === undefined ? '' : `: ${quoted(said)}`}`);
         }
-        if (warned !== undefined && gitSaid(out.stderr) !== undefined) {
-            throw unreadable(who, warned(who.quiet ? undefined : gitSaid(out.stderr)), { mend: false });
+        const lines = gitLines(out.stderr);
+        if (warned !== undefined && lines.length > 0) {
+            throw unreadable(who, warned(lines), { mend: false });
         }
         return out.stdout;
     };
@@ -253,12 +329,13 @@ function worktreesOf(run, side) {
             continue;
         }
         if (fields.some((field) => field === 'prunable' || field.startsWith('prunable '))) {
-            if (side === 'private' && existsSync(path)) {
+            if (side === 'private' && standsAt(path, PRIVATE_WORKTREE, 'git lists it as prunable and its directory could not be examined', { mend: STAT_MEND })) {
                 throw unreadable(PRIVATE_WORKTREE, 'git lists it as prunable while its directory still stands, so its files cannot be read through git', { mend: PRUNABLE_MEND });
             }
             continue;
         }
-        if (existsSync(path)) {
+        const who = side === 'private' ? PRIVATE_WORKTREE : publicWorktree(path);
+        if (standsAt(path, who, 'its directory could not be examined', { mend: side === 'private' ? STAT_MEND : 'make its path readable' })) {
             trees.push(path);
         }
     }
@@ -361,9 +438,27 @@ const underGit = (path) => path.split('/').includes('.git');
 const UNTRACKED = 'git ls-files --others --exclude-standard';
 const IGNORED = 'git ls-files --others --ignored --exclude-standard';
 
-/** What a listing that warned says: git could not open a directory, so the files in it were never listed. */
-const listingWarned = (listing, who) => (said) =>
-    `\`${listing}\` warned that it could not read part of the tree, so the files there were never listed${said === undefined ? ` — run it ${who.find} to see which, and make it readable` : `: ${said}`}`;
+/** The line git writes for a directory it could not open: the files in it were never listed. */
+const COULD_NOT_OPEN = /\bcould not open directory\b/;
+
+/**
+ * What a listing that wrote to stderr says (any stderr: a line this guard
+ * does not know may be a listing it could not finish). Of `lines`, every
+ * line git wrote, one it does not know decides the sentence: where all are
+ * the directory ones, git could not open a directory and the files in it
+ * were never listed; otherwise only that something unknown was written,
+ * and what a listing then holds may be incomplete. A side that is not
+ * quiet carries the line, quoted; the private side carries none, and says
+ * where its owner runs the listing to read it.
+ */
+const listingWarned = (listing, who) => (lines) => {
+    const unknown = lines.find((line) => !COULD_NOT_OPEN.test(line));
+    const shown = who.quiet ? '' : `: ${quoted(unknown ?? lines[0])}`;
+    if (unknown === undefined) {
+        return `\`${listing}\` warned that it could not read part of the tree, so the files there were never listed${who.quiet ? ` — run it ${who.find} to see which, and make it readable` : shown}`;
+    }
+    return `\`${listing}\` wrote to stderr a line this guard does not know, so what it listed may be incomplete${who.quiet ? ` — run it ${who.find} to read what it says` : shown}`;
+};
 
 /**
  * What one worktree at `dir` holds outside its commits: `{ entries,
@@ -405,14 +500,14 @@ function checkoutBlobs(run, dir, label, who, { ignored = false } = {}) {
             entries.push({ path: m[3], id: blob.id, where: `working tree${at}`, svg: blob.svg });
         }
     }
-    for (const path of list(['ls-files', '-z', '--others', '--exclude-standard'], { warned: listingWarned(UNTRACKED, who) })) {
+    for (const path of list(['ls-files', '-z', '--others', '--exclude-standard'], { warned: listingWarned(UNTRACKED, who), config: FULL_SCAN })) {
         // A repository embedded in the tree lists as `dir/`: not a file, and the look-art guard's to refuse.
         if (!path.endsWith('/') && !underGit(path)) {
             fromDisk(path, 'untracked', UNTRACKED);
         }
     }
     if (ignored) {
-        for (const path of list(['ls-files', '-z', '--others', '--ignored', '--exclude-standard'], { warned: listingWarned(IGNORED, who) })) {
+        for (const path of list(['ls-files', '-z', '--others', '--ignored', '--exclude-standard'], { warned: listingWarned(IGNORED, who), config: FULL_SCAN })) {
             if (!path.endsWith('/') && !underGit(path)) {
                 fromDisk(path, 'ignored', IGNORED);
             }
@@ -509,16 +604,18 @@ function blobsAmong(run, objects) {
 }
 
 /**
- * The private repository whose root is `dir`, as ids: `{ ids, historyOnly,
+ * The private repository whose root is `dir`, as ids: `{ ids, reflogOnly,
  * counted }` — `ids` every blob it holds (the tree of `commit`, else HEAD's;
- * every worktree's index; every worktree's tracked, untracked and ignored
- * files) and the sanitizer's id of each SVG among them, `historyOnly` the
- * blobs (and their SVG forms) only its history reaches — another ref, an
- * older commit, a reflog entry, a stash. Throws when git cannot run, `dir`
- * is not a repository's own root, a prunable linked worktree's directory
- * still stands, or a listing is one this reader does not know: never an
- * empty set for a failure, and never a message naming a path, an entry or
- * git's own words (`SELECTED`, `PRIVATE_WORKTREE`).
+ * every blob any ref reaches, which is every branch, tag and older commit on
+ * one; every worktree's index; every worktree's tracked, untracked and
+ * ignored files) and the sanitizer's id of each SVG among them,
+ * `reflogOnly` the blobs (and their SVG forms) only a reflog entry reaches —
+ * a draft amended or reset away, a stash entry past the newest. Throws when
+ * git cannot run, `dir` is not a repository's own root, a prunable linked
+ * worktree's directory still stands or cannot be examined, or a listing is
+ * one this reader does not know: never an empty set for a failure, and never
+ * a message naming a path, an entry or git's own words (`SELECTED`,
+ * `PRIVATE_WORKTREE`).
  */
 export function privateBlobIds({ dir, commit, git, env = process.env }) {
     const run = gitIn(dir, SELECTED, { git, env });
@@ -539,12 +636,13 @@ export function privateBlobIds({ dir, commit, git, env = process.env }) {
     if (!/^[0-9a-f]{40}$/.test(selected)) {
         throw new Error(`${CONTENT_GUARD}: the selected private repository names a commit this reader does not know`);
     }
-    // Its commit, its tree and every blob in it; every worktree's index; every ref and reflog entry.
+    // Its commit, its tree and every blob in it; every worktree's index; what any ref reaches; and what a reflog entry reaches besides.
     const atSelected = objectsOf(run, ['--no-walk', selected]);
     const indexed = objectsOf(run, ['--indexed-objects']);
-    const history = objectsOf(run, ['--all', '--reflog']);
+    const onRefs = objectsOf(run, ['--all']);
+    const reflogs = objectsOf(run, ['--all', '--reflog']);
     const indexIds = new Set(checkouts.indexIds);
-    const blobs = blobsAmong(run, new Set([...history, ...atSelected, ...indexed, ...indexIds]));
+    const blobs = blobsAmong(run, new Set([...reflogs, ...atSelected, ...indexed, ...indexIds]));
     const ids = new Set();
     const add = (set, id, svg) => {
         set.add(id);
@@ -553,23 +651,23 @@ export function privateBlobIds({ dir, commit, git, env = process.env }) {
         }
     };
     for (const [id, svg] of blobs) {
-        if (atSelected.has(id) || indexed.has(id) || indexIds.has(id)) {
+        if (atSelected.has(id) || onRefs.has(id) || indexed.has(id) || indexIds.has(id)) {
             add(ids, id, svg);
         }
     }
     for (const entry of checkouts.entries) {
         add(ids, entry.id, entry.svg ?? blobs.get(entry.id));
     }
-    const historyOnly = new Set();
+    const reflogOnly = new Set();
     for (const [id, svg] of blobs) {
         if (!ids.has(id)) {
-            historyOnly.add(id);
+            reflogOnly.add(id);
         }
         if (svg !== undefined && !ids.has(svg)) {
-            historyOnly.add(svg);
+            reflogOnly.add(svg);
         }
     }
-    return { ids, historyOnly, counted: { blobs: blobs.size, entries: checkouts.entries.length } };
+    return { ids, reflogOnly, counted: { blobs: blobs.size, entries: checkouts.entries.length } };
 }
 
 /**
@@ -603,25 +701,24 @@ export function publicBlobs({ root, git, env = process.env, worktrees = 'every' 
  * What a match says, whichever way the copy went (the re-review's R2, and
  * the fences-followup critic's item 2): the guard cannot tell a private file
  * copied here from a public file copied into the private repository, so it
- * names both, and the way out of each — true for a copy only staged or
- * written there and for one already committed, since a copy the private
- * repository then keeps only in its history is spared once `origin/main`
- * holds the public file.
+ * names both, and the way out of each. For the second, making the private
+ * file differ is not enough once the copy is committed on a branch or a tag:
+ * its history keeps it, and only a rewrite that leaves it to a reflog entry
+ * alone clears it — and then only when `origin/main` holds the public file.
  */
 export const COPY_BOTH_WAYS =
-    "its bytes equal a file of the selected private repository: either a private file was copied here (take it out of this repository), or the private repository holds a byte copy of this public file (make the private file differ: a copy then left only in the private repository's history is spared once origin/main holds this public file)";
+    "its bytes equal a file of the selected private repository: either a private file was copied here (take it out of this repository), or the private repository holds a byte copy of this public file (make the private file differ, and if the copy is committed there on a branch or a tag, rewrite that history so only a reflog entry reaches it: it is then spared once origin/main holds this public file)";
 
 /**
  * The problems: a shallow clone or no `origin/main` (the unpushed history
  * cannot all be read), and every public entry whose id is a private blob's
- * — less the exempt ids, the empty blob, and a blob only the private
- * history reaches whose copy `origin/main` already holds (`published`,
- * asked only for such a match) — named by its tracked path and where it
- * stands, never by the private file.
+ * — less the exempt ids, the empty blob, and a reflog-only private blob
+ * `origin/main` already holds (`published`, asked only for such a match) —
+ * named by its tracked path and where it stands, never by the private file.
  */
-export function privateContentProblems({ entries, shallow, upstream, published, privateIds, historyOnly, exempt }) {
-    if (!(privateIds instanceof Set) || !(historyOnly instanceof Set) || !(exempt instanceof Set) || typeof published !== 'function') {
-        throw new TypeError(`${CONTENT_GUARD}: the private ids, the history-only ids, the exempt ids and the published reader were not all read`);
+export function privateContentProblems({ entries, shallow, upstream, published, privateIds, reflogOnly, exempt }) {
+    if (!(privateIds instanceof Set) || !(reflogOnly instanceof Set) || !(exempt instanceof Set) || typeof published !== 'function') {
+        throw new TypeError(`${CONTENT_GUARD}: the private ids, the reflog-only ids, the exempt ids and the published reader were not all read`);
     }
     const problems = [];
     if (shallow) {
@@ -634,7 +731,7 @@ export function privateContentProblems({ entries, shallow, upstream, published, 
         if (id === EMPTY_BLOB || exempt.has(id)) {
             continue;
         }
-        if (!privateIds.has(id) && !(historyOnly.has(id) && !published(id))) {
+        if (!privateIds.has(id) && !(reflogOnly.has(id) && !published(id))) {
             continue;
         }
         const problem = `${JSON.stringify(path)} (${where}): ${COPY_BOTH_WAYS}`;
@@ -678,8 +775,20 @@ export function contentGuard({ root, env = process.env, gitEnv = process.env, gi
     const priv = privateBlobIds({ dir: tree.dir, commit: selection.commit, git, env: gitEnv });
     const pub = publicBlobs({ root, git, env: gitEnv, ...(worktrees === undefined ? {} : { worktrees }) });
     const exemptIds = exempt ?? canaryBlobIds();
-    const problems = privateContentProblems({ ...pub, privateIds: priv.ids, historyOnly: priv.historyOnly, exempt: exemptIds });
-    const matched = pub.entries.filter((entry) => priv.ids.has(entry.id) || priv.historyOnly.has(entry.id));
-    const spared = matched.filter((entry) => entry.id === EMPTY_BLOB || exemptIds.has(entry.id) || (!priv.ids.has(entry.id) && pub.published(entry.id))).length;
-    return { selected: true, problems, compared: { public: pub.entries.length, private: priv.ids.size + priv.historyOnly.size, spared } };
+    const problems = privateContentProblems({ ...pub, privateIds: priv.ids, reflogOnly: priv.reflogOnly, exempt: exemptIds });
+    const matched = pub.entries.filter((entry) => priv.ids.has(entry.id) || priv.reflogOnly.has(entry.id));
+    const exempted = (entry) => entry.id === EMPTY_BLOB || exemptIds.has(entry.id);
+    const spared = matched.filter(exempted).length;
+    // Of the rest, the matches only a private reflog entry reaches, whose public file origin/main holds: a spare of its own, named by public path.
+    const reflogSpared = matched.filter((entry) => !exempted(entry) && !priv.ids.has(entry.id) && pub.published(entry.id));
+    return {
+        selected: true,
+        problems,
+        compared: {
+            public: pub.entries.length,
+            private: priv.ids.size + priv.reflogOnly.size,
+            spared,
+            reflogSpared: { entries: reflogSpared.length, paths: [...new Set(reflogSpared.map((entry) => entry.path))].sort() },
+        },
+    };
 }

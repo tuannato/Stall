@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -35,9 +35,10 @@ import { sanitizeSvg } from './svg-allow.mjs';
  * private repository holds: on a ref, in a reflog entry or a stash, in its
  * index or working trees, or as the re-serialisation the build emits for
  * one of its SVGs (`scripts/private-content.mjs`). The canary's blobs
- * (public bytes, from the recipe), the empty blob, and a blob only the
- * private history reaches whose copy `origin/main` already holds are no
- * evidence (the fences-followup critic's item 2). A match names the tracked
+ * (public bytes, from the recipe), the empty blob, and a blob only a
+ * private reflog entry reaches whose copy `origin/main` already holds are
+ * no evidence — never one a branch or a tag still reaches (the
+ * fences-followup re-review's item 1). A match names the tracked
  * path, never the private one, and says both ways the copy may have gone
  * and the way out of each (the step critic's re-review, R2). The private
  * side reads its ignored files too (R4); a worktree git lists as
@@ -47,16 +48,18 @@ import { sanitizeSvg } from './svg-allow.mjs';
  * directory stands fails, and its index is read (the fences-followup
  * critic's P2); no failure on the private side prints a private path, an
  * entry or git's own words (R3); a file that cannot be read fails, its
- * `lstat` included, a listing git warns about fails, and a file of any size
- * is hashed (that critic's items 3 and 4); and a detached worktree's
- * commits are walked (its item 5).
+ * `lstat` included, a listing that writes anything to stderr fails (run
+ * with no fsmonitor, no untracked cache and no `GIT_TRACE*`), and a file of
+ * any size is hashed (that critic's items 3 and 4); a detached worktree's
+ * commits are walked (its item 5); and a worktree whose path cannot be
+ * examined fails rather than reading as gone (the re-review's item 3).
  *
  * Without a selection the first case says so on stderr and passes; under
  * `STALL_LOOKS_REQUIRED` with none it fails, as the guards over sheets do.
  * The red proofs plant a private repository and a public one, both outside
  * this checkout; the twins that stay green are the canary from public bytes
  * over this checkout (three of its files are tracked ones, byte for byte),
- * the empty blob, and a history-only private copy of a public file
+ * the empty blob, and a reflog-only private copy of a public file
  * `origin/main` holds (the owner's canary clone's case). Whole-file copies
  * only: a fragment or a redrawn picture is the words rule's and the
  * reviews'. With no selection, no case here reads a worktree of this
@@ -135,6 +138,31 @@ function strangeGit() {
     return path;
 }
 
+/**
+ * A git that writes `said` to stderr on every `--others` listing and is git
+ * for every other command (and for the listing itself): the stderr rule's
+ * subject, with a line of the plant's choosing.
+ */
+function chattyGit(said) {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-chatty-')));
+    scratch.push(dir);
+    writeFileSync(join(dir, 'said'), said);
+    const path = join(dir, 'git-standin');
+    writeFileSync(path, `#!/bin/sh\nfor arg in "$@"; do\n  if [ "$arg" = "--others" ]; then cat "$(dirname "$0")/said" >&2; fi\ndone\nexec git "$@"\n`, { mode: 0o755 });
+    return path;
+}
+
+/** A git that appends its arguments to a log, one call a line, and is git for the rest. */
+function loggingGit() {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-logging-')));
+    scratch.push(dir);
+    const log = join(dir, 'calls');
+    writeFileSync(log, '');
+    const path = join(dir, 'git-standin');
+    writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' "$*" >> "$(dirname "$0")/calls"\nexec git "$@"\n`, { mode: 0o755 });
+    return { path, calls: () => readFileSync(log, 'utf8').split('\n').filter((line) => line !== '') };
+}
+
 /** A failure's message, which must match `pattern` and name none of `hidden`: the private repository's directories and what it holds. */
 function assertSaysNothingPrivate(fn, hidden, pattern) {
     assert.throws(fn, (error) => {
@@ -168,8 +196,11 @@ describe('no-tracked-file-is-a-private-look-file', () => {
             process.stderr.write(`${CONTENT_GUARD}: the selection is the tracked fixture, this checkout's own files: nothing private to compare\n`);
             return;
         }
+        // The canary's blobs and the empty blob are one spare; a copy only a private reflog entry reaches, of a file origin/main holds, is another, named by its public path.
+        const { spared, reflogSpared } = result.compared;
+        const shown = reflogSpared.paths.slice(0, 6).join(', ') + (reflogSpared.paths.length > 6 ? `, and ${reflogSpared.paths.length - 6} more` : '');
         process.stderr.write(
-            `${CONTENT_GUARD}: compared ${result.compared.public} blobs of this checkout with ${result.compared.private} of the selection's (${result.compared.spared} the canary's or empty, exempt)\n`,
+            `${CONTENT_GUARD}: compared ${result.compared.public} blobs of this checkout with ${result.compared.private} of the selection's (${spared} the canary's or empty, exempt; ${reflogSpared.entries} only a private reflog entry reaches, of files origin/main holds, exempt${reflogSpared.entries === 0 ? '' : `: ${shown}`})\n`,
         );
         assert.deepEqual(result.problems, []);
     });
@@ -366,7 +397,7 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         assertCaught(result, 'notes/stashed.svg', 'untracked');
     });
 
-    it('(l) spares a history-only private copy of a file origin/main holds, and nothing else', () => {
+    it('(l) spares a reflog-only private copy of a file origin/main holds, and nothing else', () => {
         const published = 'public words\n';
         const pending = 'public words not yet pushed\n';
         // The canary clone's case: public files copied into private drafts that were reset away.
@@ -389,7 +420,7 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         assertCaught(before, 'notes/pending.txt', 'unpushed');
         pub.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
         assert.deepEqual(guard(pub, reset).problems, [], 'once origin/main holds it, a reflog-only copy is no evidence (which came first is not something this guard can tell)');
-        // The selected commit, not only the history, holding a copy of a published file: no exemption.
+        // A ref, not only a reflog entry, holding a copy of a published file: no exemption.
         const kept = privateRepo();
         writeFileSync(join(kept.dir, 'fixture', 'copied.txt'), published);
         kept.git('add', '-A');
@@ -397,14 +428,14 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         assertCaught(guard(pub, kept), 'docs/readme.txt', 'index');
     });
 
-    it('asks origin/main only for a history-only match, so a run with none never lists its history', () => {
+    it('asks origin/main only for a reflog-only match, so a run with none never lists its history', () => {
         const never = () => {
             throw new Error('origin/main asked');
         };
         const base = { shallow: false, upstream: 'u', exempt: new Set(), published: never };
-        assert.deepEqual(privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(), historyOnly: new Set() }), []);
-        assert.equal(privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(['x']), historyOnly: new Set() }).length, 1);
-        assert.throws(() => privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(), historyOnly: new Set(['x']) }), /origin\/main asked/);
+        assert.deepEqual(privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(), reflogOnly: new Set() }), []);
+        assert.equal(privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(['x']), reflogOnly: new Set() }).length, 1);
+        assert.throws(() => privateContentProblems({ ...base, entries: [{ path: 'a', id: 'x', where: 'index' }], privateIds: new Set(), reflogOnly: new Set(['x']) }), /origin\/main asked/);
     });
 
     it('(f) catches the sanitizer’s re-serialisation of a private SVG, the form a build emits', () => {
@@ -452,6 +483,48 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         assert.ok(contentGuard({ root: ROOT, env, gitEnv: canary.env, worktrees: 'own', exempt: new Set() }).problems.length >= 3);
     });
 
+    /*
+     * The re-review's item 2: the listing rule fails on any stderr, so the
+     * environment that writes harmless stderr is scrubbed — a trace
+     * variable in the parent's environment, and an fsmonitor hook, which
+     * can only make git look at less.
+     */
+    it('stays green when the parent environment traces git, on the canary twin too', () => {
+        const canary = plantCanary();
+        const traced = { ...canary.env, GIT_TRACE: '1', GIT_TRACE2: '1', GIT_TRACE_PERFORMANCE: '1', GIT_TRACE_SETUP: '1' };
+        const said = spawnSync('git', ['-C', ROOT, 'ls-files', '-z', '--others', '--exclude-standard'], { env: traced, encoding: 'utf8' });
+        assert.ok(said.stderr.trim() !== '', 'the plant: the trace variables make git write to stderr');
+        const result = contentGuard({ root: ROOT, env: { ...canary.selection }, gitEnv: traced, worktrees: 'own' });
+        assert.deepEqual(result.problems, []);
+        // Each side's own read of the listings, with the trace variables in the environment it was handed.
+        assert.doesNotThrow(() => publicBlobs({ root: ROOT, env: traced, worktrees: 'own' }));
+        assert.doesNotThrow(() => privateBlobIds({ dir: canary.dir, env: traced }));
+    });
+
+    it('runs a listing with fsmonitor and the untracked cache off, so a hook that talks cannot fail it', (t) => {
+        if (process.platform === 'win32') {
+            t.skip('a shell hook');
+            return;
+        }
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const hook = join(realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-hook-'))), 'fsmonitor-hook');
+        scratch.push(dirname(hook));
+        writeFileSync(hook, '#!/bin/sh\necho "fatal: a planted hook" >&2\nexit 0\n', { mode: 0o755 });
+        pub.write('loose.txt', 'loose\n');
+        for (const repo of [pub, priv]) {
+            repo.git('config', 'core.fsmonitor', hook);
+            repo.git('config', 'core.untrackedCache', 'true');
+        }
+        const heard = spawnSync('git', ['-C', pub.dir, 'ls-files', '-z', '--others', '--exclude-standard'], { env: pub.env, encoding: 'utf8' });
+        assert.match(heard.stderr, /fatal: a planted hook/, 'the plant: the hook speaks through git');
+        assert.equal(heard.status, 0, 'the plant: and git exits 0');
+        assert.deepEqual(guard(pub, priv).problems, []);
+        // And the guard still reads what the hook would hide: the listing is a full scan.
+        pub.write('copied/mark.svg', SECRET);
+        assertCaught(guard(pub, priv), 'copied/mark.svg', 'untracked');
+    });
+
     it('treats the empty blob as no evidence, on either side', () => {
         const priv = plantLooks(undefined, { 'fixture/art/empty.svg': '' });
         const pub = publicRepo();
@@ -477,7 +550,7 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         writeFileSync(join(priv.dir, 'fixture', 'template.txt'), 'a public file\n');
         assert.deepEqual(guard(pub, priv).problems, [`"a.txt" (index): ${COPY_BOTH_WAYS}`]);
         assert.match(COPY_BOTH_WAYS, /a private file was copied here \(take it out of this repository\)/);
-        assert.match(COPY_BOTH_WAYS, /the private repository holds a byte copy of this public file \(make the private file differ: a copy then left only in the private repository's history is spared once origin\/main holds this public file\)/);
+        assert.match(COPY_BOTH_WAYS, /the private repository holds a byte copy of this public file \(make the private file differ, and if the copy is committed there on a branch or a tag, rewrite that history so only a reflog entry reaches it: it is then spared once origin\/main holds this public file\)/);
         assert.doesNotMatch(COPY_BOTH_WAYS, /its bytes are a private look's file/, 'the sentence no longer calls a public file a private one');
     });
 
@@ -701,35 +774,53 @@ describe('no-tracked-file-is-a-private-look-file', () => {
     });
 
     /*
-     * The critic's item 2: a copy of a public file committed in the private
-     * repository stays in its history whatever follows, so the reflog's
-     * history-only rule is the history's: spared once origin/main holds the
-     * public file, never while the selected commit or a worktree holds it.
+     * The re-review's item 1, the window's decision (option (a)): only the
+     * reflog is spared. A copy a branch still reaches is held, whatever the
+     * private file became since — otherwise a private draft that reached
+     * origin/main by a road this guard did not see turns green the moment
+     * the private file changes. The way out COPY_BOTH_WAYS names is a
+     * rewrite that leaves the copy to the reflog. Red on 52b79a5, which
+     * spared anything only the history reached.
      */
-    it('spares a committed copy of a public file once the private file differs and origin/main holds the public one, and nothing else', () => {
+    it('keeps a copy a private branch holds red, however the private file changed, and spares it once a rewrite leaves it to the reflog', () => {
         const pub = publicRepo();
         const template = 'a public template\n';
         pub.write('layout/template.css', template);
         pub.git('add', 'layout/template.css');
         pub.git('commit', '-q', '-m', 'template');
-        // Not yet on origin/main: a port starts from it, commits the copy, then edits it.
+        // A port starts from it: the copy committed, then edited.
         const priv = privateRepo();
+        const before = priv.head();
         writeFileSync(join(priv.dir, 'fixture', 'started.css'), template);
         priv.git('add', '-A');
         priv.git('commit', '-q', '-m', 'start from the public template');
         const copied = priv.head();
-        assertCaught(guard(pub, priv), 'layout/template.css', 'index');
         writeFileSync(join(priv.dir, 'fixture', 'started.css'), '.t-planted-look .stall-name { letter-spacing: 0.06em; }\n');
         priv.git('commit', '-q', '-am', 'made its own');
-        assert.ok(priv.git('rev-list', '--objects', '--all').includes(blobId(Buffer.from(template))), 'the plant: the history still holds the copy');
+        assert.ok(priv.git('rev-list', '--objects', '--all').includes(blobId(Buffer.from(template))), 'the plant: a branch still reaches the copy');
         assertCaught(guard(pub, priv), 'layout/template.css', 'index');
-        // Once origin/main holds the public file, a copy only the private history reaches is no evidence.
+        // Once origin/main holds the public file: still red, a branch reaches the copy.
         pub.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-        assert.deepEqual(guard(pub, priv).problems, []);
+        const held = guard(pub, priv);
+        assertCaught(held, 'layout/template.css', 'index');
+        assert.ok(held.problems[0].endsWith(COPY_BOTH_WAYS), 'and it says the way out');
+        assert.deepEqual(held.compared.reflogSpared, { entries: 0, paths: [] });
+        // The rewrite the sentence names: the copy leaves every branch, and only the reflog reaches it.
+        priv.git('reset', '-q', '--hard', before);
+        assert.ok(!priv.git('rev-list', '--objects', '--all').includes(blobId(Buffer.from(template))), 'the plant: no ref reaches it now');
+        const rewritten = guard(pub, priv);
+        assert.deepEqual(rewritten.problems, []);
+        assert.equal(rewritten.compared.spared, 0, 'and it is not counted as the canary’s or empty');
+        assert.deepEqual(rewritten.compared.reflogSpared, { entries: 1, paths: ['layout/template.css'] }, 'it is counted by its public path, apart');
         // A selection that names the commit holding it: the selected commit holds it, and it fails.
         const atCopied = { ...priv.selection, [SELECTION_ENV.commit]: copied };
         assertCaught(contentGuard({ root: pub.dir, env: atCopied, gitEnv: pub.env }), 'layout/template.css', 'index');
-        // New bytes only the history reaches still fail: a private draft never published.
+    });
+
+    it('keeps a private draft red when it reached origin/main by a road this guard did not see, once the private file is gone', () => {
+        const pub = publicRepo();
+        const priv = privateRepo();
+        // The re-review's plant: a private draft committed and removed, copied out and committed, origin/main moved to hold it.
         const draft = '.t-planted-look .stall-tagline { letter-spacing: 0.01em; }\n';
         writeFileSync(join(priv.dir, 'fixture', 'draft.css'), draft);
         priv.git('add', '-A');
@@ -737,7 +828,19 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         priv.git('rm', '-q', 'fixture/draft.css');
         priv.git('commit', '-q', '-m', 'the draft gone');
         pub.write('notes/draft.css', draft);
-        assertCaught(guard(pub, priv), 'notes/draft.css', 'untracked');
+        pub.git('add', 'notes/draft.css');
+        pub.git('commit', '-q', '-m', 'leak');
+        assertCaught(guard(pub, priv), 'notes/draft.css', 'index');
+        pub.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+        assertCaught(guard(pub, priv), 'notes/draft.css', 'index');
+        // New bytes only a reflog entry reaches are caught while they are not published.
+        const amended = '.t-planted-look .stall-sub { letter-spacing: 0.02em; }\n';
+        writeFileSync(join(priv.dir, 'fixture', 'amended.css'), amended);
+        priv.git('add', '-A');
+        priv.git('commit', '-q', '-m', 'another draft');
+        priv.git('reset', '-q', '--hard', 'HEAD~1');
+        pub.write('notes/amended.css', amended);
+        assertCaught(guard(pub, priv), 'notes/amended.css', 'untracked');
     });
 
     /* The critic's item 3: a file under a directory set to mode 000 failed its lstat and read as no file; and git, warned, lists nothing under such a directory. */
@@ -783,5 +886,99 @@ describe('no-tracked-file-is-a-private-look-file', () => {
         } finally {
             chmodSync(drafts, 0o755);
         }
+        // The same on the public side, which carries git's own line, quoted.
+        rmSync(drafts, { recursive: true, force: true });
+        pub.write('loose/draft.txt', 'public draft\n');
+        chmodSync(join(pub.dir, 'loose'), 0o000);
+        try {
+            assert.throws(
+                () => guard(pub, priv),
+                /^Error: no-tracked-file-is-a-private-look-file: this checkout could not be read: `git ls-files --others --exclude-standard` warned that it could not read part of the tree, so the files there were never listed: ".*could not open directory.*"$/,
+            );
+        } finally {
+            chmodSync(join(pub.dir, 'loose'), 0o755);
+        }
+    });
+
+    /* The re-review's item 2: any other line is worded as what it is — a line this guard does not know — and carries git's own, quoted and cut, on the public side only. */
+    it('words a listing that wrote an unknown line by that line on the public side, escaped and cut, and by no line on the private side', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const planted = 'warning: a planted line';
+        const git = chattyGit(planted);
+        assert.throws(
+            () => publicBlobs({ root: pub.dir, git, env: pub.env }),
+            (error) => {
+                assert.equal(
+                    error.message,
+                    `${CONTENT_GUARD}: this checkout could not be read: \`git ls-files --others --exclude-standard\` wrote to stderr a line this guard does not know, so what it listed may be incomplete: ${JSON.stringify(planted)}`,
+                );
+                return true;
+            },
+        );
+        assertSaysNothingPrivate(
+            () => privateBlobIds({ dir: priv.dir, git, env: priv.env }),
+            [priv.dir, planted, 'a planted line'],
+            /^no-tracked-file-is-a-private-look-file: the selected private repository could not be read: `git ls-files --others --exclude-standard` wrote to stderr a line this guard does not know, so what it listed may be incomplete — run it in its main worktree to read what it says$/,
+        );
+        // Escaped and cut: a long line with a terminal escape and a bidi override in it.
+        const hostile = `warning: \u001b[31m\u202e ${'x'.repeat(400)}`;
+        assert.throws(
+            () => publicBlobs({ root: pub.dir, git: chattyGit(hostile), env: pub.env }),
+            (error) => {
+                assert.ok(!/[\p{Cc}\p{Cf}]/u.test(error.message), `a raw control or format character: ${JSON.stringify(error.message)}`);
+                assert.ok(error.message.includes('…"'), 'cut');
+                assert.ok(error.message.length < 400, `capped: ${error.message.length}`);
+                return true;
+            },
+        );
+        // One known line among unknown ones does not make the rest known; a directory line alone keeps its sentence.
+        assert.throws(() => publicBlobs({ root: pub.dir, git: chattyGit("warning: could not open directory 'x/': Permission denied\nfatal: other\n"), env: pub.env }), /wrote to stderr a line this guard does not know.*"fatal: other"$/);
+        assert.throws(() => publicBlobs({ root: pub.dir, git: chattyGit("warning: could not open directory 'x/': Permission denied\n"), env: pub.env }), /warned that it could not read part of the tree, so the files there were never listed: "warning: could not open directory 'x\/': Permission denied"$/);
+    });
+
+    it('runs both listings of files outside the index with fsmonitor and the untracked cache off, and no other call under that configuration', () => {
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const { path, calls } = loggingGit();
+        privateBlobIds({ dir: priv.dir, git: path, env: priv.env });
+        publicBlobs({ root: pub.dir, git: path, env: pub.env, worktrees: 'own' });
+        const listings = calls().filter((call) => call.includes('--others'));
+        assert.equal(listings.length, 3, 'untracked and ignored on the private side, untracked on the public');
+        for (const call of listings) {
+            assert.match(call, /-c core\.fsmonitor=false -c core\.untrackedCache=false /, call);
+        }
+        assert.ok(calls().filter((call) => !call.includes('--others')).every((call) => !call.includes('core.fsmonitor')), 'the rest of the reads run as configured');
+    });
+
+    /* The re-review's item 3: `existsSync` answers false for a path it may not search, which read an unreadable worktree as a gone one. */
+    it('fails on a private worktree whose path git and node cannot examine, instead of reading it as gone', (t) => {
+        if (process.getuid?.() === 0) {
+            t.skip('root searches a mode-000 directory, so the plant denies nothing');
+            return;
+        }
+        const priv = privateRepo();
+        const pub = publicRepo();
+        const base = realpathSync(mkdtempSync(join(tmpdir(), 'stall-content-shut-')));
+        scratch.push(base);
+        const shut = join(base, 'secret-look-shut');
+        mkdirSync(shut);
+        const tree = join(shut, 'secret-look-wt');
+        priv.git('worktree', 'add', '-q', '-b', 'shut', tree);
+        const draft = SECRET.replace('M0 0h4', 'M4 0h4');
+        writeFileSync(join(tree, 'fixture', 'draft.svg'), draft);
+        pub.write('notes/draft.svg', draft);
+        assertCaught(guard(pub, priv), 'notes/draft.svg', 'untracked');
+        chmodSync(shut, 0o000);
+        try {
+            assertSaysNothingPrivate(
+                () => guard(pub, priv),
+                [priv.dir, base, 'secret-look-shut', 'secret-look-wt', 'secret-mark'],
+                /^no-tracked-file-is-a-private-look-file: a linked worktree of the selected private repository could not be read: (git lists it as prunable and )?its directory could not be examined \(EACCES\) — run `git worktree list` in that repository to find it, and make its path readable$/,
+            );
+        } finally {
+            chmodSync(shut, 0o755);
+        }
+        assertCaught(guard(pub, priv), 'notes/draft.svg', 'untracked');
     });
 });
