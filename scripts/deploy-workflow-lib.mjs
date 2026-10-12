@@ -136,7 +136,17 @@ export const PUBLIC_CHECK_TESTS = Object.freeze({
     ]),
 });
 
-export const PUBLIC_CHECKS_RUN = `node --experimental-strip-types --test ${Object.keys(PUBLIC_CHECK_TESTS).join(' ')}`;
+/**
+ * The reporter `public-checks` runs them through: the `test` script's own
+ * (`scripts/node-test-reporter.mjs`, Node built-ins only, so it loads with
+ * nothing installed). Node alone counts a `describe` body or a describe's
+ * `after()` that throws as no failure and exits 0, and this is the job that
+ * must stop before the read token is used; the reporter exits 1 for it (the
+ * describe-guard critic's P3-3).
+ */
+export const PUBLIC_CHECKS_REPORTER = './scripts/node-test-reporter.mjs';
+
+export const PUBLIC_CHECKS_RUN = `node --experimental-strip-types --test --test-reporter=${PUBLIC_CHECKS_REPORTER} ${Object.keys(PUBLIC_CHECK_TESTS).join(' ')}`;
 
 /** The build job's first step after the download, before anything is installed. */
 export const UNWRAP_RUN = 'node scripts/looks-artifact.mjs unwrap "$RUNNER_TEMP/looks-artifact" looks';
