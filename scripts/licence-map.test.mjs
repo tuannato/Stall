@@ -376,7 +376,7 @@ function plantRepo({ gitignore, config = {} } = {}) {
             return new Set();
         }
     };
-    return { dir, git, plant, nested, ignored, facts: () => readGitFacts(dir, 'git', env) };
+    return { dir, env, git, plant, nested, ignored, facts: () => readGitFacts(dir, 'git', env) };
 }
 
 describe('look-art-waits-for-its-licence', () => {
@@ -456,6 +456,29 @@ describe('look-art-waits-for-its-licence', () => {
         assert.equal(lookArtProblems(readGitFacts(dir)).length, 1, 'push --tags would publish the tag');
         git('tag', '-d', 'kept');
         assert.deepEqual(lookArtProblems(readGitFacts(dir)), []);
+    });
+
+    /*
+     * The fences-followup critic's item 5: a commit made on a detached HEAD
+     * in another worktree, which no branch reaches and `git push origin
+     * HEAD:<branch>` from that worktree publishes. The walk is the content
+     * guard's too (`scripts/git-unpushed.mjs`).
+     */
+    it('reads a commit on a detached HEAD in another worktree, which no branch reaches', () => {
+        const { dir, env, git } = plantRepo();
+        const other = join(realpathSync(mkdtempSync(join(tmpdir(), 'stall-licence-map-wt-'))), 'detached');
+        scratch.push(dirname(other));
+        git('worktree', 'add', '-q', '--detach', other);
+        const there = (...args) => execFileSync('git', args, { cwd: other, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: other, env, input: 'x\n', encoding: 'utf8' }).trim();
+        there('update-index', '--add', '--cacheinfo', `100644,${blob},src/looks/d.svg`);
+        there('commit', '-q', '-m', 'add');
+        there('update-index', '--force-remove', 'src/looks/d.svg');
+        there('commit', '-q', '-m', 'remove');
+        assert.equal(git('branch', '--contains', there('rev-parse', 'HEAD').trim()).trim(), '', 'the plant: no branch reaches it');
+        const read = readGitFacts(dir, 'git', env);
+        assert.deepEqual(read.tree.filter(isLookArt), [], 'this worktree holds nothing of it');
+        assert.equal(lookArtProblems(read).length, 2, 'the commit that added it and the one that removed it, both a push from there would publish');
     });
 
     /*

@@ -10,15 +10,19 @@
  *   here in step 8g-pre: whether the clone is shallow, the commit
  *   `origin/main` names (undefined when there is none — a guard then fails
  *   rather than passing over an empty list), and every commit reachable from
- *   a local branch, a tag or HEAD and from no `origin/*` ref — so `push
- *   --all` and `push --tags` are covered as well as HEAD's own — with every
- *   path each one touches and which of them were gitlinks on either side. No
+ *   a local branch, a tag, HEAD or the detached HEAD of any worktree and
+ *   from no `origin/*` ref — so `push --all` and `push --tags` are covered
+ *   as well as HEAD's own, and so is `git push origin HEAD:<branch>` from a
+ *   detached linked worktree (`worktreeHeads`, the fences-followup critic's
+ *   item 5) — with every path each one touches and which of them were
+ *   gitlinks on either side. No
  *   pathspec narrows the list: the guard applies its tests to each path,
  *   because a pathspec folds case the way git does and a disk may fold more.
  * - **`readUnpushedBlobs({ root })`** — the content guard's
  *   (`scripts/private-content.mjs`): every blob those refs reach that no
- *   `origin/*` ref does (`git rev-list --objects --branches --tags HEAD --not
- *   --remotes=origin`, blobs kept by `git cat-file --batch-check`) — the set
+ *   `origin/*` ref does (`git rev-list --objects --branches --tags HEAD
+ *   <each detached worktree HEAD> --not --remotes=origin`, blobs kept by `git
+ *   cat-file --batch-check`) — the set
  *   a push packs, so a blob a tag points at, directly or through a tree, is
  *   read as well as one a commit adds.
  *
@@ -28,23 +32,30 @@ import { execFileSync } from 'node:child_process';
 import { GITLINK_MODE } from './licence-map-lib.mjs';
 
 /**
- * The refs a push could publish from, and the ones it would not: the one
- * walk both readers make — `UNPUSHED_LOG_ARGS` ends with it, so the
- * look-art guard's walk and the content guard's cannot drift apart (the
- * step-8g-pre critic's re-review, R5).
+ * The refs a push could publish from — every local branch, every tag, HEAD
+ * and, handed in, the commit each detached worktree's HEAD names — and the
+ * ones it would not: the one walk both readers make, so the look-art
+ * guard's walk and the content guard's cannot drift apart (the step-8g-pre
+ * critic's re-review, R5). A worktree's HEAD goes before `--not`, which
+ * flips every rev after it.
  */
-export const UNPUSHED_REVS = Object.freeze(['--branches', '--tags', 'HEAD', '--not', '--remotes=origin']);
+export function unpushedRevs(heads = []) {
+    return ['--branches', '--tags', 'HEAD', ...heads, '--not', '--remotes=origin'];
+}
+
+/** The walk with no detached worktree beside the running one: what both readers walked before the critic's item 5. */
+export const UNPUSHED_REVS = Object.freeze(unpushedRevs());
 
 /**
- * The log arguments, each option a repository's or a user's config would
+ * The log options, each one a repository's or a user's config would
  * otherwise decide stated: `--root` (log.showRoot false hides a root
  * commit's files), `--ignore-submodules=none` (diff.ignoreSubmodules all
  * hides every gitlink), `--diff-merges=separate` (log.diffMerges narrows or
  * combines a merge's diff), `--no-show-signature` (log.showSignature prints
  * lines this reader does not know). `--no-renames` keeps every status to one
- * path; `--no-abbrev` keeps every object id whole. Then `UNPUSHED_REVS`.
+ * path; `--no-abbrev` keeps every object id whole. The revs follow.
  */
-export const UNPUSHED_LOG_ARGS = Object.freeze([
+export const UNPUSHED_LOG_OPTIONS = Object.freeze([
     'log',
     '-z',
     '--root',
@@ -56,8 +67,35 @@ export const UNPUSHED_LOG_ARGS = Object.freeze([
     '--raw',
     '--no-abbrev',
     '--format=%x01%H',
-    ...UNPUSHED_REVS,
 ]);
+
+/** The log options and `UNPUSHED_REVS`: the look-art guard's arguments where no other worktree is detached. */
+export const UNPUSHED_LOG_ARGS = Object.freeze([...UNPUSHED_LOG_OPTIONS, ...UNPUSHED_REVS]);
+
+/**
+ * The commit each detached worktree's HEAD names, as `git worktree list
+ * --porcelain -z` lists them (a prunable one included: its HEAD still
+ * stands in the repository, and a push from the main worktree can name
+ * it). A branch is walked by `--branches` already; the running worktree's
+ * own HEAD by `HEAD`. Throws on a block this reader does not know.
+ */
+export function worktreeHeads(run) {
+    const heads = new Set();
+    for (const block of run(['worktree', 'list', '--porcelain', '-z']).split('\0\0')) {
+        const fields = block.split('\0').filter((field) => field !== '');
+        if (fields.length === 0 || fields.includes('bare') || !fields.includes('detached')) {
+            continue;
+        }
+        const head = fields.find((field) => field.startsWith('HEAD '))?.slice('HEAD '.length);
+        if (head === undefined || !/^[0-9a-f]{40,64}$/.test(head)) {
+            throw new Error('git worktree list --porcelain: a detached worktree with no HEAD this reader knows');
+        }
+        if (!/^0+$/.test(head)) {
+            heads.add(head);
+        }
+    }
+    return [...heads];
+}
 
 /** A git runner over `root`, replace objects off on every command. */
 function runnerAt({ root, git = 'git', env = process.env }) {
@@ -102,7 +140,7 @@ export function readUnpushed({ root, git, env }) {
     // the path, each NUL-terminated, the first header after a newline git
     // adds.
     const unpushed = [];
-    const out = run([...UNPUSHED_LOG_ARGS]);
+    const out = run([...UNPUSHED_LOG_OPTIONS, ...unpushedRevs(worktreeHeads(run))]);
     let current;
     let modes;
     for (const raw of out.split('\0')) {
@@ -143,7 +181,7 @@ export function readUnpushedBlobs({ root, git, env }) {
     const run = runnerAt({ root, git, env });
     const { shallow, upstream } = pushFacts(run);
     const names = new Map();
-    for (const line of run(['rev-list', '--objects', ...UNPUSHED_REVS]).split('\n')) {
+    for (const line of run(['rev-list', '--objects', ...unpushedRevs(worktreeHeads(run))]).split('\n')) {
         if (line === '') {
             continue;
         }
