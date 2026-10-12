@@ -1155,6 +1155,20 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && prop === 'all' && !/^(?:inherit|unset)$/i.test(clean)) {
             out.push(`${shown} — resets font-family to the browser's default, a font of the reader's machine; a look sheet writes all only as inherit or unset`);
         }
+        /*
+         * `text-transform: full-width` and `full-size-kana` (the re-review,
+         * R-6) paint other characters than the page's — the fullwidth forms
+         * (U+FF01–FF5E), the full-size kana — which no served face draws, so
+         * the line falls to a font of the reader's machine whatever its
+         * stack says. Refused as a keyword anywhere in a first-party
+         * declaration, a function's arguments and a custom property
+         * included: stall.css's `text-transform: var(--s-sign-case)` takes
+         * it from a variable. No served sheet uses either. The kit keeps the
+         * rules its README states.
+         */
+        if (firstParty && /(?<![\w-])(?:full-width|full-size-kana)(?![\w-])/i.test(bare)) {
+            out.push(`${shown} — full-width and full-size-kana paint characters no served face draws (the fullwidth forms, the full-size kana): the line falls to a font of the reader's machine`);
+        }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
             const sign = firstParty && /^sticky$/i.test(keywords.trim()) && isStickyBox(selectors);
             if (!sign) {
@@ -1491,8 +1505,11 @@ export function lintSheet(css, { art = [] } = {}) {
  * outside a string). The kit's art and keyframe-name rules are the kit's:
  * a shipped sheet is Stall's own, built and reviewed here. And the
  * first-party rules the kit does not carry: the sign sticky off the wall,
- * the legacy mask-composite pairs, the hooks, and no file named in a custom
- * property (`a-look-writes-each-url-in-the-property-that-paints-it`).
+ * the legacy mask-composite pairs, the hooks, no file named in a custom
+ * property (`a-look-writes-each-url-in-the-property-that-paints-it`), and
+ * nothing that puts a line in a font of the reader's machine past the
+ * served-face rules: no `all` but `inherit` or `unset`, no `full-width` or
+ * `full-size-kana` (`a-look-names-only-a-served-face`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });

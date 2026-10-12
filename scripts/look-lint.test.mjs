@@ -1151,6 +1151,30 @@ describe('a-look-names-only-a-served-face', () => {
         assert.ok(!lintSheet(plantedKit('.t-neo .item-x { all: initial; }')).some((p) => WHY.test(p)), 'the kit keeps the rules its README states');
     });
 
+    it('refuses text-transform: full-width and full-size-kana in a first-party sheet, by any road, and leaves the kit under its own rules', () => {
+        // The re-review's R-6: they paint the fullwidth forms and the full-size kana, which no served face draws, so the line falls to a font of the reader's machine.
+        const WHY = /full-width and full-size-kana paint characters no served face draws/;
+        for (const rule of [
+            '.t-neo .item-x { text-transform: full-width; }',
+            '.t-neo .item-x { text-transform: uppercase FULL-WIDTH; }',
+            '.t-neo .item-n { text-transform: full-size-kana; }',
+            // stall.css sets text-transform: var(--s-sign-case) on the sign, so the keyword in a custom property reaches it.
+            '.t-neo .stall-head { --s-sign-case: full-width; }',
+            '.t-neo .item-x { text-transform: var(--case, full-width); }',
+            '@keyframes t-neo-case { to { text-transform: full-width; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => WHY.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        const files = canaryFiles();
+        const ownArt = { dir: 'art', files: Object.keys(files).filter((path) => path.startsWith('canary/art/') && !path.endsWith('.txt')).map((path) => path.slice('canary/art/'.length)) };
+        const canary = lintLookSheet(beforeReduce(files['canary/sheet.css'], '.t-canary .stall-name { text-transform: full-width; }'), { lookClass: 't-canary', load: 'worn', ownArt });
+        assert.ok(canary.some((p) => WHY.test(p)), canary.join('\n'));
+        accepts('.t-neo .item-x { text-transform: uppercase; }');
+        accepts('.t-neo .item-x { text-transform: none; }');
+        assert.ok(!lintSheet(plantedKit('.t-neo .item-x { text-transform: full-width; }')).some((p) => WHY.test(p)), 'the kit keeps the rules its README states');
+    });
+
     it('holds every shipped look sheet, the kit and every private look sheet a run reads', () => {
         for (const sheet of LOOKS) {
             assert.deepEqual(lintLookSheet(read(sheet.path), { lookClass: sheet.lookClass }).filter((p) => /served-face/.test(p)), [], sheet.path);
