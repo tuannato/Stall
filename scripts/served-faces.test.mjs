@@ -6,7 +6,7 @@ import { themeVarValues } from './look-flash.mjs';
 import { declaredFaces, declaredStallFaces } from './probe-faces.mjs';
 import { PLANTED_CLASS, beforeReduce, canaryFiles, plantCanary, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
 import { CANARY_TREE } from './private-looks.mjs';
-import { PINNED_STACKS, ownFaceSet, privateFacesLine, rangeProblems, rootStackOf, servedFamilies, sheetParts, stackMatchesPin, stackReport } from './private-faces.mjs';
+import { PINNED_RANGELESS_FACES, PINNED_STACKS, ownFaceSet, privateFacesLine, rangeProblems, rootStackOf, scriptReport, servedFamilies, sheetParts, stackMatchesPin, stackReport } from './private-faces.mjs';
 import { guardSheets, privateRows, servedSheets } from './served-sheets.mjs';
 import {
     ROOT,
@@ -21,6 +21,7 @@ import {
     MAX_RANGE_CODE_POINTS,
     literalsOf,
     printedCodePoints,
+    scriptOfSubset,
     servedFaceSets,
     subsetScript,
 } from './served-faces.mjs';
@@ -549,6 +550,194 @@ describe('a-private-face-range-is-refused-as-published-or-malformed', () => {
         // The last code point itself is a token a browser accepts: a claim, said as one. A span up to it and a wildcard claim nothing on their own.
         assert.match(rangeProblems(ownFaceSet({ css: css('U+10FFFF'), art })).join('\n'), /unicode-range names U\+10FFFF .* on its own/);
         for (const range of ['U+20-10FFFF', 'U+4??', 'U+0-7F, U+A0-FF']) assert.deepEqual(rangeProblems(ownFaceSet({ css: css(range), art })), [], range);
+    });
+});
+
+describe('a-private-face-range-never-takes-one-letter-of-another-script', () => {
+    // The 8g0 critic's P3-3. `a-face-range-never-takes-one-letter-of-another-script`
+    // reads stall.css's faces alone, so a private look's face whose range took
+    // `р` (U+0440) — the glyph re-subset's own first cut — passed every guard.
+    // The same reading over every face a private look's sheet declares, the
+    // subset the look's own word (`fonts.json`). Everything computed is
+    // computed in a `before()` hook, an `it` or at module top.
+    let reads;
+    before(() => {
+        reads = PRIVATE_ROWS.map((row) => {
+            const read = ownFaceSet({ css: row.css, art: row.look.art });
+            const report = scriptReport({ path: row.path, read, fontsText: row.look.fontsText, cls: row.lookClass, tree: row.look.packedTree });
+            return { cls: row.lookClass, source: row.look.source, report, count: read.faces.length };
+        });
+        process.stderr.write(privateFacesLine('private face script guard (a-private-face-range-never-takes-one-letter-of-another-script)', reads, 'face'));
+    });
+
+    const TREE = 'a'.repeat(40);
+    const fontsJson = (files, name = 'Plant Serif') => JSON.stringify({ fonts: [{ name, files, licence: 'LICENSE-OFL-plant.txt' }] });
+    /** The report for one face `mem.woff2` with `range`, named in `fonts.json` as `subset` (or by `fonts` as given, `undefined` for none). */
+    const report = (range, { subset = 'Latin', ...more } = {}) =>
+        scriptReport({
+            path: 'mem.css',
+            read: ownFaceSet({ css: faceRule('mem.woff2', 't-mem-serif', withRange(range)), art: [mem(ASCII)] }),
+            fontsText: Object.hasOwn(more, 'fonts') ? more.fonts : fontsJson({ 'mem.woff2': subset }),
+            cls: 't-mem',
+            tree: TREE,
+            pins: more.pins ?? PINNED_RANGELESS_FACES,
+        });
+
+    it('reads every private look a run reads, the tracked fixture among them, and each face names only letters of its subset\'s script', () => {
+        assert.ok(reads.some((r) => r.source === 'fixture'), 'the fixture is read');
+        for (const r of reads) assert.deepEqual(r.report.problems, [], r.cls);
+    });
+
+    it('goes red on a planted look whose Latin face names р (U+0440) in its range — the glyph re-subset\'s own first cut — and passes the same look without it', async () => {
+        const cut = (range) => faceRule(PLANT_FACE, PLANT_FAMILY, withRange(range));
+        const art = { [`fixture/art/${PLANT_FACE}`]: faceBytes([...ASCII, 0x440, 0x20bd]), 'fixture/fonts.json': fontsJson({ [PLANT_FACE]: 'Latin' }) };
+        const of = async (range) => {
+            const row = await plantedRow(cut(range), art);
+            const read = ownFaceSet({ css: row.css, art: row.look.art });
+            return { read, report: scriptReport({ path: row.path, read, fontsText: row.look.fontsText, cls: row.lookClass, tree: row.look.packedTree }) };
+        };
+        const red = await of('U+20-7E, U+440, U+20BD');
+        // Every guard the branch had passes it: the file holds р, so guard 1 has nothing to say.
+        assert.deepEqual(rangeProblems(red.read), []);
+        assert.equal(red.report.problems.length, 1, red.report.problems.join('\n'));
+        assert.match(red.report.problems[0], /unicode-range names U\+0440 р, letters of another script than its Latin subset's Latin/);
+        assert.match(red.report.problems[0], /draw those letters in this face and the rest in a font of the reader's machine: remove the tokens/);
+        // The shipped reading, handed this face, refuses the same letter.
+        const shipped = lettersOfAnotherScript([{ name: PLANT_FAMILY, faces: [{ file: red.read.faces[0].file, ranges: red.read.faces[0].ranges, script: 'Latin' }] }]);
+        assert.deepEqual(shipped.letters.map(({ cp }) => cp), [0x440]);
+        const green = await of('U+20-7E, U+20BD');
+        assert.deepEqual(green.report.problems, []);
+        assert.ok(green.report.count > 0 && green.report.faces === 1, 'the face was read');
+    });
+
+    it('re-cuts the canary\'s own face with a range that takes р: the packed tree moves, the pin goes with it, the letter is refused', async () => {
+        const repo = plantCanary((path, text) => {
+            if (path !== 'canary/sheet.css') return text;
+            const ranged = text.replace("format('woff2');\n", "format('woff2');\n    unicode-range: U+20-7E, U+440;\n");
+            assert.notEqual(ranged, text, 'the canary face CSS has the line the plant edits');
+            return ranged;
+        });
+        const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
+        const row = rows.find((r) => r.lookClass === 't-canary');
+        assert.ok(row !== undefined, 'the re-cut canary is read');
+        assert.notEqual(row.look.packedTree, CANARY_TREE, 'another packed tree');
+        const result = scriptReport({ path: row.path, read: ownFaceSet({ css: row.css, art: row.look.art }), fontsText: row.look.fontsText, cls: row.lookClass, tree: row.look.packedTree });
+        assert.equal(result.problems.length, 1, result.problems.join('\n'));
+        assert.match(result.problems[0], /art\/jetbrains-mono-latin\.woff2.* unicode-range names U\+0440 р, letters of another script than its Latin subset's Latin/);
+        assert.deepEqual(result.excused, []);
+    });
+
+    it('reads the script as Script_Extensions: a Common or Latin letter passes, another script\'s is refused by script and by use', () => {
+        // µ (U+00B5) and ʼ (U+02BC) are Common or hold Latin, ª (U+00AA) is Latin; ₽ and ≈ are signs.
+        assert.deepEqual(report('U+20-7E, U+AA, U+B5, U+2BC, U+20BD, U+2248').problems, []);
+        const refused = [0x03bc, 0x0440, 0x0640, 0x30fc, 0x5143, 0xff70];
+        const problems = report(`U+20-7E, ${refused.map((cp) => `U+${cp.toString(16)}`).join(', ')}`).problems;
+        assert.equal(problems.length, 1, problems.join('\n'));
+        for (const cp of refused) assert.ok(problems[0].includes(cpName(cp)), cpName(cp));
+        // More than a sentence shows are counted, not listed.
+        assert.match(report('U+400-4FF').problems.join('\n'), /and \d+ more, letters of another script/);
+    });
+
+    it('reads the subset the look names in fonts.json, case-blind: Latin and Vietnamese are Latin, and the script check walks the range', () => {
+        for (const subset of ['Latin', 'latin', 'LATIN', 'Vietnamese', 'vietnamese']) {
+            const result = report('U+20-7E, U+1EA0-1EF9', { subset });
+            assert.deepEqual(result.problems, [], subset);
+            assert.ok(result.count > 100, `${subset}: ${result.count} code points read`);
+            assert.match(report('U+20-7E, U+440', { subset }).problems.join('\n'), /U\+0440 р/, subset);
+        }
+        assert.equal(scriptOfSubset('latin'), 'Latin');
+        assert.equal(scriptOfSubset('Latin'), undefined, 'the table is exact; the private guard lower-cases first');
+    });
+
+    it('refuses a subset SUBSET_SCRIPTS does not name, a fonts.json it cannot use and a face fonts.json does not name, each with a sentence', () => {
+        for (const subset of ['Cyrillic', 'Latin Extended', 'CJK', '__proto__', 'constructor']) {
+            const result = report('U+20-7E', { subset });
+            assert.equal(result.problems.length, 1, `${subset}: ${result.problems.join('\n')}`);
+            assert.match(result.problems[0], new RegExp(`its subset "${subset}" in fonts\\.json is one whose script SUBSET_SCRIPTS does not name \\(latin, vietnamese\\)`));
+            assert.match(result.problems[0], /added there with its own script, on purpose/);
+            assert.equal(result.count, 0, 'a face of an unknown script is not walked');
+        }
+        const cases = [
+            [{ fonts: undefined }, /the look has no fonts\.json — this reader cannot tell which script the face is cut for/],
+            [{ fonts: 'not json {' }, /fonts\.json cannot be read \(fonts\.json: not JSON/],
+            [{ fonts: JSON.stringify({ fonts: [] }) }, /fonts\.json cannot be read \(fonts\.json: fonts is not a list/],
+            [{ fonts: fontsJson({ 'other.woff2': 'Latin' }) }, /fonts\.json names no subset for it — this reader cannot tell which script the face is cut for/],
+            [{ fonts: fontsJson({ 'mem.woff2': 5 }) }, /fonts\.json cannot be read \(fonts\.json: fonts\[0\]: the subset of "mem\.woff2", 5, is not printable ASCII/],
+        ];
+        for (const [more, pattern] of cases) {
+            const result = report('U+20-7E', more);
+            assert.ok(result.problems.some((p) => pattern.test(p)), `${pattern}:\n  ${result.problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('refuses a face with no range, or one the descriptor does not make a range of, by name and without walking it', () => {
+        for (const [range, pattern] of [
+            [undefined, /unicode-range is not declared, so the face is asked for every character/],
+            ['', /unicode-range is not declared/],
+            ['U+0-10FFFF', /unicode-range names 1114112 code points, more than the 65536 this reader walks/],
+            ['U+0-10000', /unicode-range names 65537 code points, more than the 65536 this reader walks/],
+            [',', /unicode-range names no code point \(a browser drops a descriptor it cannot read/],
+        ]) {
+            const result = report(range);
+            assert.equal(result.problems.length, 1, `${range}:\n  ${result.problems.join('\n  ') || '(no problem)'}`);
+            assert.match(result.problems[0], pattern, String(range));
+            assert.match(result.problems[0], /state the range of the Latin subset/);
+            assert.equal(result.count, 0, `${range}: not walked`);
+        }
+        // A whole plane up to the cap is a range, and a wide one: walked, and its other-script letters are the refusal.
+        const wide = report('U+0-FFFF');
+        assert.ok(wide.count >= 0x10000 && /letters of another script/.test(wide.problems.join('\n')), wide.problems.join('\n'));
+    });
+
+    it('excuses the canary\'s rangeless face by name and holds the pin live: bound to the class, the packed tree, the family and the file', async () => {
+        const row = await canaryRow();
+        assert.equal(row.look.packedTree, CANARY_TREE);
+        const read = ownFaceSet({ css: row.css, art: row.look.art });
+        const args = { path: row.path, read, fontsText: row.look.fontsText, cls: row.lookClass, tree: row.look.packedTree };
+        const pinned = scriptReport(args);
+        assert.deepEqual(pinned.problems, []);
+        assert.equal(pinned.excused.length, 1);
+        assert.equal(pinned.excused[0].face.family, 't-canary-mono');
+        assert.equal(PINNED_RANGELESS_FACES.length, 1);
+        assert.equal(PINNED_RANGELESS_FACES[0].tree, CANARY_TREE);
+        // Without the pin the face is refused as any rangeless face is.
+        assert.match(scriptReport({ ...args, pins: [] }).problems.join('\n'), /art\/jetbrains-mono-latin\.woff2 \("t-canary-mono"\): unicode-range is not declared, so the face is asked for every character/);
+        // The same sheet under another packed tree, or another class, is another look: walked, and no pin said to be dead.
+        for (const other of [{ tree: 'f'.repeat(40) }, { cls: 't-other' }]) {
+            const walked = scriptReport({ ...args, ...other });
+            assert.equal(walked.problems.length, 1, walked.problems.join('\n'));
+            assert.match(walked.problems[0], /unicode-range is not declared/);
+            assert.deepEqual(walked.excused, []);
+        }
+        // A pin is for one family and one file: a pin that names others excuses nothing, and is said to match nothing.
+        for (const pin of [{ ...PINNED_RANGELESS_FACES[0], family: 't-canary-sans' }, { ...PINNED_RANGELESS_FACES[0], file: 'art/other.woff2' }]) {
+            const dead = scriptReport({ ...args, pins: [pin] });
+            assert.ok(dead.problems.some((p) => /unicode-range is not declared/.test(p)), dead.problems.join('\n'));
+            assert.ok(dead.problems.some((p) => /the pin for .* matches no face of this sheet that fonts\.json names a subset for/.test(p)), dead.problems.join('\n'));
+        }
+    });
+
+    it('says a pin that excuses a face which states a range, or one that excuses a wider range, is not live', () => {
+        const pin = { cls: 't-mem', tree: TREE, family: 't-mem-serif', file: 'art/mem.woff2', why: 'a test' };
+        const ranged = report('U+20-7E', { pins: [pin] });
+        assert.equal(ranged.problems.length, 1, ranged.problems.join('\n'));
+        assert.match(ranged.problems[0], /the pin for art\/mem\.woff2 excuses a face that states a range; remove the pin \(a test\)/);
+        // The pin excuses the missing range only: a range too wide to walk is still refused, and says why the pin does not help.
+        const wide = report('U+0-10FFFF', { pins: [pin] });
+        assert.equal(wide.problems.length, 1, wide.problems.join('\n'));
+        assert.match(wide.problems[0], /names 1114112 code points.*\[the pin for this face excuses only a face that declares no unicode-range at all\]/);
+        const bare = report(undefined, { pins: [pin] });
+        assert.deepEqual(bare.problems, []);
+        assert.equal(bare.excused.length, 1);
+    });
+
+    it('reads a face the sheet declares inside an at-rule and reports a face it cannot read first', () => {
+        const nested = `@media (min-width: 680px) { ${faceRule('mem.woff2', 't-mem-serif', withRange('U+20-7E, U+440'))} }`;
+        const result = scriptReport({ path: 'mem.css', read: ownFaceSet({ css: nested, art: [mem(ASCII)] }), fontsText: fontsJson({ 'mem.woff2': 'Latin' }), cls: 't-mem', tree: TREE });
+        assert.match(result.problems.join('\n'), /U\+0440 р/);
+        const gone = scriptReport({ path: 'mem.css', read: ownFaceSet({ css: faceRule('gone.woff2', 't-mem-serif'), art: [mem(ASCII)] }), fontsText: fontsJson({ 'gone.woff2': 'Latin' }), cls: 't-mem', tree: TREE });
+        assert.match(gone.problems.join('\n'), /art\/gone\.woff2 is not there/);
+        assert.equal(gone.faces, 0);
     });
 });
 

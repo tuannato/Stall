@@ -1,9 +1,10 @@
 /**
- * Two static guards over a private look's own faces, read from the look's
+ * Three static guards over a private look's own faces, read from the look's
  * sheet and its `art/` as git holds them (the 8g-pre row of the step-8 plan,
- * "by recommendation"; the critic's P3-14). Both are the shipped faces'
- * checks (`scripts/served-faces.mjs`, `scripts/served-faces.test.mjs`)
- * applied to the faces a private look declares:
+ * "by recommendation"; the critic's P3-14; the third from the 8g0 critic's
+ * P3-3). Each is a shipped faces' check (`scripts/served-faces.mjs`,
+ * `scripts/served-faces.test.mjs`) applied to the faces a private look
+ * declares:
  *
  * **1. A private face's `unicode-range` claims no code point its own file
  * lacks** (`rangeProblems`, the `DECLARED_NOT_HELD` check). A browser asked
@@ -96,15 +97,40 @@
  * the pin. Every other stack of every look — a private look's tagline stack
  * included — is walked like any other.
  *
+ * **3. A private face's `unicode-range` names only letters of its subset's
+ * script** (`scriptReport`, `a-private-face-range-never-takes-one-letter-of-another-script`;
+ * the 8g0 critic's P3-3). The shipped rule
+ * (`a-face-range-never-takes-one-letter-of-another-script`) reads
+ * `stall.css`'s faces alone, so a re-cut of a private look's face that put
+ * `р` (U+0440) in a Latin range — the glyph re-subset's own first cut — passed
+ * every guard: a seller's Cyrillic word drawn with that one letter in the
+ * look's face and the rest in a font of the reader's machine. The same
+ * reading (`lettersOfAnotherScript`: a letter belongs when its
+ * `Script_Extensions` hold the subset's script, or are Common or Inherited)
+ * over every face the sheet declares, and the same refusal of a face with no
+ * range (or one past `MAX_RANGE_CODE_POINTS`, or one naming nothing): such a
+ * face is asked for every character of every script. **The subset is the
+ * look's own word**, `fonts.json`'s (`files: { "<face>.woff2": "<subset>" }`),
+ * read case-blind through `SUBSET_SCRIPTS`; a face `fonts.json` does not
+ * name, a `fonts.json` this reader cannot read and a subset the table does
+ * not name are each a sentence, never a pass — a Cyrillic or Greek subset is
+ * added to `SUBSET_SCRIPTS` with its own script, on purpose, and so is a CJK
+ * one (a table that gives each subset one script has no row for a subset
+ * whose range holds Han, kana and Hangul at once; that is the owner's to
+ * decide when a look serves one). **One named pin** (`PINNED_RANGELESS_FACES`):
+ * the canary's one face states no range, and the canary is public bytes
+ * fixed by a hash; the pin is held as `PINNED_STACKS` is — the look's class
+ * and packed tree, the face's family and file — and is live or a failure.
+ *
  * Pure over strings and buffers, and the shipped faces' readers. The tests
  * that drive it over every private look a run reads, over planted
  * repositories and over the canary built from public bytes are in
  * `scripts/served-faces.test.mjs`.
  */
-import { woff2CodePoints } from './look-faces.mjs';
+import { parseLookFonts, woff2CodePoints } from './look-faces.mjs';
 import { rangePairs } from './probe-faces.mjs';
 import { CANARY_TREE } from './private-looks.mjs';
-import { NO_GLYPH, cpName, servedFaceSets } from './served-faces.mjs';
+import { MAX_RANGE_CODE_POINTS, NO_GLYPH, SUBSET_SCRIPTS, cpName, lettersOfAnotherScript, scriptOfSubset, servedFaceSets } from './served-faces.mjs';
 import { declarationsOf, echo, firstFamily, parseSheet, shorthandFamilies, splitTopLevel } from './workshop-css.mjs';
 
 /** The most readings of one family list this reader walks; past it, it refuses. */
@@ -537,6 +563,120 @@ export function stackReport({ path = 'sheet.css', css, art, rootStack, printed, 
         }
     }
     return { problems, gaps, failures, excused, read: stacks.length, walked };
+}
+
+/**
+ * The faces excused from the refusal of a face with no range, by name, each
+ * live or a failure (`scriptReport`): a look class and its packed tree, the
+ * face's family and its file, and why. The canary's one face
+ * (`t-canary-mono`, the tracked JetBrains Mono Latin subset with one byte
+ * changed) states no `unicode-range`; the canary is preview-only public
+ * bytes held by a hash (`CANARY_TREE`), and a range is a change to those
+ * bytes — a new canary commit in the private repository, a new pin and
+ * `CANARY_TREE` — that is the owner's, not this guard's. The pin excuses the
+ * refusal of the missing range and nothing else: the face is still asked
+ * for every character. It leaves in the same diff as the range comes
+ * (its tripwire forces it).
+ */
+export const PINNED_RANGELESS_FACES = Object.freeze([
+    Object.freeze({
+        cls: 't-canary',
+        tree: CANARY_TREE,
+        family: 't-canary-mono',
+        file: 'art/jetbrains-mono-latin.woff2',
+        why: "the canary's one face states no unicode-range, and the canary is preview-only public bytes held by a hash; a range is a new canary commit, which is the owner's",
+    }),
+]);
+
+/** What a face's range does not state, as a sentence part, or undefined when it states a range this reader walks. */
+function rangeNotStated(face) {
+    if (face.declared.trim() === '') return 'is not declared, so the face is asked for every character';
+    if (face.ranges.length === 0) return 'names no code point (a browser drops a descriptor it cannot read, and the face is then asked for every character)';
+    const size = face.ranges.reduce((n, [lo, hi]) => n + hi - lo + 1, 0);
+    if (size > MAX_RANGE_CODE_POINTS) return `names ${size} code points, more than the ${MAX_RANGE_CODE_POINTS} this reader walks, so the face is asked for nearly every character`;
+    return undefined;
+}
+
+/**
+ * Guard 3 (`a-private-face-range-never-takes-one-letter-of-another-script`).
+ * `read` is `ownFaceSet`'s answer for the look's sheet and art, `fontsText`
+ * its `fonts.json` (undefined when it has none), `cls` the look's class,
+ * `tree` its packed tree and `pins` the faces excused (`PINNED_RANGELESS_FACES`).
+ * Answers `{ problems, excused, faces, count }`: the sentences (the faces
+ * `ownFaceSet` could not read first, then one per face that fails and per
+ * pin that is not live), the faces a pin excused as `{ pin, face }`, how many
+ * faces were read and how many code points were walked.
+ */
+export function scriptReport({ path = 'sheet.css', read, fontsText, cls, tree, pins = PINNED_RANGELESS_FACES }) {
+    const look = { cls, tree };
+    const problems = [...read.problems];
+    const excused = [];
+    const subsets = new Map();
+    let fontsWhy;
+    if (fontsText === undefined) {
+        fontsWhy = 'the look has no fonts.json';
+    } else {
+        const { fonts, problems: shape } = parseLookFonts(fontsText);
+        if (fonts === undefined) {
+            fontsWhy = `fonts.json cannot be read (${shape.map((why) => echo(why, 80)).join('; ')})`;
+        } else {
+            for (const font of fonts) {
+                for (const [file, subset] of Object.entries(font.files)) if (!subsets.has(file)) subsets.set(file, subset);
+            }
+        }
+    }
+    const live = new Set();
+    let count = 0;
+    for (const face of read.faces) {
+        const name = face.file.replace(/^art\//, '');
+        const where = `${path}: line ${face.line}: ${face.file} ("${echo(face.family)}")`;
+        const subset = subsets.get(name);
+        if (subset === undefined) {
+            problems.push(
+                `${where}: ${fontsWhy ?? 'fonts.json names no subset for it'} — this reader cannot tell which script the face is cut for, so which letters its unicode-range may name (a-private-face-range-never-takes-one-letter-of-another-script)`,
+            );
+            continue;
+        }
+        const script = scriptOfSubset(subset.toLowerCase());
+        if (script === undefined) {
+            problems.push(
+                `${where}: its subset "${echo(subset)}" in fonts.json is one whose script SUBSET_SCRIPTS does not name (${Object.keys(SUBSET_SCRIPTS).join(', ')}) — a subset is added there with its own script, on purpose (a-private-face-range-never-takes-one-letter-of-another-script)`,
+            );
+            continue;
+        }
+        const pin = pins.find((candidate) => pinIsFor(candidate, look) && candidate.family === face.family && candidate.file === face.file);
+        if (pin !== undefined) live.add(pin);
+        const missing = rangeNotStated(face);
+        if (missing !== undefined) {
+            if (pin !== undefined && face.declared.trim() === '') {
+                excused.push({ pin, face });
+            } else {
+                problems.push(
+                    `${where}: unicode-range ${missing} — a seller's words in another script would draw whatever letters the file holds here and the rest in a font of the reader's machine: state the range of the ${echo(subset)} subset ` +
+                        `(a-private-face-range-never-takes-one-letter-of-another-script)${pin === undefined ? '' : ' [the pin for this face excuses only a face that declares no unicode-range at all]'}`,
+                );
+            }
+            continue;
+        }
+        if (pin !== undefined) {
+            problems.push(`${where}: the pin for ${pin.file} excuses a face that states a range; remove the pin (${pin.why})`);
+        }
+        const result = lettersOfAnotherScript([{ name: face.family, faces: [{ file: face.file, ranges: face.ranges, script }] }]);
+        count += result.count;
+        if (result.letters.length > 0) {
+            const shown = result.letters.slice(0, MAX_SHOWN_GAPS).map(({ cp }) => cpName(cp));
+            problems.push(
+                `${where}: unicode-range names ${shown.join(', ')}${result.letters.length > MAX_SHOWN_GAPS ? ` and ${result.letters.length - MAX_SHOWN_GAPS} more` : ''}, letters of another script than its ${echo(subset)} subset's ${script} — ` +
+                    "a seller's word in that script would draw those letters in this face and the rest in a font of the reader's machine: remove the tokens (a-private-face-range-never-takes-one-letter-of-another-script)",
+            );
+        }
+    }
+    for (const pin of pins) {
+        if (pinIsFor(pin, look) && !live.has(pin)) {
+            problems.push(`${path}: the pin for ${pin.file} (${pin.family}) matches no face of this sheet that fonts.json names a subset for; the face changed or went, so remove the pin (${pin.why})`);
+        }
+    }
+    return { problems, excused, faces: read.faces.length, count };
 }
 
 /**
