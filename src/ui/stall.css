@@ -1940,8 +1940,17 @@ body {
     overflow-wrap: anywhere;
 }
 
+/* The empty stall's call to action ("List your first item"). A look that has
+   not dressed it paints it as a bare word, so the base gives it a colour of
+   its own, the look's accent token: an anchor with none paints the browser's
+   link blue and its visited purple — `#0000EE` on the skeleton, unreadable on a
+   dark palette — and no pass can see a visited colour
+   (`every-anchor-the-app-builds-sets-its-own-colour`, which renders the
+   skeleton too). The three shipped looks restate `.t-* .cta` (0,2,0), which
+   out-ranks this (0,1,0) whatever the order, so they are unchanged. */
 .cta {
     display: inline-block;
+    color: var(--s-accent);
     text-decoration: none;
     cursor: pointer;
 }

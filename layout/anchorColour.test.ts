@@ -11,6 +11,14 @@
  * fixture screen under every shipped look, must carry a class that some
  * sheet the app loads gives a `color` of its own — a class rule applies to a link in
  * both states, so the visited colour is the class's colour.
+ *
+ * **And under the skeleton**, the look no sheet names (`t-skeleton`, measured
+ * on every probe run): a rule a shipped look's sheet writes (`.t-modern
+ * .cta`) matches under that look alone, so a base sheet that never coloured
+ * an anchor was masked under all three, and a new look — which starts as the
+ * skeleton — painted the browser's blue on it (the 8g0 critic's P2-1: the
+ * empty stall's `list-first`, `#0000EE`, and `#551A8B` once visited). A
+ * colour must come from a rule a look-less stall also matches.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -19,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { renderStall } from '../src/ui/render';
 import { appSheets } from '../scripts/sheet-roles.mjs';
 import { SCREENS, handlers } from './fixtures';
-import { shippedLooks } from './looks';
+import { SKELETON_SHEET_CLASS, measuredLooks } from './looks';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -57,7 +65,7 @@ function colouredBy(a: Element, selectors: readonly string[]): string | undefine
 }
 
 describe('every-anchor-the-app-builds-sets-its-own-colour', () => {
-    it('finds, on every fixture screen and shipped look, no anchor without a colour of its own', () => {
+    it('finds, on every fixture screen, shipped look and the skeleton, no anchor without a colour of its own', () => {
         const selectors = colourSelectors();
         expect(selectors, 'the guide links’ dress sets a colour').toContain('.cashtab-link');
         const root = document.createElement('div');
@@ -65,9 +73,21 @@ describe('every-anchor-the-app-builds-sets-its-own-colour', () => {
         document.body.append(root);
         const bare: string[] = [];
         let anchors = 0;
+        let skeletons = 0;
         for (const [name, screen] of Object.entries(SCREENS)) {
-            for (const look of shippedLooks()) {
+            for (const look of measuredLooks()) {
                 renderStall(root, { ...screen, recordTheme: look.theme, worn: [] }, handlers);
+                // The skeleton is painted as itself, not as the default look it
+                // is a row of: a stall (the door wears no look's class) wears
+                // `t-skeleton` and none of the three shipped classes.
+                const stall = root.querySelector('.stall');
+                if (look.theme.sheetClass === SKELETON_SHEET_CLASS && stall?.classList.contains(SKELETON_SHEET_CLASS)) {
+                    skeletons += 1;
+                    expect(
+                        ['t-modern', 't-neo', 't-rural'].filter((cls) => stall.classList.contains(cls)),
+                        `${name}: the skeleton wears no shipped look's class`,
+                    ).toEqual([]);
+                }
                 for (const a of root.querySelectorAll('a')) {
                     anchors += 1;
                     if (colouredBy(a, selectors) === undefined) {
@@ -77,6 +97,7 @@ describe('every-anchor-the-app-builds-sets-its-own-colour', () => {
             }
         }
         root.remove();
+        expect(skeletons, 'the skeleton is painted on the screens that wear a look').toBeGreaterThan(30);
         expect(anchors, 'the fixtures build anchors to read').toBeGreaterThan(50);
         expect([...new Set(bare)]).toEqual([]);
     });
