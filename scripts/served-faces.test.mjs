@@ -396,6 +396,10 @@ const faceBytes = (codePoints) => syntheticWoff2([{ id: 1, text: 'Plant Serif' }
 /** An `@font-face` for `file` in `family`, with the extra descriptors given. */
 const faceRule = (file, family, extra = '') => `@font-face { font-family: ${family}; src: url(./art/${file}) format("woff2"); font-display: swap;${extra} }`;
 const withRange = (range) => (range === undefined ? '' : ` unicode-range: ${range};`);
+/** A packed tree no look has, for a read that is not a look of a repository. */
+const TREE = 'a'.repeat(40);
+/** A look's `fonts.json` naming one family's faces, `files` as `{ "<face>.woff2": "<subset>" }`. */
+const fontsJson = (files, name = 'Plant Serif') => JSON.stringify({ fonts: [{ name, files, licence: 'LICENSE-OFL-plant.txt' }] });
 
 /** A planted private look (the fixture, renamed, with `rules` before its reduce block and `art` beside its own), read through the merged list. */
 async function plantedRow(rules, art) {
@@ -570,8 +574,6 @@ describe('a-private-face-range-never-takes-one-letter-of-another-script', () => 
         process.stderr.write(privateFacesLine('private face script guard (a-private-face-range-never-takes-one-letter-of-another-script)', reads, 'face'));
     });
 
-    const TREE = 'a'.repeat(40);
-    const fontsJson = (files, name = 'Plant Serif') => JSON.stringify({ fonts: [{ name, files, licence: 'LICENSE-OFL-plant.txt' }] });
     /** The report for one face `mem.woff2` with `range`, named in `fonts.json` as `subset` (or by `fonts` as given, `undefined` for none). */
     const report = (range, { subset = 'Latin', ...more } = {}) =>
         scriptReport({
