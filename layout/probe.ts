@@ -80,6 +80,7 @@ import {
     LONGEST_NAME,
     STACKED_NAME,
     handlers,
+    stageScreen,
 } from './fixtures';
 
 /**
@@ -593,6 +594,9 @@ function sheetClassesOn(root: ParentNode): string[] {
     return [...out].sort();
 }
 
+/** Nodes each staged screen put in its pressed state, per look class (`STAGED`). */
+const stagedByClass: Record<string, Record<string, number>> = {};
+
 /**
  * Paint one combination. A look is an object from `looks.ts`, never an id,
  * and its view is composed there (`paintView`): a shipped look on its
@@ -603,6 +607,14 @@ function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): 
     const root = document.getElementById('app')!;
     const view = paintView(SCREENS[screen]!, look, worn);
     renderStall(root, view, handlers);
+    // A state only a press reaches (`STAGED`), on the tree just painted,
+    // counted per look so a staged screen that found nothing to press is
+    // refused (`probe-coverage.mjs`).
+    const staged = stageScreen(screen, root);
+    if (staged !== undefined) {
+        const tally = (stagedByClass[look.theme.sheetClass] ??= {});
+        tally[screen] = (tally[screen] ?? 0) + staged;
+    }
     for (const cls of sheetClassesOn(root)) {
         sheetClassesPainted.add(cls);
     }
@@ -3621,6 +3633,47 @@ function fileClipFaults(screen: string, label: string): Failure[] {
  * red by every plant `PROBE-RULES.md` lists under "Step 8f2".
  */
 const NAME_WHOLE_CHECK = 'the-sellers-name-stands-whole';
+/**
+ * **No slack where the line clips itself** (the 8g1 critic's P2-3). Every
+ * clip gives a line's ink a pixel of rounding — but a line whose own box
+ * clips (`overflow` other than `visible` on the line itself) cuts whatever
+ * ink the model puts past that box, and the pixel let a look's own clip
+ * shave a stacked mark flat with the rule green (the red proof in
+ * `PROBE-RULES.md`: the stacked-mark name at both page widths). So on the
+ * line's **block axis** — across its lines, where `inkLines` reads the
+ * glyphs' measured reach about the baseline — the line's own clip is read
+ * with a hundredth of a pixel of float noise and no more. The inline axis
+ * keeps the pixel: along a line the model reads the advance, not the
+ * glyphs, and an advance meets its box at a rounded edge. The lines read
+ * under their own clip are counted per look (`nameOwnClipByClass`); the
+ * tracked fixture owes some on the page passes (`probe-coverage.mjs`).
+ *
+ * **What this does NOT catch** (the 8g1 re-review's near-misses A–D).
+ * This is a read of a model, not of pixels, and each of these is a shape
+ * any look could take: the critic ran each through the real probe, which
+ * read green, while lifting the clip changed real pixels of the line;
+ * beyond them, any glyph the model under-measures is not caught either.
+ * - **A.** A cut by `clip-path: inset(0)` on the line rather than by
+ *   `overflow`. Only an `overflow` or `contain: paint` clip on the line
+ *   itself is read with no slack; an `inset()` on it goes through the
+ *   same walk with its pixel, and a circle or an ellipse keeps its own.
+ * - **B.** The box edge is the padding box taken from `clientWidth` and
+ *   `clientHeight` (`paddingBox`, `src/ui/signInk.ts`), which are
+ *   integers, so the edge the ink is compared with can sit up to half a
+ *   pixel from the painted one and an ink past the painted edge by less
+ *   than that reads inside.
+ * - **C.** Upright CJK in vertical writing: the painted ink sits 1.3–2.2px
+ *   off the ink model's box (measured on the `cjk-name` screen, 390 at DPR
+ *   3 and 1280 at DPR 2), shifted rather than widened, so zero slack on
+ *   the block axis is below the model's own error there.
+ * - **D.** The inline axis reads the advance, not the ink, and keeps its
+ *   pixel: a glyph that overhangs its advance (an italic last letter) is
+ *   not read at all, and a clip on the line can slice it.
+ * The stronger guard is a pixel read — lift the clip in a frame and
+ * compare a crop of the sign column — and it is not built.
+ */
+const OWN_CLIP_SLACK = 0.01;
+const nameOwnClipByClass: Record<string, number> = {};
 const nameLinesByClass: Record<string, number> = {};
 const nameVerticalByClass: Record<string, number> = {};
 const nameTiersByClass: Record<string, Record<string, number>> = {};
@@ -3650,7 +3703,7 @@ const MASK_PROPS = ['mask-image', '-webkit-mask-image', 'mask-border-source', '-
  * cannot read — a shape that does not move when the region scrolls, over a
  * line that does, is a cut at some scroll no fixed reading can rule out.
  */
-function lineCut(rect: Box, from: Element): string | undefined {
+function lineCut(rect: Box, from: Element, strictOwn?: 'x' | 'y'): string | undefined {
     const box = { y: { lo: rect.top, hi: rect.bottom } as Span, x: { lo: rect.left, hi: rect.right } as Span };
     const need = { y: rect.bottom - rect.top, x: rect.right - rect.left };
     const reach = { y: { lo: 0, hi: 0 } as Span, x: { lo: 0, hi: 0 } as Span };
@@ -3659,17 +3712,23 @@ function lineCut(rect: Box, from: Element): string | undefined {
     const via = { y: '', x: '' };
     const side = { y: 'from below or above', x: 'sideways' };
     const overlap = (s: Span, edge: Span): number => Math.max(0, Math.min(s.hi, edge.hi) - Math.max(s.lo, edge.lo));
+    // The pixel of rounding every clip is given, but none on `strictOwn`'s
+    // axis of the line's own box (`OWN_CLIP_SLACK`, whose docblock says what
+    // this still does not catch: near-misses A–D).
+    let slack = 1;
     const clipTo = (axis: 'y' | 'x', by: string, edge: Span): string | undefined => {
         const s = box[axis];
         const r = reach[axis];
-        const lo = Math.max(r.lo, edge.lo - 1 - s.lo);
-        const hi = Math.min(r.hi, edge.hi + 1 - s.hi);
+        const lo = Math.max(r.lo, edge.lo - slack - s.lo);
+        const hi = Math.min(r.hi, edge.hi + slack - s.hi);
         if (lo <= hi) {
             reach[axis] = { lo, hi };
             return undefined;
         }
         if (!scrolled[axis]) {
-            return `is cut ${side[axis]} by ${by}: ${Math.round(overlap(s, edge))} of its ${Math.round(need[axis])}px show (${Math.round(s.lo)}–${Math.round(s.hi)} inside ${Math.round(edge.lo)}–${Math.round(edge.hi)})`;
+            const past = Math.max(edge.lo - s.lo, s.hi - edge.hi);
+            const strict = slack < 1 ? `; its ink runs ${past.toFixed(2)}px past a box that clips itself, which is given no slack across its lines` : '';
+            return `is cut ${side[axis]} by ${by}: ${Math.round(overlap(s, edge))} of its ${Math.round(need[axis])}px show (${Math.round(s.lo)}–${Math.round(s.hi)} inside ${Math.round(edge.lo)}–${Math.round(edge.hi)})${strict}`;
         }
         // The most of it any reachable scroll shows, for the message.
         const at = (d: number): number => overlap({ lo: s.lo + d, hi: s.hi + d }, edge);
@@ -3695,7 +3754,9 @@ function lineCut(rect: Box, from: Element): string | undefined {
                     if (container) stuck[axis] = false;
                     if (!clip[axis]) continue;
                     const edge = axis === 'y' ? { lo: clip.box.top, hi: clip.box.bottom } : { lo: clip.box.left, hi: clip.box.right };
+                    slack = at === from && axis === strictOwn ? OWN_CLIP_SLACK : 1;
                     const why = clipTo(axis, own, edge);
+                    slack = 1;
                     if (why !== undefined) return why;
                 }
                 continue;
@@ -3795,9 +3856,15 @@ function nameWholeFaults(screen: string, label: string): Failure[] {
             const why = unpainted(line);
             if (why !== undefined) fault = `${said} ${why} — a line nobody sees is not whole`;
         }
+        // The line's block axis, where its own clip gets no slack: across
+        // a horizontal line its height, across a vertical one its width.
+        const lineCs = getComputedStyle(line);
+        const blockAxis: 'x' | 'y' = lineCs.writingMode.startsWith('horizontal') ? 'y' : 'x';
+        const clipsItself = paintClips(line).some((clip) => clip.kind === 'axes' && clip[blockAxis]);
         for (const ink of fault === undefined ? inkLines(line) : []) {
             nameLinesByClass[measuringClass] = (nameLinesByClass[measuringClass] ?? 0) + 1;
-            const why = lineCut(ink, line);
+            if (clipsItself) nameOwnClipByClass[measuringClass] = (nameOwnClipByClass[measuringClass] ?? 0) + 1;
+            const why = lineCut(ink, line, blockAxis);
             if (why !== undefined) {
                 fault = `${said}: a line's ink at ${Math.round(ink.left)},${Math.round(ink.top)} ${why}`;
                 break;
@@ -3817,6 +3884,91 @@ function nameWholeFaults(screen: string, label: string): Failure[] {
         }
         if (fault !== undefined) {
             out.push({ screen, theme: label, check: NAME_WHOLE_CHECK, detail: `${fault} at ${window.innerWidth}x${window.innerHeight}` });
+        }
+    }
+    return out;
+}
+
+/*
+ * **The sign's words never stand on each other**
+ * (`the-signs-words-never-stand-on-each-other`, the 8g1 critic's P2-4). A
+ * look may lay the sign's lines out any way it likes — a grid that places
+ * two of them in one cell included — and every other sign rule reads one
+ * line at a time: a line whole in its own box, uncut by every clip, says
+ * nothing about another line painted through it, and two lines so, each
+ * whole, read green (the critic measured it). So on every screen, look
+ * and variant of every geometry pass, the sign's words are read as
+ * **lines**: every
+ * element in the sign that owns text and has no text-owning ancestor
+ * inside it (the name with its lamp, a tagline, the state line, an invite,
+ * each of the address's spans) — and no two lines' ink (`inkLines`, the
+ * name rule's own model: the glyphs' reach about the baseline, never a
+ * content area a tight line-height runs past its slot) may meet by more
+ * than a pixel each way. Only what paints is read: a line under
+ * `display: none` has no rects, one under `visibility` other than
+ * `visible` is skipped. The pairs compared and the sign lines read are
+ * counted per look (`signWordsByClass`), and a page pass owes pairs on
+ * every look it painted and, where it measured `empty-pasted`, an invite
+ * read in the sign (`probe-coverage.mjs`). Not read: the door's deck
+ * minis and a turned wall (`[data-turn]`), whose rects are a rotated
+ * paint's.
+ */
+const SIGN_WORDS_CHECK = 'the-signs-words-never-stand-on-each-other';
+const signWordsByClass: Record<string, { pairs: number; invites: number }> = {};
+
+/** The sign's lines: each element in it that owns text and has no text-owning ancestor inside the sign. */
+function signLines(sign: Element): HTMLElement[] {
+    const owns = (el: Element): boolean =>
+        [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n as Text).data.trim() !== '');
+    const lines: HTMLElement[] = [];
+    const walker = document.createTreeWalker(sign, NodeFilter.SHOW_ELEMENT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const el = node as HTMLElement;
+        if (!owns(el)) continue;
+        let inside = false;
+        for (let at = el.parentElement; at !== null && at !== sign; at = at.parentElement) {
+            if (owns(at)) {
+                inside = true;
+                break;
+            }
+        }
+        if (!inside) lines.push(el);
+    }
+    return lines;
+}
+
+function signWordsFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const sign of document.querySelectorAll<HTMLElement>('#app .stall-head')) {
+        if (sign.closest('.deck-stall, [data-turn]') !== null) continue;
+        const tally = (signWordsByClass[measuringClass] ??= { pairs: 0, invites: 0 });
+        const lines = signLines(sign)
+            .filter((line) => getComputedStyle(line).visibility === 'visible')
+            .map((line) => ({ line, ink: inkLines(line) }))
+            .filter(({ ink }) => ink.length > 0);
+        if (lines.some(({ line }) => line.matches('.tagline-invite'))) tally.invites += 1;
+        for (let i = 0; i < lines.length; i += 1) {
+            for (let j = i + 1; j < lines.length; j += 1) {
+                tally.pairs += 1;
+                const a = lines[i]!;
+                const b = lines[j]!;
+                let worst: { ox: number; oy: number } | undefined;
+                for (const p of a.ink) {
+                    for (const q of b.ink) {
+                        const ox = Math.min(p.right, q.right) - Math.max(p.left, q.left);
+                        const oy = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
+                        if (ox > 1 && oy > 1 && (worst === undefined || ox * oy > worst.ox * worst.oy)) worst = { ox, oy };
+                    }
+                }
+                if (worst !== undefined) {
+                    out.push({
+                        screen,
+                        theme: label,
+                        check: SIGN_WORDS_CHECK,
+                        detail: `${describe(a.line)} "${(a.line.textContent ?? '').trim().slice(0, 24)}" and ${describe(b.line)} "${(b.line.textContent ?? '').trim().slice(0, 24)}" paint their ink through each other by ${Math.round(worst.ox)}x${Math.round(worst.oy)}px at ${window.innerWidth}x${window.innerHeight}`,
+                    });
+                }
+            }
         }
     }
     return out;
@@ -3900,6 +4052,24 @@ function cjkFaceFaults(screen: string, label: string): Failure[] {
  * both columns (`PROBE-RULES.md`).
  */
 const STICKY_CHECK = 'a-sticky-sign-covers-nothing-as-the-region-scrolls';
+/*
+ * **A sticky sign fits the region it sticks in**
+ * (`a-sticky-sign-fits-its-region`, the 8g1 critic's P2-2). A sticky box
+ * stays at its inset while the region scrolls under it, so a box taller
+ * than the region's showing part holds its last pixels — on a sign, the
+ * address, and on a short screen the name too — off screen at every scroll
+ * but the region's end, where the box's containing block finally carries
+ * it up. Every other rule reads that: the address is reachable, the name
+ * whole at rest. So wherever the scroll pass finds a sticky subject, its
+ * height at rest is held to the region's showing part (the scroller's box
+ * inside the viewport, or the viewport for the page) less the box's own
+ * top and bottom insets, a pixel of rounding allowed. Measured on every
+ * geometry pass, and on the short pass (`layout-check.mjs`: 375x667 and
+ * 1280x720, two heights shorter than the page passes'), which runs the
+ * sticky looks alone. What that pass does and does not stand for is
+ * stated at `STICKY_ONLY`.
+ */
+const STICKY_FITS_CHECK = 'a-sticky-sign-fits-its-region';
 const stickyByClass: Record<string, { paints: number; scrolled: number; stops: number }> = {};
 
 /** The box a sticky box sticks within: the nearest ancestor that clips, or the page. */
@@ -3926,6 +4096,23 @@ function stickyScrollFaults(screen: string, label: string): Failure[] {
             tally.paints += 1;
             const region = scrollportOf(box);
             const page = region === document.scrollingElement || region === document.documentElement;
+            // It fits the region it sticks in (`a-sticky-sign-fits-its-region`):
+            // the region's showing part, less the box's own insets.
+            {
+                const r = page ? new DOMRect(0, 0, window.innerWidth, window.innerHeight) : region.getBoundingClientRect();
+                const shows = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+                const inset = (v: string): number => (Number.isFinite(Number.parseFloat(v)) ? Number.parseFloat(v) : 0);
+                const room = shows - inset(cs.top) - inset(cs.bottom);
+                const tall = box.getBoundingClientRect().height;
+                if (tall > room + 1) {
+                    out.push({
+                        screen,
+                        theme: label,
+                        check: STICKY_FITS_CHECK,
+                        detail: `${describe(box)} is ${Math.round(tall)}px tall and sticks in ${Math.round(room)}px of ${describe(region)} at ${window.innerWidth}x${window.innerHeight}: its last ${Math.round(tall - room)}px stand off screen at every scroll but the region's end`,
+                    });
+                }
+            }
             const max = region.scrollHeight - region.clientHeight;
             if (max <= 1) continue;
             tally.scrolled += 1;
@@ -4038,6 +4225,44 @@ const facesAtStart = await loadEveryFace(document.fonts);
 window.__faces = facesAtStart;
 
 const measured = screensToRun();
+/*
+ * **The short pass** (`?sticky=t-a,t-b`, the 8g1 critic's P2-2): the
+ * runner hands it the looks the page passes found a sticky sign on, and it
+ * measures those alone at two heights shorter than the page passes' 844
+ * and 900 — 375x667 and 1280x720 — and on each paint only where the sign
+ * is sticky there: `a-sticky-sign-covers-nothing-as-the-region-scrolls`,
+ * `a-sticky-sign-fits-its-region` and `the-sellers-name-stands-whole`
+ * (a stuck box does not move with the scroll, so a sign that outgrows a
+ * short region cuts its own name). Every other rule is the page passes'.
+ * A look with no sticky sign anywhere costs this pass nothing, and the
+ * runner skips the pass when no look has one.
+ *
+ * **What these sizes are, and what the pass does not measure** (the 8g1
+ * re-review's P2-2). 375x667 and 1280x720 are device screen sizes, not
+ * browser viewports: the probe emulates no browser chrome, so a viewport
+ * with its toolbars up is shorter than either (the critic's figure for an
+ * iPhone SE with Safari's toolbars is about 548px tall; unmeasured here).
+ * Not measured: a landscape phone (844x390), which takes the desk rules,
+ * where the tracked fixture `t-fixture-private` would fail (the critic's
+ * reading through this page's `?sticky=`, not through a runner pass); and
+ * a look that is sticky only under a condition the phone and desk passes
+ * do not enter (a reduced-motion block, say), since the pass measures only
+ * the looks those two passes found sticky.
+ */
+const STICKY_ONLY: ReadonlySet<string> | undefined = (() => {
+    const asked = new URLSearchParams(location.search).get('sticky');
+    return asked === null ? undefined : new Set(asked.split(',').filter((cls) => cls !== ''));
+})();
+/** Whether the painted stall's sign is sticky (a `STICKY_SUBJECTS` box computing `position: sticky`). */
+function signIsSticky(): boolean {
+    return STICKY_SUBJECTS.some((subject) =>
+        [...document.querySelectorAll(`#app .${subject}`)].some(
+            (box) => box.closest('.deck-stall, [data-turn]') === null && getComputedStyle(box).position === 'sticky',
+        ),
+    );
+}
+/** Paints the short pass measured, and paints it set aside because the sign was not sticky there. */
+const shortPass = { measured: 0, notSticky: 0 };
 /**
  * Screens that actually mounted a seller's figure while they were measured.
  *
@@ -4057,6 +4282,7 @@ const codesPainted = new Set<string>();
 const wornClassesPainted = new Set<string>();
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
+        if (STICKY_ONLY !== undefined && !STICKY_ONLY.has(look.theme.sheetClass)) continue;
         measuringClass = look.theme.sheetClass;
         for (const worn of variantsFor(screen, look)) {
             for (const row of worn) {
@@ -4066,6 +4292,18 @@ for (const screen of measured) {
                 worn.length === 0
                     ? look.label
                     : `${look.label} + ${worn.map((a) => a.label).join(' + ')}`;
+            if (STICKY_ONLY !== undefined) {
+                paint(screen, look, worn);
+                if (!signIsSticky()) {
+                    shortPass.notSticky += 1;
+                    continue;
+                }
+                shortPass.measured += 1;
+                failures.push(...lookSheetFaults(screen, label));
+                failures.push(...nameWholeFaults(screen, label));
+                failures.push(...stickyScrollFaults(screen, label));
+                continue;
+            }
             failures.push(...checkOverTime(screen, look, label, worn));
             failures.push(...lookSheetFaults(screen, label));
             failures.push(...fileClipFaults(screen, label));
@@ -4098,6 +4336,7 @@ for (const screen of measured) {
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
             failures.push(...nameWholeFaults(screen, label));
+            failures.push(...signWordsFaults(screen, label));
             failures.push(...cjkFaceFaults(screen, label));
             failures.push(...outlineFaults(screen, label));
             failures.push(...moneySetFaults(screen, label));
@@ -4143,7 +4382,7 @@ failures.push(...doorMiniFaults());
  * (`probe-coverage.mjs`).
  */
 const tryOnNamesByClass: Record<string, number> = {};
-if (measured.includes('publish-name')) {
+if (STICKY_ONLY === undefined && measured.includes('publish-name')) {
     const root = document.getElementById('app')!;
     // The default look, named by its class (`DEFAULT_LOOK_CLASS`, `looks.ts`): the probe names no look by id.
     const behind = shippedLooks().find((look) => look.theme.sheetClass === DEFAULT_LOOK_CLASS)!;
@@ -4201,7 +4440,7 @@ let recordRoadChecks = 0;
 for (const fault of harnessGateFaults()) {
     failures.push({ screen: 'probe page', theme: '-', check: RECORD_ROAD_CHECK, detail: fault });
 }
-if (measured.includes('offers')) {
+if (STICKY_ONLY === undefined && measured.includes('offers')) {
     const root = document.getElementById('app')!;
     const defaultClass = DEFAULT_LOOK_CLASS;
     for (const look of privateLooks().filter((candidate) => HARNESS_LICENCE.has(candidate.id))) {
@@ -4316,8 +4555,9 @@ function paintedGrounds(): { stall: MoodRgb | undefined; item: MoodRgb | undefin
 
 // Every measured look — on a workshop page the kit's alone, judged against
 // its OWN row: a kit mood measured against `decodeTheme(0xff)` would be
-// measured against Modern's canvas (the workshop critic's P1).
-for (const look of measuredLooks()) {
+// measured against Modern's canvas (the workshop critic's P1). Not on the
+// short pass, which measures sticky signs alone.
+for (const look of STICKY_ONLY === undefined ? measuredLooks() : []) {
     const theme = look.theme;
     paint('offers', look, []);
     const bare = paintSignature();
@@ -6299,12 +6539,21 @@ const verdict = {
     marksShownByClass,
     /* Sign lines read whole, the vertical ones, and the name rungs climbed, per class (`the-sellers-name-stands-whole`, 8f2). */
     nameLinesByClass,
+    /* Of those, the lines read under their own clip with no slack on their block axis (the 8g1 critic's P2-3). */
+    nameOwnClipByClass,
     nameVerticalByClass,
     nameTiersByClass,
     /* Sticky signs and the stops their regions were scrolled through, per class (`a-sticky-sign-covers-nothing-as-the-region-scrolls`, 8f2). */
     stickyByClass,
     /* The stress names measured on the name sheet's try-on, per carried look (8f2). */
     tryOnNamesByClass,
+    /* Nodes each staged screen put in its pressed state, per look class (`STAGED` in `fixtures.ts`). */
+    stagedByClass,
+    /* The short pass's looks as the page read them, and its paints measured and set aside (`?sticky=`). */
+    stickyOnly: STICKY_ONLY === undefined ? null : [...STICKY_ONLY].sort(),
+    shortPass,
+    /* Pairs of sign lines compared, and signs read with the tagline invite in them, per class (`the-signs-words-never-stand-on-each-other`). */
+    signWordsByClass,
     /* The CJK advances read where a sign line is CJK (`a-cjk-name-is-set-in-a-cjk-face`, 8f2). */
     cjkFaces: [...cjkFaces].sort(),
     /* Every policy refusal the page met before its verdict (`the-probe-page-meets-no-csp-refusal`). */

@@ -72,7 +72,10 @@
 .t-fixture-private .stall-name {
     --name-rungs: 2;
     max-height: 72px;
-    padding-block: 0.2em;
+    /* 0.3em, not 0.2: the probe gives a line's own clip no slack across
+       its lines (the 8g1 critic's P2-3), and at the wall's 14px rung the
+       stacked marks reached 0.68 of a pixel past 0.2em. */
+    padding-block: 0.3em;
     overflow: hidden;
 }
 

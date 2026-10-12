@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { CARRIED_LINE_SKIP_CEILING, PAID_LOOK_UNPAINTED_CODES, carriedTallyFaults } from './look-tallies.mjs';
+import { CARRIED_LINE_SKIP_CEILING, PAID_LOOK_UNPAINTED_CODES, carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 
 /**
  * `a-carried-look-is-held-to-its-own-skip-ceilings` (8e2, the 8e2 critic's
@@ -82,5 +82,39 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
             't-fixture-private: a-code-keeps-its-quiet-zone-white read no quiet zone on mobile/pay:pay-qr under it',
         ]);
         assert.deepEqual(PAID_LOOK_UNPAINTED_CODES, ['desktop/publish-name:publish-qr']);
+    });
+});
+
+const SKIP_RECORDS = [
+    { viewport: 'mobile', screen: 'studio-items', classes: [FIXTURE], skips: { 'clipped-away': 8, sliver: 2 } },
+    { viewport: 'mobile', screen: 'studio-items', classes: [FIXTURE], skips: { 'clipped-away': 8 } },
+    { viewport: 'mobile', screen: 'shop-window-sheet', classes: [FIXTURE], skips: { 'not-rendered': 5 } },
+    { viewport: 'mobile', screen: 'offers', classes: [FIXTURE], skips: {} },
+    { viewport: 'desktop', screen: 'shop-window-browse', classes: [FIXTURE], skips: { 'clipped-away': 2 } },
+    { viewport: 'desktop', screen: 'studio-items', classes: ['t-modern'], skips: { 'clipped-away': 9 } },
+];
+
+describe('a-carried-looks-skips-are-printed-per-screen', () => {
+    /**
+     * The 8g1 critic's P3-1: one sum per viewport let a new clipped line on
+     * one screen hide behind one fewer on another. The run prints each
+     * carried look's skips per screen beside the sums its ceiling holds.
+     */
+    it('sums each screen of the look, and only the kinds the ceiling counts', () => {
+        assert.deepEqual(skipsByScreen(SKIP_RECORDS, FIXTURE), {
+            mobile: {
+                'studio-items': { 'clipped-away': 16, 'not-rendered': 0 },
+                'shop-window-sheet': { 'clipped-away': 0, 'not-rendered': 5 },
+            },
+            desktop: { 'shop-window-browse': { 'clipped-away': 2, 'not-rendered': 0 } },
+        });
+    });
+
+    it('says each viewport in one line, screens sorted, and none where none skipped', () => {
+        assert.equal(
+            skipsByScreenLine(skipsByScreen(SKIP_RECORDS, FIXTURE)),
+            'mobile shop-window-sheet 0/5, studio-items 16/0; desktop shop-window-browse 2/0; canvas none',
+        );
+        assert.equal(skipsByScreenLine(skipsByScreen(SKIP_RECORDS, 't-none')), 'mobile none; desktop none; canvas none');
     });
 });

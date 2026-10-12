@@ -47,7 +47,10 @@ export const CLIP_PASSES = Object.freeze(['mobile', 'desktop', 'canvas']);
  * Each carried look's line skips, per viewport, as measured — exact
  * ceilings, `LINE_SKIP_CEILING`'s rule: more fails and names the count;
  * fewer says so, and the entry comes down with the change that lowered it.
- * A carried class with no entry fails the run (`carriedTallyFaults`).
+ * A carried class with no entry fails the run (`carriedTallyFaults`). The
+ * ceiling holds sums; the run prints each carried look's skips per screen
+ * beside them on every run (`skipsByScreen`), so an entry's reason can be
+ * checked against the screens that make it.
  */
 export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
     /*
@@ -73,23 +76,64 @@ export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
     /*
      * The private look at 0x04, measured 2026-10-12 over the contrast
      * targets as they stand, on its bare variant alone (it carries no
-     * worn variant yet, so each count is about half the fixture's): its
-     * sheet clips nothing the pass measures, so its skips are the base
-     * sheets' on the skeleton's markup — on the canvas, the wall
-     * payment's lines past its plate's scroller (99 on the 35-item
-     * fixture, 2 on the 3-item one) and the ticker's ribbon past its cell
-     * (3); on a phone and a desk, the halves a
-     * phone hides (the desk-only controls, a closed switch's row), the
-     * reasons the fixture's entry gives. Lowered with the change that
-     * lowers them; raised only by a reviewed diff that names what the
-     * look now clips and why.
+     * worn variant yet, so each count is about half the fixture's). The
+     * counts are measured, and fall on these screens, from the run's own
+     * dump:
+     *
+     * - mobile clipped-away 8: `studio-items`;
+     * - mobile not-rendered 5, desktop not-rendered 4: `shop-window-sheet`,
+     *   the halves a phone hides (the desk-only controls, a closed
+     *   switch's row);
+     * - desktop clipped-away 7: `shop-window-browse` 2 and `studio-items`
+     *   5 (2 → 7, 2026-10-12; the 5 are provisional);
+     * - canvas clipped-away 104: the wall payment's lines past its
+     *   plate's scroller (99 on `shop-window-touch-quotes-pay-35`, 2 on
+     *   the one-item `shop-window-touch-quotes-pay`) and the ticker's
+     *   ribbon past its cell (3).
+     *
+     * Lowered as the port changes the screens they fall on, with the
+     * change that lowers them; raised only by a reviewed diff that names
+     * what now clips and why.
      */
     't-inkwash': Object.freeze({
         mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
-        desktop: Object.freeze({ 'clipped-away': 2, 'not-rendered': 4 }),
+        desktop: Object.freeze({ 'clipped-away': 7, 'not-rendered': 4 }),
         canvas: Object.freeze({ 'clipped-away': 104, 'not-rendered': 0 }),
     }),
 });
+
+/**
+ * A carried look's line skips by viewport and screen, from the contrast
+ * pass's job records (`{ viewport, screen, classes, skips }`, the dump's
+ * `jobs`): a job counts for `cls` when the stall it painted wore it. Only
+ * screens with a skip are named. What the run prints beside the sums the
+ * ceiling holds (`skipsByScreenLine`), so a count that holds while the
+ * screens behind it change is on screen (the 8g1 critic's P3-1): a new
+ * clipped line on one screen hidden by one fewer on another reads the
+ * same sum and a different line.
+ */
+export function skipsByScreen(records, cls) {
+    const out = {};
+    for (const record of records) {
+        if (!(record.classes ?? []).includes(cls)) continue;
+        for (const why of LINE_SKIP_KINDS) {
+            const n = record.skips?.[why] ?? 0;
+            if (n === 0) continue;
+            const at = ((out[record.viewport] ??= {})[record.screen] ??= { 'clipped-away': 0, 'not-rendered': 0 });
+            at[why] += n;
+        }
+    }
+    return out;
+}
+
+/** `skipsByScreen`'s answer as one line: per viewport, each screen's clipped-away/not-rendered, screens sorted. */
+export function skipsByScreenLine(byScreen) {
+    const parts = SKIP_VIEWPORTS.map((vp) => {
+        const screens = Object.entries(byScreen[vp] ?? {}).sort(([a], [b]) => a.localeCompare(b));
+        return `${vp} ${screens.length === 0 ? 'none' : screens.map(([screen, at]) => `${screen} ${at['clipped-away']}/${at['not-rendered']}`).join(', ')}`;
+    });
+    return parts.join('; ');
+}
 
 /**
  * The codes owed by name (`CODES_REQUIRED`) that a paid look cannot paint

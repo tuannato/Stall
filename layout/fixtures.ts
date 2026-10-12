@@ -241,6 +241,33 @@ export const CJK_NAME = '山間清泉茶葉老舖子店';
  */
 export const STACKED_NAME = 'ẪỮỆ ẤẦẨ ẪỮỆ';
 export const CJK_TAGLINE = '每週新鮮烘焙，用心包裝';
+/**
+ * The longest tagline a record carries: 64 bytes, the cap of tag `0x02`, of
+ * the widest Latin letter and with no space, so it breaks only where the
+ * sign lets it.
+ */
+export const LONGEST_TAGLINE = 'W'.repeat(64);
+/** The CJK tagline at the cap: 21 ideographs, 63 bytes, the most a record holds. */
+export const LONGEST_CJK_TAGLINE = '每週新鮮烘焙咖啡豆用心包裝當日寄出歡迎選購';
+/**
+ * The longest asked amount every shipped look's item face holds at a
+ * phone's width: 100 billion XEC, `100,000,000,000`, 15 characters of
+ * figure (measured 2026-10-12: at 17 characters Rural's face spills, at 18
+ * Neo's too — the face's figure has no ladder, and the critic's 18 is a
+ * finding about the shipped looks, left to the owner). A covenant's asked
+ * amount is any size a stranger's gift listing chooses (§10).
+ */
+export const LONGEST_ASK_SATS = 10_000_000_000_000n;
+/**
+ * The longest quote figure every shipped look's item face holds at a
+ * phone's width, in the unit whose sign leaves the figure no break
+ * opportunity (`withSymbol` writes a leading sign with no space):
+ * `SAR999,999,999.99`, 17 characters. The editor writes up to eight bytes
+ * of amount (`SAR184,467,440,737,095,516.15`, 29 characters), and from 19
+ * characters every shipped look's face spills sideways at 390 (measured
+ * 2026-10-12) — a finding about the shipped looks, left to the owner.
+ */
+export const LONGEST_QUOTE: TokenPrice = { code: 'sar', exponent: 2, amount: 99_999_999_999n };
 
 export const handlers: StallHandlers = {
     onOpenItem: () => {},
@@ -345,6 +372,21 @@ export const SCREENS: Record<string, StallView> = {
         // own words with the token's name under it, and one with no words at
         // all that falls back to the token's name and says so. `QUOTED` is
         // another wallet's mint, so that row is initials plus one more line.
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+    }),
+    /*
+     * The address box in its other state (the 8g1 critic's P1-1): the
+     * clipboard refused the copy, so the sign shows the whole string at
+     * every width (`addressLine`'s `shown`, `data-copied="shown"`) — on a
+     * phone the 48 characters where `shortAddress`' glance stood. No view
+     * field reaches it: a press does, so the probe and the showroom stage
+     * it on the painted tree (`STAGED`, below). The shop's book, so the
+     * rows a wider sign could crowd are on the screen. Geometry only.
+     */
+    'addr-shown': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
     }),
@@ -626,6 +668,30 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
     }),
     /*
+     * The two faces with long figures (the 8g1 critic's P2-1). The face's
+     * figure has no ladder — the rows step down through `priceTier`, the
+     * face prints at one size — and the rows' `100,000,000` stress never
+     * reached it. A listing's asked amount is the covenant's, `from` beside
+     * it (`LONGEST_ASK_SATS`); a quote's is the seller's, in the unit whose
+     * sign the figure cannot break from (`LONGEST_QUOTE`). Each is the
+     * longest every shipped look's face holds at 390, not the longest a
+     * record can carry: past it the shipped faces spill (the constants'
+     * docblocks). Geometry only: their ink is `item-listing`'s and
+     * `item-quote`'s.
+     */
+    'item-listing-long-figure': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, LONGEST_ASK_SATS), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-quote-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, LONGEST_QUOTE]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    /*
      * The shop that sells decorations, which is the one page where the
      * Decorations section and its per-look runs are the only dividers there
      * are — a single section prints no section heading, so nothing else on
@@ -699,6 +765,22 @@ export const SCREENS: Record<string, StallView> = {
         tagline: undefined,
         announcement: undefined,
         shelves: undefined,
+        pasted: true,
+    }),
+    /*
+     * The seller's first screen after naming the stall and before listing
+     * (the 8g1 critic's P2-4): an empty book, reached by their own paste
+     * (`pasted`), with no tagline and no announcement — so the sign carries
+     * the empty stall's state line (`EMPTY_SUB`) and the tagline invite
+     * together, and the body the notice invite over the empty block. No
+     * other screen painted the invites on the empty stall. Geometry only:
+     * the notice invite's words are sampled on `sparse-pasted` where a rain
+     * falls behind them, and the empty block's ink on `empty`.
+     */
+    'empty-pasted': base({
+        fetch: { kind: 'empty' },
+        tagline: undefined,
+        announcement: undefined,
         pasted: true,
     }),
     /* The other two panels of the shell. One panel in the DOM at a time. */
@@ -944,6 +1026,20 @@ export const SCREENS: Record<string, StallView> = {
     'stacked-name': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
         stallName: STACKED_NAME,
+    }),
+    /*
+     * The tagline at its cap: 64 bytes of the widest Latin letter, and 21
+     * ideographs. The default tagline is 54 bytes and the CJK one 33, so no
+     * other screen held a tagline as long as a record can, and the two
+     * scripts reach the cap at very different lengths. Geometry only.
+     */
+    'longest-tagline': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        tagline: LONGEST_TAGLINE,
+    }),
+    'longest-cjk-tagline': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 120_000n)] },
+        tagline: LONGEST_CJK_TAGLINE,
     }),
     /*
      * The state screens. Most sellers meet one of these before they ever see
@@ -1567,6 +1663,37 @@ export const SCREENS: Record<string, StallView> = {
 };
 
 /**
+ * States the app reaches by a press on the painted tree and by no view
+ * field, staged right after the screen is painted (`stageScreen`), in the
+ * probe's `paint` and the showroom's — so every pass, the contrast pass
+ * included, and every shot of the screen are of the same state. The app
+ * repaints nothing when the press lands, so neither does the stage: the
+ * name's ladder and the marquees stand as the paint measured them.
+ *
+ * - `addr-shown`: the clipboard refused a tap on the address, and
+ *   `addressLine` set `data-copied="shown"` on it — the whole string at
+ *   every width, until the next paint (the 8g1 critic's P1-1).
+ */
+export const STAGED: Readonly<Record<string, (root: ParentNode) => number>> = Object.freeze({
+    'addr-shown': (root: ParentNode) => {
+        const boxes = root.querySelectorAll('[data-role="addr-copy"]');
+        for (const addr of boxes) {
+            addr.setAttribute('data-copied', 'shown');
+        }
+        return boxes.length;
+    },
+});
+
+/**
+ * Stage `screen`'s state on the tree just painted (`STAGED`), and say how
+ * many nodes it staged — `undefined` for a screen with nothing to stage, so
+ * a caller can refuse a staged screen that found nothing to press.
+ */
+export function stageScreen(screen: string, root: ParentNode): number | undefined {
+    return Object.hasOwn(STAGED, screen) ? STAGED[screen]!(root) : undefined;
+}
+
+/**
  * Screens that paint no offer card. They still paint decorations — a beetle
  * strip sits above the footer on every screen with a stall — so they are
  * measured undecorated and fully decorated, and the single-row variants are
@@ -1637,17 +1764,30 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'item-unbuyable-fold',
     'shop-window-unbuyable',
     'shop-window-cycle-unbuyable',
-    // The sign under stress (8f2): a 32-byte name, a CJK name. They exist
-    // for the sign; the decoration interactions they could stage are
-    // `offers`' and `shop-window-cycle`'s.
+    // The sign under stress (8f2): a 32-byte name, a CJK name; and the
+    // tagline at its cap in both scripts. They exist for the sign; the
+    // decoration interactions they could stage are `offers`' and
+    // `shop-window-cycle`'s.
     'cjk-name',
     'stacked-name',
+    'longest-tagline',
+    'longest-cjk-tagline',
     'shop-window-long-name',
     'shop-window-browse-long-name',
     'shop-window-stacked-name',
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    // The address in its refused-copy state (the 8g1 critic's P1-1): the
+    // decoration interactions it could stage are `offers`'.
+    'addr-shown',
+    // The empty stall a seller pasted (the 8g1 critic's P2-4): it exists
+    // for the sign's cells, not for decoration interactions.
+    'empty-pasted',
+    // The two faces at long figures (the 8g1 critic's P2-1): the decoration
+    // interactions they could stage are `item-listing`'s and `item-quote`'s.
+    'item-listing-long-figure',
+    'item-quote-long-figure',
 ]);
 
 /**
@@ -1755,8 +1895,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // ticker — `[data-role="unbuyable"]` in `CONTRAST_TEXT`.
     'shop-window-cycle-unbuyable',
     /*
-     * The sign under stress (8f2): the sign's ground with a longer name on
-     * it, which `hostile-name` and `offers` already sample, and the wall's
+     * The sign under stress (8f2, and the tagline at its cap): the sign's
+     * ground with a longer name or tagline on it, which
+     * `hostile-name` and `offers` already sample, and the wall's
      * own ground which `shop-window-cycle` and `shop-window-wall` sample.
      * What these screens are here for is geometry
      * (`the-sellers-name-stands-whole`). The CJK name's glyphs are the
@@ -1765,12 +1906,27 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
      */
     'cjk-name',
     'stacked-name',
+    'longest-tagline',
+    'longest-cjk-tagline',
     'shop-window-long-name',
     'shop-window-browse-long-name',
     'shop-window-stacked-name',
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    // The address showing its whole string (the 8g1 critic's P1-1):
+    // `offers`' ground with the sign's other span on it, and `.addr-full`
+    // is sampled at the desk. It is here for the sign's width.
+    'addr-shown',
+    // The empty stall a seller pasted (the 8g1 critic's P2-4): `empty`'s
+    // ground with the invites on it (the notice invite's words sampled on
+    // `sparse-pasted` under the rain). It is here for the sign's cells.
+    'empty-pasted',
+    // The two faces at long figures (the 8g1 critic's P2-1):
+    // `item-listing`'s and `item-quote`'s ink. They are here for the figure
+    // inside its card.
+    'item-listing-long-figure',
+    'item-quote-long-figure',
 ]);
 
 /**

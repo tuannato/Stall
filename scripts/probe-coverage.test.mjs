@@ -34,9 +34,15 @@ const full = {
     nameLinesByClass: { 't-modern': 40, 't-neo': 40, 't-rural': 40, 't-skeleton': 40, 't-fixture-private': 40 },
     nameTiersByClass: { 't-fixture-private': { 1: 2, 2: 1 } },
     nameVerticalByClass: { 't-fixture-private': 6 },
+    nameOwnClipByClass: { 't-fixture-private': 30 },
     marksShownByClass: { 't-fixture-private': 30 },
     stickyByClass: { 't-fixture-private': { paints: 20, scrolled: 18, stops: 90 } },
     tryOnNamesByClass: { 't-fixture-private': 2 },
+    // 8g1's critic: pairs of sign lines compared on every look a page pass
+    // may paint, and the tagline invite read in the sign.
+    signWordsByClass: Object.fromEntries(
+        ['t-modern', 't-neo', 't-rural', 't-skeleton', 't-fixture-private'].map((cls) => [cls, { pairs: 50, invites: 2 }]),
+    ),
 };
 
 describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
@@ -316,16 +322,18 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
     });
 
     it('owes the tracked fixture its sticky sign, its mark and its rung, where it is carried', () => {
-        const bare = { ...read, stickyByClass: {}, marksShownByClass: {}, nameTiersByClass: {}, nameVerticalByClass: {} };
+        const bare = { ...read, stickyByClass: {}, marksShownByClass: {}, nameTiersByClass: {}, nameVerticalByClass: {}, nameOwnClipByClass: {} };
         assert.deepEqual(probeCoverageGaps('desktop', bare, options), [
             'a-sticky-sign-covers-nothing-as-the-region-scrolls scrolled no region under the t-fixture-private sign',
             'no-look-mark-paints-inside-a-protected-box has no subject: the t-fixture-private stall showed no mark',
             'the-sellers-name-stands-whole read no t-fixture-private name on a rung of its ladder',
             'the-sellers-name-stands-whole read no vertical t-fixture-private name',
+            'the-sellers-name-stands-whole read no t-fixture-private line under its own clip',
         ]);
         assert.deepEqual(probeCoverageGaps('mobile', bare, options), [
             'the-sellers-name-stands-whole read no t-fixture-private name on a rung of its ladder',
             'the-sellers-name-stands-whole read no t-fixture-private name on the last rung of its ladder',
+            'the-sellers-name-stands-whole read no t-fixture-private line under its own clip',
         ]);
         assert.deepEqual(probeCoverageGaps('mobile', { ...read, nameTiersByClass: { 't-fixture-private': { 1: 4 } } }, options), [
             'the-sellers-name-stands-whole read no t-fixture-private name on the last rung of its ladder',
@@ -444,5 +452,68 @@ describe('owed-follows-what-a-pass-wore', () => {
         assert.deepEqual(owedFaults({ rain: ['x'], horizon: [] }, ['att-rainfall', 'att-horizon']), [
             'owed-follows-what-a-pass-wore: a pass wore att-horizon and the page owes its horizon on no contrast job (__contrastOwed)',
         ]);
+    });
+});
+
+const STATES_8G1_CLASSES = [...SHIPPED, 't-skeleton'];
+const STATES_8G1_OPTIONS = { shippedClasses: SHIPPED, skeleton: true };
+
+describe('the-8g1-states-owe-their-subjects', () => {
+    /**
+     * The 8g1 critic's states: a staged screen (`STAGED` in
+     * `layout/fixtures.ts`) owes a node it pressed on every look it was
+     * painted on, and `addr-shown` an address in its shown state on every
+     * look a pass painted. A fixture or a stage that stopped putting its
+     * state on the tree fails the run rather than leaving the rule green
+     * over the plain paint.
+     *
+     * The sign's words rule owes pairs compared on every look a page pass
+     * painted, and the tagline invite read where the pass measured
+     * `empty-pasted`.
+     */
+    let read;
+    before(() => {
+        read = {
+            ...full,
+            sheetClasses: STATES_8G1_CLASSES,
+            rowSizeClasses: SHIPPED,
+            markChecksByClass: Object.fromEntries(STATES_8G1_CLASSES.map((cls) => [cls, 40])),
+            screensMeasured: ['addr-shown', 'empty-pasted'],
+            stagedByClass: Object.fromEntries(STATES_8G1_CLASSES.map((cls) => [cls, { 'addr-shown': 2 }])),
+        };
+    });
+
+    it('passes a page pass that staged and read every state it owes', () => {
+        for (const pass of ['mobile', 'desktop']) {
+            assert.deepEqual(probeCoverageGaps(pass, read, STATES_8G1_OPTIONS), [], pass);
+        }
+    });
+
+    it('owes every staged screen a node it pressed, and addr-shown an address on every look', () => {
+        assert.deepEqual(
+            probeCoverageGaps('mobile', { ...read, stagedByClass: { ...read.stagedByClass, 't-neo': { 'addr-shown': 0 } } }, STATES_8G1_OPTIONS),
+            [
+                'addr-shown staged nothing on a t-neo stall — its state was never on the tree it measured',
+                'addr-shown put no address in its shown state on a t-neo stall',
+            ],
+        );
+        const { 't-rural': _gone, ...rest } = read.stagedByClass;
+        assert.deepEqual(probeCoverageGaps('desktop', { ...read, stagedByClass: rest }, STATES_8G1_OPTIONS), [
+            'addr-shown put no address in its shown state on a t-rural stall',
+        ]);
+        // A pass that did not measure the screen owes nothing of it.
+        assert.deepEqual(probeCoverageGaps('desktop', { ...read, stagedByClass: rest, screensMeasured: [] }, STATES_8G1_OPTIONS), []);
+    });
+
+    it('owes pairs of sign lines on every look a page pass painted, and the invite where empty-pasted was measured', () => {
+        const words = { ...read.signWordsByClass, 't-modern': { pairs: 0, invites: 0 } };
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, signWordsByClass: words }, STATES_8G1_OPTIONS), [
+            'the-signs-words-never-stand-on-each-other compared no two lines of the sign on a t-modern stall',
+            'the-signs-words-never-stand-on-each-other read no tagline invite in the sign on a t-modern stall',
+        ]);
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, signWordsByClass: words, screensMeasured: ['addr-shown'] }, STATES_8G1_OPTIONS), [
+            'the-signs-words-never-stand-on-each-other compared no two lines of the sign on a t-modern stall',
+        ]);
+        assert.deepEqual(probeCoverageGaps('canvas', { ...read, signWordsByClass: {}, stagedByClass: {}, screensMeasured: [] }, STATES_8G1_OPTIONS), []);
     });
 });

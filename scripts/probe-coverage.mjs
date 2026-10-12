@@ -77,7 +77,8 @@
  * - **The tracked fixture's subjects** (8f2, `TRACKED_FIXTURE_CLASS`): a run
  *   that carries it owes a region scrolled under its sticky sign, a mark it
  *   shows and a vertical name at the desk, a rung its long name climbed on
- *   both page passes and the last rung on the phone; the runner owes its
+ *   both page passes and the last rung on the phone, and a line read under
+ *   its own clip on both (the 8g1 critic's P2-3); the runner owes its
  *   art-off frames, pending and failed, on the contrast pass, and a
  *   mark-hide and pending frame for any carried look with marks or file art.
  * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
@@ -193,6 +194,21 @@ export function probeCoverageGaps(
                 gaps.push(`the-sellers-name-stands-whole read no line of the sign on a ${cls} stall`);
             }
         }
+        // Every look a page pass painted owes pairs of sign lines compared
+        // (`the-signs-words-never-stand-on-each-other`, the 8g1 critic's
+        // P2-4), and a pass that measured `empty-pasted` the tagline invite
+        // read in the sign beside the state line it exists to stand beside.
+        if (PAGE_PASSES.has(pass)) {
+            const words = report.signWordsByClass ?? {};
+            for (const cls of report.sheetClasses ?? []) {
+                if (!((words[cls]?.pairs ?? 0) > 0)) {
+                    gaps.push(`the-signs-words-never-stand-on-each-other compared no two lines of the sign on a ${cls} stall`);
+                }
+                if ((report.screensMeasured ?? []).includes('empty-pasted') && !((words[cls]?.invites ?? 0) > 0)) {
+                    gaps.push(`the-signs-words-never-stand-on-each-other read no tagline invite in the sign on a ${cls} stall`);
+                }
+            }
+        }
         // A sticky sign whose region never scrolled on a pass was measured at
         // rest alone (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
         for (const [cls, at] of Object.entries(report.stickyByClass ?? {})) {
@@ -227,6 +243,27 @@ export function probeCoverageGaps(
         }
         if (pass === 'desktop' && !(((report.nameVerticalByClass ?? {})[fx] ?? 0) > 0)) {
             gaps.push(`the-sellers-name-stands-whole read no vertical ${fx} name`);
+        }
+        // Its name clips itself, so the strict read of a line's own clip
+        // (the 8g1 critic's P2-3) has a subject on both page passes.
+        if (PAGE_PASSES.has(pass) && !(((report.nameOwnClipByClass ?? {})[fx] ?? 0) > 0)) {
+            gaps.push(`the-sellers-name-stands-whole read no ${fx} line under its own clip`);
+        }
+    }
+    // A staged screen (`STAGED` in `layout/fixtures.ts`, the 8g1 critic's
+    // P1-1) owes, on every look a pass painted it on, a node it pressed: a
+    // screen named for a state that staged nothing measured the plain paint.
+    const staged = report.stagedByClass ?? {};
+    for (const [cls, screens] of Object.entries(staged)) {
+        for (const [screen, n] of Object.entries(screens)) {
+            if (!(n > 0)) gaps.push(`${screen} staged nothing on a ${cls} stall — its state was never on the tree it measured`);
+        }
+    }
+    if ((report.screensMeasured ?? []).includes('addr-shown')) {
+        for (const cls of report.sheetClasses ?? []) {
+            if (!((staged[cls]?.['addr-shown'] ?? 0) > 0)) {
+                gaps.push(`addr-shown put no address in its shown state on a ${cls} stall`);
+            }
         }
     }
     // A pass that measured the CJK screen owes the face it was set in (8f2).

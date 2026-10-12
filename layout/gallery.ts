@@ -39,7 +39,7 @@
  */
 import { renderStall } from '../src/ui/render';
 import { WORKSHOP_THEME_ID } from '../src/domain/theme';
-import { SCREENS, handlers } from './fixtures';
+import { SCREENS, handlers, stageScreen } from './fixtures';
 import {
     galleryLooks,
     kitLook,
@@ -134,6 +134,8 @@ function paint(): string {
     // Composed where every harness page composes a look (`paintView`): a
     // carried private look rides the try-on, under the harness's licence.
     renderStall(app, paintView(SCREENS[screen]!, look, worn), handlers);
+    // The state a press reaches on this screen, as the probe stages it.
+    stageScreen(screen, app);
     return `${screen} · theme ${look.id} · flags ${flags} · worn [${worn
         .map((w) => w.label)
         .join(', ')}]`;

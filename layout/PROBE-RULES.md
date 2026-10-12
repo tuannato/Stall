@@ -5441,3 +5441,294 @@ bind the pay-screens audit (`quotes` / `pay`): each must mount a
 status, never a glyph.
 
 Measured green on 2a6578a: `pnpm test:layout`, 136.9 s (the window's run).
+
+## The tagline at its cap: `longest-tagline` and `longest-cjk-tagline`
+
+Two fixture screens, no new rule. A record's tagline (tag `0x02`) holds up
+to 64 bytes, and until these stood in the table the longest any screen
+painted was the default's 54 bytes and `CJK_TAGLINE`'s 33. The two scripts
+reach the cap at very different lengths: `longest-tagline` is 64 bytes of
+the widest Latin letter with no space (`LONGEST_TAGLINE`, breaking only
+where the sign lets it), `longest-cjk-tagline` 21 ideographs, 63 bytes
+(`LONGEST_CJK_TAGLINE`). Both are on `STATE_SCREENS` and
+`GEOMETRY_ONLY_SCREENS`, beside the stress names: the sign's ground with a
+longer line on it, which `offers` and `hostile-name` already sample, so
+what they add is geometry — `the-sellers-name-stands-whole` reads every
+tagline line, and `text-spills` and `cutSideways` the sign around it.
+
+## A state only a press reaches, staged: `addr-shown` (the 8g1 critic's P1-1)
+
+The address box is the copy control (`addressLine`). A tap whose clipboard
+is missing or refuses sets `data-copied="shown"` on it, and the sign then
+shows the whole 48-character address at every width until the next paint —
+on a phone, where `shortAddress`' glance stood. No view field reaches that
+state, so no screen had painted it: a look whose sign is sized by what it
+holds could widen it there and crowd everything beside it, and every pass
+measured the glance instead.
+
+**`STAGED`** (`layout/fixtures.ts`) names the screens whose state only a
+press reaches, and `stageScreen` puts it on the tree right after the paint —
+in the probe's `paint`, so every geometry pass, the reduced-motion pass and
+the contrast pass's prepare stage it, and in the showroom's, so a shot of
+the screen is of the state measured. The app repaints nothing when the
+press lands, so neither does the stage: the name's ladder and the marquees
+stand as the paint measured them. `addr-shown` is the shop's book with
+every address box in its shown state; on `STATE_SCREENS` (bare and every
+all-worn variant: the decoration interactions are `offers`') and
+`GEOMETRY_ONLY_SCREENS` (`.addr-full` is sampled at the desk, where it is
+the address's only form).
+
+**Owed, not trusted** (`probe-coverage.mjs`, test
+`the-8g1-states-owe-their-subjects`): the probe counts the nodes each
+staged screen pressed per look (`stagedByClass`); a staged screen that
+pressed nothing on a look fails the pass, and a pass that measured
+`addr-shown` owes an address in its shown state on every look it painted.
+
+Red proof: the private look at 0x04 at `b94be54`, selected — 21 failures
+on `addr-shown` at 390x844 (`asked amount is covered` ×5, `a protected box
+is cut sideways` ×5, `text-spills` ×6, and 5 more on the shop's figures),
+0 at 1280x900. Green on the three shipped looks, the skeleton and the
+tracked fixture at both widths.
+
+## The sign's words never stand on each other, and `empty-pasted` (the 8g1 critic's P2-4)
+
+**A rule, and the screen it was missing.** Every sign rule read one line at
+a time — a line whole in its own box, uncut by every clip, uncovered when it
+is protected — so two lines a look placed in one cell, each whole, painted
+through each other with every rule green.
+`the-signs-words-never-stand-on-each-other` (`signWordsFaults` in
+`probe.ts`) reads the sign's words as **lines**: each element in the sign
+that owns text and has no text-owning ancestor inside it (`signLines`: the
+name with its lamp, a tagline, the state line, an invite, each of the
+address's spans), and holds every pair to ink that meets by no more than a
+pixel each way. The ink is the name rule's own model (`inkLines`, the
+glyphs' reach about the baseline), never a text rect: under a tight
+line-height the content area runs past the line's slot, and two stacked
+lines would meet there with no glyph near. A line under `display: none`
+paints no rect; one under `visibility` other than `visible` is skipped.
+Every screen, look and variant of every geometry pass; not the door's deck
+minis, not a turned wall.
+
+**`empty-pasted`** is the seller's first screen after naming the stall and
+before listing: an empty book reached by their own paste (`pasted`), no
+tagline, no announcement — so the sign holds the empty stall's state line
+(`EMPTY_SUB`) and the tagline invite together, which no screen painted
+(`sparse-pasted` carries the invite with no state line: `paintOffers` gives
+the count to the tab). `STATE_SCREENS` and `GEOMETRY_ONLY_SCREENS`: the
+notice invite's words are sampled on `sparse-pasted` where a rain falls
+behind them, the empty block's ink on `empty`; the tagline invite is no
+contrast target anywhere, stated.
+
+Owed (`probe-coverage.mjs`, `the-8g1-states-owe-their-subjects`): every
+look a page pass painted owes pairs of sign lines compared, and a pass that
+measured `empty-pasted` the tagline invite read in the sign
+(`signWordsByClass`).
+
+Red proof: the private look at 0x04 at `b94be54`, selected — `empty-pasted`
+fails `the-signs-words-never-stand-on-each-other` at 390x844 and 1280x900.
+Green on the three shipped looks, the skeleton and the tracked fixture at
+both widths, every screen.
+
+## The item face at long figures: `item-listing-long-figure` and `item-quote-long-figure` (the 8g1 critic's P2-1)
+
+Two fixture screens, no new rule. The rows step their figure down through
+`priceTier`; the item face prints its figure at one size, and the rows'
+`100,000,000` stress never reached it. `item-listing-long-figure` is the
+listing face over `LONGEST_ASK_SATS` (`100,000,000,000` XEC, 15 characters,
+`from` beside it); `item-quote-long-figure` the quote face over
+`LONGEST_QUOTE` (`SAR999,999,999.99`, 17 characters in the unit whose sign
+leaves the figure no break opportunity — `withSymbol` writes a leading sign
+with no space). `STATE_SCREENS` and `GEOMETRY_ONLY_SCREENS`: their ink is
+`item-listing`'s and `item-quote`'s. What catches a spill is the rules that
+were already there — `text-spills`, the sideways scroll, `cutSideways`,
+`coveredBy` — once a screen stages it.
+
+**Each figure is the longest every shipped look's face holds at 390, not
+the longest a record carries, and that is a finding about the shipped
+looks** (measured 2026-10-12, the shipped looks, the skeleton and the
+tracked fixture, 390x844 and 1280x900): the listing face holds 15
+characters on every look and spills at 17 on Rural and at 18 on Rural and
+Neo (`text-spills`, and on Neo the panel scrolls sideways); the quote face
+holds 17 and spills at 19 on every look, and the editor writes up to 29
+(`SAR184,467,440,737,095,516.15`, eight bytes of amount). The desk holds
+all of them. A ladder for the face's figure, or a wrap, is the owner's
+call; the fixtures move to the record's longest when it lands.
+
+Red proof: the private look at 0x04 at `b94be54`, selected — at 390x844,
+8 failures on `item-listing-long-figure` (`asked amount is covered` among
+them) and 2 on `item-quote-long-figure` (`text-spills`); 0 at 1280x900.
+Green on the three shipped looks, the skeleton and the tracked fixture at
+both widths.
+
+## A sticky sign fits the region it sticks in, measured on short screens too (the 8g1 critic's P2-2)
+
+**A rule.** `a-sticky-sign-covers-nothing-as-the-region-scrolls` asked
+what passes under a sticky sign, never whether the sign fits where it
+sticks. A sticky box stays at its inset while the region scrolls, so a box
+taller than the region's showing part keeps its last pixels — on a sign,
+the address, and on a short enough screen the name — off screen at every
+scroll but the region's end, where its containing block finally carries it
+up. Every other rule reads that as fine: the address is reachable, the
+name whole at rest. `a-sticky-sign-fits-its-region` (in
+`stickyScrollFaults`) holds a sticky subject's height at rest to the
+region's showing part (the scroller's box inside the viewport, or the
+viewport for the page) less the box's own top and bottom insets, a pixel
+allowed — on every geometry pass, wherever the scroll pass finds a sticky
+subject.
+
+**A pass.** The page passes measure 844 and 900 tall alone, and a sign
+that fits both may not fit a shorter screen. The short pass
+(`SHORT_VIEWPORTS` in `layout-check.mjs`: 375x667 from the phone pass,
+1280x720 from the desk pass) runs after the tablet pass, for
+the look classes the page pass at its width found a sticky sign on
+(`stickyByClass`), handed to the page as `?sticky=` (`layout/probe.ts`'s
+`STICKY_ONLY`). The page measures those looks alone, every screen and
+variant of the page pass's split, and on each paint only where the sign
+is sticky there: the scroll pass, the fit and
+`the-sellers-name-stands-whole`. The billboard, the try-on's stress names
+and the record road are the page passes' and do not run. A run whose page
+passes found no sticky sign skips the pass and says so (`·` line); a look
+handed to it that it finds no sticky sign on, or reads no sign line of,
+fails as a rule that compared nothing. Its line prints its time and its
+paints measured and set aside.
+
+**What 375x667 and 1280x720 are, and what the pass does not measure** (the
+8g1 re-review's P2-2). They are device screen sizes, not browser viewports.
+The probe emulates with `mobile: false`, no browser chrome, so a viewport
+with its toolbars up is shorter than either: the critic's figure for an
+iPhone SE with Safari's toolbars is about 548px tall (from memory,
+unmeasured here), and a laptop window on a 1280x720 screen is shorter than
+720 (about 610–650 by the critic's memory). The stall never scrolls the document (`.stall-scroll` scrolls), so a
+phone's toolbars stay up. Also not measured:
+
+- **A landscape phone (844x390).** It takes the desk rules and is in no
+  pass. The tracked fixture `t-fixture-private` would fail there: the
+  critic, reading it through the probe page's `?sticky=` (not through a
+  runner pass), found 42 failures over 4 screens
+  (`a-sticky-sign-fits-its-region` and `the-sellers-name-stands-whole`),
+  where it fits 1280x720, 1366x657 and 1024x600. Adding 844x390 turns the
+  default run red on the fixture until the fixture changes, and a look has
+  no way to drop sticky on a short screen (`LOOK_MEDIA` has no height
+  condition) — only to cap the sign and let it scroll inside itself. The
+  owner's call.
+- **A look sticky only under a condition the phone and desk passes do not
+  enter.** The pass measures only the looks those two passes found sticky
+  (`stickySeen`, from their `stickyByClass`), so a look sticky only under
+  some condition they do not enter is handed to no short pass. A
+  reduced-motion block is one: the look lint admits a sticky sign there,
+  and the reduced-motion pass does not hand its findings on.
+- A turned wall.
+
+Cost: the shipped looks and the skeleton have no sticky sign, so a run
+that carries no sticky look pays nothing. The tracked fixture's sign is
+sticky at the desk alone: the default run measures it at 1280x720 (137
+paints, about 2 s by the scratch harness) and skips 375x667. The fixture
+fits at 1280x720: its sign is green there.
+
+Red proof: the private look at 0x04 at `b94be54`, selected —
+`a-sticky-sign-fits-its-region` fails 52 paints at 375x667 and 55 at
+1280x720, and `a-sticky-sign-covers-nothing-as-the-region-scrolls` 8 more
+at 375x667; `the-sellers-name-stands-whole` holds at both.
+
+## No slack where the line clips itself (the 8g1 critic's P2-3)
+
+`the-sellers-name-stands-whole` gave every clip a pixel of rounding
+(`lineCut`'s `clipTo`). A line whose own box clips (`overflow` other than
+`visible`, or `contain: paint`, on the line itself) cuts whatever ink runs
+past that box, and the pixel let a look's own clip shave a stacked mark
+flat with the rule green (the red proof below): on `stacked-name` the
+critic's pixels changed in the one device column past the box.
+
+**The rule now reads the line's own clip with no slack across its lines**
+(`OWN_CLIP_SLACK`, a hundredth of a pixel of float noise): on the line's
+block axis — its height for a horizontal line, its width for a vertical
+one, where `inkLines` reads the glyphs' measured reach about the baseline.
+Along the line the pixel stays: there the model reads the advance, not the
+glyphs, and an advance meets its box at a rounded edge (measured: the
+tracked fixture's advance ran 0.23px past its own box on `invalid` at
+390). Every other clip keeps its pixel. The message says how far past, to
+the hundredth.
+
+**Why the model and not pixels.** The pixel read — lift the clip in a frame
+and fail on any changed pixel outside the box — is the stronger one, and
+the contrast pass's look-pseudo frames are its machinery; but the sign's
+stress screens, where stacked marks are painted, are geometry only, and
+shooting every sign that clips itself on every screen is a frame pair a
+paint, on every paint of such a look. The model's read costs nothing and
+caught the critic's case at both widths.
+
+**What it does NOT catch** (the 8g1 re-review's near-misses A–D). This is a
+read of a model, not of pixels, and each of these is a shape any look
+could take: the critic ran each through the real probe, which read green,
+while lifting the clip changed real pixels of the line.
+
+- **A. A cut by `clip-path: inset(0)` on the line rather than by
+  `overflow`.** Only an `overflow` or `contain: paint` clip on the line
+  itself is read with no slack. An `inset()` on the line goes through the
+  same walk with its pixel (`lineCut`'s shape branch), and a circle or an
+  ellipse keeps its own (`shapeOf`'s `rx + 1`).
+- **B. The box edge taken from an integer.** The padding box is
+  `clientWidth` and `clientHeight` (`paddingBox`, `src/ui/signInk.ts`), so
+  the edge the ink is compared with can sit up to half a pixel from the
+  painted one, and an ink past the painted edge by less than that reads
+  inside.
+- **C. Upright CJK in vertical writing.** The painted ink sits 1.3–2.2px off
+  the ink model's box (measured on the `cjk-name` screen, 390 at DPR 3 and
+  1280 at DPR 2); the model is shifted, not widened, so zero slack on the
+  block axis is below the model's own error there.
+- **D. The inline axis reads the advance, not the ink.** It keeps its
+  pixel, and a glyph that overhangs its advance (an italic last letter) is
+  not read at all: a clip on the line can slice it with the rule green.
+
+Beyond them: any glyph the model under-measures. The name ladder (`inkFits`,
+`src/ui/signInk.ts`) keeps the same rounded box and its pixel, so a
+seller's name no screen paints can stop on a rung that shaves it; only the
+fixtures' names are held. Nothing in public CI proves the strict branch
+fires at its edge: the tracked fixture now sits well inside its box, and
+the red proof below exists only in a private run.
+
+**A pixel read on the sign is the stronger guard, and it is not built**:
+for a sign line whose own box clips (`overflow`, `contain: paint` or any
+`clip-path`), lift the clip and compare a crop of the sign column, not a
+full frame. Its cost against the pass is unmeasured (the critic's guess: a
+crop capture is a few milliseconds, so seconds, not a pass). Until it is
+built, this rule is the model's.
+
+**The tracked fixture gave its name room** (`padding-block` 0.2em → 0.3em,
+its sheet): at the wall's 14px rung its stacked marks ran 0.68 of a pixel
+past 0.2em — inside the old pixel, outside no slack — on
+`shop-window-stacked-name` at 1280x900, 1080x1920 and 768x1024. The ladder
+(`inkFits`, `src/ui/signInk.ts`) keeps its pixel: it is the app's, and a
+rung the probe now refuses is the look's to give room to, not the
+ladder's to climb past. So a look whose ink lands in that last pixel stops
+on a rung the probe fails; CLAUDE.md's "the ladder climbs exactly until the
+probe would call the name whole" holds everywhere but that pixel, stated.
+
+Owed: the tracked fixture's name clips itself, so a run that carries it
+owes a line read under its own clip on both page passes
+(`nameOwnClipByClass`, `probe-coverage.mjs`).
+
+Red proof: the private look at 0x04 at `b94be54`, selected —
+`stacked-name` fails at 390x844 and at 1280x900, and the name sheet's
+try-on with the stacked-mark name at both; green before this change. The
+shipped looks and the skeleton clip no sign line, so the rule changes
+nothing for them.
+
+## A carried look's line skips, printed per screen (the 8g1 critic's P3-1)
+
+`CARRIED_LINE_SKIP_CEILING` holds one sum per viewport and kind, so a new
+clipped line on one screen and one fewer on another read the same sum and
+the run green, and the ceiling's own comment could name the wrong screens
+for its count (it did: one carried look's entry named the wrong screens
+for its phone skips). Every run that carries a private look now prints, beside
+the carried tallies, each carried look's skips per viewport and screen
+(`skipsByScreen`, `skipsByScreenLine` in `scripts/look-tallies.mjs`, over
+the contrast pass's job records; a job counts for a look when the stall it
+painted wore the look's class). Printed on every run, faults or none.
+Test: `a-carried-looks-skips-are-printed-per-screen`.
+
+Not changed: the ceiling's shape. Keying it by screen would make each
+screen's count exact and fail the case above, at the cost of a table that
+moves with every slice of a look being ported — recommended once the
+private look at 0x04's port stops moving the screens its counts fall on,
+not before.

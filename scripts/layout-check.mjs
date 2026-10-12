@@ -44,7 +44,7 @@ import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
-import { carriedTallyFaults } from './look-tallies.mjs';
+import { carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
@@ -275,6 +275,32 @@ const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
  * is what the mobile one was standing in for.
  */
 const TABLET = { name: 'tablet', width: 768, height: 1024 };
+/*
+ * The short screens (the 8g1 critic's P2-2): two heights shorter than the
+ * page passes' 844 and 900, where a sign that fits those first stops
+ * fitting. A sticky sign stays at its inset while its region scrolls, so on
+ * a short screen a tall one keeps its address, and then its name, off
+ * screen at every scroll but the end. Run for the looks each page pass
+ * found a sticky sign on (`from`), and only there (`?sticky=`,
+ * `layout/probe.ts`): a look with no sticky sign costs nothing, and a run
+ * with none skips the pass.
+ *
+ * **What these sizes are, and what the pass does not measure.** 375x667 and
+ * 1280x720 are device screen sizes, not browser viewports: the probe
+ * emulates no browser chrome (`mobile: false`), so a viewport with its
+ * toolbars up is shorter than either (the critic's figure for an iPhone SE
+ * with Safari's toolbars is about 548px tall; unmeasured here). Not
+ * measured: a landscape phone (844x390), which takes the desk rules, where
+ * the tracked fixture `t-fixture-private` would fail (the critic's reading
+ * through the probe page, not a runner pass); and a look that is sticky
+ * only under a condition the phone and desk passes do not enter (a
+ * reduced-motion block, say), because the pass measures only the looks
+ * those two passes found sticky (`stickySeen`).
+ */
+const SHORT_VIEWPORTS = [
+    { name: 'short-phone', width: 375, height: 667, from: 'mobile' },
+    { name: 'short-desk', width: 1280, height: 720, from: 'desktop' },
+];
 const WINDOW_SCREENS =
     'shop-window-cycle,shop-window-browse,shop-window-quotes,shop-window-wall,' +
     // The touch wall (2026-09-21): the strip and its steppers, and the
@@ -530,6 +556,8 @@ const RING_MASK_ALPHA = 0.5;
 const outlinedTargetsSeen = new Set();
 /** Every look class whose geometry passes showed a mark (`marksShownByClass`): each owes a mark-hide frame (8f2). */
 const marksShownSeen = new Set();
+/** The look classes each page pass found a sticky sign on (`stickyByClass`): the short pass's looks (`SHORT_VIEWPORTS`). */
+const stickySeen = { mobile: [], desktop: [] };
 /**
  * The carried looks whose own sheet names a file in a mask or clip property
  * (8f2, the 8f2 critic's P3-8), read from the sheet as the build reads it:
@@ -2325,6 +2353,12 @@ try {
          */
         for (const kind of report.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
         for (const [cls, n] of Object.entries(report.marksShownByClass ?? {})) if (n > 0) marksShownSeen.add(cls);
+        if (Object.hasOwn(stickySeen, vp.name)) {
+            stickySeen[vp.name] = Object.entries(report.stickyByClass ?? {})
+                .filter(([, at]) => at.paints > 0)
+                .map(([cls]) => cls)
+                .sort();
+        }
         for (const cls of report.wornClasses ?? []) wornClassesSeen.add(cls);
         for (const code of report.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
         const gaps = probeCoverageGaps(vp.name, report, {
@@ -2599,6 +2633,78 @@ try {
                         for (const gap of gaps) console.error(`    ${gap}`);
                     }
                     console.error(`    compared: ${compared}`);
+                }
+            }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
+        }
+    }
+
+    /*
+     * Pass 2d: the short screens (`SHORT_VIEWPORTS`), for the looks a page
+     * pass found a sticky sign on. The page reads `?sticky=` and measures
+     * those looks alone, and on each paint only where the sign is sticky:
+     * the scroll pass, `a-sticky-sign-fits-its-region` and
+     * `the-sellers-name-stands-whole`. Its cost is printed on its line.
+     */
+    for (const vp of SHORT_VIEWPORTS) {
+        const classes = stickySeen[vp.from];
+        const label = `short (${vp.width}x${vp.height}, sticky signs)`;
+        if (classes.length === 0) {
+            console.log(`· ${label}: no look has a sticky sign at the ${vp.from} pass's width — nothing to measure`);
+            continue;
+        }
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
+            sessionId,
+        );
+        try {
+            const sv = await readVerdict(cdp, sessionId, probeUrl(vp, `&sticky=${classes.join(',')}`));
+            const spent = took();
+            const echoed = JSON.stringify(sv.stickyOnly ?? null);
+            if (sv.viewport !== vp.width) {
+                failed = true;
+                console.error(`✗ ${label}: asked for ${vp.width}px and the page measured ${sv.viewport}px.`);
+            } else if (echoed !== JSON.stringify(classes)) {
+                failed = true;
+                console.error(`✗ ${label}: asked for ${classes.join(', ')} and the page read ${echoed} — it measured another set.`);
+            } else {
+                // Owed: every look handed here found sticky and its name read
+                // at this size — a look the page pass found sticky and this
+                // pass never did measured nothing of it here.
+                const gaps = [];
+                for (const cls of classes) {
+                    if (!(((sv.stickyByClass ?? {})[cls]?.paints ?? 0) > 0)) {
+                        gaps.push(`found no sticky sign on a ${cls} stall at ${vp.width}x${vp.height}, where the ${vp.from} pass found one`);
+                    }
+                    if (!(((sv.nameLinesByClass ?? {})[cls] ?? 0) > 0)) {
+                        gaps.push(`the-sellers-name-stands-whole read no line of the sign on a ${cls} stall`);
+                    }
+                }
+                const tally = classes
+                    .map((cls) => {
+                        const at = (sv.stickyByClass ?? {})[cls] ?? { paints: 0, scrolled: 0, stops: 0 };
+                        return `${cls} ${at.paints}/${at.scrolled}/${at.stops}`;
+                    })
+                    .join(', ');
+                const line = `${sv.shortPass?.measured ?? 0} paints measured, ${sv.shortPass?.notSticky ?? 0} set aside (no sticky sign there) · sticky signs (paints/scrolled/stops): ${tally}`;
+                if (sv.failures.length === 0 && gaps.length === 0) {
+                    console.log(`✓ ${label}: ${(sv.screensMeasured ?? []).length} screens — ${spent}\n    compared: ${line}\n    faces: ${facesLine(sv.faces)}`);
+                } else {
+                    failed = true;
+                    if (sv.failures.length > 0) {
+                        console.error(`✗ ${label}: ${sv.failures.length} failure(s) — ${spent}`);
+                        for (const f of sv.failures) {
+                            console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                        }
+                    }
+                    if (gaps.length > 0) {
+                        console.error(`✗ ${label}: a rule compared nothing it owes —`);
+                        for (const gap of gaps) console.error(`    ${gap}`);
+                    }
+                    console.error(`    compared: ${line}`);
                 }
             }
         } catch (err) {
@@ -3428,6 +3534,12 @@ try {
             });
             verdicts.push(...faults);
             for (const note of notes) console.log(`  ${note}`);
+            // Per screen, on every run (the 8g1 critic's P3-1): the ceiling
+            // holds sums, and a sum that holds while its screens change is
+            // only on screen here.
+            for (const cls of PRIVATE_SHEET_CLASSES) {
+                console.log(`  ${cls} line skips by screen (clipped-away/not-rendered): ${skipsByScreenLine(skipsByScreen(runDumpJobs, cls))}`);
+            }
             if (faults.length === 0) {
                 const said = PRIVATE_SHEET_CLASSES.map((cls) =>
                     ['mobile', 'desktop', 'canvas']
