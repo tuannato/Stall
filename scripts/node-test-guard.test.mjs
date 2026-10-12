@@ -163,7 +163,11 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         ['an inner describe’s function declaration of the same name', "let check;\nbefore(() => { check = compute(); });\ndescribe('inner', () => { function check() {} it('t', check); });"],
         ['a describe callback’s parameter of the same name', "let t;\nbefore(() => { t = compute(); });\ndescribe('inner', (t) => { it(t.name, () => {}); });"],
         ['a helper’s initialised let, read by the describe it builds', "let title;\nbefore(() => { title = compute(); });\nconst make = (n) => {\n    let title = `t ${n}`;\n    describe('made', () => { it(title, () => {}); });\n};"],
-        ['a helper’s bare let, set in its own body before the describe it builds', "const make = (n) => {\n    let title;\n    title = `t ${n}`;\n    describe('made', () => { it(title, () => {}); });\n};"],
+        // The fences-followup critic's item 7: a method's parameter, a for...in or for head, and a var written in a nested block bind the name too.
+        ['a method’s parameter of the same name', "let x;\nbefore(() => { x = compute(); });\nconst make = () => ({ m(x) { describe('i', () => { it(x, () => {}); }); } });"],
+        ['a for...in head of the same name', "let x;\nbefore(() => { x = compute(); });\nconst make = () => { for (const x in OBJECT) { describe('i', () => { it(x, () => {}); }); } };"],
+        ['a for head of the same name', "let x;\nbefore(() => { x = compute(); });\nconst make = () => { for (let x = 0; x < 2; x += 1) { describe('i', () => { it(`n ${x}`, () => {}); }); } };"],
+        ['a var of the same name written in a nested block of a helper', "let x;\nbefore(() => { x = compute(); });\nconst make = () => { if (WANTED) { var x = 'v'; } describe('i', () => { it(x, () => {}); }); };"],
     ]) {
         it(`passes ${name}`, () => {
             assert.deepEqual(problemsIn(body).map(problemLine), []);
@@ -174,17 +178,20 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         assert.deepEqual(describeBodyProblems('m.test.mjs', "let shared;\nshared = compute();\ndescribe('s', () => { it(shared, () => {}); });").problems, []);
     });
 
-    it('still refuses a hook-filled let where the nearest binding is one: an inner describe’s own bare let, a for...of block’s, and an outer one past a binding of another name', () => {
+    it('still refuses a hook-filled let where the nearest binding is one: an inner describe’s own bare let, a for...of block’s, a helper’s, and an outer one past a binding of another name', () => {
         for (const [body, name] of [
             ["let x;\nbefore(() => { x = compute(); });\ndescribe('inner', () => { let x; before(() => { x = 1; }); it(x, () => {}); });", 'x'],
             ["for (const n of [1, 2]) { let t; before(() => { t = n; }); it(t, () => {}); }", 't'],
             ["let t;\nbefore(() => { t = compute(); });\nfor (const other of NAMES) { it(t, () => {}); }\ndescribe('inner', (s) => { const u = 'lit'; it(t, () => {}); });", 't'],
             ["let t;\nbefore(() => { t = compute(); });\nconst make = (t2) => { describe('made', () => { it(t, () => {}); }); };", 't'],
+            // The fences-followup critic's item 6: a helper's bare let, which main refused, is a slot too — whatever fills it (fail closed).
+            ["const make = (n) => {\n    let title;\n    before(() => { title = `t ${n}`; });\n    describe('m', () => { it(title, () => {}); });\n};", 'title'],
+            ["const make = (n) => {\n    let title;\n    title = `t ${n}`;\n    describe('made', () => { it(title, () => {}); });\n};", 'title'],
         ]) {
             const problems = problemsIn(body);
             assert.ok(problems.length >= 1, `passed: ${body}`);
             assert.ok(
-                problems.every((problem) => problem.why.includes(`reads \`${name}\`, a let of a describe body`)),
+                problems.every((problem) => problem.why.includes(`reads \`${name}\`, a let of a describe body`) || problem.why.includes(`reads \`${name}\`, a let of a function body`)),
                 problems.map(problemLine).join('\n'),
             );
         }
@@ -210,6 +217,66 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         for (const shape of ["it.call(null, 't', () => {});", 'other.describe.call(null);', 'fn.call(null);']) {
             assert.deepEqual(describeBodyProblems('a.test.mjs', shape).problems, [], shape);
         }
+    });
+
+    /* The fences-followup critic's item 6: a read before the declaration it reads throws as the suite is registered. */
+    it('refuses a read before its declaration in a scope the registration reaches through describe callbacks alone', () => {
+        for (const [label, text, name] of [
+            ['an inner describe’s const read before it, under an outer bare let', "describe('s', () => {\n    let x;\n    before(() => { x = compute(); });\n    describe('inner', () => { it(x, () => {}); const x = 'lit'; });\n});", 'x'],
+            ['a module const read in a describe registered before it', "describe('s', () => { it(TITLE, () => {}); });\nconst TITLE = 'x';", 'TITLE'],
+            ['a bare let read before it in the same body', "describe('s', () => { it(t, () => {}); let t; });", 't'],
+            ['a for...of over its own head', "describe('s', () => { for (const x of x) { it('a', () => {}); } });", 'x'],
+        ]) {
+            const { problems } = describeBodyProblems('t.test.mjs', text);
+            assert.equal(problems.length, 1, `${label}: ${problems.map(problemLine).join('\n')}`);
+            assert.match(problems[0].why, new RegExp(`reads \`${name}\` before its declaration|over \`${name}\` before its declaration`), label);
+        }
+        // Not a read before its declaration: a module const a describe built by a helper reads only when the helper is called, and a function declaration hoists.
+        assert.deepEqual(describeBodyProblems('t.test.mjs', "function suiteOf() { describe('s', () => { it(TITLE, () => {}); }); }\nconst TITLE = 'x';\nsuiteOf();").problems, []);
+        assert.deepEqual(describeBodyProblems('t.test.mjs', "describe('s', () => { it('t', check); function check() {} });").problems, []);
+    });
+
+    /* The fences-followup critic's item 7: a describe reached as a value is not read as one, so it is refused; one in parentheses is read. */
+    it('refuses a describe used as a value, and reads one called in parentheses', () => {
+        for (const shape of [
+            'const d = describe;',
+            'const describeIf = WANTED ? describe : describe.skip;',
+            "(0, describe)('s', () => {});",
+            "Reflect.apply(describe, null, ['s', () => {}]);",
+            "const { describe: d } = require('node:test');",
+            'export default { describe };',
+            'const t2 = test.describe;',
+            'const s2 = it.suite.only;',
+        ]) {
+            const { problems } = describeBodyProblems('a.test.mjs', shape);
+            assert.ok(problems.length >= 1, shape);
+            assert.ok(problems.every((problem) => /^a describe used as a value/.test(problem.why)), `${shape}: ${problems.map(problemLine).join('\n')}`);
+        }
+        for (const callee of ['(describe)', '(describe.skip)', '(describe).only', '((test.describe))']) {
+            const { problems, describes } = describeBodyProblems('a.test.mjs', `${callee}('a', () => { const x = f(); });`);
+            assert.equal(describes, 1, callee);
+            assert.equal(problems.length, 1, `${callee}: ${problems.map(problemLine).join('\n')}`);
+            assert.match(problems[0].why, /a const that computes/, callee);
+        }
+        // Not a value: the import, a destructured name, another object's property, a describe called, and a property named describe.
+        for (const shape of [
+            "import { describe, it } from 'node:test';",
+            "const { describe } = require('node:test');",
+            'const same = nodeTest.describe === nodeTest.suite;',
+            "describe('a', () => { it('t', () => {}); });",
+            'const o = { describe: 1 };',
+        ]) {
+            assert.deepEqual(describeBodyProblems('a.test.mjs', shape).problems, [], shape);
+        }
+    });
+
+    it('refuses a describe callback with a default parameter, which is computed as the suite is registered', () => {
+        for (const shape of ["describe('s', (x = f()) => { it('t', () => {}); });", "describe('s', ({ a = f() }) => { it('t', () => {}); });"]) {
+            const { problems } = describeBodyProblems('a.test.mjs', shape);
+            assert.equal(problems.length, 1, shape);
+            assert.match(problems[0].why, /a describe callback with a default parameter/);
+        }
+        assert.deepEqual(describeBodyProblems('a.test.mjs', "describe('s', (s) => { it('t', () => {}); });").problems, []);
     });
 
     it('names the line of the statement, not of the describe', () => {

@@ -44,24 +44,47 @@ import ts from 'typescript';
  * one, and a property read on it throws in the body. A `let` is for what a
  * test or a hook body reads when it runs. "Reads" is by scope (the 6978ade
  * re-review's R-P3-1): a name reads the nearest binding of it, walking out
- * from where it stands, and only a bare `let` declared directly in a
- * describe body (or in the block of a `for...of` standing in one) is refused
- * — a `for...of` head, a callback's parameter, an inner body's `const`,
- * function or class declaration, or a helper's own `let`, met first, is the
- * binding the name reads.
+ * from where it stands (`readOf`). A bare `let` declared directly in any
+ * function's body — a describe callback's, a helper's that builds a
+ * describe, a hook's — or in the block of a `for...of` standing in a
+ * describe body is a slot a hook fills and is refused, whatever fills it
+ * (a helper's, set in its own body, is refused too: fail closed, the
+ * fences-followup critic's item 6). A loop head (`for...of`, `for...in`,
+ * `for`), any function's parameters (a method's, a constructor's, an
+ * accessor's), a function expression's own name, a `var` written anywhere
+ * in a function, an inner body's `const`, function or class declaration and
+ * a `let` with a value, met first, are the binding the name reads; a bare
+ * `let` at module top is no slot (a module runs top to bottom before its
+ * tests). And a name read before its declaration in a scope the
+ * registration reaches through describe callbacks alone — an inner body's
+ * `const` below the read, a module constant below the describe that reads
+ * it, `for (const x of x)` — throws as the suite is registered and is
+ * refused (that critic's item 6).
  *
  * `describe` is also `suite`, `test.describe`, `test.suite`, `it.describe` and
  * `it.suite` on Node 22.22.0, each with `.skip`, `.only` and `.todo`
- * (`describe === suite`, checked); the guard reads all of them as a describe.
- * Reached through `.call`, `.apply` or `.bind` it is refused wherever it
- * stands (R-P3-2): the guard reads a describe written as one, and a callback
- * passed through those is one it would have to find among other arguments.
+ * (`describe === suite`, checked); the guard reads all of them as a describe,
+ * in parentheses or not. Reached through `.call`, `.apply` or `.bind` it is
+ * refused wherever it stands (R-P3-2): the guard reads a describe written as
+ * one, and a callback passed through those is one it would have to find
+ * among other arguments. Used as a value — an alias (`const d = describe`),
+ * a conditional (`cond ? describe : describe.skip`), a comma (`(0,
+ * describe)(…)`), an argument (`Reflect.apply(describe, …)`), a renamed
+ * binding (`const { describe: d } = require('node:test')`) — it is refused
+ * too (that critic's item 7): what it is called as is not read. A describe
+ * callback with a default parameter is refused (the default is computed as
+ * the suite is registered).
  *
  * Not decided here, stated: that a bare name names an iterable, a function or
- * an initialised binding; what a hook or a test does when it runs (a failure
- * there is counted). An `after()` hook inside a describe that throws is not
+ * a binding a hook fills (one at module top or past a helper is not read);
+ * what a hook or a test does when it runs (a failure there is counted); a
+ * describe reached through a namespace other than `test` or `it` (`await
+ * import('node:test')` bound to another name, `require` into an object), a
+ * local function named `describe` or `it` (read as Node's), and a getter
+ * read as a title. An `after()` hook inside a describe that throws is not
  * counted either (measured) and is not read here: the reporter
- * (`scripts/node-test-reporter.mjs`) fails the run for it.
+ * (`scripts/node-test-reporter.mjs`) fails the run for it, as it does for
+ * any throw this guard does not see.
  */
 
 /** The ways to call a function that are not a call of it written out: a describe reached through one is refused. */
@@ -195,6 +218,15 @@ function boundNames(name, into = new Set()) {
     return into;
 }
 
+/** `node` with the parentheses around it taken off. */
+function unwrap(node) {
+    let inner = node;
+    while (inner.kind === K.ParenthesizedExpression) {
+        inner = inner.expression;
+    }
+    return inner;
+}
+
 /** The describe call whose in-place callback `fn` is, or undefined: the callback is its last argument that is not an object literal. */
 function describeOf(fn) {
     const call = fn.parent;
@@ -225,28 +257,108 @@ function standsInDescribeBody(statement) {
     return parent?.kind === K.ForOfStatement && parent.statement === statement && standsInDescribeBody(parent);
 }
 
+/** Whether `block` is a body a hook-filled `let` can stand in: any function's own block (a describe callback's, a helper's, a hook's), or a describe body's `for...of` block. */
+function isBodyBlock(block) {
+    return block.kind === K.Block && block.parent !== undefined && ((ts.isFunctionLike(block.parent) && block.parent.body === block) || isDescribeBlock(block));
+}
+
 /**
- * How `statements` bind `name`, or undefined: `'hook'` for a `let` with no
- * initializer (the slot a `before()` hook fills), `'bound'` for any other
- * declaration of it — a `let` with a value, a `const`, a `var`, a function,
- * a class, an import.
+ * The declaration of `name` among `statements`, or undefined: `{ kind,
+ * node }`, `kind` one of `bare-let` (a `let` with no initializer: the slot
+ * a hook fills), `let`, `const`, `var`, `function`, `class` or `import`,
+ * and `node` the statement that declares it.
  */
-function bindingIn(statements, name) {
+function declarationIn(statements, name) {
     for (const statement of statements) {
         if (statement.kind === K.VariableStatement) {
-            const isLet = (statement.declarationList.flags & ts.NodeFlags.Let) !== 0;
+            const flags = statement.declarationList.flags;
             for (const declaration of statement.declarationList.declarations) {
                 if (boundNames(declaration.name).has(name)) {
-                    return isLet && declaration.name.kind === K.Identifier && !declaration.initializer ? 'hook' : 'bound';
+                    const kind = flags & ts.NodeFlags.Let ? (declaration.name.kind === K.Identifier && !declaration.initializer ? 'bare-let' : 'let') : flags & ts.NodeFlags.Const ? 'const' : 'var';
+                    return { kind, node: statement };
                 }
             }
-        } else if ((statement.kind === K.FunctionDeclaration || statement.kind === K.ClassDeclaration) && statement.name?.text === name) {
-            return 'bound';
+        } else if (statement.kind === K.FunctionDeclaration && statement.name?.text === name) {
+            return { kind: 'function', node: statement };
+        } else if (statement.kind === K.ClassDeclaration && statement.name?.text === name) {
+            return { kind: 'class', node: statement };
         } else if (statement.kind === K.ImportDeclaration) {
             const clause = statement.importClause;
             const bindings = clause?.namedBindings;
             if (clause?.name?.text === name || bindings?.name?.text === name || bindings?.elements?.some((element) => element.name.text === name)) {
-                return 'bound';
+                return { kind: 'import', node: statement };
+            }
+        }
+    }
+    return undefined;
+}
+
+/** Whether a `var` named `name` is declared anywhere in `scope` outside a nested function: a `var` belongs to its function, wherever it is written. */
+function varHoisted(scope, name) {
+    let found = false;
+    const walk = (node) => {
+        if (found || ts.isFunctionLike(node)) {
+            return;
+        }
+        if (node.kind === K.VariableDeclarationList && (node.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0 && node.declarations.some((declaration) => boundNames(declaration.name).has(name))) {
+            found = true;
+            return;
+        }
+        ts.forEachChild(node, walk);
+    };
+    ts.forEachChild(scope, walk);
+    return found;
+}
+
+/**
+ * What the identifier `id` reads when the registration it stands in runs:
+ *   - `hook`: a bare `let` declared directly in a function's body or a
+ *     describe body (`isBodyBlock`) — the slot a hook fills, still empty;
+ *   - `tdz`: a `let`, `const` or `class` (or a loop head, read by its own
+ *     list) declared after it in a scope the walk reached through describe
+ *     callbacks alone, which run as they are registered — so the read throws
+ *     before the binding exists;
+ * or undefined. The nearest binding of the name decides, walking out from
+ * where `id` stands: a `for...of`, `for...in` or `for` head (for what it
+ * covers), any function's parameters (a method's, a constructor's, an
+ * accessor's included) or a function expression's own name, a `var` written
+ * anywhere in a function, and any other declaration met first are the
+ * binding it reads. A bare `let` at module top is no slot (a module runs
+ * top to bottom before its tests), and neither is a binding past a function
+ * that is not a describe callback (it runs when it is called).
+ */
+function readOf(id) {
+    const name = id.text;
+    const at = id.getStart();
+    let from = id;
+    let immediate = true;
+    for (let up = id.parent; up; from = up, up = up.parent) {
+        if ((up.kind === K.ForOfStatement || up.kind === K.ForInStatement || up.kind === K.ForStatement) && up.initializer?.kind === K.VariableDeclarationList && up.initializer.declarations.some((declaration) => boundNames(declaration.name).has(name))) {
+            if (up.kind !== K.ForStatement && from === up.expression) {
+                // `for (const x of x)`: the list is read in the head's own scope, before its binding exists.
+                return immediate && (up.initializer.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) !== 0 ? 'tdz' : undefined;
+            }
+            return undefined;
+        }
+        if (ts.isFunctionLike(up)) {
+            if (up.parameters.some((parameter) => boundNames(parameter.name).has(name)) || (up.kind === K.FunctionExpression && up.name?.text === name)) {
+                return undefined;
+            }
+            if (!(isFunction(up) && describeOf(up) !== undefined)) {
+                immediate = false;
+            }
+        }
+        if (up.kind === K.Block || up.kind === K.SourceFile) {
+            const declared = declarationIn(up.statements, name);
+            if (declared !== undefined) {
+                const hoisted = declared.kind === 'var' || declared.kind === 'function' || declared.kind === 'import';
+                if (!hoisted && immediate && at < declared.node.end) {
+                    return 'tdz';
+                }
+                return declared.kind === 'bare-let' && isBodyBlock(up) ? 'hook' : undefined;
+            }
+            if ((up.kind === K.SourceFile || (ts.isFunctionLike(up.parent) && up.parent.body === up)) && varHoisted(up, name)) {
+                return undefined;
             }
         }
     }
@@ -254,61 +366,52 @@ function bindingIn(statements, name) {
 }
 
 /**
- * Whether the identifier `id` reads a `let` of a describe body: the nearest
- * binding of its name, walking out from where `id` stands, is a `let` with
- * no initializer declared directly in a describe body. A `for...of` head
- * (for the loop's body), a function's parameters or its own name, and any
- * other declaration met first are the binding it reads.
- */
-function readsHookLet(id) {
-    const name = id.text;
-    let from = id;
-    for (let up = id.parent; up; from = up, up = up.parent) {
-        if (up.kind === K.ForOfStatement && from === up.statement && up.initializer.kind === K.VariableDeclarationList) {
-            if (up.initializer.declarations.some((declaration) => boundNames(declaration.name).has(name))) {
-                return false;
-            }
-        }
-        if (isFunction(up) || up.kind === K.FunctionDeclaration) {
-            if (up.parameters.some((parameter) => boundNames(parameter.name).has(name)) || (up.kind === K.FunctionExpression && up.name?.text === name)) {
-                return false;
-            }
-        }
-        if (up.kind === K.Block || up.kind === K.SourceFile) {
-            const binding = bindingIn(up.statements, name);
-            if (binding !== undefined) {
-                return binding === 'hook' && isDescribeBlock(up);
-            }
-        }
-    }
-    return false;
-}
-
-/**
- * The name of a `let` of a describe body that `node` reads when it is
- * evaluated, or undefined: a bare name, the root of a property chain, a
- * shorthand property, a property value, a template substitution — each read
- * by scope (`readsHookLet`). A function's body runs later and is not read.
+ * The read of a slot a hook fills, or of a binding before it exists, that
+ * `node` makes when it is evaluated — `{ name, why }`, `why` as `readOf`
+ * answers — or undefined: a bare name, the root of a property chain, a
+ * shorthand property, a property value, a template substitution. A
+ * function's body runs later and is not read.
  */
 function letRead(node) {
+    const named = (id) => {
+        const why = readOf(id);
+        return why === undefined ? undefined : { name: id.text, why, where: isDescribeBlock(bodyOf(id)) ? 'a describe body' : 'a function body' };
+    };
     switch (node.kind) {
         case K.Identifier:
-            return readsHookLet(node) ? node.text : undefined;
+            return named(node);
         case K.PropertyAccessExpression:
             return letRead(node.expression);
         case K.ParenthesizedExpression:
             return letRead(node.expression);
         case K.ShorthandPropertyAssignment:
-            return readsHookLet(node.name) ? node.name.text : undefined;
+            return named(node.name);
         case K.PropertyAssignment:
             return letRead(node.initializer);
         case K.TemplateExpression:
-            return node.templateSpans.map((span) => letRead(span.expression)).find((name) => name !== undefined);
+            return node.templateSpans.map((span) => letRead(span.expression)).find((read) => read !== undefined);
         case K.ObjectLiteralExpression:
-            return node.properties.map((property) => letRead(property)).find((name) => name !== undefined);
+            return node.properties.map((property) => letRead(property)).find((read) => read !== undefined);
         default:
             return undefined;
     }
+}
+
+/** The block that declares the binding `id` reads as a slot, for the message: the nearest block declaring a bare `let` of its name. */
+function bodyOf(id) {
+    for (let up = id.parent; up; up = up.parent) {
+        if (up.kind === K.Block && declarationIn(up.statements, id.text)?.kind === 'bare-let') {
+            return up;
+        }
+    }
+    return id;
+}
+
+/** Why a registration reads `read`: a slot no hook has filled yet, or a binding not declared yet. */
+function readProblem(subject, read) {
+    return read.why === 'tdz'
+        ? `${subject} reads \`${read.name}\` before its declaration: the registration runs first and the read throws; declare it first, at module top`
+        : `${subject} reads \`${read.name}\`, a let of ${read.where}: it is empty until a hook has run, and this registration reads it first; build it at module top`;
 }
 
 function bindingIsPlain(name) {
@@ -350,8 +453,11 @@ function statementProblem(statement) {
             }
             const list = statement.expression;
             if (list.kind === K.Identifier) {
-                if (readsHookLet(list)) {
-                    return `a for...of over \`${list.text}\`, a let of a describe body: it is empty until a hook has run, and this loop runs first; build it at module top`;
+                const read = letRead(list);
+                if (read !== undefined) {
+                    return read.why === 'tdz'
+                        ? `a for...of over \`${read.name}\` before its declaration: the loop runs as the suite is registered and the read throws; declare it first, at module top`
+                        : `a for...of over \`${read.name}\`, a let of ${read.where}: it is empty until a hook has run, and this loop runs first; build it at module top`;
                 }
             } else if (!(list.kind === K.ArrayLiteralExpression && isLiteral(list))) {
                 return 'a for...of over something that is computed: build the items at module top and loop over the name';
@@ -374,7 +480,7 @@ function expressionProblem(expression) {
     if (expression.kind !== K.CallExpression) {
         return `a ${ts.SyntaxKind[expression.kind]} expression, which runs when the suite is registered`;
     }
-    const callee = expression.expression;
+    const callee = unwrap(expression.expression);
     if (callee.kind !== K.Identifier) {
         return `a call to \`${callee.getText()}\`: only a bare describe, it, test, before, after, beforeEach or afterEach may be called (no .skip, .only or .todo, and nothing else)`;
     }
@@ -385,24 +491,75 @@ function expressionProblem(expression) {
         if (!isPlainArgument(argument)) {
             return `an argument of ${callee.text}() that computes (${ts.SyntaxKind[argument.kind]}): build it at module top`;
         }
-        const name = letRead(argument);
-        if (name !== undefined) {
-            return `an argument of ${callee.text}() that reads \`${name}\`, a let of a describe body: it is empty until a hook has run, and this registration reads it first; build it at module top`;
+        const read = letRead(argument);
+        if (read !== undefined) {
+            return readProblem(`an argument of ${callee.text}() that`, read);
         }
     }
     return undefined;
 }
 
-/** `describe`, `suite`, `test.describe`, `test.suite`, `it.describe`, `it.suite`, each with `.skip`, `.only` or `.todo`. */
+/** `describe`, `suite`, `test.describe`, `test.suite`, `it.describe`, `it.suite`, each with `.skip`, `.only` or `.todo`, in parentheses or not. */
 function isDescribeCallee(callee) {
-    let node = callee;
+    let node = unwrap(callee);
     if (node.kind === K.PropertyAccessExpression && ['skip', 'only', 'todo'].includes(node.name.text)) {
-        node = node.expression;
+        node = unwrap(node.expression);
     }
     if (node.kind === K.Identifier) {
         return node.text === 'describe' || node.text === 'suite';
     }
     return node.kind === K.PropertyAccessExpression && node.expression.kind === K.Identifier && ['test', 'it'].includes(node.expression.text) && ['describe', 'suite'].includes(node.name.text);
+}
+
+/**
+ * A reference to a describe that is no part of a larger one: `describe` or
+ * `suite` by bare name where it is read as a value (never a declared name,
+ * an imported one or a property's name), `test.describe`, `test.suite`,
+ * `it.describe` or `it.suite`.
+ */
+function isDescribeRoot(node) {
+    if (node.kind === K.PropertyAccessExpression) {
+        return node.expression.kind === K.Identifier && ['test', 'it'].includes(node.expression.text) && ['describe', 'suite'].includes(node.name.text);
+    }
+    if (node.kind !== K.Identifier || !['describe', 'suite'].includes(node.text)) {
+        return false;
+    }
+    const parent = node.parent;
+    switch (parent?.kind) {
+        case undefined:
+        case K.ImportSpecifier:
+        case K.ImportClause:
+        case K.NamespaceImport:
+        case K.ExportSpecifier:
+        case K.QualifiedName:
+        case K.TypeReference:
+        case K.LabeledStatement:
+        case K.BreakStatement:
+        case K.ContinueStatement:
+            return false;
+        case K.PropertyAccessExpression:
+            return parent.expression === node;
+        case K.PropertyAssignment:
+            return parent.initializer === node;
+        case K.BindingElement:
+            // `const { describe } = …` declares the name; `const { describe: d } = …` hands it on under another.
+            return parent.propertyName === node && !(parent.name.kind === K.Identifier && parent.name.text === node.text);
+        case K.VariableDeclaration:
+        case K.Parameter:
+        case K.FunctionDeclaration:
+        case K.FunctionExpression:
+        case K.ClassDeclaration:
+        case K.ClassExpression:
+        case K.MethodDeclaration:
+        case K.PropertyDeclaration:
+        case K.GetAccessor:
+        case K.SetAccessor:
+        case K.PropertySignature:
+        case K.MethodSignature:
+            return parent.name !== node;
+        default:
+            return true;
+    }
 }
 
 /**
@@ -426,8 +583,18 @@ export function describeBodyProblems(name, text) {
                 report(node, 'node:test imported by default, as a namespace or under another name: `test.describe` is a describe, and the guard follows the bare names only');
             }
         }
-        if (node.kind === K.PropertyAccessExpression && THROUGH.includes(node.name.text) && isDescribeCallee(node.expression)) {
-            report(node, `a describe reached through .${node.name.text}: write the describe itself, which the guard reads (it does not look for the callback among another call's arguments)`);
+        if (isDescribeRoot(node)) {
+            // Up through `.skip`, `.only`, `.todo` and parentheses to what is done with it: called, reached through a method, or used as a value.
+            let top = node;
+            for (let up = top.parent; up && (up.kind === K.ParenthesizedExpression || (up.kind === K.PropertyAccessExpression && up.expression === top && ['skip', 'only', 'todo'].includes(up.name.text))); up = top.parent) {
+                top = up;
+            }
+            const used = top.parent;
+            if (used?.kind === K.PropertyAccessExpression && used.expression === top && THROUGH.includes(used.name.text)) {
+                report(used, `a describe reached through .${used.name.text}: write the describe itself, which the guard reads (it does not look for the callback among another call's arguments)`);
+            } else if (!(used?.kind === K.CallExpression && used.expression === top)) {
+                report(node, 'a describe used as a value (an alias, a conditional, an argument, a comma, a renamed binding): the guard reads a describe where it is called by its name, so write the call itself');
+            }
         }
         if (node.kind === K.CallExpression) {
             if (isDescribeCallee(node.expression)) {
@@ -435,6 +602,8 @@ export function describeBodyProblems(name, text) {
                 const callback = [...node.arguments].reverse().find((argument) => argument.kind !== K.ObjectLiteralExpression);
                 if (!callback || !isFunction(callback)) {
                     report(node, 'a describe whose callback is not a function written in place');
+                } else if (!callback.parameters.every((parameter) => !parameter.initializer && bindingIsPlain(parameter.name))) {
+                    report(callback, 'a describe callback with a default parameter: the default is computed when the suite is registered');
                 } else if (callback.body.kind !== K.Block) {
                     const why = expressionProblem(callback.body);
                     if (why !== undefined) {
