@@ -71,9 +71,13 @@ import ts from 'typescript';
  * a conditional (`cond ? describe : describe.skip`), a comma (`(0,
  * describe)(…)`), an argument (`Reflect.apply(describe, …)`), a renamed
  * binding (`const { describe: d } = require('node:test')`) — it is refused
- * too (that critic's item 7): what it is called as is not read. A describe
- * callback with a default parameter is refused (the default is computed as
- * the suite is registered).
+ * too (that critic's item 7): what it is called as is not read. Not inside
+ * the body of a test or a hook (`typeof describe` in an `it`, the re-review's
+ * item 5): that runs when the test does and registers nothing, so a value
+ * there is not refused — and a describe aliased in a test body and called
+ * from it is not read, as a describe reached through another namespace is
+ * not. A describe callback with a default parameter is refused (the default
+ * is computed as the suite is registered).
  *
  * Not decided here, stated: that a bare name names an iterable, a function or
  * a binding a hook fills (one at module top or past a helper is not read);
@@ -499,6 +503,33 @@ function expressionProblem(expression) {
     return undefined;
 }
 
+/** The names that register a test or a hook, whose callbacks run when the test or the hook does: never as the suite is registered. */
+const TEST_REGISTRARS = new Set(['it', 'test', 'before', 'after', 'beforeEach', 'afterEach']);
+
+/** Whether `callee` is a test or hook registrar by bare name, with `.skip`, `.only` or `.todo`, in parentheses or not. */
+function isTestOrHookCallee(callee) {
+    let node = unwrap(callee);
+    if (node.kind === K.PropertyAccessExpression && ['skip', 'only', 'todo'].includes(node.name.text)) {
+        node = unwrap(node.expression);
+    }
+    return node.kind === K.Identifier && TEST_REGISTRARS.has(node.text);
+}
+
+/**
+ * Whether `node` stands inside the body of a test or a hook: inside a
+ * function written in place as an argument of a test's or a hook's
+ * registering call, at any depth. That body runs when the test does, so what
+ * it holds registers nothing.
+ */
+function inTestOrHookBody(node) {
+    for (let up = node.parent; up; up = up.parent) {
+        if (isFunction(up) && up.parent?.kind === K.CallExpression && up.parent.arguments.includes(up) && isTestOrHookCallee(up.parent.expression)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** `describe`, `suite`, `test.describe`, `test.suite`, `it.describe`, `it.suite`, each with `.skip`, `.only` or `.todo`, in parentheses or not. */
 function isDescribeCallee(callee) {
     let node = unwrap(callee);
@@ -592,7 +623,7 @@ export function describeBodyProblems(name, text) {
             const used = top.parent;
             if (used?.kind === K.PropertyAccessExpression && used.expression === top && THROUGH.includes(used.name.text)) {
                 report(used, `a describe reached through .${used.name.text}: write the describe itself, which the guard reads (it does not look for the callback among another call's arguments)`);
-            } else if (!(used?.kind === K.CallExpression && used.expression === top)) {
+            } else if (!(used?.kind === K.CallExpression && used.expression === top) && !inTestOrHookBody(node)) {
                 report(node, 'a describe used as a value (an alias, a conditional, an argument, a comma, a renamed binding): the guard reads a describe where it is called by its name, so write the call itself');
             }
         }

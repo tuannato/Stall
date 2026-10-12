@@ -270,6 +270,38 @@ describe('no-node-test-computes-in-a-describe-body', () => {
         }
     });
 
+    /* The re-review's item 5: the value rule is for registration code, not for what a test or a hook does when it runs. */
+    it('refuses a describe used as a value where the suite is registered, and not inside the body of a test or a hook', () => {
+        for (const shape of [
+            "it('t', () => { assert.equal(typeof describe, 'function'); });",
+            "it('t', (t) => { t.diagnostic(String(typeof describe)); });",
+            "test('t', async () => { const same = describe === suite; });",
+            "it.skip('t', () => { const d = describe; });",
+            "before(() => { const d = describe; });",
+            "describe('s', () => { afterEach(() => { Reflect.has(globalThis, 'describe') || describe; }); });",
+            "describe('s', () => { it('t', () => { function helper() { return describe.skip; } helper(); }); });",
+            "it('t', function named() { return typeof test.describe; });",
+        ]) {
+            assert.deepEqual(describeBodyProblems('a.test.mjs', shape).problems, [], shape);
+        }
+        // Registration code: a describe body, a helper that builds a describe, the module top, an argument of a registering call, and a function that is no test's or hook's callback.
+        for (const shape of [
+            "describe('s', () => { const d = describe; });",
+            "function build() { const d = describe; return d; }",
+            "it('t', () => {});\nconst d = describe;",
+            "it('t', describe);",
+            "it('t', () => {}, { run: describe });",
+            "const run = () => typeof describe;\nit('t', run);",
+            "describe('s', () => { it('t', () => {}); });\nconst after2 = () => describe;",
+        ]) {
+            const { problems } = describeBodyProblems('a.test.mjs', shape);
+            assert.ok(problems.some((problem) => /^a describe used as a value/.test(problem.why)), `${shape}: ${problems.map(problemLine).join('\n') || '(no problem)'}`);
+        }
+        // Still refused wherever it stands: a describe reached through a method, and one called from a test body is read by its name.
+        assert.match(describeBodyProblems('a.test.mjs', "it('t', () => { describe.call(null, 's', () => {}); });").problems[0].why, /^a describe reached through \.call/);
+        assert.match(describeBodyProblems('a.test.mjs', "it('t', () => { describe('s', () => { const v = f(); }); });").problems[0].why, /a const that computes/);
+    });
+
     it('refuses a describe callback with a default parameter, which is computed as the suite is registered', () => {
         for (const shape of ["describe('s', (x = f()) => { it('t', () => {}); });", "describe('s', ({ a = f() }) => { it('t', () => {}); });"]) {
             const { problems } = describeBodyProblems('a.test.mjs', shape);
