@@ -195,12 +195,22 @@ working accept, and there is no accept.
   2026-10-06; carried out 2026-10-10 as far as the faces' own fonts go).**
   The four Latin subsets are cut again from the fonts Google Fonts cut them
   from, with every glyph the app prints that those fonts draw: `≈` and `₽`
-  on every look, and `→ ◆` and every quote unit's sign but `元` on Modern. What a
-  font lacks stays on a pinned exception list, drawn by the reader's
-  machine: `→ ◆ ₹ ₪ ₩ ₦ ₱` on Rural, `₹ ₪ ₩ ₦ ₱ ₺` on Neo, and `元`
-  everywhere. Not decided: borrowing those from Inter for Rural and Neo (a
-  taste call, to be shown to the owner on a picture), and a CJK face for one
-  sign (a new licence). **RUB prints `₽` after the figure ("100 ₽"; owner,
+  on every look, and `→ ◆` and every quote unit's sign but `元` on Modern.
+  **What Rural's and Neo's fonts lack is borrowed from Inter (owner,
+  2026-10-12, "ok các khuyến nghị", on a picture of the money figures with
+  those signs; carried out the same day):** one `@font-face` segment per
+  face, Inter's Latin file under the family's own name and descriptors,
+  whose `unicode-range` names exactly what the family's own files lack —
+  `→ ◆ ₹ ₪ ₩ ₦ ₱` on Stall Serif, roman and italic, and `₹ ₪ ₩ ₦ ₱ ₺` on
+  JetBrains Mono — so those signs draw alike on every OS. Costs, stated:
+  an italic Rural line sets the borrowed signs upright and `◆` about twice
+  the size a machine font drew it, and the Rural ticker's `◆` grows with it
+  (shown to the owner after the decision, the same day); while a family's
+  own file is still loading and Inter's has landed, the family's metrics
+  (`ch`, line height) are Inter's — the failure state is unchanged; the
+  change costs every visitor 795 bytes, which leaves a deploy build carrying
+  the tracked fixture 10,392 of its room. `元` stays the reader's machine's: a CJK face
+  for one sign is a new licence, not decided. **RUB prints `₽` after the figure ("100 ₽"; owner,
   2026-10-10)**, not `р.`: a Cyrillic `р` in a Latin range drew one letter
   of every Cyrillic word a seller writes in Stall's face and the rest in the
   reader's, so no face's range takes a letter of another script.

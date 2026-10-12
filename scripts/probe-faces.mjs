@@ -24,10 +24,10 @@ export const FACES_CHECK = 'every-face-is-loaded-before-the-probe-measures';
 /** The sheet whose `@font-face` rules name the shipped faces. */
 export const STALL_CSS = new URL('../src/ui/stall.css', import.meta.url);
 
-const unquote = (value) => value.trim().replace(/^(['"])(.*)\1$/, '$2').trim();
+export const unquote = (value) => value.trim().replace(/^(['"])(.*)\1$/, '$2').trim();
 
 /** `normal` and `bold` as the numbers a face set reports, and every run of space as one. */
-function normalWeight(value) {
+export function normalWeight(value) {
     return value
         .trim()
         .split(/\s+/)
@@ -102,11 +102,13 @@ export function faceName(face) {
 }
 
 /**
- * The `@font-face` rules of a stylesheet, as `{ family, style, weight,
- * unicodeRange, src }` — comments stripped, a missing descriptor at its
- * initial value, `src` the first `url()` it names (or '').
+ * The `@font-face` rules of a stylesheet, each as its descriptors: lower-case
+ * name to the value as written, trimmed — comments stripped, `src` and
+ * `unicode-range` among them. The one reader of a face block, so a check
+ * that wants a descriptor `declaredFaces` does not carry (`font-display`)
+ * reads the same blocks.
  */
-export function declaredFaces(css) {
+export function fontFaceBlocks(css) {
     const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const out = [];
     for (const match of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
@@ -116,15 +118,24 @@ export function declaredFaces(css) {
             if (colon < 0) continue;
             descriptors.set(declaration.slice(0, colon).trim().toLowerCase(), declaration.slice(colon + 1).trim());
         }
-        out.push({
-            family: unquote(descriptors.get('font-family') ?? ''),
-            style: descriptors.get('font-style') ?? 'normal',
-            weight: descriptors.get('font-weight') ?? 'normal',
-            unicodeRange: descriptors.get('unicode-range') ?? '',
-            src: /url\(\s*(['"]?)([^'")]+)\1\s*\)/.exec(descriptors.get('src') ?? '')?.[2] ?? '',
-        });
+        out.push(descriptors);
     }
     return out;
+}
+
+/**
+ * The `@font-face` rules of a stylesheet, as `{ family, style, weight,
+ * unicodeRange, src }` — comments stripped, a missing descriptor at its
+ * initial value, `src` the first `url()` it names (or '').
+ */
+export function declaredFaces(css) {
+    return fontFaceBlocks(css).map((descriptors) => ({
+        family: unquote(descriptors.get('font-family') ?? ''),
+        style: descriptors.get('font-style') ?? 'normal',
+        weight: descriptors.get('font-weight') ?? 'normal',
+        unicodeRange: descriptors.get('unicode-range') ?? '',
+        src: /url\(\s*(['"]?)([^'")]+)\1\s*\)/.exec(descriptors.get('src') ?? '')?.[2] ?? '',
+    }));
 }
 
 /** The faces `src/ui/stall.css` declares. */

@@ -43,7 +43,9 @@
  *   line: `đ` is printed, `Đ` is painted) is walked as a browser walks it,
  *   one character at a time: a family draws it when one of its faces'
  *   `unicode-range` names it and the file's `cmap` holds it (own families
- *   from the sheet's `@font-face` rules, served ones from `stall.css`); a
+ *   from the sheet's `@font-face` rules, served ones from `stall.css`,
+ *   where a segment — a rule in a served family's name over Inter's file —
+ *   is one more face of that family, `servedFaceSets`); a
  *   family that does not goes on to the next. It must be drawn by an own or
  *   a served face **before** the walk meets a family the machine supplies,
  *   or runs out of list — after which it is drawn per OS, and a private look

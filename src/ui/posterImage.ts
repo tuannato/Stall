@@ -1108,6 +1108,9 @@ export function drawPosterWhenFontsLoad(canvas: HTMLCanvasElement, spec: PosterS
     }
     // The spec's own words, so a subset past Latin (a Vietnamese stall name)
     // is waited for too: `load` with no text asks only the faces covering U+0020.
+    // The tag's figure and surcharge line are among them: a sign such as `₹`
+    // is drawn from a face of its own on Rural and Neo (stall.css, the Inter
+    // segments), so a draw before that file lands keeps the machine's sign.
     const item = spec.item;
     const words = [
         spec.name,
@@ -1116,6 +1119,8 @@ export function drawPosterWhenFontsLoad(canvas: HTMLCanvasElement, spec: PosterS
         spec.caption,
         item?.name ?? '',
         item?.words ?? '',
+        item?.figure ?? '',
+        item?.surcharge ?? '',
     ].join(' ');
     const weights = ['400', '600', '700', '800', spec.nameWeight];
     const asks = [...new Set(weights)].map((w) => fonts.load(`${w} 16px ${spec.font}`, words));
