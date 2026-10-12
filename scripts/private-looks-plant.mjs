@@ -309,6 +309,37 @@ export function beforeReduce(css, rule) {
     return `${css.slice(0, at)}${rule}\n\n${css.slice(at)}`;
 }
 
+/** The synthetic face `plantFace` serves, its family and the licence file beside it. */
+export const PLANTED_FACE = 'plant-serif-latin.woff2';
+export const PLANTED_FACE_FAMILY = 'Plant Serif';
+export const PLANTED_FACE_LICENCE = 'LICENSE-OFL-plant-serif.txt';
+
+/** The planted face's bytes: a name table with a copyright notice and `family`, nothing a browser would draw. */
+export function plantedFaceBytes(family = PLANTED_FACE_FAMILY) {
+    return syntheticWoff2([
+        { id: 0, text: 'Copyright 2024 The Plant Type Authors' },
+        { id: 1, text: family },
+    ]);
+}
+
+/**
+ * A planted look serving one synthetic face (step 8e1): its sheet names the
+ * face, `fonts.json` lists it, and `licence` (the OFL text beside it, `null`
+ * for none) is the licence file. The repository a deploy build's notices are
+ * proved on (`a-deploy-build-names-every-face-it-serves`) and the kit's check
+ * of those notices (`the-kit-check-holds-the-deploy-notices-to-the-selection`).
+ */
+export function plantFace({ licence = oflText('The Plant Type Authors'), family } = {}) {
+    const fontFace = `@font-face { font-family: ${PLANTED_CLASS}-serif; src: url(./art/${PLANTED_FACE}) format("woff2"); font-display: swap; }`;
+    return plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, fontFace) : text), {
+        [`fixture/art/${PLANTED_FACE}`]: plantedFaceBytes(family),
+        ...(licence === null ? {} : { [`fixture/art/${PLANTED_FACE_LICENCE}`]: licence }),
+        'fixture/fonts.json': JSON.stringify({
+            fonts: [{ name: PLANTED_FACE_FAMILY, files: { [PLANTED_FACE]: 'Latin' }, licence: PLANTED_FACE_LICENCE }],
+        }),
+    });
+}
+
 /** WOFF2 UIntBase128 (the spec's §4.1), encoded. */
 function base128(value) {
     const bytes = [];

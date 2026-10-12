@@ -29,7 +29,7 @@ import {
 import { MAX_SVG_ELEMENTS, SVG_ELEMENTS, sanitizeSvg } from './svg-allow.mjs';
 import { LOOK_FONTS_HEADING, noticedLicence } from './notices-lib.mjs';
 import { LOOKS_ENV, REQUIRED_ENV, selectionRequired } from './looks-selection.mjs';
-import { PLANTED_CLASS, beforeReduce, oflText, plantLooks, removePlants, syntheticWoff2 } from './private-looks-plant.mjs';
+import { PLANTED_CLASS, PLANTED_FACE, beforeReduce, oflText, plantFace, plantLooks, plantedFaceBytes, removePlants } from './private-looks-plant.mjs';
 
 /**
  * The private-look join at build time (`scripts/private-looks-build.mjs`,
@@ -71,6 +71,30 @@ const tempDir = (name) => {
     scratch.push(dir);
     return dir;
 };
+
+/**
+ * `run(dir)` with the temporary directory pointed at a folder of its own:
+ * other processes on the machine build in the shared one too, and a count
+ * there reads their folders as this build's (a second session's build
+ * turned one red). `os.tmpdir()` reads `TMPDIR` on every call.
+ */
+function inOwnTmpdir(run) {
+    const own = tempDir('tmpdir');
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = own;
+    try {
+        return run(own);
+    } finally {
+        if (saved === undefined) {
+            delete process.env.TMPDIR;
+        } else {
+            process.env.TMPDIR = saved;
+        }
+    }
+}
+
+/** The materialised folders standing in `dir`. */
+const materialisedIn = (dir) => readdirSync(dir).filter((name) => name.startsWith(MATERIALISED_PREFIX));
 
 /** The tracked fixture's files as HEAD holds them, from the fixture's root. */
 function trackedFixturePaths() {
@@ -601,25 +625,10 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
      * (`scripts/private-looks-plant.mjs`). Real `vite build`s, ~1 s each.
      */
     after(removePlants);
-    const FACE = 'plant-serif-latin.woff2';
-    const LICENCE = 'LICENSE-OFL-plant-serif.txt';
     let PUBLIC_NOTICES;
     before(() => {
         PUBLIC_NOTICES = readFileSync(join(ROOT, 'public', 'licenses.txt'));
     });
-    const face = (family = 'Plant Serif') =>
-        syntheticWoff2([
-            { id: 0, text: 'Copyright 2024 The Plant Type Authors' },
-            { id: 1, text: family },
-        ]);
-    const fontFace = () => `@font-face { font-family: ${PLANTED_CLASS}-serif; src: url(./art/${FACE}) format("woff2"); font-display: swap; }`;
-    /** A planted look serving one synthetic face; `licence` the OFL text beside it, or `null` for none. */
-    const plantFace = ({ licence = oflText('The Plant Type Authors'), family } = {}) =>
-        plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, fontFace()) : text), {
-            [`fixture/art/${FACE}`]: face(family),
-            ...(licence === null ? {} : { [`fixture/art/${LICENCE}`]: licence }),
-            'fixture/fonts.json': JSON.stringify({ fonts: [{ name: 'Plant Serif', files: { [FACE]: 'Latin' }, licence: LICENCE }] }),
-        });
 
     let repo;
     let dist;
@@ -635,7 +644,7 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
         assert.ok(served.subarray(0, PUBLIC_NOTICES.length).equals(PUBLIC_NOTICES), 'the public notices come first, byte for byte');
         const added = served.subarray(PUBLIC_NOTICES.length).toString('utf8');
         assert.match(added, new RegExp(`^\n${LOOK_FONTS_HEADING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n`));
-        assert.ok(added.includes(`- Plant Serif, the Latin subset this site serves for a look it carries (${FACE})`), added);
+        assert.ok(added.includes(`- Plant Serif, the Latin subset this site serves for a look it carries (${PLANTED_FACE})`), added);
         assert.ok(added.includes(noticedLicence(oflText('The Plant Type Authors'))), 'the licence text, whole');
         assert.match(served.toString('latin1'), /^[\x00-\x7f]*$/, 'ASCII, as the public notices are');
         assert.ok(served.toString('utf8').endsWith('\n') && !served.toString('utf8').endsWith('\n\n'));
@@ -646,11 +655,11 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
     it('emits the face it names, and every emitted face is named', () => {
         const files = distFiles(dist);
         const faces = [...files].filter(([path]) => path.endsWith('.woff2'));
-        assert.ok(faces.some(([, bytes]) => bytes.equals(face())), 'the planted face is emitted');
+        assert.ok(faces.some(([, bytes]) => bytes.equals(plantedFaceBytes())), 'the planted face is emitted');
         const notices = files.get('licenses.txt').toString('utf8');
         for (const [path, bytes] of faces) {
-            if (bytes.equals(face())) {
-                assert.ok(notices.includes(FACE), `${path} is the planted face and the notices name it`);
+            if (bytes.equals(plantedFaceBytes())) {
+                assert.ok(notices.includes(PLANTED_FACE), `${path} is the planted face and the notices name it`);
             }
         }
     });
@@ -669,7 +678,7 @@ describe('a-deploy-build-names-every-face-it-serves', () => {
         );
         assert.equal(look.fonts.length, 1, 'the dist check reads the face');
         const problems = distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [look], excluded: [] });
-        assert.ok(problems.some((p) => p === `fixture: it serves art/${FACE} and licenses.txt does not name it`), problems.join('\n'));
+        assert.ok(problems.some((p) => p === `fixture: it serves art/${PLANTED_FACE} and licenses.txt does not name it`), problems.join('\n'));
         assert.ok(problems.some((p) => p === 'fixture: it serves Plant Serif and licenses.txt does not carry its licence whole'), problems.join('\n'));
     });
 
@@ -1003,24 +1012,24 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             // The plugin runs the check itself on every build that selected
             // anything and wrote to the disk (the critic's item 7a): planted
             // here over the public build's dist, under a preview selection.
-            const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
-            plugin.configResolved({ root: ROOT, build: { outDir: publicDist, write: true } });
-            const writes = [];
-            const write = process.stderr.write;
-            process.stderr.write = (chunk) => writes.push(String(chunk)) > 0;
-            try {
-                plugin.buildStart();
-            } finally {
-                process.stderr.write = write;
-            }
-            assert.ok(writes.includes(`${fixtureCarriesLine()}\n`), writes.join(''));
-            const written = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
-            assert.ok(written.length > 0, 'the build wrote its files to the temporary directory');
-            // Rollup's `writeBundle`: the dist is on the disk, the one state the check runs in.
-            plugin.writeBundle();
-            assert.throws(() => plugin.closeBundle(), /does not hold what its selection carries:\n {2}- fixture: the build carries it, and 0 files name its sheet/);
-            const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX));
-            assert.ok(after.length < written.length, 'and removed them, failing or not');
+            inOwnTmpdir((own) => {
+                const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
+                plugin.configResolved({ root: ROOT, build: { outDir: publicDist, write: true } });
+                const writes = [];
+                const write = process.stderr.write;
+                process.stderr.write = (chunk) => writes.push(String(chunk)) > 0;
+                try {
+                    plugin.buildStart();
+                } finally {
+                    process.stderr.write = write;
+                }
+                assert.ok(writes.includes(`${fixtureCarriesLine()}\n`), writes.join(''));
+                assert.ok(materialisedIn(own).length > 0, 'the build wrote its files to the temporary directory');
+                // Rollup's `writeBundle`: the dist is on the disk, the one state the check runs in.
+                plugin.writeBundle();
+                assert.throws(() => plugin.closeBundle(), /does not hold what its selection carries:\n {2}- fixture: the build carries it, and 0 files name its sheet/);
+                assert.deepEqual(materialisedIn(own), [], 'and removed them, failing or not');
+            });
         });
 
         it('says on stderr which looks a build carries, and says nothing when it carries none', () => {
@@ -1230,23 +1239,24 @@ describe('a-build-whose-stamp-fails-says-why', () => {
     const STAMP_FAILS = /0 emitted stylesheets name t-fixture-private as their look \(--look-sheet\), where one does/;
 
     it('ends a hook-driven build with the stamp’s own sentence, and leaves nothing written', () => {
-        const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
-        plugin.configResolved({ root: ROOT, build: { outDir: tempDir('dist-stamp-fails'), write: true } });
-        const write = process.stderr.write;
-        process.stderr.write = () => true;
-        try {
-            plugin.buildStart();
-        } finally {
-            process.stderr.write = write;
-        }
-        const before = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX)).length;
-        assert.ok(before > 0, 'the build wrote its files to the temporary directory');
-        // A bundle with no sheet naming the look: the stamp's refusal.
-        assert.throws(() => plugin.generateBundle.handler({}, {}), STAMP_FAILS);
-        // What Vite's `finally` does next: close the bundle. No dist was written, so no check, no second error.
-        assert.doesNotThrow(() => plugin.closeBundle());
-        const after = readdirSync(tmpdir()).filter((name) => name.startsWith(MATERIALISED_PREFIX)).length;
-        assert.ok(after < before, 'and removed them');
+        const outDir = tempDir('dist-stamp-fails');
+        inOwnTmpdir((own) => {
+            const plugin = privateLooksPlugin({ facts, validateLook, vars, env: PREVIEW });
+            plugin.configResolved({ root: ROOT, build: { outDir, write: true } });
+            const write = process.stderr.write;
+            process.stderr.write = () => true;
+            try {
+                plugin.buildStart();
+            } finally {
+                process.stderr.write = write;
+            }
+            assert.ok(materialisedIn(own).length > 0, 'the build wrote its files to the temporary directory');
+            // A bundle with no sheet naming the look: the stamp's refusal.
+            assert.throws(() => plugin.generateBundle.handler({}, {}), STAMP_FAILS);
+            // What Vite's `finally` does next: close the bundle. No dist was written, so no check, no second error.
+            assert.doesNotThrow(() => plugin.closeBundle());
+            assert.deepEqual(materialisedIn(own), [], 'and removed them');
+        });
     });
 
     it('ends a real build with the stamp’s own sentence, never the dist check’s', () => {

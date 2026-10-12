@@ -29,6 +29,16 @@
  * - a copy of a file in `public/`, byte for byte;
  * - a copy of a plain file in `workshop/art/` (`readArt`: no link, one hard
  *   link), byte for byte under that file's own name;
+ * - **under a private-look selection whose looks serve a face, `licenses.txt`
+ *   when it is byte for byte what `noticesWithLookFonts` makes of
+ *   `public/licenses.txt` and the faces the baseline's own selection
+ *   carries** (the 8g0 critic's P2-3): the private-looks plugin writes it
+ *   in `writeBundle`, which a build with `write: false` never runs, so the
+ *   baseline cannot emit it and the public copy is not it. The baseline
+ *   asks the plugin which faces it carried (`api.carriedFaces`) and makes
+ *   the text itself; the plugin still writes it in harness builds, so a
+ *   harness `dist` is a deploy's. Exactly that text and nothing else: one
+ *   byte more, fewer or different is a stranger;
  * - and no `data:` URL in the kit's CSS that the baseline's CSS does not
  *   carry — `?inline` puts a file's bytes inside the CSS bundle, where a
  *   listing of names cannot see them.
@@ -41,6 +51,7 @@
  */
 import { lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { noticesWithLookFonts } from './notices-lib.mjs';
 import { ART_NAME, echo } from './workshop-css.mjs';
 
 /** The kit's sheet, as the kit's pages import it. */
@@ -51,6 +62,9 @@ const KIT_SHEET = 'workshop/theme-workshop.css';
  * CSS bundle exists in the baseline whatever the creator's sheet compiles to.
  */
 const BASELINE_SHEET = '.t-workshop{outline-color:currentColor}\n@media (prefers-reduced-motion: reduce){}\n';
+
+/** The private-looks plugin's name, as `privateLooksPlugin` names it. */
+const PRIVATE_LOOKS_PLUGIN = 'stall-private-looks';
 
 /** How many problems a failure prints before it counts the rest. */
 const SHOWN = 20;
@@ -94,12 +108,17 @@ function shown(path) {
  * `BASELINE_SHEET`. `STALL_WORKSHOP_CMD` must name the command, as it does
  * for the build being checked. Returns every output with its bytes and
  * whether the creator's files may change it, the resolved outDir and
- * publicDir, and the baseline's CSS text.
+ * publicDir, the baseline's CSS text, and `notices` — the deploy build's
+ * `licenses.txt` for the selection this baseline was built under (the
+ * environment's, as the checked build read it), or `undefined` when no look
+ * it carries serves a face (the file is then the public one, a copy of
+ * `public/`).
  */
 export async function kitBaseline({ configFile, root = process.cwd() }) {
     const { build } = await import('vite');
     const sheet = resolve(root, KIT_SHEET);
     let resolved;
+    let carried = [];
     const result = await build({
         root,
         configFile,
@@ -111,6 +130,12 @@ export async function kitBaseline({ configFile, root = process.cwd() }) {
                 enforce: 'pre',
                 configResolved(config) {
                     resolved = config;
+                },
+                // After the private-looks plugin's `buildStart` read the
+                // selection: which faces its carried looks serve.
+                generateBundle() {
+                    const plugin = resolved.plugins.find((p) => p.name === PRIVATE_LOOKS_PLUGIN);
+                    carried = plugin?.api?.carriedFaces?.() ?? [];
                 },
                 load(id) {
                     const [path, query = ''] = id.split('?');
@@ -150,7 +175,27 @@ export async function kitBaseline({ configFile, root = process.cwd() }) {
         cssText,
         outDir: resolve(resolved.root, resolved.build.outDir),
         publicDir: resolved.publicDir,
+        notices: deployNotices(resolved.publicDir, carried),
     };
+}
+
+/**
+ * The `licenses.txt` a deploy build of `carried` writes (the private-looks
+ * plugin's `writeBundle`): the public file and then the carried faces,
+ * `noticesWithLookFonts`; `undefined` when no carried look serves a face,
+ * where the file is the public one and is accepted as the copy it is.
+ */
+function deployNotices(publicDir, carried) {
+    if (!carried.some((look) => look.fonts.length > 0)) return undefined;
+    const source = publicDir ? join(publicDir, 'licenses.txt') : undefined;
+    if (source === undefined) return undefined;
+    let text;
+    try {
+        text = readFileSync(source, 'utf8');
+    } catch {
+        return undefined;
+    }
+    return Buffer.from(noticesWithLookFonts(text, carried), 'utf8');
 }
 
 function walk(dir, base = dir, out = []) {
@@ -212,6 +257,15 @@ export function kitBuildProblems({ outDir, artDir, baseline }) {
         const bytes = readFileSync(file.path);
         if (baseline.publicDir && sameBytes(join(baseline.publicDir, file.rel), bytes)) {
             copies.add(file.rel);
+            continue;
+        }
+        // The one file a selection's build writes that a baseline cannot:
+        // the deploy notices, exactly as `noticesWithLookFonts` makes them.
+        if (file.rel === 'licenses.txt' && baseline.notices !== undefined) {
+            if (bytes.equals(baseline.notices)) continue;
+            problems.push(
+                `${echo(file.rel)}: neither the public notices nor the deploy notices this selection's faces make of them`,
+            );
             continue;
         }
         const key = unhashed(file.rel);

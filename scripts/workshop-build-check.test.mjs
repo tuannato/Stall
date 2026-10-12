@@ -1,10 +1,11 @@
 import { strict as assert } from 'node:assert';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { LOOKS_ENV } from './looks-selection.mjs';
+import { plantFace, removePlants } from './private-looks-plant.mjs';
 import { kitBaseline, kitBuildProblems, requireCleanKitBuild } from './workshop-build-check.mjs';
 
 /**
@@ -46,6 +47,7 @@ before(async () => {
     baseline = await kitBaseline({ configFile: CONFIG });
 });
 after(() => {
+    removePlants();
     for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -128,5 +130,114 @@ describe('the-kit-build-emits-no-file-it-was-not-given', () => {
         const unlisted = kitBuildProblems({ outDir, artDir: join(dir, 'art'), baseline });
         assert.equal(unlisted.length, 1, unlisted.join('\n'));
         assert.match(unlisted[0], /^assets\/a-[A-Za-z0-9_-]{8}\.svg: neither a file/);
+    });
+});
+
+describe('the-kit-check-holds-the-deploy-notices-to-the-selection', () => {
+    /**
+     * The private-looks plugin writes `licenses.txt` into a build's outDir as
+     * the public notices followed by the faces the carried looks serve
+     * (`noticesWithLookFonts`) — in `writeBundle`, which the baseline's
+     * in-memory build (`write: false`) never runs. Under a selection whose
+     * look serves a face the file is neither a byte copy of `public/` nor a
+     * baseline output, so the check refused it and deleted the outDir:
+     * `pnpm workshop:shots` could not run (the 8g0 critic's P2-3). The kit
+     * check accepts that one file when it is byte for byte what
+     * `noticesWithLookFonts` makes of the public notices and the faces the
+     * baseline's own selection carries, and nothing else.
+     *
+     * The subject is a real kit build under a planted look serving a
+     * synthetic face — the machinery of `a-deploy-build-names-every-face-it-serves`
+     * (`plantFace`) — with the selection in this process's environment, as
+     * `scripts/workshop.mjs` leaves it (`Object.assign(process.env, looks.env)`).
+     */
+    let selected;
+    let outDir;
+    let served;
+    let publicNotices;
+
+    /** The kit's config, built for real into `outDir` with the sheet it ships. */
+    async function kitBuild(into) {
+        const { build } = await import('vite');
+        await build({ root: ROOT, configFile: CONFIG, logLevel: 'silent', build: { outDir: into, emptyOutDir: true } });
+    }
+
+    /** Run `fn` with `selection` in the environment, and the environment as it was after. */
+    async function selecting(selection, fn) {
+        const was = Object.fromEntries(LOOKS_ENV.map((name) => [name, process.env[name]]));
+        Object.assign(process.env, selection);
+        try {
+            return await fn();
+        } finally {
+            for (const [name, value] of Object.entries(was)) {
+                if (value === undefined) delete process.env[name];
+                else process.env[name] = value;
+            }
+        }
+    }
+
+    /** A copy of the selected build's outDir with `licenses.txt` replaced by `bytes`. */
+    function withNotices(bytes) {
+        const copy = join(realpathSync(mkdtempSync(join(tmpdir(), 'stall-kit-notices-'))), 'out');
+        scratch.push(join(copy, '..'));
+        cpSync(outDir, copy, { recursive: true });
+        writeFileSync(join(copy, 'licenses.txt'), bytes);
+        return copy;
+    }
+
+    const problemsOf = (dir, over = selected) => kitBuildProblems({ outDir: dir, artDir: 'workshop/art', baseline: over });
+    const noticesProblems = (problems) => problems.filter((p) => p.startsWith('licenses.txt:'));
+
+    before(async () => {
+        const repo = plantFace();
+        outDir = join(realpathSync(mkdtempSync(join(tmpdir(), 'stall-kit-selected-'))), 'out');
+        scratch.push(join(outDir, '..'));
+        await selecting(repo.selection, async () => {
+            selected = await kitBaseline({ configFile: CONFIG });
+            await kitBuild(outDir);
+        });
+        served = readFileSync(join(outDir, 'licenses.txt'));
+        publicNotices = readFileSync(join(ROOT, 'public', 'licenses.txt'));
+    });
+
+    it('is a subject: the deploy build wrote more than the public notices', () => {
+        assert.ok(served.length > publicNotices.length, 'the deploy notices name the planted face after the public ones');
+        assert.ok(served.subarray(0, publicNotices.length).equals(publicNotices), 'and begin with the public notices byte for byte');
+        assert.ok(served.toString('utf8').includes('Plant Serif'), 'the planted face is named');
+    });
+
+    it('accepts the notices the deploy build writes for the selection it was built under', async () => {
+        assert.deepEqual(problemsOf(outDir), []);
+        await requireCleanKitBuild({ configFile: CONFIG, artDir: 'workshop/art', outDir, baseline: selected });
+        assert.ok(existsSync(join(outDir, 'licenses.txt')), 'an accepted build is kept');
+    });
+
+    it('refuses the same file one byte longer, one byte shorter and one byte different', () => {
+        const longer = Buffer.concat([served, Buffer.from('x')]);
+        const shorter = served.subarray(0, served.length - 1);
+        const different = Buffer.from(served);
+        const at = different.indexOf('Plant Serif');
+        different[at] = different[at] ^ 0x01;
+        for (const [name, bytes] of [['longer', longer], ['shorter', shorter], ['different', different]]) {
+            const problems = noticesProblems(problemsOf(withNotices(bytes)));
+            assert.equal(problems.length, 1, `${name}: ${problems.join('\n')}`);
+            assert.match(problems[0], /^licenses\.txt: /, name);
+        }
+    });
+
+    it('refuses the public notices followed by anything but the selection\'s faces', () => {
+        const extra = Buffer.concat([served, Buffer.from('\nA face this selection does not carry.\n')]);
+        assert.equal(noticesProblems(problemsOf(withNotices(extra))).length, 1);
+        // Nothing of the faces: the public notices alone are still a byte copy of public/.
+        assert.deepEqual(noticesProblems(problemsOf(withNotices(publicNotices))), []);
+    });
+
+    it('does not vouch for a file the baseline\'s own selection does not make', () => {
+        // A baseline built with no selection carries no faces: the deploy
+        // text is a stranger to it, and so is anything else with the public
+        // notices as a prefix.
+        const none = baseline;
+        assert.equal(none.notices, undefined);
+        assert.equal(noticesProblems(problemsOf(outDir, none)).length, 1);
     });
 });
