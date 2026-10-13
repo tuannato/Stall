@@ -6453,7 +6453,11 @@ never paints a figure larger than the card did. Measured in Chrome on the
 three shipped looks and the skeleton, bare and worn, against each step's
 widest figure in every unit `QUOTE_UNITS` writes (`元`, drawn by the
 machine's fallback, is the widest sign; tabular digits make every figure of
-one length one width), with 2–6% to spare inside the price column:
+one length one width), with 0.7–6% to spare inside the price column (0.7%
+for Neo's widest `₩` figure at 1080x1920, the critic's measurement in this
+Mac's fallback face; `₩` and `元` are drawn by the machine's fallback font,
+so the margin depends on that machine and may be smaller or negative on
+another):
 
 | wall (layout) | price column | step 0 (design) | the steps |
 |---|---|---|---|

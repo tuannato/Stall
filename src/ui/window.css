@@ -934,8 +934,11 @@
  * 1920x1080, 1280x900, 1280x800, 1080x1920, 768x1024 — against the widest
  * figure each step holds in every unit `QUOTE_UNITS` writes (`元`, drawn by
  * the machine's fallback, is the widest sign; tabular digits make every
- * figure of a length one width), with 2–6% to spare inside the price's own
- * grid column. The probe's `a-cycle-card-shows-every-digit-at-every-wall-size`
+ * figure of a length one width), with 0.7–6% to spare inside the price's
+ * own grid column — 0.7% for Neo's widest `₩` figure at 1080x1920, measured
+ * by the critic in this Mac's fallback face; `₩` and `元` are drawn by the
+ * machine's fallback font, so on another machine that margin may be smaller
+ * or negative. The probe's `a-cycle-card-shows-every-digit-at-every-wall-size`
  * is the judge, over Cycle fixtures at the widest figure of each step on
  * every wall pass.
  *
