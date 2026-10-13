@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import * as copy from './copy';
 import { holdsLivePaint, overlayMounts, renderStall, resetIconsForTests } from './render';
 import {
+    WALL_NARROW_LISTING_CHARS,
+    WALL_NARROW_QUOTE_CHARS,
     WINDOW_QR_MIN_PX,
     WINDOW_QR_PX,
     cycleListings,
@@ -194,6 +196,60 @@ describe('the-window-row-wears-the-shop-row-anatomy', () => {
         // The figure is the covenant's own asked amount, under the role every
         // money guard in this repo reads.
         expect(row!.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+    });
+});
+
+describe('a-wall-row-keeps-its-leading-digits', () => {
+    /**
+     * The wall's rows never had the shop's re-flow (round 3, the critic's
+     * P2-3, pre-existing): on the counter tablet a 14-character listing
+     * spilled its row and a 10,000,000.00 XEC quote lost its ` XEC`, and at
+     * 1280 a long figure ran over the item's name or under its picture. A wall
+     * row's figure now takes the shop's rule (`rowFigure` at the shop's cuts,
+     * a break after a comma from 21) and, at the wall's narrower cuts, a mark
+     * the counter tablet reads (`fig-narrow`). happy-dom lays nothing out:
+     * the tall, tablet, desk and canvas passes measure
+     * `shop-window-browse-long-figures` and its three siblings.
+     */
+    it('pins the narrow cuts by value', () => {
+        expect([WALL_NARROW_LISTING_CHARS, WALL_NARROW_QUOTE_CHARS]).toEqual([14, 17]);
+    });
+
+    const listingRow = (askedSats: bigint) =>
+        paint(windowView({ show: 'listings', mode: 'browse' }, { fetch: { kind: 'offers', offers: [{ ...offer(BEANS), askedSats }] } })).querySelector(
+            '.items .item-a',
+        )!;
+    const quoteRow = (amount: bigint) =>
+        paint(
+            windowView({ show: 'quotes', mode: 'browse' }, { prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount } as TokenPrice]]) }),
+        ).querySelector('.items .item-a')!;
+
+    it('marks a listing for the tablet from 14 characters and re-flows it from 17, breaking it from 21', () => {
+        const at = (sats: bigint) => {
+            const a = listingRow(sats);
+            return [a.querySelector('[data-role="price"]')?.textContent?.length, a.classList.contains('fig-narrow'), a.classList.contains('fig-wraps'), a.querySelectorAll('wbr').length > 0];
+        };
+        expect(at(9_999_999_999n)).toEqual([13, false, false, false]);
+        expect(at(99_999_999_999n)).toEqual([14, true, false, false]);
+        expect(at(9_999_999_999_999n)).toEqual([17, true, true, false]);
+        expect(at(2_099_906_103_286_385n)).toEqual([21, true, true, true]);
+    });
+
+    it('marks a quote for the tablet from 17 characters and re-flows it from 18', () => {
+        const at = (amount: bigint) => {
+            const a = quoteRow(amount);
+            return [a.querySelector('[data-role="seller-price"]')?.textContent, a.classList.contains('fig-narrow'), a.classList.contains('fig-wraps')];
+        };
+        expect(at(100_000_000n)).toEqual(['1,000,000.00 XEC', false, false]);
+        expect(at(1_000_000_000n)).toEqual(['10,000,000.00 XEC', true, false]);
+        expect(at(10_000_000_000n)).toEqual(['100,000,000.00 XEC', true, true]);
+    });
+
+    it('gives the re-flowed rows their own row in window.css, and the tablet the whole row', () => {
+        const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(css).toMatch(/\.stall\.shop-window\[data-mode='browse'\] \.item-a\.fig-wraps \{\s*display: block;/);
+        expect(css).toMatch(/@container sw \(orientation: landscape\) \{\s*\.stall\.shop-window\[data-mode='browse'\] \.item-head:has\(> \.item-p > \.item-a\.fig-wraps\) \{\s*grid-template-areas:\s*'ic name'\s*'ic price';/);
+        expect(css).toMatch(/\.item-head:has\(> \.item-p > \.item-a:is\(\.fig-wraps, \.fig-narrow\)\) \{\s*grid-template-areas:\s*'ic name'\s*'price price';/);
     });
 });
 

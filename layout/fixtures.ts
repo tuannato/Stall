@@ -1651,6 +1651,72 @@ export const SCREENS: Record<string, StallView> = {
         stallName: LONGEST_NAME,
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
+    /*
+     * The wall's rows at long figures (round 3, the critic's P2-3,
+     * pre-existing: the wall's rows never had the shop's re-flow). Browse,
+     * listings at 14, 17, 21 and 26 characters and quotes at 17
+     * (`10,000,000.00 XEC`) and 30 (the eight-byte XEC quote), at the desk
+     * (`shop-window-browse-long-figures`, `shop-window-quotes-long-figures`)
+     * and on the 1920 wall (`shop-window-wall-browse-long-figures`), and a
+     * touch wall's quotes (`shop-window-touch-quotes-long-figures`); the
+     * tall and tablet passes measure all four (`WINDOW_SCREENS`). On main a
+     * 14-character listing spilled its row and a 10,000,000.00 XEC quote lost
+     * its ` XEC` on the tablet, and at 1280 a long figure ran over the item's
+     * name (Modern) or under its picture (Neo). Geometry only:
+     * `shop-window-browse`'s and `shop-window-quotes`' ink.
+     */
+    'shop-window-browse-long-figures': base({
+        fetch: {
+            kind: 'offers',
+            offers: [
+                offer(T1, 0, 99_999_999_999n),
+                offer(T2, 1, 9_999_999_999_999n),
+                offer(LONG, 4, 2_099_906_103_286_385n),
+                offer(LONGER, 5, LONGEST_ASK_SATS),
+            ],
+        },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-quotes-long-figures': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-wall-browse-long-figures': base({
+        fetch: {
+            kind: 'offers',
+            offers: [
+                offer(T1, 0, 99_999_999_999n),
+                offer(T2, 1, 9_999_999_999_999n),
+                offer(LONG, 4, 2_099_906_103_286_385n),
+                offer(LONGER, 5, LONGEST_ASK_SATS),
+            ],
+        },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-touch-quotes-long-figures': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selection: new Map([[T1, 1n]]),
+        shopTab: 'quotes',
+    }),
     'shop-window-wall-browse-long-name': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
@@ -2009,6 +2075,12 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    // The wall's rows at long figures (round 3): `shop-window-browse`'s and
+    // `shop-window-quotes`' shapes and ink.
+    'shop-window-browse-long-figures',
+    'shop-window-quotes-long-figures',
+    'shop-window-wall-browse-long-figures',
+    'shop-window-touch-quotes-long-figures',
     // The address in its refused-copy state (the 8g1 critic's P1-1): the
     // decoration interactions it could stage are `offers`'.
     'addr-shown',
@@ -2168,6 +2240,12 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    // The wall's rows at long figures (round 3): `shop-window-browse`'s and
+    // `shop-window-quotes`' shapes and ink.
+    'shop-window-browse-long-figures',
+    'shop-window-quotes-long-figures',
+    'shop-window-wall-browse-long-figures',
+    'shop-window-touch-quotes-long-figures',
     // The address showing its whole string (the 8g1 critic's P1-1):
     // `offers`' ground with the sign's other span on it, and `.addr-full`
     // is sampled at the desk. It is here for the sign's width.
@@ -2263,6 +2341,8 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-wall',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    'shop-window-wall-browse-long-figures',
+    'shop-window-touch-quotes-long-figures',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
     'shop-window-touch-quotes-pay-3',

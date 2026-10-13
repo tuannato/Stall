@@ -404,7 +404,14 @@ const WINDOW_SCREENS =
     // Browse, at the desk width and at a wall size, a name in stacked-mark
     // capitals and a CJK name (`the-sellers-name-stands-whole`).
     'shop-window-long-name,shop-window-browse-long-name,shop-window-stacked-name,shop-window-cjk-name,' +
-    'shop-window-wall-long-name,shop-window-wall-browse-long-name';
+    'shop-window-wall-long-name,shop-window-wall-browse-long-name,' +
+    // The rows of the wall at long figures (round 3, P2-3 of the critic):
+    // the counter tablet is where a 14-character listing and a 17-character
+    // quote first failed to fit on main. (No apostrophe in this comment:
+    // `the-shots-cover-every-probed-screen-and-variant` reads the quoted
+    // names out of this list.)
+    'shop-window-browse-long-figures,shop-window-quotes-long-figures,' +
+    'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>

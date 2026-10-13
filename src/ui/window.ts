@@ -38,7 +38,14 @@ import {
     withheldQuotes,
 } from './render';
 import { ICON_HERO_SIZE, ICON_WALL_SIZE } from '../domain/icons';
-import { PAY_RATE_MAX_AGE_MS, formatTriedAt, quoteSurchargeNode } from './render';
+import {
+    PAY_RATE_MAX_AGE_MS,
+    ROW_REFLOW_LISTING_CHARS,
+    ROW_REFLOW_QUOTE_CHARS,
+    formatTriedAt,
+    quoteSurchargeNode,
+    rowFigure,
+} from './render';
 
 /**
  * The shop window: this stall on a screen in a physical shop.
@@ -280,6 +287,31 @@ function tileSize(cycle: boolean): typeof ICON_WALL_SIZE | typeof ICON_HERO_SIZE
     return cycle ? ICON_WALL_SIZE : ICON_HERO_SIZE;
 }
 
+/**
+ * Where a wall row's figure no longer fits the counter tablet's row (round 3,
+ * the critic's P2-3, pre-existing): measured on main at 768x1024, Browse, the
+ * shipped looks — a listing first spilled its row at **14** characters
+ * (`999,999,999.99` with `from` and ` XEC`, on every look) and a quote at
+ * **17** (`10,000,000.00 XEC`, its `XEC` cut on Neo and Rural). Counted as the
+ * row prints the figure, like the shop's cuts. There, from these, the tag
+ * takes the whole row under the picture; every other wall keeps it beside
+ * the name until the shop's own cut (`ROW_REFLOW_LISTING_CHARS`,
+ * `ROW_REFLOW_QUOTE_CHARS`, `rowFigure`), where it moves under the name and
+ * from 21 characters may break after a comma. Every figure under the cut is
+ * the row it always was. Pinned by value in
+ * `a-wall-row-keeps-its-leading-digits`.
+ */
+export const WALL_NARROW_LISTING_CHARS = 14;
+export const WALL_NARROW_QUOTE_CHARS = 17;
+
+/** A wall row's figure, re-flowed and broken by the shop's rule, and marked where the counter tablet cannot seat it. */
+function wallFigure(amount: HTMLElement, node: HTMLElement, figure: string, cut: number, narrow: number): void {
+    rowFigure(amount, node, figure, 3, cut);
+    if (figure.length >= narrow) {
+        amount.classList.add('fig-narrow');
+    }
+}
+
 /** A listing, as the window paints it: picture, name, the covenant's figure. */
 function listingRow(listing: TokenListing, view: StallView, withCode: boolean): HTMLElement {
     const offer = cheapestOf(listing);
@@ -312,8 +344,9 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
         if (offer.askedAtoms < offer.atoms) {
             amount.append(el('span', 'item-from', copy.PRICE_FROM));
         }
-        const figure = el('span', 'item-x', formatXec(offer.askedSats));
+        const figure = el('span', 'item-x');
         figure.setAttribute('data-role', 'price');
+        wallFigure(amount, figure, formatXec(offer.askedSats), ROW_REFLOW_LISTING_CHARS, WALL_NARROW_LISTING_CHARS);
         amount.append(figure);
         amount.append(el('span', 'item-u', copy.XEC), lookMark('figure'));
         price.append(amount);
@@ -382,8 +415,9 @@ function quoteRow(
 
     const price = el('span', 'item-p');
     const amount = el('span', 'item-a');
-    const figure = el('span', 'item-x', quoteFigure(item.price));
+    const figure = el('span', 'item-x');
     figure.setAttribute('data-role', 'seller-price');
+    wallFigure(amount, figure, quoteFigure(item.price), ROW_REFLOW_QUOTE_CHARS, WALL_NARROW_QUOTE_CHARS);
     amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
