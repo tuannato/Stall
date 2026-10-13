@@ -412,6 +412,17 @@ const WINDOW_SCREENS =
     // names out of this list.)
     'shop-window-browse-long-figures,shop-window-quotes-long-figures,' +
     'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures';
+/*
+ * The wall screens these two passes do not measure (round 4): the Cycle card
+ * at the rows' cuts, measured on the canvas pass alone. On main the card
+ * overruns at these lengths here too, a gap of its own left for its own
+ * branch (PROBE-RULES, "Left for its own branch"). Printed on both passes, and
+ * held to `CANVAS_ONLY_WALL_SCREENS` in layout/fixtures.ts by the shot plan
+ * test (no apostrophe in this comment, for the same reason as above).
+ */
+const CANVAS_ONLY_WALL_SCREENS =
+    'shop-window-cycle-listing-16,shop-window-cycle-listing-17,shop-window-cycle-listing-18,shop-window-cycle-quote-16,' +
+    'shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>
@@ -2759,7 +2770,8 @@ try {
                 if (pv.failures.length === 0 && gaps.length === 0) {
                     console.log(
                         `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
-                            `\n    faces: ${facesLine(pv.faces)}`,
+                            `\n    faces: ${facesLine(pv.faces)}` +
+                            `\n    not measured here, left for the Cycle card's own branch: ${CANVAS_ONLY_WALL_SCREENS.split(',').length} screens (${CANVAS_ONLY_WALL_SCREENS})`,
                     );
                 } else {
                     failed = true;
@@ -2838,7 +2850,8 @@ try {
                 if (tv.failures.length === 0 && gaps.length === 0) {
                     console.log(
                         `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
-                            `\n    faces: ${facesLine(tv.faces)}`,
+                            `\n    faces: ${facesLine(tv.faces)}` +
+                            `\n    not measured here, left for the Cycle card's own branch: ${CANVAS_ONLY_WALL_SCREENS.split(',').length} screens (${CANVAS_ONLY_WALL_SCREENS})`,
                     );
                 } else {
                     failed = true;

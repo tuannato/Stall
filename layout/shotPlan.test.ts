@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
+import { CANVAS_ONLY_WALL_SCREENS, CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { shippedLooks, type Look } from './looks';
 import { DEFAULT_THEME_ID } from '../src/domain/theme';
 import { CONTRAST_VIEWPORTS } from './contrastPlan';
@@ -54,7 +54,7 @@ function at(jobs: readonly ShotJob[], viewport: string): Set<string> {
 describe('the-shots-cover-every-probed-screen-and-variant', () => {
     const jobs = shotPlan(dressed);
     const allScreens = Object.keys(SCREENS);
-    const wall = allScreens.filter((name) => SCREENS[name]!.window !== undefined);
+    const wall = allScreens.filter((name) => SCREENS[name]!.window !== undefined && !CANVAS_ONLY_WALL_SCREENS.has(name));
 
     it('shoots every screen but the door, each where the probe measures it', () => {
         const shot = new Set(jobs.map((job) => job.screen));
@@ -81,6 +81,14 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect([...at(jobs, 'portrait')].sort()).toEqual([...wall].sort());
         expect([...at(jobs, 'tablet')].sort()).toEqual([...wall].sort());
         expect([...runnerList('WINDOW_SCREENS')].sort()).toEqual([...wall].sort());
+        // The wall screens left off these two passes are the Cycle card at the rows' cuts
+        // alone (round 4): canvas screens, Cycle mode, a figure of 16 characters or more.
+        expect([...runnerList('CANVAS_ONLY_WALL_SCREENS')].sort()).toEqual([...CANVAS_ONLY_WALL_SCREENS].sort());
+        for (const name of CANVAS_ONLY_WALL_SCREENS) {
+            expect(CANVAS_SCREENS.has(name), name).toBe(true);
+            expect(SCREENS[name]!.window?.mode, name).toBe('cycle');
+            expect(name, name).toMatch(/^shop-window-cycle-(listing|quote)-1[6-9]$/);
+        }
         expect(SHOT_VIEWPORTS.portrait).toMatchObject({ width: 1080, height: 1920 });
         expect(SHOT_VIEWPORTS.tablet).toMatchObject({ width: 768, height: 1024 });
         expect(SHOT_VIEWPORTS.canvas).toMatchObject({ width: 1920, height: 1080 });

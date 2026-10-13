@@ -304,8 +304,25 @@ function tileSize(cycle: boolean): typeof ICON_WALL_SIZE | typeof ICON_HERO_SIZE
 export const WALL_NARROW_LISTING_CHARS = 14;
 export const WALL_NARROW_QUOTE_CHARS = 17;
 
-/** A wall row's figure, re-flowed and broken by the shop's rule, and marked where the counter tablet cannot seat it. */
-function wallFigure(amount: HTMLElement, node: HTMLElement, figure: string, cut: number, narrow: number): void {
+/**
+ * A wall figure: on a Browse row, re-flowed and broken by the shop's rule and
+ * marked where the counter tablet cannot seat it; on the Cycle card, the
+ * figure as it always was. **The Cycle card is not a row** (round 4, the
+ * critic's P1-1 on round 3): its one card is laid out by its own grid, and
+ * giving it `fig-wraps` let the shop's desk own-row rule — written for the
+ * shop's four-column rows — take the card's grid from 17 characters for a
+ * listing and 18 for a quote, so at 1920x1080 Neo printed a hundred million
+ * as ",000,000.00 XEC" and Rural put the card's code below the screen. Its
+ * figure is plain text, the node main wrote, at every length; what the card
+ * does at a length it cannot seat is a pre-existing gap of its own (the
+ * Cycle card has no ladder, `layout/PROBE-RULES.md`, "Left for its own
+ * branch"). Test: `a-cycle-card-keeps-its-grid-at-the-cut`.
+ */
+function wallFigure(amount: HTMLElement, node: HTMLElement, figure: string, cycle: boolean, cut: number, narrow: number): void {
+    if (cycle) {
+        node.textContent = figure;
+        return;
+    }
     rowFigure(amount, node, figure, 3, cut);
     if (figure.length >= narrow) {
         amount.classList.add('fig-narrow');
@@ -346,7 +363,7 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
         }
         const figure = el('span', 'item-x');
         figure.setAttribute('data-role', 'price');
-        wallFigure(amount, figure, formatXec(offer.askedSats), ROW_REFLOW_LISTING_CHARS, WALL_NARROW_LISTING_CHARS);
+        wallFigure(amount, figure, formatXec(offer.askedSats), withCode, ROW_REFLOW_LISTING_CHARS, WALL_NARROW_LISTING_CHARS);
         amount.append(figure);
         amount.append(el('span', 'item-u', copy.XEC), lookMark('figure'));
         price.append(amount);
@@ -417,7 +434,7 @@ function quoteRow(
     const amount = el('span', 'item-a');
     const figure = el('span', 'item-x');
     figure.setAttribute('data-role', 'seller-price');
-    wallFigure(amount, figure, quoteFigure(item.price), ROW_REFLOW_QUOTE_CHARS, WALL_NARROW_QUOTE_CHARS);
+    wallFigure(amount, figure, quoteFigure(item.price), cycle, ROW_REFLOW_QUOTE_CHARS, WALL_NARROW_QUOTE_CHARS);
     amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);

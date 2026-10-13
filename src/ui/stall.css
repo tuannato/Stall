@@ -7830,18 +7830,23 @@ textarea.share-embed {
  * written on the desk grids' own four columns, so the caret and Pay keep
  * their areas. A quote row in selection mode already takes its own row at
  * every width at tier 3 (`.item-head-q.sel-in[data-price-tier='3']`), so it
- * is left to that rule.
+ * is left to that rule. **The shop's alone** (`.stall:not(.shop-window)`,
+ * round 4, the critic's P1-1 on round 3): the wall's grids are window.css's,
+ * two or three columns with no caret and no Pay, and at (0,5,0) these rules
+ * out-ranked the Cycle card's (0,4,0) and the tall Browse wall's, taking the
+ * card's grid from the cut (a hundred million printed as ",000,000.00 XEC"
+ * on Neo at 1920x1080).
  */
 @media (min-width: 680px) {
-    .item-head:not(.item-head-q):has(> .item-p > .item-a.fig-wraps) {
+    .stall:not(.shop-window) .item-head:not(.item-head-q):has(> .item-p > .item-a.fig-wraps) {
         grid-template-areas: 'ic name name caret' 'price price price price';
     }
 
-    .item-head-q:not(.sel-in):has(> .item-p > .item-a.fig-wraps) {
+    .stall:not(.shop-window) .item-head-q:not(.sel-in):has(> .item-p > .item-a.fig-wraps) {
         grid-template-areas: 'ic name name pay' 'price price price price';
     }
 
-    .item-head:has(> .item-p > .item-a.fig-wraps) .item-p {
+    .stall:not(.shop-window) .item-head:has(> .item-p > .item-a.fig-wraps) .item-p {
         justify-self: end;
         max-width: 100%;
         margin-top: 6px;

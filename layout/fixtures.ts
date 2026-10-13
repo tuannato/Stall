@@ -1717,6 +1717,77 @@ export const SCREENS: Record<string, StallView> = {
         selection: new Map([[T1, 1n]]),
         shopTab: 'quotes',
     }),
+    /*
+     * The wall's one card (Cycle) either side of the rows' cuts (round 4, the
+     * critic's P1-1 on round 3: the card took the shop's desk own-row grid
+     * from 17 characters for a listing and 18 for a quote, and at 1920x1080
+     * Neo printed a hundred million as ",000,000.00 XEC"). Listings at 16
+     * (`1,234,567,890.12`), 17 and 18 characters as the row counts them,
+     * quotes at 16 (`1,000,000.00 XEC`), 17, 18 (`100,000,000.00 XEC`) and
+     * 19 (`$100,000,000,000.00`). The card does not re-flow: it is not a
+     * row, and it paints as main does at every length. Measured on the
+     * canvas pass. Not on the desk, tall or tablet passes, and no 19-character
+     * listing: there these lengths overrun the card on main too (a 19-character
+     * listing on Neo at 1920x1080, every one of these at 1280, on the tall
+     * wall and on the counter tablet; `layout/PROBE-RULES.md`, "Left for its
+     * own branch"), and a pass has no list of known failures. Geometry only:
+     * `shop-window-cycle`'s ink.
+     */
+    'shop-window-cycle-listing-16': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 123_456_789_012n)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cycle-listing-17': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 1_234_567_890_123n)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cycle-listing-18': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 12_345_678_901_234n)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cycle-quote-16': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 100_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-cycle-quote-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-cycle-quote-18': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 10_000_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-cycle-quote-19': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'usd', exponent: 2, amount: 10_000_000_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
     'shop-window-wall-browse-long-name': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
@@ -2081,6 +2152,15 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-quotes-long-figures',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
+    // decoration interactions and ink.
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
     // The address in its refused-copy state (the 8g1 critic's P1-1): the
     // decoration interactions it could stage are `offers`'.
     'addr-shown',
@@ -2246,6 +2326,15 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-quotes-long-figures',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
+    // decoration interactions and ink.
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
     // The address showing its whole string (the 8g1 critic's P1-1):
     // `offers`' ground with the sign's other span on it, and `.addr-full`
     // is sampled at the desk. It is here for the sign's width.
@@ -2343,10 +2432,40 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-wall-browse-long-name',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
     'shop-window-touch-quotes-pay-3',
     'shop-window-touch-quotes-pay-35',
+]);
+
+/**
+ * Wall screens the tall and tablet passes do not measure: the Cycle card at
+ * the rows' cuts (round 4, the critic's P1-1 on round 3), measured on the
+ * canvas pass alone. They are there to hold the card's grid at the cut at
+ * 1920x1080, where main paints them whole; at 1080x1920 and 768x1024 the card
+ * overruns at these lengths on main too (and at 768x1024 from 10 characters),
+ * a gap of the Cycle card's own that this branch neither causes nor closes
+ * (`layout/PROBE-RULES.md`, "Left for its own branch"), and a pass carries
+ * no list of known failures. `shop-window-cycle` itself stays on both. The
+ * runner prints this list on both passes (`CANVAS_ONLY_WALL_SCREENS` there,
+ * held to this set by `the-shots-cover-every-probed-screen-and-variant`),
+ * and the branch that gives the card a ladder empties it.
+ */
+export const CANVAS_ONLY_WALL_SCREENS: ReadonlySet<string> = new Set([
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
 ]);
 
 /**

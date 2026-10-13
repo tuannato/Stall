@@ -777,8 +777,13 @@
  * 21 characters, and takes a row of its own under the name; and on the
  * counter tablet, from the wall's own narrower cut (`WALL_NARROW_*`,
  * `fig-narrow`), the tag takes the whole row under the picture. Every row
- * under the cut is the row it always was. Cycle is not changed: its one card
- * is not a row (a stated gap, `layout/PROBE-RULES.md`).
+ * under the cut is the row it always was. **The Cycle card is not a row and
+ * takes none of this** (round 4, the critic's P1-1 on round 3): round 3 gave
+ * its figure `fig-wraps` too, and stall.css's desk own-row rule took its
+ * grid from the cut. Its figure is plain text again (`wallFigure`) and that
+ * rule is the shop's alone; what the card does at a length it cannot seat
+ * is a gap of its own, on main too (`layout/PROBE-RULES.md`, "Left for its
+ * own branch").
  */
 .stall.shop-window[data-mode='browse'] .item-a.fig-wraps {
     display: block;
