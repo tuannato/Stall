@@ -2522,6 +2522,46 @@ body {
 }
 
 /*
+ * A look whose tag the ceilings above cannot seat below 390px gives its
+ * tier-1 and tier-2 tags the tier-3 dress there (D-2026-10-13-04, the
+ * owner's option (b)): a row of their own under the name. Keyed on the
+ * look's own row (`narrowTag`, written on the root as `data-narrow-tag` by
+ * `dressLook`), never on a look's class, and read here in the base sheet
+ * rather than in a look sheet, whose media conditions stop at the probe's
+ * passes (`LOOK_MEDIA`) — the narrow pass at 360 measures it. Rural's
+ * alone: its tag spends ~39px on notch, padding and border, and at 360 its
+ * name column fell to 44–60px beside a tier-1 or tier-2 tag (224 probe
+ * failures on the four shop screens), at 375 to 59px beside `₩12,000`
+ * (14). The cost, stated: every Rural row at tier 1 or 2 takes its tag
+ * onto a row of its own from 389px down — 57 rows in the showroom at 360,
+ * `from 1,200` among them, 55 of which fit at 375 without it. Nothing moves
+ * at 390, and Modern's and Neo's rows never move. A quote row in selection
+ * mode has no Pay, so its own row names none.
+ */
+@media (max-width: 389.98px) {
+    .stall[data-narrow-tag='own-row'] .item-head:not(.item-head-q):is([data-price-tier='1'], [data-price-tier='2']) {
+        grid-template-areas: var(--s-areas-m3);
+        grid-template-columns: var(--s-cols-m3);
+    }
+
+    .stall[data-narrow-tag='own-row'] .item-head-q:not(.sel-in):is([data-price-tier='1'], [data-price-tier='2']) {
+        grid-template-areas: 'ic name pay' 'price price price';
+        grid-template-columns: var(--s-icon) minmax(0, 1fr) auto;
+    }
+
+    .stall[data-narrow-tag='own-row'] .item-head-q.sel-in:is([data-price-tier='1'], [data-price-tier='2']) {
+        grid-template-areas: 'ic name' 'price price';
+        grid-template-columns: var(--s-icon) minmax(0, 1fr);
+    }
+
+    .stall[data-narrow-tag='own-row'] .item-head:is([data-price-tier='1'], [data-price-tier='2']) .item-p {
+        justify-self: end;
+        max-width: 100%;
+        margin-top: 6px;
+    }
+}
+
+/*
  * Base motion (round 3): the look's own pulse and sheen, var-named
  * keyframes we ship. The sheen is a background layer on the card's box —
  * no pseudo-element, nothing that can leave it.
@@ -3811,6 +3851,33 @@ textarea.paste-in {
 }
 
 /*
+ * The face's "You pay" figure on the card ladder (round 2, the critic's
+ * P2-1): the row carries the figure's tier (`cardFigureTier`), and on a
+ * phone the figure steps 20 / 17 / 15px — under every shipped look's own
+ * `--s-paid-size` (21 to 27px), and sized for the row's dd, which shares its
+ * line with "You pay": at 360 a 21-character figure was cut 61px on Rural.
+ * Each step is capped at the look's own size, because tier 0 is a value of
+ * the look's row (`paid`, which `lookData` takes up to 2000px) rather than
+ * a rule of its sheet, so a look with a smaller "You pay" must never see the
+ * floor grow it (`a-card-figure-steps-down-on-every-look`). Past 21
+ * characters it breaks after a comma (`moneyFigure`). Same weight as the
+ * base rule and after it, so a look that sizes the row owns its ladder.
+ */
+@media (max-width: 679.98px) {
+    .row.big:where([data-price-tier='1']) dd {
+        font-size: min(20px, var(--s-paid-size));
+    }
+
+    .row.big:where([data-price-tier='2']) dd {
+        font-size: min(17px, var(--s-paid-size));
+    }
+
+    .row.big:where([data-price-tier='3']) dd {
+        font-size: min(15px, var(--s-paid-size));
+    }
+}
+
+/*
  * `.ctx` is danger and means something is wrong: a field that will not
  * validate, a stall that cannot be published, an offer whose covenant would
  * refuse the take. `.note` below is the other job it used to do.
@@ -5010,15 +5077,59 @@ textarea.share-embed {
  * the record sheets' painted 440 at desk width. `window.css` names the same
  * trap in its own words ("the intrinsic 300x150 of a sizeless SVG"), and
  * this sheet had been sitting in it unnoticed. Measured 2026-09-22, found by
- * the critic: with the box taking the column, the code is 318px painted on a
- * 390px phone and 440 at desk width, which is what `PAY_QR_NARROWEST_PX` is
- * told and what the memo's scan gate rests on.
+ * the critic: with the box taking the column, the code is 308–318px painted
+ * on a 390px phone and 440 at desk width; it moves one for one with the
+ * screen, so below 390 it takes more of the sheet (the next rule), and
+ * Rural's 308 at 390 is what `PAY_QR_NARROWEST_PX` is told and what the
+ * memo's scan gate rests on.
  */
 .pay-qr {
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 100%;
+}
+
+/*
+ * The pay code takes more of the sheet below 390px (2026-10-13, the third
+ * option on the 8g1 critic's P2-4). The plate moves one for one with the
+ * screen, so at 360 the code painted 278–288px inside four insets a side —
+ * the sheet's padding (12–18px), the ticket's border and its 12px padding,
+ * and the code's own 10px of white — and every phone narrower than 390 drew
+ * it under `PAY_QR_NARROWEST_PX`. Below 390 the ticket's sides are 2px and
+ * the code's white is 4px (its four-module quiet zone is drawn inside the
+ * SVG and untouched; a corner radius of at most 8px never reaches it), so
+ * the code is 32px wider and paints 310 (Rural), 318 (Modern, the skeleton,
+ * the tracked fixture) and 320 (Neo) at 360 — at or over the 308 Rural
+ * paints at 390, where nothing changes. The ticket's words keep their old
+ * inset. Scoped to the pay sheets (`.pay-qr-body`): the record sheets draw
+ * their code from 680px only. Read by the probe's narrow pass ("a pay code
+ * is as wide as the gate was told").
+ */
+@media (max-width: 389.98px) {
+    .publish-qr.pay-qr-body {
+        padding-inline: 2px;
+    }
+
+    /* The corner is capped at 8px below 390 (round 2, the critic's P3-4).
+       The code is clipped to its radius less its padding, and `lookData`
+       takes a `qrRadius` up to 2000px. The quiet-zone read
+       (`a-code-keeps-its-quiet-zone-white`) runs at 390 and 1280 only, and
+       there refuses a radius that cuts more than one module into the square
+       the code draws in — radius minus the 10px of white, so about 15px of
+       `qrRadius`. With 4px of white the same 15px would cut 11px at 360,
+       past one module (about 5px) though still inside the four-module quiet
+       zone. At 8px the cut is at most 4px, within one module at the gate's
+       density (4.94px), so the 360 box keeps the rule the read holds at 390.
+       The shipped looks are 6, 0 and 8px: nothing of theirs moves. */
+    .pay-qr-body .pay-qr .qr {
+        padding: 4px;
+        border-radius: min(var(--s-qr-radius), 8px);
+    }
+
+    .publish-qr.pay-qr-body .fine {
+        padding-inline: 10px;
+    }
 }
 
 /*
@@ -7607,6 +7718,140 @@ textarea.share-embed {
     font-weight: var(--s-price-weight);
     letter-spacing: var(--s-price-track);
 }
+
+/*
+ * The card figures' ladder (2026-10-13, the 8g1 critic's P2-3): the item
+ * face's figure (the listing's asked amount, the quote's figure) and the
+ * XEC the wallet signs on both pay sheets. `cardFigureTier` in render sets
+ * `data-price-tier` on the figure's row from its length
+ * (`CARD_FIGURE_CEILINGS`: 14, 17, 21 characters), measured at 360px on
+ * every look's face; nothing of 14 characters or fewer is touched.
+ *
+ * The sizes are the floor, phones only like the rows' ladder: written as
+ * `.face-x:where([…]) .x` at the base rule's own (0,2,0) and after it (and
+ * `.pay-x:where([…]) .pay-x-n` over the base's (0,1,0)), so **a look that
+ * sizes these figures at all out-ranks the whole ladder, tiers included**
+ * and owns it (`every-look-that-sizes-its-figure-sizes-every-price-tier`).
+ * No shipped look sizes them, so this paints them on all three.
+ *
+ * The last rung holds at every width: past 21 characters the row re-flows
+ * as one line of text — `from`, the figure, the unit — and the figure may
+ * break after a comma and nowhere else (the `<wbr>`s `moneyFigure` writes;
+ * `.fig-end` keeps the last group and a trailing sign or ` XEC` together,
+ * so a unit never stands alone on a line). There is no break opportunity
+ * between `from` and the first digit or between the last digit and the
+ * unit, so they ride the first and last lines. At a desk the figure keeps
+ * its design size and breaks only where the row is narrower than it.
+ * Proved by the probe's narrow pass (`a-card-figure-stands-inside-its-row`,
+ * `layout/PROBE-RULES.md`, "The narrow phone").
+ */
+@media (max-width: 679.98px) {
+    .face-x:where([data-price-tier='1']) .x,
+    .pay-x:where([data-price-tier='1']) .pay-x-n {
+        font-size: 26px;
+    }
+
+    .face-x:where([data-price-tier='2']) .x,
+    .pay-x:where([data-price-tier='2']) .pay-x-n {
+        font-size: 21px;
+    }
+
+    .face-x:where([data-price-tier='3']) .x,
+    .pay-x:where([data-price-tier='3']) .pay-x-n {
+        font-size: 18px;
+    }
+}
+
+.face-x:where([data-price-tier='3']),
+.pay-x:where([data-price-tier='3']) {
+    display: block;
+    line-height: 1.3;
+}
+
+.face-x:where([data-price-tier='3']) > * + * {
+    margin-inline-start: 7px;
+}
+
+.pay-x:where([data-price-tier='3']) > * + * {
+    margin-inline-start: 8px;
+}
+
+.fig-end {
+    white-space: nowrap;
+}
+
+/* A Pay several line whose figure is past 17 characters, on a phone: the
+   figure takes a row of its own under the name, right-aligned as before,
+   instead of crushing the name to a column of single letters. At a desk the
+   sheet has the room (round 2, the critic's P3-2). */
+@media (max-width: 679.98px) {
+    .pay-line:where([data-price-tier='2'], [data-price-tier='3']) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/*
+ * A row's figure on the rows' last rung, at or past its kind's cut (round 2,
+ * the critic's P2-6; the cut moved to 17 characters for a listing and 18 for
+ * a quote in round 3, P1-1 — `rowFigure`, `ROW_REFLOW_LISTING_CHARS`,
+ * `ROW_REFLOW_QUOTE_CHARS`): the tag re-flows as one line of text — `from`,
+ * the figure, the unit, end-aligned as the look sets the cell — and from 21
+ * characters the figure may break after a comma, so a figure wider than its
+ * row loses no digit at either end: a block's line that cannot fit overflows
+ * at its end, never at its start. It used to grow to the left out of a
+ * nowrap, end-aligned flex row and cut its most significant digits. The gap
+ * the flex row had is a margin here, and the figure's line is 1.3 as on the
+ * face's last rung: as a flex item the figure was a block one line-height
+ * tall, and inline its glyphs' box (Lora's is 1.28em) stood past a 1.05
+ * line into the tag's clip, where Rural's swaying tag cut its corners at a
+ * desk. Every row under the cut is untouched.
+ */
+.item-head[data-price-tier='3'] .item-a.fig-wraps {
+    display: block;
+}
+
+.item-head[data-price-tier='3'] .item-a.fig-wraps > * + * {
+    margin-inline-start: var(--s-price-inner-gap);
+}
+
+.item-head[data-price-tier='3'] .item-a.fig-wraps .item-x {
+    white-space: normal;
+    line-height: 1.3;
+}
+
+/*
+ * At a desk the rows read no ladder, and such a figure at its design size
+ * pinned the price column's `auto` track to its whole width: the eight-byte
+ * XEC quote row left Neo's name 28px and Rural's 19, and Rural's tag clipped
+ * the eight-byte asked amount's tail (measured at 1280, round 2); on main a
+ * quote row first fails at 680 from 18 characters and a listing from 17. So
+ * a row whose figure re-flows takes the tier-3 dress there too — the tag on
+ * a row of its own under the name, at its natural width at the row's end —
+ * written on the desk grids' own four columns, so the caret and Pay keep
+ * their areas. A quote row in selection mode already takes its own row at
+ * every width at tier 3 (`.item-head-q.sel-in[data-price-tier='3']`), so it
+ * is left to that rule. **The shop's alone** (`.stall:not(.shop-window)`,
+ * round 4, the critic's P1-1 on round 3): the wall's grids are window.css's,
+ * two or three columns with no caret and no Pay, and at (0,5,0) these rules
+ * out-ranked the Cycle card's (0,4,0) and the tall Browse wall's, taking the
+ * card's grid from the cut (a hundred million printed as ",000,000.00 XEC"
+ * on Neo at 1920x1080).
+ */
+@media (min-width: 680px) {
+    .stall:not(.shop-window) .item-head:not(.item-head-q):has(> .item-p > .item-a.fig-wraps) {
+        grid-template-areas: 'ic name name caret' 'price price price price';
+    }
+
+    .stall:not(.shop-window) .item-head-q:not(.sel-in):has(> .item-p > .item-a.fig-wraps) {
+        grid-template-areas: 'ic name name pay' 'price price price price';
+    }
+
+    .stall:not(.shop-window) .item-head:has(> .item-p > .item-a.fig-wraps) .item-p {
+        justify-self: end;
+        max-width: 100%;
+        margin-top: 6px;
+    }
+}
 .face-stock {
     font-size: 13.5px;
     color: var(--s-muted);
@@ -7764,17 +8009,24 @@ textarea.share-embed {
     grid-area: total;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    /* `safe`: a total wider than its block overflows at its end, never its
+       start, so a figure that cannot fit loses its tail and keeps its
+       leading digits (round 3, the critic's P2-2; on main an eight-byte
+       total started 4–16px off the left edge at 360). */
+    align-items: safe flex-end;
     line-height: 1.2;
     min-width: 0;
     max-width: 46vw;
 }
 
+/* The total wraps where its words do — before its unit — and past the card
+   ladder's last ceiling after a comma (`moneyFigure`); a total that fits is
+   the one line it always was. */
 .sel-total {
     font-weight: 700;
     font-size: 16px;
     color: var(--s-text);
-    white-space: nowrap;
+    text-align: right;
     font-variant-numeric: tabular-nums;
 }
 

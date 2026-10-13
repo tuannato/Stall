@@ -250,24 +250,38 @@ export const LONGEST_TAGLINE = 'W'.repeat(64);
 /** The CJK tagline at the cap: 21 ideographs, 63 bytes, the most a record holds. */
 export const LONGEST_CJK_TAGLINE = '每週新鮮烘焙咖啡豆用心包裝當日寄出歡迎選購';
 /**
- * The longest asked amount every shipped look's item face holds at a
- * phone's width: 100 billion XEC, `100,000,000,000`, 15 characters of
- * figure (measured 2026-10-12: at 17 characters Rural's face spills, at 18
- * Neo's too — the face's figure has no ladder, and the critic's 18 is a
- * finding about the shipped looks, left to the owner). A covenant's asked
- * amount is any size a stranger's gift listing chooses (§10).
+ * The longest asked amount there is: an output's value is eight bytes, and
+ * `formatXec` of the largest eight-byte number is
+ * `184,467,440,737,095,516.15`, 26 characters of figure, with `from` beside
+ * it (a partial). A covenant's asked amount is any size a stranger's gift
+ * listing chooses (§10), so the face must hold this one: since 2026-10-13
+ * its figure steps down a ladder and, past 21 characters, breaks after a
+ * comma (`CARD_FIGURE_CEILINGS`). Before the ladder this fixture held 15
+ * characters, the most the shipped faces seated at 390.
  */
-export const LONGEST_ASK_SATS = 10_000_000_000_000n;
+export const LONGEST_ASK_SATS = 2n ** 64n - 1n;
 /**
- * The longest quote figure every shipped look's item face holds at a
- * phone's width, in the unit whose sign leaves the figure no break
- * opportunity (`withSymbol` writes a leading sign with no space):
- * `SAR999,999,999.99`, 17 characters. The editor writes up to eight bytes
- * of amount (`SAR184,467,440,737,095,516.15`, 29 characters), and from 19
- * characters every shipped look's face spills sideways at 390 (measured
- * 2026-10-12) — a finding about the shipped looks, left to the owner.
+ * The longest quote figure the editor can write: an XEC quote at the
+ * largest eight-byte amount, `184,467,440,737,095,516.15 XEC`, 30
+ * characters — every unit `QUOTE_UNITS` writes at exponent 2 or 0, with
+ * its sign, is 30 or fewer (`SAR`, `HK$`, `NT$`, `Fr.` and ` kr` 29, `đ`
+ * 27). Its ` XEC` is the case the ladder's last rung guards: the space before
+ * the unit is a break opportunity, and the figure's last group keeps the
+ * unit on its own line (`.fig-end`). Before the ladder this fixture was
+ * `SAR999,999,999.99`, 17 characters, the most the shipped faces seated at
+ * 390 — and the probe's 360 pass found it spilling on every look.
  */
-export const LONGEST_QUOTE: TokenPrice = { code: 'sar', exponent: 2, amount: 99_999_999_999n };
+export const LONGEST_QUOTE: TokenPrice = { code: 'xec', exponent: 2, amount: 2n ** 64n - 1n };
+/**
+ * The largest sum a payment could realistically sign: under the whole XEC
+ * supply, 21 trillion. A USD quote of $447,280,000.00 at a rate of
+ * $0.0000213 a XEC composes `20,999,061,032,863.85` XEC, 21 characters with
+ * its cents — the pay sheet's figure on the ladder's last single-line step
+ * (`CARD_FIGURE_CEILINGS`). The rate is its own so the figure has cents;
+ * stamped now, so the code is drawn and measured like `pay`'s.
+ */
+export const LONGEST_PAY_QUOTE: TokenPrice = { code: 'usd', exponent: 2, amount: 44_728_000_000n };
+const LONGEST_PAY_RATE = { rate: scaleRate(0.0000213)!, atMs: Date.now() };
 
 export const handlers: StallHandlers = {
     onOpenItem: () => {},
@@ -556,6 +570,62 @@ export const SCREENS: Record<string, StallView> = {
         selectionOpen: true,
         selection: new Map([[QUOTED, 3n]]),
     }),
+    /*
+     * The strip at its longest (round 3, the critic's P2-2, pre-existing): an
+     * eight-byte XEC quote chosen once, so the strip's total and the row's
+     * selection line both carry 30 characters of figure. On main the total
+     * ran off the strip's left edge at 360 (its leading digits gone) and was
+     * cut by the tray at 390 on Neo and Rural, and the line ran under the
+     * stepper on Neo. Both break after a comma past 21 characters now, and
+     * the total loses its tail before its head. Geometry only:
+     * `pay-several-strip-xec`'s ink.
+     */
+    'pay-several-strip-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
+    /*
+     * The strip's total either side of where it breaks (round 4, the
+     * critic's P3-4): at 360 a total of 18 to 21 characters wrapped before
+     * its unit and left ` XEC` alone on its line (Neo and Rural; at 390 from
+     * 20). Broken after a comma from 18 (`STRIP_BREAK_CHARS`), the last group
+     * and the unit together. `pay-several-strip`'s ink.
+     */
+    'pay-several-strip-18': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
+    'pay-several-strip-21': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
     'pay-several-ask': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
@@ -576,6 +646,90 @@ export const SCREENS: Record<string, StallView> = {
         selection: new Map([[T1, 2n]]),
         overlay: { kind: 'pay-several' },
         payRate: PAY_RATE,
+    }),
+    /*
+     * The two pay sheets at long figures (2026-10-13, the 8g1 critic's
+     * P2-3): the figure the wallet signs has the face's ladder now
+     * (`CARD_FIGURE_CEILINGS`), and no fixture had ever put a long one on
+     * either sheet. `pay-long-figure` is the largest realistic sum
+     * (`LONGEST_PAY_QUOTE`, 21 characters, one line on the ladder's last
+     * single-line step); `pay-several-long-figure` is two XEC quotes at the
+     * largest eight-byte amount, so the figure (25 characters), both lines
+     * (30 each) and the total are past the last ceiling and break after a
+     * comma — the longest figures the sheet composes from records the
+     * editor can write. The second item is another wallet's mint, so its
+     * line carries the borrowed-id warning under it. Geometry only: their
+     * ink is `pay`'s and `pay-several`'s.
+     */
+    'pay-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, LONGEST_PAY_QUOTE]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+        payRate: LONGEST_PAY_RATE,
+    }),
+    /*
+     * The pay sheet over the eight-byte XEC quote (round 4, the critic's
+     * P2-2): the one pay sheet whose figure, the XEC the wallet signs,
+     * breaks after its commas (26 characters, past the ladder's last
+     * ceiling). On the contrast plan, every piece of it read for its ink
+     * (`BROKEN_FIGURE_SCREENS` in the runner).
+     */
+    'pay-longest-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, LONGEST_QUOTE]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
+    'pay-several-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    /*
+     * Pay several over the eight-byte XEC quote, both items this stall's
+     * own (round 4, the critic's P2-2): its figure, its two lines and its
+     * total break after their commas, and it is on the contrast plan, every
+     * piece read for its ink. Not `pay-several-long-figure`, whose second
+     * item is another wallet's mint: the borrowed-id warning stands inside
+     * `pay-lines` on a ground of its own, and the money box read, which reads
+     * that container whole in its own ink, read it at 2.94:1 on Rural worn —
+     * against no glyph of that ink (a reading of the container, left as it
+     * was: that screen stays geometry only).
+     */
+    'pay-several-longest-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: new Map<string, GenesisAttribution>([
+            [T1, 'attributed'],
+            [QUOTED, 'attributed'],
+        ]),
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
     }),
     'pay-dust': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
@@ -668,15 +822,14 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
     }),
     /*
-     * The two faces with long figures (the 8g1 critic's P2-1). The face's
-     * figure has no ladder — the rows step down through `priceTier`, the
-     * face prints at one size — and the rows' `100,000,000` stress never
-     * reached it. A listing's asked amount is the covenant's, `from` beside
-     * it (`LONGEST_ASK_SATS`); a quote's is the seller's, in the unit whose
-     * sign the figure cannot break from (`LONGEST_QUOTE`). Each is the
-     * longest every shipped look's face holds at 390, not the longest a
-     * record can carry: past it the shipped faces spill (the constants'
-     * docblocks). Geometry only: their ink is `item-listing`'s and
+     * The two faces with long figures (the 8g1 critic's P2-1 and P2-3). The
+     * rows' `100,000,000` stress never reached the face. A listing's asked
+     * amount is the covenant's, `from` beside it (`LONGEST_ASK_SATS`, the
+     * largest eight-byte amount); a quote's is the seller's, the longest
+     * the editor writes (`LONGEST_QUOTE`, an XEC quote at the same amount).
+     * Both are past the face's last ceiling (`CARD_FIGURE_CEILINGS`), so
+     * they stand on its last rung, breaking after a comma at a phone's
+     * width. Geometry only: their ink is `item-listing`'s and
      * `item-quote`'s.
      */
     'item-listing-long-figure': base({
@@ -690,6 +843,161 @@ export const SCREENS: Record<string, StallView> = {
         genesis: GENESIS,
         quoteTimes: QUOTE_TIMES,
         overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    /*
+     * The card ladder's every step at its widest (round 2, the critic's
+     * P2-2): one screen per step and surface, so the cuts are held by the
+     * probe on every look rather than by one hand measurement. Each figure is
+     * the widest its step holds (`CARD_FIGURE_CEILINGS`):
+     * - the listing face, which also carries the "You pay" row at the same
+     *   tier: 14, 17 and 21 characters of asked amount;
+     * - the quote face, in the units whose signs the faces do not draw, so
+     *   the machine's fallback paints them at about 1em: `₩9,999,999,999`
+     *   (14), `元9,999,999,999.99` (17), `元9,999,999,999,999.99` (21);
+     * - the pay sheet, an XEC quote: 14 and 17 characters (21 and past it
+     *   are `pay-long-figure` and `pay-several-long-figure`);
+     * - Pay several with a 17- and an 18-character line (a line's own row
+     *   starts at 18).
+     * Every row behind them is on tier 0 or the last tier, so Rural's rows
+     * at 360 (their own ladder's question) are not in the way. Geometry
+     * only: their ink is `item-listing`'s, `item-quote`'s, `pay`'s and
+     * `pay-several`'s.
+     */
+    'item-listing-figure-14': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 99_999_999_999n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-listing-figure-17': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 9_999_999_999_999n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-listing-figure-21': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 9_999_999_999_999_999n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-quote-figure-14': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'krw', exponent: 0, amount: 9_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'item-quote-figure-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'cny', exponent: 2, amount: 999_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'item-quote-figure-21': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'cny', exponent: 2, amount: 999_999_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'pay-figure-14': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 99_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
+    'pay-figure-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 9_999_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
+    'pay-several-figure-lines': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    /*
+     * Rows at the longest figures (round 2, the critic's P2-6): an
+     * eight-byte asked amount on a listing row and an eight-byte XEC quote
+     * on a quote row. They re-flow on the rows' last rung and break after a
+     * comma (`rowFigure`); before, they grew to the left and cut their
+     * leading digits at 360 on every look and at 390 on Neo, Rural, and for
+     * the quote on every look. `row-longest-figure` is geometry only
+     * (`offers`' ink); `quote-row-longest-figure` is sampled by the contrast
+     * pass (round 3, the critic's P2-1): it is the one screen whose broken
+     * figure's every digit is read for its ink.
+     */
+    'row-longest-figure': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, LONGEST_ASK_SATS), offer(T2, 1, 87_500n)] },
+    }),
+    'quote-row-longest-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+    }),
+    /*
+     * Rows on either side of the re-flow's cut (round 3, the critic's P1-1;
+     * `ROW_REFLOW_LISTING_CHARS` 17, `ROW_REFLOW_QUOTE_CHARS` 18, counted as
+     * the row prints the figure). Under it, ordinary prices keep main's row
+     * at every width — no row of their own at a desk, no extra height, no
+     * `role="img"`: `quote-row-1m` (a 1,000,000.00 XEC quote, 16 characters,
+     * about $20–30) and `row-15-16` (listings of 15 and 16 characters). At it:
+     * `row-17` and `quote-row-18` (a 100,000,000.00 XEC quote) re-flow
+     * without a break, and `row-21` (the whole supply with its cents) is the
+     * first listing that breaks after a comma (`ROW_BREAK_CHARS`). Geometry
+     * only: the ink is `offers`' and `plugin-missing-quotes`'.
+     */
+    'quote-row-1m': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 100_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+    }),
+    'quote-row-18': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+    }),
+    'row-15-16': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 100_000_000_050n), offer(T2, 1, 1_000_000_000_050n)] },
+    }),
+    'row-17': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 9_999_999_999_999n), offer(T2, 1, 87_500n)] },
+    }),
+    'row-21': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 2_099_906_103_286_385n), offer(T2, 1, 87_500n)] },
     }),
     /*
      * The shop that sells decorations, which is the one page where the
@@ -1421,6 +1729,143 @@ export const SCREENS: Record<string, StallView> = {
         stallName: LONGEST_NAME,
         readAtMs: 1_756_400_000_000 - 120_000,
     }),
+    /*
+     * The wall's rows at long figures (round 3, the critic's P2-3,
+     * pre-existing: the wall's rows never had the shop's re-flow). Browse,
+     * listings at 14, 17, 21 and 26 characters and quotes at 17
+     * (`10,000,000.00 XEC`) and 30 (the eight-byte XEC quote), at the desk
+     * (`shop-window-browse-long-figures`, `shop-window-quotes-long-figures`)
+     * and on the 1920 wall (`shop-window-wall-browse-long-figures`), and a
+     * touch wall's quotes (`shop-window-touch-quotes-long-figures`); the
+     * tall and tablet passes measure all four (`WINDOW_SCREENS`). On main a
+     * 14-character listing spilled its row and a 10,000,000.00 XEC quote lost
+     * its ` XEC` on the tablet, and at 1280 a long figure ran over the item's
+     * name (Modern) or under its picture (Neo). Geometry only:
+     * `shop-window-browse`'s and `shop-window-quotes`' ink.
+     */
+    'shop-window-browse-long-figures': base({
+        fetch: {
+            kind: 'offers',
+            offers: [
+                offer(T1, 0, 99_999_999_999n),
+                offer(T2, 1, 9_999_999_999_999n),
+                offer(LONG, 4, 2_099_906_103_286_385n),
+                offer(LONGER, 5, LONGEST_ASK_SATS),
+            ],
+        },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-quotes-long-figures': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-wall-browse-long-figures': base({
+        fetch: {
+            kind: 'offers',
+            offers: [
+                offer(T1, 0, 99_999_999_999n),
+                offer(T2, 1, 9_999_999_999_999n),
+                offer(LONG, 4, 2_099_906_103_286_385n),
+                offer(LONGER, 5, LONGEST_ASK_SATS),
+            ],
+        },
+        window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-touch-quotes-long-figures': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selection: new Map([[T1, 1n]]),
+        shopTab: 'quotes',
+    }),
+    /*
+     * The wall's one card (Cycle) either side of the rows' cuts (round 4, the
+     * critic's P1-1 on round 3: the card took the shop's desk own-row grid
+     * from 17 characters for a listing and 18 for a quote, and at 1920x1080
+     * Neo printed a hundred million as ",000,000.00 XEC"). Listings at 16
+     * (`1,234,567,890.12`), 17 and 18 characters as the row counts them,
+     * quotes at 16 (`1,000,000.00 XEC`), 17, 18 (`100,000,000.00 XEC`) and
+     * 19 (`$100,000,000,000.00`). The card does not re-flow: it is not a
+     * row, and it paints as main does at every length. Measured on the
+     * canvas pass. Not on the desk, tall or tablet passes, and no 19-character
+     * listing: there these lengths overrun the card on main too (a 19-character
+     * listing on Neo at 1920x1080, every one of these at 1280, on the tall
+     * wall and on the counter tablet; `layout/PROBE-RULES.md`, "Left for its
+     * own branch"), and a pass has no list of known failures. Geometry only:
+     * `shop-window-cycle`'s ink.
+     */
+    'shop-window-cycle-listing-16': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 123_456_789_012n)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cycle-listing-17': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 1_234_567_890_123n)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cycle-listing-18': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 12_345_678_901_234n)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    }),
+    'shop-window-cycle-quote-16': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 100_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-cycle-quote-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-cycle-quote-18': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 10_000_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
+    'shop-window-cycle-quote-19': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, { code: 'usd', exponent: 2, amount: 10_000_000_000_000n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    }),
     'shop-window-wall-browse-long-name': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
@@ -1749,6 +2194,9 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // decoration interactions they could stage are `offers`'.
     'pay-several-strip',
     'pay-several-strip-xec',
+    'pay-several-strip-long-figure',
+    'pay-several-strip-18',
+    'pay-several-strip-21',
     'pay-several-ask',
     'pay-several',
     'item-quote',
@@ -1778,6 +2226,21 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    // The wall's rows at long figures (round 3): `shop-window-browse`'s and
+    // `shop-window-quotes`' shapes and ink.
+    'shop-window-browse-long-figures',
+    'shop-window-quotes-long-figures',
+    'shop-window-wall-browse-long-figures',
+    'shop-window-touch-quotes-long-figures',
+    // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
+    // decoration interactions and ink.
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
     // The address in its refused-copy state (the 8g1 critic's P1-1): the
     // decoration interactions it could stage are `offers`'.
     'addr-shown',
@@ -1788,6 +2251,31 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // interactions they could stage are `item-listing`'s and `item-quote`'s.
     'item-listing-long-figure',
     'item-quote-long-figure',
+    // The two pay sheets at long figures (2026-10-13): `pay`'s and
+    // `pay-several`'s sheet shape, which sits over the shop.
+    'pay-long-figure',
+    'pay-longest-figure',
+    'pay-several-long-figure',
+    'pay-several-longest-figure',
+    // The card ladder's every step and the rows at the longest figures
+    // (round 2): the faces', the sheets' and the rows' shapes again.
+    'item-listing-figure-14',
+    'item-listing-figure-17',
+    'item-listing-figure-21',
+    'item-quote-figure-14',
+    'item-quote-figure-17',
+    'item-quote-figure-21',
+    'pay-figure-14',
+    'pay-figure-17',
+    'pay-several-figure-lines',
+    'row-longest-figure',
+    'quote-row-longest-figure',
+    // Round 3: the rows either side of the re-flow's cut.
+    'quote-row-1m',
+    'quote-row-18',
+    'row-15-16',
+    'row-17',
+    'row-21',
 ]);
 
 /**
@@ -1914,6 +2402,21 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cjk-name',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    // The wall's rows at long figures (round 3): `shop-window-browse`'s and
+    // `shop-window-quotes`' shapes and ink.
+    'shop-window-browse-long-figures',
+    'shop-window-quotes-long-figures',
+    'shop-window-wall-browse-long-figures',
+    'shop-window-touch-quotes-long-figures',
+    // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
+    // decoration interactions and ink.
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
     // The address showing its whole string (the 8g1 critic's P1-1):
     // `offers`' ground with the sign's other span on it, and `.addr-full`
     // is sampled at the desk. It is here for the sign's width.
@@ -1922,11 +2425,44 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // ground with the invites on it (the notice invite's words sampled on
     // `sparse-pasted` under the rain). It is here for the sign's cells.
     'empty-pasted',
-    // The two faces at long figures (the 8g1 critic's P2-1):
-    // `item-listing`'s and `item-quote`'s ink. They are here for the figure
-    // inside its card.
-    'item-listing-long-figure',
+    // The quote face at a long figure (the 8g1 critic's P2-1): `item-quote`'s
+    // ink. Here for the figure inside its card. Not the listing face, the
+    // two pay sheets or the strip at long figures: since round 4 (the
+    // critic's P2-2) the contrast pass samples them, every broken figure's
+    // every digit read for its ink (`BROKEN_FIGURE_SCREENS` in the runner).
     'item-quote-long-figure',
+    // The pay sheet at the largest realistic sum: `pay`'s ink, one line on
+    // the ladder's last single-line step, so nothing breaks; the pay sheet
+    // that breaks its figure is `pay-longest-figure`, sampled.
+    'pay-long-figure',
+    // Pay several with another wallet's mint among its items: `pay-several`'s
+    // ink. The Pay several that breaks every figure and is sampled is
+    // `pay-several-longest-figure` (the warning inside `pay-lines` is a
+    // ground the container's box read cannot be fair to).
+    'pay-several-long-figure',
+    // The card ladder's every step and the rows at the longest figures
+    // (round 2): the ink of the screens they copy. Here for the geometry.
+    'item-listing-figure-14',
+    'item-listing-figure-17',
+    'item-listing-figure-21',
+    'item-quote-figure-14',
+    'item-quote-figure-17',
+    'item-quote-figure-21',
+    'pay-figure-14',
+    'pay-figure-17',
+    'pay-several-figure-lines',
+    'row-longest-figure',
+    // Round 3: the rows either side of the re-flow's cut. Not
+    // `quote-row-longest-figure`: the contrast pass samples it, with the
+    // four surfaces above.
+    // Round 4: the strip's total either side of its break (`pay-several-strip`'s ink).
+    'pay-several-strip-18',
+    'pay-several-strip-21',
+    'quote-row-1m',
+    'quote-row-18',
+    'row-15-16',
+    'row-17',
+    'row-21',
 ]);
 
 /**
@@ -1983,10 +2519,42 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-wall',
     'shop-window-wall-long-name',
     'shop-window-wall-browse-long-name',
+    'shop-window-wall-browse-long-figures',
+    'shop-window-touch-quotes-long-figures',
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
     'shop-window-touch-quotes-pay-3',
     'shop-window-touch-quotes-pay-35',
+]);
+
+/**
+ * Wall screens the tall and tablet passes do not measure: the Cycle card at
+ * the rows' cuts (round 4, the critic's P1-1 on round 3), measured on the
+ * canvas pass alone. They are there to hold the card's grid at the cut at
+ * 1920x1080, where main paints them whole; at 1080x1920 and 768x1024 the card
+ * overruns at these lengths on main too (and at 768x1024 from 10 characters),
+ * a gap of the Cycle card's own that this branch neither causes nor closes
+ * (`layout/PROBE-RULES.md`, "Left for its own branch"), and a pass carries
+ * no list of known failures. `shop-window-cycle` itself stays on both. The
+ * runner prints this list on both passes (`CANVAS_ONLY_WALL_SCREENS` there,
+ * held to this set by `the-shots-cover-every-probed-screen-and-variant`),
+ * and the branch that gives the card a ladder empties it.
+ */
+export const CANVAS_ONLY_WALL_SCREENS: ReadonlySet<string> = new Set([
+    'shop-window-cycle-listing-16',
+    'shop-window-cycle-listing-17',
+    'shop-window-cycle-listing-18',
+    'shop-window-cycle-quote-16',
+    'shop-window-cycle-quote-17',
+    'shop-window-cycle-quote-18',
+    'shop-window-cycle-quote-19',
 ]);
 
 /**

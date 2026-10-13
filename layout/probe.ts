@@ -61,6 +61,8 @@ import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
+import { reachesAnything, spillReach } from './spillReach';
+import { CARD_LADDER_LAST_STEP } from './cardLadder';
 import { inkLines, paddingBox, paintClips, type Box } from '../src/ui/signInk';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -371,18 +373,60 @@ function coveredBy(node: Element): string | undefined {
     if (box.width === 0 || box.height === 0) {
         return 'has no box at all';
     }
-    const points: [number, number][] = [
-        [box.left + box.width / 2, box.top + box.height / 2],
-        [box.left + 2, box.top + 2],
-        [box.right - 2, box.top + 2],
-        [box.left + 2, box.bottom - 2],
-        [box.right - 2, box.bottom - 2],
-    ];
+    /*
+     * Five points on each of the node's own boxes: one for a block or a
+     * one-line figure, which is the box itself, and one per line for a
+     * figure the card ladder breaks after a comma (2026-10-13,
+     * `CARD_FIGURE_CEILINGS`). The union of two lines of unequal length is a
+     * rectangle the figure does not fill, and a point in its empty corner
+     * hit the row and read as the figure covered by its own row.
+     */
+    const lineBoxes = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    /*
+     * **In the box's own turned frame** (round 3): a box inside a turned
+     * ancestor answers its axis-aligned bounds, and their corners are not the
+     * box — a 750px Rural tag swaying 0.77° on the wall put the bounds'
+     * corners of a 21-character figure 4–5px outside the tag it is drawn in,
+     * and the corner read as the figure covered by its own row. So each
+     * box's five points are taken in the frame it is drawn in, before its
+     * turn (`turnedBox`, the contrast pass's own), and turned back: every
+     * point is a point of the box. An unturned box is read exactly as before.
+     */
+    const angle = angleOf(node);
+    // A broken figure's line boxes are solved from their bounds; past 45°
+    // they cannot be, and the node is read as one box in its own frame
+    // (`ownFrame`, exact at any turn).
+    const lineFrames = angle === 0 || lineBoxes.length <= 1 ? undefined : lineBoxes.map((r) => turnedBox(r, angle));
+    const byLine = lineBoxes.length > 1 && (lineFrames === undefined || lineFrames.every((f) => f !== undefined));
+    const points: [number, number][] = (byLine ? lineBoxes : [box]).flatMap((r, i) => {
+        if (angle === 0) {
+            return [
+                [r.left + r.width / 2, r.top + r.height / 2] as [number, number],
+                [r.left + 2, r.top + 2] as [number, number],
+                [r.right - 2, r.top + 2] as [number, number],
+                [r.left + 2, r.bottom - 2] as [number, number],
+                [r.right - 2, r.bottom - 2] as [number, number],
+            ];
+        }
+        const t = byLine ? lineFrames![i]! : ownFrame(node, r, angle);
+        if (t === undefined) {
+            return [];
+        }
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const at = (dx: number, dy: number): [number, number] => [t.cx + dx * cos - dy * sin, t.cy + dx * sin + dy * cos];
+        const hx = t.w / 2 - 2;
+        const hy = t.h / 2 - 2;
+        return [at(0, 0), at(-hx, -hy), at(hx, -hy), at(-hx, hy), at(hx, hy)];
+    });
     // Content inside the shell's scroll region keeps its full rect even when
     // part of it is scrolled out of the clip. A point beyond the clip is not
     // covered — it is reachable by scrolling, and the tab bar sits outside
     // the clip in flow, so it can never cover what is inside. Points within
     // the clip are still fully checked.
+    if (points.length === 0) {
+        return `${describe(node)} stands in a frame turned ${degrees(angle)} and has no layout box of its own, which the probe cannot read past 45° — it reads a turned element by its own size, and a node with none only under 45°`;
+    }
     const cut = cutSideways(node, box);
     if (cut !== undefined) {
         return cut;
@@ -1270,6 +1314,14 @@ function measure(screen: string, themeLabel: string): Failure[] {
         const edge = clipper?.getBoundingClientRect();
         const cut = edge !== undefined && (down ? strip.bottom > edge.bottom + 1 : strip.right > edge.right + 1);
         let under: Element | undefined;
+        // Against a control inside the clipper, the whole strip (below the
+        // fold too); against one outside it, the part the clipper shows
+        // (`spillReach`, round 4, the critic's P2-1).
+        const clipCs = clipper === null ? undefined : getComputedStyle(clipper);
+        const clip =
+            edge === undefined || clipCs === undefined
+                ? undefined
+                : { box: edge, clipsX: clipCs.overflowX !== 'visible', clipsY: clipCs.overflowY !== 'visible' };
         if (!cut) {
             for (const other of root.querySelectorAll<HTMLElement>('button, a, input, select, textarea, [data-role="price"], [data-role="seller-price"], .item-n, .face-nm, .fine, .note, .pub')) {
                 if (other === node || node.contains(other) || other.contains(node)) {
@@ -1278,8 +1330,12 @@ function measure(screen: string, themeLabel: string): Failure[] {
                 if (other.closest('[aria-hidden="true"]') !== null) {
                     continue;
                 }
+                const reach = spillReach(strip, clip, clipper === null || clipper.contains(other));
+                if (!reachesAnything(reach)) {
+                    continue;
+                }
                 const r = other.getBoundingClientRect();
-                if (r.width > 0 && overlaps(strip, r)) {
+                if (r.width > 0 && !(reach.right <= r.left || r.right <= reach.left || reach.bottom <= r.top || r.bottom <= reach.top)) {
                     under = other;
                     break;
                 }
@@ -2014,6 +2070,174 @@ function wallCuts(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **A card figure stands inside its row** (2026-10-13; the 8g1 critic's
+ * P2-3, the owner's D-2026-10-13-02). The item face's figure (the listing's
+ * asked amount, the quote's figure), the face's "You pay" figure, the XEC a
+ * pay sheet's wallet signs, each Pay several line's figure and the Pay
+ * several total: every line box of the figure stands inside its row's content
+ * box, or the total's own. It is stricter than `text-spills`, which tolerates
+ * a box poking into its parent's padding — the first stage of what the
+ * critic found, a figure 16px into an 18px pad at 390, before the panel
+ * clipped it. The face and the pay sheets step their figure down a ladder
+ * (`CARD_FIGURE_CEILINGS`, `cardFigureTier`) and, past its last ceiling,
+ * break it after a comma; this is what holds that ladder true on every look
+ * at every pass that paints one, the 360 pass (`narrow`) above all.
+ *
+ * **Tier 0 is read against its card's padding box** (round 2, the critic's
+ * P2-3 and the window's call): figures of 14 characters or fewer keep their
+ * design size by the owner's line, and at 360 the widest of them runs into
+ * the card's padding where it is widest — 8.5px of the pay card's 14 on Neo
+ * (every 14-character pay figure: tabular mono), 13.3px of the face's 18 for
+ * `₩9,999,999,999` on Neo, 2.5px on Rural — cut by nothing. So on the three
+ * places that line governs, the face's figure, "You pay" and a pay sheet's
+ * figure (`TIER_0_IN_CARD`), tier 0 is held to stay inside its card's
+ * padding box (`.card`, or the pay card `.pay-amt`), the way `text-spills`
+ * reads a box; tiers 1–3, where the ladder makes a promise, keep the strict
+ * read of the row's content box. A Pay several line and the total keep the
+ * strict read at every length: a line carries a tier only from 18
+ * characters (a line of 15–17 still sits beside its name and reads as
+ * tier 0 here), and the total carries none. A hidden figure (a sheet with
+ * no rate yet) has no line box and is not read. Counted per look and per
+ * place and tier (`cardFigureByClass`, `face:3` for a face figure on the
+ * ladder's last rung), so the runner owes every step a read.
+ */
+const CARD_FIGURE_CHECK = 'a-card-figure-stands-inside-its-row';
+const cardFigureByClass: Record<string, Record<string, number>> = {};
+/** Where a card figure stands: the place's name, its row, and the figure inside the row. */
+const CARD_FIGURES: readonly (readonly [string, string, string])[] = [
+    ['face', '.face-x', ':scope > [data-role="price"], :scope > [data-role="seller-price"]'],
+    ['paid', '.row.big', ':scope > dd'],
+    ['pay', '.pay-x', ':scope > [data-role="price"]'],
+    ['line', '.pay-line', '.pay-line-x'],
+    ['total', '[data-role="pay-total"]', ':scope'],
+];
+/** The places whose tier 0 is the owner's "14 characters or fewer, unchanged", read against the card's padding box. */
+const TIER_0_IN_CARD: ReadonlySet<string> = new Set(['face', 'paid', 'pay']);
+
+/*
+ * **A card figure steps down on every look** (round 2, the critic's P2-4).
+ * The static guard (`every-look-that-sizes-its-figure-sizes-every-price-tier`)
+ * reads selectors, and seven legal look rules escaped it — a `font`
+ * shorthand on `.face-x .x`, `.pay-q`, `.x`, `.face-x > span`,
+ * `.pay-amt .pay-x span:first-child`, `[data-role='price']` and a `font`
+ * shorthand on `.pay-x-n` — each out-ranking stall.css's floor and freezing
+ * the figure at every step. So the painted size is held instead, whatever
+ * selector set it: on a phone, for every look, **each variant on its own**
+ * (bare, every decoration worn: round 3, the critic's P3-1 — merged into one
+ * range per tier, a worn variant sizing the figure 18px at every tier read as
+ * "grows from tier 0 to tier 1" against the bare 34), and each of the four
+ * figures the ladder steps (`CARD_LADDER_FIGURES`), no tier paints larger
+ * than the smallest size the tier before it painted, and the last tier is
+ * smaller than tier 0 — **unless tier 0 is already at or under the floor's
+ * own last step** (`CARD_LADDER_LAST_STEP` in `layout/cardLadder.ts`, held to
+ * the sheet by `the-ladders-last-step-is-the-sheets-floor`: 18px for the face and the pay
+ * figure, 15px for "You pay"), where a figure has no smaller step to take
+ * and the fit rule alone judges it (round 3, the critic's P3-1: a look row
+ * whose `paid` is 14px, every step `min(Npx, 14px)`, failed here with every
+ * figure fitting). Read at the end of the page from the sizes every paint
+ * collected (`cardLadderSizes`, the smallest and largest per look, variant,
+ * figure and tier), so it needs the fixtures at every step, which the runner
+ * owes; what it compared is reported per look and figure as the most tiers
+ * one variant read (`cardLadderByClass`, `"0123"`: the ladder fixtures are
+ * painted bare and fully worn), and a figure compared over fewer than all
+ * four is a gap. Desk widths keep the design size and are not
+ * read.
+ */
+const CARD_LADDER_CHECK = 'a-card-figure-steps-down-on-every-look';
+/** The figures the ladder steps, as `place:role` (a "You pay" figure carries no role: `paid:figure`). */
+const CARD_LADDER_FIGURES: ReadonlySet<string> = new Set(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
+type LadderTiers = Record<string, { min: number; max: number }>;
+/** Per look class, per variant (the paint's label), per figure, per tier. */
+const cardLadderSizes: Record<string, Record<string, Record<string, LadderTiers>>> = {};
+const cardLadderByClass: Record<string, Record<string, string>> = {};
+
+function cardFigureFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const byLook = (cardFigureByClass[measuringClass] ??= {});
+    const phone = window.innerWidth < 680;
+    for (const [place, rowSel, figSel] of CARD_FIGURES) {
+        for (const row of document.querySelectorAll<HTMLElement>(`#app ${rowSel}`)) {
+            if (row.closest('.deck-stall') !== null) continue;
+            const figure = figSel === ':scope' ? row : row.querySelector<HTMLElement>(figSel);
+            if (figure === null) continue;
+            const range = document.createRange();
+            range.selectNodeContents(figure);
+            const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+            if (lines.length === 0) continue;
+            const tier = row.getAttribute('data-price-tier') ?? '0';
+            // Tier 0 of the face, "You pay" and a pay figure against its card's
+            // padding box; every other read against the row's content box.
+            const card = tier === '0' && TIER_0_IN_CARD.has(place) ? row.closest<HTMLElement>('.card, .pay-amt') : null;
+            const edge = card ?? row;
+            const cs = getComputedStyle(edge);
+            const box = edge.getBoundingClientRect();
+            const inset = (side: 'Left' | 'Right'): number =>
+                Number.parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) +
+                (card === null ? Number.parseFloat(cs.getPropertyValue(`padding-${side.toLowerCase()}`)) : 0);
+            const left = box.left + inset('Left');
+            const right = box.right - inset('Right');
+            byLook[`${place}:${tier}`] = (byLook[`${place}:${tier}`] ?? 0) + 1;
+            const ladder = `${place}:${figure.getAttribute('data-role') ?? 'figure'}`;
+            if (phone && CARD_LADDER_FIGURES.has(ladder)) {
+                const size = Number.parseFloat(getComputedStyle(figure).fontSize);
+                const at = (((cardLadderSizes[measuringClass] ??= {})[label] ??= {})[ladder] ??= {});
+                const was = at[tier];
+                at[tier] = was === undefined ? { min: size, max: size } : { min: Math.min(was.min, size), max: Math.max(was.max, size) };
+            }
+            const over = Math.max(...lines.map((r) => r.right)) - right;
+            const under = left - Math.min(...lines.map((r) => r.left));
+            if (over > 0.5 || under > 0.5) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: CARD_FIGURE_CHECK,
+                    detail:
+                        `the ${place} figure "${(figure.textContent ?? '').slice(0, 40)}" (tier ${tier}, ${getComputedStyle(figure).fontSize}) ` +
+                        `runs ${over > 0.5 ? `${over.toFixed(1)}px past its ${card === null ? "row's content" : "card's padding"} box on the right` : `${under.toFixed(1)}px past its ${card === null ? "row's content" : "card's padding"} box on the left`} ` +
+                        `(${describe(edge)}, ${Math.round(left)}–${Math.round(right)})`,
+                });
+            }
+        }
+    }
+    return out;
+}
+
+/** Every look's painted ladder, each variant on its own, read once at the end of the page (`a-card-figure-steps-down-on-every-look`). */
+function cardLadderFaults(): Failure[] {
+    const out: Failure[] = [];
+    for (const [cls, variants] of Object.entries(cardLadderSizes)) {
+        // The most tiers one variant compared, per figure: a state screen is
+        // painted bare and fully worn only, so a single decoration's variant
+        // paints tier 0 alone and compares nothing — the report is the
+        // variant that compared the most, and every variant is compared on
+        // its own.
+        const compared: Record<string, string[]> = {};
+        for (const [variant, figures] of Object.entries(variants)) {
+            for (const [key, tiers] of Object.entries(figures)) {
+                const painted = ['0', '1', '2', '3'].filter((t) => tiers[t] !== undefined);
+                if (painted.length > (compared[key]?.length ?? 0)) compared[key] = painted;
+                if (painted.length < 2) continue;
+                const at = (t: string): { min: number; max: number } => tiers[t]!;
+                const sizes = painted.map((t) => `tier ${t} ${at(t).min === at(t).max ? at(t).max : `${at(t).min}–${at(t).max}`}px`).join(', ');
+                for (let i = 1; i < painted.length; i += 1) {
+                    if (at(painted[i]!).max > at(painted[i - 1]!).min + 0.01) {
+                        out.push({ screen: 'probe page', theme: variant, check: CARD_LADDER_CHECK, detail: `the ${key} figure grows from tier ${painted[i - 1]} to tier ${painted[i]} (${sizes})` });
+                    }
+                }
+                const floor = CARD_LADDER_LAST_STEP[key] ?? 0;
+                if (at(painted[0]!).min > floor + 0.01 && !(at(painted.at(-1)!).max < at(painted[0]!).min - 0.01)) {
+                    out.push({ screen: 'probe page', theme: variant, check: CARD_LADDER_CHECK, detail: `the ${key} figure takes no smaller step on its ladder (${sizes})` });
+                }
+            }
+        }
+        for (const [key, tiers] of Object.entries(compared)) {
+            (cardLadderByClass[cls] ??= {})[key] = tiers.join('');
+        }
+    }
+    return out;
+}
+
+/*
  * **A payment list that scrolls says how many lines it hides** (2026-09-24,
  * the owner's decision 4). The payment's lines scroll inside the wall's
  * plate under a cap in pixels (`window.css`), and nothing said so: a
@@ -2086,7 +2310,9 @@ function payLinesSayWhatTheyHide(screen: string, label: string): Failure[] {
  * "scan to enter" stays 9.5px — unless it is one of the raised nodes
  * (`FLOOR_NAMED`: the brand strip and the tile letters are aria-hidden or
  * decorative and rose anyway, F2; the steppers' counts are aria-hidden
- * because the buttons carry them, and are read by the eye). The door's deck minis are pictures at
+ * because the buttons carry them, and are read by the eye, and so are a
+ * broken money figure's pieces, under the `.fig-say` that names the whole
+ * figure). The door's deck minis are pictures at
  * 0.34–0.56 zoom and are skipped. The raised nodes read are counted
  * (`floorNamedChecks`) and the runner requires some on the phone and desk
  * passes. A class no fixture paints — the notice invite's `.ghost-chip`, a
@@ -2118,6 +2344,10 @@ const FLOOR_NAMED = [
     // `selection-count`) and the wall's.
     '.step-n',
     '.sw-step-n',
+    // A money figure broken after its commas (round 2, the critic's P3-1):
+    // its pieces are `aria-hidden` because `.fig-say` carries the whole
+    // figure as one name, and every sighted reader reads them.
+    '.fig-say',
 ];
 const FLOOR_NAMED_SELECTOR = FLOOR_NAMED.flatMap((sel) => [sel, `${sel} *`]).join(', ');
 let floorNamedChecks = 0;
@@ -4332,6 +4562,7 @@ for (const screen of measured) {
             failures.push(...wallCuts(screen, label));
             failures.push(...statusLineFaults(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
+            failures.push(...cardFigureFaults(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
@@ -4365,6 +4596,7 @@ for (const screen of measured) {
 }
 
 failures.push(...doorMiniFaults());
+failures.push(...cardLadderFaults());
 
 /*
  * **The sign's stress names on a try-on** (step 8f2; the 8f1 critic's item
@@ -4775,6 +5007,19 @@ type ContrastTarget = {
     lines: RingLine[];
     /** An outlined target's drawn icons: not text, left out of the mask and the ring. */
     icons: Hole[];
+    /**
+     * A money figure broken after its commas (`.fig-say`, round 3, the
+     * critic's P2-1): its lines of text — every text node in it, hidden ones
+     * included — each with the money node's own ink, never the piece's, and
+     * how many letters and digits the figure holds. The runner reads each
+     * piece's glyphs in the figure's ink (`a-broken-figure-paints-every-digit`).
+     */
+    digits?: RingLine[];
+    digitsOwed?: number;
+    /** The broken figure's role, which the runner owes per screen (`BROKEN_FIGURE_SCREENS`). */
+    digitsRole?: string;
+    /** A broken figure's own line boxes, each read whole by the runner's box read (round 4). */
+    lineBoxes?: { x: number; y: number; w: number; h: number }[];
     /** Where an outlined target's ring may be read: the box, `ring` px wider, inside the clip. */
     ringBox: Hole;
     /** The outline's own offsets, which are where the ring lies around the glyph mask. */
@@ -4892,6 +5137,7 @@ declare global {
          * wears the outline, for the ring read's second capture.
          */
         __contrastGlyphs: (show: boolean) => Promise<number>;
+        __contrastFigureGlyphs: (show: boolean) => Promise<number>;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -5117,6 +5363,13 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         return 'sliver';
     }
     const angle = angleOf(node);
+    // A target in a turned frame is read in that frame (`ownFrame`); one with
+    // no layout size of its own past 45° cannot be, and says so — the runner
+    // fails a pass with any (round 4, the critic's P3-1).
+    const frame = angle === 0 ? undefined : ownFrame(node, full, angle);
+    if (angle !== 0 && frame === undefined) {
+        return 'turned-too-far';
+    }
     const read = lined ? lineRectsOf(node, ink, ownBand) : undefined;
     if (read !== undefined && read.rects.length === 0) {
         return read.why;
@@ -5159,7 +5412,7 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         pad: 0,
         legacyPad: insideTransform(node) ? 8 : 0,
         angle,
-        ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
+        ...(angle === 0 ? {} : { frame: frame! }),
         sel: describe(node),
         ...(node.matches(HONEST_SELECTOR) ? { role: node.getAttribute('data-role')! } : {}),
         money,
@@ -5167,6 +5420,44 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         legacyDropped: sliver,
         ring,
         lines: ring > 0 ? ringLines(node, box) : [],
+        // A broken figure's pieces, each read in the FIGURE's own ink (the
+        // ink of the node the figure is written into, never a piece's), and
+        // only the figure's own text: a money target holding words beside
+        // the figure (Pay several's lines, the selection line's "1 ×") read
+        // those words toward the figure's ink in round 3's first cut (round
+        // 4, the critic's P2-2).
+        ...(money && node.querySelector('.fig-say') !== null
+            ? (() => {
+                  const says = [...node.querySelectorAll<HTMLElement>('.fig-say')];
+                  const inkOf = (el: HTMLElement | null): string =>
+                      el === null || el === node ? ink : (el.dataset['probeInk'] ?? getComputedStyle(el).color);
+                  return {
+                      digits: says.flatMap((say) => ringLines(say, box, { ink: inkOf(say.parentElement), hidden: true })),
+                      digitsOwed: says.reduce(
+                          (n, say) => n + [...(say.getAttribute('aria-label') ?? '')].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length,
+                          0,
+                      ),
+                      digitsRole: node.getAttribute('data-role') ?? describe(node),
+                      // Its line boxes, each read whole by the box read (round 4):
+                      // the union of an inline figure's lines holds what stands
+                      // beside them. Unturned figures alone; a turned one keeps
+                      // its one box in its own frame.
+                      ...(angle === 0 && node.getClientRects().length > 1
+                          ? {
+                                lineBoxes: [...node.getClientRects()]
+                                    .map((r) => {
+                                        const x = Math.max(r.left, box.x);
+                                        const y = Math.max(r.top, box.y);
+                                        const w = Math.min(r.right, box.x + box.width) - x;
+                                        const h = Math.min(r.bottom, box.y + box.height) - y;
+                                        return { x, y, w, h };
+                                    })
+                                    .filter((r) => r.w > 0 && r.h > 0),
+                            }
+                          : {}),
+                  };
+              })()
+            : {}),
         icons:
             ring > 0
                 ? [...node.querySelectorAll('svg')].map((svg) => {
@@ -5205,18 +5496,47 @@ function angleOf(el: Element | null): number {
  * A turned box before its turn: `getBoundingClientRect()` and
  * `Range.getClientRects()` answer a turned box's axis-aligned bounds, W×H,
  * and for a turn θ those are w·c + h·s by w·s + h·c — solved here for w and
- * h, about the same centre.
+ * h, about the same centre. **Undefined from 45°** (round 4, the critic's
+ * P3-1): there the system is singular (c = s) or gives no positive box, and
+ * the first version threw, so a look that turned a figure that far stopped
+ * the probe page writing any verdict. An element is read by `ownFrame`
+ * instead, which never needs the solve; a line fragment past it is said by
+ * its caller.
  */
-function turnedBox(r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } {
+function turnedBox(r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } | undefined {
     const c = Math.abs(Math.cos(angle));
     const sn = Math.abs(Math.sin(angle));
     const det = c * c - sn * sn;
     const w = angle === 0 ? r.width : (r.width * c - r.height * sn) / det;
     const h = angle === 0 ? r.height : (r.height * c - r.width * sn) / det;
     if (!(det > 0 && w > 0 && h > 0)) {
-        throw new Error(`a box turned ${((angle * 180) / Math.PI).toFixed(2)}° at ${Math.round(r.x)},${Math.round(r.y)} gives no box before its turn`);
+        return undefined;
     }
     return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, w, h };
+}
+
+/**
+ * An element's box before its frame's turn: solved from its bounds under 45°
+ * (`turnedBox`, which every read used before and still uses there, so no
+ * read moves), and past it its layout size (`offsetWidth` × `offsetHeight`,
+ * which no transform touches) about the centre of its turned bounds — exact
+ * at any angle, never singular (round 4, the critic's P3-1). An element with
+ * no layout size of its own (an SVG node) past 45° is undefined.
+ */
+function ownFrame(node: Element, r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } | undefined {
+    const solved = turnedBox(r, angle);
+    if (solved !== undefined) {
+        return solved;
+    }
+    if (node instanceof HTMLElement && node.offsetWidth > 0 && node.offsetHeight > 0) {
+        return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, w: node.offsetWidth, h: node.offsetHeight };
+    }
+    return undefined;
+}
+
+/** A turn in degrees, for a sentence. */
+function degrees(angle: number): string {
+    return `${((angle * 180) / Math.PI).toFixed(2)}°`;
 }
 
 /**
@@ -5263,6 +5583,7 @@ function lineRectsOf(
 ): { rects: LineRect[]; why: string } {
     const rects: LineRect[] = [];
     let fragments = 0;
+    let turned = 0;
     const clipped = (owner: Element, r: DOMRect): Hole | undefined => {
         let x0 = r.left;
         let y0 = r.top;
@@ -5289,6 +5610,12 @@ function lineRectsOf(
         if (cut === undefined) return;
         const angle = angleOf(owner);
         const line = turnedBox(r, angle);
+        if (line === undefined) {
+            // A line fragment past 45° cannot be solved from its bounds
+            // (round 4, the critic's P3-1): the target says so.
+            turned += 1;
+            return;
+        }
         rects.push({ ...cut, cx: line.cx, cy: line.cy, rw: line.w, rh: line.h, angle, ink: lineInk, ...(glyph ? { glyph: true as const } : {}) });
     };
     const range = document.createRange();
@@ -5309,6 +5636,9 @@ function lineRectsOf(
             if (svg.closest(CONTRAST) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
             push(svg, svg.getBoundingClientRect(), ink, true);
         }
+    }
+    if (turned > 0) {
+        return { rects: [], why: 'turned-too-far' };
     }
     return { rects, why: fragments === 0 ? 'not-rendered' : 'clipped-away' };
 }
@@ -5334,7 +5664,11 @@ function drawsNothing(node: HTMLElement): boolean {
  * the clip left it), so a line scrolled half out of a clip counts only what
  * shows. Text inside an `<svg>` is a drawing, not a line.
  */
-function ringLines(node: HTMLElement, box: { x: number; y: number; width: number; height: number }): RingLine[] {
+function ringLines(
+    node: HTMLElement,
+    box: { x: number; y: number; width: number; height: number },
+    opts: { ink?: string; hidden?: boolean } = {},
+): RingLine[] {
     const lines = new Map<string, RingLine>();
     const range = document.createRange();
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -5343,8 +5677,10 @@ function ringLines(node: HTMLElement, box: { x: number; y: number; width: number
         const owner = text.parentElement;
         if (owner === null || owner.closest('svg') !== null) continue;
         const cs = getComputedStyle(owner);
-        if (cs.visibility !== 'visible') continue;
-        const ink = owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
+        // A broken figure's pieces are read hidden or not (`hidden`): a piece
+        // a look hid paints nothing, and the read finds no glyph in it.
+        if (cs.visibility !== 'visible' && opts.hidden !== true) continue;
+        const ink = opts.ink ?? (owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color);
         const value = text.textContent ?? '';
         for (let i = 0; i < value.length; ) {
             const cp = value.codePointAt(i)!;
@@ -5395,6 +5731,32 @@ window.__contrastGlyphs = async (show: boolean) => {
     let n = 0;
     for (const node of preparedNodes) {
         if (outlineOf(node) <= 0) continue;
+        n += 1;
+        for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
+            if (el.dataset['probeColor'] === undefined) continue;
+            if (show) {
+                el.style.color = el.dataset['probeColor'];
+            } else {
+                el.style.setProperty('color', 'transparent', 'important');
+            }
+        }
+    }
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return n;
+};
+
+/**
+ * The broken-figure read's second capture (round 3, the critic's P2-1):
+ * every prepared money node holding a `.fig-say` has its glyphs shown again
+ * (the colour the prepare blanked, each element its own, put back) or
+ * blanked once more. A piece a look made transparent is put back
+ * transparent, and one it hid stays hidden: what the read then finds is what
+ * the look paints.
+ */
+window.__contrastFigureGlyphs = async (show: boolean) => {
+    let n = 0;
+    for (const node of preparedNodes) {
+        if (!node.matches(MONEY) || node.querySelector('.fig-say') === null) continue;
         n += 1;
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
@@ -6595,6 +6957,10 @@ const verdict = {
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,
+    /* Card figures read inside their rows, per look and per place:tier (`a-card-figure-stands-inside-its-row`). */
+    cardFigureByClass,
+    /* The tiers each figure's painted ladder was compared over, per look (`a-card-figure-steps-down-on-every-look`). */
+    cardLadderByClass,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);

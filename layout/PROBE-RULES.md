@@ -2421,6 +2421,21 @@ the painted box — width minus the element's own padding — and fails under th
 constant. Proved red by raising the constant to 500: 252 failures on the
 mobile pass, naming the 316px Modern paints.
 
+**At 360 too** (2026-10-13, the 8g1 critic's P2-4). The rule reads every
+pay sheet the narrow pass paints ("The narrow phone", below), and the plate
+moves one for one with the screen: at 360 Modern painted 286, Neo 288,
+**Rural 278**, the skeleton and the tracked fixture 286 (at 375: 301, 303,
+293). Proved red then: at 308 the narrow screens failed 483 times, every one
+this rule. Lowering the gate to 278 was built and measured first, and its
+cost was too high to merge as it stood — Pay several drew a code for two
+items at counts under 256 and none past 255, and one item read "Too many
+items" — so below 390 the pay sheets give the code more of the sheet instead
+("A wider code box below 390", below): at 360 it paints 310 on Rural, 318 on
+Modern, the skeleton and the fixture, 320 on Neo, and `PAY_QR_NARROWEST_PX`
+stays 308, pinned by value with those numbers. Pay several draws for one to
+six items at counts under 256 and one to five past 255, as before, and the
+single pay sheet's 61-module code is 5.05px a module or more from 360 up.
+
 What this does not measure: a touch. The presses are driven in
 `app.window.test.ts` (the freeze, the close on a change, the expiry at
 `PAY_RATE_MAX_AGE_MS`) and in `window.test.ts` (the handlers, the allow-list
@@ -5552,7 +5567,10 @@ Neo (`text-spills`, and on Neo the panel scrolls sideways); the quote face
 holds 17 and spills at 19 on every look, and the editor writes up to 29
 (`SAR184,467,440,737,095,516.15`, eight bytes of amount). The desk holds
 all of them. A ladder for the face's figure, or a wrap, is the owner's
-call; the fixtures move to the record's longest when it lands.
+call; the fixtures move to the record's longest when it lands. **It landed
+on 2026-10-13** ("The narrow phone", below): the two screens carry the
+record's longest now — 26 characters of asked amount and a 30-character XEC
+quote — and the paragraph above is the measurement that asked for it.
 
 Red proof: the private look at 0x04 at `b94be54`, selected — at 390x844,
 8 failures on `item-listing-long-figure` (`asked amount is covered` among
@@ -5732,3 +5750,664 @@ screen's count exact and fail the case above, at the cost of a table that
 moves with every slice of a look being ported — recommended once the
 private look at 0x04's port stops moving the screens its counts fall on,
 not before.
+
+## The narrow phone (2026-10-13; the 8g1 critic's P2-3 and P2-4, the owner's D-2026-10-13-02)
+
+Every page pass ran at 390 and wider, so whatever held at 390 and not at 360
+went unseen. Three things did not hold at 360 on main (measured that day on
+the three shipped looks, the skeleton and the tracked fixture): the item
+face's figure spilled from 16 characters on Neo (`item-quote-long-figure`,
+17 characters, spilled on every look), every pay code painted narrower than
+`PAY_QR_NARROWEST_PX` (308), and Rural's row name column fell under its 64px
+floor. A pass, a ladder, a rule and a gate.
+
+### The pass
+
+`narrow`, 360x800, `?screens=` over `NARROW_SCREENS` in `layout-check.mjs`:
+geometry only, no contrast. The rows (`unbuyable` and the selection strip:
+`pay-several-strip`, `pay-several-strip-xec`, `pay-several-ask`), the item
+faces (`item-listing`, `item-quote`, `item-unbuyable-fold`,
+`item-listing-long-figure`, `item-quote-long-figure`), the pay sheet (`pay`,
+`pay-xec`, `pay-moved`, `pay-dust`, `pay-long-figure`), Pay several
+(`pay-several`, `pay-several-long-figure`) and the rest of the money set on
+a phone (`activity`'s receipt amount, `describe` and `publish-name`'s
+record hex, `pay-tag`'s figure on paper). The runner refuses a pass whose
+page measured another width (`viewport`), another set of looks, private
+looks the selection does not carry, fewer screens than it asked for, or a
+pay screen that mounted no seller's figure, and holds it to the coverage it
+owes (`probeCoverageGaps('narrow', …)`: a look's sheet read on every look,
+a mark read hidden on every public look, and every step of the card
+figures below). Measured 4.6s of a 158.5s run (2026-10-13; the target was
+30–40s); 5.1s of 150.7s with round 2's eleven screens.
+
+**Round 2 (the critic's P2-2 and P2-6)** adds the card ladder's every step
+at its widest — `item-listing-figure-14`, `-17`, `-21` (the listing face,
+whose fold carries "You pay" at the same tier), `item-quote-figure-14`,
+`-17`, `-21` (`₩9,999,999,999`, `元9,999,999,999.99`,
+`元9,999,999,999,999.99`: signs the faces do not draw, painted by the
+machine's fallback at about 1em), `pay-figure-14` and `-17`, and
+`pay-several-figure-lines` (a 17-character line beside its name and an
+18-character one on its own row) — and the rows at the longest figures,
+`row-longest-figure` (an eight-byte asked amount) and
+`quote-row-longest-figure` (an eight-byte XEC quote). Each is a state
+screen, geometry only, so the phone (390) and desk (1280) passes paint
+them too.
+
+**Rural's narrow rows (round 3, D-2026-10-13-04, the owner's option
+(b)).** In round 2 `offers`, `plugin-missing-quotes`, `quotes-signs` and
+`pay-inr` were off this pass on every look: at 360 Rural's row name column
+on them fell to 44–60px, under the name-floor rule's 64 (`from 1,200` 58px,
+`100,000,000` 55, `$5.00` 60, `₩12,000` 44, `₹499.00` 52, `₪35.00` 57,
+`₱250.00` and `₺120.00` 50 — 224 failures), and at 375 the `₩12,000` row
+was 59px (14 failures); 384 and 390 were clear. Rural's tag spends about
+39px on its notch, padding and border, and the rows' ladder
+(`tierCeilings`) was measured at 390. Now Rural's row carries `narrowTag:
+'own-row'`, the renderer writes it on the stall's root as
+`data-narrow-tag` (`dressLook`; `STATE_ATTRIBUTES`, held to its writer in
+`a-look-cannot-target-one-seller`), and stall.css gives a tier-1 or tier-2
+tag the tier-3 dress under `max-width: 389.98px` — a row of its own under
+the name, the quote head's with Pay, a quote row in selection mode with
+none. Never a look sheet's media condition (`LOOK_MEDIA` stops at the
+probe's passes, and a fourth would reach every private look). The four
+screens are back on this pass for every look, with 0 failures. **The
+cost, stated:** 57 Rural rows in the showroom take their tag onto a row of
+their own at 360, `from 1,200` among them, 55 of which fit at 375 without
+it; nothing moves at 390, and Modern's and Neo's rows never move.
+
+**Round 3 also adds** (the critic's re-review): the rows either side of the
+re-flow's cut (`quote-row-1m`, `row-15-16`, `row-17`, `quote-row-18`,
+`row-21`, below) and the selection strip at the longest total
+(`pay-several-strip-long-figure`). 41 screens. **Round 4 adds** the strip's
+total at 18 and 21 characters (`pay-several-strip-18`, `-21`), the pay sheet
+over the eight-byte quote (`pay-longest-figure`) and Pay several over it
+with both items the stall's own (`pay-several-longest-figure`): 45 screens,
+6.8s of a 211.6s run.
+
+### The ladder
+
+`CARD_FIGURE_CEILINGS` (14, 17, 21 characters) and `cardFigureTier` in
+`render.ts`: the item face's figure, both pay sheets' figure (the XEC the
+wallet signs) step down 34/36 → 26 → 21 → 18px, the floor in stall.css
+(`.face-x:where([data-price-tier='N']) .x`, `.pay-x:where(…) .pay-x-n`, at
+the base rules' own weight and after them, phones only). Character count,
+one table for every look: no look sizes these figures. Measured at 360 on
+every unit `QUOTE_UNITS` writes, at each step's longest figure, against the
+row's content width (face: Modern 286, Neo 298, Rural 286, the fixture 286;
+pay: 302, 304, 294, 302):
+
+| step | face, widest | pay, widest |
+|---|---|---|
+| ≤14 at 34/36px (unchanged) | Neo `₩9,999,999,999` 311 of 298, Rural 289 of 286 | Neo 313 of 304 |
+| ≤17 at 26px | Neo `元9,999,999,999.99` 285 of 298, Rural `HK$999,999,999.99` 267 of 286 | Neo 274 of 304 |
+| ≤21 at 21px | Neo `元9,999,999,999,999.99` 282 of 298, Rural 264 | Neo 273 of 304 |
+
+Neo's mono is 0.62em a character; a sign its face does not draw (`元`, `₩`)
+comes from the machine's fallback at about 1em, which is why 28 and 22px,
+tried first, left `元` 9px past the face's row at 17 characters. Past 21
+the figure is 18px and the row re-flows as one line of text, at every
+width: the figure may break after a comma and nowhere else (`<wbr>` written
+by `moneyFigure`, textContent unchanged), the last group stays whole with a
+trailing sign or ` XEC` (`.fig-end`, nowrap), and `from` and the unit ride
+the first and last lines because nothing breaks between a letter and a
+digit. At a desk the figure keeps its design size and breaks only where the
+row is narrower than it (680, and the pay dialog's 484–502px at 1280, which
+main cut at 25 characters: 41 desk failures). A Pay several line whose
+figure is past 17 takes a row of its own under the name — on a phone only
+since round 2 (the critic's P3-2: at a desk the sheet has the room, and an
+18-character line had moved to its own row at 1280) — and the total's
+figure breaks after a comma past 21.
+
+**"You pay" is on the ladder** (round 2, the critic's P2-1). The face's
+fold carries the same figure in "You pay" (`.row.big dd`, its own size
+`--s-paid-size`, 21–27px), which round 1 only broke past 21: at 360 an
+18-character figure was cut 17px on Rural and a 21-character one 31–61px,
+and at 390 31px on Rural. The row now carries the figure's tier
+(`sheetRow`, `cardFigureTier`), and on a phone the dd steps to 20, 17 and
+15px, each capped at the look's own `--s-paid-size` (`min()`): tier 0 is a
+value of the look's row, which `lookData` takes up to 2000px, so the floor
+must never grow a smaller one. It shares its line with the words "You
+pay", so its steps are smaller than the card figure's. Past 21 it breaks
+after a comma. A unit may still wrap under its figure (" XEC" alone on the
+dd's second line): whole, and as it was at tier 0 on main.
+
+**Rows keep their leading digits** (round 2, the critic's P2-6;
+pre-existing; **the cut moved in round 3**, P1-1). A row's figure is
+`nowrap` inside an end-aligned flex cell, so a figure wider than its row
+grew to the left and lost its most significant digits: the eight-byte
+asked amount read `,467,440,737,095,516.15` with `184` and `from` gone on
+Neo at 360, and an eight-byte XEC quote row read `.84,467,…` at 390 on
+every look. On the rows' last rung (the row's own `tierCeilings`), a
+figure at or past its kind's cut — **17 characters for a listing, 18 for a
+quote**, counted as the row prints it (`ROW_REFLOW_LISTING_CHARS`,
+`ROW_REFLOW_QUOTE_CHARS`; a listing's figure without `from` or ` XEC`, a
+quote's with its sign or unit) — re-flows as one block of text
+(`.item-a.fig-wraps`): a block's line that cannot fit overflows at its
+end, so whatever is lost is the tail and never the head; and **from 21**
+(`ROW_BREAK_CHARS`) it also breaks after a comma like the face's
+(`moneyFigure`), with the one `role="img"` name that needs. Its line is
+1.3, as on the face's last rung: as a flex item the figure was a block one
+line-height tall, inline its glyphs' box (Lora's is 1.28em) stood past a
+1.05 line into the tag's clip, and Rural's swaying tag cut its corners at
+a desk. **At a desk too**: the rows read no ladder there, and such a figure
+at its design size pinned the price column's `auto` track — the XEC quote
+row left Neo's name 28px and Rural's 19, and Rural's tag clipped the asked
+amount's tail — so a re-flowed row takes the own-row dress at every width,
+on the desk grids' four columns (`'ic name name caret' 'price price price
+price'`, the quote head's with Pay; a quote row in selection mode keeps
+its own tier-3 rule). **Why the cut** (the critic's re-review, P1-1):
+round 2 re-flowed from 15 characters counted with the unit, so a
+1,000,000.00 XEC quote (16, about $20–30) left its name's line at 680 and
+1280 — 98 → 158px on Modern, 94.5 → 154 on Neo, 106 → 184 on Rural — grew
+5px at 360 and 390, and read "image" to a screen reader. The cut is where a
+row first failed on main: a quote at 18 (`100,000,000.00 XEC`, Rural at
+680), a listing at 17 (Rural at 680; at 360 the first listing failure is
+at 21, which is where the break starts). Every row under the cut is the
+row main paints, at every width (`quote-row-1m`, `row-15-16`, held by
+`looks:diff`).
+
+**The selection strip** (round 3, the critic's P2-2, pre-existing): the
+strip's total (`selection-total`) and a chosen row's line
+(`selection-figure`) break each figure after a comma (`moneyFigure`,
+`moneyLine`), and the total's block aligns `safe flex-end` so an overflow
+loses its tail. On main an eight-byte total started 4–16px off the left
+edge at 360 and was cut by the tray at 390 on Neo and Rural, and its line
+ran under the stepper on Neo (`pay-several-strip-long-figure`). **From 18
+characters since round 4** (`STRIP_BREAK_CHARS`, the critic's P3-4): round
+3 broke past 21 and let the total wrap before its unit, so a total of 18
+to 21 characters left ` XEC` alone on its line — read line by line on
+round 3's code, `100,000,000.00` / `XEC` on Neo and Rural at 360 and on Neo
+at 375, and `10,000,000,000.00` / `XEC` on every look at 360, 375 and 390.
+Broken from 18, the last group keeps its unit (`100,000,` / `000.00 XEC`,
+`10,000,000,` / `000.00 XEC`), and an 18-character total that fits its
+line at 390 is one line as before (`pay-several-strip-18`, `-21`).
+
+**The wall's rows** (round 3, the critic's P2-3, pre-existing):
+`window.ts` built its rows' figures as plain `nowrap` text. They take the
+shop's rule now (`rowFigure` at the shop's cuts, the break from 21), and
+in Browse a re-flowed row's tag moves under the name ('ic name' / 'ic
+price'; a touch wall's with its stepper). On the counter tablet the row
+fails sooner — a listing spilled at **14** characters on every look, a
+`10,000,000.00 XEC` quote (**17**) lost its ` XEC` on Neo and Rural — so
+from the wall's own cuts (`WALL_NARROW_LISTING_CHARS`,
+`WALL_NARROW_QUOTE_CHARS`, `fig-narrow`) the tag takes the whole row under
+the picture there, and a re-flowed figure steps to 30px (an eight-byte
+quote at 46px was three lines, taller than the 129px of list a touch wall
+leaves). Fixtures `shop-window-browse-long-figures`,
+`shop-window-quotes-long-figures` (the desk), `shop-window-wall-browse-long-figures`
+and `shop-window-touch-quotes-long-figures` (the 1920 wall), all four on
+the tall and tablet passes.
+
+**The Cycle card is not a row** (round 4, the critic's P1-1). Round 3 said
+"the Cycle card is not changed", and it was: `wallFigure` gave the Cycle
+card's figure `fig-wraps` too, and stall.css's desk own-row block (three
+rules at (0,5,0), not scoped to the shop) out-ranked the card's own grid
+(0,4,0), so from 17 characters for a listing and 18 for a quote the card
+took `'ic name name pay' / 'price price price price'` over its two
+columns: at 1920x1080 Neo printed `100,000,000.00 XEC` as
+",000,000.00 XEC", and Rural put the code under the screen. Now the card's
+figure is the plain text main writes, at every length (`wallFigure` takes
+`cycle`), and the desk block is the shop's alone
+(`.stall:not(.shop-window)`), which also takes the shop's four-column
+areas off the tall Browse wall. Fixtures either side of the cuts —
+`shop-window-cycle-listing-16`, `-17`, `-18` and `shop-window-cycle-quote-16`
+to `-19` — on the canvas pass (`a-cycle-card-keeps-its-grid-at-the-cut`).
+Measured on the probe page with these screens and a 19-character listing:
+at 1920x1080 round 3 gave 377 failures on the seven, the fix 0; at
+1280x800, 1080x1920 and 768x1024 the fix's counts equal main's (653, 916,
+964; round 3 666, 813, 1,588). They are not on the tall and tablet
+passes (`CANVAS_ONLY_WALL_SCREENS`, printed on both): the card overruns
+there at these lengths on main too, which is the next section.
+
+The cost on the shipped looks: none for a figure of 14 characters or fewer
+(`looks:diff`); and at 360 a 14-character figure still runs into its card's
+padding where it is widest, cut by nothing — 8.5px of the pay card's 14 on
+Neo, 13.3px of the face's 18 on Neo for `₩9,999,999,999`, 2.5px on Rural —
+which the rule reads against the card's padding box at tier 0 (below).
+
+The fixtures move to the real maxima: `LONGEST_ASK_SATS` is the largest
+eight-byte amount (`184,467,440,737,095,516.15`, 26 characters, `from`
+beside it), `LONGEST_QUOTE` an XEC quote at that amount (30 characters, the
+longest `quoteFigure` the editor can write), `pay-long-figure` the largest
+realistic sum (`LONGEST_PAY_QUOTE`, $447,280,000.00 at $0.0000213 a XEC:
+`20,999,061,032,863.85`, under the whole XEC supply), and
+`pay-several-long-figure` two XEC quotes at the eight-byte maximum (figure
+25 characters, lines 30, total 30 in its sentence).
+
+### The rule: `a-card-figure-stands-inside-its-row`
+
+Every line box of the face's figure, the face's "You pay" figure (place
+`paid`), a pay sheet's figure, a Pay several line's figure and the Pay
+several total stands inside its row's content box (the total's own).
+Stricter than `text-spills`, which tolerates a box poking into its parent's
+padding — the first stage of the critic's finding. Run on every pass.
+
+**Tier 0 is read against the card's padding box** (round 2, the critic's
+P2-3; the window chose its option (b)). The owner's line keeps every figure
+of 14 characters or fewer at its design size, and at 360 the widest of them
+runs into its card's padding, cut by nothing: every 14-character pay figure
+on Neo (tabular mono, 14 × 0.62 × 36px = 312 in a 304px row) 8.5px into
+the pay card's 14 — a $2k–$21k payment — and `₩9,999,999,999` on the face
+13.3px into Neo's 18 and 2.5px on Rural. So on the three places that line
+governs — the face's figure, "You pay" and a pay figure (`TIER_0_IN_CARD`)
+— tier 0 stands inside its card's padding box (`.card`, or the pay card
+`.pay-amt`), the way `text-spills` reads a box; tiers 1–3, where the ladder
+makes a promise, keep the strict read of the row's content box. A Pay
+several line and the total keep the strict read at every length: a line
+carries a tier only from 18 characters (a 15–17-character line still sits
+beside its name and reads as tier 0), and the total carries none.
+
+**Owed on every step** (round 2, the critic's P2-2). Counted per look and
+per place:tier (`cardFigureByClass`), the narrow pass **and the phone pass
+at 390** owe, on every look they painted, `face:0`–`face:3`,
+`paid:0`–`paid:3`, `pay:0`–`pay:3`, and `line:0`, `line:2` and `line:3`
+(`CARD_FIGURES_OWED`, `scripts/probe-coverage.mjs`; a line has no
+`line:1`). A step no fixture paints is a gap that fails the run, never a
+pass. The pass's line prints what it read (`card figures read: …`).
+
+**And the cover check reads a broken figure line by line.** `coveredBy`
+took five points on the node's bounding box; a figure broken over two lines
+of unequal length leaves an empty corner in that box, which hit the row and
+read as the figure covered by its own row (`asked amount is covered … by
+div.face-x`, the first run). It takes five points on each line box when a
+node has more than one, and the box itself otherwise, so every single-box
+node is read exactly as before.
+
+### A card figure steps down on every look: `a-card-figure-steps-down-on-every-look` (round 2, the critic's P2-4)
+
+The static guard (`every-look-that-sizes-its-figure-sizes-every-price-tier
+— the face and the pay sheets`) reads two selector shapes and one property,
+and the critic found seven legal look rules it returned `[]` for, each
+out-ranking the floor and freezing the figure at every tier:
+`.face-x .x { font: 700 40px/1 Inter }`, `.pay-q {…}`, `.x {…}`,
+`.face-x > span {…}`, `.pay-amt .pay-x span:first-child {…}`,
+`[data-role='price'] {…}` and `.pay-x-n { font: 700 44px Inter }`. So the
+painted size is held instead, whatever selector set it: on a phone pass,
+per look and per figure the ladder steps (`CARD_LADDER_FIGURES`:
+`face:price`, `face:seller-price`, `paid:figure` for "You pay",
+`pay:price`), every paint records the smallest and largest computed
+`font-size` at each tier (`cardLadderSizes`), **each variant on its own**
+(round 3), and at the end of the page no tier may paint larger than the
+smallest size the tier before it painted, and the last tier must be
+smaller than tier 0 — **unless tier 0 is already at or under the floor's
+own last step** (`CARD_LADDER_LAST_STEP` in `layout/cardLadder.ts`, held
+to stall.css's floor by `the-ladders-last-step-is-the-sheets-floor` since
+round 4, the critic's P3-2: 18px for the face and the pay figure, 15px for
+"You pay"), where a figure has no smaller step to take and the fit rule
+alone judges it. What it compared is reported per look and
+figure as the most tiers one variant read (`cardLadderByClass`, `"0123"`:
+the ladder fixtures are state screens, painted bare and fully worn), and
+the narrow and phone passes owe all four figures over all four tiers on
+every look (`CARD_LADDERS_OWED`, by name — a fifth figure never stands in
+for a missing one). Desk widths keep the design size and are not read. The
+static guard stays as it was: it names the selectors the floor uses; this
+holds any.
+
+**Two misfires, fixed in round 3** (the critic's re-review, P3-1): merged
+into one range per tier, a worn variant sizing the face figure 18px at
+every tier (`.t-modern.att-awning .face-x .x`) read as "grows from tier 0
+to tier 1 (tier 0 18–34px …)", 6 failures with every figure fitting; and a
+look row whose `paid` is 14px (`lookData` takes 0–2000), every step
+`min(Npx, 14px)`, read as "takes no smaller step", on Modern and the
+skeleton. Both give 0 failures now, at 360 and 390, and the seven shapes
+above are each still red, on the bare and the worn variant.
+
+### One name to a screen reader (round 2, the critic's P3-1)
+
+Each `<wbr>` splits a broken figure's text, and Chrome's accessibility tree
+held it as one StaticText per group of digits (six for an eight-byte
+figure) that a reader stepping by element could announce as six numbers.
+A broken figure is now one `span.fig-say[role=img]` named by the whole
+figure (`aria-label`), its pieces in an `aria-hidden` span under it; the
+money node still holds the figure in one element, `textContent` unchanged.
+Read with CDP `Accessibility.getPartialAXTree` on the node, on every look
+at 360: one `image` node named `184,467,440,737,095,516.15 XEC` (the
+quote's face and the quote row), `184,467,440,737,095,516.15` (the asked
+amount on the face and on the listing row, whose button's name reads the
+whole figure), `368,934,881,474,191,032.3` (Pay several's figure), and the
+total's sentence as text around one image — no piece of any figure as
+text. The cost: a reader says "image". `role="img"` is the role every
+reader honours a name on; a name on a generic span is one some readers
+ignore, which with the pieces hidden would read nothing. Not tried with
+VoiceOver or TalkBack. Because the pieces are `aria-hidden`, the type
+floor names `.fig-say` among its raised nodes (`FLOOR_NAMED`), so a broken
+figure is still held to 11px. Test: `names a broken figure once for a
+screen reader` in `a-card-figure-steps-down-and-breaks-only-after-a-comma`.
+
+### A broken figure paints every digit: `a-broken-figure-paints-every-digit` (round 3, the critic's P2-1)
+
+Every fixture that painted a broken figure was geometry only, and the
+money box's own read cannot see its digits: it compares the node's
+computed ink with the blanked ground, so a look that hid a broken figure's
+pieces (`.t-modern .fig-say > span { visibility: hidden }`) or made its last
+group transparent (`.t-neo .fig-end { color: transparent }`) passed the
+whole runner — while a screen reader, which reads the one `role="img"`
+name, still heard the figure. Now `quote-row-longest-figure` (an eight-byte
+XEC quote on its quote row: broken after its commas at the phone, re-flowed
+onto its own row at the desk — `.fig-say`, `.fig-end` and `.fig-wraps` on
+one screen) is on the contrast plan at the phone and the desk, every look
+bare and worn (`BROKEN_FIGURE_SCREEN`; +7 jobs a viewport on the public
+plan, 571; 715 with the tracked fixture carried). On every job, every money
+node holding a `.fig-say` carries its lines — every text node in it,
+hidden ones included — each with the FIGURE's ink, never the piece's
+(`digits`, `targetFor`), and the runner reads them on a capture with those
+glyphs shown (`__contrastFigureGlyphs`, `digitRead`): at least
+`RING_MASK_PER_CHAR` pixels a letter or digit that moved halfway from the
+blanked capture toward the figure's ink, and every letter and digit of the
+figure on some line. A failing read is taken again on a fresh pair before
+it is believed. Every job of the screen owes the read (a verdict names the
+jobs that did not), and the contrast line prints `N broken figure(s) read
+digit by digit on M job(s)`: 18 on 18 at the public run with the fixture
+carried, 2.7s. The ink of the broken figure is then read twice: the box
+read (its computed ink against its ground), and this.
+
+**Every surface, and contrast** (round 4, the critic's P2-2). Round 3's read
+ran on the quote row alone; the face's, the pay sheet's, Pay several's and
+the strip's broken figures were geometry only, and the critic's three
+plants on them (Modern's face `.fig-end` transparent, Neo's `.pay-x` pieces
+hidden, Rural's strip total's pieces hidden) passed the runner. Now five
+screens are on the contrast plan for it, phone and desk, bare and worn
+(`BROKEN_FIGURE_SCREENS`), each owing its figures by role: the quote row
+(`seller-price`), the listing face (`item-listing-long-figure`, `price`),
+the pay sheet over the eight-byte quote (`pay-longest-figure`, new:
+`pay-long-figure`'s 21-character figure does not break; `price`), Pay
+several over it with both items the stall's own
+(`pay-several-longest-figure`, new: `price`, `pay-lines`, `pay-total`) and
+the strip (`selection-total`). Not `pay-several-long-figure`: its second
+item is another wallet's mint, the borrowed-id warning stands inside
+`pay-lines` on a ground of its own, and the money box read, which reads that
+container whole in the container's ink, took it at 2.94:1 on Rural worn —
+against no glyph of that ink; that screen stays geometry only, stated.
++28 jobs a page viewport: 627 on the public plan, 787 with the tracked
+fixture. Three changes to the read itself:
+
+- **It reads contrast.** A line's glyph pixels (those that moved halfway
+  toward the figure's ink) are each read against their own ground pixel,
+  and a line passes with at least `RING_MASK_PER_CHAR` of them a digit and
+  its strongest pixel a digit (the line's `chars`-th strongest) at
+  `PIXEL_CONTRAST_FLOOR`, 3:1, the floor every money figure is held to. A
+  piece painted faint enough to read under it fails though its pixels moved
+  toward the ink. Measured: Modern's strip total in `#6f6f6f` with its
+  pieces at 55% opacity read 2.19:1 (1.87 worn) and fails on contrast
+  alone; Rural's pieces at 55% read 3.2:1 bare (over the floor, passing as
+  a whole figure painted at 3.2:1 passes the box read) and 2.26–2.48:1 worn,
+  which fail. The run prints the faintest piece: 4.01:1 unplanted.
+- **Only the figure's own pieces**, each `.fig-say`'s lines in the ink of
+  the node the figure is written into: Pay several's lines and the
+  selection line hold words beside their figures, which round 3's first cut
+  read toward the figure's ink (0.00:1 on a line of names).
+- **A broken figure's box read takes its line boxes one by one**
+  (`lineBoxes`): the union of an inline figure's lines is a rectangle that
+  held the face's unblanked "from" (1.18–2.46:1 on the listing face).
+
+Cost: 180 figures on 90 jobs, 19.0s of the contrast pass (round 3: 18 on
+18, 2.7s).
+
+**What it reads, and what it does not** (the critic's round-4 review,
+P2-1). It reads each piece, a comma group or the figure's end, as a whole:
+enough pixels moved toward the figure's ink, and the strongest of them at
+3:1. It does not read each digit, so a piece only partly hidden passes.
+Three plants the look lint and the kit lint both accept passed the whole
+runner: a gradient mask over the face's last group (the figure read
+"…095,51"), an inset clip on the pay sheet's last group (missed at 390),
+and negative letter-spacing on the strip's last group. A mask over the
+whole group was caught. A pixel floor on the figure's own ink would not
+close this; a computed-style check would (every piece computes the money
+node's colour, opacity, visibility, font and letter-spacing, with no mask,
+clip, filter or transform). Not built here; whether a look may style a
+figure's pieces at all is the owner's call.
+
+### Two reads corrected (round 3)
+
+- **`coveredBy` reads a turned box in its own frame.** A box inside a
+  turned ancestor answers its axis-aligned bounds, and their corners are
+  not the box: a 750px Rural tag on the wall swaying 0.77° put the bounds'
+  corners of a 21-character figure outside the tag it is drawn in, and the
+  corner read as "asked amount is covered by div.item-head" though every
+  glyph stood inside the tag. Each box's five points are now taken in its
+  frame before the turn (`turnedBox`, the contrast pass's own) and turned
+  back, so every point is a point of the box; an unturned box is read
+  exactly as before. Red: a Rural name block laid over the turned figure
+  (`.t-rural .item-b { position: relative; z-index: 3; padding-bottom:
+  400px; margin-bottom: -400px }`) is still "covered … by span.item-b" on
+  the wall at 1920 and 1080x1920.
+- **`text-spills` reads a spill only where its clipper shows it.** The
+  strip a block's words paint into ran the block's whole height, and the
+  part a scroller hides (down the list, past the dock that stands outside
+  it) was read as lying under the dock's tab: a 300px Rural card tilted
+  0.6° bulges 1.6px a side, and `pay-several-strip-long-figure` failed "2px
+  past its box, under button.tab" at 360 though the scroller ends 16px
+  above the tab. The strip is cut to the clipper's box first. Red: Neo's
+  quote labels planted 30px wide and `nowrap` still fail "span.item-b
+  paints 19px past its box, under span.item-x" at 390.
+  **Corrected in round 4** (the critic's P2-1): cut for every control, the
+  strip of a block below the fold (wholly outside the scroller at scroll 0)
+  lay under nothing, so words painted over the covenant's asked amount in
+  the item face's fold passed every pass. The cut now applies to a control
+  outside the clipper alone (`spillReach`, `layout/spillReach.ts`): one
+  inside it scrolls with the spill and is read against the whole strip;
+  the clipper is cut per axis, only where it clips. Not read, stated: a
+  control outside the clipper's subtree standing over the clipper's own box
+  is read against the strip as it shows at scroll 0. Test:
+  `a-spill-below-the-fold-is-still-read`.
+- **A box turned 45° or more** (round 4, the critic's P3-1): `turnedBox`
+  solves a turned box from its bounds, and from 45° the system has no
+  answer; it threw, and a look turning a figure that far stopped the probe
+  page writing any verdict. Under 45° every read is unchanged; past it an
+  element is read in its own frame by its layout size (`ownFrame`:
+  `offsetWidth` × `offsetHeight`, which no transform touches, about its
+  bounds' centre), and a line fragment the sampler cannot solve makes its
+  target say `turned-too-far`, which fails the contrast pass by name.
+
+### Red proofs (2026-10-13)
+
+- **Main's render and stall.css under the new fixtures and pass** (a scratch
+  clone, `git checkout 7d13c80 -- src/ui/render.ts src/ui/stall.css`, the
+  real runner): narrow 1,356 failures (`text-spills` 747, `a pay code is
+  narrower than the gate was told` 483, `the panel scrolls sideways` 90,
+  `a-card-figure-stands-inside-its-row` 36) and 20 coverage gaps (no long
+  card figure read on any look); mobile 801, desktop 41. Green with the
+  ladder.
+- **The old gate at 360**: `PAY_QR_NARROWEST_PX` at 308 over main's code
+  box, the narrow screens through the probe page: 483 failures, every one
+  `a pay code is narrower than the gate was told` (Modern 286, Neo 288,
+  Rural 278, the skeleton and the fixture 286). The gate is 308, never 278:
+  a gate of 278 was built and measured first and replaced by the wider code
+  box below, which makes 308 true at 360.
+- **The new rule alone**: the pay figure's tier 2 planted at 24px, so a
+  21-character figure runs 8.5px into Neo's 14px card padding: 2 failures,
+  both `a-card-figure-stands-inside-its-row` on Neo, and no `text-spills`.
+- **The floor**: tier 2 taken out of stall.css: `sizes every step of both
+  figures in stall.css` red. A look that sizes either figure and forgets a
+  step: the planted cases in `theme-sheets.test.ts` (tier 2 missing on the
+  face, every tier missing on the pay figure and on the face by role).
+
+### Round 2 red proofs (2026-10-13)
+
+Each through the real probe page (`?screens=`) on a scratch copy of the
+branch, one change at a time, shipped looks and the skeleton:
+
+- **"You pay" off the ladder** (the row given no tier, so no step): the
+  four listing-face fixtures at 360, **346 failures** (17 characters on
+  Modern and Rural, 21 on every look: `text-spills`, `the panel scrolls
+  sideways`, the card rule on `paid:0`), at 390 **177**. Green with it.
+- **The rows without the comma break** (`rowFigure` out):
+  `row-longest-figure` and `quote-row-longest-figure`, **171 failures at
+  360, 127 at 390, 70 at 1280** (`a protected box is cut sideways`, `asked
+  amount is covered`, `text escapes its clip`, the name floor). With the
+  break and no desk dress, 74 at 1280; with the desk dress and a 1.05 line,
+  2 at 1280 and 4 at 680, all Rural (the tag's clip over the glyphs'
+  corners). Green with all three.
+- **Tier 0 read strictly** (the content box at every tier):
+  `pay-figure-14` and `item-quote-figure-14` at 360, **6 failures**, every
+  one this rule: Neo's pay 8.5px, Neo's face 13.3px, Rural's face 2.5px; 0
+  at 390.
+- **A tier-1 pay figure at 30px** (into its card's padding, not cut): 2
+  failures, both this rule on Neo, 12.2px past the row's content box, and
+  no `text-spills` — tiers 1–3 keep the strict read.
+- **The painted ladder**, each of the critic's seven shapes planted alone
+  in Modern's sheet: every one fails `a-card-figure-steps-down-on-every-look`
+  for the figures it froze (`.face-x .x` with `font:`, `.x` and
+  `.face-x > span`: `face:price` and `face:seller-price`; `.pay-q`:
+  `face:seller-price`; `[data-role='price']`: `face:price` and `pay:price`;
+  `.pay-amt .pay-x span:first-child` and `.pay-x-n` with `font:`:
+  `pay:price`). Two more that fit their rows, so nothing else fires:
+  `.x { font-size: 16px }` ("takes no smaller step", 2 failures and nothing
+  else) and tier 1 at 20px under tier 2's 21 ("grows from tier 1 to tier
+  2", 2 failures and nothing else). Restored: 0.
+- **A step no fixture paints**: the narrow screens without
+  `item-listing-figure-17` and `item-quote-figure-17`, read by
+  `probeCoverageGaps('narrow', …)`: on every look, `read no face:1`, `read
+  no paid:1`, and the three face and "You pay" ladders compared over tiers
+  0, 2, 3, not all four.
+- **The accessibility tree**: round 1's markup gives one StaticText per
+  group of digits on every look; the test fails on it.
+
+### Round 3 red proofs (2026-10-13)
+
+Through the probe page on a scratch copy of the branch, one change at a
+time (shipped looks and the skeleton), and the full runner where said:
+
+- **The hidden digits** (the critic's plant, the full runner in a git
+  clone of the branch): Modern's pieces `visibility: hidden` and Neo's
+  `.fig-end` transparent — **8 failures**, every one
+  `a-broken-figure-paints-every-digit`, on `quote-row-longest-figure` at the
+  phone and the desk, bare and worn, on Modern ("a piece of 3 digit(s) …
+  paints 0 glyph pixel(s) in the figure's ink") and Neo (the 8 letters and
+  digits of `516.15 XEC`); `EXIT=1`. The critic's run of the same plant on
+  round 2 passed.
+- **The rows' cut**: `an-ordinary-quote-row-keeps-its-desk-row` pins 17, 18
+  and 21 by value; the 1,000,000.00 XEC quote and the 15- and 16-character
+  listings are one text node with no re-flow (`looks:diff` against main
+  with the fixtures, below).
+- **Rural without its narrow tag** (`dressLook` writing nothing): the four
+  shop screens, **224 failures at 360 and 14 at 375**, 0 at 390; with it 0,
+  0, 0.
+- **The strip as main paints it** (total and line as plain text, the block
+  `flex-end`, the total `nowrap`): `pay-several-strip-long-figure`, **57
+  failures at 360, 42 at 390**, 0 at 1280; with the break 0.
+- **The wall's rows as main paints them** (`wallFigure` out): the four wall
+  fixtures, **1,150 failures at 768x1024, 236 at 1080x1920, 51 at
+  1280x900, 84 at 1920x1080**; with the re-flow 0 at all four.
+- **The painted ladder**: the seven shapes, each still red on the bare and
+  the worn variant (366, 218, 436, 436, 92, 422 and 92 failures at 360 with
+  the fit rule's own); the two misfires above, 0.
+- **The two reads corrected**: above.
+
+### Round 4 red proofs (2026-10-13)
+
+The probe page on a scratch clone of the branch, and the full runner where
+said, one change at a time:
+
+- **The Cycle card at the cut** (round 3's code with the round-4 Cycle
+  fixtures, 1920x1080): 377 failures on the seven screens (a 17-character
+  listing 113, 18: 128, an 18-character quote 64, 19: 72 — cut sideways,
+  cut from below, reaching the status line, covered); the fix 0.
+  `a-cycle-card-keeps-its-grid-at-the-cut` red with `wallFigure` giving the
+  card the re-flow and with the desk block unscoped.
+- **Below the fold** (`text-spills` only; round 3's read → this one):
+  words over the covenant's asked amount in the face's fold
+  (`.listing-line { justify-content: flex-start }`, `.listing-meta {
+  order: -1; flex: none; width: 8px; white-space: nowrap }`) at 390x844 0 →
+  254 and at 1280x900 0 → 254; the same plant under `max-width: 389.98px`,
+  the narrow pass's screens, 0 → 297; Neo's Studio doors (`.tool-t {
+  white-space: nowrap; max-width: 30px }`) at 1280x900, 0 → 28. Unplanted,
+  0 on every screen at 390x844 and 1280x900 and on the narrow pass: round
+  3's false alarm (`pay-several-strip-long-figure`, Rural, 360) stays quiet.
+- **The digits** (full runner): the critic's three plants, 16 failures,
+  every one `a-broken-figure-paints-every-digit` (Modern's face, Neo's pay
+  sheet and Pay several, Rural's strip, phone and desk, bare and worn); the
+  faint plants above, 26.
+- **The turn** (full runner): `.t-rural .item-p { rotate: 50deg }` runs
+  every pass to its verdict — 530 failures at 390, 686 at 1280, all the
+  turn's own (decorations over the figure, covered) — and the contrast pass
+  says "10 contrast target(s) stand in a frame turned 45° or more"; it
+  threw before.
+- **The ladder's last step**: the pay floor planted at 17px,
+  `the-ladders-last-step-is-the-sheets-floor` red.
+- **The narrow tag's writer**: a `setAttribute('data-narrow-tag', …)`
+  planted in `window.ts`, `the-narrow-tag-has-one-writer` red.
+
+### Left for its own branch: the Cycle card and the touch wall at ordinary lengths (pre-existing)
+
+Measured on 2026-10-13 through the probe page with scratch fixtures (one
+card per screen, every look; the branch's reads, over the Cycle card that
+is byte for byte main's), and on main where said. **The Cycle card has no
+ladder**: its figure is `clamp(40px, min(10.4cqh, 6.4cqw), 112px)`, nowrap,
+in the card's price column, whatever its length. The first length that
+fails, counted as the row counts it (a listing without `from` and ` XEC`, a
+quote with its unit):
+
+| size | listing | quote |
+|---|---|---|
+| 768x1024, the counter tablet | **6** on every look (`123.45`: text-spills on Modern and Neo; on Rural also cut sideways, cut from below, covered) | 8 on Neo and Rural (`9.99 XEC`), 9 on Modern (`99.99 XEC`); `$999.99` (7) whole |
+| 1280x900, the desk pass's size | 7 on Neo (covered), 9 on Modern, 14 on Rural | 16 on Neo, 17 on Rural, 18 on Modern; and on Rural the quote card reaches the status line at every shorter length (`$99.99` included) |
+| 1280x800 | 8 on Neo, 9 on Modern, 14 on Rural | 17 on Neo and Rural, 19 on Modern; the quote card reaches the status line on Modern (6–18) and Rural (6–16), and so does the shipped `shop-window-cycle` |
+| 1080x1920, the tall wall | 12 on Neo and Rural, 13 on Modern | 13 on Neo, 14 on Rural, 15 on Modern |
+| 1920x1080 | 19 on Neo (text-spills; measured on main), whole through 18 | whole through 19 |
+
+The failures are `text-spills`, `a protected box is cut sideways`,
+`nothing-on-the-wall-is-cut-from-below`, `asked amount is covered` and
+`nothing-in-the-body-reaches-the-status-line`. **A touch wall at 1280**
+(Browse, `touch=on`, one item chosen, a second quote of each length beside
+it): on main a quote fails from 16 characters on Neo, 17 on Rural and 18 on
+Modern (cut sideways, cut from below, 456 failures over the lengths); on the
+branch 16 and 17 still fail on Neo and Rural (152), and from 18 the row
+re-flows and fits. `$100,000,000,000.00` (19, a USD quote) fits on both.
+
+**Why no pass sees it:** the tall and tablet passes measure the Cycle card
+only as `shop-window-cycle` paints it (a short listing) and no Cycle quote
+at all; the Cycle fixtures at the rows' cuts are on the canvas pass alone
+(`CANVAS_ONLY_WALL_SCREENS`); every touch-wall screen is a canvas screen,
+measured at 1920 and on the two portrait passes, never at a desk width; and
+the desk pass is 1280x900, so 1280x800 is measured by nothing. **What a
+pass would need:** Cycle fixtures at ordinary lengths on both rails (a
+listing from 6 characters, a quote from 8, and the cut fixtures) on the
+tall, tablet and desk passes, `CANVAS_ONLY_WALL_SCREENS` emptied; the
+touch-wall screens on the desk pass (or a 1280 wall pass of their own); and
+a 1280x800 wall. Every one of them is red on main today, so they land with
+the fix (a ladder for the card's figure, as the rows have), not before it.
+
+### A wider code box below 390 (2026-10-13, the third option on P2-4)
+
+Below 390px the pay sheets give their code more of the sheet (stall.css,
+`@media (max-width: 389.98px)`, scoped to `.pay-qr-body`): the ticket's sides
+go from 12px to 2px and the code's own white from 10px to 4px, while the
+ticket's words keep a 10px inset. The four-module quiet zone is drawn inside
+the SVG and is untouched; the code's corner radius (6, 0 and 8px) never
+reaches it at 4px. Measured on the pay sheet, painted (box minus padding):
+
+| width | Modern | Neo | Rural | fixture |
+|---|---|---|---|---|
+| 360 | 318 (was 286) | 320 (288) | **310** (278) | 318 (286) |
+| 375 | 333 (301) | 335 (303) | 325 (293) | 333 (301) |
+| 389 | 347 | 349 | 339 | 347 |
+| 390, unchanged | 316 | 318 | **308** | 316 |
+
+So the narrowest code from 360 up is Rural's 308 at 390, where nothing moved
+(`looks:diff` shoots 390 and wider), and `PAY_QR_NARROWEST_PX` says 308 —
+the gate is 308 with this box, never 278: the owner said yes to the wider
+box in place of lowering the gate (D-2026-10-13-04). The cost: the ticket's dashed
+edge stands 2px from the code's white below 390, and the code is 32px
+wider. Below 360 nothing is measured: at 320 Rural would paint 270.
+
+**The corner is capped below 390** (round 2, the critic's P3-4). The 4px of
+white assumes a small corner: the code is clipped to its radius less its
+padding, and `lookData` takes a `qrRadius` up to 2000px. The quiet-zone
+read (`a-code-keeps-its-quiet-zone-white`) runs on contrast jobs at 390 and
+1280 only, and there refuses a corner that cuts more than one module into
+the square the code draws in (`quietZonePixels`) — radius minus the 10px of
+white past about 5px, so about 15px of `qrRadius`. Below 390 the same
+radius would cut 11px with 4px of white: past one module, still inside the
+four-module quiet zone, and read by nothing. So below 390 the code's corner
+is `min(var(--s-qr-radius), 8px)`: at most a 4px cut, within one module at
+the gate's density (4.94px), the rule the read holds at 390. The shipped
+looks are 6, 0 and 8px, so nothing of theirs moves. Pinned statically in
+`the-selection-figure-is-the-figure-in-the-link`. A correction, stated:
+the critic's band (about 62–70px) and round 2's first draft (72–79px) both
+compared a finder pattern clipped at 360 with one clipped at 390, and
+missed that the read already refuses anything past one module at 390; no
+radius passes the 390 read and clips a finder at 360 even without the cap,
+which is therefore a belt that keeps the 360 box to the read's own rule.
+**What it does not cap, stated**: a look's own sheet restating the code's
+`border-radius` at a higher specificity than (0,3,0) wins at every width;
+at 390 the read would then judge it, at 360 nothing does.

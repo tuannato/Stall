@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import * as copy from './copy';
 import { holdsLivePaint, overlayMounts, renderStall, resetIconsForTests } from './render';
 import {
+    WALL_NARROW_LISTING_CHARS,
+    WALL_NARROW_QUOTE_CHARS,
     WINDOW_QR_MIN_PX,
     WINDOW_QR_PX,
     cycleListings,
@@ -21,6 +23,7 @@ import {
 import { nextCard } from '../domain/window';
 import type { TokenPrice } from '../domain/description';
 import { cashtabTokenUrl } from '../domain/cashtab';
+import { formatXec } from '../domain/money';
 import { qrMatrix } from '../domain/qr';
 import { payLandingUrl } from '../domain/route';
 import type { StallHandlers } from './render';
@@ -194,6 +197,108 @@ describe('the-window-row-wears-the-shop-row-anatomy', () => {
         // The figure is the covenant's own asked amount, under the role every
         // money guard in this repo reads.
         expect(row!.querySelector('[data-role="price"]')?.textContent).toBe('1,200');
+    });
+});
+
+describe('a-wall-row-keeps-its-leading-digits', () => {
+    /**
+     * The wall's rows never had the shop's re-flow (round 3, the critic's
+     * P2-3, pre-existing): on the counter tablet a 14-character listing
+     * spilled its row and a 10,000,000.00 XEC quote lost its ` XEC`, and at
+     * 1280 a long figure ran over the item's name or under its picture. A wall
+     * row's figure now takes the shop's rule (`rowFigure` at the shop's cuts,
+     * a break after a comma from 21) and, at the wall's narrower cuts, a mark
+     * the counter tablet reads (`fig-narrow`). happy-dom lays nothing out:
+     * the tall, tablet, desk and canvas passes measure
+     * `shop-window-browse-long-figures` and its three siblings.
+     */
+    it('pins the narrow cuts by value', () => {
+        expect([WALL_NARROW_LISTING_CHARS, WALL_NARROW_QUOTE_CHARS]).toEqual([14, 17]);
+    });
+
+    const listingRow = (askedSats: bigint) =>
+        paint(windowView({ show: 'listings', mode: 'browse' }, { fetch: { kind: 'offers', offers: [{ ...offer(BEANS), askedSats }] } })).querySelector(
+            '.items .item-a',
+        )!;
+    const quoteRow = (amount: bigint) =>
+        paint(
+            windowView({ show: 'quotes', mode: 'browse' }, { prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount } as TokenPrice]]) }),
+        ).querySelector('.items .item-a')!;
+
+    it('marks a listing for the tablet from 14 characters and re-flows it from 17, breaking it from 21', () => {
+        const at = (sats: bigint) => {
+            const a = listingRow(sats);
+            return [a.querySelector('[data-role="price"]')?.textContent?.length, a.classList.contains('fig-narrow'), a.classList.contains('fig-wraps'), a.querySelectorAll('wbr').length > 0];
+        };
+        expect(at(9_999_999_999n)).toEqual([13, false, false, false]);
+        expect(at(99_999_999_999n)).toEqual([14, true, false, false]);
+        expect(at(9_999_999_999_999n)).toEqual([17, true, true, false]);
+        expect(at(2_099_906_103_286_385n)).toEqual([21, true, true, true]);
+    });
+
+    it('marks a quote for the tablet from 17 characters and re-flows it from 18', () => {
+        const at = (amount: bigint) => {
+            const a = quoteRow(amount);
+            return [a.querySelector('[data-role="seller-price"]')?.textContent, a.classList.contains('fig-narrow'), a.classList.contains('fig-wraps')];
+        };
+        expect(at(100_000_000n)).toEqual(['1,000,000.00 XEC', false, false]);
+        expect(at(1_000_000_000n)).toEqual(['10,000,000.00 XEC', true, false]);
+        expect(at(10_000_000_000n)).toEqual(['100,000,000.00 XEC', true, true]);
+    });
+
+    it('gives the re-flowed rows their own row in window.css, and the tablet the whole row', () => {
+        const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(css).toMatch(/\.stall\.shop-window\[data-mode='browse'\] \.item-a\.fig-wraps \{\s*display: block;/);
+        expect(css).toMatch(/@container sw \(orientation: landscape\) \{\s*\.stall\.shop-window\[data-mode='browse'\] \.item-head:has\(> \.item-p > \.item-a\.fig-wraps\) \{\s*grid-template-areas:\s*'ic name'\s*'ic price';/);
+        expect(css).toMatch(/\.item-head:has\(> \.item-p > \.item-a:is\(\.fig-wraps, \.fig-narrow\)\) \{\s*grid-template-areas:\s*'ic name'\s*'price price';/);
+    });
+});
+
+describe('a-cycle-card-keeps-its-grid-at-the-cut', () => {
+    /**
+     * The Cycle card is not a row (round 4, the critic's P1-1 on round 3).
+     * Round 3 gave every wall figure the row's re-flow, the Cycle card's
+     * included, and stall.css's desk own-row rule — written for the shop's
+     * four-column rows, at (0,5,0) — out-ranked the card's own grid at
+     * (0,4,0): from 17 characters for a listing and 18 for a quote the card
+     * took 'ic name name pay' / 'price price price price' over its two
+     * columns, and at 1920x1080 Neo printed `100,000,000.00 XEC` as
+     * ",000,000.00 XEC" with the code at the screen's foot. So the card's
+     * figure is the plain text main wrote, at every length, and the desk rule
+     * is the shop's alone. happy-dom lays nothing out: the canvas pass
+     * measures `shop-window-cycle-listing-16` … `shop-window-cycle-quote-19`
+     * (red on round 3: 377 failures at 1920x1080).
+     */
+    const cycleAmount = (view: StallView) => paint(view).querySelector('.items .item-a')!;
+
+    it('writes the Cycle card figure as plain text on both rails, at and past the cuts', () => {
+        for (const askedSats of [123_456_789_012n, 1_234_567_890_123n, 12_345_678_901_234n, 2_099_906_103_286_385n]) {
+            const a = cycleAmount(windowView({ show: 'listings', mode: 'cycle' }, { fetch: { kind: 'offers', offers: [{ ...offer(BEANS), askedSats }] } }));
+            const figure = a.querySelector('[data-role="price"]')!;
+            expect([a.className, figure.children.length, figure.textContent]).toEqual(['item-a', 0, formatXec(askedSats)]);
+        }
+        for (const amount of [100_000_000n, 1_000_000_000n, 10_000_000_000n, 2n ** 64n - 1n]) {
+            const a = cycleAmount(windowView({ show: 'quotes', mode: 'cycle' }, { prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount } as TokenPrice]]) }));
+            const figure = a.querySelector('[data-role="seller-price"]')!;
+            expect([a.className, figure.children.length]).toEqual(['item-a', 0]);
+            expect(figure.textContent).toMatch(/^[\d,.]+ XEC$/);
+        }
+    });
+
+    it('keeps the Browse row re-flow at the same figure', () => {
+        const a = cycleAmount(windowView({ show: 'quotes', mode: 'browse' }, { prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 10_000_000_000n } as TokenPrice]]) }));
+        expect(a.classList.contains('fig-wraps')).toBe(true);
+    });
+
+    it('scopes the desk own-row rules in stall.css to the shop', () => {
+        const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const selectors = [...css.matchAll(/([^{}]*\.item-a\.fig-wraps\)[^{}]*)\{/g)].map((m) => m[1]!.trim());
+        // The desk block's three rules, and every rule naming a re-flowed row's head: none reaches the wall.
+        const desk = selectors.filter((sel) => sel.includes(':has(> .item-p > .item-a.fig-wraps)'));
+        expect(desk.length).toBe(3);
+        for (const sel of desk) {
+            expect(sel.startsWith('.stall:not(.shop-window) ')).toBe(true);
+        }
     });
 });
 

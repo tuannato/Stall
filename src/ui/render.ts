@@ -1202,6 +1202,14 @@ function dressLook(
      */
     node.classList.add(theme.sheetClass);
     node.classList.add(...attachmentClasses(worn));
+    // How the row's tag stands below 390px, from the look's own row and read
+    // by the base sheet alone (`narrowTag`, D-2026-10-13-04): Rural's tags at
+    // tiers 1 and 2 take a row of their own there.
+    if (theme.narrowTag === 'own-row') {
+        node.setAttribute('data-narrow-tag', 'own-row');
+    } else {
+        node.removeAttribute('data-narrow-tag');
+    }
     return vars;
 }
 
@@ -1290,6 +1298,9 @@ function paintHome(
             stall.classList.remove(cls);
         }
     }
+    // Nor a look's narrow row dress: the door's rows are its minis', each
+    // dressed by its own look.
+    stall.removeAttribute('data-narrow-tag');
     const canopy = el('div', 'door-canopy');
     canopy.setAttribute('aria-hidden', 'true');
     stall.append(canopy);
@@ -1862,16 +1873,21 @@ function paintUnresolvable(
  * under a gate that computed 5.21 (the critic, 2026-09-22; §9's own 2026-09-21
  * lesson repeated, and the reason the probe now measures this box).
  *
- * At 390px, painted: Modern 316, Neo 318, **Rural 308** — the sheets' own
- * paddings differ. At desk width all three are 440, the record sheet's
- * number, because `.pay-qr` now takes the column (it shrink-wrapped to the
- * SVG's intrinsic 300px until the same day). The narrowest decides, because
- * one sheet draws one code at every width and a code that cannot be read
- * where it is drawn is not worth drawing.
+ * Painted, at 390px: Modern 316, Neo 318, **Rural 308** — the sheets' own
+ * paddings differ — and at desk width all three are 440, the record sheet's.
+ * The plate moves one for one with the screen, so below 390 the pay sheets
+ * give the code more of the sheet (stall.css, `.pay-qr-body` under 390px:
+ * the ticket's sides 2px, the code's white 4px), and at 360, the narrowest
+ * phone the probe measures, it paints Modern 286 → 318, Neo 288 → 320,
+ * Rural 278 → 310, the skeleton and the tracked fixture 318 (2026-10-13, the
+ * 8g1 critic's P2-4). So Rural's 308 at 390 is still the narrowest from 360
+ * up. The narrowest decides, because one sheet draws one code at every width
+ * and a code that cannot be read where it is drawn is not worth drawing.
  *
  * The cost, stated: at desk width a memo naming up to twenty-six items would
  * still scan at 5.18px a module, and this floor stops drawing it at about
  * seven — above that the fold says so, and both Pay controls are above it.
+ * Below 360 nothing is measured (at 320 Rural would paint 270).
  */
 export const PAY_QR_NARROWEST_PX = 308;
 
@@ -3390,8 +3406,9 @@ function payRow(
     }
     const price = el('span', 'item-p');
     const amount = el('span', 'item-a');
-    const figure = el('span', 'item-x', figureText);
+    const figure = el('span', 'item-x');
     figure.setAttribute('data-role', 'seller-price');
+    rowFigure(amount, figure, figureText, tier, ROW_REFLOW_QUOTE_CHARS);
     amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
@@ -5903,7 +5920,8 @@ function paySheet(
         }
 
         figureRow.hidden = sats === undefined;
-        figure.textContent = sats === undefined ? '' : formatXec(sats);
+        // The figure and its row's step on the ladder, one call (`paintCardFigure`).
+        paintCardFigure(figureRow, figure, sats === undefined ? '' : formatXec(sats));
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTE : copy.PAY_CAP_SIGNS;
         /*
          * With a figure, the quote sits under it labelled as the seller's; an
@@ -6351,13 +6369,18 @@ function selectionLineNode(
         line.append(yn);
         return line;
     }
-    const sub = el(
-        'span',
-        count > 0n ? 'sel-sub in' : 'sel-sub',
-        count > 0n
-            ? copy.selectionLine(count.toString(), quoteFigure(item.price), lineFigure(item.price, count))
-            : copy.SELECTION_NOT_CHOSEN,
-    );
+    const sub = el('span', count > 0n ? 'sel-sub in' : 'sel-sub');
+    if (count > 0n) {
+        // Each figure from `STRIP_BREAK_CHARS` breaks after a comma (round
+        // 3, the critic's P2-2: an eight-byte line ran under the stepper on
+        // Neo at 360 and 390; round 4, P3-4: from 18 characters, so a unit
+        // never stands alone on a line).
+        const quoted = quoteFigure(item.price);
+        const line = lineFigure(item.price, count);
+        moneyLine(sub, copy.selectionLine(count.toString(), quoted, line), [quoted, line]);
+    } else {
+        sub.textContent = copy.SELECTION_NOT_CHOSEN;
+    }
     // The chosen line is money — "2 × $5.00 = $10.00", the figure a buyer
     // adds up before Pay — and wears its own role, which the layout probe
     // protects and reads whole (`layout/moneySet.ts`); the unchosen note is
@@ -6506,7 +6529,13 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
             } else {
                 const glance = selectionGlance(selection, view.prices);
                 const totalBlock = el('span', 'sel-totalblk');
-                const total = el('b', 'sel-total', glance === undefined ? '' : quoteFigure(glance));
+                const total = el('b', 'sel-total');
+                // From `STRIP_BREAK_CHARS` the total breaks after a comma
+                // (round 3, the critic's P2-2: an eight-byte total ran off
+                // the strip's left edge at 360, its leading digits gone;
+                // round 4, P3-4: from 18, where ` XEC` first stood alone).
+                const totalFigure = glance === undefined ? '' : quoteFigure(glance);
+                moneyFigure(total, totalFigure, totalFigure.length >= STRIP_BREAK_CHARS);
                 total.setAttribute('data-role', 'selection-total');
                 totalBlock.append(total);
                 if (selectionHasSurcharge(selection, view.prices)) {
@@ -6728,7 +6757,18 @@ function paySeveralSheet(
             const line = el('div', 'pay-line');
             line.append(el('dt', undefined, copy.paySeveralLine(quoteNaming(view, item.tokenId).title, n.toString())));
             const value = el('dd', 'pay-line-v');
-            value.append(el('span', 'pay-line-x', quoteFigure({ ...item.price, amount: item.price.amount * n })));
+            const lineFigure = quoteFigure({ ...item.price, amount: item.price.amount * n });
+            const figureNode = el('span', 'pay-line-x');
+            // A long line's figure takes a row of its own under the name, and
+            // past the face's last ceiling it may break after a comma: a
+            // 30-character figure beside the name left the name a column of
+            // single letters at 360 (2026-10-13). Short lines are untouched.
+            const lineTier = cardFigureTier(lineFigure);
+            if (lineTier >= 2) {
+                line.setAttribute('data-price-tier', String(lineTier));
+            }
+            moneyFigure(figureNode, lineFigure, lineTier === 3);
+            value.append(figureNode);
             line.append(value);
             const surcharge = quoteSurchargeNode(item.price, 'dd', 'pay-line-s');
             if (surcharge !== null) {
@@ -7092,12 +7132,20 @@ function paySeveralSheet(
         final.hidden = lostAll;
         howFold.hidden = lostAll;
         const glance = selectionGlance(selection, prices);
-        total.textContent =
+        const glanceFigure = glance === undefined ? '' : quoteFigure(glance);
+        // Past the face's last ceiling the total's figure may break after a
+        // comma too (`moneySentence`); the sentence around it wraps at its
+        // spaces as it always did.
+        moneySentence(
+            total,
             glance === undefined
                 ? ''
                 : selectionHasSurcharge(selection, prices)
-                  ? copy.paySeveralTotalSurcharged(quoteFigure(glance))
-                  : copy.paySeveralTotal(quoteFigure(glance));
+                  ? copy.paySeveralTotalSurcharged(glanceFigure)
+                  : copy.paySeveralTotal(glanceFigure),
+            glanceFigure,
+            cardFigureTier(glanceFigure) === 3,
+        );
         /*
          * The memo names the items this payment covers (`STLP`'s second
          * shape). **One item composes the shape that already exists**, which
@@ -7146,7 +7194,8 @@ function paySeveralSheet(
                   ? copy.PAY_FINE_MEMO_TOO_MANY
                   : copy.PAY_FINE_NO_MEMO;
         figureRow.hidden = sats === undefined;
-        figure.textContent = sats === undefined ? '' : formatXec(sats);
+        // The figure and its row's step on the ladder, one call (`paintCardFigure`).
+        paintCardFigure(figureRow, figure, sats === undefined ? '' : formatXec(sats));
         cap.textContent = sats === undefined ? copy.PAY_CAP_QUOTES : copy.PAY_CAP_SIGNS;
         // Any ask out, the refresh control's own included: the single sheet's rule.
         const askingNow = asking || refreshAsking || valveAsking;
@@ -8504,8 +8553,9 @@ function offerRow(
         if (tier > 0) {
             head.setAttribute('data-price-tier', String(tier));
         }
-        const asked = el('span', 'item-x', figure);
+        const asked = el('span', 'item-x');
         asked.setAttribute('data-role', 'price');
+        rowFigure(amount, asked, figure, tier, ROW_REFLOW_LISTING_CHARS);
         amount.append(asked);
         // The unit rides the amount's own baseline row — "from 1,200 XEC"
         // is one line in every design; a block unit under the number was
@@ -8593,6 +8643,210 @@ export function priceTier(
     if (chars <= ceilings[1]) return 1;
     if (chars <= ceilings[2]) return 2;
     return 3;
+}
+
+/**
+ * How many characters of figure the item face and the two pay sheets seat at
+ * each step of their own ladder on a phone (the 8g1 critic's P2-3, the
+ * owner's D-2026-10-13-02): the design size, then 26, 21 and 18px, the floor
+ * stall.css paints (`.face-x` and `.pay-x` with `data-price-tier`). Measured
+ * at **360px**, the narrowest phone the probe measures, against a row of 298px
+ * on Neo's face and 304 on its pay card (Rural 286 and 294, Modern 286 and
+ * 302; `layout/PROBE-RULES.md`, "The narrow phone"), on the widest figure
+ * each step can hold in every unit `QUOTE_UNITS` writes: Neo's mono is 0.62em
+ * a character, and a sign its face does not draw (`元`, `₩`) is drawn by the
+ * machine's fallback at about 1em, so `元9,999,999,999.99` is the face's
+ * widest 17 characters. One table for every look, because no look sizes these
+ * figures: what paints them is the floor, the same on all three.
+ *
+ * - **14** at the design size, so no figure of 14 characters or fewer moves
+ *   on any look. The cost, stated: at 360 a 14-character figure still runs
+ *   into its card's padding where it is widest — 8.5px of the pay card's 14
+ *   on Neo (312 of 304), and on the face 13.3px of 18 on Neo for
+ *   `₩9,999,999,999` and 2.5px on Rural — cut by nothing, and the probe
+ *   reads this step against the card's padding box rather than the row's
+ *   content box (`a-card-figure-stands-inside-its-row`). The face's "You
+ *   pay" figure rides the same steps at its own sizes (`sheetRow`).
+ * - **17** at 26px and **21** at 21px — each 13px or more inside the row on
+ *   every look for the widest figure the step holds (`元` on Neo's face: 285
+ *   and 282 of 298), a margin for a fallback glyph measured on one machine.
+ *   The most XEC a payment could ever carry, the whole supply with its cents,
+ *   stands on one line.
+ * - Past 21, 18px, and the figure may break **after a comma and nowhere
+ *   else** (`moneyFigure`): an eight-byte asked amount is 26 characters, 290px
+ *   of Neo's 298 at 18px with `from` still to seat beside it, and the longest
+ *   quote the editor writes is 30 (an XEC quote), which no legible size seats
+ *   on one line at 360.
+ *
+ * Character count, like the rows' ladder: render never reads layout. `from`
+ * does not count, because it wraps above the figure on the face rather than
+ * taking room beside it, and counting it would move a figure of fewer than
+ * 14 characters. A fourth look that sizes these figures in its own sheet
+ * owns its whole ladder (`every-look-that-sizes-its-figure-sizes-every-price-tier`)
+ * and is held to these cuts by the probe's narrow pass, never the other way
+ * round.
+ */
+export const CARD_FIGURE_CEILINGS = [14, 17, 21] as const;
+
+/** The dress a face or pay-sheet figure wears for its length (`CARD_FIGURE_CEILINGS`). */
+export function cardFigureTier(figure: string): 0 | 1 | 2 | 3 {
+    return priceTier(figure, false, CARD_FIGURE_CEILINGS);
+}
+
+/**
+ * A money figure written into its node — with, when `breaks`, a soft break
+ * after each comma and nowhere else. A group of digits is never split (a
+ * free wrap prints two numbers), and the last group stays on one line with
+ * whatever follows it inside the figure, a trailing sign or ` XEC` (`fig-end`,
+ * nowrap), so a unit is never left alone on a line. `<wbr>` is an element
+ * with no text: the node's `textContent` is the figure exactly, which is what
+ * every reader of a money node reads (`the-figure-on-screen-is-the-figure-in-the-link`).
+ * The digits never change; only the dress does.
+ *
+ * **One name to a screen reader** (round 2, the critic's P3-1): each `<wbr>`
+ * splits the text into its own node, and Chrome's accessibility tree held a
+ * broken figure as six pieces a reader stepping by element could announce
+ * as six numbers. So a broken figure is one `span.fig-say[role=img]` named
+ * by the whole figure (`aria-label`) whose pieces sit in an `aria-hidden`
+ * span: one node with one name, read whole, and the money node still holds
+ * the figure in one element. Cost, stated: a reader announces it as an
+ * image ("…, image"). `role="img"` is the role every reader honours a name
+ * on; a name on a generic span is one NVDA ignores, which with the pieces
+ * hidden would read nothing. Verified with Chrome's tree (CDP), not with a
+ * reader. Test: `a-card-figure-steps-down-and-breaks-only-after-a-comma`.
+ */
+function moneyFigure(node: HTMLElement, figure: string, breaks: boolean): void {
+    const groups = breaks ? figure.split(/(?<=,)/) : [figure];
+    if (groups.length < 2) {
+        node.textContent = figure;
+        return;
+    }
+    const pieces = el('span');
+    pieces.setAttribute('aria-hidden', 'true');
+    for (const group of groups.slice(0, -1)) {
+        pieces.append(document.createTextNode(group), document.createElement('wbr'));
+    }
+    pieces.append(el('span', 'fig-end', groups[groups.length - 1]));
+    const said = el('span', 'fig-say');
+    said.setAttribute('role', 'img');
+    said.setAttribute('aria-label', figure);
+    said.append(pieces);
+    node.replaceChildren(said);
+}
+
+/**
+ * A sentence that carries a money figure — the Pay several total — with the
+ * figure's breaks (`moneyFigure`) when `breaks`, and the sentence's own text
+ * unchanged around it. `textContent` is the sentence exactly.
+ */
+function moneySentence(node: HTMLElement, sentence: string, figure: string, breaks: boolean): void {
+    const at = breaks && figure !== '' ? sentence.indexOf(figure) : -1;
+    if (at < 0) {
+        node.textContent = sentence;
+        return;
+    }
+    const inner = document.createElement('span');
+    moneyFigure(inner, figure, true);
+    node.replaceChildren(sentence.slice(0, at), ...inner.childNodes, sentence.slice(at + figure.length));
+}
+
+/**
+ * Where the selection strip's total and the chosen line's figures break
+ * after a comma (round 4, the critic's P3-4): **18** characters. Measured at
+ * 360 on Neo and Rural (and at 390 from 20) a total of 18 to 21 characters
+ * wrapped before its unit and left ` XEC` alone on its line; broken, the
+ * last group and the unit stay together (`.fig-end`) and the wrap falls
+ * after a comma. Under it a total fits its line at every width, and is the
+ * text node it always was. Pinned by value in
+ * `the-selection-strip-loses-a-long-totals-tail-never-its-head`.
+ */
+export const STRIP_BREAK_CHARS = 18;
+
+/**
+ * A line of words carrying several money figures — the selection line's
+ * "2 × Q = L" (round 3, the critic's P2-2) — with each figure from
+ * `STRIP_BREAK_CHARS` broken after its commas (`moneyFigure`), in order,
+ * and the words around them unchanged. `textContent` is the sentence
+ * exactly; a sentence whose figures are all short is one text node.
+ */
+function moneyLine(node: HTMLElement, sentence: string, figures: readonly string[]): void {
+    const parts: Node[] = [];
+    let from = 0;
+    for (const figure of figures) {
+        if (figure === '' || figure.length < STRIP_BREAK_CHARS) continue;
+        const at = sentence.indexOf(figure, from);
+        if (at < 0) continue;
+        parts.push(document.createTextNode(sentence.slice(from, at)));
+        const inner = document.createElement('span');
+        moneyFigure(inner, figure, true);
+        parts.push(...inner.childNodes);
+        from = at + figure.length;
+    }
+    if (parts.length === 0) {
+        node.textContent = sentence;
+        return;
+    }
+    parts.push(document.createTextNode(sentence.slice(from)));
+    node.replaceChildren(...parts);
+}
+
+/**
+ * Where a row's figure starts to re-flow, counted the way the figure is
+ * printed on the row: a listing's asked amount without `from` or ` XEC`, a
+ * quote's figure with its sign or unit (`quoteFigure`). Measured on main at
+ * 360, 390, 680 and 1280 on the shipped looks (the critic's re-review of
+ * round 2, P1-1): a listing row first failed at **17** characters (Rural at
+ * 680) and a quote row at **18** (`100,000,000.00 XEC`, Rural at 680), so
+ * an ordinary price — a 1,000,000.00 XEC quote, a 1,000,000,000.5 XEC
+ * listing — keeps the row it always had at every width. Pinned by value in
+ * `an-ordinary-quote-row-keeps-its-desk-row`.
+ */
+export const ROW_REFLOW_LISTING_CHARS = 17;
+export const ROW_REFLOW_QUOTE_CHARS = 18;
+/**
+ * Where a re-flowed row's figure may also break after a comma: 21
+ * characters, where a listing row first failed at 360 on main (no break
+ * opportunity in `from 20,999,061,032,863.85 XEC` otherwise). Only past it
+ * does the figure carry `<wbr>`s and the one `role="img"` name they need
+ * (`moneyFigure`), so a reader hears "image" on stress figures alone.
+ */
+export const ROW_BREAK_CHARS = 21;
+
+/**
+ * A row's figure on the rows' last rung (round 2, the critic's P2-6; the cut
+ * moved in round 3, the critic's P1-1): a figure at or past its kind's cut
+ * (`ROW_REFLOW_LISTING_CHARS`, `ROW_REFLOW_QUOTE_CHARS`) on a row that
+ * already gave its tag a row of its own re-flows as text (`fig-wraps`: a
+ * block, so a line that cannot fit loses its tail and never its head; at a
+ * desk the tag takes its own row there too), and from `ROW_BREAK_CHARS` it
+ * breaks after a comma like the face's. It used to grow to the left and cut
+ * its most significant digits ("…,467,440,737,095,516.15", the `184` gone).
+ * Every figure under the cut is the row it always was, at every width.
+ * `rowTier` is the row's own (`priceTier` over the look's `tierCeilings`);
+ * the wall, which reads no ladder, passes 3.
+ */
+export function rowFigure(amount: HTMLElement, node: HTMLElement, figure: string, rowTier: number, cut: number): void {
+    const wraps = rowTier === 3 && figure.length >= cut;
+    if (wraps) {
+        amount.classList.add('fig-wraps');
+    }
+    moneyFigure(node, figure, wraps && figure.length >= ROW_BREAK_CHARS);
+}
+
+/**
+ * A face or pay-sheet figure and its row's tier, painted together, so the
+ * size the row wears and the breaks the figure carries can never disagree.
+ * The row carries the attribute (the last rung re-flows the row, not only
+ * the figure); none at tier 0.
+ */
+function paintCardFigure(row: HTMLElement, node: HTMLElement, figure: string): void {
+    const tier = cardFigureTier(figure);
+    if (tier > 0) {
+        row.setAttribute('data-price-tier', String(tier));
+    } else {
+        row.removeAttribute('data-price-tier');
+    }
+    moneyFigure(node, figure, tier === 3);
 }
 
 /**
@@ -8685,8 +8939,9 @@ function itemFace(
         headRow.append(names);
         card.append(headRow);
         const figure = el('div', 'face-x');
-        const q = el('span', 'x pay-q', quoteFigure(item.price));
+        const q = el('span', 'x pay-q');
         q.setAttribute('data-role', 'seller-price');
+        paintCardFigure(figure, q, quoteFigure(item.price));
         figure.append(q, lookMark('figure'));
         card.append(figure);
         const surcharge = quoteSurchargeNode(item.price, 'div', 'pay-sub quote-surcharge face-surcharge');
@@ -8788,8 +9043,9 @@ function itemFace(
     }
     // `x` alone: the theme sheets size `.item-x` for the row's tag, and the
     // face's figure has its own size on every look.
-    const asked = el('span', 'x', formatXec(offer.askedSats));
+    const asked = el('span', 'x');
     asked.setAttribute('data-role', 'price');
+    paintCardFigure(figure, asked, formatXec(offer.askedSats));
     figure.append(asked);
     figure.append(el('span', 'item-u', copy.XEC), lookMark('figure'));
     card.append(figure);
@@ -8853,7 +9109,11 @@ function itemFace(
         const minAtoms = formatAtoms(offer.askedAtoms, known);
         how.append(sheetRow(copy.MIN_PURCHASE, ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms));
     }
-    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(formatXec(offer.askedSats)), true));
+    // The face's other money figure, on the card ladder's every step (round
+    // 2, the critic's P2-1): its row carries the figure's tier, stall.css
+    // steps its size, and past the last ceiling it breaks after a comma.
+    const youPay = formatXec(offer.askedSats);
+    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(youPay), true, cardFigureTier(youPay)));
     if (known !== undefined) {
         how.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(formatAtoms(offer.atoms, known))));
     }
@@ -9260,10 +9520,21 @@ function tokenFacts(
     return box;
 }
 
-function sheetRow(label: string, value: string, big = false): HTMLElement {
+/**
+ * A labelled fact in a sheet or a face's fold. The face's "You pay" passes
+ * its figure's tier on the card ladder (`cardFigureTier`): the row carries
+ * it from tier 1, stall.css steps the size on a phone, and tier 3 breaks
+ * after a comma (`moneyFigure`). Every other row is tier 0 and unchanged.
+ */
+function sheetRow(label: string, value: string, big = false, tier: 0 | 1 | 2 | 3 = 0): HTMLElement {
     const row = el('dl', big ? 'row big' : 'row');
+    if (tier > 0) {
+        row.setAttribute('data-price-tier', String(tier));
+    }
     row.append(el('dt', undefined, label));
-    row.append(el('dd', undefined, value));
+    const dd = el('dd');
+    moneyFigure(dd, value, tier === 3);
+    row.append(dd);
     return row;
 }
 

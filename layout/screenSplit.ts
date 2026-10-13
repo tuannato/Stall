@@ -5,7 +5,7 @@
  * the probe measured at that width and the two can never drift apart.
  */
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CANVAS_SCREENS, SCREENS } from './fixtures';
+import { CANVAS_ONLY_WALL_SCREENS, CANVAS_SCREENS, SCREENS } from './fixtures';
 
 /**
  * `canvas` is the 1920x1080 pass and runs the canvas screens **only**;
@@ -40,9 +40,13 @@ export function screensAt(width: number, canvas: boolean): string[] {
     );
 }
 
-/** The shop-window screens: every fixture carrying `window`, wherever it is measured. */
+/**
+ * The shop-window screens the tall and tablet passes measure: every fixture
+ * carrying `window`, but the Cycle cards at the rows' cuts, which the canvas
+ * pass alone measures for now (`CANVAS_ONLY_WALL_SCREENS`).
+ */
 export function wallScreens(): string[] {
-    return Object.keys(SCREENS).filter((name) => SCREENS[name]!.window !== undefined);
+    return Object.keys(SCREENS).filter((name) => SCREENS[name]!.window !== undefined && !CANVAS_ONLY_WALL_SCREENS.has(name));
 }
 
 /** The overlay screens painted on the transparent wire (`bg=transparent`). */

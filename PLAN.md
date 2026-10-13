@@ -215,6 +215,24 @@ working accept, and there is no accept.
   of every Cyrillic word a seller writes in Stall's face and the rest in the
   reader's, so no face's range takes a letter of another script.
 
+- **Money figures stand whole on a 360px phone (owner, 2026-10-13, "Theo
+  khuyến nghị" and "Ok cứ theo các khuyến nghị hợp lý").** The item face's
+  figure, its "You pay" row, the pay sheet's figure (what the wallet signs)
+  and Pay several's lines and total step down a size ladder by length, the
+  same table for every look (≤14 characters unchanged; 15–17, 18–21, then a
+  break after a comma only, the unit kept with the last group); a row's
+  figure re-flows onto its own row from 17 characters (a listing) or 18 (a
+  quote) and breaks after commas from 21, so a figure loses its tail, never
+  its head, and a broken figure is one name to a screen reader. **The pay
+  code's gate stays 308px**: below 390px the code's ticket gives the code
+  more of the sheet (318/320/310px at 360 on Modern/Neo/Rural), in place of
+  the first plan to lower the gate to the painted width — which would have
+  drawn Pay several's code for exactly two items and none for one. Rural's
+  rows below 390px take their tag onto a row of their own (option (b): 0
+  failures at 360 and 375, nothing moves at 390; 55–57 rows move below
+  390), keyed on Rural's own row, not a media condition every look gets.
+  The probe measures money screens at 360px (geometry), and a broken
+  figure's pieces on the contrast pass. Decisions D-2026-10-13-02 and -04.
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
@@ -834,6 +852,27 @@ money path this app can have, because nothing on it is derived.
 ---
 
 ## Open — ask before assuming
+
+- **P1, live and older than the 360px work: the wall's Cycle card prints
+  prices that are not the covenant's number.** On the counter tablet
+  (768x1024) the Cycle card, the wall's default mode, cuts the figure from
+  a 6-character listing ("from 123.45 XEC") and an 8–9-character XEC
+  quote, on every look: `123,456.78 XEC` shows as "123,45" on Rural — read
+  with a comma as the decimal point, a thousand times too low — and
+  `1,234.56 XEC` as "1,234.5" on Neo. At 1280x900 a listing fails from
+  7–14 characters and Neo's tail paints under the code; at 1280x800 the
+  card reaches the status line; the tall wall fails from 12–15 characters;
+  the touch wall at 1280 from 16. No probe pass measured these
+  (`CANVAS_ONLY_WALL_SCREENS` holds the Cycle fixtures to the canvas
+  alone). `window.ts` and `window.css` are what origin/main serves.
+  **Next, its own branch, before the private look's port continues:** a
+  length ladder for the card's figure, the comma break inside the card's
+  own grid past its last step, the figure never under the code, and
+  fixtures red on main today at every wall size
+  (`a-cycle-card-shows-every-digit-at-every-wall-size`). Until it lands,
+  whether `/guide` should qualify the counter tablet is the owner's call.
+  Source: `private/design/workshop-2026-09-23/CRITIC-NARROW-PHONE.md`,
+  rounds 3 and 4.
 
 - **A screen shorter than the wall's floor stopped being a wall, and that
   is a behaviour change.** The floor asks the short painted axis now

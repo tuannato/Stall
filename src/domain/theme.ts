@@ -258,6 +258,22 @@ export type DecodedTheme = {
      */
     tierCeilings: readonly [number, number, number];
     /**
+     * How a row's tag stands on a phone narrower than 390px, where the
+     * ceilings above were not measured: `'own-row'` gives a tier-1 or tier-2
+     * tag a row of its own under the name, as tier 3 always has, and absent
+     * leaves every row as the ceilings decide. The renderer writes it on the
+     * stall's root as `data-narrow-tag` (`dressLook`) and the base sheet
+     * reads it under `max-width: 389.98px` — never a look sheet, whose media
+     * conditions stop at the probe's own passes (`LOOK_MEDIA`). Rural's alone
+     * (D-2026-10-13-04, the owner's option (b)): its tag spends ~39px on its
+     * notch, padding and border, and at 360 its name column fell to 44–60px
+     * beside a tier-1 or tier-2 tag on every shop screen (57 rows in the
+     * showroom), at 375 to 59px beside `₩12,000`; Modern's and Neo's rows
+     * hold at 360. A look read from data inherits its base's value and
+     * cannot set its own (`lookData.ts` takes no such field).
+     */
+    narrowTag?: 'own-row';
+    /**
      * The stream overlay's plate — 216px of content (252 − 2×18), figure
      * 39→31→24px tabular bold, `from`/`XEC` at 22px, flex gap 8. Same
      * `priceTier` shape as the shop (`from` counts as two characters); these
@@ -693,6 +709,7 @@ const SHIPPED_LOOKS: ReadonlyMap<number, Omit<DecodedTheme, 'id' | 'known'>> = n
             sheetLoad: 'bundled',
             label: 'Rural',
             tierCeilings: [6, 8, 11],
+            narrowTag: 'own-row',
             overlayTierCeilings: [8, 10, 12],
             /*
              * Re-cut 2026-08-30 from the approved full dress (extraction
