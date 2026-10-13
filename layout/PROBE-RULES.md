@@ -6478,11 +6478,20 @@ and Browse's code caption step down. Measured on main at 1280x800: the
 shipped card with an announcement ran 67px over the status line on Modern
 under the Awning and 81px on Rural with the yard, a quote card 84 and 92px,
 and Browse's code plate overran its body by 20 and 30px. A Cycle quote's
-foot gives 20px at 900 tall and under where Rural's yard is worn: at
+foot gives 20px at 900 tall and under where Rural's yard is worn — at
 1280x900 the yard put a quote card 9.5px over, and no other look reached
-the status line there (2026-10-14: the first cut gave every look's quote
-card the 20px, which moved a quote card on Modern, Neo and Rural bare that
-stood clear on main).
+the status line there — and on every look under 790px of frame, where a
+768-tall screen put a quote card over the status line on Neo and Rural bare
+(1366x768, main). 2026-10-14: the first cut gave every look's quote card
+the 20px at 900 tall and under, which moved a quote card on every bare look
+at 1280x900 and 1280x800 that stood clear on main; scoped to the yard alone
+it left Neo's quote cards over the status line at 1366x768 (113 cards past
+it there, against 75 now — the off-size table below); and the whole air at
+790px, which took Rural bare's cards at 768 too (46), moved Browse's code
+plate under the Awning at 1280x900, whose canopy leaves 768px of frame,
+until its quiet zone read 1,928 pixels grey. A bare 1280x800 frame is 800px
+and keeps its foot; the Awning's quote card at 1280x900 gives its 20px, the
+one card on a probed size that moves for this.
 
 **The touch wall below 1920** (window.css, after the touch rules): every
 touch quote row puts its figure on a row of its own under the picture and
@@ -6657,6 +6666,37 @@ of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and
   | 1024x768 | 273 / 129 | 126 / 44 |
   | 800x1280 | 180 / 245 | 4 / 219 |
   | 680x1000 | 254 / 21 | 14 / 19 |
+
+  **Measured again 2026-10-14** with a harness of the second builder's
+  (`offsize.mjs` in the session scratchpad: this repository's probe page
+  built and served, Chrome off the network, the probe's own verdict read
+  at each size; the same 35 screens, nine looks, 315 cards a size). Cards
+  with a figure failure (the Cycle rule, `text-spills`, cut sideways,
+  covered) / cards past the status line, main's code with these fixtures
+  against this branch at its second commit:
+
+  | size | main | branch |
+  |---|---|---|
+  | 2560x1440 | 122 / 0 | 0 / 0 |
+  | 1600x900 | 137 / 19 | 0 / 0 |
+  | 1366x768 | 154 / 141 | 0 / 75 |
+  | 1280x768 | 176 / 141 | 0 / 75 |
+  | 1280x720 | 172 / 200 | 0 / 48 |
+  | 1280x1024 | 147 / 19 | 0 / 21 (Rural worn) |
+  | 1024x768 | 264 / 142 | 139 / 77 |
+  | 800x1280 | 159 / 232 | 4 / 214 |
+  | 680x1000 | 233 / 25 | 24 / 23 |
+
+  At 768 and 720 tall what still reaches the status line is the Awning's
+  and the yard's worn cards, and at 768 Rural bare's (its card at its
+  design size, the shipped three-character one included, as on main).
+  **1024x768 — an iPad on its side —
+  is the largest gap left**: 139 cards with a digit cut or covered, the
+  shipped three-character card among them on every look (main 264); the
+  short landscape layout's design size and steps are in px measured at
+  1280, and its price column at 1024 is narrower than any step was sized
+  for. 680x1000 fails on Rural alone (its tag, steps 0–3), 800x1280 a
+  nine-character listing on Neo and Rural. Not built; no pass paints them.
 
   Seventeen cards are worse in one way: main cut their figure sideways and
   kept the card above the status line; the branch shows every digit and the

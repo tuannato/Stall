@@ -1034,17 +1034,25 @@
  * 320px body under the Awning and 310px with the yard, so its list ran 20
  * and 30px over the status line. A Cycle quote's foot gives 20px at 900 tall
  * and under where Rural's yard is worn, which put a quote card 9.5px over
- * at 1280x900 (no other look reached the status line there; scoped to the
- * yard so a quote card on every other look stands where it did).
- * Under 740px of frame — the Awning takes 132px of a 1280x800 frame for its
- * canopy — and on a frame of 820px or less that carries Rural's yard row
- * (the yard is a row of this grid, so it shortens the body without
- * shortening the frame), the rest steps down. Measured after: the shipped
- * card on Rural with the yard ends 7.5px above the status line at 1280x800
- * (8px at 1280x900).
+ * at 1280x900 (no other look reached the status line there), and on any
+ * look under 790px of frame, where a 768-tall screen put a quote card over
+ * it on Neo and Rural bare (1366x768, main; 2026-10-14) — a bare 1280x800
+ * frame is 800px and keeps its foot. Under 740px of frame — the Awning
+ * takes 132px of a 1280x800 frame for its canopy — and on a frame of 820px
+ * or less that carries Rural's yard row (the yard is a row of this grid, so
+ * it shortens the body without shortening the frame), the rest steps down.
+ * Measured after: the shipped card on Rural with the yard ends 7.5px above
+ * the status line at 1280x800 (8px at 1280x900).
  * The code is at its floor already and is not what gives; nothing changes
- * on a 1280x900 wall but a Cycle quote's foot under the yard.
+ * on a 1280x900 wall but a Cycle quote's foot, under the yard and under the
+ * Awning (whose canopy leaves 768px of frame there).
  */
+@container sw (orientation: landscape) and (max-height: 790px) {
+    .stall-scroll {
+        --sw-foot: 12px;
+    }
+}
+
 @container sw (orientation: landscape) and (max-height: 740px) {
     .stall-scroll {
         --sw-air: 4px;
