@@ -5023,6 +5023,36 @@ textarea.share-embed {
 }
 
 /*
+ * The pay code takes more of the sheet below 390px (2026-10-13, the third
+ * option on the 8g1 critic's P2-4). The plate moves one for one with the
+ * screen, so at 360 the code painted 278–288px inside four insets a side —
+ * the sheet's padding (12–18px), the ticket's border and its 12px padding,
+ * and the code's own 10px of white — and every phone narrower than 390 drew
+ * it under `PAY_QR_NARROWEST_PX`. Below 390 the ticket's sides are 2px and
+ * the code's white is 4px (its four-module quiet zone is drawn inside the
+ * SVG and untouched; a corner radius of at most 8px never reaches it), so
+ * the code is 32px wider and paints 310 (Rural), 318 (Modern, the skeleton,
+ * the tracked fixture) and 320 (Neo) at 360 — at or over the 308 Rural
+ * paints at 390, where nothing changes. The ticket's words keep their old
+ * inset. Scoped to the pay sheets (`.pay-qr-body`): the record sheets draw
+ * their code from 680px only. Read by the probe's narrow pass ("a pay code
+ * is as wide as the gate was told").
+ */
+@media (max-width: 389.98px) {
+    .publish-qr.pay-qr-body {
+        padding-inline: 2px;
+    }
+
+    .pay-qr-body .pay-qr .qr {
+        padding: 4px;
+    }
+
+    .publish-qr.pay-qr-body .fine {
+        padding-inline: 10px;
+    }
+}
+
+/*
  * The publish sheet. A bottom sheet on a phone, a dialog on a desktop. It is a
  * disclosure the seller opened, so it may cover the shop behind it — but it is
  * scrollable and never taller than the screen, so it cannot strand an asked

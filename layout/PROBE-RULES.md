@@ -5882,3 +5882,25 @@ node is read exactly as before.
   figures in stall.css` red. A look that sizes either figure and forgets a
   step: the planted cases in `theme-sheets.test.ts` (tier 2 missing on the
   face, every tier missing on the pay figure and on the face by role).
+
+### A wider code box below 390 (2026-10-13, the third option on P2-4)
+
+Below 390px the pay sheets give their code more of the sheet (stall.css,
+`@media (max-width: 389.98px)`, scoped to `.pay-qr-body`): the ticket's sides
+go from 12px to 2px and the code's own white from 10px to 4px, while the
+ticket's words keep a 10px inset. The four-module quiet zone is drawn inside
+the SVG and is untouched; the code's corner radius (6, 0 and 8px) never
+reaches it at 4px. Measured on the pay sheet, painted (box minus padding):
+
+| width | Modern | Neo | Rural | fixture |
+|---|---|---|---|---|
+| 360 | 318 (was 286) | 320 (288) | **310** (278) | 318 (286) |
+| 375 | 333 (301) | 335 (303) | 325 (293) | 333 (301) |
+| 389 | 347 | 349 | 339 | 347 |
+| 390, unchanged | 316 | 318 | **308** | 316 |
+
+So the narrowest code from 360 up is Rural's 308 at 390, where nothing moved
+(`looks:diff` shoots 390 and wider), and `PAY_QR_NARROWEST_PX` can say 308
+again. The cost: the ticket's dashed edge stands 2px from the code's white
+below 390, and the code is 32px wider. Below 360 nothing is measured: at
+320 Rural would paint 270.
