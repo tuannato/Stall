@@ -5,7 +5,7 @@
  * the probe measured at that width and the two can never drift apart.
  */
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CANVAS_ONLY_WALL_SCREENS, CANVAS_SCREENS, SCREENS } from './fixtures';
+import { CANVAS_SCREENS, SCREENS } from './fixtures';
 
 /**
  * `canvas` is the 1920x1080 pass and runs the canvas screens **only**;
@@ -41,12 +41,26 @@ export function screensAt(width: number, canvas: boolean): string[] {
 }
 
 /**
- * The shop-window screens the tall and tablet passes measure: every fixture
- * carrying `window`, but the Cycle cards at the rows' cuts, which the canvas
- * pass alone measures for now (`CANVAS_ONLY_WALL_SCREENS`).
+ * The shop-window screens the wall passes measure: every fixture carrying
+ * `window`, on the tall wall (1080x1920), the counter tablet (768x1024) and
+ * the short desk wall (1280x800). Since the Cycle card has its own ladder
+ * (`WALL_FIGURE_CEILINGS`), its long-figure screens are measured at every
+ * wall size like the rest; until then the canvas pass alone measured those at
+ * the rows' cuts.
  */
 export function wallScreens(): string[] {
-    return Object.keys(SCREENS).filter((name) => SCREENS[name]!.window !== undefined && !CANVAS_ONLY_WALL_SCREENS.has(name));
+    return Object.keys(SCREENS).filter((name) => SCREENS[name]!.window !== undefined);
+}
+
+/**
+ * The wall screens the desk pass (1280x900) does not reach by the canvas
+ * split: every canvas screen carrying `window` — the touch wall, the Cycle
+ * card's ladder, and the four canvas twins of desk screens. The runner's
+ * desk wall pass measures them at the desk's own size, so every wall screen
+ * is measured at 1280x900 too.
+ */
+export function deskWallScreens(): string[] {
+    return Object.keys(SCREENS).filter((name) => CANVAS_SCREENS.has(name) && SCREENS[name]!.window !== undefined);
 }
 
 /** The overlay screens painted on the transparent wire (`bg=transparent`). */

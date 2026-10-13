@@ -853,26 +853,27 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
-- **P1, live and older than the 360px work: the wall's Cycle card prints
-  prices that are not the covenant's number.** On the counter tablet
-  (768x1024) the Cycle card, the wall's default mode, cuts the figure from
-  a 6-character listing ("from 123.45 XEC") and an 8–9-character XEC
-  quote, on every look: `123,456.78 XEC` shows as "123,45" on Rural — read
-  with a comma as the decimal point, a thousand times too low — and
-  `1,234.56 XEC` as "1,234.5" on Neo. At 1280x900 a listing fails from
-  7–14 characters and Neo's tail paints under the code; at 1280x800 the
-  card reaches the status line; the tall wall fails from 12–15 characters;
-  the touch wall at 1280 from 16. No probe pass measured these
-  (`CANVAS_ONLY_WALL_SCREENS` holds the Cycle fixtures to the canvas
-  alone). `window.ts` and `window.css` are what origin/main serves.
-  **Next, its own branch, before the private look's port continues:** a
-  length ladder for the card's figure, the comma break inside the card's
-  own grid past its last step, the figure never under the code, and
-  fixtures red on main today at every wall size
-  (`a-cycle-card-shows-every-digit-at-every-wall-size`). Until it lands,
-  whether `/guide` should qualify the counter tablet is the owner's call.
-  Source: `private/design/workshop-2026-09-23/CRITIC-NARROW-PHONE.md`,
-  rounds 3 and 4.
+- **P1, live and older than the 360px work, narrowed: the wall's Cycle card
+  still misprints prices on screen sizes the probe does not paint.** Fixed
+  on 2026-10-14 at the five wall sizes the probe paints (1920x1080,
+  1280x900, 1280x800, 1080x1920, 768x1024) by a length ladder for the card's
+  figure, with a comma break inside its grid past the last step; main failed
+  thousands of checks per wall pass there, the fix none. **Still broken off
+  them:** at 1024x768 (the counter tablet on its side) `$999.99` shows as
+  "$999.9" on Neo and `123,456.78 XEC` runs 40px into the code on Neo and
+  Rural (1,923 cards failing, from main's 5,239); at 800x1280 the card runs
+  past the status line and Rural's code is cut from below; 680x1000 fails on
+  Rural. **Next, its own branch, before 8g2:** a probe pass at each of these
+  sizes (about 5–6 s each), landing with its fix; the critic's preferred fix
+  is a measured fit after paint, like the seller's-name ladder, which would
+  also give back the size the one shared table took from figures that fitted
+  on main (145 cells; `$999.99` on Modern at the tablet, 76.8 → 56.8px). Two
+  changes to the touch wall came with the fix and are stated for the
+  owner: on landscape walls 900 tall and under the list yields its row to a
+  standing payment (approved before for the counter tablet only), and below
+  1920 every touch quote row puts its figure on a row of its own. Whether
+  `/guide` should qualify a tablet on its side until this lands is the
+  owner's call. Source: `private/design/workshop-2026-09-23/CRITIC-WALL-CYCLE.md`.
 
 - **A screen shorter than the wall's floor stopped being a wall, and that
   is a behaviour change.** The floor asks the short painted axis now

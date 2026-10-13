@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { readFileSync } from 'node:fs';
+import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -65,6 +66,9 @@ const full = {
     ),
     // Round 2: the phone pass owes every step of the card figures too.
     ...cardRead,
+    // The Cycle card's ladder (2026-10-13): every step read on every look a
+    // wall pass may paint.
+    cycleFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, Object.fromEntries(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((step) => [step, 3]))])),
 };
 
 describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
@@ -251,8 +255,8 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
     });
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
-        // The lines before 8f2's tallies, which have a case of their own below.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, ...before } = full;
+        // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -616,5 +620,73 @@ describe('the-narrow-pass-owes-the-long-card-figures', () => {
             probeCoverageLine('narrow', narrowRead),
             /^card figures read: face:0 10, face:1 10, face:2 10, face:3 10, line:0 20, line:2 10, line:3 20, paid:0 10, paid:1 10, paid:2 10, paid:3 10, pay:0 10, pay:1 10, pay:2 10, pay:3 10 · ladders compared: 20/,
         );
+    });
+});
+
+/** The five wall passes, and every look they may paint (the Cycle card's ladder, 2026-10-13). */
+const WALLS = ['canvas', 'desk-wall', 'short-wall', 'portrait', 'tablet'];
+const painted = { sheetClasses: CARD_LOOKS };
+
+describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
+    /**
+     * The Cycle card's ladder (2026-10-13, the critic's P1 on narrow-phone
+     * round 4): every wall pass — the canvas, the two desk walls, the tall
+     * wall and the counter tablet — owes `a-cycle-card-shows-every-digit-at-every-wall-size`
+     * a read of every step on every look it painted, so a fixture that stopped
+     * painting a step leaves a gap and not a green pass over nothing.
+     */
+    it('owes ten steps, and every wall pass owes each on every look it painted', () => {
+        assert.deepEqual([...CYCLE_STEPS_OWED], ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+        for (const pass of WALLS) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(
+                probeCoverageGaps(pass, read).filter((gap) => gap.startsWith('a-cycle-card')),
+                [],
+                pass,
+            );
+            const noStep7 = { ...read, cycleFigureByClass: { ...full.cycleFigureByClass, 't-rural': { ...full.cycleFigureByClass['t-rural'], 7: 0 } } };
+            assert.deepEqual(
+                probeCoverageGaps(pass, noStep7).filter((gap) => gap.startsWith('a-cycle-card')),
+                ['a-cycle-card-shows-every-digit-at-every-wall-size read no step-7 Cycle figure on a t-rural wall'],
+                pass,
+            );
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, cycleFigureByClass: {} }).filter((gap) => gap.startsWith('a-cycle-card')).length,
+                CARD_LOOKS.length * CYCLE_STEPS_OWED.length,
+                pass,
+            );
+        }
+        // A page pass owes none: the desk wall pass reads the desk's own size.
+        for (const pass of ['mobile', 'desktop', 'narrow']) {
+            assert.equal(
+                probeCoverageGaps(pass, { ...full, ...painted, cycleFigureByClass: {} }).filter((gap) => gap.startsWith('a-cycle-card')).length,
+                0,
+                pass,
+            );
+        }
+    });
+
+    it('owes the touch wall\'s controls of the two desk walls too', () => {
+        for (const pass of ['desk-wall', 'short-wall']) {
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...full, wallControlRoles: { ...full.wallControlRoles, 'window-back': 0 } }),
+                ['nothing-on-the-wall-is-cut-from-below read no window-back on a wall'],
+                pass,
+            );
+        }
+    });
+
+    it('prints the Cycle figures it read by step on a wall pass\'s line', () => {
+        assert.match(
+            probeCoverageLine('short-wall', { wallControlChecks: 2, statusLineChecks: 3, cycleFigureByClass: { 't-neo': { 0: 2, 9: 1 }, 't-rural': { 0: 1, 10: 4 } } }),
+            /^wall controls read: 2 · status line asked: 3 · Cycle figures read by step: 0:3 9:1 10:4$/,
+        );
+    });
+
+    it('owes the ladder\'s own steps: one more than window.ts\'s ceilings', () => {
+        const source = readFileSync(new URL('../src/ui/window.ts', import.meta.url), 'utf8');
+        const ceilings = source.match(/export const WALL_FIGURE_CEILINGS = \[([^\]]*)\] as const;/);
+        assert.ok(ceilings, 'WALL_FIGURE_CEILINGS in window.ts');
+        assert.equal(CYCLE_STEPS_OWED.length, ceilings[1].split(',').length + 1);
     });
 });

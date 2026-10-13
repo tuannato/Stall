@@ -24,8 +24,9 @@
  *   deck mini with that look's own shop, at both widths.
  * - **`nothing-on-the-wall-is-cut-from-below`** reads the touch wall's
  *   controls — on the public looks, and on each carried private look's own
- *   walls (8e2: `wallControlRolesByClass`) — on the three passes that paint it: the canvas (1920x1080), the
- *   portrait wall (1080x1920) and the counter tablet (768x1024) — every one
+ *   walls (8e2: `wallControlRolesByClass`) — on the five passes that paint it: the canvas (1920x1080),
+ *   the portrait wall (1080x1920), the counter tablet (768x1024) and the two
+ *   desk walls (1280x900, 1280x800; 2026-10-13) — every one
  *   of its five controls on each, and the payment's two lines outside its
  *   scroller, "+N more" and the borrowed-token sentence (`WALL_ROLES`), each
  *   read WHOLE: a stepper cut to a sliver is printed on the pass's line and
@@ -44,7 +45,12 @@
  *   measured or any look wore the rain: the rain is set aside there by
  *   name, or no root was read.
  * - **`nothing-in-the-body-reaches-the-status-line`** asks the wall's body
- *   on the three wall passes.
+ *   on the five wall passes.
+ * - **`a-cycle-card-shows-every-digit-at-every-wall-size`** (2026-10-13)
+ *   reads the Cycle card's figure at every step of its ladder
+ *   (`CYCLE_STEPS_OWED`) on every look each wall pass painted: the canvas
+ *   (1920x1080), the two desk walls (1280x900, 1280x800), the tall wall
+ *   (1080x1920) and the counter tablet (768x1024).
  * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
  *   bunting on the phone and desk passes wherever Rural is measured or any
  *   look wore the bunting.
@@ -92,11 +98,12 @@
  *   ladders compared (`CARD_LADDERS_OWED`, `cardLadderByClass`).
  *
  * The phone and desk passes owe the page rules, the canvas the overlay's
- * places and the wall's controls, the portrait and tablet passes the
- * wall's controls, and the narrow pass the card figures (the phone pass owes
- * them too); the reduced-motion
+ * places and the wall's controls and Cycle steps, the portrait, tablet and
+ * two desk wall passes the wall's controls and Cycle steps, and the narrow
+ * pass the card figures (the phone pass owes them too); the reduced-motion
  * and contrast passes owe nothing here (`mobile`, `desktop`, `canvas`,
- * `portrait`, `tablet` and `narrow` are the runner's pass names).
+ * `portrait`, `tablet`, `desk-wall`, `short-wall` and `narrow` are the
+ * runner's pass names).
  */
 
 import { FIXTURE_PRIVATE_LOOK_CLASS } from './private-looks.mjs';
@@ -124,8 +131,21 @@ const SKIP_SURFACES = {
 };
 /** The passes the row-size and ladder rules read: page screens only. */
 const PAGE_PASSES = new Set(['mobile', 'desktop']);
-/** The passes that paint the touch wall, whose controls the wall rule reads. */
-const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet']);
+/**
+ * The passes that paint the touch wall, whose controls the wall rule reads:
+ * the canvas, the tall wall, the counter tablet, and since the Cycle card's
+ * ladder the two desk wall passes (1280x900, 1280x800).
+ */
+const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall']);
+/**
+ * The Cycle card's steps each wall pass owes read on every look it painted
+ * (`a-cycle-card-shows-every-digit-at-every-wall-size`): tier 0 and every
+ * step of `WALL_FIGURE_CEILINGS` (src/ui/window.ts; nine ceilings, ten steps),
+ * each at its widest figure (`shop-window-cycle-*` in layout/fixtures.ts). A
+ * step no fixture paints at a wall size is a gap, not a pass. Pinned to the
+ * table by `the-cycle-steps-owed-are-the-ladders-own`.
+ */
+export const CYCLE_STEPS_OWED = Object.freeze(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
 /**
  * The passes that owe the card figures' every step: the narrow phone at 360,
  * whose job they are, and the phone at 390, which measures the same screens
@@ -314,6 +334,18 @@ export function probeCoverageGaps(
     if (WALL_PASSES.has(pass) && !((report.statusLineChecks ?? 0) > 0)) {
         gaps.push('nothing-in-the-body-reaches-the-status-line asked nothing on a wall');
     }
+    // The Cycle card's ladder (2026-10-13): every step at its widest figure,
+    // on every look a wall pass painted.
+    if (WALL_PASSES.has(pass)) {
+        const read = report.cycleFigureByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            for (const step of CYCLE_STEPS_OWED) {
+                if (!(((read[cls] ?? {})[step] ?? 0) > 0)) {
+                    gaps.push(`a-cycle-card-shows-every-digit-at-every-wall-size read no step-${step} Cycle figure on a ${cls} wall`);
+                }
+            }
+        }
+    }
     // The card figures' ladder (2026-10-13): a pass that measures the long
     // figures owes each a read on every look it painted — a fixture that
     // stopped mounting one would leave the rule green over nothing.
@@ -492,8 +524,18 @@ export function probeCoverageLine(pass, report) {
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${hiddenSmall}${marks}`;
     }
+    const cycleSums = {};
+    for (const read of Object.values(report.cycleFigureByClass ?? {})) {
+        for (const [step, n] of Object.entries(read)) cycleSums[step] = (cycleSums[step] ?? 0) + n;
+    }
+    // The Cycle card's figures read, summed over the looks, per step, on every
+    // wall pass whose page reported them (2026-10-13).
+    const cycle =
+        report.cycleFigureByClass === undefined
+            ? ''
+            : ` · Cycle figures read by step: ${Object.entries(cycleSums).sort(([a], [b]) => Number(a) - Number(b)).map(([step, n]) => `${step}:${n}`).join(' ') || 'none'}`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + cycle + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})

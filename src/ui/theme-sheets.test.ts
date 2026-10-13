@@ -201,8 +201,11 @@ describe('a-var-read-at-rest-resolves-at-rest', () => {
     });
 });
 
-/** Flatten a sheet into rules; descend @media, skip other at-rule bodies
- *  (keyframe steps declare no ink-over-ground pairing worth policing). */
+/** Flatten a sheet into rules; descend @media and @container (a rule under
+ *  a condition is a rule at rest while it holds — the wall's layouts are
+ *  container blocks, and the Cycle card's ladder declares its custom
+ *  properties there, 2026-10-13), skip other at-rule bodies (keyframe steps
+ *  declare no ink-over-ground pairing worth policing). */
 function parseRules(css: string): { selector: string; body: string }[] {
     const out: { selector: string; body: string }[] = [];
     const walk = (text: string): void => {
@@ -219,7 +222,7 @@ function parseRules(css: string): { selector: string; body: string }[] {
                 j += 1;
             }
             const body = text.slice(open + 1, j - 1);
-            if (selector.startsWith('@media')) walk(body);
+            if (selector.startsWith('@media') || selector.startsWith('@container')) walk(body);
             else if (!selector.startsWith('@')) out.push({ selector, body });
             k = j;
         }
@@ -523,13 +526,19 @@ const ladderRules = (css: string): { selector: string; body: string }[] =>
 const LOOK_SHEETS = SERVED.filter((sheet) => ['look', 'kit', 'fixture', 'private'].includes(sheet.role) && sheet.lookClass !== undefined);
 
 /** The ladder steps a look sheet that sizes `figure` under its class leaves unsized: each `tier` with no font-size of its own. */
-function unsizedSteps(css: string, cls: string, figure: (selector: string) => boolean, step: (tier: string) => string): string[] {
+function unsizedSteps(
+    css: string,
+    cls: string,
+    figure: (selector: string) => boolean,
+    step: (tier: string) => string,
+    tiers: readonly string[] = ['1', '2', '3'],
+): string[] {
     const rules = ladderRules(css).filter((rule) => new RegExp(`\\.${cls}(?![\\w-])`).test(rule.selector) && figure(rule.selector) && /font-size\s*:/.test(rule.body));
-    const sizes = rules.some((rule) => !/data-(?:price-)?tier/.test(rule.selector));
+    const sizes = rules.some((rule) => !/data-(?:price-|wall-)?tier/.test(rule.selector));
     if (!sizes) {
         return [];
     }
-    return ['1', '2', '3'].filter((tier) => !rules.some((rule) => rule.selector.includes(step(tier))));
+    return tiers.filter((tier) => !rules.some((rule) => rule.selector.includes(step(tier))));
 }
 
 const ITEM_FIGURE = (selector: string): boolean => /\.item-x(?![\w-])/.test(selector);
@@ -542,6 +551,12 @@ const FACE_FIGURE = (selector: string): boolean =>
 const PAY_FIGURE = (selector: string): boolean =>
     /\.pay-x-n(?![\w-])/.test(selector) || (/\.pay-x(?![\w-])/.test(selector) && /\[data-role='price'\]/.test(selector));
 const OVERLAY_STEP = (tier: string): string => `[data-tier='${tier}']`;
+/** The wall's Cycle card's figure: `.item-x` or its money node by role, under `.shop-window` (2026-10-13). */
+const WALL_FIGURE = (selector: string): boolean =>
+    /\.shop-window(?![\w-])/.test(selector) && (/\.item-x(?![\w-])/.test(selector) || /\[data-role='(?:seller-)?price'\]/.test(selector));
+const WALL_STEP = (tier: string): string => `[data-wall-tier='${tier}']`;
+/** Every step of the Cycle card's ladder but 0 (`WALL_FIGURE_CEILINGS`, nine ceilings). */
+const WALL_STEPS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 describe('every-look-that-sizes-its-figure-sizes-every-price-tier', () => {
     /**
@@ -610,6 +625,38 @@ describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the face a
         expect(unsizedSteps(pay.css, pay.lookClass!, PAY_FIGURE, ITEM_STEP)).toEqual(['1', '2', '3']);
         const byRole = await plantedSheet(`.${PLANTED_CLASS} .face-x [data-role="seller-price"] { font-size: 44px; }`);
         expect(unsizedSteps(byRole.css, byRole.lookClass!, FACE_FIGURE, ITEM_STEP)).toEqual(['1', '2', '3']);
+    });
+});
+
+describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the wall\'s Cycle card', () => {
+    /**
+     * The Cycle card's ladder (2026-10-13): window.css steps the card's
+     * figure down by `data-wall-tier`, nine steps past the design size, in
+     * each of the wall's layouts — custom properties on the head, read by
+     * the card's own `.item-x` rule at (0,4,0). A look sheet that sizes the
+     * wall's figure at a weight that out-ranks those rules (a worn-only
+     * sheet lands after window.css and wins its ties) freezes the figure at
+     * one size at every length — the defect the ladder closed, on the counter
+     * tablet "123,45" for `123,456.78 XEC` — so a look that sizes it sizes
+     * every step. No shipped look sizes it today; this holds the next one,
+     * over every look sheet a run serves, a private look's included.
+     */
+    it('holds every look sheet that sizes the wall\'s figure under its class to steps 1 to 9', () => {
+        for (const sheet of LOOK_SHEETS) {
+            expect(unsizedSteps(sheet.css, sheet.lookClass!, WALL_FIGURE, WALL_STEP, WALL_STEPS), sheet.path).toEqual([]);
+        }
+    });
+
+    it('goes red on a planted look that sizes the wall\'s figure and forgets steps', async () => {
+        const planted = await plantedSheet(`.stall.${PLANTED_CLASS}.shop-window[data-mode='cycle'] .item-head .item-x { font-size: 60px; }`);
+        expect(unsizedSteps(planted.css, planted.lookClass!, WALL_FIGURE, WALL_STEP, WALL_STEPS)).toEqual(WALL_STEPS);
+        const most = await plantedSheet(
+            `.stall.${PLANTED_CLASS}.shop-window .item-x { font-size: 60px; }\n` +
+                WALL_STEPS.filter((step) => step !== '7')
+                    .map((step) => `.stall.${PLANTED_CLASS}.shop-window .item-head[data-wall-tier='${step}'] .item-x { font-size: ${60 - Number(step) * 4}px; }`)
+                    .join('\n'),
+        );
+        expect(unsizedSteps(most.css, most.lookClass!, WALL_FIGURE, WALL_STEP, WALL_STEPS)).toEqual(['7']);
     });
 });
 

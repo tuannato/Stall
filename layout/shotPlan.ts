@@ -11,8 +11,9 @@
  *
  * - **Viewports.** 390×844 and 1280×900 for the page screens (the wall
  *   screens only where the wall fits, as the probe does), 1920×1080 for the
- *   canvas screens, and the shop window's two portrait passes — 1080×1920,
- *   the tall wall, and 768×1024, the counter tablet stood on end.
+ *   canvas screens, and the shop window's own passes — every wall screen at
+ *   1280×900 too, 1080×1920 (the tall wall), 768×1024 (the counter tablet
+ *   stood on end) and 1280×800 (the short desk wall).
  * - **Variants.** Bare; every decoration worn (one per slot, as the picker
  *   produces) on every screen that wears decorations; and each mood worn
  *   alone, on every screen — the overlay keeps a mood where it drops the
@@ -30,7 +31,7 @@
  */
 import { NO_DECOR_SCREENS } from './fixtures';
 import { canWear, wornAllFlags, wornOf, type Look } from './looks';
-import { clearScreens, screensAt, wallScreens } from './screenSplit';
+import { clearScreens, deskWallScreens, screensAt, wallScreens } from './screenSplit';
 
 export type ShotViewport = {
     readonly name: string;
@@ -46,6 +47,9 @@ export const SHOT_VIEWPORTS = {
     canvas: { name: 'canvas', width: 1920, height: 1080 },
     portrait: { name: 'portrait', width: 1080, height: 1920 },
     tablet: { name: 'tablet', width: 768, height: 1024 },
+    // The short desk wall, the probe's own pass since the Cycle card's
+    // ladder: a 1280x800 panel, the landscape tablet's size.
+    shortWall: { name: 'short-wall', width: 1280, height: 800 },
 } as const satisfies Record<string, ShotViewport>;
 
 export type ShotGround = 'dark' | 'light';
@@ -78,13 +82,17 @@ function slug(label: string): string {
  */
 export function shotScreens(withDoor = false): readonly (readonly [ShotViewport, readonly string[]])[] {
     const notDoor = (name: string): boolean => withDoor || name !== 'door';
-    const { phone, desk, canvas, portrait, tablet } = SHOT_VIEWPORTS;
+    const { phone, desk, canvas, portrait, tablet, shortWall } = SHOT_VIEWPORTS;
     return [
         [phone, screensAt(phone.width, false).filter(notDoor)],
-        [desk, screensAt(desk.width, false).filter(notDoor)],
+        // The desk's page screens and, since the Cycle card's ladder, the
+        // wall screens the canvas split keeps off the desk pass (the probe's
+        // desk wall pass, at the same size).
+        [desk, [...screensAt(desk.width, false).filter(notDoor), ...deskWallScreens()]],
         [canvas, screensAt(canvas.width, true).filter(notDoor)],
         [portrait, wallScreens()],
         [tablet, wallScreens()],
+        [shortWall, wallScreens()],
     ];
 }
 

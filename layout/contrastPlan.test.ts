@@ -40,13 +40,16 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         // Round 4: +28 a page viewport, the listing face, both pay sheets and
         // the selection strip at long figures sampled too (the critic's
         // P2-2), so every surface that breaks a figure is read digit by digit.
+        // The Cycle card's ladder (2026-10-13): +7 at the desk, the wall's
+        // eight-byte listing where it wraps (`shop-window-cycle-longest-figure`,
+        // three looks bare and worn, the skeleton bare), read digit by digit.
         expect(looks.map((look) => look.id)).toEqual([1, 2, 3, SKELETON_LOOK_ID]);
         expect({
             mobile: count(jobs, 'mobile'),
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 284, desktop: 314, canvas: 29, total: 627 });
+        }).toEqual({ mobile: 284, desktop: 321, canvas: 29, total: 634 });
     });
 
     it('samples Grid horizon worn alone on the offers screen, at the phone and the desk', () => {

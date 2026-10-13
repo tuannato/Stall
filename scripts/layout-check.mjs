@@ -421,18 +421,49 @@ const WINDOW_SCREENS =
     // `the-shots-cover-every-probed-screen-and-variant` reads the quoted
     // names out of this list.)
     'shop-window-browse-long-figures,shop-window-quotes-long-figures,' +
-    'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures';
-/*
- * The wall screens these two passes do not measure (round 4): the Cycle card
- * at the rows' cuts, measured on the canvas pass alone. On main the card
- * overruns at these lengths here too, a gap of its own left for its own
- * branch (PROBE-RULES, "Left for its own branch"). Printed on both passes, and
- * held to `CANVAS_ONLY_WALL_SCREENS` in layout/fixtures.ts by the shot plan
- * test (no apostrophe in this comment, for the same reason as above).
- */
-const CANVAS_ONLY_WALL_SCREENS =
+    'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,' +
+    // The Cycle card at the rows cuts (round 4) and at the widest figure of
+    // each step of its own ladder, and the eight-byte listing as a page
+    // screen: every one measured on every wall pass since the card has a
+    // ladder (no apostrophe in this comment, for the reason above).
     'shop-window-cycle-listing-16,shop-window-cycle-listing-17,shop-window-cycle-listing-18,shop-window-cycle-quote-16,' +
-    'shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19';
+    'shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19,shop-window-cycle-listing-5,' +
+    'shop-window-cycle-listing-6,shop-window-cycle-listing-7,shop-window-cycle-listing-9,shop-window-cycle-listing-11,' +
+    'shop-window-cycle-listing-14,shop-window-cycle-listing-20,shop-window-cycle-listing-24,shop-window-cycle-listing-26,' +
+    'shop-window-cycle-quote-8,shop-window-cycle-quote-9,shop-window-cycle-quote-10,shop-window-cycle-quote-13,' +
+    'shop-window-cycle-quote-22,shop-window-cycle-quote-26,shop-window-cycle-quote-30,shop-window-cycle-usd-5,' +
+    'shop-window-cycle-usd-7,shop-window-cycle-usd-9,shop-window-cycle-usd-11,shop-window-cycle-usd-13,shop-window-cycle-usd-22,' +
+    'shop-window-cycle-usd-27,shop-window-cycle-cny-27,' +
+    'shop-window-cycle-longest-figure';
+/*
+ * The two desk wall passes (the Cycle card's ladder, 2026-10-13). A wall is
+ * also a 1280-wide panel: 1280x900 is the desk pass's own size and 1280x800
+ * the landscape tablet's, and the Cycle card printed a figure that was not
+ * the covenant's at both — at 1280x900 Neo's `.78 XEC` under the code, at
+ * 1280x800 the card over the status line — while no pass measured a wall
+ * screen there but the page screens the desk pass reaches by the canvas
+ * split. So the desk wall pass measures, at 1280x900, every wall screen the
+ * canvas split keeps off the desk pass (`DESK_WALL_SCREENS`: the touch wall,
+ * the Cycle ladder and the canvas twins; `deskWallScreens()` in
+ * layout/screenSplit.ts), and the short wall pass measures every wall screen
+ * at 1280x800 (`WINDOW_SCREENS`). Both are held to the shot plan by
+ * `the-shots-cover-every-probed-screen-and-variant` (no apostrophe in this
+ * comment, for the reason above).
+ */
+const DESK_WALL = { name: 'desk-wall', width: 1280, height: 900 };
+const SHORT_WALL = { name: 'short-wall', width: 1280, height: 800 };
+const DESK_WALL_SCREENS =
+    'shop-window-wall,shop-window-wall-long-name,shop-window-wall-browse-long-name,shop-window-wall-browse-long-figures,' +
+    'shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,shop-window-cycle-listing-16,shop-window-cycle-listing-17,' +
+    'shop-window-cycle-listing-18,' +
+    'shop-window-cycle-quote-16,shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19,' +
+    'shop-window-cycle-listing-5,shop-window-cycle-listing-6,shop-window-cycle-listing-7,shop-window-cycle-listing-9,' +
+    'shop-window-cycle-listing-11,shop-window-cycle-listing-14,shop-window-cycle-listing-20,shop-window-cycle-listing-24,' +
+    'shop-window-cycle-listing-26,shop-window-cycle-quote-8,shop-window-cycle-quote-9,shop-window-cycle-quote-10,' +
+    'shop-window-cycle-quote-13,shop-window-cycle-quote-22,shop-window-cycle-quote-26,shop-window-cycle-quote-30,' +
+    'shop-window-cycle-usd-5,shop-window-cycle-usd-7,shop-window-cycle-usd-9,shop-window-cycle-usd-11,shop-window-cycle-usd-13,' +
+    'shop-window-cycle-usd-22,shop-window-cycle-usd-27,shop-window-cycle-cny-27,shop-window-touch-quotes,' +
+    'shop-window-touch-quotes-pay,shop-window-touch-quotes-pay-3,shop-window-touch-quotes-pay-35';
 const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
 
 const probeUrl = (vp, extra = '') =>
@@ -736,10 +767,12 @@ const CODES_REQUIRED = [
  * quote, the listing face's asked amount, the pay sheet's XEC the wallet
  * signs over the eight-byte quote (`pay-longest-figure`), Pay several's
  * (`pay-several-longest-figure`: its figure, lines and total),
- * and the selection strip's total — broken after their
- * commas at the phone and the desk, every look bare and worn. The wall's
- * rows are not on it: the canvas pass samples no long-figure wall
- * (`shop-window-browse`'s ink), stated in PROBE-RULES.
+ * the selection strip's total, and the wall's Cycle card where it wraps
+ * (`shop-window-cycle-longest-figure`, 2026-10-13: the eight-byte listing at
+ * 1280x900) — broken after their commas at the phone and the desk, every
+ * look bare and worn. The wall's Browse rows are not on it: the canvas pass
+ * samples no long-figure wall row (`shop-window-browse`'s ink), stated in
+ * PROBE-RULES.
  */
 const BROKEN_FIGURE_SCREENS = {
     'quote-row-longest-figure': ['seller-price'],
@@ -747,6 +780,9 @@ const BROKEN_FIGURE_SCREENS = {
     'pay-longest-figure': ['price'],
     'pay-several-longest-figure': ['price', 'pay-lines', 'pay-total'],
     'pay-several-strip-long-figure': ['selection-total'],
+    // The wall's Cycle card where it wraps (2026-10-13): the eight-byte
+    // listing at 1280x900, two lines on Modern and the skeleton, three on Neo and Rural.
+    'shop-window-cycle-longest-figure': ['price'],
 };
 
 /**
@@ -2837,8 +2873,7 @@ try {
                 if (pv.failures.length === 0 && gaps.length === 0) {
                     console.log(
                         `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
-                            `\n    faces: ${facesLine(pv.faces)}` +
-                            `\n    not measured here, left for the Cycle card's own branch: ${CANVAS_ONLY_WALL_SCREENS.split(',').length} screens (${CANVAS_ONLY_WALL_SCREENS})`,
+                            `\n    faces: ${facesLine(pv.faces)}`,
                     );
                 } else {
                     failed = true;
@@ -2917,14 +2952,83 @@ try {
                 if (tv.failures.length === 0 && gaps.length === 0) {
                     console.log(
                         `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
-                            `\n    faces: ${facesLine(tv.faces)}` +
-                            `\n    not measured here, left for the Cycle card's own branch: ${CANVAS_ONLY_WALL_SCREENS.split(',').length} screens (${CANVAS_ONLY_WALL_SCREENS})`,
+                            `\n    faces: ${facesLine(tv.faces)}`,
                     );
                 } else {
                     failed = true;
                     if (tv.failures.length > 0) {
                         console.error(`✗ ${label}: ${tv.failures.length} failure(s) — ${took()}`);
                         for (const f of tv.failures) {
+                            console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                        }
+                    }
+                    if (gaps.length > 0) {
+                        console.error(`✗ ${label}: a rule compared nothing it owes —`);
+                        for (const gap of gaps) console.error(`    ${gap}`);
+                    }
+                    console.error(`    compared: ${compared}`);
+                }
+            }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
+        }
+    }
+
+    /*
+     * Pass 2c″: the two desk wall passes (`DESK_WALL` and `SHORT_WALL` above,
+     * 2026-10-13): a wall that is a 1280-wide panel, 900 and 800 tall. Both
+     * enter the short landscape block (`landscapeShort`), where the Cycle
+     * card's code stands beside its figure and its ladder wraps; a pass that
+     * did not would certify a layout it never painted. Each owes what the
+     * other wall passes owe (`probe-coverage.mjs`), the Cycle card's every
+     * step on every look among it.
+     */
+    for (const [vp, screens] of [
+        [DESK_WALL, DESK_WALL_SCREENS],
+        [SHORT_WALL, WINDOW_SCREENS],
+    ]) {
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
+            sessionId,
+        );
+        const wanted = screens.split(',').length;
+        const label = `${vp.name} (${vp.width}x${vp.height}, shop window)`;
+        took();
+        try {
+            const wv = await readVerdict(cdp, sessionId, probeUrl(vp, `&screens=${screens}`));
+            if (wv.viewport !== vp.width) {
+                failed = true;
+                console.error(`✗ ${label}: asked for ${vp.width}px and the page measured ${wv.viewport}px.`);
+            } else if (sheetClassesWrong(wv.sheetClasses) !== undefined) {
+                failed = true;
+                console.error(`✗ ${label}: ${sheetClassesWrong(wv.sheetClasses)}`);
+            } else if (wv.landscapeShort !== true) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: the page never entered the short-landscape block —` +
+                        ' this pass would certify a layout it did not paint.',
+                );
+            } else if ((wv.screensMeasured ?? []).length !== wanted) {
+                failed = true;
+                console.error(`✗ ${label}: measured ${(wv.screensMeasured ?? []).length} of ${wanted} screens — vacuous green.`);
+            } else {
+                for (const kind of wv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const cls of wv.wornClasses ?? []) wornClassesSeen.add(cls);
+                for (const code of wv.codesPainted ?? []) codesPaintedSeen.add(`${vp.name}/${code}`);
+                const gaps = probeCoverageGaps(vp.name, wv, { privateClasses: PRIVATE_SHEET_CLASSES });
+                const compared = probeCoverageLine(vp.name, wv);
+                if (wv.failures.length === 0 && gaps.length === 0) {
+                    console.log(
+                        `✓ ${label}: ${wanted} screens, every look — ${took()}\n    compared: ${compared}` +
+                            `\n    faces: ${facesLine(wv.faces)}`,
+                    );
+                } else {
+                    failed = true;
+                    if (wv.failures.length > 0) {
+                        console.error(`✗ ${label}: ${wv.failures.length} failure(s) — ${took()}`);
+                        for (const f of wv.failures) {
                             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                         }
                     }

@@ -370,6 +370,27 @@ const bc = (
     edge: BroadcastParams['edge'] = 'bottom',
 ): BroadcastParams => ({ preset, mode, transparent, cards, side, edge });
 
+/** One listing on the wall's Cycle card, a partial (so it carries `from`), at `sats`. */
+const cycleListing = (sats: bigint): StallView =>
+    base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, sats)] },
+        window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        readAtMs: 1_756_400_000_000 - 120_000,
+    });
+
+/** One quote on the wall's Cycle card, on the quotes rail, at `price`. */
+const cycleQuote = (price: TokenPrice): StallView =>
+    base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+        prices: new Map([[T1, price]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        readAtMs: 1_756_400_000_000 - 120_000,
+        shopTab: 'quotes',
+    });
+
 export const SCREENS: Record<string, StallView> = {
     offers: base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
@@ -1796,19 +1817,40 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
+     * The touch wall under its rows' own cuts (the Cycle card's ladder round,
+     * 2026-10-14): a `1,000,000.00 XEC` quote (16 characters, under the
+     * wall's narrow cut and the rows' re-flow, so it takes neither class)
+     * chosen beside a `9,999,999.99 XEC` row (16 too, at its widest
+     * digits), both with their steppers. At 1280 a 16-character quote was
+     * cut sideways on Neo on main (the critic's round 4), and no fixture
+     * painted a touch row between the shop's figures and the 17-character
+     * one above. Measured on every wall pass.
+     */
+    'shop-window-touch-quotes-16': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 100_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 999_999_999n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selection: new Map([[T1, 1n]]),
+        shopTab: 'quotes',
+    }),
+    /*
      * The wall's one card (Cycle) either side of the rows' cuts (round 4, the
      * critic's P1-1 on round 3: the card took the shop's desk own-row grid
      * from 17 characters for a listing and 18 for a quote, and at 1920x1080
      * Neo printed a hundred million as ",000,000.00 XEC"). Listings at 16
      * (`1,234,567,890.12`), 17 and 18 characters as the row counts them,
      * quotes at 16 (`1,000,000.00 XEC`), 17, 18 (`100,000,000.00 XEC`) and
-     * 19 (`$100,000,000,000.00`). The card does not re-flow: it is not a
-     * row, and it paints as main does at every length. Measured on the
-     * canvas pass. Not on the desk, tall or tablet passes, and no 19-character
-     * listing: there these lengths overrun the card on main too (a 19-character
-     * listing on Neo at 1920x1080, every one of these at 1280, on the tall
-     * wall and on the counter tablet; `layout/PROBE-RULES.md`, "Left for its
-     * own branch"), and a pass has no list of known failures. Geometry only:
+     * 19 (`$100,000,000,000.00`). The card does not take the rows' re-flow:
+     * it is not a row. Since the card has a ladder of its own (the fixtures
+     * below) these are measured on every wall pass, and on the 1920 wall they
+     * paint as main did, but the 18-character listing (20 as counted), which
+     * steps there: on Neo it ran 4px past its column. Geometry only:
      * `shop-window-cycle`'s ink.
      */
     'shop-window-cycle-listing-16': base({
@@ -1866,6 +1908,70 @@ export const SCREENS: Record<string, StallView> = {
         readAtMs: 1_756_400_000_000 - 120_000,
         shopTab: 'quotes',
     }),
+    /*
+     * The Cycle card's figure ladder (the critic's P1 on narrow-phone round 4,
+     * pre-existing: the card had one figure size at every length, so the
+     * counter tablet cut a 6-character listing and an 8-character XEC quote on
+     * every look, and 1280x900 put Neo's `123,456.78 XEC` tail under the
+     * code). One card at the widest figure of each step of
+     * `WALL_FIGURE_CEILINGS`, counted as `wallFigureTier` counts (a listing's
+     * figure and two for its `from`; these listings are partials, so they
+     * carry it), on both rails: listings of 5, 6 (`123.45`, the first to
+     * fail on the tablet), 7, 9, 11, 14, 20, 24 and 26 characters (the
+     * eight-byte asked amount); XEC quotes of 8 (`1.23 XEC`), 9, 10, 13, 22,
+     * 26 and 30 (the eight-byte quote); USD quotes of 5 (`$5.00`), 7, 9, 11,
+     * 13, 22 and 27; and the widest sign at its longest, `元` drawn by the
+     * machine's fallback, at 27. With the cut fixtures above, every step
+     * holds its widest figure of each kind. Measured on every wall pass — the
+     * canvas, 1280x900 and 1280x800 (`DESK_WALL_SCREENS` and `WINDOW_SCREENS`
+     * in the runner), the tall wall and the counter tablet — by
+     * `a-cycle-card-shows-every-digit-at-every-wall-size`. Geometry only:
+     * `shop-window-cycle`'s ink, and `shop-window-cycle-longest-figure`'s
+     * broken one.
+     */
+    ...Object.fromEntries(
+        (
+            [
+                ['listing-5', 123_400n],
+                ['listing-6', 12_345n],
+                ['listing-7', 12_345_600n],
+                ['listing-9', 123_456_700n],
+                ['listing-11', 12_345_678_900n],
+                ['listing-14', 1_234_567_890_100n],
+                ['listing-20', 1_234_567_890_123_450n],
+                ['listing-24', 123_456_789_012_345_678n],
+                ['listing-26', LONGEST_ASK_SATS],
+            ] as const
+        ).map(([name, sats]) => [`shop-window-cycle-${name}`, cycleListing(sats)]),
+    ),
+    ...Object.fromEntries(
+        (
+            [
+                ['quote-8', { code: 'xec', exponent: 2, amount: 123n }],
+                ['quote-9', { code: 'xec', exponent: 2, amount: 1_234n }],
+                ['quote-10', { code: 'xec', exponent: 2, amount: 12_345n }],
+                ['quote-13', { code: 'xec', exponent: 2, amount: 1_234_567n }],
+                ['quote-22', { code: 'xec', exponent: 2, amount: 12_345_678_901_234n }],
+                ['quote-26', { code: 'xec', exponent: 2, amount: 12_345_678_901_234_567n }],
+                ['quote-30', LONGEST_QUOTE],
+                ['usd-5', { code: 'usd', exponent: 2, amount: 500n }],
+                ['usd-7', { code: 'usd', exponent: 2, amount: 99_999n }],
+                ['usd-9', { code: 'usd', exponent: 2, amount: 123_456n }],
+                ['usd-11', { code: 'usd', exponent: 2, amount: 12_345_678n }],
+                ['usd-13', { code: 'usd', exponent: 2, amount: 123_456_789n }],
+                ['usd-22', { code: 'usd', exponent: 2, amount: 1_234_567_890_123_456n }],
+                ['usd-27', { code: 'usd', exponent: 2, amount: 2n ** 64n - 1n }],
+                ['cny-27', { code: 'cny', exponent: 2, amount: 2n ** 64n - 1n }],
+            ] as const satisfies readonly (readonly [string, TokenPrice])[]
+        ).map(([name, price]) => [`shop-window-cycle-${name}`, cycleQuote(price)]),
+    ),
+    /*
+     * The same eight-byte listing as a page screen, so the desk pass measures
+     * it where it breaks (1280x900: two lines on Modern and the skeleton,
+     * three on Neo and Rural) and the contrast pass reads every piece of it there
+     * (`BROKEN_FIGURE_SCREENS` in the runner, `a-broken-figure-paints-every-digit`).
+     */
+    'shop-window-cycle-longest-figure': cycleListing(LONGEST_ASK_SATS),
     'shop-window-wall-browse-long-name': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         window: { show: 'listings', mode: 'browse', payCode: true, turn: 'none', touch: false },
@@ -2232,6 +2338,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-quotes-long-figures',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-touch-quotes-16',
     // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
     // decoration interactions and ink.
     'shop-window-cycle-listing-16',
@@ -2241,6 +2348,33 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cycle-quote-17',
     'shop-window-cycle-quote-18',
     'shop-window-cycle-quote-19',
+    // The Cycle card's figure ladder: the same card at the widest figure of
+    // each step, and the eight-byte listing as a page screen.
+    'shop-window-cycle-listing-5',
+    'shop-window-cycle-listing-6',
+    'shop-window-cycle-listing-7',
+    'shop-window-cycle-listing-9',
+    'shop-window-cycle-listing-11',
+    'shop-window-cycle-listing-14',
+    'shop-window-cycle-listing-20',
+    'shop-window-cycle-listing-24',
+    'shop-window-cycle-listing-26',
+    'shop-window-cycle-quote-8',
+    'shop-window-cycle-quote-9',
+    'shop-window-cycle-quote-10',
+    'shop-window-cycle-quote-13',
+    'shop-window-cycle-quote-22',
+    'shop-window-cycle-quote-26',
+    'shop-window-cycle-quote-30',
+    'shop-window-cycle-usd-5',
+    'shop-window-cycle-usd-7',
+    'shop-window-cycle-usd-9',
+    'shop-window-cycle-usd-11',
+    'shop-window-cycle-usd-13',
+    'shop-window-cycle-usd-22',
+    'shop-window-cycle-usd-27',
+    'shop-window-cycle-cny-27',
+    'shop-window-cycle-longest-figure',
     // The address in its refused-copy state (the 8g1 critic's P1-1): the
     // decoration interactions it could stage are `offers`'.
     'addr-shown',
@@ -2408,6 +2542,7 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-quotes-long-figures',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-touch-quotes-16',
     // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
     // decoration interactions and ink.
     'shop-window-cycle-listing-16',
@@ -2417,6 +2552,33 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cycle-quote-17',
     'shop-window-cycle-quote-18',
     'shop-window-cycle-quote-19',
+    // The Cycle card's figure ladder: `shop-window-cycle`'s ink, here for the
+    // figure inside its column. Not `shop-window-cycle-longest-figure`, which
+    // the desk job samples where it breaks after its commas.
+    'shop-window-cycle-listing-5',
+    'shop-window-cycle-listing-6',
+    'shop-window-cycle-listing-7',
+    'shop-window-cycle-listing-9',
+    'shop-window-cycle-listing-11',
+    'shop-window-cycle-listing-14',
+    'shop-window-cycle-listing-20',
+    'shop-window-cycle-listing-24',
+    'shop-window-cycle-listing-26',
+    'shop-window-cycle-quote-8',
+    'shop-window-cycle-quote-9',
+    'shop-window-cycle-quote-10',
+    'shop-window-cycle-quote-13',
+    'shop-window-cycle-quote-22',
+    'shop-window-cycle-quote-26',
+    'shop-window-cycle-quote-30',
+    'shop-window-cycle-usd-5',
+    'shop-window-cycle-usd-7',
+    'shop-window-cycle-usd-9',
+    'shop-window-cycle-usd-11',
+    'shop-window-cycle-usd-13',
+    'shop-window-cycle-usd-22',
+    'shop-window-cycle-usd-27',
+    'shop-window-cycle-cny-27',
     // The address showing its whole string (the 8g1 critic's P1-1):
     // `offers`' ground with the sign's other span on it, and `.addr-full`
     // is sampled at the desk. It is here for the sign's width.
@@ -2521,6 +2683,7 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-wall-browse-long-name',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-touch-quotes-16',
     'shop-window-cycle-listing-16',
     'shop-window-cycle-listing-17',
     'shop-window-cycle-listing-18',
@@ -2528,33 +2691,34 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-cycle-quote-17',
     'shop-window-cycle-quote-18',
     'shop-window-cycle-quote-19',
+    'shop-window-cycle-listing-5',
+    'shop-window-cycle-listing-6',
+    'shop-window-cycle-listing-7',
+    'shop-window-cycle-listing-9',
+    'shop-window-cycle-listing-11',
+    'shop-window-cycle-listing-14',
+    'shop-window-cycle-listing-20',
+    'shop-window-cycle-listing-24',
+    'shop-window-cycle-listing-26',
+    'shop-window-cycle-quote-8',
+    'shop-window-cycle-quote-9',
+    'shop-window-cycle-quote-10',
+    'shop-window-cycle-quote-13',
+    'shop-window-cycle-quote-22',
+    'shop-window-cycle-quote-26',
+    'shop-window-cycle-quote-30',
+    'shop-window-cycle-usd-5',
+    'shop-window-cycle-usd-7',
+    'shop-window-cycle-usd-9',
+    'shop-window-cycle-usd-11',
+    'shop-window-cycle-usd-13',
+    'shop-window-cycle-usd-22',
+    'shop-window-cycle-usd-27',
+    'shop-window-cycle-cny-27',
     'shop-window-touch-quotes',
     'shop-window-touch-quotes-pay',
     'shop-window-touch-quotes-pay-3',
     'shop-window-touch-quotes-pay-35',
-]);
-
-/**
- * Wall screens the tall and tablet passes do not measure: the Cycle card at
- * the rows' cuts (round 4, the critic's P1-1 on round 3), measured on the
- * canvas pass alone. They are there to hold the card's grid at the cut at
- * 1920x1080, where main paints them whole; at 1080x1920 and 768x1024 the card
- * overruns at these lengths on main too (and at 768x1024 from 10 characters),
- * a gap of the Cycle card's own that this branch neither causes nor closes
- * (`layout/PROBE-RULES.md`, "Left for its own branch"), and a pass carries
- * no list of known failures. `shop-window-cycle` itself stays on both. The
- * runner prints this list on both passes (`CANVAS_ONLY_WALL_SCREENS` there,
- * held to this set by `the-shots-cover-every-probed-screen-and-variant`),
- * and the branch that gives the card a ladder empties it.
- */
-export const CANVAS_ONLY_WALL_SCREENS: ReadonlySet<string> = new Set([
-    'shop-window-cycle-listing-16',
-    'shop-window-cycle-listing-17',
-    'shop-window-cycle-listing-18',
-    'shop-window-cycle-quote-16',
-    'shop-window-cycle-quote-17',
-    'shop-window-cycle-quote-18',
-    'shop-window-cycle-quote-19',
 ]);
 
 /**
