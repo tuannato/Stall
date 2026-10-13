@@ -50,7 +50,6 @@ import {
     PAY_QUOTE_UNSHOWN,
     PAY_SEVERAL_GONE,
     PAY_SEVERAL_GONE_OPENED,
-    PAY_QR_TOO_MANY,
     payItemsChangedUnpressed,
     selectionDroppedCheck,
     selectionDroppedCheckPressed,
@@ -59,10 +58,8 @@ import {
     payTolerance,
 } from './ui/copy';
 import { satsForQuote, scaleRate } from './domain/fiat';
-import { qrScansInBox } from './domain/qr';
 import {
     qrSvg,
-    PAY_QR_NARROWEST_PX,
     PAY_RECOMPOSE_GRACE_MS,
     PAY_OPEN_GUARD_MS,
     PAY_CHECK_TIMEOUT_MS,
@@ -7161,17 +7158,12 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         const sheetOf = (root: HTMLElement, name: string) => root.querySelector(`[data-role="${name}"]`) as HTMLElement | null;
         const codeOf = (sheet: HTMLElement | null): string | null | undefined =>
             sheet?.querySelector('[data-role="pay-qr"] path')?.getAttribute('d');
-        /**
-         * The figure on screen, its code, and the link a press opens: one
-         * bigint. Pay several draws its code only where it scans in the box
-         * its gate is told (`PAY_QR_NARROWEST_PX`): where that box refuses
-         * the composed string, the sheet says so in place of a code and the
-         * link still carries the figure.
-         */
+        /** The figure on screen, its code, and the link a press opens: one bigint. */
         const oneFigure = (root: HTMLElement, name: string, figure: string): void => {
             const sheet = sheetOf(root, name);
             expect(figureOf(root, name), 'the figure').toBe(figure);
             const code = codeOf(sheet);
+            expect(code, 'a code for the records as they stand').toBeTruthy();
             let url = press(root, name);
             if (url === undefined) {
                 // Every press inside the grace of a change is absorbed; a
@@ -7181,12 +7173,6 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
             }
             expect(url, 'the link').toContain(`amount=${figure.replace(/,/g, '')}.00`);
             const bip21 = url!.split('#/send?bip21=')[1]!;
-            if (name === 'pay-several' && !qrScansInBox(bip21, PAY_QR_NARROWEST_PX)) {
-                expect(code, 'no code the gate refuses').toBeUndefined();
-                expect(sheet?.querySelector('[data-role="pay-qr-why"]')?.textContent).toBe(PAY_QR_TOO_MANY);
-                return;
-            }
-            expect(code, 'a code for the records as they stand').toBeTruthy();
             expect(qrSvg(bip21, '').querySelector('path')?.getAttribute('d'), 'the code is the link').toBe(code);
         };
         const choose = async (root: HTMLElement): Promise<void> => {
