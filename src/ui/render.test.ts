@@ -19776,17 +19776,16 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
         expect(few.root.querySelector('[data-role="pay-qr-why"]')).toBeNull();
         /*
          * **The box the gate is told, by value.** It is a browser
-         * measurement (2026-10-13, at 360px, the narrowest phone the probe
-         * measures: Modern 286, Neo 288, Rural 278, the skeleton and the
-         * tracked fixture 286; 316, 318 and 308 at 390, the number pinned
-         * here until the 360 pass found every code under it; 440 at desk
-         * width) and it shipped wrong once — read off the wrong node as 318
-         * when the plate painted 300 — so it is pinned here and measured on
-         * the painted node by the probe's "a pay code is as wide as the gate
-         * was told", at 360 too. A test deriving its expectation from the
-         * symbol would have stayed green at any number.
+         * measurement (Rural 308 at 390px, where the sheet is as narrow as it
+         * gets before the pay code takes more of it; at 360 the code paints
+         * 310 on Rural, 318 on Modern, the skeleton and the fixture, 320 on
+         * Neo; 440 at desk width) and it shipped wrong once — read off the
+         * wrong node as 318 when the plate painted 300 — so it is pinned here
+         * and measured on the painted node by the probe's "a pay code is as
+         * wide as the gate was told", at 360 too. A test deriving its
+         * expectation from the symbol would have stayed green at any number.
          */
-        expect(PAY_QR_NARROWEST_PX).toBe(278);
+        expect(PAY_QR_NARROWEST_PX).toBe(308);
     });
 
     /**

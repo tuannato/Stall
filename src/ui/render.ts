@@ -1862,28 +1862,23 @@ function paintUnresolvable(
  * under a gate that computed 5.21 (the critic, 2026-09-22; §9's own 2026-09-21
  * lesson repeated, and the reason the probe now measures this box).
  *
- * **At 360px, the narrowest phone the probe measures** (2026-10-13, the 8g1
- * critic's P2-4, the owner's D-2026-10-13-02), painted: Modern 286, Neo 288,
- * **Rural 278**, the skeleton and the tracked fixture look 286. The plate is
- * the sheet's column, so it moves one for one with the screen: at 375 they
- * are 301, 303 and 293, at 390 316, 318 and 308 (the number this constant
- * said until the 360 pass found every code under it), and at desk width all
- * three are 440, the record sheet's. The narrowest decides, because one
- * sheet draws one code at every width and a code that cannot be read where
- * it is drawn is not worth drawing.
+ * Painted, at 390px: Modern 316, Neo 318, **Rural 308** — the sheets' own
+ * paddings differ — and at desk width all three are 440, the record sheet's.
+ * The plate moves one for one with the screen, so below 390 the pay sheets
+ * give the code more of the sheet (stall.css, `.pay-qr-body` under 390px:
+ * the ticket's sides 2px, the code's white 4px), and at 360, the narrowest
+ * phone the probe measures, it paints Modern 286 → 318, Neo 288 → 320,
+ * Rural 278 → 310, the skeleton and the tracked fixture 318 (2026-10-13, the
+ * 8g1 critic's P2-4). So Rural's 308 at 390 is still the narrowest from 360
+ * up. The narrowest decides, because one sheet draws one code at every width
+ * and a code that cannot be read where it is drawn is not worth drawing.
  *
- * The cost, stated (composed with this sheet's own encoder, USD quotes at a
- * fixture rate): at 308 Pay several drew a code for one to six items at
- * counts under 256 and one to five past 255; at 278 it draws one for **two
- * items at counts under 256 and for none past 255** — one item composes the
- * single-item memo, whose 32-byte token id makes a 61-module code (4.56px a
- * module here), and three items a 57-module one (4.88). Everywhere else the
- * fold prints `PAY_QR_TOO_MANY` — which reads "Too many items" over one item,
- * a sentence for the owner — and both Pay controls stand above it. The gate
- * is one number for every width, so at a desk, where the same memo would
- * still scan up to about twenty-six items, it draws no more of them.
+ * The cost, stated: at desk width a memo naming up to twenty-six items would
+ * still scan at 5.18px a module, and this floor stops drawing it at about
+ * seven — above that the fold says so, and both Pay controls are above it.
+ * Below 360 nothing is measured (at 320 Rural would paint 270).
  */
-export const PAY_QR_NARROWEST_PX = 278;
+export const PAY_QR_NARROWEST_PX = 308;
 
 /**
  * A QR of `text` as an SVG, drawn from the module matrix with one `<path>` built

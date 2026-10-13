@@ -5012,8 +5012,9 @@ textarea.share-embed {
  * this sheet had been sitting in it unnoticed. Measured 2026-09-22, found by
  * the critic: with the box taking the column, the code is 308–318px painted
  * on a 390px phone and 440 at desk width; it moves one for one with the
- * screen, so at 360 it is 278–288 (2026-10-13), the narrowest of which is
- * what `PAY_QR_NARROWEST_PX` is told and what the memo's scan gate rests on.
+ * screen, so below 390 it takes more of the sheet (the next rule), and
+ * Rural's 308 at 390 is what `PAY_QR_NARROWEST_PX` is told and what the
+ * memo's scan gate rests on.
  */
 .pay-qr {
     display: flex;

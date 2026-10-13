@@ -7164,10 +7164,9 @@ describe('a-pay-press-over-a-record-that-moved-sends-nothing-and-asks-again', ()
         /**
          * The figure on screen, its code, and the link a press opens: one
          * bigint. Pay several draws its code only where it scans in the box
-         * its gate is told (`PAY_QR_NARROWEST_PX`, 278 since 2026-10-13):
-         * one item composes the single-item memo, which that box refuses, so
-         * there the sheet says so in place of a code and the link still
-         * carries the figure.
+         * its gate is told (`PAY_QR_NARROWEST_PX`): where that box refuses
+         * the composed string, the sheet says so in place of a code and the
+         * link still carries the figure.
          */
         const oneFigure = (root: HTMLElement, name: string, figure: string): void => {
             const sheet = sheetOf(root, name);
