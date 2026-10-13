@@ -6329,8 +6329,14 @@ said, one change at a time:
 
 ### Left for its own branch: the Cycle card and the touch wall at ordinary lengths (pre-existing)
 
-**Closed 2026-10-13** by the Cycle card's ladder ("The Cycle card's figure
-ladder", below); what follows is main's as measured then.
+**Closed at the five wall sizes the probe paints** (1920x1080, 1280x900,
+1280x800, 1080x1920, 768x1024) by the Cycle card's ladder ("The Cycle
+card's figure ladder", below). **Not closed off them**: at 1024x768 (the
+counter tablet on its side) `$999.99` still shows as "$999.9" on Neo and
+`123,456.78 XEC` runs 40px into the code on Neo and Rural; at 800x1280 the
+card runs past the status line and Rural's code is cut from below; 680x1000
+still fails on Rural ("Not measured, stated", below; PLAN § Open). What
+follows is main's as measured on 2026-10-13.
 
 Measured on 2026-10-13 through the probe page with scratch fixtures (one
 card per screen, every look; the branch's reads, over the Cycle card that
@@ -6681,6 +6687,15 @@ of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and
 
 ### Not measured, stated
 
+- **The thinnest margins are signs the machine draws.** The fixtures carry
+  XEC, USD and one CNY quote; `₩` and `元` are drawn by the Mac's fallback
+  font, and at 1080x1920 their widest figure has 0.7% to spare. On another
+  machine's fallback the margin may be negative (the critic, 2026-10-14).
+- **A money figure that clips itself is unseen**: the Cycle rule and
+  `cutSideways` read the figure's ancestors, so `overflow: hidden` with a
+  `max-width` on the figure itself passed with 0 failures (the critic's
+  plant: "12, / 345." for `12,345.67 XEC`). For the computed-style money
+  rule (D-2026-10-14-02).
 - **Off the probe's sizes** (the scratch harness, the 35 Cycle screens,
   every look bare and worn, 280 cards a size; main's code with the same
   fixtures beside it). Figure cut or over the code / card over the status

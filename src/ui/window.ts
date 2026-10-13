@@ -321,9 +321,12 @@ export const WALL_NARROW_QUOTE_CHARS = 17;
  * 1080x1920 and 768x1024 — against the widest figure each step holds in
  * every unit `QUOTE_UNITS` writes (`元` drawn by the machine's fallback is the
  * widest sign). Tier 0, five characters or fewer, is the card's design size
- * at every wall size, so no figure that stood whole on main moves; on the
- * 1920 wall nothing of 19 characters or fewer moves either. One table for
- * every look: no look sizes the wall's figure, and a look that does owns
+ * at every wall size. A longer figure may shrink though it stood whole on
+ * main: a step shrinks on every look where any look overflowed there (the
+ * critic counted 145 such cells; `$999.99` on Modern at the counter tablet
+ * goes 76.8 → 56.8px). On the 1920 wall no figure of 19 characters or fewer
+ * changes size, though from 12 characters the break markup renders it a
+ * few pixels differently. One table for every look: no look sizes the wall's figure, and a look that does owns
  * every step (`every-look-that-sizes-its-figure-sizes-every-price-tier`).
  * Pinned by value in `a-cycle-card-shows-every-digit-at-every-wall-size`.
  */
