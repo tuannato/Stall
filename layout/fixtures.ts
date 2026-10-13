@@ -566,14 +566,26 @@ export const SCREENS: Record<string, StallView> = {
         selection: new Map([[T1, 1n]]),
         selectionAsk: { kind: 'remove', tokenId: T1 },
     }),
+    /*
+     * Two items since 2026-10-13: the sheet's scan gate is told the code's
+     * box at 360 (`PAY_QR_NARROWEST_PX`, 278), and one item composes the
+     * single-item memo, whose 32-byte token id makes a code the gate now
+     * refuses at every width — so a one-item fixture painted no code, and
+     * the code a payment carries ("Pay several"'s at a phone and a desk,
+     * `CODES_REQUIRED`) and its caption (`pay-qr-lede`) went unread. Two
+     * items compose the list memo, 53 modules, 5.25px a module at 278.
+     */
     'pay-several': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
-        prices: QUOTES,
+        prices: new Map([...QUOTES, [T2, { code: 'usd', exponent: 2, amount: 350n }]]),
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
         quoteTimes: QUOTE_TIMES,
         selectionOpen: true,
-        selection: new Map([[T1, 2n]]),
+        selection: new Map([
+            [T1, 2n],
+            [T2, 1n],
+        ]),
         overlay: { kind: 'pay-several' },
         payRate: PAY_RATE,
     }),

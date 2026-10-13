@@ -2421,6 +2421,27 @@ the painted box — width minus the element's own padding — and fails under th
 constant. Proved red by raising the constant to 500: 252 failures on the
 mobile pass, naming the 316px Modern paints.
 
+**At 360 too** (2026-10-13, the 8g1 critic's P2-4, the owner's
+D-2026-10-13-02). The rule reads every pay sheet the narrow pass paints
+("The narrow phone", below), and the plate moves one for one with the
+screen: at 360 Modern paints 286, Neo 288, **Rural 278**, the skeleton and
+the tracked fixture 286 (at 375: 301, 303, 293; at 390: 316, 318, 308). So
+`PAY_QR_NARROWEST_PX` is 278, pinned by value in `render.test.ts` with these
+numbers. Proved red: at 308 the narrow screens fail 483 times, every one this
+rule, naming the five widths. **The cost, stated** (composed with the sheet's
+own encoder, USD quotes at the fixture rate): at 308 Pay several drew a code
+for one to six items at counts under 256 and one to five past 255; at 278,
+for **two items at counts under 256 and none past 255**. One item composes
+the single-item memo, whose 32-byte token id makes a 61-module code (4.56px a
+module at 278), and three items a 57-module one (4.88), both under 4.94; the
+fold then prints `PAY_QR_TOO_MANY` — which reads "Too many items" over one
+item. The `pay-several` fixture chooses two items since, or it would paint no
+code at all and the code a payment carries (`CODES_REQUIRED`) and its caption
+(`pay-qr-lede`) would go unread. **Not changed, stated:** the single pay
+sheet draws its code ungated (`fitsQr` alone), and its single-item code is
+the same 61 modules — 4.56 to 4.72px a module at 360 on every look, under
+the density this gate trusts.
+
 What this does not measure: a touch. The presses are driven in
 `app.window.test.ts` (the freeze, the close on a change, the expiry at
 `PAY_RATE_MAX_AGE_MS`) and in `window.test.ts` (the handlers, the allow-list

@@ -5010,9 +5010,10 @@ textarea.share-embed {
  * the record sheets' painted 440 at desk width. `window.css` names the same
  * trap in its own words ("the intrinsic 300x150 of a sizeless SVG"), and
  * this sheet had been sitting in it unnoticed. Measured 2026-09-22, found by
- * the critic: with the box taking the column, the code is 318px painted on a
- * 390px phone and 440 at desk width, which is what `PAY_QR_NARROWEST_PX` is
- * told and what the memo's scan gate rests on.
+ * the critic: with the box taking the column, the code is 308–318px painted
+ * on a 390px phone and 440 at desk width; it moves one for one with the
+ * screen, so at 360 it is 278–288 (2026-10-13), the narrowest of which is
+ * what `PAY_QR_NARROWEST_PX` is told and what the memo's scan gate rests on.
  */
 .pay-qr {
     display: flex;
