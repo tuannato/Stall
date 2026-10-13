@@ -421,7 +421,7 @@ const WINDOW_SCREENS =
     // `the-shots-cover-every-probed-screen-and-variant` reads the quoted
     // names out of this list.)
     'shop-window-browse-long-figures,shop-window-quotes-long-figures,' +
-    'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures,' +
+    'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,' +
     // The Cycle card at the rows cuts (round 4) and at the widest figure of
     // each step of its own ladder, and the eight-byte listing as a page
     // screen: every one measured on every wall pass since the card has a
@@ -454,7 +454,8 @@ const DESK_WALL = { name: 'desk-wall', width: 1280, height: 900 };
 const SHORT_WALL = { name: 'short-wall', width: 1280, height: 800 };
 const DESK_WALL_SCREENS =
     'shop-window-wall,shop-window-wall-long-name,shop-window-wall-browse-long-name,shop-window-wall-browse-long-figures,' +
-    'shop-window-touch-quotes-long-figures,shop-window-cycle-listing-16,shop-window-cycle-listing-17,shop-window-cycle-listing-18,' +
+    'shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,shop-window-cycle-listing-16,shop-window-cycle-listing-17,' +
+    'shop-window-cycle-listing-18,' +
     'shop-window-cycle-quote-16,shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19,' +
     'shop-window-cycle-listing-5,shop-window-cycle-listing-6,shop-window-cycle-listing-7,shop-window-cycle-listing-9,' +
     'shop-window-cycle-listing-11,shop-window-cycle-listing-14,shop-window-cycle-listing-20,shop-window-cycle-listing-24,' +

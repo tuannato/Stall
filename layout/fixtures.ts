@@ -1817,6 +1817,29 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
+     * The touch wall under its rows' own cuts (the Cycle card's ladder round,
+     * 2026-10-14): a `1,000,000.00 XEC` quote (16 characters, under the
+     * wall's narrow cut and the rows' re-flow, so it takes neither class)
+     * chosen beside a `9,999,999.99 XEC` row (16 too, at its widest
+     * digits), both with their steppers. At 1280 a 16-character quote was
+     * cut sideways on Neo on main (the critic's round 4), and no fixture
+     * painted a touch row between the shop's figures and the 17-character
+     * one above. Measured on every wall pass.
+     */
+    'shop-window-touch-quotes-16': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        window: { show: 'quotes', mode: 'browse', payCode: true, turn: 'none', touch: true },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 100_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 999_999_999n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selection: new Map([[T1, 1n]]),
+        shopTab: 'quotes',
+    }),
+    /*
      * The wall's one card (Cycle) either side of the rows' cuts (round 4, the
      * critic's P1-1 on round 3: the card took the shop's desk own-row grid
      * from 17 characters for a listing and 18 for a quote, and at 1920x1080
@@ -2315,6 +2338,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-quotes-long-figures',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-touch-quotes-16',
     // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
     // decoration interactions and ink.
     'shop-window-cycle-listing-16',
@@ -2518,6 +2542,7 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-quotes-long-figures',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-touch-quotes-16',
     // The Cycle card at the rows' cuts (round 4): `shop-window-cycle`'s
     // decoration interactions and ink.
     'shop-window-cycle-listing-16',
@@ -2658,6 +2683,7 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'shop-window-wall-browse-long-name',
     'shop-window-wall-browse-long-figures',
     'shop-window-touch-quotes-long-figures',
+    'shop-window-touch-quotes-16',
     'shop-window-cycle-listing-16',
     'shop-window-cycle-listing-17',
     'shop-window-cycle-listing-18',

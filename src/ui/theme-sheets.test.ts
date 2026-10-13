@@ -632,7 +632,8 @@ describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the wall\'
     /**
      * The Cycle card's ladder (2026-10-13): window.css steps the card's
      * figure down by `data-wall-tier`, nine steps past the design size, in
-     * each of the wall's layouts, at (0,6,0). A look sheet that sizes the
+     * each of the wall's layouts — custom properties on the head, read by
+     * the card's own `.item-x` rule at (0,4,0). A look sheet that sizes the
      * wall's figure at a weight that out-ranks those rules (a worn-only
      * sheet lands after window.css and wins its ties) freezes the figure at
      * one size at every length — the defect the ladder closed, on the counter

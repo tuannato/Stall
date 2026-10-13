@@ -6478,8 +6478,11 @@ and Browse's code caption step down. Measured on main at 1280x800: the
 shipped card with an announcement ran 67px over the status line on Modern
 under the Awning and 81px on Rural with the yard, a quote card 84 and 92px,
 and Browse's code plate overran its body by 20 and 30px. A Cycle quote's
-foot gives 20px at 900 tall and under (Rural's yard put a quote card 9.5px
-over at 1280x900).
+foot gives 20px at 900 tall and under where Rural's yard is worn: at
+1280x900 the yard put a quote card 9.5px over, and no other look reached
+the status line there (2026-10-14: the first cut gave every look's quote
+card the 20px, which moved a quote card on Modern, Neo and Rural bare that
+stood clear on main).
 
 **The touch wall below 1920** (window.css, after the touch rules): every
 touch quote row puts its figure on a row of its own under the picture and
@@ -6495,15 +6498,15 @@ from below under the Awning.
 ### The passes
 
 - **`desk-wall`**, 1280x900: every wall screen the canvas split keeps off
-  the desk pass (`deskWallScreens()`, the runner's `DESK_WALL_SCREENS`, 40
+  the desk pass (`deskWallScreens()`, the runner's `DESK_WALL_SCREENS`, 41
   screens): the touch wall, the Cycle ladder's fixtures and the canvas
   twins. The desk pass still measures the page wall screens at that size.
-- **`short-wall`**, 1280x800: every wall screen (`WINDOW_SCREENS`, 52).
+- **`short-wall`**, 1280x800: every wall screen (`WINDOW_SCREENS`, 53).
 - Both refuse a page that did not enter the short landscape block
   (`landscapeShort`, echoed by the page) and owe what the other wall passes
   owe (`WALL_PASSES` in probe-coverage.mjs).
-- The tall and tablet passes measure every wall screen too (52, from 20),
-  and the canvas pass the Cycle fixtures (59 screens, from 35).
+- The tall and tablet passes measure every wall screen too (53, from 20),
+  and the canvas pass the Cycle fixtures (60 screens, from 35).
   `CANVAS_ONLY_WALL_SCREENS` is gone (`wallScreens()` is every `window`
   fixture).
 
@@ -6515,7 +6518,12 @@ critic's own `123.45`, `1.23 XEC`, `12.34 XEC` and `$5.00`), all canvas
 screens and geometry only; and `shop-window-cycle-longest-figure`, the
 eight-byte listing as a page screen, which the desk pass paints wrapped
 and the contrast pass samples (`BROKEN_FIGURE_SCREENS`: two lines on Modern
-and the skeleton, three on Neo and Rural, read digit by digit). The shot plan follows the
+and the skeleton, three on Neo and Rural, read digit by digit). And
+`shop-window-touch-quotes-16` (2026-10-14): two touch rows at 16 characters
+(`1,000,000.00 XEC` chosen, `9,999,999.99 XEC`), under the wall's narrow cut
+and the rows' re-flow — the length the critic's round 4 found cut sideways
+on Neo at 1280, which no fixture painted (the touch fixtures jumped from the
+shop's figures to 17 characters). The shot plan follows the
 probe (`shotPlan.ts`: the desk viewport gains the desk wall's screens, and
 a `short-wall` viewport, 1280x800, shoots every wall screen).
 
@@ -6572,6 +6580,39 @@ The branch's fixtures, probe, runner and tests over main's `window.ts`,
 | short-wall (1280x800) | 4,293 (1,905 on the touch wall) | 575 |
 | narrow (360) | 0 | — |
 
+**Re-run 2026-10-14** (the second builder, a clean scratch clone of main at
+`6db735e` with this branch's tests over it, nothing else on the machine):
+the same counts to the failure, and the contrast pass this time: red,
+`a-broken-figure-paints-every-digit` read no broken figure on the eight
+`shop-window-cycle-longest-figure` desk jobs (main writes no break), and 11
+figures on paint below 3:1 — that figure painted over the card's code,
+1.17:1 on Modern, 1.52:1 on Neo, 1.17:1 on the fixture look and the
+skeleton (the fixture look's art pending and failed alike). With
+`shop-window-touch-quotes-16` added: desk-wall 3,892 and short-wall 4,325,
+the new screen's 32 + 32 all on Neo bare and worn — `span.item-x is cut
+sideways by div.item (38–432 inside 44–792)`, 388 of its 394px shown.
+Main's failures per Cycle fixture, as the number of looks (of nine: three
+shipped bare and worn, the fixture look bare and worn, the skeleton). Each
+step a layout shrinks has a look whose figure failed at it on main, and no
+step a layout leaves alone has a figure failing; the step-0 and step-1
+failures marked "status line" are the card's bottom edge (Rural's yard at
+1280x900, the Awning and the yard at 1280x800), which the air and the foot
+answer, not the ladder:
+
+| fixture (counted, step) | canvas | desk-wall | short-wall | portrait | tablet |
+|---|---|---|---|---|---|
+| `usd-5` (5, 0) | · | 1 (status line, Rural worn) | 2 (status line) | · | · |
+| `listing-5` (7, 1) | · | 4 | · | · | 6 |
+| `usd-7` (7, 1) | · | 1 (status line) | 2 (status line) | · | 4 |
+| `listing-6`, `quote-8` (8, 2) | · | 7, 4 | 4, 2 | · | 9, 9 |
+| `listing-7`, `quote-9`, `usd-9` (9, 2) | · | 9, 7, 4 | 8, 5, 4 | · | 9 each |
+| `quote-10`, `listing-9`, `usd-11` (10–11, 3) | · | 8, 9, 9 | 9 each | · | 9 each |
+| `listing-11`, `quote-13`, `usd-13` (13, 4) | · | 9 each | 9 each | 6, 4, 4 | 9 each |
+| steps 5–6 (16–19) | · | 9 each | 9 each | 9 each | 9 each |
+| `listing-18` (20, 7) | 2 | 9 | 9 | 9 | 9 |
+| `listing-20`, `quote-22`, `usd-22` (22, 7) | 4, 4, 2 | 9 each | 9 each | 9 each | 9 each |
+| steps 8–9 (23 up) | 8–9 | 9 each | 9 each | 9 each | 9 each |
+
 The rest are `text-spills`, `a protected box is cut sideways`, `asked
 amount is covered`, `nothing-on-the-wall-is-cut-from-below` and, at 1280,
 `nothing-in-the-body-reaches-the-status-line` (77). Every wall pass also
@@ -6587,8 +6628,13 @@ served sheet matches). On the branch every pass is 0.
 
 ### Cost
 
-Back to back on this Mac (2026-10-14, load 3–6): main 185.6s, the branch
-202.2s (+16.6s). The two new passes 4.9s and 5.9s; portrait +0.9s (7.3 →
+**Back to back on this Mac, 2026-10-14 03:33 and 03:36 (load 2.6–3.1)**:
+main 173.8s, the branch 192.1s (+18.3s). Per pass: the tall wall 6.3 → 8.0s
+(+1.7s, 20 → 53 screens), the counter tablet 4.2 → 5.9s (+1.7s, 20 → 53),
+the canvas 4.3 → 5.5s (35 → 60), the desk pass 9.8 → 10.0s, the two new
+passes 4.8s (desk-wall, 41 screens) and 5.8s (short-wall, 53), the contrast
+pass 121.5 → 124.0s (787 → 796 jobs). The first builder's own pair, 2026-10-14 (load 3–6):
+main 185.6s, the branch 202.2s (+16.6s). The two new passes 4.9s and 5.9s; portrait +0.9s (7.3 →
 8.2), tablet +1.2s (4.7 → 5.9), canvas +0.9s; the contrast pass +5.9s (787
 → 796 jobs with the tracked fixture carried, the rest noise). Other runs
 of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and

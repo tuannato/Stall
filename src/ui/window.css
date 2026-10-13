@@ -453,7 +453,7 @@
         text-align: center;
     }
 
-    /* The Cycle card's figure ladder (below): steps 1-3 and the break, and a quote's foot. */
+    /* The Cycle card's figure ladder (below): steps 1-3 and the break, and a quote's foot under Rural's yard. */
     [data-wall-tier='1'] {
         --sw-fig: 72px;
     }
@@ -470,7 +470,7 @@
         --sw-fig: 38px;
     }
 
-    .stall-scroll {
+    .stall-scroll:has(> .att-beetle) {
         --sw-foot: 12px;
     }
 }
@@ -1033,7 +1033,9 @@
  * code plate (the code at its 280px floor and its caption) was 364px in a
  * 320px body under the Awning and 310px with the yard, so its list ran 20
  * and 30px over the status line. A Cycle quote's foot gives 20px at 900 tall
- * and under, where Rural's yard put a quote card 9.5px over at 1280x900.
+ * and under where Rural's yard is worn, which put a quote card 9.5px over
+ * at 1280x900 (no other look reached the status line there; scoped to the
+ * yard so a quote card on every other look stands where it did).
  * Under 740px of frame — the Awning takes 132px of a 1280x800 frame for its
  * canopy — and on a frame of 820px or less that carries Rural's yard row
  * (the yard is a row of this grid, so it shortens the body without
@@ -1041,8 +1043,7 @@
  * card on Rural with the yard ends 7.5px above the status line at 1280x800
  * (8px at 1280x900).
  * The code is at its floor already and is not what gives; nothing changes
- * on a 1280x900 wall but a Cycle quote's foot, where no Cycle quote stood on
- * main.
+ * on a 1280x900 wall but a Cycle quote's foot under the yard.
  */
 @container sw (orientation: landscape) and (max-height: 740px) {
     .stall-scroll {
