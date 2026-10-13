@@ -5044,8 +5044,20 @@ textarea.share-embed {
         padding-inline: 2px;
     }
 
+    /* The corner is capped at 8px below 390 (round 2, the critic's P3-4).
+       The code is clipped to its radius less its padding, and `lookData`
+       takes a `qrRadius` up to 2000px. The quiet-zone read
+       (`a-code-keeps-its-quiet-zone-white`) runs at 390 and 1280 only, and
+       there refuses a radius that cuts more than one module into the square
+       the code draws in — radius minus the 10px of white, so about 15px of
+       `qrRadius`. With 4px of white the same 15px would cut 11px at 360,
+       past one module (about 5px) though still inside the four-module quiet
+       zone. At 8px the cut is at most 4px, within one module at the gate's
+       density (4.94px), so the 360 box keeps the rule the read holds at 390.
+       The shipped looks are 6, 0 and 8px: nothing of theirs moves. */
     .pay-qr-body .pay-qr .qr {
         padding: 4px;
+        border-radius: min(var(--s-qr-radius), 8px);
     }
 
     .publish-qr.pay-qr-body .fine {

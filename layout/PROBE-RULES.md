@@ -5865,10 +5865,12 @@ node is read exactly as before.
   `a-card-figure-stands-inside-its-row` 36) and 20 coverage gaps (no long
   card figure read on any look); mobile 801, desktop 41. Green with the
   ladder.
-- **The old gate**: `PAY_QR_NARROWEST_PX` back at 308, the narrow screens
-  through the probe page: 483 failures, every one `a pay code is narrower
-  than the gate was told` (Modern 286, Neo 288, Rural 278, the skeleton and
-  the fixture 286). Green at 278.
+- **The old gate at 360**: `PAY_QR_NARROWEST_PX` at 308 over main's code
+  box, the narrow screens through the probe page: 483 failures, every one
+  `a pay code is narrower than the gate was told` (Modern 286, Neo 288,
+  Rural 278, the skeleton and the fixture 286). The gate is 308, never 278:
+  a gate of 278 was built and measured first and replaced by the wider code
+  box below, which makes 308 true at 360.
 - **The new rule alone**: the pay figure's tier 2 planted at 24px, so a
   21-character figure runs 8.5px into Neo's 14px card padding: 2 failures,
   both `a-card-figure-stands-inside-its-row` on Neo, and no `text-spills`.
@@ -5894,7 +5896,29 @@ reaches it at 4px. Measured on the pay sheet, painted (box minus padding):
 | 390, unchanged | 316 | 318 | **308** | 316 |
 
 So the narrowest code from 360 up is Rural's 308 at 390, where nothing moved
-(`looks:diff` shoots 390 and wider), and `PAY_QR_NARROWEST_PX` can say 308
-again. The cost: the ticket's dashed edge stands 2px from the code's white
-below 390, and the code is 32px wider. Below 360 nothing is measured: at
-320 Rural would paint 270.
+(`looks:diff` shoots 390 and wider), and `PAY_QR_NARROWEST_PX` says 308 —
+the gate is 308 with this box, never 278. The cost: the ticket's dashed
+edge stands 2px from the code's white below 390, and the code is 32px
+wider. Below 360 nothing is measured: at 320 Rural would paint 270.
+
+**The corner is capped below 390** (round 2, the critic's P3-4). The 4px of
+white assumes a small corner: the code is clipped to its radius less its
+padding, and `lookData` takes a `qrRadius` up to 2000px. The quiet-zone
+read (`a-code-keeps-its-quiet-zone-white`) runs on contrast jobs at 390 and
+1280 only, and there refuses a corner that cuts more than one module into
+the square the code draws in (`quietZonePixels`) — radius minus the 10px of
+white past about 5px, so about 15px of `qrRadius`. Below 390 the same
+radius would cut 11px with 4px of white: past one module, still inside the
+four-module quiet zone, and read by nothing. So below 390 the code's corner
+is `min(var(--s-qr-radius), 8px)`: at most a 4px cut, within one module at
+the gate's density (4.94px), the rule the read holds at 390. The shipped
+looks are 6, 0 and 8px, so nothing of theirs moves. Pinned statically in
+`the-selection-figure-is-the-figure-in-the-link`. A correction, stated:
+the critic's band (about 62–70px) and round 2's first draft (72–79px) both
+compared a finder pattern clipped at 360 with one clipped at 390, and
+missed that the read already refuses anything past one module at 390; no
+radius passes the 390 read and clips a finder at 360 even without the cap,
+which is therefore a belt that keeps the 360 box to the read's own rule.
+**What it does not cap, stated**: a look's own sheet restating the code's
+`border-radius` at a higher specificity than (0,3,0) wins at every width;
+at 390 the read would then judge it, at 360 nothing does.

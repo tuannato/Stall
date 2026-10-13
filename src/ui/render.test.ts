@@ -19786,6 +19786,18 @@ describe('the-selection-figure-is-the-figure-in-the-link', () => {
          * expectation from the symbol would have stayed green at any number.
          */
         expect(PAY_QR_NARROWEST_PX).toBe(308);
+        /*
+         * The box that makes 308 true below 390 (the wider code box, read
+         * statically: happy-dom lays nothing out), and the corner it caps
+         * there (round 2, the critic's P3-4): `lookData` takes a `qrRadius`
+         * up to 2000px, and the quiet-zone read, which runs at 390 and 1280,
+         * refuses a corner that cuts more than one module into the code's
+         * square there — with 4px of white the same radius would cut past one
+         * module at 360, where no read looks. At 8px it cannot.
+         */
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const narrow = css.match(/@media \(max-width: 389\.98px\) \{\s*\.publish-qr\.pay-qr-body[\s\S]*?\n\}/)?.[0] ?? '';
+        expect(narrow).toMatch(/\.pay-qr-body \.pay-qr \.qr \{\s*padding: 4px;\s*border-radius: min\(var\(--s-qr-radius\), 8px\);/);
     });
 
     /**
