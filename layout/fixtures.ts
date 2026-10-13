@@ -570,6 +570,29 @@ export const SCREENS: Record<string, StallView> = {
         selectionOpen: true,
         selection: new Map([[QUOTED, 3n]]),
     }),
+    /*
+     * The strip at its longest (round 3, the critic's P2-2, pre-existing): an
+     * eight-byte XEC quote chosen once, so the strip's total and the row's
+     * selection line both carry 30 characters of figure. On main the total
+     * ran off the strip's left edge at 360 (its leading digits gone) and was
+     * cut by the tray at 390 on Neo and Rural, and the line ran under the
+     * stepper on Neo. Both break after a comma past 21 characters now, and
+     * the total loses its tail before its head. Geometry only:
+     * `pay-several-strip-xec`'s ink.
+     */
+    'pay-several-strip-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
     'pay-several-ask': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
@@ -854,6 +877,49 @@ export const SCREENS: Record<string, StallView> = {
         genesis: GENESIS,
         quoteTimes: QUOTE_TIMES,
         shopTab: 'quotes',
+    }),
+    /*
+     * Rows on either side of the re-flow's cut (round 3, the critic's P1-1;
+     * `ROW_REFLOW_LISTING_CHARS` 17, `ROW_REFLOW_QUOTE_CHARS` 18, counted as
+     * the row prints the figure). Under it, ordinary prices keep main's row
+     * at every width — no row of their own at a desk, no extra height, no
+     * `role="img"`: `quote-row-1m` (a 1,000,000.00 XEC quote, 16 characters,
+     * about $20–30) and `row-15-16` (listings of 15 and 16 characters). At it:
+     * `row-17` and `quote-row-18` (a 100,000,000.00 XEC quote) re-flow
+     * without a break, and `row-21` (the whole supply with its cents) is the
+     * first listing that breaks after a comma (`ROW_BREAK_CHARS`). Geometry
+     * only: the ink is `offers`' and `plugin-missing-quotes`'.
+     */
+    'quote-row-1m': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 100_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+    }),
+    'quote-row-18': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+    }),
+    'row-15-16': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 100_000_000_050n), offer(T2, 1, 1_000_000_000_050n)] },
+    }),
+    'row-17': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 9_999_999_999_999n), offer(T2, 1, 87_500n)] },
+    }),
+    'row-21': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 2_099_906_103_286_385n), offer(T2, 1, 87_500n)] },
     }),
     /*
      * The shop that sells decorations, which is the one page where the
@@ -1913,6 +1979,7 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // decoration interactions they could stage are `offers`'.
     'pay-several-strip',
     'pay-several-strip-xec',
+    'pay-several-strip-long-figure',
     'pay-several-ask',
     'pay-several',
     'item-quote',
@@ -1969,6 +2036,12 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-several-figure-lines',
     'row-longest-figure',
     'quote-row-longest-figure',
+    // Round 3: the rows either side of the re-flow's cut.
+    'quote-row-1m',
+    'quote-row-18',
+    'row-15-16',
+    'row-17',
+    'row-21',
 ]);
 
 /**
@@ -2125,9 +2198,15 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'pay-figure-17',
     'pay-several-figure-lines',
     'row-longest-figure',
-    // Not `quote-row-longest-figure` (round 3): the contrast pass samples
-    // it, the one screen whose broken figure's every digit is read for its
-    // ink.
+    'pay-several-strip-long-figure',
+    // Round 3: the rows either side of the re-flow's cut. Not
+    // `quote-row-longest-figure`: the contrast pass samples it, the one
+    // screen whose broken figure's every digit is read for its ink.
+    'quote-row-1m',
+    'quote-row-18',
+    'row-15-16',
+    'row-17',
+    'row-21',
 ]);
 
 /**

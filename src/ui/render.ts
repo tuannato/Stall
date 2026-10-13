@@ -1202,6 +1202,14 @@ function dressLook(
      */
     node.classList.add(theme.sheetClass);
     node.classList.add(...attachmentClasses(worn));
+    // How the row's tag stands below 390px, from the look's own row and read
+    // by the base sheet alone (`narrowTag`, D-2026-10-13-04): Rural's tags at
+    // tiers 1 and 2 take a row of their own there.
+    if (theme.narrowTag === 'own-row') {
+        node.setAttribute('data-narrow-tag', 'own-row');
+    } else {
+        node.removeAttribute('data-narrow-tag');
+    }
     return vars;
 }
 
@@ -1290,6 +1298,9 @@ function paintHome(
             stall.classList.remove(cls);
         }
     }
+    // Nor a look's narrow row dress: the door's rows are its minis', each
+    // dressed by its own look.
+    stall.removeAttribute('data-narrow-tag');
     const canopy = el('div', 'door-canopy');
     canopy.setAttribute('aria-hidden', 'true');
     stall.append(canopy);
@@ -3397,7 +3408,7 @@ function payRow(
     const amount = el('span', 'item-a');
     const figure = el('span', 'item-x');
     figure.setAttribute('data-role', 'seller-price');
-    rowFigure(amount, figure, figureText, tier);
+    rowFigure(amount, figure, figureText, tier, ROW_REFLOW_QUOTE_CHARS);
     amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
@@ -6358,13 +6369,17 @@ function selectionLineNode(
         line.append(yn);
         return line;
     }
-    const sub = el(
-        'span',
-        count > 0n ? 'sel-sub in' : 'sel-sub',
-        count > 0n
-            ? copy.selectionLine(count.toString(), quoteFigure(item.price), lineFigure(item.price, count))
-            : copy.SELECTION_NOT_CHOSEN,
-    );
+    const sub = el('span', count > 0n ? 'sel-sub in' : 'sel-sub');
+    if (count > 0n) {
+        // Each figure past the card ladder's last ceiling breaks after a
+        // comma (round 3, the critic's P2-2): an eight-byte line ran under
+        // the stepper on Neo at 360 and 390.
+        const quoted = quoteFigure(item.price);
+        const line = lineFigure(item.price, count);
+        moneyLine(sub, copy.selectionLine(count.toString(), quoted, line), [quoted, line]);
+    } else {
+        sub.textContent = copy.SELECTION_NOT_CHOSEN;
+    }
     // The chosen line is money — "2 × $5.00 = $10.00", the figure a buyer
     // adds up before Pay — and wears its own role, which the layout probe
     // protects and reads whole (`layout/moneySet.ts`); the unchosen note is
@@ -6513,7 +6528,12 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
             } else {
                 const glance = selectionGlance(selection, view.prices);
                 const totalBlock = el('span', 'sel-totalblk');
-                const total = el('b', 'sel-total', glance === undefined ? '' : quoteFigure(glance));
+                const total = el('b', 'sel-total');
+                // Past the card ladder's last ceiling the total breaks after a
+                // comma (round 3, the critic's P2-2): an eight-byte total ran
+                // off the strip's left edge at 360, its leading digits gone.
+                const totalFigure = glance === undefined ? '' : quoteFigure(glance);
+                moneyFigure(total, totalFigure, cardFigureTier(totalFigure) === 3);
                 total.setAttribute('data-role', 'selection-total');
                 totalBlock.append(total);
                 if (selectionHasSurcharge(selection, view.prices)) {
@@ -8533,7 +8553,7 @@ function offerRow(
         }
         const asked = el('span', 'item-x');
         asked.setAttribute('data-role', 'price');
-        rowFigure(amount, asked, figure, tier);
+        rowFigure(amount, asked, figure, tier, ROW_REFLOW_LISTING_CHARS);
         amount.append(asked);
         // The unit rides the amount's own baseline row — "from 1,200 XEC"
         // is one line in every design; a block unit under the number was
@@ -8729,20 +8749,74 @@ function moneySentence(node: HTMLElement, sentence: string, figure: string, brea
 }
 
 /**
- * A row's figure on the rows' last rung (round 2, the critic's P2-6): a
- * figure past the card ladder's first ceiling (more than 14 characters) on a
- * row that already gave its tag a row of its own breaks after a comma like
- * the face's, and the tag re-flows as text (`fig-wraps`), so a figure wider
- * than its row loses no digit at either end — it used to grow to the left
- * and cut its most significant digits ("…,467,440,737,095,516.15", the
- * `184` gone). Nothing of 14 characters or fewer is touched, at any tier.
+ * A line of words carrying several money figures — the selection line's
+ * "2 × Q = L" (round 3, the critic's P2-2) — with each figure past the card
+ * ladder's last ceiling broken after its commas (`moneyFigure`), in order,
+ * and the words around them unchanged. `textContent` is the sentence
+ * exactly; a sentence whose figures are all short is one text node.
  */
-function rowFigure(amount: HTMLElement, node: HTMLElement, figure: string, rowTier: number): void {
-    const breaks = rowTier === 3 && cardFigureTier(figure) > 0;
-    if (breaks) {
+function moneyLine(node: HTMLElement, sentence: string, figures: readonly string[]): void {
+    const parts: Node[] = [];
+    let from = 0;
+    for (const figure of figures) {
+        if (figure === '' || cardFigureTier(figure) !== 3) continue;
+        const at = sentence.indexOf(figure, from);
+        if (at < 0) continue;
+        parts.push(document.createTextNode(sentence.slice(from, at)));
+        const inner = document.createElement('span');
+        moneyFigure(inner, figure, true);
+        parts.push(...inner.childNodes);
+        from = at + figure.length;
+    }
+    if (parts.length === 0) {
+        node.textContent = sentence;
+        return;
+    }
+    parts.push(document.createTextNode(sentence.slice(from)));
+    node.replaceChildren(...parts);
+}
+
+/**
+ * Where a row's figure starts to re-flow, counted the way the figure is
+ * printed on the row: a listing's asked amount without `from` or ` XEC`, a
+ * quote's figure with its sign or unit (`quoteFigure`). Measured on main at
+ * 360, 390, 680 and 1280 on the shipped looks (the critic's re-review of
+ * round 2, P1-1): a listing row first failed at **17** characters (Rural at
+ * 680) and a quote row at **18** (`100,000,000.00 XEC`, Rural at 680), so
+ * an ordinary price — a 1,000,000.00 XEC quote, a 1,000,000,000.5 XEC
+ * listing — keeps the row it always had at every width. Pinned by value in
+ * `an-ordinary-quote-row-keeps-its-desk-row`.
+ */
+export const ROW_REFLOW_LISTING_CHARS = 17;
+export const ROW_REFLOW_QUOTE_CHARS = 18;
+/**
+ * Where a re-flowed row's figure may also break after a comma: 21
+ * characters, where a listing row first failed at 360 on main (no break
+ * opportunity in `from 20,999,061,032,863.85 XEC` otherwise). Only past it
+ * does the figure carry `<wbr>`s and the one `role="img"` name they need
+ * (`moneyFigure`), so a reader hears "image" on stress figures alone.
+ */
+export const ROW_BREAK_CHARS = 21;
+
+/**
+ * A row's figure on the rows' last rung (round 2, the critic's P2-6; the cut
+ * moved in round 3, the critic's P1-1): a figure at or past its kind's cut
+ * (`ROW_REFLOW_LISTING_CHARS`, `ROW_REFLOW_QUOTE_CHARS`) on a row that
+ * already gave its tag a row of its own re-flows as text (`fig-wraps`: a
+ * block, so a line that cannot fit loses its tail and never its head; at a
+ * desk the tag takes its own row there too), and from `ROW_BREAK_CHARS` it
+ * breaks after a comma like the face's. It used to grow to the left and cut
+ * its most significant digits ("…,467,440,737,095,516.15", the `184` gone).
+ * Every figure under the cut is the row it always was, at every width.
+ * `rowTier` is the row's own (`priceTier` over the look's `tierCeilings`);
+ * the wall, which reads no ladder, passes 3.
+ */
+export function rowFigure(amount: HTMLElement, node: HTMLElement, figure: string, rowTier: number, cut: number): void {
+    const wraps = rowTier === 3 && figure.length >= cut;
+    if (wraps) {
         amount.classList.add('fig-wraps');
     }
-    moneyFigure(node, figure, breaks);
+    moneyFigure(node, figure, wraps && figure.length >= ROW_BREAK_CHARS);
 }
 
 /**

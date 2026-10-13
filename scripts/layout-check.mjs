@@ -301,25 +301,17 @@ const TABLET = { name: 'tablet', width: 768, height: 1024 };
  * - the card ladder's every step at its widest (`item-listing-figure-14`,
  *   `-17`, `-21`; `item-quote-figure-14`, `-17`, `-21`; `pay-figure-14`,
  *   `-17`; `pay-several-figure-lines`) and the rows at the longest figures
- *   (`row-longest-figure`, `quote-row-longest-figure`), round 2.
+ *   (`row-longest-figure`, `quote-row-longest-figure`), round 2;
+ * - the shop's rows on every look (round 3): `offers`,
+ *   `plugin-missing-quotes`, `quotes-signs` and `pay-inr`, off this pass in
+ *   round 2 while Rural's name column fell under its 64px floor at 360 (224
+ *   failures) and 375 (14), back since Rural's tier-1 and tier-2 tags take
+ *   a row of their own below 390 (`narrowTag`, D-2026-10-13-04); the rows
+ *   either side of the re-flow's cut (`quote-row-1m`, `row-15-16`,
+ *   `row-17`, `quote-row-18`, `row-21`); and the selection strip at the
+ *   longest total (`pay-several-strip-long-figure`).
  * The QR gate's rule reads every pay sheet's code here
- * (`PAY_QR_NARROWEST_PX`).
- *
- * **Left off, stated:** `offers`, `plugin-missing-quotes`, `quotes-signs`
- * and `pay-inr` (whose shop is `quotes-signs`' rows). On Rural at 360 their
- * rows' name column falls to 44–60px, under the 64px floor ("the name
- * column collapsed under the price"; `pay-inr` as a spill of the same row):
- * the rows' own ladder (`tierCeilings`, measured at 390) seats too many
- * characters beside Rural's tag there. That ladder is not this decision's,
- * and fixing it is a design change the owner has not made, so the four
- * screens are off on every look until it is answered, rather than turning
- * this pass red or being measured around Rural. Modern's and Neo's rows
- * hold at 360 (68px and more). Every narrow run prints the four
- * (`NARROW_LEFT_OFF`), so the gap is on screen and not only here. The rows
- * are measured here through `unbuyable`, the selection strip and the two
- * longest-figure rows, which hold on every look. At 375 `quotes-signs`'
- * Rural `₩12,000` row is 59px too (14 failures); 384 is clear.
- * `layout/PROBE-RULES.md`, "The narrow phone".
+ * (`PAY_QR_NARROWEST_PX`). `layout/PROBE-RULES.md`, "The narrow phone".
  */
 const NARROW = { name: 'narrow', width: 360, height: 800 };
 const NARROW_SCREENS = [
@@ -356,15 +348,19 @@ const NARROW_SCREENS = [
     'pay-several-figure-lines',
     'row-longest-figure',
     'quote-row-longest-figure',
+    // Round 3: the shop's rows on every look, Rural's narrow tags included;
+    // the rows either side of the re-flow's cut; the strip's longest total.
+    'offers',
+    'plugin-missing-quotes',
+    'quotes-signs',
+    'pay-inr',
+    'quote-row-1m',
+    'row-15-16',
+    'row-17',
+    'quote-row-18',
+    'row-21',
+    'pay-several-strip-long-figure',
 ].join(',');
-/**
- * The money screens the narrow pass leaves off, on every look, printed on
- * every run (round 2, the critic's P2-5): Rural's row name column falls under
- * its 64px floor on them at 360 (and at 375 on `quotes-signs`), a question of
- * the rows' own ladder that is the owner's. Measured on no look until it is
- * answered.
- */
-const NARROW_LEFT_OFF = ['offers', 'plugin-missing-quotes', 'quotes-signs', 'pay-inr'];
 /*
  * The short screens (the 8g1 critic's P2-2): two heights shorter than the
  * page passes' 844 and 900, where a sign that fits those first stops
@@ -2904,11 +2900,9 @@ try {
                     sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
                 });
                 const compared = probeCoverageLine(NARROW.name, nv);
-                const leftOff = `\n    left off, every look: ${NARROW_LEFT_OFF.join(', ')} (Rural's row name under its 64px floor at 360 and 375; the owner's call)`;
                 if (nv.failures.length === 0 && gaps.length === 0) {
                     console.log(
                         `✓ ${label}: ${wanted} screens, every look — ${spent}\n    compared: ${compared}` +
-                            leftOff +
                             `\n    faces: ${facesLine(nv.faces)}`,
                     );
                 } else {
@@ -2923,7 +2917,7 @@ try {
                         console.error(`✗ ${label}: a rule compared nothing it owes —`);
                         for (const gap of gaps) console.error(`    ${gap}`);
                     }
-                    console.error(`    compared: ${compared}${leftOff}`);
+                    console.error(`    compared: ${compared}`);
                 }
             }
         } catch (err) {

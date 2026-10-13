@@ -106,6 +106,9 @@ import { ADDR_COPIED_MS,
     PAY_OPEN_GUARD_MS,
     priceTier,
     CARD_FIGURE_CEILINGS,
+    ROW_BREAK_CHARS,
+    ROW_REFLOW_LISTING_CHARS,
+    ROW_REFLOW_QUOTE_CHARS,
     cardFigureTier,
     recheckPaySheet,
     renderStall,
@@ -6552,6 +6555,145 @@ describe('a-long-row-figure-keeps-its-leading-digits', () => {
         const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
         expect(css).toMatch(/\.item-head\[data-price-tier='3'\] \.item-a\.fig-wraps \{\s*display: block;/);
         expect(css).toMatch(/\.item-head\[data-price-tier='3'\] \.item-a\.fig-wraps \.item-x \{\s*white-space: normal;/);
+    });
+});
+
+describe('an-ordinary-quote-row-keeps-its-desk-row', () => {
+    /**
+     * The re-flow's cut (round 3, the critic's P1-1): round 2 re-flowed a row
+     * past 14 characters counted with the unit, and a 1,000,000.00 XEC quote
+     * (16, about $20–30) left its name's line for a row of its own at 680 and
+     * 1280 — 98 → 158px on Modern — and read as "image" to a screen reader.
+     * The cut is where a row first failed on main: 17 characters for a
+     * listing, 18 for a quote, counted as the row prints the figure; the
+     * comma break and its `role="img"` start at 21. Pinned by value.
+     */
+    it('pins the cuts by value', () => {
+        expect([ROW_REFLOW_LISTING_CHARS, ROW_REFLOW_QUOTE_CHARS, ROW_BREAK_CHARS]).toEqual([17, 18, 21]);
+    });
+
+    const LONG_ID = '99'.repeat(32);
+    const LONG_META: TokenMeta = {
+        tokenId: LONG_ID,
+        name: 'Harvest Ledger',
+        ticker: 'HRVT',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const listingAmount = (askedSats: bigint) =>
+        paint(
+            idlePubkey({
+                tokens: new Map([[LONG_ID, LONG_META]]),
+                fetch: { kind: 'offers', offers: [{ ...OFFER, tokenId: LONG_ID, askedSats }] },
+            }),
+        ).root.querySelector<HTMLElement>('.item-head .item-a')!;
+    const quoteAmount = (amount: bigint) =>
+        paint(payView({ prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount }]]) })).root.querySelector<HTMLElement>(
+            '.item-head-q .item-a',
+        )!;
+    const dress = (a: HTMLElement) => ({
+        figure: a.querySelector('.item-x')?.textContent,
+        wraps: a.classList.contains('fig-wraps'),
+        breaks: a.querySelectorAll('wbr').length > 0,
+        named: a.querySelector('.fig-say') !== null,
+    });
+
+    it('leaves a 1,000,000.00 XEC quote and a 15- or 16-character listing as they always were', () => {
+        expect(dress(quoteAmount(100_000_000n))).toEqual({ figure: '1,000,000.00 XEC', wraps: false, breaks: false, named: false });
+        expect(dress(quoteAmount(1_000_000_000n))).toEqual({ figure: '10,000,000.00 XEC', wraps: false, breaks: false, named: false });
+        expect(dress(listingAmount(100_000_000_050n))).toEqual({ figure: '1,000,000,000.5', wraps: false, breaks: false, named: false });
+        expect(dress(listingAmount(1_000_000_000_050n))).toEqual({ figure: '10,000,000,000.5', wraps: false, breaks: false, named: false });
+        // One text node: the figure is the node's only child.
+        expect([...quoteAmount(100_000_000n).querySelector('.item-x')!.childNodes].map((n) => n.nodeType)).toEqual([Node.TEXT_NODE]);
+    });
+
+    it('re-flows a row at its cut without a break, and breaks it after a comma from 21', () => {
+        expect(dress(quoteAmount(10_000_000_000n))).toEqual({ figure: '100,000,000.00 XEC', wraps: true, breaks: false, named: false });
+        expect(dress(listingAmount(9_999_999_999_999n))).toEqual({ figure: '99,999,999,999.99', wraps: true, breaks: false, named: false });
+        expect(dress(listingAmount(2_099_906_103_286_385n))).toEqual({ figure: '20,999,061,032,863.85', wraps: true, breaks: true, named: true });
+    });
+
+    it('gives a re-flowed row its own row at a desk, leaving a quote row in selection mode to its own rule', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(css).toMatch(/\.item-head:not\(\.item-head-q\):has\(> \.item-p > \.item-a\.fig-wraps\) \{\s*grid-template-areas: 'ic name name caret' 'price price price price';/);
+        expect(css).toMatch(/\.item-head-q:not\(\.sel-in\):has\(> \.item-p > \.item-a\.fig-wraps\) \{\s*grid-template-areas: 'ic name name pay' 'price price price price';/);
+    });
+});
+
+describe('the-selection-strip-loses-a-long-totals-tail-never-its-head', () => {
+    /**
+     * The strip's total and a chosen row's line (round 3, the critic's P2-2,
+     * pre-existing): an eight-byte XEC quote chosen once ran the total off the
+     * strip's left edge at 360, its leading digits gone, and the line under
+     * the stepper on Neo. Both break after a comma past 21 characters
+     * (`moneyFigure`, `moneyLine`), the total's block aligns `safe flex-end`,
+     * and a short total or line is the one text node it was. The probe's
+     * narrow and phone passes measure `pay-several-strip-long-figure`.
+     */
+    const strip = (amount: bigint) =>
+        paint(
+            payView({
+                prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount }]]),
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 1n]]),
+            }),
+        ).root;
+
+    it('breaks an eight-byte total and line after their commas, each figure one name', () => {
+        const root = strip(2n ** 64n - 1n);
+        const total = root.querySelector('[data-role="selection-total"]')!;
+        expect(total.textContent).toBe('184,467,440,737,095,516.15 XEC');
+        expect(total.querySelectorAll('wbr')).toHaveLength(5);
+        expect(total.querySelector('.fig-say')?.getAttribute('aria-label')).toBe('184,467,440,737,095,516.15 XEC');
+        const line = root.querySelector('[data-role="selection-figure"]')!;
+        expect(line.textContent).toBe(copy.selectionLine('1', '184,467,440,737,095,516.15 XEC', '184,467,440,737,095,516.15 XEC'));
+        expect(line.querySelectorAll('.fig-say')).toHaveLength(2);
+        expect(line.firstChild?.textContent).toBe('1 \u00d7 ');
+    });
+
+    it('leaves an ordinary total and line one text node', () => {
+        const root = strip(100_000_000n);
+        for (const role of ['selection-total', 'selection-figure']) {
+            const node = root.querySelector(`[data-role="${role}"]`)!;
+            expect([...node.childNodes].map((n) => n.nodeType), role).toEqual([Node.TEXT_NODE]);
+        }
+    });
+
+    it('aligns the total safe, so an overflow loses the tail', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(css).toMatch(/\.sel-totalblk \{[^}]*align-items: safe flex-end;/);
+    });
+});
+
+describe('rural-tags-take-a-row-of-their-own-below-390', () => {
+    /**
+     * D-2026-10-13-04, the owner's option (b): Rural's tier-1 and tier-2 tags
+     * take a row of their own below 390px. Keyed on the look's own row
+     * (`narrowTag`), written on the stall's root (`data-narrow-tag`) and read
+     * by stall.css under `max-width: 389.98px`; never a look sheet's media
+     * condition. Modern's and Neo's rows, and the door, carry nothing. The
+     * probe's narrow pass measures the four shop screens on every look.
+     */
+    const rootOf = (id: number) => paint(offersView([OFFER], new Map([[TOKEN_ID, BEANS]]), { recordTheme: decodeTheme(id) })).root.querySelector('.stall')!;
+
+    it('marks Rural’s root and no other look’s', () => {
+        expect(decodeTheme(RURAL_THEME_ID).narrowTag).toBe('own-row');
+        expect(rootOf(RURAL_THEME_ID).getAttribute('data-narrow-tag')).toBe('own-row');
+        for (const id of [DEFAULT_THEME_ID, NEO_CITY_THEME_ID]) {
+            expect(decodeTheme(id).narrowTag).toBeUndefined();
+            expect(rootOf(id).hasAttribute('data-narrow-tag')).toBe(false);
+        }
+    });
+
+    it('reads it in the base sheet under the narrow phone’s condition, for listing and quote rows at tiers 1 and 2', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const block = css.match(/@media \(max-width: 389\.98px\) \{\s*\.stall\[data-narrow-tag='own-row'\][\s\S]*?\n\}/)?.[0] ?? '';
+        expect(block).toContain(".stall[data-narrow-tag='own-row'] .item-head:not(.item-head-q):is([data-price-tier='1'], [data-price-tier='2'])");
+        expect(block).toContain(".stall[data-narrow-tag='own-row'] .item-head-q:not(.sel-in):is([data-price-tier='1'], [data-price-tier='2'])");
+        expect(block).toContain(".stall[data-narrow-tag='own-row'] .item-head-q.sel-in:is([data-price-tier='1'], [data-price-tier='2'])");
+        for (const sheet of ['theme-modern.css', 'theme-neo.css', 'theme-rural.css']) {
+            expect(readFileSync(join(UI_DIR, sheet), 'utf8'), sheet).not.toContain('389.98');
+        }
     });
 });
 

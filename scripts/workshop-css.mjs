@@ -450,6 +450,11 @@ export const STATE_ATTRIBUTES = Object.freeze({
     'data-edge': Object.freeze(['top']),
     'data-format': Object.freeze(['square', 'story', 'stream', 'tag']),
     'data-mode': Object.freeze(['browse', 'cycle', 'rail']),
+    // How a look's row tags stand below 390px (D-2026-10-13-04): written on
+    // the stall's root from the look's own row (`narrowTag`, `dressLook` in
+    // render.ts) and read by stall.css under `max-width: 389.98px`; a look
+    // may read it at the widths its own media reach.
+    'data-narrow-tag': Object.freeze(['own-row']),
     'data-over': Object.freeze(['true']),
     'data-paying': Object.freeze(['on']),
     'data-preset': Object.freeze(['corner', 'rail']),

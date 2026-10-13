@@ -2522,6 +2522,46 @@ body {
 }
 
 /*
+ * A look whose tag the ceilings above cannot seat below 390px gives its
+ * tier-1 and tier-2 tags the tier-3 dress there (D-2026-10-13-04, the
+ * owner's option (b)): a row of their own under the name. Keyed on the
+ * look's own row (`narrowTag`, written on the root as `data-narrow-tag` by
+ * `dressLook`), never on a look's class, and read here in the base sheet
+ * rather than in a look sheet, whose media conditions stop at the probe's
+ * passes (`LOOK_MEDIA`) — the narrow pass at 360 measures it. Rural's
+ * alone: its tag spends ~39px on notch, padding and border, and at 360 its
+ * name column fell to 44–60px beside a tier-1 or tier-2 tag (224 probe
+ * failures on the four shop screens), at 375 to 59px beside `₩12,000`
+ * (14). The cost, stated: every Rural row at tier 1 or 2 takes its tag
+ * onto a row of its own from 389px down — 57 rows in the showroom at 360,
+ * `from 1,200` among them, 55 of which fit at 375 without it. Nothing moves
+ * at 390, and Modern's and Neo's rows never move. A quote row in selection
+ * mode has no Pay, so its own row names none.
+ */
+@media (max-width: 389.98px) {
+    .stall[data-narrow-tag='own-row'] .item-head:not(.item-head-q):is([data-price-tier='1'], [data-price-tier='2']) {
+        grid-template-areas: var(--s-areas-m3);
+        grid-template-columns: var(--s-cols-m3);
+    }
+
+    .stall[data-narrow-tag='own-row'] .item-head-q:not(.sel-in):is([data-price-tier='1'], [data-price-tier='2']) {
+        grid-template-areas: 'ic name pay' 'price price price';
+        grid-template-columns: var(--s-icon) minmax(0, 1fr) auto;
+    }
+
+    .stall[data-narrow-tag='own-row'] .item-head-q.sel-in:is([data-price-tier='1'], [data-price-tier='2']) {
+        grid-template-areas: 'ic name' 'price price';
+        grid-template-columns: var(--s-icon) minmax(0, 1fr);
+    }
+
+    .stall[data-narrow-tag='own-row'] .item-head:is([data-price-tier='1'], [data-price-tier='2']) .item-p {
+        justify-self: end;
+        max-width: 100%;
+        margin-top: 6px;
+    }
+}
+
+/*
  * Base motion (round 3): the look's own pulse and sheen, var-named
  * keyframes we ship. The sheen is a background layer on the card's box —
  * no pseudo-element, nothing that can leave it.
@@ -7751,18 +7791,20 @@ textarea.share-embed {
 }
 
 /*
- * A row's figure on the rows' last rung, past 14 characters (round 2, the
- * critic's P2-6; `rowFigure`): the tag re-flows as one line of text — `from`,
- * the figure, the unit, end-aligned as the look sets the cell — and the
- * figure may break after a comma, so a figure wider than its row loses no
- * digit at either end: a block's line that cannot fit overflows at its end,
- * never at its start. It used to grow to the left out of a nowrap,
- * end-aligned flex row and cut its most significant digits. The gap the
- * flex row had is a margin here, and the figure's line is 1.3 as on the
+ * A row's figure on the rows' last rung, at or past its kind's cut (round 2,
+ * the critic's P2-6; the cut moved to 17 characters for a listing and 18 for
+ * a quote in round 3, P1-1 — `rowFigure`, `ROW_REFLOW_LISTING_CHARS`,
+ * `ROW_REFLOW_QUOTE_CHARS`): the tag re-flows as one line of text — `from`,
+ * the figure, the unit, end-aligned as the look sets the cell — and from 21
+ * characters the figure may break after a comma, so a figure wider than its
+ * row loses no digit at either end: a block's line that cannot fit overflows
+ * at its end, never at its start. It used to grow to the left out of a
+ * nowrap, end-aligned flex row and cut its most significant digits. The gap
+ * the flex row had is a margin here, and the figure's line is 1.3 as on the
  * face's last rung: as a flex item the figure was a block one line-height
  * tall, and inline its glyphs' box (Lora's is 1.28em) stood past a 1.05
  * line into the tag's clip, where Rural's swaying tag cut its corners at a
- * desk.
+ * desk. Every row under the cut is untouched.
  */
 .item-head[data-price-tier='3'] .item-a.fig-wraps {
     display: block;
@@ -7781,19 +7823,21 @@ textarea.share-embed {
  * At a desk the rows read no ladder, and such a figure at its design size
  * pinned the price column's `auto` track to its whole width: the eight-byte
  * XEC quote row left Neo's name 28px and Rural's 19, and Rural's tag clipped
- * the eight-byte asked amount's tail (measured at 1280, round 2). So a row
- * whose figure breaks takes the tier-3 dress there too — the tag on a row of
- * its own under the name, at its natural width at the row's end — written on
- * the desk grids' own four columns, so the caret and Pay keep their areas.
- * Only figures past 14 characters on the last rung; every other row is the
- * desk row it was.
+ * the eight-byte asked amount's tail (measured at 1280, round 2); on main a
+ * quote row first fails at 680 from 18 characters and a listing from 17. So
+ * a row whose figure re-flows takes the tier-3 dress there too — the tag on
+ * a row of its own under the name, at its natural width at the row's end —
+ * written on the desk grids' own four columns, so the caret and Pay keep
+ * their areas. A quote row in selection mode already takes its own row at
+ * every width at tier 3 (`.item-head-q.sel-in[data-price-tier='3']`), so it
+ * is left to that rule.
  */
 @media (min-width: 680px) {
-    .item-head:has(> .item-p > .item-a.fig-wraps) {
+    .item-head:not(.item-head-q):has(> .item-p > .item-a.fig-wraps) {
         grid-template-areas: 'ic name name caret' 'price price price price';
     }
 
-    .item-head-q:has(> .item-p > .item-a.fig-wraps) {
+    .item-head-q:not(.sel-in):has(> .item-p > .item-a.fig-wraps) {
         grid-template-areas: 'ic name name pay' 'price price price price';
     }
 
@@ -7960,17 +8004,24 @@ textarea.share-embed {
     grid-area: total;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    /* `safe`: a total wider than its block overflows at its end, never its
+       start, so a figure that cannot fit loses its tail and keeps its
+       leading digits (round 3, the critic's P2-2; on main an eight-byte
+       total started 4–16px off the left edge at 360). */
+    align-items: safe flex-end;
     line-height: 1.2;
     min-width: 0;
     max-width: 46vw;
 }
 
+/* The total wraps where its words do — before its unit — and past the card
+   ladder's last ceiling after a comma (`moneyFigure`); a total that fits is
+   the one line it always was. */
 .sel-total {
     font-weight: 700;
     font-size: 16px;
     color: var(--s-text);
-    white-space: nowrap;
+    text-align: right;
     font-variant-numeric: tabular-nums;
 }
 

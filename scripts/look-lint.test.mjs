@@ -218,6 +218,11 @@ describe('a-look-cannot-target-one-seller', () => {
         assert.ok(read('src/ui/render.ts').includes("setAttribute('data-script', 'cjk')"), 'render.ts writes data-script');
         assert.match(read('src/domain/text.ts'), /export function scriptOf\(text: string\): 'cjk' \| undefined/);
         assert.deepEqual(LOOK_HOOK_ATTRIBUTES['data-script'], ['cjk']);
+        // The narrow row dress (D-2026-10-13-04) is held to what writes it: a
+        // look row's `narrowTag`, whose one value render.ts writes on the root.
+        assert.match(read('src/domain/theme.ts'), /narrowTag\?: 'own-row';/);
+        assert.ok(read('src/ui/render.ts').includes("node.setAttribute('data-narrow-tag', 'own-row')"), 'render.ts writes data-narrow-tag');
+        assert.deepEqual(STATE_ATTRIBUTES['data-narrow-tag'], ['own-row']);
         for (const [name, values] of Object.entries(LOOK_HOOK_ATTRIBUTES)) {
             assert.deepEqual(STATE_ATTRIBUTES[name], values, `${name} is a state attribute`);
             assert.ok(!app.valued.has(name), `${name} is read by a served sheet now: list it as an ordinary state attribute`);
