@@ -371,13 +371,22 @@ function coveredBy(node: Element): string | undefined {
     if (box.width === 0 || box.height === 0) {
         return 'has no box at all';
     }
-    const points: [number, number][] = [
-        [box.left + box.width / 2, box.top + box.height / 2],
-        [box.left + 2, box.top + 2],
-        [box.right - 2, box.top + 2],
-        [box.left + 2, box.bottom - 2],
-        [box.right - 2, box.bottom - 2],
-    ];
+    /*
+     * Five points on each of the node's own boxes: one for a block or a
+     * one-line figure, which is the box itself, and one per line for a
+     * figure the card ladder breaks after a comma (2026-10-13,
+     * `CARD_FIGURE_CEILINGS`). The union of two lines of unequal length is a
+     * rectangle the figure does not fill, and a point in its empty corner
+     * hit the row and read as the figure covered by its own row.
+     */
+    const lineBoxes = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    const points: [number, number][] = (lineBoxes.length > 1 ? lineBoxes : [box]).flatMap((r) => [
+        [r.left + r.width / 2, r.top + r.height / 2] as [number, number],
+        [r.left + 2, r.top + 2] as [number, number],
+        [r.right - 2, r.top + 2] as [number, number],
+        [r.left + 2, r.bottom - 2] as [number, number],
+        [r.right - 2, r.bottom - 2] as [number, number],
+    ]);
     // Content inside the shell's scroll region keeps its full rect even when
     // part of it is scrolled out of the clip. A point beyond the clip is not
     // covered — it is reachable by scrolling, and the tab bar sits outside
@@ -2008,6 +2017,69 @@ function wallCuts(screen: string, label: string): Failure[] {
             wallControlRoles[role] = (wallControlRoles[role] ?? 0) + 1;
             const byLook = (wallControlRolesByClass[measuringClass] ??= {});
             byLook[role] = (byLook[role] ?? 0) + 1;
+        }
+    }
+    return out;
+}
+
+/*
+ * **A card figure stands inside its row** (2026-10-13; the 8g1 critic's
+ * P2-3, the owner's D-2026-10-13-02). The item face's figure (the listing's
+ * asked amount, the quote's figure), the XEC a pay sheet's wallet signs, each
+ * Pay several line's figure and the Pay several total: every line box of the
+ * figure stands inside its row's content box, or the total's own. It is
+ * stricter than `text-spills`, which tolerates a box poking into its
+ * parent's padding — the first stage of what the critic found, a figure
+ * 16px into an 18px pad at 390, before the panel clipped it. The face and
+ * the pay sheets step their figure down a ladder (`CARD_FIGURE_CEILINGS`,
+ * `cardFigureTier`) and, past its last ceiling, break it after a comma; this
+ * is what holds that ladder true on every look at every pass that paints
+ * one, the 360 pass (`narrow`) above all. A hidden figure (a sheet with no
+ * rate yet) has no line box and is not read. Counted per look and per
+ * place and tier (`cardFigureByClass`, `face:3` for a face figure on the
+ * ladder's last rung), so the runner can owe the long figures a read.
+ */
+const CARD_FIGURE_CHECK = 'a-card-figure-stands-inside-its-row';
+const cardFigureByClass: Record<string, Record<string, number>> = {};
+/** Where a card figure stands: the place's name, its row, and the figure inside the row. */
+const CARD_FIGURES: readonly (readonly [string, string, string])[] = [
+    ['face', '.face-x', ':scope > [data-role="price"], :scope > [data-role="seller-price"]'],
+    ['pay', '.pay-x', ':scope > [data-role="price"]'],
+    ['line', '.pay-line', '.pay-line-x'],
+    ['total', '[data-role="pay-total"]', ':scope'],
+];
+
+function cardFigureFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const byLook = (cardFigureByClass[measuringClass] ??= {});
+    for (const [place, rowSel, figSel] of CARD_FIGURES) {
+        for (const row of document.querySelectorAll<HTMLElement>(`#app ${rowSel}`)) {
+            if (row.closest('.deck-stall') !== null) continue;
+            const figure = figSel === ':scope' ? row : row.querySelector<HTMLElement>(figSel);
+            if (figure === null) continue;
+            const range = document.createRange();
+            range.selectNodeContents(figure);
+            const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+            if (lines.length === 0) continue;
+            const cs = getComputedStyle(row);
+            const box = row.getBoundingClientRect();
+            const left = box.left + Number.parseFloat(cs.borderLeftWidth) + Number.parseFloat(cs.paddingLeft);
+            const right = box.right - Number.parseFloat(cs.borderRightWidth) - Number.parseFloat(cs.paddingRight);
+            const tier = row.getAttribute('data-price-tier') ?? '0';
+            byLook[`${place}:${tier}`] = (byLook[`${place}:${tier}`] ?? 0) + 1;
+            const over = Math.max(...lines.map((r) => r.right)) - right;
+            const under = left - Math.min(...lines.map((r) => r.left));
+            if (over > 0.5 || under > 0.5) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: CARD_FIGURE_CHECK,
+                    detail:
+                        `the ${place} figure "${(figure.textContent ?? '').slice(0, 40)}" (tier ${tier}, ${getComputedStyle(figure).fontSize}) ` +
+                        `runs ${over > 0.5 ? `${over.toFixed(1)}px past its row's right edge` : `${under.toFixed(1)}px past its row's left edge`} ` +
+                        `(${describe(row)}, content ${Math.round(left)}–${Math.round(right)})`,
+                });
+            }
         }
     }
     return out;
@@ -4332,6 +4404,7 @@ for (const screen of measured) {
             failures.push(...wallCuts(screen, label));
             failures.push(...statusLineFaults(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
+            failures.push(...cardFigureFaults(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
@@ -6595,6 +6668,8 @@ const verdict = {
     outlinedTargets: [...outlinedTargets].sort(),
     smallText: [...smallTextElsewhere].sort(),
     ladderTiers,
+    /* Card figures read inside their rows, per look and per place:tier (`a-card-figure-stands-inside-its-row`). */
+    cardFigureByClass,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);

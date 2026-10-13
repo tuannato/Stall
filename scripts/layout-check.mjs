@@ -276,6 +276,67 @@ const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
  */
 const TABLET = { name: 'tablet', width: 768, height: 1024 };
 /*
+ * The narrow phone (2026-10-13; the 8g1 critic's P2-3 and P2-4, the owner's
+ * D-2026-10-13-02): 360x800, the narrowest phone the matrix measures, for
+ * the screens that carry money and nothing else — geometry only, no
+ * contrast. Every page pass ran at 390 and wider, so a figure, a pay code or
+ * a row that holds at 390 and not at 360 went unseen: the item face's figure
+ * spilled at 16 characters on Neo, and every pay code painted narrower than
+ * the gate was told.
+ *
+ * The list (`NARROW_SCREENS`), and why each is on it:
+ * - the rows: `unbuyable` (listing rows and the row's "Not buyable" label)
+ *   and the selection strip with its quote rows and steppers
+ *   (`pay-several-strip`, `pay-several-strip-xec`, `pay-several-ask`);
+ * - the item faces: `item-listing`, `item-quote`, `item-unbuyable-fold`
+ *   (a figure beside a fold that lists a refused take) and the two long
+ *   figures (`item-listing-long-figure`, `item-quote-long-figure`);
+ * - the pay sheet: `pay`, `pay-xec`, `pay-moved` (the restated figure on
+ *   the control), `pay-dust`, `pay-long-figure`;
+ * - Pay several: `pay-several`, `pay-several-long-figure`;
+ * - the rest of the money set on a phone: `activity` (the receipt's
+ *   amount), `describe` (the seller's figure read back and the record's
+ *   hex), `publish-name` (the stall record's hex), `pay-tag` (the figure
+ *   on paper).
+ * The QR gate's rule reads every pay sheet's code here
+ * (`PAY_QR_NARROWEST_PX`).
+ *
+ * **Left off, stated:** `offers`, `plugin-missing-quotes`, `quotes-signs`
+ * and `pay-inr` (whose shop is `quotes-signs`' rows). On Rural at 360 their
+ * rows' name column falls to 44–60px, under the 64px floor ("the name
+ * column collapsed under the price"; `pay-inr` as a spill of the same row):
+ * the rows' own ladder (`tierCeilings`, measured at 390) seats too many
+ * characters beside Rural's tag there. That ladder is not this decision's,
+ * and fixing it is a design change the owner has not made, so the four
+ * screens wait for it rather than turning this pass red or being measured
+ * around. Modern's and Neo's rows hold at 360 (68px and more). The rows are
+ * measured here through `unbuyable` and the selection strip, which hold on
+ * every look. `layout/PROBE-RULES.md`, "The narrow phone".
+ */
+const NARROW = { name: 'narrow', width: 360, height: 800 };
+const NARROW_SCREENS = [
+    'unbuyable',
+    'pay-several-strip',
+    'pay-several-strip-xec',
+    'pay-several-ask',
+    'item-listing',
+    'item-quote',
+    'item-unbuyable-fold',
+    'item-listing-long-figure',
+    'item-quote-long-figure',
+    'pay',
+    'pay-xec',
+    'pay-moved',
+    'pay-dust',
+    'pay-long-figure',
+    'pay-several',
+    'pay-several-long-figure',
+    'activity',
+    'describe',
+    'publish-name',
+    'pay-tag',
+].join(',');
+/*
  * The short screens (the 8g1 critic's P2-2): two heights shorter than the
  * page passes' 844 and 900, where a sign that fits those first stops
  * fitting. A sticky sign stays at its inset while its region scrolls, so on
@@ -2625,6 +2686,78 @@ try {
                     if (tv.failures.length > 0) {
                         console.error(`✗ ${label}: ${tv.failures.length} failure(s) — ${took()}`);
                         for (const f of tv.failures) {
+                            console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                        }
+                    }
+                    if (gaps.length > 0) {
+                        console.error(`✗ ${label}: a rule compared nothing it owes —`);
+                        for (const gap of gaps) console.error(`    ${gap}`);
+                    }
+                    console.error(`    compared: ${compared}`);
+                }
+            }
+        } catch (err) {
+            failed = true;
+            console.error(`✗ ${label}: ${err.message}`);
+        }
+    }
+
+    /*
+     * Pass 2c′: the narrow phone (`NARROW` above). Geometry only, the money
+     * screens alone. The page's own width is the measurement (`viewport`),
+     * as on every pass: an emulation that applied another width would
+     * certify a phone nobody measured. Its cost is printed on its line.
+     */
+    {
+        await cdp.send(
+            'Emulation.setDeviceMetricsOverride',
+            { width: NARROW.width, height: NARROW.height, deviceScaleFactor: 1, mobile: false },
+            sessionId,
+        );
+        const wanted = NARROW_SCREENS.split(',').length;
+        const label = `narrow (${NARROW.width}x${NARROW.height}, the money screens)`;
+        took();
+        try {
+            const nv = await readVerdict(cdp, sessionId, probeUrl(NARROW, `&screens=${NARROW_SCREENS}`));
+            const spent = took();
+            const wrongPrivate = privateLooksWrong(nv.privateClasses);
+            const noQuote = payScreensMissingQuote(nv.screensMeasured ?? [], nv.screensWithQuote ?? []);
+            if (nv.viewport !== NARROW.width) {
+                failed = true;
+                console.error(`✗ ${label}: asked for ${NARROW.width}px and the page measured ${nv.viewport}px.`);
+            } else if (wrongPrivate !== undefined) {
+                failed = true;
+                console.error(`✗ ${label}: ${wrongPrivate}`);
+            } else if (sheetClassesWrong(nv.sheetClasses) !== undefined) {
+                failed = true;
+                console.error(`✗ ${label}: ${sheetClassesWrong(nv.sheetClasses)}`);
+            } else if ((nv.screensMeasured ?? []).length !== wanted) {
+                failed = true;
+                console.error(
+                    `✗ ${label}: measured ${(nv.screensMeasured ?? []).length} of ${wanted} screens — vacuous green.`,
+                );
+            } else if (noQuote.length > 0) {
+                failed = true;
+                console.error(`✗ ${label}: ${noQuote.join(', ')} mounted no seller's figure — a green pass over nothing.`);
+            } else {
+                for (const kind of nv.outlinedTargets ?? []) outlinedTargetsSeen.add(kind);
+                for (const cls of nv.wornClasses ?? []) wornClassesSeen.add(cls);
+                for (const code of nv.codesPainted ?? []) codesPaintedSeen.add(`${NARROW.name}/${code}`);
+                const gaps = probeCoverageGaps(NARROW.name, nv, {
+                    privateClasses: PRIVATE_SHEET_CLASSES,
+                    sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
+                });
+                const compared = probeCoverageLine(NARROW.name, nv);
+                if (nv.failures.length === 0 && gaps.length === 0) {
+                    console.log(
+                        `✓ ${label}: ${wanted} screens, every look — ${spent}\n    compared: ${compared}` +
+                            `\n    faces: ${facesLine(nv.faces)}`,
+                    );
+                } else {
+                    failed = true;
+                    if (nv.failures.length > 0) {
+                        console.error(`✗ ${label}: ${nv.failures.length} failure(s) — ${spent}`);
+                        for (const f of nv.failures) {
                             console.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                         }
                     }

@@ -250,24 +250,38 @@ export const LONGEST_TAGLINE = 'W'.repeat(64);
 /** The CJK tagline at the cap: 21 ideographs, 63 bytes, the most a record holds. */
 export const LONGEST_CJK_TAGLINE = '每週新鮮烘焙咖啡豆用心包裝當日寄出歡迎選購';
 /**
- * The longest asked amount every shipped look's item face holds at a
- * phone's width: 100 billion XEC, `100,000,000,000`, 15 characters of
- * figure (measured 2026-10-12: at 17 characters Rural's face spills, at 18
- * Neo's too — the face's figure has no ladder, and the critic's 18 is a
- * finding about the shipped looks, left to the owner). A covenant's asked
- * amount is any size a stranger's gift listing chooses (§10).
+ * The longest asked amount there is: an output's value is eight bytes, and
+ * `formatXec` of the largest eight-byte number is
+ * `184,467,440,737,095,516.15`, 26 characters of figure, with `from` beside
+ * it (a partial). A covenant's asked amount is any size a stranger's gift
+ * listing chooses (§10), so the face must hold this one: since 2026-10-13
+ * its figure steps down a ladder and, past 21 characters, breaks after a
+ * comma (`CARD_FIGURE_CEILINGS`). Before the ladder this fixture held 15
+ * characters, the most the shipped faces seated at 390.
  */
-export const LONGEST_ASK_SATS = 10_000_000_000_000n;
+export const LONGEST_ASK_SATS = 2n ** 64n - 1n;
 /**
- * The longest quote figure every shipped look's item face holds at a
- * phone's width, in the unit whose sign leaves the figure no break
- * opportunity (`withSymbol` writes a leading sign with no space):
- * `SAR999,999,999.99`, 17 characters. The editor writes up to eight bytes
- * of amount (`SAR184,467,440,737,095,516.15`, 29 characters), and from 19
- * characters every shipped look's face spills sideways at 390 (measured
- * 2026-10-12) — a finding about the shipped looks, left to the owner.
+ * The longest quote figure the editor can write: an XEC quote at the
+ * largest eight-byte amount, `184,467,440,737,095,516.15 XEC`, 30
+ * characters — every unit `QUOTE_UNITS` writes at exponent 2 or 0, with
+ * its sign, is 30 or fewer (`SAR`, `HK$`, `NT$`, `Fr.` and ` kr` 29, `đ`
+ * 27). Its ` XEC` is the case the ladder's last rung guards: the space before
+ * the unit is a break opportunity, and the figure's last group keeps the
+ * unit on its own line (`.fig-end`). Before the ladder this fixture was
+ * `SAR999,999,999.99`, 17 characters, the most the shipped faces seated at
+ * 390 — and the probe's 360 pass found it spilling on every look.
  */
-export const LONGEST_QUOTE: TokenPrice = { code: 'sar', exponent: 2, amount: 99_999_999_999n };
+export const LONGEST_QUOTE: TokenPrice = { code: 'xec', exponent: 2, amount: 2n ** 64n - 1n };
+/**
+ * The largest sum a payment could realistically sign: under the whole XEC
+ * supply, 21 trillion. A USD quote of $447,280,000.00 at a rate of
+ * $0.0000213 a XEC composes `20,999,061,032,863.85` XEC, 21 characters with
+ * its cents — the pay sheet's figure on the ladder's last single-line step
+ * (`CARD_FIGURE_CEILINGS`). The rate is its own so the figure has cents;
+ * stamped now, so the code is drawn and measured like `pay`'s.
+ */
+export const LONGEST_PAY_QUOTE: TokenPrice = { code: 'usd', exponent: 2, amount: 44_728_000_000n };
+const LONGEST_PAY_RATE = { rate: scaleRate(0.0000213)!, atMs: Date.now() };
 
 export const handlers: StallHandlers = {
     onOpenItem: () => {},
@@ -589,6 +603,45 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'pay-several' },
         payRate: PAY_RATE,
     }),
+    /*
+     * The two pay sheets at long figures (2026-10-13, the 8g1 critic's
+     * P2-3): the figure the wallet signs has the face's ladder now
+     * (`CARD_FIGURE_CEILINGS`), and no fixture had ever put a long one on
+     * either sheet. `pay-long-figure` is the largest realistic sum
+     * (`LONGEST_PAY_QUOTE`, 21 characters, one line on the ladder's last
+     * single-line step); `pay-several-long-figure` is two XEC quotes at the
+     * largest eight-byte amount, so the figure (25 characters), both lines
+     * (30 each) and the total are past the last ceiling and break after a
+     * comma — the longest figures the sheet composes from records the
+     * editor can write. The second item is another wallet's mint, so its
+     * line carries the borrowed-id warning under it. Geometry only: their
+     * ink is `pay`'s and `pay-several`'s.
+     */
+    'pay-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, LONGEST_PAY_QUOTE]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+        payRate: LONGEST_PAY_RATE,
+    }),
+    'pay-several-long-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
     'pay-dust': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         // One satoshi of XEC: no rate involved, and under `DUST_SATS`.
@@ -680,15 +733,14 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
     }),
     /*
-     * The two faces with long figures (the 8g1 critic's P2-1). The face's
-     * figure has no ladder — the rows step down through `priceTier`, the
-     * face prints at one size — and the rows' `100,000,000` stress never
-     * reached it. A listing's asked amount is the covenant's, `from` beside
-     * it (`LONGEST_ASK_SATS`); a quote's is the seller's, in the unit whose
-     * sign the figure cannot break from (`LONGEST_QUOTE`). Each is the
-     * longest every shipped look's face holds at 390, not the longest a
-     * record can carry: past it the shipped faces spill (the constants'
-     * docblocks). Geometry only: their ink is `item-listing`'s and
+     * The two faces with long figures (the 8g1 critic's P2-1 and P2-3). The
+     * rows' `100,000,000` stress never reached the face. A listing's asked
+     * amount is the covenant's, `from` beside it (`LONGEST_ASK_SATS`, the
+     * largest eight-byte amount); a quote's is the seller's, the longest
+     * the editor writes (`LONGEST_QUOTE`, an XEC quote at the same amount).
+     * Both are past the face's last ceiling (`CARD_FIGURE_CEILINGS`), so
+     * they stand on its last rung, breaking after a comma at a phone's
+     * width. Geometry only: their ink is `item-listing`'s and
      * `item-quote`'s.
      */
     'item-listing-long-figure': base({
@@ -1800,6 +1852,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // interactions they could stage are `item-listing`'s and `item-quote`'s.
     'item-listing-long-figure',
     'item-quote-long-figure',
+    // The two pay sheets at long figures (2026-10-13): `pay`'s and
+    // `pay-several`'s sheet shape, which sits over the shop.
+    'pay-long-figure',
+    'pay-several-long-figure',
 ]);
 
 /**
@@ -1939,6 +1995,11 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // inside its card.
     'item-listing-long-figure',
     'item-quote-long-figure',
+    // The two pay sheets at long figures (2026-10-13): `pay`'s and
+    // `pay-several`'s ink, on the ground those two already sample. They are
+    // here for the figure inside its card at 360.
+    'pay-long-figure',
+    'pay-several-long-figure',
 ]);
 
 /**

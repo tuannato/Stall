@@ -7608,6 +7608,74 @@ textarea.share-embed {
     font-weight: var(--s-price-weight);
     letter-spacing: var(--s-price-track);
 }
+
+/*
+ * The card figures' ladder (2026-10-13, the 8g1 critic's P2-3): the item
+ * face's figure (the listing's asked amount, the quote's figure) and the
+ * XEC the wallet signs on both pay sheets. `cardFigureTier` in render sets
+ * `data-price-tier` on the figure's row from its length
+ * (`CARD_FIGURE_CEILINGS`: 14, 17, 21 characters), measured at 360px on
+ * every look's face; nothing of 14 characters or fewer is touched.
+ *
+ * The sizes are the floor, phones only like the rows' ladder: written as
+ * `.face-x:where([…]) .x` at the base rule's own (0,2,0) and after it (and
+ * `.pay-x:where([…]) .pay-x-n` over the base's (0,1,0)), so **a look that
+ * sizes these figures at all out-ranks the whole ladder, tiers included**
+ * and owns it (`every-look-that-sizes-its-figure-sizes-every-price-tier`).
+ * No shipped look sizes them, so this paints them on all three.
+ *
+ * The last rung holds at every width: past 21 characters the row re-flows
+ * as one line of text — `from`, the figure, the unit — and the figure may
+ * break after a comma and nowhere else (the `<wbr>`s `moneyFigure` writes;
+ * `.fig-end` keeps the last group and a trailing sign or ` XEC` together,
+ * so a unit never stands alone on a line). There is no break opportunity
+ * between `from` and the first digit or between the last digit and the
+ * unit, so they ride the first and last lines. At a desk the figure keeps
+ * its design size and breaks only where the row is narrower than it.
+ * Proved by the probe's narrow pass (`a-card-figure-stands-inside-its-row`,
+ * `layout/PROBE-RULES.md`, "The narrow phone").
+ */
+@media (max-width: 679.98px) {
+    .face-x:where([data-price-tier='1']) .x,
+    .pay-x:where([data-price-tier='1']) .pay-x-n {
+        font-size: 26px;
+    }
+
+    .face-x:where([data-price-tier='2']) .x,
+    .pay-x:where([data-price-tier='2']) .pay-x-n {
+        font-size: 21px;
+    }
+
+    .face-x:where([data-price-tier='3']) .x,
+    .pay-x:where([data-price-tier='3']) .pay-x-n {
+        font-size: 18px;
+    }
+}
+
+.face-x:where([data-price-tier='3']),
+.pay-x:where([data-price-tier='3']) {
+    display: block;
+    line-height: 1.3;
+}
+
+.face-x:where([data-price-tier='3']) > * + * {
+    margin-inline-start: 7px;
+}
+
+.pay-x:where([data-price-tier='3']) > * + * {
+    margin-inline-start: 8px;
+}
+
+.fig-end {
+    white-space: nowrap;
+}
+
+/* A Pay several line whose figure is past 17 characters: the figure takes a
+   row of its own under the name, right-aligned as before, instead of
+   crushing the name to a column of single letters. */
+.pay-line:where([data-price-tier='2'], [data-price-tier='3']) {
+    grid-template-columns: minmax(0, 1fr);
+}
 .face-stock {
     font-size: 13.5px;
     color: var(--s-muted);

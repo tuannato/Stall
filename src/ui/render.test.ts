@@ -105,6 +105,8 @@ import { ADDR_COPIED_MS,
     PAY_RECOMPOSE_GRACE_MS,
     PAY_OPEN_GUARD_MS,
     priceTier,
+    CARD_FIGURE_CEILINGS,
+    cardFigureTier,
     recheckPaySheet,
     renderStall,
     resetIconsForTests,
@@ -6195,6 +6197,148 @@ describe('a-long-price-steps-down-before-it-moves-rows', () => {
     });
 });
 
+describe('a-card-figure-steps-down-and-breaks-only-after-a-comma', () => {
+    /**
+     * The item face's figure and the XEC a pay sheet's wallet signs step down
+     * their own ladder (2026-10-13, the 8g1 critic's P2-3): one table for
+     * every look, measured at 360px on Neo's mono, the widest face. Pinned
+     * by value — a test reading the symbol would stay green at any cut —
+     * with the owner's line at 14: nothing of 14 characters or fewer moves.
+     */
+    it('pins the cuts by value and keeps every figure of 14 characters or fewer at design size', () => {
+        expect(CARD_FIGURE_CEILINGS).toEqual([14, 17, 21]);
+        expect(cardFigureTier('12,345,678,901')).toBe(0);
+        expect(cardFigureTier('$999,999,999.99')).toBe(1);
+        expect(cardFigureTier('SAR999,999,999.99')).toBe(1);
+        expect(cardFigureTier('123,456,789,012.34')).toBe(2);
+        expect(cardFigureTier('20,999,061,032,863.85')).toBe(2);
+        expect(cardFigureTier('368,934,881,474,191,032.3')).toBe(3);
+        expect(cardFigureTier('184,467,440,737,095,516.15 XEC')).toBe(3);
+    });
+
+    const face = (offers: StallOffer[], over: Partial<StallView> = {}) =>
+        paint(
+            idlePubkey({
+                fetch: { kind: 'offers', offers },
+                tokens: new Map([[TOKEN_ID, BEANS]]),
+                overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'listings' },
+                ...over,
+            }),
+        ).root;
+
+    it('paints a short face figure exactly as it always did: one text node and no tier', () => {
+        const root = face([OFFER]);
+        const figure = root.querySelector('.face-x [data-role="price"]')!;
+        expect(figure.textContent).toBe('1,200');
+        expect([...figure.childNodes].map((n) => n.nodeType)).toEqual([Node.TEXT_NODE]);
+        expect(figure.closest('.face-x')?.hasAttribute('data-price-tier')).toBe(false);
+    });
+
+    it('breaks the longest asked amount only after its commas, the last group whole', () => {
+        const root = face([{ ...OFFER, askedSats: 2n ** 64n - 1n }]);
+        const figure = root.querySelector('.face-x [data-role="price"]')!;
+        expect(figure.textContent).toBe('184,467,440,737,095,516.15');
+        expect(figure.closest('.face-x')?.getAttribute('data-price-tier')).toBe('3');
+        const wbrs = [...figure.querySelectorAll('wbr')];
+        expect(wbrs).toHaveLength(5);
+        // Every break follows a comma, and nothing else breaks a group.
+        for (const wbr of wbrs) {
+            expect(wbr.previousSibling?.textContent?.endsWith(',')).toBe(true);
+        }
+        expect(figure.querySelector('.fig-end')?.textContent).toBe('516.15');
+        // `from` and the unit are the row's, outside the money node.
+        expect(figure.nextElementSibling?.textContent).toBe(copy.XEC);
+    });
+
+    it('steps a quote down without breaking it, and keeps a trailing unit with its last group', () => {
+        const quoted = (price: TokenPrice) =>
+            paint(
+                payView({
+                    prices: new Map([[TOKEN_ID, price]]),
+                    genesis: new Map([[TOKEN_ID, 'attributed']]),
+                    overlay: { kind: 'item', tokenId: TOKEN_ID, rail: 'quotes' },
+                }),
+            ).root.querySelector('.face-x [data-role="seller-price"]')!;
+        const sar = quoted({ code: 'sar', exponent: 2, amount: 99_999_999_999n });
+        expect(sar.textContent).toBe('SAR999,999,999.99');
+        expect(sar.closest('.face-x')?.getAttribute('data-price-tier')).toBe('1');
+        expect(sar.querySelectorAll('wbr')).toHaveLength(0);
+        const xec = quoted({ code: 'xec', exponent: 2, amount: 2n ** 64n - 1n });
+        expect(xec.textContent).toBe('184,467,440,737,095,516.15 XEC');
+        expect(xec.closest('.face-x')?.getAttribute('data-price-tier')).toBe('3');
+        expect(xec.querySelector('.fig-end')?.textContent).toBe('516.15 XEC');
+    });
+
+    it('gives a long Pay several line its own row and breaks the total only after a comma', () => {
+        const amount = 2n ** 64n - 1n;
+        const root = paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [TOKEN_UNLISTED, PAY_TEA],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, { code: 'xec', exponent: 2, amount }],
+                    [TOKEN_UNLISTED, { code: 'xec', exponent: 2, amount }],
+                ]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([
+                    [TOKEN_ID, 1n],
+                    [TOKEN_UNLISTED, 1n],
+                ]),
+            }),
+        ).root.querySelector('[data-role="pay-several"]')!;
+        const price = root.querySelector('[data-role="price"]')!;
+        expect(price.textContent).toBe('368,934,881,474,191,032.3');
+        expect(price.closest('.pay-x')?.getAttribute('data-price-tier')).toBe('3');
+        const lines = [...root.querySelectorAll('.pay-line')];
+        expect(lines).toHaveLength(2);
+        for (const line of lines) {
+            expect(line.getAttribute('data-price-tier')).toBe('3');
+            expect(line.querySelector('.pay-line-x')?.textContent).toBe('184,467,440,737,095,516.15 XEC');
+            expect(line.querySelector('.pay-line-x .fig-end')?.textContent).toBe('516.15 XEC');
+        }
+        const total = root.querySelector('[data-role="pay-total"]')!;
+        expect(total.textContent).toBe(copy.paySeveralTotal('368,934,881,474,191,032.30 XEC'));
+        expect(total.querySelectorAll('wbr')).toHaveLength(5);
+    });
+
+    it('leaves a short Pay several line, its total and its figure as they were', () => {
+        const root = paint(
+            payView({
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([[TOKEN_ID, 2n]]),
+                payRate: PAY_RATE,
+            }),
+        ).root.querySelector('[data-role="pay-several"]')!;
+        expect(root.querySelector('.pay-x')?.hasAttribute('data-price-tier')).toBe(false);
+        expect(root.querySelector('.pay-line')?.hasAttribute('data-price-tier')).toBe(false);
+        expect(root.querySelectorAll('wbr')).toHaveLength(0);
+    });
+
+    /**
+     * The floor ladder in stall.css sizes every step for both figures, under
+     * the phone block like the rows' floor, and the last rung re-flows the row
+     * at every width. Read statically (happy-dom lays nothing out); the
+     * probe's `a-card-figure-stands-inside-its-row` is the real judge.
+     */
+    it('sizes every step of both figures in stall.css, and re-flows the last rung at every width', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const phone = css.match(/@media \(max-width: 679\.98px\) \{\s*\.face-x:where\(\[data-price-tier='1'\]\)[\s\S]*?\n\}/)?.[0] ?? '';
+        for (const [tier, px] of [['1', 26], ['2', 21], ['3', 18]] as const) {
+            for (const figure of ['.face-x', '.pay-x']) {
+                const inner = figure === '.face-x' ? '.x' : '.pay-x-n';
+                expect(phone, `${figure} tier ${tier}`).toContain(`${figure}:where([data-price-tier='${tier}']) ${inner}`);
+            }
+            expect(phone).toMatch(new RegExp(`data-price-tier='${tier}'\\]\\) \\.pay-x-n \\{\\s*font-size: ${px}px`));
+        }
+        expect(css).toMatch(/\.face-x:where\(\[data-price-tier='3'\]\),\s*\.pay-x:where\(\[data-price-tier='3'\]\) \{\s*display: block;/);
+        expect(css).toMatch(/\.fig-end \{\s*white-space: nowrap;/);
+    });
+});
+
 describe('the-head-wears-the-tier-the-figure-earned', () => {
     // Its own token: a second offer of BEANS would fold into one grouped
     // card speaking for the cheapest ask, and the long figure would vanish.
@@ -9379,6 +9523,25 @@ describe('the-figure-on-screen-is-the-figure-in-the-link', () => {
             prices: new Map([[TOKEN_ID, { ...QUOTE_USD, tolerancePct: 60 }]]),
         }).root;
         expect(wide.textContent).toContain(copy.PAY_TOLERANCE_WIDE);
+    });
+
+    /**
+     * The ladder changes the figure's dress and never its digits (2026-10-13):
+     * past the last ceiling the figure carries a soft break after each comma,
+     * and the node's text — what a reader reads, and what is checked against
+     * the link — is still the one bigint, exactly.
+     */
+    it('keeps one bigint when the figure is long enough to break after its commas', () => {
+        const amount = 2n ** 64n - 1n;
+        const { root } = sheet({ prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount }]]) });
+        const sats = satsForQuote({ code: 'xec', exponent: 2, amount }, 1n, undefined)!;
+        const figure = root.querySelector('[data-role="pay"] [data-role="price"]')!;
+        expect(figure.textContent).toBe(formatXec(sats));
+        expect(figure.textContent).toBe('184,467,440,737,095,516.15');
+        expect(figure.closest('.pay-x')?.getAttribute('data-price-tier')).toBe('3');
+        expect(figure.querySelectorAll('wbr')).toHaveLength(5);
+        expect(pressForUrl(root, 'pay-cashtab')).toBe(cashtabPayUrl(ADDR, sats, encodePaymentMemoHex(TOKEN_ID, 1n)!));
+        expect(pressForUrl(root, 'pay-cashtab')).toContain('amount=184467440737095516.15');
     });
 
     it('multiplies by the quantity the buyer typed, in the figure and the link', () => {

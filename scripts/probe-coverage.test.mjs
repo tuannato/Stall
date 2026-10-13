@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { CARD_FIGURES_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 const full = {
@@ -515,5 +515,45 @@ describe('the-8g1-states-owe-their-subjects', () => {
             'the-signs-words-never-stand-on-each-other compared no two lines of the sign on a t-modern stall',
         ]);
         assert.deepEqual(probeCoverageGaps('canvas', { ...read, signWordsByClass: {}, stagedByClass: {}, screensMeasured: [] }, STATES_8G1_OPTIONS), []);
+    });
+});
+
+/*
+ * The narrow pass (360x800, 2026-10-13): what it read of the long card
+ * figures, on every look it painted, built at module top (a describe body
+ * registers and never computes, `no-node-test-computes-in-a-describe-body`).
+ */
+const NARROW_LOOKS = [...SHIPPED, 't-skeleton', 't-fixture-private'];
+const narrowRead = {
+    sheetClasses: NARROW_LOOKS,
+    lookSheetsRead: [...SHIPPED, 't-fixture-private'],
+    markChecksByClass: Object.fromEntries(NARROW_LOOKS.filter((cls) => cls !== 't-fixture-private').map((cls) => [cls, 20])),
+    cardFigureByClass: Object.fromEntries(
+        NARROW_LOOKS.map((cls) => [cls, { 'face:0': 9, 'face:3': 4, 'pay:0': 13, 'pay:2': 2, 'pay:3': 2, 'line:3': 4, 'total:0': 4 }]),
+    ),
+};
+const NARROW_OPTIONS = { privateClasses: ['t-fixture-private'], sheetedClasses: [...SHIPPED, 't-fixture-private'] };
+
+describe('the-narrow-pass-owes-the-long-card-figures', () => {
+    it('owes a face figure and a line on the last rung and a pay figure on the last two, on every look', () => {
+        assert.deepEqual([...CARD_FIGURES_OWED], ['face:3', 'pay:2', 'pay:3', 'line:3']);
+        assert.deepEqual(probeCoverageGaps('narrow', narrowRead, NARROW_OPTIONS), []);
+        const noLongFace = {
+            ...narrowRead,
+            cardFigureByClass: { ...narrowRead.cardFigureByClass, 't-rural': { 'face:0': 9, 'pay:2': 2, 'pay:3': 2, 'line:3': 4 } },
+        };
+        assert.deepEqual(probeCoverageGaps('narrow', noLongFace, NARROW_OPTIONS), [
+            'a-card-figure-stands-inside-its-row read no face:3 figure on a t-rural stall',
+        ]);
+        assert.deepEqual(probeCoverageGaps('narrow', { ...narrowRead, cardFigureByClass: {} }, NARROW_OPTIONS).length, NARROW_LOOKS.length * 4);
+    });
+
+    it('owes nothing of it on the phone at 390, which measures the same screens', () => {
+        const owed = probeCoverageGaps('mobile', { ...full, ...narrowRead, cardFigureByClass: {} }, NARROW_OPTIONS);
+        assert.equal(owed.filter((gap) => gap.startsWith('a-card-figure-stands-inside-its-row')).length, 0);
+    });
+
+    it('prints the long figures it read on the pass\'s line', () => {
+        assert.match(probeCoverageLine('narrow', narrowRead), /long card figures read: face:3 20, line:3 20, pay:2 10, pay:3 10/);
     });
 });

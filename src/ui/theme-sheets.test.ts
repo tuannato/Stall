@@ -535,6 +535,12 @@ function unsizedSteps(css: string, cls: string, figure: (selector: string) => bo
 const ITEM_FIGURE = (selector: string): boolean => /\.item-x(?![\w-])/.test(selector);
 const ITEM_STEP = (tier: string): string => `[data-price-tier='${tier}']`;
 const OVERLAY_FIGURE = (selector: string): boolean => /\.bc-p\b/.test(selector) && /\[data-role='(?:seller-)?price'\]/.test(selector);
+/** The item face's figure: `.face-x .x`, or its money node by role (2026-10-13). */
+const FACE_FIGURE = (selector: string): boolean =>
+    /\.face-x(?![\w-])/.test(selector) && (/\s\.x(?![\w-])/.test(selector) || /\[data-role='(?:seller-)?price'\]/.test(selector));
+/** The XEC a pay sheet's wallet signs: `.pay-x-n`, or the price role under `.pay-x` (2026-10-13). */
+const PAY_FIGURE = (selector: string): boolean =>
+    /\.pay-x-n(?![\w-])/.test(selector) || (/\.pay-x(?![\w-])/.test(selector) && /\[data-role='price'\]/.test(selector));
 const OVERLAY_STEP = (tier: string): string => `[data-tier='${tier}']`;
 
 describe('every-look-that-sizes-its-figure-sizes-every-price-tier', () => {
@@ -573,6 +579,37 @@ describe('every-look-that-sizes-its-figure-sizes-every-price-tier', () => {
             `.${PLANTED_CLASS} .item-x { font-size: 40px; }\n.${PLANTED_CLASS} .item-head[data-price-tier="1"] .item-x, .${PLANTED_CLASS} .item-head[data-price-tier='3'] .item-x { font-size: 30px; }`,
         );
         expect(unsizedSteps(two.css, two.lookClass!, ITEM_FIGURE, ITEM_STEP)).toEqual(['2']);
+    });
+});
+
+describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the face and the pay sheets', () => {
+    /**
+     * The card figures' ladder (2026-10-13, the 8g1 critic's P2-3): stall.css
+     * sizes the item face's figure and the XEC a pay sheet's wallet signs at
+     * each step of `CARD_FIGURE_CEILINGS`, under `:where()` at the base rules'
+     * own weight, so a look that sizes either figure at all out-ranks the
+     * whole floor and owns its ladder — and one that forgot a step would paint
+     * its design-size figure where the ladder's cuts say it cannot fit. No
+     * shipped look sizes them today; this holds the next one, over every look
+     * sheet a run serves, a private look's included.
+     */
+    it('holds every look sheet that sizes the face or the pay figure under its class to tiers 1, 2 and 3', () => {
+        for (const sheet of LOOK_SHEETS) {
+            expect(unsizedSteps(sheet.css, sheet.lookClass!, FACE_FIGURE, ITEM_STEP), `${sheet.path} sizes the face figure`).toEqual([]);
+            expect(unsizedSteps(sheet.css, sheet.lookClass!, PAY_FIGURE, ITEM_STEP), `${sheet.path} sizes the pay figure`).toEqual([]);
+        }
+    });
+
+    it('goes red on a planted look that sizes the face figure and forgets a tier, and on one that sizes the pay figure and none', async () => {
+        const face = await plantedSheet(
+            `.${PLANTED_CLASS} .face-x .x { font-size: 40px; }\n` +
+                `.${PLANTED_CLASS} .face-x[data-price-tier='1'] .x, .${PLANTED_CLASS} .face-x[data-price-tier='3'] .x { font-size: 24px; }`,
+        );
+        expect(unsizedSteps(face.css, face.lookClass!, FACE_FIGURE, ITEM_STEP)).toEqual(['2']);
+        const pay = await plantedSheet(`.${PLANTED_CLASS} .pay-x-n { font-size: 44px; }`);
+        expect(unsizedSteps(pay.css, pay.lookClass!, PAY_FIGURE, ITEM_STEP)).toEqual(['1', '2', '3']);
+        const byRole = await plantedSheet(`.${PLANTED_CLASS} .face-x [data-role="seller-price"] { font-size: 44px; }`);
+        expect(unsizedSteps(byRole.css, byRole.lookClass!, FACE_FIGURE, ITEM_STEP)).toEqual(['1', '2', '3']);
     });
 });
 
