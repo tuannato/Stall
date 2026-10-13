@@ -472,6 +472,12 @@ export const STATE_ATTRIBUTES = Object.freeze({
     'data-tier': Object.freeze(['1', '2', '3']),
     'data-touch': Object.freeze(['on']),
     'data-turn': Object.freeze(['ccw', 'cw']),
+    // The wall's Cycle card's step on its figure ladder (2026-10-13): written
+    // on the card's head by `wallFigure` (window.ts, `WALL_FIGURE_CEILINGS`,
+    // nine ceilings, steps 1 to 9; none at step 0) and read by window.css; a
+    // look that sizes the card's figure sizes every step
+    // (`every-look-that-sizes-its-figure-sizes-every-price-tier`).
+    'data-wall-tier': Object.freeze(['1', '2', '3', '4', '5', '6', '7', '8', '9']),
     ...LOOK_HOOK_ATTRIBUTES,
 });
 

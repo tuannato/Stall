@@ -8715,7 +8715,7 @@ export function cardFigureTier(figure: string): 0 | 1 | 2 | 3 {
  * hidden would read nothing. Verified with Chrome's tree (CDP), not with a
  * reader. Test: `a-card-figure-steps-down-and-breaks-only-after-a-comma`.
  */
-function moneyFigure(node: HTMLElement, figure: string, breaks: boolean): void {
+export function moneyFigure(node: HTMLElement, figure: string, breaks: boolean): void {
     const groups = breaks ? figure.split(/(?<=,)/) : [figure];
     if (groups.length < 2) {
         node.textContent = figure;

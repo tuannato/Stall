@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CANVAS_ONLY_WALL_SCREENS, CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
+import { CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { shippedLooks, type Look } from './looks';
 import { DEFAULT_THEME_ID } from '../src/domain/theme';
 import { CONTRAST_VIEWPORTS } from './contrastPlan';
@@ -54,7 +54,10 @@ function at(jobs: readonly ShotJob[], viewport: string): Set<string> {
 describe('the-shots-cover-every-probed-screen-and-variant', () => {
     const jobs = shotPlan(dressed);
     const allScreens = Object.keys(SCREENS);
-    const wall = allScreens.filter((name) => SCREENS[name]!.window !== undefined && !CANVAS_ONLY_WALL_SCREENS.has(name));
+    const wall = allScreens.filter((name) => SCREENS[name]!.window !== undefined);
+    // The wall screens the canvas split keeps off the desk pass, which the
+    // desk wall pass measures at the desk's own size (the Cycle card's ladder).
+    const deskWall = wall.filter((name) => CANVAS_SCREENS.has(name));
 
     it('shoots every screen but the door, each where the probe measures it', () => {
         const shot = new Set(jobs.map((job) => job.screen));
@@ -62,35 +65,38 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect(shot.has('door')).toBe(false);
         const canvas = at(jobs, 'canvas');
         expect([...canvas].sort()).toEqual([...CANVAS_SCREENS].sort());
-        for (const viewport of ['phone', 'desk']) {
-            for (const name of at(jobs, viewport)) {
-                expect(CANVAS_SCREENS.has(name), `${name} is a canvas screen at ${viewport}`).toBe(false);
-            }
+        for (const name of at(jobs, 'phone')) {
+            expect(CANVAS_SCREENS.has(name), `${name} is a canvas screen at phone`).toBe(false);
         }
-        // Every page screen at the desk width; at a phone's, every one but a
-        // wall, which the app cannot paint below its floor.
+        for (const name of at(jobs, 'desk')) {
+            expect(CANVAS_SCREENS.has(name) && SCREENS[name]!.window === undefined, `${name} is an overlay screen at desk`).toBe(false);
+        }
+        // Every page screen at the desk width, and every wall screen there
+        // too; at a phone's, every page screen but a wall, which the app
+        // cannot paint below its floor.
         const page = allScreens.filter((name) => !CANVAS_SCREENS.has(name) && name !== 'door');
-        expect([...at(jobs, 'desk')].sort()).toEqual([...page].sort());
+        expect([...at(jobs, 'desk')].sort()).toEqual([...page, ...deskWall].sort());
         expect(SHOT_VIEWPORTS.phone.width).toBeLessThan(WINDOW_MIN_PX);
         expect([...at(jobs, 'phone')].sort()).toEqual(
             page.filter((name) => SCREENS[name]!.window === undefined).sort(),
         );
     });
 
-    it('shoots the shop window at the probe’s two portrait sizes, and the runner agrees on which screens', () => {
+    it('shoots the shop window at every wall size the probe measures, and the runner agrees on which screens', () => {
         expect([...at(jobs, 'portrait')].sort()).toEqual([...wall].sort());
         expect([...at(jobs, 'tablet')].sort()).toEqual([...wall].sort());
+        expect([...at(jobs, 'short-wall')].sort()).toEqual([...wall].sort());
         expect([...runnerList('WINDOW_SCREENS')].sort()).toEqual([...wall].sort());
-        // The wall screens left off these two passes are the Cycle card at the rows' cuts
-        // alone (round 4): canvas screens, Cycle mode, a figure of 16 characters or more.
-        expect([...runnerList('CANVAS_ONLY_WALL_SCREENS')].sort()).toEqual([...CANVAS_ONLY_WALL_SCREENS].sort());
-        for (const name of CANVAS_ONLY_WALL_SCREENS) {
-            expect(CANVAS_SCREENS.has(name), name).toBe(true);
-            expect(SCREENS[name]!.window?.mode, name).toBe('cycle');
-            expect(name, name).toMatch(/^shop-window-cycle-(listing|quote)-1[6-9]$/);
+        // Every wall screen at every wall size since the Cycle card's ladder:
+        // the desk wall pass takes, at 1280x900, the canvas ones the desk
+        // pass does not reach — the touch wall and the Cycle ladder among them.
+        expect([...runnerList('DESK_WALL_SCREENS')].sort()).toEqual([...deskWall].sort());
+        for (const name of ['shop-window-touch-quotes-pay', 'shop-window-cycle-listing-26', 'shop-window-cycle-quote-30']) {
+            expect(deskWall, name).toContain(name);
         }
         expect(SHOT_VIEWPORTS.portrait).toMatchObject({ width: 1080, height: 1920 });
         expect(SHOT_VIEWPORTS.tablet).toMatchObject({ width: 768, height: 1024 });
+        expect(SHOT_VIEWPORTS.shortWall).toMatchObject({ width: 1280, height: 800 });
         expect(SHOT_VIEWPORTS.canvas).toMatchObject({ width: 1920, height: 1080 });
         // The phone, the desk and the canvas are the probe's own three.
         expect(SHOT_VIEWPORTS.desk).toMatchObject({ width: 1280, height: 900 });
@@ -149,7 +155,7 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
     it('counts the empty kit: one bare paint per probed cell, two for a transparent one', () => {
         const page = Object.keys(SCREENS).filter((name) => !CANVAS_SCREENS.has(name) && name !== 'door');
         const phone = page.filter((name) => SCREENS[name]!.window === undefined).length;
-        const cells = phone + page.length + CANVAS_SCREENS.size + 2 * wall.length;
+        const cells = phone + page.length + deskWall.length + CANVAS_SCREENS.size + 3 * wall.length;
         const clear = Object.keys(SCREENS).filter((name) => SCREENS[name]!.broadcast?.transparent === true).length;
         expect(shotPlan(skeleton).length).toBe(cells + clear);
         expect(shotPlan(skeleton).every((job) => job.variant === 'bare' && job.flags === 0)).toBe(true);

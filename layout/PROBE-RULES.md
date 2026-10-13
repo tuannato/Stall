@@ -6329,6 +6329,9 @@ said, one change at a time:
 
 ### Left for its own branch: the Cycle card and the touch wall at ordinary lengths (pre-existing)
 
+**Closed 2026-10-13** by the Cycle card's ladder ("The Cycle card's figure
+ladder", below); what follows is main's as measured then.
+
 Measured on 2026-10-13 through the probe page with scratch fixtures (one
 card per screen, every look; the branch's reads, over the Cycle card that
 is byte for byte main's), and on main where said. **The Cycle card has no
@@ -6411,3 +6414,216 @@ which is therefore a belt that keeps the 360 box to the read's own rule.
 **What it does not cap, stated**: a look's own sheet restating the code's
 `border-radius` at a higher specificity than (0,3,0) wins at every width;
 at 390 the read would then judge it, at 360 nothing does.
+
+## The Cycle card's figure ladder (2026-10-13; the critic's P1 on narrow-phone round 4, pre-existing)
+
+The wall's Cycle card printed its figure at one size at every length,
+nowrap, in the card's price column (the table under "Left for its own
+branch", above, is main's as measured then). On the counter tablet a
+6-character listing and an 8-character XEC quote ran out of the card on
+every look and `123,456.78 XEC` read "123,45" on Rural — a thousand times
+low to a reader who writes the decimal with a comma; at 1280x900 Neo's
+`.78 XEC` painted under the code; at 1280x800 the card ran over the status
+line. No pass saw it: the tall and tablet passes painted no Cycle figure
+longer than three characters, the Cycle fixtures at the rows' cuts were on
+the canvas pass alone (`CANVAS_ONLY_WALL_SCREENS`, now gone), and no pass
+painted a wall at 1280.
+
+### The ladder
+
+`wallFigureTier` (window.ts) counts the figure as the rows count it — the
+figure as printed, a listing's without ` XEC`, two more for a listing's
+`from` — against `WALL_FIGURE_CEILINGS` = 5, 7, 9, 11, 13, 16, 19, 22, 26
+(step 9 past 26; the widest the chain allows is 28 for a listing and 30 for
+an XEC quote), and writes the step on the card's head as `data-wall-tier`
+(none at step 0) and, from `WALL_BREAK_TIER` (step 4, 12 characters),
+`data-wall-break` with the figure built by `moneyFigure` (a `<wbr>` after
+each comma, the pieces `aria-hidden` under one `role="img"` named by the
+whole figure, the last group and its unit in `.fig-end`). window.css gives
+each wall layout a size for the steps it needs, in a custom property its
+own `.item-x` rule reads under a `min()` with its design size, so a step
+never paints a figure larger than the card did. Measured in Chrome on the
+three shipped looks and the skeleton, bare and worn, against each step's
+widest figure in every unit `QUOTE_UNITS` writes (`元`, drawn by the
+machine's fallback, is the widest sign; tabular digits make every figure of
+one length one width), with 2–6% to spare inside the price column:
+
+| wall (layout) | price column | step 0 (design) | the steps |
+|---|---|---|---|
+| 1920x1080 (landscape 901–1200 tall) | 1034px | 79.9px (70.2 under the Awning) | 1–6 unchanged; 7–9 ×0.85, ×0.71, ×0.65 (`--sw-k`): 67.9, 56.7, 51.9px |
+| 1280x900 and 1280x800 (landscape ≤900) | 392–493px | 81.9px (79.9 / 69.5 under the Awning) | 1: 72, 2: 50, 3: 40px; 4–9: 38px, wrapped after a comma |
+| 1080x1920 (portrait >1200) | 918px, the code below | 124px | 1–3 unchanged; 4: 9.6cqw (103.7), 5: 7.85cqw (84.8), 6: 6.5cqw (70.2), 7: 5.5cqw (59.4), 8: 4.58cqw (49.5), 9: 4.2cqw (45.4px) |
+| 768x1024 (portrait ≤1200) | 326px | 10cqw (76.8px) | 1: 7.4cqw (56.8), 2: 5.1cqw (39.2), 3: 4.2cqw (32.3); 4–9: 32px, wrapped |
+| landscape >1200 tall (2560x1440; no pass) | — | 112px | 5: 97, 6: 82, 7: 69, 8: 57, 9: 53px |
+
+Why the wrap and not a smaller line: on the two narrow walls one line of a
+12-character figure is 30px on the tablet and an eight-byte listing 12px,
+which a room does not read; wrapped, every figure is at least 32px, at most
+three lines (the longest listings, 24 characters and up, on Neo and Rural)
+and two for every quote. The wrap is the
+stream card's tier-3 shape for a listing: its price cell becomes a grid —
+`from` on a line above, the figure's lines, ` XEC` beside the last line
+(`last baseline`) — because inline, `from` and the look's mark stood inside
+the money node's union box, which the contrast pass reads whole (2.20:1 and
+1.19:1 on Rural, measured). A quote's unit is inside its figure and rides
+the last group. **Step 0 is the design size at every wall**, so nothing a
+step 0 card printed moves, and at 1920x1080 nothing of 19 characters or
+fewer moves.
+
+**A short landscape wall gives its own air back** (window.css, the two
+compaction blocks): under 740px of frame (the Awning's canopy takes 132px
+of a 1280x800 frame) and on a frame of 820px or less carrying Rural's yard
+row, the body's padding, the card's padding and gaps, the code's caption
+and Browse's code caption step down. Measured on main at 1280x800: the
+shipped card with an announcement ran 67px over the status line on Modern
+under the Awning and 81px on Rural with the yard, a quote card 84 and 92px,
+and Browse's code plate overran its body by 20 and 30px. A Cycle quote's
+foot gives 20px at 900 tall and under (Rural's yard put a quote card 9.5px
+over at 1280x900).
+
+**The touch wall below 1920** (window.css, after the touch rules): every
+touch quote row puts its figure on a row of its own under the picture and
+the name, at 33px at most (30px from the wall's narrow cut and on the rows'
+re-flow) — at 1280 the stepper's column took 306–311px of a 690px row, and
+a `10,000,000.00 XEC` quote (17 characters) left the name a 0px column and
+ran 31px past the row on Neo. And at 900 tall and under, while a payment stands, the list yields
+its row to the band and the band takes the counter tablet's text steps
+(now custom properties both walls set): at 1280x900 the band left the list
+0–106px, and at 1280x800 the band's code, total and "+1 more" were cut
+from below under the Awning.
+
+### The passes
+
+- **`desk-wall`**, 1280x900: every wall screen the canvas split keeps off
+  the desk pass (`deskWallScreens()`, the runner's `DESK_WALL_SCREENS`, 40
+  screens): the touch wall, the Cycle ladder's fixtures and the canvas
+  twins. The desk pass still measures the page wall screens at that size.
+- **`short-wall`**, 1280x800: every wall screen (`WINDOW_SCREENS`, 52).
+- Both refuse a page that did not enter the short landscape block
+  (`landscapeShort`, echoed by the page) and owe what the other wall passes
+  owe (`WALL_PASSES` in probe-coverage.mjs).
+- The tall and tablet passes measure every wall screen too (52, from 20),
+  and the canvas pass the Cycle fixtures (59 screens, from 35).
+  `CANVAS_ONLY_WALL_SCREENS` is gone (`wallScreens()` is every `window`
+  fixture).
+
+The fixtures: `shop-window-cycle-listing-{5,6,7,9,11,14,20,24,26}`,
+`-quote-{8,9,10,13,22,26,30}` (XEC), `-usd-{5,7,9,11,13,22,27}` and
+`-cny-27`, beside round 4's seven at the rows' cuts — every step at its
+widest figure on both rails (`cycleLadder.test.ts` holds that, and the
+critic's own `123.45`, `1.23 XEC`, `12.34 XEC` and `$5.00`), all canvas
+screens and geometry only; and `shop-window-cycle-longest-figure`, the
+eight-byte listing as a page screen, which the desk pass paints wrapped
+and the contrast pass samples (`BROKEN_FIGURE_SCREENS`: two lines on Modern
+and the skeleton, three on Neo and Rural, read digit by digit). The shot plan follows the
+probe (`shotPlan.ts`: the desk viewport gains the desk wall's screens, and
+a `short-wall` viewport, 1280x800, shoots every wall screen).
+
+### The rule: `a-cycle-card-shows-every-digit-at-every-wall-size`
+
+On every pass, for every Cycle card: the figure's lines (the money node with
+its `from` and ` XEC`) and its price cell stand inside the price's own grid
+column — read from the head's resolved tracks — and so never past the
+card's grid, under the code or under the picture; every line stands inside
+the card, the viewport and above the status line; no line crosses the
+code's box or the picture's (read on the line's middle three fifths: a
+content area runs a few pixels past its ink, and Neo's mono figure's runs
+2px into the code's row at 1920x1080 with no ink there); and a broken
+figure splits no group — each piece, and `.fig-end`, on one line. Read with
+the card's turn and the tag's sway taken off (inline `transform`/`rotate:
+none !important`, the element's own style put back after): Rural tilts
+every third card half a degree and sways its tag 0.8°, and an axis-aligned
+box of a 160px tag is 2–4px wider than the tag. Counted per look and per
+step (`cycleFigureByClass`); every wall pass (canvas, portrait, tablet,
+desk-wall, short-wall) owes every step, 0–9, on every look it painted
+(`CYCLE_STEPS_OWED`, pinned to `WALL_FIGURE_CEILINGS` by
+`the-wall-passes-owe-the-cycle-cards-every-step`), and prints them
+(`Cycle figures read by step: 0:… 9:…`).
+
+**What it sees that the older rules did not**: a figure in its column's gap
+or over the next track by a few pixels, which no other element covers and
+no clip cuts — on main a 5-character listing ran 6.5px past its column on
+the tablet, `1.23 XEC` 18.2px — and a figure whose cell left the grid.
+On main's code it alone failed 178 look cells across the passes (below).
+
+**A look owns its ladder**: `every-look-that-sizes-its-figure-sizes-every-price-tier`
+gained the wall's Cycle card — a look sheet that sizes the Cycle figure
+sizes all nine steps (`data-wall-tier`), proved by planted sheets; the look
+lint lists `data-wall-tier` `1`–`9` as state a look may read
+(`STATE_ATTRIBUTES`, held to `WALL_FIGURE_CEILINGS`). No shipped look sizes
+it. **A guard widened, stated**: `theme-sheets.test.ts`'s rule parser now
+descends `@container` as well as `@media`, so `a-var-read-at-rest-resolves-at-rest`
+reads the ladder's custom properties (it failed on the first `--sw-fig`
+read under an `@container` block, where the parser saw no declaration).
+
+### Red proofs (2026-10-13)
+
+The branch's fixtures, probe, runner and tests over main's `window.ts`,
+`window.css` and `render.ts` (a scratch clone, the full runner):
+
+| pass | failures | of them `a-cycle-card-shows-every-digit-at-every-wall-size` |
+|---|---|---|
+| mobile (390) | 0 | — |
+| desktop (1280x900) | 171 (`shop-window-cycle-longest-figure`) | 27 |
+| canvas (1920x1080) | 828 | 123 |
+| portrait (1080x1920) | 2,339 | 176 |
+| tablet (768x1024) | 4,407 | 528 |
+| desk-wall (1280x900) | 3,860 (1,414 on the touch wall) | 600 |
+| short-wall (1280x800) | 4,293 (1,905 on the touch wall) | 575 |
+| narrow (360) | 0 | — |
+
+The rest are `text-spills`, `a protected box is cut sideways`, `asked
+amount is covered`, `nothing-on-the-wall-is-cut-from-below` and, at 1280,
+`nothing-in-the-body-reaches-the-status-line` (77). Every wall pass also
+reported a coverage gap per look and step 1–9 (main writes no step). In
+178 look cells the new rule failed alone (canvas 7, portrait 10, tablet 14,
+desk-wall 78, short-wall 69). The contrast pass on that run died on a
+closed DevTools socket and the runner's 300s watchdog fired, on a machine
+at load 5.3, so the red run's contrast verdict is not recorded. The static
+half on main's code: `cycleLadder.test.ts` 1 of 2 and `window.test.ts` all
+6 new cases red, `the-wall-passes-owe-the-cycle-cards-every-step` red, and
+the look lint's `STATE_ATTRIBUTES` inventory red (a listed attribute no
+served sheet matches). On the branch every pass is 0.
+
+### Cost
+
+Back to back on this Mac (2026-10-14, load 3–6): main 185.6s, the branch
+202.2s (+16.6s). The two new passes 4.9s and 5.9s; portrait +0.9s (7.3 →
+8.2), tablet +1.2s (4.7 → 5.9), canvas +0.9s; the contrast pass +5.9s (787
+→ 796 jobs with the tracked fixture carried, the rest noise). Other runs
+of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and
+216.6s.
+
+### Not measured, stated
+
+- **Off the probe's sizes** (the scratch harness, the 35 Cycle screens,
+  every look bare and worn, 280 cards a size; main's code with the same
+  fixtures beside it). Figure cut or over the code / card over the status
+  line:
+
+  | size | main | branch |
+  |---|---|---|
+  | 2560x1440 | 138 / 0 | 0 / 0 |
+  | 1600x900 | 155 / 19 | 0 / 0 |
+  | 1366x768 | 171 / 129 | 0 / 44 (≤21px) |
+  | 1280x720 | 185 / 196 | 0 / 42 (≤69px) |
+  | 1280x1024 | 166 / 0 | 0 / 13 (Rural worn, ≤78px) |
+  | 1024x768 | 273 / 129 | 126 / 44 |
+  | 800x1280 | 180 / 245 | 4 / 219 |
+  | 680x1000 | 254 / 21 | 14 / 19 |
+
+  Seventeen cards are worse in one way: main cut their figure sideways and
+  kept the card above the status line; the branch shows every digit and the
+  card runs past it — at 1280x1024 on Rural worn (13, up to 78px) and at
+  680x1000 (Modern worn's 30-character quote 27px, Rural worn's 24- and
+  26-character listings 15px). At 1280x1024 no step of the 1080-tall
+  layout seats a 16-character quote in its 566px column, and **Chrome
+  breaks the figure at its `<wbr>` under `white-space: nowrap`** (measured:
+  the figure 566 by 172px at 75.8px, computed `nowrap`), so the card grows
+  a line. A ladder that holds at every landscape width between 1280 and
+  1920 at 1024 tall is not built; 1024x768 and 800x1280 were broken on
+  main and stay broken.
+- The tablet's and the short wall's wrapped figures are geometry only: the
+  contrast pass samples the wrapped Cycle figure at 1280x900 alone
+  (`shop-window-cycle-longest-figure`).
+- The touch wall between 1280 and 1919 wide is measured at 1280 alone.

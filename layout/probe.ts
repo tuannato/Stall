@@ -2238,6 +2238,156 @@ function cardLadderFaults(): Failure[] {
 }
 
 /*
+ * **The Cycle card shows every digit at every wall size** (the critic's P1
+ * on narrow-phone round 4, pre-existing). The wall's Cycle card printed one
+ * figure size at every length, so on the counter tablet `123,456.78 XEC`
+ * read "123,45" on Rural — a thousand times low to a reader who writes the
+ * decimal with a comma — and at 1280x900 Neo's `.78 XEC` painted under the
+ * code; no pass painted a Cycle figure longer than three characters at any
+ * size but 1920x1080. The card now steps its figure down a ladder
+ * (`WALL_FIGURE_CEILINGS`, `data-wall-tier` on the head) and, where a wall
+ * is narrow, wraps it after a comma; this is what holds that true on every
+ * wall pass. For every Cycle card's figure — the money node with its `from`
+ * and ` XEC` — and its price cell (a look's tag chrome included):
+ *
+ * - every line and the cell stand inside the price's own grid column, so
+ *   the figure is never past the card's grid and never under the code or
+ *   the picture beside it;
+ * - every line stands inside the card, the viewport and above the status
+ *   line;
+ * - no line crosses the code's box or the picture's (read on the line's
+ *   middle three fifths: a content area runs a few pixels past its ink, and
+ *   Neo's mono figure's runs 2px into the code's row at 1920x1080 with no
+ *   ink there);
+ * - a figure broken after its commas splits no group: each piece, and the
+ *   last group with its unit (`.fig-end`), stands on one line.
+ *
+ * Read with the card's own turn and its tag's sway taken off for the read
+ * (Rural tilts every third card half a degree and sways its tag 0.8°, so an
+ * axis-aligned box of a 160px-tall tag is 2–4px wider than the tag; the
+ * transforms are put back before the next rule reads the tree). Counted per
+ * look and per step (`cycleFigureByClass`): the runner owes every step on
+ * every look on each of the five wall passes.
+ */
+const CYCLE_FIGURE_CHECK = 'a-cycle-card-shows-every-digit-at-every-wall-size';
+/** Per look class, per `data-wall-tier` (`'0'` for none), how many Cycle figures were read. */
+const cycleFigureByClass: Record<string, Record<string, number>> = {};
+
+function cycleFigureFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const card of document.querySelectorAll<HTMLElement>("#app .stall.shop-window[data-mode='cycle'] .sw-strip .item")) {
+        const head = card.querySelector<HTMLElement>(':scope > .item-head');
+        const cell = head?.querySelector<HTMLElement>(':scope > .item-p');
+        const amount = cell?.querySelector<HTMLElement>(':scope > .item-a');
+        const figure = amount?.querySelector<HTMLElement>('[data-role="price"], [data-role="seller-price"]');
+        if (head === null || head === undefined || cell === null || cell === undefined || amount === null || amount === undefined || figure === null || figure === undefined) {
+            continue;
+        }
+        const turned = [card, head, cell, amount, figure];
+        const kept = turned.map((el) => el.getAttribute('style'));
+        for (const el of turned) {
+            el.style.setProperty('transform', 'none', 'important');
+            el.style.setProperty('rotate', 'none', 'important');
+        }
+        try {
+            const tier = head.getAttribute('data-wall-tier') ?? '0';
+            const byLook = (cycleFigureByClass[measuringClass] ??= {});
+            byLook[tier] = (byLook[tier] ?? 0) + 1;
+            const say = (detail: string): void => {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: CYCLE_FIGURE_CHECK,
+                    detail: `the Cycle figure "${(figure.textContent ?? '').slice(0, 40)}" (step ${tier}, ${getComputedStyle(figure).fontSize}) ${detail} at ${window.innerWidth}x${window.innerHeight}`,
+                });
+            };
+            const range = document.createRange();
+            range.selectNodeContents(amount);
+            const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+            const box = cell.getBoundingClientRect();
+            // The price's grid column, from the head's resolved tracks.
+            const hcs = getComputedStyle(head);
+            const hb = head.getBoundingClientRect();
+            const contentLeft = hb.left + Number.parseFloat(hcs.borderLeftWidth) + Number.parseFloat(hcs.paddingLeft);
+            const gap = Number.parseFloat(hcs.columnGap) || 0;
+            const tracks = hcs.gridTemplateColumns.split(/\s+/).map(Number.parseFloat).filter((w) => Number.isFinite(w));
+            let column: { left: number; right: number } | undefined;
+            for (let i = 0, at = contentLeft; i < tracks.length; at += tracks[i]! + gap, i += 1) {
+                if (box.left >= at - 1 && box.left <= at + tracks[i]! + 1) {
+                    column = { left: at, right: at + tracks[i]! };
+                    break;
+                }
+            }
+            if (column === undefined) {
+                say(`stands in no grid column of its card (${hcs.gridTemplateColumns})`);
+                continue;
+            }
+            const left = Math.min(box.left, ...lines.map((r) => r.left));
+            const right = Math.max(box.right, ...lines.map((r) => r.right));
+            if (right > column.right + 0.5 || left < column.left - 0.5) {
+                say(
+                    `runs ${right > column.right + 0.5 ? `${(right - column.right).toFixed(1)}px past its column on the right` : `${(column.left - left).toFixed(1)}px past its column on the left`} ` +
+                        `(column ${Math.round(column.left)}–${Math.round(column.right)}, the cell ${Math.round(box.left)}–${Math.round(box.right)})`,
+                );
+            }
+            const cardBox = card.getBoundingClientRect();
+            const status = card.closest('.stall-scroll')?.querySelector<HTMLElement>(':scope > .sw-status')?.getBoundingClientRect();
+            for (const line of lines) {
+                if (line.left < cardBox.left - 0.5 || line.right > cardBox.right + 0.5 || line.top < cardBox.top - 0.5 || line.bottom > cardBox.bottom + 0.5) {
+                    say(`has a line outside its card (${Math.round(line.left)}–${Math.round(line.right)} × ${Math.round(line.top)}–${Math.round(line.bottom)})`);
+                    break;
+                }
+                if (line.left < -0.5 || line.right > window.innerWidth + 0.5 || line.top < -0.5 || line.bottom > window.innerHeight + 0.5) {
+                    say('has a line outside the viewport');
+                    break;
+                }
+                if (status !== undefined && status.height > 0 && line.bottom > status.top + 0.5) {
+                    say(`has a line ${(line.bottom - status.top).toFixed(1)}px over the status line`);
+                    break;
+                }
+            }
+            for (const [what, other] of [
+                ['the code', card.querySelector<HTMLElement>('.sw-qr')],
+                ['the picture', card.querySelector<HTMLElement>('.item-ic')],
+            ] as const) {
+                const o = other?.getBoundingClientRect();
+                if (o === undefined || o.width === 0 || o.height === 0) continue;
+                const crossed = lines.find((line) => {
+                    const top = line.top + line.height * 0.2;
+                    const bottom = line.bottom - line.height * 0.2;
+                    return line.right > o.left + 0.5 && line.left < o.right - 0.5 && bottom > o.top && top < o.bottom;
+                });
+                if (crossed !== undefined) {
+                    say(`has a line over ${what} (${Math.round(crossed.left)}–${Math.round(crossed.right)} × ${Math.round(crossed.top)}–${Math.round(crossed.bottom)})`);
+                }
+            }
+            // A broken figure splits no group: every piece on one line.
+            if (figure.querySelector('.fig-say') !== null) {
+                const pieces: Node[] = [...figure.querySelectorAll('.fig-say > span[aria-hidden] > *')].filter((n) => n.nodeName !== 'WBR');
+                for (const node of figure.querySelector('.fig-say > span[aria-hidden]')!.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE) pieces.push(node);
+                }
+                for (const piece of pieces) {
+                    const r = document.createRange();
+                    r.selectNodeContents(piece);
+                    const tops = [...r.getClientRects()].filter((q) => q.width > 0).map((q) => q.top);
+                    if (tops.length > 1 && Math.max(...tops) - Math.min(...tops) > 1) {
+                        say(`splits the group "${piece.textContent}" over two lines`);
+                    }
+                }
+            }
+        } finally {
+            turned.forEach((el, i) => {
+                const style = kept[i];
+                if (style === null) el.removeAttribute('style');
+                else el.setAttribute('style', style!);
+            });
+        }
+    }
+    return out;
+}
+
+/*
  * **A payment list that scrolls says how many lines it hides** (2026-09-24,
  * the owner's decision 4). The payment's lines scroll inside the wall's
  * plate under a cap in pixels (`window.css`), and nothing said so: a
@@ -4563,6 +4713,7 @@ for (const screen of measured) {
             failures.push(...statusLineFaults(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...cardFigureFaults(screen, label));
+            failures.push(...cycleFigureFaults(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
@@ -6876,6 +7027,13 @@ const verdict = {
      */
     portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
         .matches,
+    /*
+     * The short landscape block — `(orientation: landscape) and (max-height:
+     * 900px)` — echoed for the two desk wall passes' guard (1280x900 and
+     * 1280x800, since the Cycle card's ladder): the card's code stands beside
+     * its figure there, and its ladder's wrap is that block's.
+     */
+    landscapeShort: matchMedia('(orientation: landscape) and (max-height: 900px)').matches,
     screensMeasured: measured,
     /*
      * Every face's status when the measuring began (`layout/faces.ts`; the
@@ -6961,6 +7119,8 @@ const verdict = {
     cardFigureByClass,
     /* The tiers each figure's painted ladder was compared over, per look (`a-card-figure-steps-down-on-every-look`). */
     cardLadderByClass,
+    /* Cycle figures read per look and per step (`a-cycle-card-shows-every-digit-at-every-wall-size`). */
+    cycleFigureByClass,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);

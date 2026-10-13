@@ -178,7 +178,7 @@
 }
 
 .stall.shop-window .stall-body {
-    padding: 24px 44px;
+    padding: var(--sw-air, 24px) 44px;
     align-content: start;
 }
 
@@ -301,10 +301,10 @@
     grid-template-columns: 460px minmax(0, 1fr);
     column-gap: 56px;
     max-width: 100%;
-    row-gap: 22px;
+    row-gap: var(--sw-gap, 22px);
     align-content: center;
     align-items: start;
-    padding: 40px 48px;
+    padding: var(--sw-pad, 40px) 48px;
 }
 
 .stall.shop-window[data-mode='cycle'] .item-ic {
@@ -333,7 +333,7 @@
 }
 
 .stall.shop-window[data-mode='cycle'] .item-x {
-    font-size: clamp(40px, min(10.4cqh, 6.4cqw), 112px);
+    font-size: min(var(--sw-fig, 112px), clamp(40px, min(10.4cqh, 6.4cqw), 112px));
 }
 
 .stall.shop-window[data-mode='cycle'] .item-from,
@@ -356,7 +356,7 @@
 }
 
 .stall.shop-window[data-mode='cycle'] .item-foot {
-    padding: 0 48px 32px;
+    padding: 0 48px var(--sw-foot, 32px);
 }
 
 .stall.shop-window[data-mode='cycle'] .item-foot-words {
@@ -448,9 +448,30 @@
     }
 
     .stall.shop-window[data-mode='cycle'] .sw-qr .sw-cap {
-        margin-top: 12px;
+        margin-top: var(--sw-cap, 12px);
         max-width: 320px;
         text-align: center;
+    }
+
+    /* The Cycle card's figure ladder (below): steps 1-3 and the break, and a quote's foot. */
+    [data-wall-tier='1'] {
+        --sw-fig: 72px;
+    }
+
+    [data-wall-tier='2'] {
+        --sw-fig: 50px;
+    }
+
+    [data-wall-tier='3'] {
+        --sw-fig: 40px;
+    }
+
+    [data-wall-break] {
+        --sw-fig: 38px;
+    }
+
+    .stall-scroll {
+        --sw-foot: 12px;
     }
 }
 
@@ -487,7 +508,20 @@
     }
 
     .stall.shop-window[data-mode='cycle'] .item-x {
-        font-size: clamp(40px, min(7.4cqh, 6.4cqw), 80px);
+        font-size: calc(clamp(40px, min(7.4cqh, 6.4cqw), 80px) * var(--sw-k, 1));
+    }
+
+    /* The Cycle card's figure ladder (below): steps 7-9, a factor of the design size. */
+    [data-wall-tier='7'] {
+        --sw-k: 0.85;
+    }
+
+    [data-wall-tier='8'] {
+        --sw-k: 0.71;
+    }
+
+    [data-wall-tier='9'] {
+        --sw-k: 0.65;
     }
 }
 
@@ -588,6 +622,8 @@
 
 .stall.shop-window[data-mode='browse'] .sw-plate .sw-cap {
     max-width: 380px;
+    margin-top: var(--sw-plate-cap, 14px);
+    font-size: var(--sw-plate-fs, 28px);
 }
 
 /* ---------- portrait: a screen hung the other way is first-class ---------- */
@@ -626,7 +662,7 @@
     }
 
     .stall.shop-window[data-mode='cycle'] .item-x {
-        font-size: min(124px, 11.5cqw);
+        font-size: min(var(--sw-fig, 124px), 124px, 11.5cqw);
     }
 
     .stall.shop-window[data-mode='cycle'] .sw-qr {
@@ -689,6 +725,31 @@
         max-width: 420px;
         text-align: left;
     }
+
+    /* The Cycle card's figure ladder (below): steps 4-9. */
+    [data-wall-tier='4'] {
+        --sw-fig: 9.6cqw;
+    }
+
+    [data-wall-tier='5'] {
+        --sw-fig: 7.85cqw;
+    }
+
+    [data-wall-tier='6'] {
+        --sw-fig: 6.5cqw;
+    }
+
+    [data-wall-tier='7'] {
+        --sw-fig: 5.5cqw;
+    }
+
+    [data-wall-tier='8'] {
+        --sw-fig: 4.58cqw;
+    }
+
+    [data-wall-tier='9'] {
+        --sw-fig: 4.2cqw;
+    }
 }
 
 /*
@@ -740,7 +801,7 @@
        face was self-hosted), and a longer figure did the same on every look.
        The figure steps to 10cqw (77px at 768) and the words to 20px. */
     .stall.shop-window[data-mode='cycle'] .item-x {
-        font-size: 10cqw;
+        font-size: min(var(--sw-fig, 10cqw), 10cqw);
     }
 
     .stall.shop-window[data-mode='cycle'] .item-from,
@@ -762,6 +823,23 @@
         padding: 16px 32px;
         row-gap: 8px;
     }
+
+    /* The Cycle card's figure ladder (below): steps 1-3 and the break. */
+    [data-wall-tier='1'] {
+        --sw-fig: 7.4cqw;
+    }
+
+    [data-wall-tier='2'] {
+        --sw-fig: 5.1cqw;
+    }
+
+    [data-wall-tier='3'] {
+        --sw-fig: 4.2cqw;
+    }
+
+    [data-wall-break] {
+        --sw-fig: 32px;
+    }
 }
 
 /*
@@ -780,10 +858,8 @@
  * under the cut is the row it always was. **The Cycle card is not a row and
  * takes none of this** (round 4, the critic's P1-1 on round 3): round 3 gave
  * its figure `fig-wraps` too, and stall.css's desk own-row rule took its
- * grid from the cut. Its figure is plain text again (`wallFigure`) and that
- * rule is the shop's alone; what the card does at a length it cannot seat
- * is a gap of its own, on main too (`layout/PROBE-RULES.md`, "Left for its
- * own branch").
+ * grid from the cut. That rule is the shop's alone, and the card has a
+ * ladder of its own (`wallFigure`; "The Cycle card's figure ladder" below).
  */
 .stall.shop-window[data-mode='browse'] .item-a.fig-wraps {
     display: block;
@@ -833,6 +909,162 @@
        customer could ever scroll it into. */
     .stall.shop-window[data-mode='browse'] .item-a.fig-wraps .item-x {
         font-size: 30px;
+    }
+}
+
+/* ---------- the Cycle card's figure ladder ---------- */
+
+/*
+ * The card's figure steps down by its length (`wallFigureTier` in window.ts
+ * writes the step on the head as `data-wall-tier`, none at tier 0, the
+ * card's design size, and `data-wall-break` from the break step on). It had
+ * one size at every length, nowrap, so the counter tablet cut a 6-character
+ * listing and an 8-character XEC quote on every look, and 1280x900 put a
+ * 10-character figure's tail under the code (the critic's P1 on
+ * narrow-phone round 4, pre-existing).
+ *
+ * Each layout below gives the steps it needs a size in `--sw-fig` (on the
+ * 1080-tall landscape wall a factor of its design size, `--sw-k`), and no
+ * others; the card's own `.item-x` rule in each layout reads it under a
+ * `min()` with its design size, so a step never paints a figure larger than
+ * the card did. A custom property on an attribute selector rather than a
+ * font-size under the card's full selector: every visitor downloads these
+ * rules, and the wall's selector is 50 bytes a step. The sizes were measured in Chrome on the
+ * shipped looks and the skeleton at the wall sizes the probe paints —
+ * 1920x1080, 1280x900, 1280x800, 1080x1920, 768x1024 — against the widest
+ * figure each step holds in every unit `QUOTE_UNITS` writes (`元`, drawn by
+ * the machine's fallback, is the widest sign; tabular digits make every
+ * figure of a length one width), with 2–6% to spare inside the price's own
+ * grid column. The probe's `a-cycle-card-shows-every-digit-at-every-wall-size`
+ * is the judge, over Cycle fixtures at the widest figure of each step on
+ * every wall pass.
+ *
+ * Where a wall is narrow — the short landscape walls and the counter tablet
+ * — a figure from the break step on (`WALL_BREAK_TIER`, 12 characters)
+ * wraps after a comma at a size a room can still read instead of shrinking
+ * to one line under it: one line of an eight-byte listing is 12px on the
+ * tablet. A quote's unit is inside its figure, and `.fig-end` keeps it with
+ * the last group; a listing's price cell becomes a grid of its own — `from`
+ * on a line above, the figure's lines, and ` XEC` beside the last of them
+ * (`last baseline`) — the stream card's tier-3 shape, so `from`, the unit
+ * and a look's mark stand outside the money node's own box, which the
+ * contrast pass reads whole. No group is split. Measured at most three
+ * lines — the longest listings (24 characters and up) on Neo and Rural —
+ * and two for every quote. The 1920 wall and the tall wall keep every
+ * figure on one line at the sizes the probe paints.
+ */
+@container sw (orientation: landscape) and (min-height: 1201px) {
+    [data-wall-tier='5'] {
+        --sw-fig: 97px;
+    }
+
+    [data-wall-tier='6'] {
+        --sw-fig: 82px;
+    }
+
+    [data-wall-tier='7'] {
+        --sw-fig: 69px;
+    }
+
+    [data-wall-tier='8'] {
+        --sw-fig: 57px;
+    }
+
+    [data-wall-tier='9'] {
+        --sw-fig: 53px;
+    }
+}
+
+/* The wrap itself, on the two narrow walls (one block for both). */
+@container sw ((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1200px)) {
+    /* The touch wall's payment steps down on both narrow walls: one line of
+       the payment at 18px (52.5px, measured) and "+N more" under it — two
+       lines, a borrowed-token sentence and the count ran the tablet's band
+       to 528px in Modern worn's 485px body and cut Back — and the band's
+       text at the tablet's steps. Above the portrait block's own cap by
+       weight, not by order. */
+    .shop-window .stall-scroll {
+        --sw-pay-lines: 18px;
+        --sw-pay-lines-h: 56px;
+        --sw-pay-tot: 19px;
+        --sw-pay-small: 15px;
+        --sw-pay-fig: 34px;
+        --sw-pay-cap: 18px;
+        --sw-pay-back-h: 64px;
+        --sw-pay-back-w: 160px;
+    }
+
+    [data-wall-break] .item-x {
+        grid-area: x;
+        white-space: normal;
+        line-height: 1.1;
+        text-align: start;
+    }
+
+    [data-wall-break] .item-a:has(> .item-u) {
+        display: grid;
+        grid-template:
+            'from from'
+            'x u' / minmax(0, max-content) auto;
+        column-gap: var(--s-price-inner-gap);
+        align-items: last baseline;
+        justify-content: start;
+    }
+
+    [data-wall-break] .item-from {
+        grid-area: from;
+        justify-self: start;
+    }
+
+    [data-wall-break] .item-a > .item-u {
+        grid-area: u;
+    }
+}
+
+/*
+ * A short landscape wall gives the wall's own air back (2026-10-13), the
+ * 1080-tall wall's step 5b one layout down, through custom properties the
+ * base rules read with their own values as the fallback (`--sw-air`, the
+ * body's padding; the Cycle card's `--sw-pad`, `--sw-gap`, `--sw-cap` and
+ * `--sw-foot`; Browse's code caption, `--sw-plate-cap` and
+ * `--sw-plate-fs`). Measured at 1280x800: the shipped Cycle card with an
+ * announcement ran 67px over the status bar on Modern under the Awning and
+ * 81px on Rural with the Yard beetle, a quote card 84 and 92, and Browse's
+ * code plate (the code at its 280px floor and its caption) was 364px in a
+ * 320px body under the Awning and 310px with the yard, so its list ran 20
+ * and 30px over the status line. A Cycle quote's foot gives 20px at 900 tall
+ * and under, where Rural's yard put a quote card 9.5px over at 1280x900.
+ * Under 740px of frame — the Awning takes 132px of a 1280x800 frame for its
+ * canopy — and on a frame of 820px or less that carries Rural's yard row
+ * (the yard is a row of this grid, so it shortens the body without
+ * shortening the frame), the rest steps down. Measured after: the shipped
+ * card on Rural with the yard ends 7.5px above the status line at 1280x800
+ * (8px at 1280x900).
+ * The code is at its floor already and is not what gives; nothing changes
+ * on a 1280x900 wall but a Cycle quote's foot, where no Cycle quote stood on
+ * main.
+ */
+@container sw (orientation: landscape) and (max-height: 740px) {
+    .stall-scroll {
+        --sw-air: 4px;
+        --sw-pad: 10px;
+        --sw-gap: 6px;
+        --sw-cap: 6px;
+        --sw-foot: 8px;
+        --sw-plate-cap: 8px;
+        --sw-plate-fs: 22px;
+    }
+}
+
+@container sw (orientation: landscape) and (max-height: 820px) {
+    .stall-scroll:has(> .att-beetle) {
+        --sw-air: 4px;
+        --sw-pad: 10px;
+        --sw-gap: 6px;
+        --sw-cap: 6px;
+        --sw-foot: 8px;
+        --sw-plate-cap: 8px;
+        --sw-plate-fs: 22px;
     }
 }
 
@@ -1077,6 +1309,12 @@
     grid-area: qr;
 }
 
+/* The code's caption on the band: the code's own size unless a short wall
+   steps it down (`--sw-pay-cap`, the tablet's and the short landscape's). */
+.stall.shop-window[data-touch='on'] .sw-paying .sw-cap {
+    font-size: var(--sw-pay-cap, 28px);
+}
+
 .stall.shop-window[data-touch='on'] .sw-pay-a {
     grid-area: what;
 }
@@ -1120,7 +1358,7 @@
 }
 
 .stall.shop-window[data-touch='on'] .sw-pay-fig {
-    font-size: clamp(36px, 4cqw, 56px);
+    font-size: var(--sw-pay-fig, clamp(36px, 4cqw, 56px));
     font-weight: 750;
     font-variant-numeric: tabular-nums;
     line-height: 1.05;
@@ -1139,7 +1377,7 @@
     width: 100%;
     max-width: 640px;
     text-align: left;
-    font-size: 21px;
+    font-size: var(--sw-pay-lines, 21px);
     /*
      * A selection holds up to 35 items, and one line each ran the band to
      * ~2,400px at 35 — past the body on every wall, the total and Back cut
@@ -1151,7 +1389,7 @@
      * tablet (below). How many it hides is said under it, outside it
      * ("+N more", `sayHiddenPayLines`).
      */
-    max-height: 120px;
+    max-height: var(--sw-pay-lines-h, 120px);
     overflow-y: auto;
     overscroll-behavior: contain;
 }
@@ -1187,7 +1425,7 @@
 }
 
 .stall.shop-window[data-touch='on'] .sw-pay-tot {
-    font-size: 23px;
+    font-size: var(--sw-pay-tot, 23px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
@@ -1201,7 +1439,7 @@
  */
 .stall.shop-window[data-touch='on'] .sw-pay-more,
 .stall.shop-window[data-touch='on'] .sw-pay-borrowed {
-    font-size: 17px;
+    font-size: var(--sw-pay-small, 17px);
     line-height: 1.3;
     color: var(--s-text);
 }
@@ -1229,13 +1467,16 @@
    and a wall is read across a room rather than at arm's length. */
 .stall.shop-window[data-touch='on'] .sw-pay-rate,
 .stall.shop-window[data-touch='on'] .sw-pay-note {
-    font-size: 18px;
+    font-size: var(--sw-pay-small, 18px);
     line-height: 1.3;
     max-width: 900px;
     color: var(--s-text);
 }
 
 .stall.shop-window[data-touch='on'] .sw-pay-back {
+    /* The touch buttons' own floor (`.sw-sel-btn`) unless a short wall steps it down. */
+    min-height: var(--sw-pay-back-h, clamp(72px, 8cqw, 96px));
+    min-width: var(--sw-pay-back-w, 200px);
     background: transparent;
     color: var(--s-accent);
     border: 2px solid color-mix(in srgb, var(--s-text) 22%, var(--s-accent));
@@ -1274,8 +1515,8 @@
     }
 
     /* Five lines of the payment on a screen hung the tall way: it has the room. */
-    .stall.shop-window[data-touch='on'] .sw-pay-lines {
-        max-height: 309px;
+    .stall-scroll {
+        --sw-pay-lines-h: 309px;
     }
 }
 
@@ -1291,7 +1532,8 @@
      * A counter tablet is 768 × 1024, and a 280px code with its lines and
      * both truths is most of that screen: measured, the band came to 553px
      * of a ~600px body and the shelf behind it had nothing left. The text
-     * steps down here.
+     * steps down (custom properties the band's base rules read, set with the
+     * short landscape wall's in the Cycle ladder's narrow-wall block above).
      *
      * **And the list yields its row to the band while a payment stands**
      * (2026-09-24, round 3). A wall row is 321–364px tall at this size and
@@ -1314,41 +1556,6 @@
 
     .stall.shop-window[data-touch='on'][data-mode='browse'] .sw[data-paying='on'] .stall-body {
         grid-template-rows: auto;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-pay-lines {
-        font-size: 18px;
-        /* One line at 18px (52.5px, measured) and "+N more" under it: two
-           lines, a borrowed-token sentence and the count ran the band to
-           528px in Modern worn's 485px body and cut Back. */
-        max-height: 56px;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-pay-tot {
-        font-size: 19px;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-pay-more,
-    .stall.shop-window[data-touch='on'] .sw-pay-borrowed {
-        font-size: 15px;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-pay-rate,
-    .stall.shop-window[data-touch='on'] .sw-pay-note {
-        font-size: 15px;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-pay-fig {
-        font-size: 34px;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-paying .sw-cap {
-        font-size: 18px;
-    }
-
-    .stall.shop-window[data-touch='on'] .sw-pay-back {
-        min-height: 64px;
-        min-width: 160px;
     }
 
     /*
@@ -1399,6 +1606,63 @@
         grid-column: 3;
         grid-row: 3 / span 2;
         align-self: center;
+    }
+}
+
+/*
+ * A touch wall narrower than 1920 (2026-10-13, the Cycle card's ladder
+ * round). Its quote rows lay a stepper of 72px buttons beside the figure,
+ * and at 1280 the stepper's column is 306–311px of a 690px row: a
+ * `10,000,000.00 XEC` quote left the name a 0px column and ran 31px past
+ * the row's left edge on Neo, 18px on Rural (main; at 1440 and 1600 Neo's
+ * name ran under the figure). So below 1920 every touch quote row puts its
+ * figure on a row of its own under the picture and the name — the counter
+ * tablet's shape — at 33px at most, and at 30px from the wall's narrow cut
+ * (`fig-narrow`, 17 characters) and on the rows' re-flow (`fig-wraps`),
+ * where the tablet's re-flowed figure stands. At 1920 the rows are what
+ * they were.
+ */
+@container sw (orientation: landscape) and (max-width: 1919.98px) {
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .item-head.item-head-q {
+        grid-template-areas:
+            'ic name step'
+            'price price step';
+        grid-template-columns: clamp(72px, 9cqw, 140px) minmax(0, 1fr) auto;
+        row-gap: 8px;
+    }
+
+    .stall.shop-window[data-touch='on'] .item-head-q .item-p {
+        justify-self: start;
+    }
+
+    .stall.shop-window[data-touch='on'] .item-head-q .item-x {
+        font-size: min(3.1cqw, 33px);
+    }
+
+    .stall.shop-window[data-touch='on'] .item-head-q :is(.fig-wraps, .fig-narrow) .item-x {
+        font-size: min(3.1cqw, 30px);
+    }
+}
+
+/*
+ * The touch wall's payment on a short landscape wall (900 tall and under,
+ * 2026-10-13). At 1280x900 the band left the list 0–106px, never one whole
+ * quote row, and at 1280x800 the band itself ran past the body: on Modern
+ * under the Awning its code, its total and its "+1 more" were cut from below
+ * (`nothing-on-the-wall-is-cut-from-below`, main). The counter tablet's
+ * answers, one layout over: the list yields its row while a payment stands
+ * (what was chosen stays on screen by name in the selection strip; Back
+ * brings the list back), and the band's text takes the tablet's steps —
+ * the same custom properties. The cost is the tablet's, stated there: the
+ * list's scroll place is not kept across the payment.
+ */
+@container sw (orientation: landscape) and (max-height: 900px) {
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw[data-paying='on'] .sw-strip {
+        display: none;
+    }
+
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw[data-paying='on'] .stall-body {
+        grid-template-rows: auto;
     }
 }
 

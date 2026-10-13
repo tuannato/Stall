@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import * as copy from './copy';
 import { holdsLivePaint, overlayMounts, renderStall, resetIconsForTests } from './render';
 import {
+    WALL_BREAK_TIER,
+    WALL_FIGURE_CEILINGS,
     WALL_NARROW_LISTING_CHARS,
     WALL_NARROW_QUOTE_CHARS,
     WINDOW_QR_MIN_PX,
@@ -17,6 +19,7 @@ import {
     wallListings,
     windowItemLink,
     windowLinkFor,
+    wallFigureTier,
     windowRail,
     windowTurns,
 } from './window';
@@ -264,23 +267,24 @@ describe('a-cycle-card-keeps-its-grid-at-the-cut', () => {
      * took 'ic name name pay' / 'price price price price' over its two
      * columns, and at 1920x1080 Neo printed `100,000,000.00 XEC` as
      * ",000,000.00 XEC" with the code at the screen's foot. So the card's
-     * figure is the plain text main wrote, at every length, and the desk rule
-     * is the shop's alone. happy-dom lays nothing out: the canvas pass
-     * measures `shop-window-cycle-listing-16` … `shop-window-cycle-quote-19`
-     * (red on round 3: 377 failures at 1920x1080).
+     * figure takes neither of the rows' classes, at any length — its steps
+     * are its own (`a-cycle-card-shows-every-digit-at-every-wall-size`) — and
+     * the desk rule is the shop's alone. happy-dom lays nothing out: every
+     * wall pass measures the Cycle fixtures (red on round 3: 377 failures at
+     * 1920x1080).
      */
     const cycleAmount = (view: StallView) => paint(view).querySelector('.items .item-a')!;
 
-    it('writes the Cycle card figure as plain text on both rails, at and past the cuts', () => {
+    it('gives the Cycle card figure none of the rows\' re-flow on both rails, at and past the cuts', () => {
         for (const askedSats of [123_456_789_012n, 1_234_567_890_123n, 12_345_678_901_234n, 2_099_906_103_286_385n]) {
             const a = cycleAmount(windowView({ show: 'listings', mode: 'cycle' }, { fetch: { kind: 'offers', offers: [{ ...offer(BEANS), askedSats }] } }));
             const figure = a.querySelector('[data-role="price"]')!;
-            expect([a.className, figure.children.length, figure.textContent]).toEqual(['item-a', 0, formatXec(askedSats)]);
+            expect([a.className, figure.className, figure.textContent]).toEqual(['item-a', 'item-x', formatXec(askedSats)]);
         }
         for (const amount of [100_000_000n, 1_000_000_000n, 10_000_000_000n, 2n ** 64n - 1n]) {
             const a = cycleAmount(windowView({ show: 'quotes', mode: 'cycle' }, { prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount } as TokenPrice]]) }));
             const figure = a.querySelector('[data-role="seller-price"]')!;
-            expect([a.className, figure.children.length]).toEqual(['item-a', 0]);
+            expect([a.className, figure.className]).toEqual(['item-a', 'item-x']);
             expect(figure.textContent).toMatch(/^[\d,.]+ XEC$/);
         }
     });
@@ -288,6 +292,7 @@ describe('a-cycle-card-keeps-its-grid-at-the-cut', () => {
     it('keeps the Browse row re-flow at the same figure', () => {
         const a = cycleAmount(windowView({ show: 'quotes', mode: 'browse' }, { prices: new Map([[BEANS, { code: 'xec', exponent: 2, amount: 10_000_000_000n } as TokenPrice]]) }));
         expect(a.classList.contains('fig-wraps')).toBe(true);
+        expect(a.closest('.item-head')!.hasAttribute('data-wall-tier')).toBe(false);
     });
 
     it('scopes the desk own-row rules in stall.css to the shop', () => {
@@ -299,6 +304,145 @@ describe('a-cycle-card-keeps-its-grid-at-the-cut', () => {
         for (const sel of desk) {
             expect(sel.startsWith('.stall:not(.shop-window) ')).toBe(true);
         }
+    });
+});
+
+describe('a-cycle-card-shows-every-digit-at-every-wall-size', () => {
+    /**
+     * The Cycle card's own ladder (the critic's P1 on narrow-phone round 4,
+     * pre-existing): one figure size at every length cut a 6-character
+     * listing and an 8-character XEC quote on the counter tablet, on every
+     * look, and printed `123,456.78 XEC` as "123,45" on Rural. The card now
+     * steps its figure down by length (`WALL_FIGURE_CEILINGS`, counted as
+     * the rows count: two more for a listing's `from`), writes the step on
+     * its head, and from `WALL_BREAK_TIER` carries a soft break after each
+     * comma that the narrow walls wrap at. happy-dom lays nothing out: the
+     * probe's rule of the same name holds the paint on every wall pass.
+     */
+    const cycleHead = (view: StallView) => paint(view).querySelector<HTMLElement>('.sw-strip .item-head')!;
+    const listing = (askedSats: bigint, atoms = 10n) =>
+        cycleHead(windowView({ show: 'listings', mode: 'cycle' }, { fetch: { kind: 'offers', offers: [{ ...offer(BEANS), askedSats, atoms }] } }));
+    const quote = (price: TokenPrice) => cycleHead(windowView({ show: 'quotes', mode: 'cycle' }, { prices: new Map([[BEANS, price]]) }));
+
+    it('pins the steps and the break by value', () => {
+        expect([...WALL_FIGURE_CEILINGS]).toEqual([5, 7, 9, 11, 13, 16, 19, 22, 26]);
+        expect(WALL_BREAK_TIER).toBe(4);
+        // The break starts at 12 characters, as counted.
+        expect(wallFigureTier('1'.repeat(11), false)).toBe(WALL_BREAK_TIER - 1);
+        expect(wallFigureTier('1'.repeat(12), false)).toBe(WALL_BREAK_TIER);
+    });
+
+    it('counts a listing\'s from as two characters, as the rows do', () => {
+        expect(wallFigureTier('875', true)).toBe(0);
+        expect(wallFigureTier('1,200', false)).toBe(0);
+        expect(wallFigureTier('1,200', true)).toBe(1);
+        expect(wallFigureTier('123.45', true)).toBe(2);
+        expect(wallFigureTier('$5.00', false)).toBe(0);
+        expect(wallFigureTier('9.99 XEC', false)).toBe(2);
+        expect(wallFigureTier('184,467,440,737,095,516.15 XEC', false)).toBe(WALL_FIGURE_CEILINGS.length);
+        expect(wallFigureTier('184,467,440,737,095,516.15', true)).toBe(WALL_FIGURE_CEILINGS.length);
+    });
+
+    it('writes the step on the card\'s head, none at step 0, on both rails', () => {
+        expect(listing(87_500n).getAttribute('data-wall-tier')).toBeNull();
+        // A whole-lot listing carries no from, and counts its figure alone.
+        expect(listing(120_000n, 1n).getAttribute('data-wall-tier')).toBeNull();
+        expect(listing(120_000n).getAttribute('data-wall-tier')).toBe('1');
+        expect(listing(12_345n).getAttribute('data-wall-tier')).toBe('2');
+        expect(listing(12_345_678n).getAttribute('data-wall-tier')).toBe('4');
+        expect(quote({ code: 'usd', exponent: 2, amount: 500n }).getAttribute('data-wall-tier')).toBeNull();
+        expect(quote({ code: 'xec', exponent: 2, amount: 123n }).getAttribute('data-wall-tier')).toBe('2');
+        expect(quote({ code: 'xec', exponent: 2, amount: 2n ** 64n - 1n }).getAttribute('data-wall-tier')).toBe(String(WALL_FIGURE_CEILINGS.length));
+    });
+
+    it('breaks a figure after its commas from the break step, and only there, its digits and its name unchanged', () => {
+        const under = listing(12_345_678n * 10n);
+        // "1,234,567.8" is 11 characters and two for from: step 4, broken.
+        const broken = listing(1_234_567_800n);
+        const plain = listing(12_345_600n);
+        const figureOf = (head: HTMLElement) => head.querySelector<HTMLElement>('[data-role="price"]')!;
+        expect(figureOf(plain).querySelector('wbr')).toBeNull();
+        expect(figureOf(under).textContent).toBe(formatXec(123_456_780n));
+        for (const head of [broken, quote({ code: 'xec', exponent: 2, amount: 2n ** 64n - 1n })]) {
+            const figure = head.querySelector<HTMLElement>('[data-role="price"], [data-role="seller-price"]')!;
+            const say = figure.querySelector<HTMLElement>('.fig-say[role="img"]')!;
+            expect(say.parentElement).toBe(figure);
+            expect(say.getAttribute('aria-label')).toBe(figure.textContent);
+            expect(figure.querySelectorAll('wbr').length).toBe((figure.textContent!.match(/,/g) ?? []).length);
+            // The last group keeps whatever follows it — ` XEC` on a quote.
+            expect(figure.querySelector('.fig-end')!.textContent).toMatch(/^\d{1,3}(\.\d+)?( XEC)?$/);
+            expect(Number(head.getAttribute('data-wall-tier'))).toBeGreaterThanOrEqual(WALL_BREAK_TIER);
+        }
+    });
+
+    /** window.css with its comments out. */
+    const css = () => readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    /** Every block under `condition`, its body. */
+    const bodies = (condition: string): string[] => {
+        const text = css();
+        const out: string[] = [];
+        for (let at = text.indexOf(`@container sw ${condition} {`); at > -1; at = text.indexOf(`@container sw ${condition} {`, at + 1)) {
+            out.push(text.slice(at, text.indexOf('\n}\n', at)));
+        }
+        expect(out.length, condition).toBeGreaterThan(0);
+        return out;
+    };
+    /** The steps a layout sizes, as `--sw-fig` (or the 1080-tall wall's factor `--sw-k`), and the break's size. */
+    const steps = (condition: string): Map<string, string> => {
+        const out = new Map<string, string>();
+        for (const body of bodies(condition)) {
+            for (const m of body.matchAll(/\[data-wall-(tier='(\d)'|break)\] \{\s*--sw-(?:fig|k): ([^;]+);\s*\}/g)) {
+                out.set(m[2] ?? 'break', m[3]!);
+            }
+        }
+        return out;
+    };
+    /** The card's own `.item-x` size in a layout. */
+    const reads = (condition: string | undefined): string[] => {
+        const text = condition === undefined ? css().slice(0, css().indexOf('@container')) : bodies(condition).join('\n');
+        return [...text.matchAll(/\.stall\.shop-window\[data-mode='cycle'\] \.item-x \{\s*font-size: ([^;]+);/g)].map((m) => m[1]!);
+    };
+
+    it('sizes each layout\'s steps in window.css, each read under that layout\'s own design size', () => {
+        // The card's design size in each layout, read with the step under a min().
+        expect(reads(undefined)).toEqual(['min(var(--sw-fig, 112px), clamp(40px, min(10.4cqh, 6.4cqw), 112px))']);
+        expect(reads('(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)')).toContain(
+            'calc(clamp(40px, min(7.4cqh, 6.4cqw), 80px) * var(--sw-k, 1))',
+        );
+        expect(reads('(orientation: portrait)')).toContain('min(var(--sw-fig, 124px), 124px, 11.5cqw)');
+        expect(reads('(orientation: portrait) and (max-height: 1200px)')).toContain('min(var(--sw-fig, 10cqw), 10cqw)');
+        // The 1920 wall moves nothing of 19 characters or fewer.
+        const tv = steps('(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)');
+        expect([...tv.keys()]).toEqual(['7', '8', '9']);
+        for (const factor of tv.values()) expect(Number(factor)).toBeLessThan(1);
+        const tall = steps('(orientation: landscape) and (min-height: 1201px)');
+        expect([...tall.keys()]).toEqual(['5', '6', '7', '8', '9']);
+        const short = steps('(orientation: landscape) and (max-height: 900px)');
+        expect([...short.keys()]).toEqual(['1', '2', '3', 'break']);
+        const portrait = steps('(orientation: portrait)');
+        expect([...portrait.keys()]).toEqual(['4', '5', '6', '7', '8', '9']);
+        const tablet = steps('(orientation: portrait) and (max-height: 1200px)');
+        expect([...tablet.keys()]).toEqual(['1', '2', '3', 'break']);
+        // Each step is smaller than the one before it, in each layout.
+        const n = (v: string) => Number(/^([\d.]+)/.exec(v)![1]);
+        for (const layout of [tv, tall, short, portrait, tablet]) {
+            const sizes = [...layout.entries()].filter(([step]) => step !== 'break').map(([, v]) => n(v));
+            expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
+        }
+    });
+
+    it('wraps from the break step where a wall is narrow, and nowhere else', () => {
+        const text = css();
+        const wraps = [...text.matchAll(/@container sw ([^{]+)\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)].filter(([, , body]) => /white-space: normal/.test(body!) && /data-wall-break/.test(body!));
+        expect(wraps.map(([, cond]) => cond!.trim())).toEqual([
+            '((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1200px))',
+        ]);
+        expect(wraps[0]![2]).toMatch(/\[data-wall-break\] \.item-x \{[^}]*white-space: normal;/);
+        // The break's own size, on the two narrow walls, and the attribute from the break step.
+        expect(steps('(orientation: landscape) and (max-height: 900px)').get('break')).toBe('38px');
+        expect(steps('(orientation: portrait) and (max-height: 1200px)').get('break')).toBe('32px');
+        expect(listing(1_234_567_800n).hasAttribute('data-wall-break')).toBe(true);
+        expect(listing(12_345_600n).hasAttribute('data-wall-break')).toBe(false);
     });
 });
 

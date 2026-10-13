@@ -43,6 +43,7 @@ import {
     ROW_REFLOW_LISTING_CHARS,
     ROW_REFLOW_QUOTE_CHARS,
     formatTriedAt,
+    moneyFigure,
     quoteSurchargeNode,
     rowFigure,
 } from './render';
@@ -305,22 +306,92 @@ export const WALL_NARROW_LISTING_CHARS = 14;
 export const WALL_NARROW_QUOTE_CHARS = 17;
 
 /**
- * A wall figure: on a Browse row, re-flowed and broken by the shop's rule and
- * marked where the counter tablet cannot seat it; on the Cycle card, the
- * figure as it always was. **The Cycle card is not a row** (round 4, the
- * critic's P1-1 on round 3): its one card is laid out by its own grid, and
- * giving it `fig-wraps` let the shop's desk own-row rule — written for the
- * shop's four-column rows — take the card's grid from 17 characters for a
- * listing and 18 for a quote, so at 1920x1080 Neo printed a hundred million
- * as ",000,000.00 XEC" and Rural put the card's code below the screen. Its
- * figure is plain text, the node main wrote, at every length; what the card
- * does at a length it cannot seat is a pre-existing gap of its own (the
- * Cycle card has no ladder, `layout/PROBE-RULES.md`, "Left for its own
- * branch"). Test: `a-cycle-card-keeps-its-grid-at-the-cut`.
+ * The Cycle card's own length ladder (the critic's P1 on narrow-phone round
+ * 4, pre-existing): the card's figure was one size at every length —
+ * `clamp(40px, min(10.4cqh, 6.4cqw), 112px)`, nowrap — so on the counter
+ * tablet a 6-character listing (`from 123.45 XEC`) and an 8-character XEC
+ * quote ran out of the card, and `123,456.78 XEC` read "123,45" on Rural, a
+ * thousand times low to a reader who writes the decimal with a comma; at
+ * 1280x900 Neo's `123,456.78 XEC` painted ".78 XEC" under the code. Counted
+ * as the rows count (`priceTier`): the figure as printed, a listing's
+ * without ` XEC`, and two characters more for a listing's `from`. Each step
+ * has a size in each of the wall's layouts (`window.css`, "The Cycle card's
+ * figure ladder"), measured on the shipped looks and the skeleton at the
+ * five wall sizes the probe paints — 1920x1080, 1280x900, 1280x800,
+ * 1080x1920 and 768x1024 — against the widest figure each step holds in
+ * every unit `QUOTE_UNITS` writes (`元` drawn by the machine's fallback is the
+ * widest sign). Tier 0, five characters or fewer, is the card's design size
+ * at every wall size, so no figure that stood whole on main moves; on the
+ * 1920 wall nothing of 19 characters or fewer moves either. One table for
+ * every look: no look sizes the wall's figure, and a look that does owns
+ * every step (`every-look-that-sizes-its-figure-sizes-every-price-tier`).
+ * Pinned by value in `a-cycle-card-shows-every-digit-at-every-wall-size`.
  */
-function wallFigure(amount: HTMLElement, node: HTMLElement, figure: string, cycle: boolean, cut: number, narrow: number): void {
+export const WALL_FIGURE_CEILINGS = [5, 7, 9, 11, 13, 16, 19, 22, 26] as const;
+
+/**
+ * From this step on (12 characters, as counted above) the Cycle figure
+ * carries a soft break after each comma (`moneyFigure`: `<wbr>`s, its
+ * pieces `aria-hidden` under one `role="img"` named by the whole figure),
+ * and where the wall is narrow — the short landscape walls and the counter
+ * tablet — it wraps there at a size a room can still read (38px and 32px)
+ * rather than shrinking to one line below it: at one line a 12-character
+ * figure is 30px on the tablet and an eight-byte listing 12px. A wrapped
+ * listing stands `from` on a line above its figure and ` XEC` beside the
+ * figure's last line; a quote's unit rides its last group (`.fig-end`); no
+ * group is split. On the 1920 wall and the tall wall the figure stays on one
+ * line at every length at the sizes the probe paints (the eight-byte quote
+ * is 52px at 1920x1080, 46px under the Awning, and 45px on the tall wall).
+ * Where no step seats a figure — measured at 1280x1024, a 16-character
+ * quote in a 566px column — Chrome breaks it at its `<wbr>` even under
+ * `white-space: nowrap`: whole, a line taller (`layout/PROBE-RULES.md`,
+ * "The Cycle card's figure ladder", "Not measured, stated").
+ */
+export const WALL_BREAK_TIER = 4;
+
+/** The Cycle figure's step on its ladder: `figure`'s length, and two more for a listing's `from`. */
+export function wallFigureTier(figure: string, hasFrom: boolean): number {
+    const chars = figure.length + (hasFrom ? 2 : 0);
+    const step = WALL_FIGURE_CEILINGS.findIndex((ceiling) => chars <= ceiling);
+    return step < 0 ? WALL_FIGURE_CEILINGS.length : step;
+}
+
+/**
+ * A wall figure: on a Browse row, re-flowed and broken by the shop's rule and
+ * marked where the counter tablet cannot seat it; on the Cycle card, its own
+ * ladder (`wallFigureTier`, on the card's head as `data-wall-tier`, none at
+ * tier 0, and `data-wall-break` from `WALL_BREAK_TIER`). **The Cycle card
+ * is not a row** (round 4, the critic's P1-1 on round 3): its one card is
+ * laid out by its own grid, and giving it
+ * `fig-wraps` let the shop's desk own-row rule — written for the shop's
+ * four-column rows — take the card's grid from 17 characters for a listing
+ * and 18 for a quote, so at 1920x1080 Neo printed a hundred million as
+ * ",000,000.00 XEC". It takes neither of the rows' classes; its steps and
+ * its wrap are window.css's, scoped to the Cycle card. Tests:
+ * `a-cycle-card-keeps-its-grid-at-the-cut`,
+ * `a-cycle-card-shows-every-digit-at-every-wall-size`.
+ */
+function wallFigure(
+    head: HTMLElement,
+    amount: HTMLElement,
+    node: HTMLElement,
+    figure: string,
+    cycle: boolean,
+    hasFrom: boolean,
+    cut: number,
+    narrow: number,
+): void {
     if (cycle) {
-        node.textContent = figure;
+        const tier = wallFigureTier(figure, hasFrom);
+        if (tier > 0) {
+            head.setAttribute('data-wall-tier', String(tier));
+        }
+        // From the break step the narrow walls may wrap the figure
+        // (window.css reads the attribute's presence, one selector a rule).
+        if (tier >= WALL_BREAK_TIER) {
+            head.setAttribute('data-wall-break', '');
+        }
+        moneyFigure(node, figure, tier >= WALL_BREAK_TIER);
         return;
     }
     rowFigure(amount, node, figure, 3, cut);
@@ -358,12 +429,13 @@ function listingRow(listing: TokenListing, view: StallView, withCode: boolean): 
         const amount = el('span', 'item-a');
         // "from" is a claim about the figure — that it prices PART of the lot.
         // On a whole-lot offer it is simply false.
-        if (offer.askedAtoms < offer.atoms) {
+        const from = offer.askedAtoms < offer.atoms;
+        if (from) {
             amount.append(el('span', 'item-from', copy.PRICE_FROM));
         }
         const figure = el('span', 'item-x');
         figure.setAttribute('data-role', 'price');
-        wallFigure(amount, figure, formatXec(offer.askedSats), withCode, ROW_REFLOW_LISTING_CHARS, WALL_NARROW_LISTING_CHARS);
+        wallFigure(head, amount, figure, formatXec(offer.askedSats), withCode, from, ROW_REFLOW_LISTING_CHARS, WALL_NARROW_LISTING_CHARS);
         amount.append(figure);
         amount.append(el('span', 'item-u', copy.XEC), lookMark('figure'));
         price.append(amount);
@@ -434,7 +506,7 @@ function quoteRow(
     const amount = el('span', 'item-a');
     const figure = el('span', 'item-x');
     figure.setAttribute('data-role', 'seller-price');
-    wallFigure(amount, figure, quoteFigure(item.price), cycle, ROW_REFLOW_QUOTE_CHARS, WALL_NARROW_QUOTE_CHARS);
+    wallFigure(head, amount, figure, quoteFigure(item.price), cycle, false, ROW_REFLOW_QUOTE_CHARS, WALL_NARROW_QUOTE_CHARS);
     amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
