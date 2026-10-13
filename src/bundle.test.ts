@@ -248,7 +248,7 @@ const wornOf = (looks: readonly PrivateLookRead[]) => looks.map((look) => ({ loo
  * 8e2 — on a deploy build carrying the private looks a run reads: the
  * merged rows and the loader ride the entry, a look's sheet and art never do.
  */
-const EVERY_VISITOR_CEILING_BYTES = 895_000;
+const EVERY_VISITOR_CEILING_BYTES = 915_000;
 
 /** A byte count as a run prints it. */
 const figure = (bytes: number): string => bytes.toLocaleString('en-US');
@@ -288,6 +288,15 @@ describe('every-visitor-weight-has-a-ceiling', () => {
      * real look's `look.json` costs more than the fixture's 1,173). Each run
      * prints both: this build's here, the deploy build's in
      * `each-look-keeps-its-art-budget`.
+     *
+     * **Raised to 915,000 (+20,000) on 2026-10-14** (D-2026-10-14-01, the
+     * owner: "Theo khuyến nghị"). The money fixes had eaten the room: 873,351
+     * public after the 360px phone work (+5,832 over 867,519) and 876,485
+     * with the wall's Cycle-card ladder, which left a deploy build carrying
+     * the tracked fixture 1,433 bytes (893,567). Every byte of that rise is a
+     * figure that no longer loses a digit; none is ornament. The bound on the
+     * two buckets together rises by construction to 915,000 + 274,000 =
+     * 1,189,000.
      */
 
     it(`keeps every visitor's download under ${EVERY_VISITOR_CEILING_BYTES} bytes`, async () => {

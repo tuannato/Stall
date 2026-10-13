@@ -58,7 +58,9 @@
  * a second time, so it fired while every visitor's download still had room
  * — ~28 KB on the public build, ~11 KB on a deploy build carrying a look
  * (measured 2026-10-06). The bound on the two together rose by construction,
- * from 1,130,000 to 895,000 + 274,000 = 1,169,000.
+ * from 1,130,000 to 895,000 + 274,000 = 1,169,000, and to 915,000 +
+ * 274,000 = 1,189,000 when the every-visitor ceiling was raised on
+ * 2026-10-14 (D-2026-10-14-01).
  */
 import { gzipSync } from 'node:zlib';
 import { sanitizeSvg } from './svg-allow.mjs';
