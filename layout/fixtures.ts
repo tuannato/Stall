@@ -833,12 +833,13 @@ export const SCREENS: Record<string, StallView> = {
     /*
      * Rows at the longest figures (round 2, the critic's P2-6): an
      * eight-byte asked amount on a listing row and an eight-byte XEC quote
-     * on a quote row. A row's figure past 14 characters on the rows' last
-     * rung breaks after a comma (`rowFigure`); before, it grew to the left
-     * and cut its leading digits at 360 on every look and at 390 on Neo,
-     * Rural, and for the quote on every look. The other rows are on tier 0 or
-     * the last tier, clear of Rural's rows at 360. Geometry only: `offers`'
-     * and `plugin-missing-quotes`' ink.
+     * on a quote row. They re-flow on the rows' last rung and break after a
+     * comma (`rowFigure`); before, they grew to the left and cut their
+     * leading digits at 360 on every look and at 390 on Neo, Rural, and for
+     * the quote on every look. `row-longest-figure` is geometry only
+     * (`offers`' ink); `quote-row-longest-figure` is sampled by the contrast
+     * pass (round 3, the critic's P2-1): it is the one screen whose broken
+     * figure's every digit is read for its ink.
      */
     'row-longest-figure': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, LONGEST_ASK_SATS), offer(T2, 1, 87_500n)] },
@@ -2124,7 +2125,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'pay-figure-17',
     'pay-several-figure-lines',
     'row-longest-figure',
-    'quote-row-longest-figure',
+    // Not `quote-row-longest-figure` (round 3): the contrast pass samples
+    // it, the one screen whose broken figure's every digit is read for its
+    // ink.
 ]);
 
 /**

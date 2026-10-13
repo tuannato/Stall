@@ -705,6 +705,16 @@ const CODES_REQUIRED = [
 ];
 
 /**
+ * The screen the contrast pass reads broken figures on, every job of it
+ * (round 3, the critic's P2-1; `a-broken-figure-paints-every-digit`): an
+ * eight-byte XEC quote on its quote row, broken after its commas at the
+ * phone and re-flowed onto its own row at the desk — `.fig-say`, `.fig-end`
+ * and `.fig-wraps` on one screen, every look bare and worn. The other
+ * broken-figure screens are geometry only (`GEOMETRY_ONLY_SCREENS`).
+ */
+const BROKEN_FIGURE_SCREEN = 'quote-row-longest-figure';
+
+/**
  * Glyph pixels a line's mask must hold per letter or digit. The least any
  * outlined target read in round 8 was 13.7 a character (the pass prints
  * it: "at least N glyph pixels a character"); 10 sits under that with room
@@ -962,6 +972,60 @@ function legacyBand(img, target) {
  * control is read against the muted ink. Returns the worst contrast, the pixels read,
  * and where the worst one was.
  */
+/**
+ * **A broken figure paints every digit** (round 3, the critic's P2-1): a
+ * money figure broken after its commas (`.fig-say`, its pieces
+ * `aria-hidden` under one `role="img"` name) is a figure a screen reader
+ * hears whole whatever the pieces paint, so a look that hid a piece, or
+ * made one transparent, would show no digit while the money box's own read
+ * — the node's computed ink against the blanked ground — stayed green. Read
+ * on a capture with the broken figures' glyphs shown
+ * (`__contrastFigureGlyphs`): for every line of every piece, the pixels
+ * that moved at least halfway from the blanked capture toward the FIGURE's
+ * own ink (never the piece's), at least `RING_MASK_PER_CHAR` for each
+ * letter or digit the line shows; and every letter and digit of the figure
+ * on some line. Returns the lines too thin and how many characters the
+ * lines held.
+ */
+function digitRead(blank, shown, target) {
+    const W = blank.width;
+    const H = blank.height;
+    const bpp = blank.bpp;
+    const thin = [];
+    let found = 0;
+    let maskPx = 0;
+    for (const line of target.digits ?? []) {
+        const [ir, ig, ib] = rgbaOf(line.ink);
+        const x0 = Math.max(0, Math.floor(line.x));
+        const y0 = Math.max(0, Math.floor(line.y));
+        const x1 = Math.min(W - 1, Math.ceil(line.x + line.w) - 1);
+        const y1 = Math.min(H - 1, Math.ceil(line.y + line.h) - 1);
+        found += line.chars;
+        let held = 0;
+        for (let y = y0; y <= y1; y += 1) {
+            for (let x = x0; x <= x1; x += 1) {
+                const i = (y * W + x) * bpp;
+                const dr = ir - blank.data[i];
+                const dg = ig - blank.data[i + 1];
+                const db = ib - blank.data[i + 2];
+                const den = dr * dr + dg * dg + db * db;
+                if (den < 1) continue;
+                const a =
+                    ((shown.data[i] - blank.data[i]) * dr +
+                        (shown.data[i + 1] - blank.data[i + 1]) * dg +
+                        (shown.data[i + 2] - blank.data[i + 2]) * db) /
+                    den;
+                if (a >= RING_MASK_ALPHA) held += 1;
+            }
+        }
+        maskPx += held;
+        if (line.chars > 0 && held < RING_MASK_PER_CHAR * line.chars) {
+            thin.push({ ...line, mask: held });
+        }
+    }
+    return { thin, found, maskPx };
+}
+
 function lineRead(img, target) {
     let worst = Infinity;
     let px = 0;
@@ -1243,6 +1307,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     const horizonKeys = new Set();
     const horizonWorst = new Map();
     const horizonUnread = [];
+    const brokenKeys = new Set();
+    let brokenFigures = 0;
     let lookPseudoPixels = 0;
     let lookPseudoJobs = 0;
     let lookMarkJobs = 0;
@@ -1747,6 +1813,65 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     phases.set('ring', entry);
                 }
                 /*
+                 * A broken figure paints every digit (`digitRead`, round 3):
+                 * the figures broken after a comma, on a capture with their
+                 * glyphs shown, each piece's glyphs read in the figure's
+                 * own ink. A failing read is taken again on a fresh pair
+                 * before it is believed, like a failing box.
+                 */
+                const broken = targets.filter((t) => (t.digitsOwed ?? 0) > 0);
+                if (retryWhy.length === 0 && broken.length > 0) {
+                    const brokenStart = performance.now();
+                    const figureGlyphs = async (show) => {
+                        const r = await cdp.send(
+                            'Runtime.evaluate',
+                            { expression: `window.__contrastFigureGlyphs(${show})`, awaitPromise: true, returnByValue: true },
+                            sessionId,
+                        );
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                        return r.result.value;
+                    };
+                    const readBroken = async () => {
+                        const blankCap = await capture();
+                        const n = await figureGlyphs(true);
+                        const shownCap = await capture();
+                        await figureGlyphs(false);
+                        const why = [...blankCap.why, ...shownCap.why];
+                        if (n !== broken.length) why.push(`${n} broken figures shown where the read has ${broken.length}`);
+                        return { why, results: why.length > 0 ? [] : broken.map((t) => ({ t, r: digitRead(blankCap.shot, shownCap.shot, t) })) };
+                    };
+                    const bad = ({ t, r }) => r.thin.length > 0 || r.found < t.digitsOwed;
+                    let pass = await readBroken();
+                    if (pass.why.length === 0 && pass.results.some(bad)) {
+                        await sleep(250);
+                        pass = await readBroken();
+                    }
+                    if (pass.why.length > 0) {
+                        retryWhy = pass.why.map((w) => `for the broken figures, ${w}`);
+                    } else {
+                        brokenKeys.add(plannedJob.key);
+                        for (const { t, r } of pass.results) {
+                            brokenFigures += 1;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${t.sel} at ${Math.round(t.x)},${Math.round(t.y)}`;
+                            if (r.found < t.digitsOwed) {
+                                dim.push(
+                                    `${at} is a figure broken after its commas and ${t.digitsOwed - r.found} of its ${t.digitsOwed} letters and digits stand on no line of it — a-broken-figure-paints-every-digit`,
+                                );
+                            } else if (r.thin.length > 0) {
+                                const line = r.thin[0];
+                                dim.push(
+                                    `${at} is a figure broken after its commas and a piece of ${line.chars} digit(s) at ${Math.round(line.x)},${Math.round(line.y)} ` +
+                                        `paints ${line.mask} glyph pixel(s) in the figure's ink, under ${RING_MASK_PER_CHAR} a digit — a-broken-figure-paints-every-digit`,
+                                );
+                            }
+                        }
+                    }
+                    const entry = phases.get('broken figures') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - brokenStart;
+                    phases.set('broken figures', entry);
+                }
+                /*
                  * Grid horizon at its worst, reported (step 5a″; the
                  * owner's C, 2026-09-27): the art flattened to its
                  * brightest paint (`__horizonAtItsWorst`), a frame with
@@ -2078,6 +2203,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             horizonKeys,
             horizonWorst,
             horizonUnread,
+            brokenKeys,
+            brokenFigures,
             lookPseudoPixels,
             lookPseudoJobs,
             lookMarkJobs,
@@ -3161,6 +3288,10 @@ try {
         // the lines that gave no sample there.
         const horizonWorst = new Map();
         const horizonUnread = [];
+        // Jobs whose broken figures were read digit by digit, and how many
+        // figures (`a-broken-figure-paints-every-digit`, round 3).
+        const brokenKeys = new Set();
+        let brokenFigures = 0;
         const dim = [];
         // The ring read (`ringRead`): outlined targets read, ring pixels
         // read, and the least ring contrast per kind of line, for the report.
@@ -3282,6 +3413,8 @@ try {
                 }
             }
             for (const key of out.horizonKeys) horizonKeys.add(key);
+            for (const key of out.brokenKeys) brokenKeys.add(key);
+            brokenFigures += out.brokenFigures;
             for (const [part, byJob] of out.horizonWorst) {
                 const into = horizonWorst.get(part) ?? new Map();
                 for (const [key, least] of byJob) into.set(key, Math.min(into.get(key) ?? Infinity, least));
@@ -3594,6 +3727,16 @@ try {
             });
             console.log(`  Grid horizon at its worst, least per sign line (a known limit, the owner's C, 2026-09-27): ${said.join('; ')}`);
         }
+        // Every job of the broken-figure screen read its broken figures digit
+        // by digit (round 3, the critic's P2-1): a screen that stopped
+        // breaking its figure, or a read that stopped finding one, is a gap.
+        const brokenOwed = plan.filter((job) => job.screen === BROKEN_FIGURE_SCREEN).map((job) => job.key);
+        if (brokenOwed.length === 0 || brokenOwed.some((key) => !brokenKeys.has(key))) {
+            verdicts.push(
+                `a-broken-figure-paints-every-digit read broken figures on ${brokenKeys.size} job(s) but not on ` +
+                    `${brokenOwed.filter((key) => !brokenKeys.has(key)).join(', ') || `any job of ${BROKEN_FIGURE_SCREEN}`}`,
+            );
+        }
         if (HORIZON_REQUIRED.some((key) => !horizonKeys.has(key))) {
             verdicts.push(
                 `the sign's lines over Grid horizon were read at its worst on ${horizonKeys.size} job(s) but not on ${HORIZON_REQUIRED.filter((key) => !horizonKeys.has(key)).join(', ')}`,
@@ -3754,7 +3897,8 @@ try {
                         `the aurora's tide held at an end on ${tideJobs}, ` +
                         `${lineTargets} of them over their line rects, ` +
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
-                        `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character) — ${took()}` +
+                        `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character), ` +
+                        `${brokenFigures} broken figure(s) read digit by digit on ${brokenKeys.size} job(s) — ${took()}` +
                         `\n    faces: every face loaded before the first job on all ${tabs.reduce((n, tab) => n + tab.faces.length, 0)} contrast pages` +
                         ` (the first: ${tabs[0].faces[0] ?? 'none'})` +
                         `\n    honest-display: ${[...honestJobs.values()].reduce((a, b) => a + b, 0)} job(s) on ${honestScreens.length} sheet screens read every line they owe; ` +

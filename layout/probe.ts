@@ -5003,6 +5003,15 @@ type ContrastTarget = {
     lines: RingLine[];
     /** An outlined target's drawn icons: not text, left out of the mask and the ring. */
     icons: Hole[];
+    /**
+     * A money figure broken after its commas (`.fig-say`, round 3, the
+     * critic's P2-1): its lines of text — every text node in it, hidden ones
+     * included — each with the money node's own ink, never the piece's, and
+     * how many letters and digits the figure holds. The runner reads each
+     * piece's glyphs in the figure's ink (`a-broken-figure-paints-every-digit`).
+     */
+    digits?: RingLine[];
+    digitsOwed?: number;
     /** Where an outlined target's ring may be read: the box, `ring` px wider, inside the clip. */
     ringBox: Hole;
     /** The outline's own offsets, which are where the ring lies around the glyph mask. */
@@ -5120,6 +5129,7 @@ declare global {
          * wears the outline, for the ring read's second capture.
          */
         __contrastGlyphs: (show: boolean) => Promise<number>;
+        __contrastFigureGlyphs: (show: boolean) => Promise<number>;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -5395,6 +5405,12 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         legacyDropped: sliver,
         ring,
         lines: ring > 0 ? ringLines(node, box) : [],
+        ...(money && node.querySelector('.fig-say') !== null
+            ? {
+                  digits: ringLines(node, box, { ink, hidden: true }),
+                  digitsOwed: [...(node.textContent ?? '')].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length,
+              }
+            : {}),
         icons:
             ring > 0
                 ? [...node.querySelectorAll('svg')].map((svg) => {
@@ -5562,7 +5578,11 @@ function drawsNothing(node: HTMLElement): boolean {
  * the clip left it), so a line scrolled half out of a clip counts only what
  * shows. Text inside an `<svg>` is a drawing, not a line.
  */
-function ringLines(node: HTMLElement, box: { x: number; y: number; width: number; height: number }): RingLine[] {
+function ringLines(
+    node: HTMLElement,
+    box: { x: number; y: number; width: number; height: number },
+    opts: { ink?: string; hidden?: boolean } = {},
+): RingLine[] {
     const lines = new Map<string, RingLine>();
     const range = document.createRange();
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -5571,8 +5591,10 @@ function ringLines(node: HTMLElement, box: { x: number; y: number; width: number
         const owner = text.parentElement;
         if (owner === null || owner.closest('svg') !== null) continue;
         const cs = getComputedStyle(owner);
-        if (cs.visibility !== 'visible') continue;
-        const ink = owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
+        // A broken figure's pieces are read hidden or not (`hidden`): a piece
+        // a look hid paints nothing, and the read finds no glyph in it.
+        if (cs.visibility !== 'visible' && opts.hidden !== true) continue;
+        const ink = opts.ink ?? (owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color);
         const value = text.textContent ?? '';
         for (let i = 0; i < value.length; ) {
             const cp = value.codePointAt(i)!;
@@ -5623,6 +5645,32 @@ window.__contrastGlyphs = async (show: boolean) => {
     let n = 0;
     for (const node of preparedNodes) {
         if (outlineOf(node) <= 0) continue;
+        n += 1;
+        for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
+            if (el.dataset['probeColor'] === undefined) continue;
+            if (show) {
+                el.style.color = el.dataset['probeColor'];
+            } else {
+                el.style.setProperty('color', 'transparent', 'important');
+            }
+        }
+    }
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return n;
+};
+
+/**
+ * The broken-figure read's second capture (round 3, the critic's P2-1):
+ * every prepared money node holding a `.fig-say` has its glyphs shown again
+ * (the colour the prepare blanked, each element its own, put back) or
+ * blanked once more. A piece a look made transparent is put back
+ * transparent, and one it hid stays hidden: what the read then finds is what
+ * the look paints.
+ */
+window.__contrastFigureGlyphs = async (show: boolean) => {
+    let n = 0;
+    for (const node of preparedNodes) {
+        if (!node.matches(MONEY) || node.querySelector('.fig-say') === null) continue;
         n += 1;
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
