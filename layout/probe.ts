@@ -5010,6 +5010,10 @@ type ContrastTarget = {
      */
     digits?: RingLine[];
     digitsOwed?: number;
+    /** The broken figure's role, which the runner owes per screen (`BROKEN_FIGURE_SCREENS`). */
+    digitsRole?: string;
+    /** A broken figure's own line boxes, each read whole by the runner's box read (round 4). */
+    lineBoxes?: { x: number; y: number; w: number; h: number }[];
     /** Where an outlined target's ring may be read: the box, `ring` px wider, inside the clip. */
     ringBox: Hole;
     /** The outline's own offsets, which are where the ring lies around the glyph mask. */
@@ -5403,11 +5407,43 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         legacyDropped: sliver,
         ring,
         lines: ring > 0 ? ringLines(node, box) : [],
+        // A broken figure's pieces, each read in the FIGURE's own ink (the
+        // ink of the node the figure is written into, never a piece's), and
+        // only the figure's own text: a money target holding words beside
+        // the figure (Pay several's lines, the selection line's "1 ×") read
+        // those words toward the figure's ink in round 3's first cut (round
+        // 4, the critic's P2-2).
         ...(money && node.querySelector('.fig-say') !== null
-            ? {
-                  digits: ringLines(node, box, { ink, hidden: true }),
-                  digitsOwed: [...(node.textContent ?? '')].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length,
-              }
+            ? (() => {
+                  const says = [...node.querySelectorAll<HTMLElement>('.fig-say')];
+                  const inkOf = (el: HTMLElement | null): string =>
+                      el === null || el === node ? ink : (el.dataset['probeInk'] ?? getComputedStyle(el).color);
+                  return {
+                      digits: says.flatMap((say) => ringLines(say, box, { ink: inkOf(say.parentElement), hidden: true })),
+                      digitsOwed: says.reduce(
+                          (n, say) => n + [...(say.getAttribute('aria-label') ?? '')].filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length,
+                          0,
+                      ),
+                      digitsRole: node.getAttribute('data-role') ?? describe(node),
+                      // Its line boxes, each read whole by the box read (round 4):
+                      // the union of an inline figure's lines holds what stands
+                      // beside them. Unturned figures alone; a turned one keeps
+                      // its one box in its own frame.
+                      ...(angle === 0 && node.getClientRects().length > 1
+                          ? {
+                                lineBoxes: [...node.getClientRects()]
+                                    .map((r) => {
+                                        const x = Math.max(r.left, box.x);
+                                        const y = Math.max(r.top, box.y);
+                                        const w = Math.min(r.right, box.x + box.width) - x;
+                                        const h = Math.min(r.bottom, box.y + box.height) - y;
+                                        return { x, y, w, h };
+                                    })
+                                    .filter((r) => r.w > 0 && r.h > 0),
+                            }
+                          : {}),
+                  };
+              })()
             : {}),
         icons:
             ring > 0

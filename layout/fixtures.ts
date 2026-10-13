@@ -637,6 +637,21 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'pay', tokenId: T1 },
         payRate: LONGEST_PAY_RATE,
     }),
+    /*
+     * The pay sheet over the eight-byte XEC quote (round 4, the critic's
+     * P2-2): the one pay sheet whose figure, the XEC the wallet signs,
+     * breaks after its commas (26 characters, past the ladder's last
+     * ceiling). On the contrast plan, every piece of it read for its ink
+     * (`BROKEN_FIGURE_SCREENS` in the runner).
+     */
+    'pay-longest-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, LONGEST_QUOTE]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
     'pay-several-long-figure': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: new Map([
@@ -645,6 +660,36 @@ export const SCREENS: Record<string, StallView> = {
         ]),
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    /*
+     * Pay several over the eight-byte XEC quote, both items this stall's
+     * own (round 4, the critic's P2-2): its figure, its two lines and its
+     * total break after their commas, and it is on the contrast plan, every
+     * piece read for its ink. Not `pay-several-long-figure`, whose second
+     * item is another wallet's mint: the borrowed-id warning stands inside
+     * `pay-lines` on a ground of its own, and the money box read, which reads
+     * that container whole in its own ink, read it at 2.94:1 on Rural worn —
+     * against no glyph of that ink (a reading of the container, left as it
+     * was: that screen stays geometry only).
+     */
+    'pay-several-longest-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, LONGEST_QUOTE],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: new Map<string, GenesisAttribution>([
+            [T1, 'attributed'],
+            [QUOTED, 'attributed'],
+        ]),
         quoteTimes: QUOTE_TIMES,
         selectionOpen: true,
         selection: new Map([
@@ -2174,7 +2219,9 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // The two pay sheets at long figures (2026-10-13): `pay`'s and
     // `pay-several`'s sheet shape, which sits over the shop.
     'pay-long-figure',
+    'pay-longest-figure',
     'pay-several-long-figure',
+    'pay-several-longest-figure',
     // The card ladder's every step and the rows at the longest figures
     // (round 2): the faces', the sheets' and the rows' shapes again.
     'item-listing-figure-14',
@@ -2343,15 +2390,20 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // ground with the invites on it (the notice invite's words sampled on
     // `sparse-pasted` under the rain). It is here for the sign's cells.
     'empty-pasted',
-    // The two faces at long figures (the 8g1 critic's P2-1):
-    // `item-listing`'s and `item-quote`'s ink. They are here for the figure
-    // inside its card.
-    'item-listing-long-figure',
+    // The quote face at a long figure (the 8g1 critic's P2-1): `item-quote`'s
+    // ink. Here for the figure inside its card. Not the listing face, the
+    // two pay sheets or the strip at long figures: since round 4 (the
+    // critic's P2-2) the contrast pass samples them, every broken figure's
+    // every digit read for its ink (`BROKEN_FIGURE_SCREENS` in the runner).
     'item-quote-long-figure',
-    // The two pay sheets at long figures (2026-10-13): `pay`'s and
-    // `pay-several`'s ink, on the ground those two already sample. They are
-    // here for the figure inside its card at 360.
+    // The pay sheet at the largest realistic sum: `pay`'s ink, one line on
+    // the ladder's last single-line step, so nothing breaks; the pay sheet
+    // that breaks its figure is `pay-longest-figure`, sampled.
     'pay-long-figure',
+    // Pay several with another wallet's mint among its items: `pay-several`'s
+    // ink. The Pay several that breaks every figure and is sampled is
+    // `pay-several-longest-figure` (the warning inside `pay-lines` is a
+    // ground the container's box read cannot be fair to).
     'pay-several-long-figure',
     // The card ladder's every step and the rows at the longest figures
     // (round 2): the ink of the screens they copy. Here for the geometry.
@@ -2365,10 +2417,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'pay-figure-17',
     'pay-several-figure-lines',
     'row-longest-figure',
-    'pay-several-strip-long-figure',
     // Round 3: the rows either side of the re-flow's cut. Not
-    // `quote-row-longest-figure`: the contrast pass samples it, the one
-    // screen whose broken figure's every digit is read for its ink.
+    // `quote-row-longest-figure`: the contrast pass samples it, with the
+    // four surfaces above.
     'quote-row-1m',
     'quote-row-18',
     'row-15-16',

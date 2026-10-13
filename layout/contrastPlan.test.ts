@@ -37,13 +37,16 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         // does (`layout/honestDisplay.ts`). Round 3 of the narrow phone: +7 a
         // page viewport, `quote-row-longest-figure` sampled (the critic's
         // P2-1), the one screen whose broken figure is read digit by digit.
+        // Round 4: +28 a page viewport, the listing face, both pay sheets and
+        // the selection strip at long figures sampled too (the critic's
+        // P2-2), so every surface that breaks a figure is read digit by digit.
         expect(looks.map((look) => look.id)).toEqual([1, 2, 3, SKELETON_LOOK_ID]);
         expect({
             mobile: count(jobs, 'mobile'),
             desktop: count(jobs, 'desktop'),
             canvas: count(jobs, 'canvas'),
             total: jobs.length,
-        }).toEqual({ mobile: 256, desktop: 286, canvas: 29, total: 571 });
+        }).toEqual({ mobile: 284, desktop: 314, canvas: 29, total: 627 });
     });
 
     it('samples Grid horizon worn alone on the offers screen, at the phone and the desk', () => {
