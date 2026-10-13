@@ -61,6 +61,7 @@ import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
+import { reachesAnything, spillReach } from './spillReach';
 import { inkLines, paddingBox, paintClips, type Box } from '../src/ui/signInk';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -1301,22 +1302,15 @@ function measure(screen: string, themeLabel: string): Failure[] {
         const edge = clipper?.getBoundingClientRect();
         const cut = edge !== undefined && (down ? strip.bottom > edge.bottom + 1 : strip.right > edge.right + 1);
         let under: Element | undefined;
-        // The part of the strip its clipper shows (round 3): a clipper clips
-        // both axes, so where the strip runs past it — down a scroller, under
-        // the dock that stands outside it — it paints nothing and lies under
-        // nothing. A 300px Rural card tilted 0.6° bulges 1.6px a side, and its
-        // strip, the list's whole height, was read as lying under the dock's
-        // tab at 360 though the scroller ends 16px above it.
-        const shown =
-            edge === undefined
-                ? strip
-                : new DOMRect(
-                      Math.max(strip.left, edge.left),
-                      Math.max(strip.top, edge.top),
-                      Math.min(strip.right, edge.right) - Math.max(strip.left, edge.left),
-                      Math.min(strip.bottom, edge.bottom) - Math.max(strip.top, edge.top),
-                  );
-        if (!cut && shown.width > 0 && shown.height > 0) {
+        // Against a control inside the clipper, the whole strip (below the
+        // fold too); against one outside it, the part the clipper shows
+        // (`spillReach`, round 4, the critic's P2-1).
+        const clipCs = clipper === null ? undefined : getComputedStyle(clipper);
+        const clip =
+            edge === undefined || clipCs === undefined
+                ? undefined
+                : { box: edge, clipsX: clipCs.overflowX !== 'visible', clipsY: clipCs.overflowY !== 'visible' };
+        if (!cut) {
             for (const other of root.querySelectorAll<HTMLElement>('button, a, input, select, textarea, [data-role="price"], [data-role="seller-price"], .item-n, .face-nm, .fine, .note, .pub')) {
                 if (other === node || node.contains(other) || other.contains(node)) {
                     continue;
@@ -1324,8 +1318,12 @@ function measure(screen: string, themeLabel: string): Failure[] {
                 if (other.closest('[aria-hidden="true"]') !== null) {
                     continue;
                 }
+                const reach = spillReach(strip, clip, clipper === null || clipper.contains(other));
+                if (!reachesAnything(reach)) {
+                    continue;
+                }
                 const r = other.getBoundingClientRect();
-                if (r.width > 0 && overlaps(shown, r)) {
+                if (r.width > 0 && !(reach.right <= r.left || r.right <= reach.left || reach.bottom <= r.top || r.bottom <= reach.top)) {
                     under = other;
                     break;
                 }
