@@ -213,6 +213,8 @@ describe('every-whole-sheet-guard-reads-the-served-sheets', () => {
         'scripts/workshop-lint.test.mjs': "the kit's own sheet and a creator's scratch sheet, the kit lint's subjects",
         'layout/workshopStarter.test.ts': "the kit's starters, the kit's subject",
         'layout/auroraTide.test.ts': "stall.css's aurora rules, a shipped row's",
+        'layout/cardLadder.test.ts':
+            "stall.css's phone floor for the card figures, the base's own declarations, held to the probe's last step (round 4); what a look sizes is the probe's to measure (`a-card-figure-steps-down-on-every-look`)",
         'layout/anchorColour.test.ts':
             'renders the shipped looks and the skeleton: the base sheets colour every anchor the app builds, read under the skeleton, which no sheet names, and a look sheet can only add or override that colour, never hand a link the browser\'s back (the look lint refuses `revert` and `revert-layer` on `color` and `all`, and `all` other than `inherit` or `unset`); an anchor under a private look is read by the probe\'s contrast pass under every look a selection carries (8e2: the guide and wearing links are contrast targets)',
         'src/bundle.test.ts':
