@@ -6142,6 +6142,20 @@ fixture. Three changes to the read itself:
 Cost: 180 figures on 90 jobs, 19.0s of the contrast pass (round 3: 18 on
 18, 2.7s).
 
+**What it reads, and what it does not** (the critic's round-4 review,
+P2-1). It reads each piece, a comma group or the figure's end, as a whole:
+enough pixels moved toward the figure's ink, and the strongest of them at
+3:1. It does not read each digit, so a piece only partly hidden passes.
+Three plants the look lint and the kit lint both accept passed the whole
+runner: a gradient mask over the face's last group (the figure read
+"…095,51"), an inset clip on the pay sheet's last group (missed at 390),
+and negative letter-spacing on the strip's last group. A mask over the
+whole group was caught. A pixel floor on the figure's own ink would not
+close this; a computed-style check would (every piece computes the money
+node's colour, opacity, visibility, font and letter-spacing, with no mask,
+clip, filter or transform). Not built here; whether a look may style a
+figure's pieces at all is the owner's call.
+
 ### Two reads corrected (round 3)
 
 - **`coveredBy` reads a turned box in its own frame.** A box inside a
