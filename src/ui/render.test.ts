@@ -6319,6 +6319,83 @@ describe('a-card-figure-steps-down-and-breaks-only-after-a-comma', () => {
     });
 
     /**
+     * One name to a screen reader (round 2, the critic's P3-1): each `<wbr>`
+     * splits the figure's text, and Chrome's tree held a broken figure as six
+     * pieces. A broken figure is one `role="img"` named by the whole figure,
+     * its pieces `aria-hidden` under it, and the money node still holds the
+     * figure in one element with `textContent` the figure exactly.
+     * Verified in Chrome with CDP `Accessibility.getPartialAXTree` (one
+     * image node named by the whole figure, no piece of it as text);
+     * happy-dom builds no tree, so this pins the markup that tree is read from.
+     */
+    it('names a broken figure once for a screen reader, its digits still in one element', () => {
+        const root = face([{ ...OFFER, askedSats: 2n ** 64n - 1n }]);
+        const brokenFigures = [
+            root.querySelector<HTMLElement>('.face-x [data-role="price"]')!,
+            root.querySelector<HTMLElement>('.row.big dd')!,
+        ];
+        expect(brokenFigures[1]!.closest('.row.big')?.getAttribute('data-price-tier')).toBe('3');
+        for (const figure of brokenFigures) {
+            const said = [...figure.querySelectorAll('.fig-say')];
+            expect(said).toHaveLength(1);
+            expect(said[0]!.getAttribute('role')).toBe('img');
+            expect(said[0]!.getAttribute('aria-label')).toBe(figure.textContent);
+            expect(figure.querySelectorAll('wbr').length).toBeGreaterThan(0);
+            // Every piece of the figure's text is hidden under the one name.
+            const walker = document.createTreeWalker(figure, NodeFilter.SHOW_TEXT);
+            for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+                expect(text.parentElement?.closest('[aria-hidden="true"]')?.parentElement).toBe(said[0]);
+            }
+        }
+        // A short figure is its text and nothing else: no name of its own.
+        const plain = face([OFFER]).querySelector('.face-x [data-role="price"]')!;
+        expect(plain.querySelector('.fig-say, [aria-hidden]')).toBeNull();
+        // The total's sentence stays readable around the one named figure.
+        const total = paint(
+            payView({
+                tokens: new Map([
+                    [TOKEN_ID, BEANS],
+                    [TOKEN_UNLISTED, PAY_TEA],
+                ]),
+                prices: new Map([
+                    [TOKEN_ID, { code: 'xec', exponent: 2, amount: 2n ** 64n - 1n }],
+                    [TOKEN_UNLISTED, { code: 'xec', exponent: 2, amount: 2n ** 64n - 1n }],
+                ]),
+                overlay: { kind: 'pay-several' },
+                selectionOpen: true,
+                selection: new Map([
+                    [TOKEN_ID, 1n],
+                    [TOKEN_UNLISTED, 1n],
+                ]),
+            }),
+        ).root.querySelector('[data-role="pay-total"]')!;
+        expect(total.querySelector('.fig-say')?.getAttribute('aria-label')).toBe('368,934,881,474,191,032.30 XEC');
+        expect(total.firstChild?.nodeType).toBe(Node.TEXT_NODE);
+        expect(total.firstChild?.parentElement?.closest('[aria-hidden]')).toBeNull();
+    });
+
+    /**
+     * The face's "You pay" figure on the same ladder (round 2, the critic's
+     * P2-1): its row carries the figure's tier, the floor steps its size, and
+     * past the last ceiling it breaks after a comma. 14 characters or fewer
+     * carry no tier.
+     */
+    it('puts the face\'s You pay figure on every step of the ladder', () => {
+        for (const [sats, tier] of [
+            [99_999_999_999n, null],
+            [9_999_999_999_999n, '1'],
+            [9_999_999_999_999_999n, '2'],
+            [2n ** 64n - 1n, '3'],
+        ] as const) {
+            const row = face([{ ...OFFER, askedSats: sats }]).querySelector<HTMLElement>('.row.big')!;
+            const figure = formatXec(sats);
+            expect(row.querySelector('dd')?.textContent).toBe(copy.payAmount(figure));
+            expect(row.getAttribute('data-price-tier'), figure).toBe(tier);
+            expect(row.querySelectorAll('wbr').length > 0, figure).toBe(tier === '3');
+        }
+    });
+
+    /**
      * The floor ladder in stall.css sizes every step for both figures, under
      * the phone block like the rows' floor, and the last rung re-flows the row
      * at every width. Read statically (happy-dom lays nothing out); the
@@ -6336,6 +6413,14 @@ describe('a-card-figure-steps-down-and-breaks-only-after-a-comma', () => {
         }
         expect(css).toMatch(/\.face-x:where\(\[data-price-tier='3'\]\),\s*\.pay-x:where\(\[data-price-tier='3'\]\) \{\s*display: block;/);
         expect(css).toMatch(/\.fig-end \{\s*white-space: nowrap;/);
+        // "You pay": each step under the phone block and capped at the look's
+        // own size, so the floor never grows a look's smaller figure.
+        const paid = css.match(/@media \(max-width: 679\.98px\) \{\s*\.row\.big:where\(\[data-price-tier='1'\]\)[\s\S]*?\n\}/)?.[0] ?? '';
+        for (const [tier, px] of [['1', 20], ['2', 17], ['3', 15]] as const) {
+            expect(paid, `You pay tier ${tier}`).toMatch(
+                new RegExp(`\\.row\\.big:where\\(\\[data-price-tier='${tier}'\\]\\) dd \\{\\s*font-size: min\\(${px}px, var\\(--s-paid-size\\)\\);`),
+            );
+        }
     });
 });
 
@@ -6395,6 +6480,78 @@ describe('the-head-wears-the-tier-the-figure-earned', () => {
         );
         const head = root.querySelector('.item-head')!;
         expect(head.getAttribute('data-price-tier')).toBe('2');
+    });
+});
+
+describe('a-long-row-figure-keeps-its-leading-digits', () => {
+    /**
+     * A row's figure on the rows' last rung past 14 characters (round 2, the
+     * critic's P2-6): it grew to the left out of a nowrap, end-aligned cell
+     * and cut its most significant digits ("…,467,440,737,095,516.15", the
+     * `184` gone) — at 360 on every look, at 390 on Neo and Rural, and an
+     * eight-byte XEC quote row at 390 on every look. Now the tag re-flows as
+     * text (`fig-wraps`, a block, so whatever cannot fit loses its tail) and
+     * the figure breaks after a comma like the face's. Nothing of 14
+     * characters or fewer changes on any tier. happy-dom lays nothing out:
+     * the probe's narrow and phone passes measure `row-longest-figure` and
+     * `quote-row-longest-figure`.
+     */
+    const LONG_ID = '99'.repeat(32);
+    const LONG_META: TokenMeta = {
+        tokenId: LONG_ID,
+        name: 'Harvest Ledger',
+        ticker: 'HRVT',
+        decimals: 0,
+        tokenType: { protocol: 'SLP', type: 'SLP_TOKEN_TYPE_FUNGIBLE' },
+    };
+    const rowOf = (askedSats: bigint) =>
+        paint(
+            idlePubkey({
+                tokens: new Map([[LONG_ID, LONG_META]]),
+                fetch: { kind: 'offers', offers: [{ ...OFFER, tokenId: LONG_ID, askedSats }] },
+            }),
+        ).root.querySelector<HTMLElement>('.item-head')!;
+
+    it('breaks an eight-byte asked amount after its commas on its own row', () => {
+        const head = rowOf(2n ** 64n - 1n);
+        expect(head.getAttribute('data-price-tier')).toBe('3');
+        const amount = head.querySelector('.item-a')!;
+        expect(amount.classList.contains('fig-wraps')).toBe(true);
+        const figure = amount.querySelector('[data-role="price"]')!;
+        expect(figure.textContent).toBe('184,467,440,737,095,516.15');
+        const wbrs = [...figure.querySelectorAll('wbr')];
+        expect(wbrs).toHaveLength(5);
+        for (const wbr of wbrs) {
+            expect(wbr.previousSibling?.textContent?.endsWith(',')).toBe(true);
+        }
+        expect(figure.querySelector('.fig-end')?.textContent).toBe('516.15');
+    });
+
+    it('leaves a figure of 14 characters or fewer one text node, even on the last rung', () => {
+        // "100,000,000" with from: the live defect's figure, tier 3, 11 characters.
+        const head = rowOf(10_000_000_000n);
+        expect(head.getAttribute('data-price-tier')).toBe('3');
+        expect(head.querySelector('.item-a')?.classList.contains('fig-wraps')).toBe(false);
+        const figure = head.querySelector('[data-role="price"]')!;
+        expect([...figure.childNodes].map((n) => n.nodeType)).toEqual([Node.TEXT_NODE]);
+    });
+
+    it('breaks an eight-byte XEC quote on a quote row the same way', () => {
+        const head = paint(payView({ prices: new Map([[TOKEN_ID, { code: 'xec', exponent: 2, amount: 2n ** 64n - 1n }]]) })).root.querySelector<HTMLElement>(
+            '.item-head-q',
+        )!;
+        expect(head.getAttribute('data-price-tier')).toBe('3');
+        expect(head.querySelector('.item-a')?.classList.contains('fig-wraps')).toBe(true);
+        const figure = head.querySelector('[data-role="seller-price"]')!;
+        expect(figure.textContent).toBe('184,467,440,737,095,516.15 XEC');
+        expect(figure.querySelector('.fig-end')?.textContent).toBe('516.15 XEC');
+        expect(figure.querySelector('.fig-say')?.getAttribute('aria-label')).toBe(figure.textContent);
+    });
+
+    it('re-flows the last rung as text in stall.css, at every width', () => {
+        const css = readFileSync(join(UI_DIR, 'stall.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        expect(css).toMatch(/\.item-head\[data-price-tier='3'\] \.item-a\.fig-wraps \{\s*display: block;/);
+        expect(css).toMatch(/\.item-head\[data-price-tier='3'\] \.item-a\.fig-wraps \.item-x \{\s*white-space: normal;/);
     });
 });
 

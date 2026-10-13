@@ -3395,8 +3395,9 @@ function payRow(
     }
     const price = el('span', 'item-p');
     const amount = el('span', 'item-a');
-    const figure = el('span', 'item-x', figureText);
+    const figure = el('span', 'item-x');
     figure.setAttribute('data-role', 'seller-price');
+    rowFigure(amount, figure, figureText, tier);
     amount.append(figure, lookMark('figure'));
     price.append(amount);
     head.append(price);
@@ -8530,8 +8531,9 @@ function offerRow(
         if (tier > 0) {
             head.setAttribute('data-price-tier', String(tier));
         }
-        const asked = el('span', 'item-x', figure);
+        const asked = el('span', 'item-x');
         asked.setAttribute('data-role', 'price');
+        rowFigure(amount, asked, figure, tier);
         amount.append(asked);
         // The unit rides the amount's own baseline row — "from 1,200 XEC"
         // is one line in every design; a block unit under the number was
@@ -8637,9 +8639,12 @@ export function priceTier(
  *
  * - **14** at the design size, so no figure of 14 characters or fewer moves
  *   on any look. The cost, stated: at 360 a 14-character figure still runs
- *   into its card's padding where it is widest — 8px of the pay card's 14 on
- *   Neo (312 of 304), and on the face 13px of 18 on Neo for `₩9,999,999,999`
- *   and 2px on Rural — cut by nothing.
+ *   into its card's padding where it is widest — 8.5px of the pay card's 14
+ *   on Neo (312 of 304), and on the face 13.3px of 18 on Neo for
+ *   `₩9,999,999,999` and 2.5px on Rural — cut by nothing, and the probe
+ *   reads this step against the card's padding box rather than the row's
+ *   content box (`a-card-figure-stands-inside-its-row`). The face's "You
+ *   pay" figure rides the same steps at its own sizes (`sheetRow`).
  * - **17** at 26px and **21** at 21px — each 13px or more inside the row on
  *   every look for the widest figure the step holds (`元` on Neo's face: 285
  *   and 282 of 298), a margin for a fallback glyph measured on one machine.
@@ -8675,6 +8680,18 @@ export function cardFigureTier(figure: string): 0 | 1 | 2 | 3 {
  * with no text: the node's `textContent` is the figure exactly, which is what
  * every reader of a money node reads (`the-figure-on-screen-is-the-figure-in-the-link`).
  * The digits never change; only the dress does.
+ *
+ * **One name to a screen reader** (round 2, the critic's P3-1): each `<wbr>`
+ * splits the text into its own node, and Chrome's accessibility tree held a
+ * broken figure as six pieces a reader stepping by element could announce
+ * as six numbers. So a broken figure is one `span.fig-say[role=img]` named
+ * by the whole figure (`aria-label`) whose pieces sit in an `aria-hidden`
+ * span: one node with one name, read whole, and the money node still holds
+ * the figure in one element. Cost, stated: a reader announces it as an
+ * image ("…, image"). `role="img"` is the role every reader honours a name
+ * on; a name on a generic span is one NVDA ignores, which with the pieces
+ * hidden would read nothing. Verified with Chrome's tree (CDP), not with a
+ * reader. Test: `a-card-figure-steps-down-and-breaks-only-after-a-comma`.
  */
 function moneyFigure(node: HTMLElement, figure: string, breaks: boolean): void {
     const groups = breaks ? figure.split(/(?<=,)/) : [figure];
@@ -8682,12 +8699,17 @@ function moneyFigure(node: HTMLElement, figure: string, breaks: boolean): void {
         node.textContent = figure;
         return;
     }
-    const parts: Node[] = [];
+    const pieces = el('span');
+    pieces.setAttribute('aria-hidden', 'true');
     for (const group of groups.slice(0, -1)) {
-        parts.push(document.createTextNode(group), document.createElement('wbr'));
+        pieces.append(document.createTextNode(group), document.createElement('wbr'));
     }
-    parts.push(el('span', 'fig-end', groups[groups.length - 1]));
-    node.replaceChildren(...parts);
+    pieces.append(el('span', 'fig-end', groups[groups.length - 1]));
+    const said = el('span', 'fig-say');
+    said.setAttribute('role', 'img');
+    said.setAttribute('aria-label', figure);
+    said.append(pieces);
+    node.replaceChildren(said);
 }
 
 /**
@@ -8704,6 +8726,23 @@ function moneySentence(node: HTMLElement, sentence: string, figure: string, brea
     const inner = document.createElement('span');
     moneyFigure(inner, figure, true);
     node.replaceChildren(sentence.slice(0, at), ...inner.childNodes, sentence.slice(at + figure.length));
+}
+
+/**
+ * A row's figure on the rows' last rung (round 2, the critic's P2-6): a
+ * figure past the card ladder's first ceiling (more than 14 characters) on a
+ * row that already gave its tag a row of its own breaks after a comma like
+ * the face's, and the tag re-flows as text (`fig-wraps`), so a figure wider
+ * than its row loses no digit at either end — it used to grow to the left
+ * and cut its most significant digits ("…,467,440,737,095,516.15", the
+ * `184` gone). Nothing of 14 characters or fewer is touched, at any tier.
+ */
+function rowFigure(amount: HTMLElement, node: HTMLElement, figure: string, rowTier: number): void {
+    const breaks = rowTier === 3 && cardFigureTier(figure) > 0;
+    if (breaks) {
+        amount.classList.add('fig-wraps');
+    }
+    moneyFigure(node, figure, breaks);
 }
 
 /**
@@ -8982,10 +9021,11 @@ function itemFace(
         const minAtoms = formatAtoms(offer.askedAtoms, known);
         how.append(sheetRow(copy.MIN_PURCHASE, ticker !== undefined ? `${minAtoms} ${ticker}` : minAtoms));
     }
-    // The face's other money figure: past the card ladder's last ceiling it
-    // breaks after a comma like the figure on the card (`moneyFigure`).
+    // The face's other money figure, on the card ladder's every step (round
+    // 2, the critic's P2-1): its row carries the figure's tier, stall.css
+    // steps its size, and past the last ceiling it breaks after a comma.
     const youPay = formatXec(offer.askedSats);
-    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(youPay), true, cardFigureTier(youPay) === 3));
+    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(youPay), true, cardFigureTier(youPay)));
     if (known !== undefined) {
         how.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(formatAtoms(offer.atoms, known))));
     }
@@ -9392,11 +9432,20 @@ function tokenFacts(
     return box;
 }
 
-function sheetRow(label: string, value: string, big = false, breaks = false): HTMLElement {
+/**
+ * A labelled fact in a sheet or a face's fold. The face's "You pay" passes
+ * its figure's tier on the card ladder (`cardFigureTier`): the row carries
+ * it from tier 1, stall.css steps the size on a phone, and tier 3 breaks
+ * after a comma (`moneyFigure`). Every other row is tier 0 and unchanged.
+ */
+function sheetRow(label: string, value: string, big = false, tier: 0 | 1 | 2 | 3 = 0): HTMLElement {
     const row = el('dl', big ? 'row big' : 'row');
+    if (tier > 0) {
+        row.setAttribute('data-price-tier', String(tier));
+    }
     row.append(el('dt', undefined, label));
     const dd = el('dd');
-    moneyFigure(dd, value, breaks);
+    moneyFigure(dd, value, tier === 3);
     row.append(dd);
     return row;
 }

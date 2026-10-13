@@ -83,15 +83,18 @@
  *   mark-hide and pending frame for any carried look with marks or file art.
  * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
  *   `cjk-name` owes the advance it read (`cjkFaces`).
- * - **`a-card-figure-stands-inside-its-row`** (2026-10-13): the narrow pass
- *   (360x800) owes, on every look it painted, a read of the long figures the
- *   ladder exists for (`CARD_FIGURES_OWED`): a face figure and a Pay several
- *   line on the last rung, and a pay figure on the last two
- *   (`cardFigureByClass`, per look and per place:tier).
+ * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
+ *   narrow pass (360x800) and the phone pass owe, on every look they
+ *   painted, a read of every step of the face's figure, "You pay", a pay
+ *   sheet's figure and a Pay several line (`CARD_FIGURES_OWED`,
+ *   `cardFigureByClass`, per look and per place:tier), and
+ *   **`a-card-figure-steps-down-on-every-look`** the four figures' painted
+ *   ladders compared (`CARD_LADDERS_OWED`, `cardLadderByClass`).
  *
  * The phone and desk passes owe the page rules, the canvas the overlay's
  * places and the wall's controls, the portrait and tablet passes the
- * wall's controls, and the narrow pass the card figures; the reduced-motion
+ * wall's controls, and the narrow pass the card figures (the phone pass owes
+ * them too); the reduced-motion
  * and contrast passes owe nothing here (`mobile`, `desktop`, `canvas`,
  * `portrait`, `tablet` and `narrow` are the runner's pass names).
  */
@@ -124,20 +127,38 @@ const PAGE_PASSES = new Set(['mobile', 'desktop']);
 /** The passes that paint the touch wall, whose controls the wall rule reads. */
 const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet']);
 /**
- * The pass that owes the card figures' long reads: the narrow phone at 360,
- * whose job they are. The phone at 390 measures the same screens and runs the
- * rule, and owes nothing here.
+ * The passes that owe the card figures' every step: the narrow phone at 360,
+ * whose job they are, and the phone at 390, which measures the same screens
+ * (round 2, the critic's P2-2).
  */
-const CARD_FIGURE_PASSES = new Set(['narrow']);
+const CARD_FIGURE_PASSES = new Set(['mobile', 'narrow']);
 /**
  * The card figures each of those passes owes on every look it painted, as
- * `place:tier` (`a-card-figure-stands-inside-its-row`): the face's and a Pay
- * several line's last rung (`item-listing-long-figure`,
- * `item-quote-long-figure`, `pay-several-long-figure`), and the pay figure on
- * its last single-line step and its last rung (`pay-long-figure`,
- * `pay-several-long-figure`).
+ * `place:tier` (`a-card-figure-stands-inside-its-row`): every step of the
+ * face's figure, the face's "You pay" figure and a pay sheet's figure, each
+ * at its widest (round 2: `item-listing-figure-14`, `-17`, `-21`,
+ * `item-listing-long-figure` and the quote faces, whose fold carries "You
+ * pay" at the same tier; `pay-figure-14`, `-17`, `pay-long-figure`,
+ * `pay-several-long-figure`), and a Pay several line on the three dresses it
+ * has: beside its name (`line:0`, up to 17 characters — a line carries a
+ * tier only from 18, so it has no `line:1`), on a row of its own (`line:2`)
+ * and broken after a comma (`line:3`; `pay-several`,
+ * `pay-several-figure-lines`, `pay-several-long-figure`). A step no fixture
+ * paints is a gap, not a pass.
  */
-export const CARD_FIGURES_OWED = Object.freeze(['face:3', 'pay:2', 'pay:3', 'line:3']);
+export const CARD_FIGURES_OWED = Object.freeze([
+    ...['face', 'paid', 'pay'].flatMap((place) => ['0', '1', '2', '3'].map((tier) => `${place}:${tier}`)),
+    'line:0',
+    'line:2',
+    'line:3',
+]);
+/**
+ * The figures whose painted ladder each of those passes owes compared on
+ * every look, over all four tiers (`a-card-figure-steps-down-on-every-look`):
+ * the face's two by role, "You pay" (no role) and a pay sheet's — named,
+ * never counted, so a fifth figure can never stand in for a missing one.
+ */
+export const CARD_LADDERS_OWED = Object.freeze(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
 /** The touch wall's controls and held lines, by role: a pass that read none of one read nothing of it. */
 const WALL_ROLES = [
     'window-back',
@@ -298,10 +319,19 @@ export function probeCoverageGaps(
     // stopped mounting one would leave the rule green over nothing.
     if (CARD_FIGURE_PASSES.has(pass)) {
         const read = report.cardFigureByClass ?? {};
+        const ladders = report.cardLadderByClass ?? {};
         for (const cls of report.sheetClasses ?? []) {
             for (const place of CARD_FIGURES_OWED) {
                 if (!(((read[cls] ?? {})[place] ?? 0) > 0)) {
                     gaps.push(`a-card-figure-stands-inside-its-row read no ${place} figure on a ${cls} stall`);
+                }
+            }
+            for (const figure of CARD_LADDERS_OWED) {
+                const tiers = (ladders[cls] ?? {})[figure] ?? '';
+                if (tiers !== '0123') {
+                    gaps.push(
+                        `a-card-figure-steps-down-on-every-look compared the ${figure} ladder over ${tiers === '' ? 'no tier' : `tiers ${tiers.split('').join(', ')}`} on a ${cls} stall, not all four`,
+                    );
                 }
             }
         }
@@ -446,13 +476,18 @@ export function probeCoverageLine(pass, report) {
         (Object.keys(report.tryOnNamesByClass ?? {}).length === 0 ? '' : ` · stress names tried on: ${perClass(report.tryOnNamesByClass)}`) +
         (Object.keys(report.nameVerticalByClass ?? {}).length === 0 ? '' : ` · vertical sign lines: ${perClass(report.nameVerticalByClass)}`) +
         ((report.cjkFaces ?? []).length === 0 ? '' : ` · CJK advance: ${report.cjkFaces.join(', ')}`);
-    // The long card figures read, summed over the looks (`a-card-figure-stands-inside-its-row`).
+    // The card figures read, summed over the looks, per place and step (`a-card-figure-stands-inside-its-row`).
     const cardSums = {};
     for (const read of Object.values(report.cardFigureByClass ?? {})) {
-        for (const [place, n] of Object.entries(read)) if (/:[23]$/.test(place)) cardSums[place] = (cardSums[place] ?? 0) + n;
+        for (const [place, n] of Object.entries(read)) if (!place.startsWith('total')) cardSums[place] = (cardSums[place] ?? 0) + n;
     }
+    const ladderSum = Object.values(report.cardLadderByClass ?? {}).reduce(
+        (a, figures) => a + Object.values(figures).filter((tiers) => tiers === '0123').length,
+        0,
+    );
     const cards = CARD_FIGURE_PASSES.has(pass)
-        ? ` · long card figures read: ${Object.entries(cardSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}`
+        ? ` · card figures read: ${Object.entries(cardSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}` +
+          ` · ladders compared: ${ladderSum}`
         : '';
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${hiddenSmall}${marks}`;

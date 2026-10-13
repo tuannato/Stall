@@ -2025,33 +2025,77 @@ function wallCuts(screen: string, label: string): Failure[] {
 /*
  * **A card figure stands inside its row** (2026-10-13; the 8g1 critic's
  * P2-3, the owner's D-2026-10-13-02). The item face's figure (the listing's
- * asked amount, the quote's figure), the XEC a pay sheet's wallet signs, each
- * Pay several line's figure and the Pay several total: every line box of the
- * figure stands inside its row's content box, or the total's own. It is
- * stricter than `text-spills`, which tolerates a box poking into its
- * parent's padding — the first stage of what the critic found, a figure
- * 16px into an 18px pad at 390, before the panel clipped it. The face and
- * the pay sheets step their figure down a ladder (`CARD_FIGURE_CEILINGS`,
- * `cardFigureTier`) and, past its last ceiling, break it after a comma; this
- * is what holds that ladder true on every look at every pass that paints
- * one, the 360 pass (`narrow`) above all. A hidden figure (a sheet with no
- * rate yet) has no line box and is not read. Counted per look and per
+ * asked amount, the quote's figure), the face's "You pay" figure, the XEC a
+ * pay sheet's wallet signs, each Pay several line's figure and the Pay
+ * several total: every line box of the figure stands inside its row's content
+ * box, or the total's own. It is stricter than `text-spills`, which tolerates
+ * a box poking into its parent's padding — the first stage of what the
+ * critic found, a figure 16px into an 18px pad at 390, before the panel
+ * clipped it. The face and the pay sheets step their figure down a ladder
+ * (`CARD_FIGURE_CEILINGS`, `cardFigureTier`) and, past its last ceiling,
+ * break it after a comma; this is what holds that ladder true on every look
+ * at every pass that paints one, the 360 pass (`narrow`) above all.
+ *
+ * **Tier 0 is read against its card's padding box** (round 2, the critic's
+ * P2-3 and the window's call): figures of 14 characters or fewer keep their
+ * design size by the owner's line, and at 360 the widest of them runs into
+ * the card's padding where it is widest — 8.5px of the pay card's 14 on Neo
+ * (every 14-character pay figure: tabular mono), 13.3px of the face's 18 for
+ * `₩9,999,999,999` on Neo, 2.5px on Rural — cut by nothing. So on the three
+ * places that line governs, the face's figure, "You pay" and a pay sheet's
+ * figure (`TIER_0_IN_CARD`), tier 0 is held to stay inside its card's
+ * padding box (`.card`, or the pay card `.pay-amt`), the way `text-spills`
+ * reads a box; tiers 1–3, where the ladder makes a promise, keep the strict
+ * read of the row's content box. A Pay several line and the total keep the
+ * strict read at every length: a line carries a tier only from 18
+ * characters (a line of 15–17 still sits beside its name and reads as
+ * tier 0 here), and the total carries none. A hidden figure (a sheet with
+ * no rate yet) has no line box and is not read. Counted per look and per
  * place and tier (`cardFigureByClass`, `face:3` for a face figure on the
- * ladder's last rung), so the runner can owe the long figures a read.
+ * ladder's last rung), so the runner owes every step a read.
  */
 const CARD_FIGURE_CHECK = 'a-card-figure-stands-inside-its-row';
 const cardFigureByClass: Record<string, Record<string, number>> = {};
 /** Where a card figure stands: the place's name, its row, and the figure inside the row. */
 const CARD_FIGURES: readonly (readonly [string, string, string])[] = [
     ['face', '.face-x', ':scope > [data-role="price"], :scope > [data-role="seller-price"]'],
+    ['paid', '.row.big', ':scope > dd'],
     ['pay', '.pay-x', ':scope > [data-role="price"]'],
     ['line', '.pay-line', '.pay-line-x'],
     ['total', '[data-role="pay-total"]', ':scope'],
 ];
+/** The places whose tier 0 is the owner's "14 characters or fewer, unchanged", read against the card's padding box. */
+const TIER_0_IN_CARD: ReadonlySet<string> = new Set(['face', 'paid', 'pay']);
+
+/*
+ * **A card figure steps down on every look** (round 2, the critic's P2-4).
+ * The static guard (`every-look-that-sizes-its-figure-sizes-every-price-tier`)
+ * reads selectors, and seven legal look rules escaped it — a `font`
+ * shorthand on `.face-x .x`, `.pay-q`, `.x`, `.face-x > span`,
+ * `.pay-amt .pay-x span:first-child`, `[data-role='price']` and a `font`
+ * shorthand on `.pay-x-n` — each out-ranking stall.css's floor and freezing
+ * the figure at every step. So the painted size is held instead, whatever
+ * selector set it: on a phone, for every look and each of the four figures
+ * the ladder steps (`CARD_LADDER_FIGURES`: the face's asked amount and its
+ * quote by role, "You pay", a pay sheet's figure), no tier paints larger
+ * than the smallest size the tier before it painted, and the last tier is
+ * smaller than tier 0. Read at the end of the page from the sizes every
+ * paint collected (`cardLadderSizes`, the smallest and largest per look,
+ * figure and tier), so it needs the fixtures at every step, which the runner
+ * owes; what it compared is reported per look and figure as the tiers it
+ * read (`cardLadderByClass`, `"0123"`), and a figure compared over fewer
+ * than all four is a gap. Desk widths keep the design size and are not read.
+ */
+const CARD_LADDER_CHECK = 'a-card-figure-steps-down-on-every-look';
+/** The figures the ladder steps, as `place:role` (a "You pay" figure carries no role: `paid:figure`). */
+const CARD_LADDER_FIGURES: ReadonlySet<string> = new Set(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
+const cardLadderSizes: Record<string, Record<string, Record<string, { min: number; max: number }>>> = {};
+const cardLadderByClass: Record<string, Record<string, string>> = {};
 
 function cardFigureFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
     const byLook = (cardFigureByClass[measuringClass] ??= {});
+    const phone = window.innerWidth < 680;
     for (const [place, rowSel, figSel] of CARD_FIGURES) {
         for (const row of document.querySelectorAll<HTMLElement>(`#app ${rowSel}`)) {
             if (row.closest('.deck-stall') !== null) continue;
@@ -2061,12 +2105,26 @@ function cardFigureFaults(screen: string, label: string): Failure[] {
             range.selectNodeContents(figure);
             const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
             if (lines.length === 0) continue;
-            const cs = getComputedStyle(row);
-            const box = row.getBoundingClientRect();
-            const left = box.left + Number.parseFloat(cs.borderLeftWidth) + Number.parseFloat(cs.paddingLeft);
-            const right = box.right - Number.parseFloat(cs.borderRightWidth) - Number.parseFloat(cs.paddingRight);
             const tier = row.getAttribute('data-price-tier') ?? '0';
+            // Tier 0 of the face, "You pay" and a pay figure against its card's
+            // padding box; every other read against the row's content box.
+            const card = tier === '0' && TIER_0_IN_CARD.has(place) ? row.closest<HTMLElement>('.card, .pay-amt') : null;
+            const edge = card ?? row;
+            const cs = getComputedStyle(edge);
+            const box = edge.getBoundingClientRect();
+            const inset = (side: 'Left' | 'Right'): number =>
+                Number.parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) +
+                (card === null ? Number.parseFloat(cs.getPropertyValue(`padding-${side.toLowerCase()}`)) : 0);
+            const left = box.left + inset('Left');
+            const right = box.right - inset('Right');
             byLook[`${place}:${tier}`] = (byLook[`${place}:${tier}`] ?? 0) + 1;
+            const ladder = `${place}:${figure.getAttribute('data-role') ?? 'figure'}`;
+            if (phone && CARD_LADDER_FIGURES.has(ladder)) {
+                const size = Number.parseFloat(getComputedStyle(figure).fontSize);
+                const at = ((cardLadderSizes[measuringClass] ??= {})[ladder] ??= {});
+                const was = at[tier];
+                at[tier] = was === undefined ? { min: size, max: size } : { min: Math.min(was.min, size), max: Math.max(was.max, size) };
+            }
             const over = Math.max(...lines.map((r) => r.right)) - right;
             const under = left - Math.min(...lines.map((r) => r.left));
             if (over > 0.5 || under > 0.5) {
@@ -2076,9 +2134,32 @@ function cardFigureFaults(screen: string, label: string): Failure[] {
                     check: CARD_FIGURE_CHECK,
                     detail:
                         `the ${place} figure "${(figure.textContent ?? '').slice(0, 40)}" (tier ${tier}, ${getComputedStyle(figure).fontSize}) ` +
-                        `runs ${over > 0.5 ? `${over.toFixed(1)}px past its row's right edge` : `${under.toFixed(1)}px past its row's left edge`} ` +
-                        `(${describe(row)}, content ${Math.round(left)}–${Math.round(right)})`,
+                        `runs ${over > 0.5 ? `${over.toFixed(1)}px past its ${card === null ? "row's content" : "card's padding"} box on the right` : `${under.toFixed(1)}px past its ${card === null ? "row's content" : "card's padding"} box on the left`} ` +
+                        `(${describe(edge)}, ${Math.round(left)}–${Math.round(right)})`,
                 });
+            }
+        }
+    }
+    return out;
+}
+
+/** Every look's painted ladder, read once at the end of the page (`a-card-figure-steps-down-on-every-look`). */
+function cardLadderFaults(): Failure[] {
+    const out: Failure[] = [];
+    for (const [cls, figures] of Object.entries(cardLadderSizes)) {
+        for (const [key, tiers] of Object.entries(figures)) {
+            const painted = ['0', '1', '2', '3'].filter((t) => tiers[t] !== undefined);
+            (cardLadderByClass[cls] ??= {})[key] = painted.join('');
+            if (painted.length < 2) continue;
+            const at = (t: string): { min: number; max: number } => tiers[t]!;
+            const sizes = painted.map((t) => `tier ${t} ${at(t).min === at(t).max ? at(t).max : `${at(t).min}–${at(t).max}`}px`).join(', ');
+            for (let i = 1; i < painted.length; i += 1) {
+                if (at(painted[i]!).max > at(painted[i - 1]!).min + 0.01) {
+                    out.push({ screen: 'probe page', theme: cls, check: CARD_LADDER_CHECK, detail: `the ${key} figure grows from tier ${painted[i - 1]} to tier ${painted[i]} (${sizes})` });
+                }
+            }
+            if (!(at(painted.at(-1)!).max < at(painted[0]!).min - 0.01)) {
+                out.push({ screen: 'probe page', theme: cls, check: CARD_LADDER_CHECK, detail: `the ${key} figure takes no smaller step on its ladder (${sizes})` });
             }
         }
     }
@@ -2158,7 +2239,9 @@ function payLinesSayWhatTheyHide(screen: string, label: string): Failure[] {
  * "scan to enter" stays 9.5px — unless it is one of the raised nodes
  * (`FLOOR_NAMED`: the brand strip and the tile letters are aria-hidden or
  * decorative and rose anyway, F2; the steppers' counts are aria-hidden
- * because the buttons carry them, and are read by the eye). The door's deck minis are pictures at
+ * because the buttons carry them, and are read by the eye, and so are a
+ * broken money figure's pieces, under the `.fig-say` that names the whole
+ * figure). The door's deck minis are pictures at
  * 0.34–0.56 zoom and are skipped. The raised nodes read are counted
  * (`floorNamedChecks`) and the runner requires some on the phone and desk
  * passes. A class no fixture paints — the notice invite's `.ghost-chip`, a
@@ -2190,6 +2273,10 @@ const FLOOR_NAMED = [
     // `selection-count`) and the wall's.
     '.step-n',
     '.sw-step-n',
+    // A money figure broken after its commas (round 2, the critic's P3-1):
+    // its pieces are `aria-hidden` because `.fig-say` carries the whole
+    // figure as one name, and every sighted reader reads them.
+    '.fig-say',
 ];
 const FLOOR_NAMED_SELECTOR = FLOOR_NAMED.flatMap((sel) => [sel, `${sel} *`]).join(', ');
 let floorNamedChecks = 0;
@@ -4438,6 +4525,7 @@ for (const screen of measured) {
 }
 
 failures.push(...doorMiniFaults());
+failures.push(...cardLadderFaults());
 
 /*
  * **The sign's stress names on a try-on** (step 8f2; the 8f1 critic's item
@@ -6670,6 +6758,8 @@ const verdict = {
     ladderTiers,
     /* Card figures read inside their rows, per look and per place:tier (`a-card-figure-stands-inside-its-row`). */
     cardFigureByClass,
+    /* The tiers each figure's painted ladder was compared over, per look (`a-card-figure-steps-down-on-every-look`). */
+    cardLadderByClass,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);

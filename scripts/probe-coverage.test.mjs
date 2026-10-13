@@ -1,8 +1,28 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { CARD_FIGURES_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
+/*
+ * Every card figure a phone pass owes, read on every look the tests paint
+ * (round 2: every step of the face's figure, "You pay" and a pay figure,
+ * and a Pay several line's three dresses), and the four figures' painted
+ * ladders compared over all four tiers.
+ */
+const CARD_LOOKS = [...SHIPPED, 't-skeleton', 't-fixture-private'];
+const EVERY_CARD_STEP = Object.fromEntries(
+    ['face', 'paid', 'pay'].flatMap((place) => ['0', '1', '2', '3'].map((tier) => [`${place}:${tier}`, 2])).concat([
+        ['line:0', 4],
+        ['line:2', 2],
+        ['line:3', 4],
+        ['total:0', 4],
+    ]),
+);
+const EVERY_LADDER = Object.fromEntries(['face:price', 'face:seller-price', 'paid:figure', 'pay:price'].map((figure) => [figure, '0123']));
+const cardRead = {
+    cardFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_CARD_STEP])),
+    cardLadderByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_LADDER])),
+};
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
     skipChecks: { 'wall-cycle': 7, 'stream-card': 4, 'stream-ticker': 4 },
@@ -43,6 +63,8 @@ const full = {
     signWordsByClass: Object.fromEntries(
         ['t-modern', 't-neo', 't-rural', 't-skeleton', 't-fixture-private'].map((cls) => [cls, { pairs: 50, invites: 2 }]),
     ),
+    // Round 2: the phone pass owes every step of the card figures too.
+    ...cardRead,
 };
 
 describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
@@ -519,7 +541,7 @@ describe('the-8g1-states-owe-their-subjects', () => {
 });
 
 /*
- * The narrow pass (360x800, 2026-10-13): what it read of the long card
+ * The narrow pass (360x800, 2026-10-13; round 2): what it read of the card
  * figures, on every look it painted, built at module top (a describe body
  * registers and never computes, `no-node-test-computes-in-a-describe-body`).
  */
@@ -528,32 +550,71 @@ const narrowRead = {
     sheetClasses: NARROW_LOOKS,
     lookSheetsRead: [...SHIPPED, 't-fixture-private'],
     markChecksByClass: Object.fromEntries(NARROW_LOOKS.filter((cls) => cls !== 't-fixture-private').map((cls) => [cls, 20])),
-    cardFigureByClass: Object.fromEntries(
-        NARROW_LOOKS.map((cls) => [cls, { 'face:0': 9, 'face:3': 4, 'pay:0': 13, 'pay:2': 2, 'pay:3': 2, 'line:3': 4, 'total:0': 4 }]),
-    ),
+    ...cardRead,
 };
 const NARROW_OPTIONS = { privateClasses: ['t-fixture-private'], sheetedClasses: [...SHIPPED, 't-fixture-private'] };
+/** The narrow read with one look's card figure reads replaced. */
+const narrowWithout = (cls, read) => ({ ...narrowRead, cardFigureByClass: { ...narrowRead.cardFigureByClass, [cls]: read } });
+const RURAL_NO_FACE_1 = Object.fromEntries(Object.entries(EVERY_CARD_STEP).filter(([place]) => place !== 'face:1'));
+const NEO_NO_PAID_2 = Object.fromEntries(Object.entries(EVERY_CARD_STEP).filter(([place]) => place !== 'paid:2'));
 
 describe('the-narrow-pass-owes-the-long-card-figures', () => {
-    it('owes a face figure and a line on the last rung and a pay figure on the last two, on every look', () => {
-        assert.deepEqual([...CARD_FIGURES_OWED], ['face:3', 'pay:2', 'pay:3', 'line:3']);
+    it('owes every step of the face, You pay and a pay figure, and a line beside its name, on its own row and broken, on every look', () => {
+        assert.deepEqual(
+            [...CARD_FIGURES_OWED],
+            ['face:0', 'face:1', 'face:2', 'face:3', 'paid:0', 'paid:1', 'paid:2', 'paid:3', 'pay:0', 'pay:1', 'pay:2', 'pay:3', 'line:0', 'line:2', 'line:3'],
+        );
         assert.deepEqual(probeCoverageGaps('narrow', narrowRead, NARROW_OPTIONS), []);
-        const noLongFace = {
-            ...narrowRead,
-            cardFigureByClass: { ...narrowRead.cardFigureByClass, 't-rural': { 'face:0': 9, 'pay:2': 2, 'pay:3': 2, 'line:3': 4 } },
-        };
-        assert.deepEqual(probeCoverageGaps('narrow', noLongFace, NARROW_OPTIONS), [
-            'a-card-figure-stands-inside-its-row read no face:3 figure on a t-rural stall',
+        assert.deepEqual(probeCoverageGaps('narrow', narrowWithout('t-rural', RURAL_NO_FACE_1), NARROW_OPTIONS), [
+            'a-card-figure-stands-inside-its-row read no face:1 figure on a t-rural stall',
         ]);
-        assert.deepEqual(probeCoverageGaps('narrow', { ...narrowRead, cardFigureByClass: {} }, NARROW_OPTIONS).length, NARROW_LOOKS.length * 4);
+        assert.deepEqual(probeCoverageGaps('narrow', narrowWithout('t-neo', NEO_NO_PAID_2), NARROW_OPTIONS), [
+            'a-card-figure-stands-inside-its-row read no paid:2 figure on a t-neo stall',
+        ]);
+        assert.deepEqual(
+            probeCoverageGaps('narrow', { ...narrowRead, cardFigureByClass: {} }, NARROW_OPTIONS).length,
+            NARROW_LOOKS.length * CARD_FIGURES_OWED.length,
+        );
     });
 
-    it('owes nothing of it on the phone at 390, which measures the same screens', () => {
-        const owed = probeCoverageGaps('mobile', { ...full, ...narrowRead, cardFigureByClass: {} }, NARROW_OPTIONS);
-        assert.equal(owed.filter((gap) => gap.startsWith('a-card-figure-stands-inside-its-row')).length, 0);
+    it('owes the four figures\' painted ladders over all four tiers, by name', () => {
+        assert.deepEqual([...CARD_LADDERS_OWED], ['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
+        const shortLadder = {
+            ...narrowRead,
+            cardLadderByClass: { ...narrowRead.cardLadderByClass, 't-neo': { ...EVERY_LADDER, 'pay:price': '03', 'paid:figure': undefined } },
+        };
+        assert.deepEqual(probeCoverageGaps('narrow', shortLadder, NARROW_OPTIONS), [
+            'a-card-figure-steps-down-on-every-look compared the paid:figure ladder over no tier on a t-neo stall, not all four',
+            'a-card-figure-steps-down-on-every-look compared the pay:price ladder over tiers 0, 3 on a t-neo stall, not all four',
+        ]);
+        // A fifth figure never stands in for a missing one.
+        const swapped = {
+            ...narrowRead,
+            cardLadderByClass: { ...narrowRead.cardLadderByClass, 't-rural': { 'face:price': '0123', 'face:seller-price': '0123', 'pay:price': '0123', 'line:figure': '0123' } },
+        };
+        assert.deepEqual(probeCoverageGaps('narrow', swapped, NARROW_OPTIONS), [
+            'a-card-figure-steps-down-on-every-look compared the paid:figure ladder over no tier on a t-rural stall, not all four',
+        ]);
     });
 
-    it('prints the long figures it read on the pass\'s line', () => {
-        assert.match(probeCoverageLine('narrow', narrowRead), /long card figures read: face:3 20, line:3 20, pay:2 10, pay:3 10/);
+    it('owes the same of the phone at 390, which measures the same screens, and nothing of the desk', () => {
+        const owed = probeCoverageGaps('mobile', { ...full, ...narrowRead, cardFigureByClass: {}, cardLadderByClass: {} }, NARROW_OPTIONS);
+        assert.equal(
+            owed.filter((gap) => gap.startsWith('a-card-figure-stands-inside-its-row')).length,
+            NARROW_LOOKS.length * CARD_FIGURES_OWED.length,
+        );
+        assert.equal(
+            owed.filter((gap) => gap.startsWith('a-card-figure-steps-down-on-every-look')).length,
+            NARROW_LOOKS.length * CARD_LADDERS_OWED.length,
+        );
+        const desk = probeCoverageGaps('desktop', { ...full, ...narrowRead, cardFigureByClass: {}, cardLadderByClass: {} }, NARROW_OPTIONS);
+        assert.equal(desk.filter((gap) => gap.startsWith('a-card-figure')).length, 0);
+    });
+
+    it('prints the card figures it read and the ladders it compared on the pass\'s line', () => {
+        assert.match(
+            probeCoverageLine('narrow', narrowRead),
+            /^card figures read: face:0 10, face:1 10, face:2 10, face:3 10, line:0 20, line:2 10, line:3 20, paid:0 10, paid:1 10, paid:2 10, paid:3 10, pay:0 10, pay:1 10, pay:2 10, pay:3 10 · ladders compared: 20/,
+        );
     });
 });

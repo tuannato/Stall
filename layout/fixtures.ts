@@ -744,6 +744,117 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
     }),
     /*
+     * The card ladder's every step at its widest (round 2, the critic's
+     * P2-2): one screen per step and surface, so the cuts are held by the
+     * probe on every look rather than by one hand measurement. Each figure is
+     * the widest its step holds (`CARD_FIGURE_CEILINGS`):
+     * - the listing face, which also carries the "You pay" row at the same
+     *   tier: 14, 17 and 21 characters of asked amount;
+     * - the quote face, in the units whose signs the faces do not draw, so
+     *   the machine's fallback paints them at about 1em: `₩9,999,999,999`
+     *   (14), `元9,999,999,999.99` (17), `元9,999,999,999,999.99` (21);
+     * - the pay sheet, an XEC quote: 14 and 17 characters (21 and past it
+     *   are `pay-long-figure` and `pay-several-long-figure`);
+     * - Pay several with a 17- and an 18-character line (a line's own row
+     *   starts at 18).
+     * Every row behind them is on tier 0 or the last tier, so Rural's rows
+     * at 360 (their own ladder's question) are not in the way. Geometry
+     * only: their ink is `item-listing`'s, `item-quote`'s, `pay`'s and
+     * `pay-several`'s.
+     */
+    'item-listing-figure-14': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 99_999_999_999n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-listing-figure-17': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 9_999_999_999_999n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-listing-figure-21': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 9_999_999_999_999_999n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-quote-figure-14': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'krw', exponent: 0, amount: 9_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'item-quote-figure-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'cny', exponent: 2, amount: 999_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'item-quote-figure-21': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'cny', exponent: 2, amount: 999_999_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'pay-figure-14': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 99_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
+    'pay-figure-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'xec', exponent: 2, amount: 9_999_999_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'pay', tokenId: T1 },
+    }),
+    'pay-several-figure-lines': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    /*
+     * Rows at the longest figures (round 2, the critic's P2-6): an
+     * eight-byte asked amount on a listing row and an eight-byte XEC quote
+     * on a quote row. A row's figure past 14 characters on the rows' last
+     * rung breaks after a comma (`rowFigure`); before, it grew to the left
+     * and cut its leading digits at 360 on every look and at 390 on Neo,
+     * Rural, and for the quote on every look. The other rows are on tier 0 or
+     * the last tier, clear of Rural's rows at 360. Geometry only: `offers`'
+     * and `plugin-missing-quotes`' ink.
+     */
+    'row-longest-figure': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, LONGEST_ASK_SATS), offer(T2, 1, 87_500n)] },
+    }),
+    'quote-row-longest-figure': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, LONGEST_QUOTE],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n, surchargePct: 5 }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+    }),
+    /*
      * The shop that sells decorations, which is the one page where the
      * Decorations section and its per-look runs are the only dividers there
      * are — a single section prints no section heading, so nothing else on
@@ -1844,6 +1955,19 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // `pay-several`'s sheet shape, which sits over the shop.
     'pay-long-figure',
     'pay-several-long-figure',
+    // The card ladder's every step and the rows at the longest figures
+    // (round 2): the faces', the sheets' and the rows' shapes again.
+    'item-listing-figure-14',
+    'item-listing-figure-17',
+    'item-listing-figure-21',
+    'item-quote-figure-14',
+    'item-quote-figure-17',
+    'item-quote-figure-21',
+    'pay-figure-14',
+    'pay-figure-17',
+    'pay-several-figure-lines',
+    'row-longest-figure',
+    'quote-row-longest-figure',
 ]);
 
 /**
@@ -1988,6 +2112,19 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // here for the figure inside its card at 360.
     'pay-long-figure',
     'pay-several-long-figure',
+    // The card ladder's every step and the rows at the longest figures
+    // (round 2): the ink of the screens they copy. Here for the geometry.
+    'item-listing-figure-14',
+    'item-listing-figure-17',
+    'item-listing-figure-21',
+    'item-quote-figure-14',
+    'item-quote-figure-17',
+    'item-quote-figure-21',
+    'pay-figure-14',
+    'pay-figure-17',
+    'pay-several-figure-lines',
+    'row-longest-figure',
+    'quote-row-longest-figure',
 ]);
 
 /**

@@ -297,7 +297,11 @@ const TABLET = { name: 'tablet', width: 768, height: 1024 };
  * - the rest of the money set on a phone: `activity` (the receipt's
  *   amount), `describe` (the seller's figure read back and the record's
  *   hex), `publish-name` (the stall record's hex), `pay-tag` (the figure
- *   on paper).
+ *   on paper);
+ * - the card ladder's every step at its widest (`item-listing-figure-14`,
+ *   `-17`, `-21`; `item-quote-figure-14`, `-17`, `-21`; `pay-figure-14`,
+ *   `-17`; `pay-several-figure-lines`) and the rows at the longest figures
+ *   (`row-longest-figure`, `quote-row-longest-figure`), round 2.
  * The QR gate's rule reads every pay sheet's code here
  * (`PAY_QR_NARROWEST_PX`).
  *
@@ -308,10 +312,14 @@ const TABLET = { name: 'tablet', width: 768, height: 1024 };
  * the rows' own ladder (`tierCeilings`, measured at 390) seats too many
  * characters beside Rural's tag there. That ladder is not this decision's,
  * and fixing it is a design change the owner has not made, so the four
- * screens wait for it rather than turning this pass red or being measured
- * around. Modern's and Neo's rows hold at 360 (68px and more). The rows are
- * measured here through `unbuyable` and the selection strip, which hold on
- * every look. `layout/PROBE-RULES.md`, "The narrow phone".
+ * screens are off on every look until it is answered, rather than turning
+ * this pass red or being measured around Rural. Modern's and Neo's rows
+ * hold at 360 (68px and more). Every narrow run prints the four
+ * (`NARROW_LEFT_OFF`), so the gap is on screen and not only here. The rows
+ * are measured here through `unbuyable`, the selection strip and the two
+ * longest-figure rows, which hold on every look. At 375 `quotes-signs`'
+ * Rural `₩12,000` row is 59px too (14 failures); 384 is clear.
+ * `layout/PROBE-RULES.md`, "The narrow phone".
  */
 const NARROW = { name: 'narrow', width: 360, height: 800 };
 const NARROW_SCREENS = [
@@ -335,7 +343,28 @@ const NARROW_SCREENS = [
     'describe',
     'publish-name',
     'pay-tag',
+    // Round 2: the card ladder's every step at its widest, and the rows at
+    // the longest figures (the critic's P2-2 and P2-6).
+    'item-listing-figure-14',
+    'item-listing-figure-17',
+    'item-listing-figure-21',
+    'item-quote-figure-14',
+    'item-quote-figure-17',
+    'item-quote-figure-21',
+    'pay-figure-14',
+    'pay-figure-17',
+    'pay-several-figure-lines',
+    'row-longest-figure',
+    'quote-row-longest-figure',
 ].join(',');
+/**
+ * The money screens the narrow pass leaves off, on every look, printed on
+ * every run (round 2, the critic's P2-5): Rural's row name column falls under
+ * its 64px floor on them at 360 (and at 375 on `quotes-signs`), a question of
+ * the rows' own ladder that is the owner's. Measured on no look until it is
+ * answered.
+ */
+const NARROW_LEFT_OFF = ['offers', 'plugin-missing-quotes', 'quotes-signs', 'pay-inr'];
 /*
  * The short screens (the 8g1 critic's P2-2): two heights shorter than the
  * page passes' 844 and 900, where a sign that fits those first stops
@@ -2748,9 +2777,11 @@ try {
                     sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
                 });
                 const compared = probeCoverageLine(NARROW.name, nv);
+                const leftOff = `\n    left off, every look: ${NARROW_LEFT_OFF.join(', ')} (Rural's row name under its 64px floor at 360 and 375; the owner's call)`;
                 if (nv.failures.length === 0 && gaps.length === 0) {
                     console.log(
                         `✓ ${label}: ${wanted} screens, every look — ${spent}\n    compared: ${compared}` +
+                            leftOff +
                             `\n    faces: ${facesLine(nv.faces)}`,
                     );
                 } else {
@@ -2765,7 +2796,7 @@ try {
                         console.error(`✗ ${label}: a rule compared nothing it owes —`);
                         for (const gap of gaps) console.error(`    ${gap}`);
                     }
-                    console.error(`    compared: ${compared}`);
+                    console.error(`    compared: ${compared}${leftOff}`);
                 }
             }
         } catch (err) {
