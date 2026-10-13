@@ -107,6 +107,7 @@ import { ADDR_COPIED_MS,
     priceTier,
     CARD_FIGURE_CEILINGS,
     ROW_BREAK_CHARS,
+    STRIP_BREAK_CHARS,
     ROW_REFLOW_LISTING_CHARS,
     ROW_REFLOW_QUOTE_CHARS,
     cardFigureTier,
@@ -6625,10 +6626,14 @@ describe('the-selection-strip-loses-a-long-totals-tail-never-its-head', () => {
      * The strip's total and a chosen row's line (round 3, the critic's P2-2,
      * pre-existing): an eight-byte XEC quote chosen once ran the total off the
      * strip's left edge at 360, its leading digits gone, and the line under
-     * the stepper on Neo. Both break after a comma past 21 characters
-     * (`moneyFigure`, `moneyLine`), the total's block aligns `safe flex-end`,
-     * and a short total or line is the one text node it was. The probe's
-     * narrow and phone passes measure `pay-several-strip-long-figure`.
+     * the stepper on Neo. Both break after a comma — from 18 characters
+     * since round 4 (`STRIP_BREAK_CHARS`, the critic's P3-4: a total of 18 to
+     * 21 characters left ` XEC` alone on its line at 360) — the last group
+     * and the unit kept together (`.fig-end`), the total's block aligns
+     * `safe flex-end`, and a shorter total or line is the one text node it
+     * was. The probe's narrow and phone passes measure
+     * `pay-several-strip-18`, `pay-several-strip-21` and
+     * `pay-several-strip-long-figure`.
      */
     const strip = (amount: bigint) =>
         paint(
@@ -6649,6 +6654,21 @@ describe('the-selection-strip-loses-a-long-totals-tail-never-its-head', () => {
         expect(line.textContent).toBe(copy.selectionLine('1', '184,467,440,737,095,516.15 XEC', '184,467,440,737,095,516.15 XEC'));
         expect(line.querySelectorAll('.fig-say')).toHaveLength(2);
         expect(line.firstChild?.textContent).toBe('1 \u00d7 ');
+    });
+
+    it('keeps the last group with its unit from 18 characters, and breaks nothing under it', () => {
+        expect(STRIP_BREAK_CHARS).toBe(18);
+        for (const [amount, figure, breaks] of [
+            [1_000_000_000n, '10,000,000.00 XEC', false],
+            [10_000_000_000n, '100,000,000.00 XEC', true],
+            [1_000_000_000_000n, '10,000,000,000.00 XEC', true],
+        ] as const) {
+            const total = strip(amount).querySelector('[data-role="selection-total"]')!;
+            expect(total.textContent).toBe(figure);
+            expect(total.querySelector('.fig-end')?.textContent ?? null, figure).toBe(breaks ? `${figure.split(',').at(-1)}` : null);
+            const line = strip(amount).querySelector('[data-role="selection-figure"]')!;
+            expect(line.querySelectorAll('.fig-say').length, figure).toBe(breaks ? 2 : 0);
+        }
     });
 
     it('leaves an ordinary total and line one text node', () => {

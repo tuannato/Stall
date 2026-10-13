@@ -219,7 +219,9 @@ describe('a-look-cannot-target-one-seller', () => {
         assert.match(read('src/domain/text.ts'), /export function scriptOf\(text: string\): 'cjk' \| undefined/);
         assert.deepEqual(LOOK_HOOK_ATTRIBUTES['data-script'], ['cjk']);
         // The narrow row dress (D-2026-10-13-04) is held to what writes it: a
-        // look row's `narrowTag`, whose one value render.ts writes on the root.
+        // look row's `narrowTag`, whose one value render.ts writes on the root
+        // (and nothing else writes it: `the-narrow-tag-has-one-writer`, a parsed
+        // census of every naming of it in code, round 4).
         assert.match(read('src/domain/theme.ts'), /narrowTag\?: 'own-row';/);
         assert.ok(read('src/ui/render.ts').includes("node.setAttribute('data-narrow-tag', 'own-row')"), 'render.ts writes data-narrow-tag');
         assert.deepEqual(STATE_ATTRIBUTES['data-narrow-tag'], ['own-row']);

@@ -593,6 +593,39 @@ export const SCREENS: Record<string, StallView> = {
         selectionOpen: true,
         selection: new Map([[T1, 1n]]),
     }),
+    /*
+     * The strip's total either side of where it breaks (round 4, the
+     * critic's P3-4): at 360 a total of 18 to 21 characters wrapped before
+     * its unit and left ` XEC` alone on its line (Neo and Rural; at 390 from
+     * 20). Broken after a comma from 18 (`STRIP_BREAK_CHARS`), the last group
+     * and the unit together. `pay-several-strip`'s ink.
+     */
+    'pay-several-strip-18': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
+    'pay-several-strip-21': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 500_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
     'pay-several-ask': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
@@ -2162,6 +2195,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-several-strip',
     'pay-several-strip-xec',
     'pay-several-strip-long-figure',
+    'pay-several-strip-18',
+    'pay-several-strip-21',
     'pay-several-ask',
     'pay-several',
     'item-quote',
@@ -2420,6 +2455,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // Round 3: the rows either side of the re-flow's cut. Not
     // `quote-row-longest-figure`: the contrast pass samples it, with the
     // four surfaces above.
+    // Round 4: the strip's total either side of its break (`pay-several-strip`'s ink).
+    'pay-several-strip-18',
+    'pay-several-strip-21',
     'quote-row-1m',
     'quote-row-18',
     'row-15-16',

@@ -6371,9 +6371,10 @@ function selectionLineNode(
     }
     const sub = el('span', count > 0n ? 'sel-sub in' : 'sel-sub');
     if (count > 0n) {
-        // Each figure past the card ladder's last ceiling breaks after a
-        // comma (round 3, the critic's P2-2): an eight-byte line ran under
-        // the stepper on Neo at 360 and 390.
+        // Each figure from `STRIP_BREAK_CHARS` breaks after a comma (round
+        // 3, the critic's P2-2: an eight-byte line ran under the stepper on
+        // Neo at 360 and 390; round 4, P3-4: from 18 characters, so a unit
+        // never stands alone on a line).
         const quoted = quoteFigure(item.price);
         const line = lineFigure(item.price, count);
         moneyLine(sub, copy.selectionLine(count.toString(), quoted, line), [quoted, line]);
@@ -6529,11 +6530,12 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
                 const glance = selectionGlance(selection, view.prices);
                 const totalBlock = el('span', 'sel-totalblk');
                 const total = el('b', 'sel-total');
-                // Past the card ladder's last ceiling the total breaks after a
-                // comma (round 3, the critic's P2-2): an eight-byte total ran
-                // off the strip's left edge at 360, its leading digits gone.
+                // From `STRIP_BREAK_CHARS` the total breaks after a comma
+                // (round 3, the critic's P2-2: an eight-byte total ran off
+                // the strip's left edge at 360, its leading digits gone;
+                // round 4, P3-4: from 18, where ` XEC` first stood alone).
                 const totalFigure = glance === undefined ? '' : quoteFigure(glance);
-                moneyFigure(total, totalFigure, cardFigureTier(totalFigure) === 3);
+                moneyFigure(total, totalFigure, totalFigure.length >= STRIP_BREAK_CHARS);
                 total.setAttribute('data-role', 'selection-total');
                 totalBlock.append(total);
                 if (selectionHasSurcharge(selection, view.prices)) {
@@ -8749,9 +8751,21 @@ function moneySentence(node: HTMLElement, sentence: string, figure: string, brea
 }
 
 /**
+ * Where the selection strip's total and the chosen line's figures break
+ * after a comma (round 4, the critic's P3-4): **18** characters. Measured at
+ * 360 on Neo and Rural (and at 390 from 20) a total of 18 to 21 characters
+ * wrapped before its unit and left ` XEC` alone on its line; broken, the
+ * last group and the unit stay together (`.fig-end`) and the wrap falls
+ * after a comma. Under it a total fits its line at every width, and is the
+ * text node it always was. Pinned by value in
+ * `the-selection-strip-loses-a-long-totals-tail-never-its-head`.
+ */
+export const STRIP_BREAK_CHARS = 18;
+
+/**
  * A line of words carrying several money figures — the selection line's
- * "2 × Q = L" (round 3, the critic's P2-2) — with each figure past the card
- * ladder's last ceiling broken after its commas (`moneyFigure`), in order,
+ * "2 × Q = L" (round 3, the critic's P2-2) — with each figure from
+ * `STRIP_BREAK_CHARS` broken after its commas (`moneyFigure`), in order,
  * and the words around them unchanged. `textContent` is the sentence
  * exactly; a sentence whose figures are all short is one text node.
  */
@@ -8759,7 +8773,7 @@ function moneyLine(node: HTMLElement, sentence: string, figures: readonly string
     const parts: Node[] = [];
     let from = 0;
     for (const figure of figures) {
-        if (figure === '' || cardFigureTier(figure) !== 3) continue;
+        if (figure === '' || figure.length < STRIP_BREAK_CHARS) continue;
         const at = sentence.indexOf(figure, from);
         if (at < 0) continue;
         parts.push(document.createTextNode(sentence.slice(from, at)));

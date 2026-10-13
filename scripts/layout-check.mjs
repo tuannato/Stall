@@ -312,7 +312,8 @@ const TABLET = { name: 'tablet', width: 768, height: 1024 };
  *   a row of their own below 390 (`narrowTag`, D-2026-10-13-04); the rows
  *   either side of the re-flow's cut (`quote-row-1m`, `row-15-16`,
  *   `row-17`, `quote-row-18`, `row-21`); and the selection strip at the
- *   longest total (`pay-several-strip-long-figure`).
+ *   longest total (`pay-several-strip-long-figure`) and at 18 and 21
+ *   characters (`pay-several-strip-18`, `-21`, round 4).
  * The QR gate's rule reads every pay sheet's code here
  * (`PAY_QR_NARROWEST_PX`). `layout/PROBE-RULES.md`, "The narrow phone".
  */
@@ -365,6 +366,10 @@ const NARROW_SCREENS = [
     'quote-row-18',
     'row-21',
     'pay-several-strip-long-figure',
+    // Round 4 (the critic's P3-4): the strip's total at 18 and 21
+    // characters, either side of where ` XEC` stood alone on its line.
+    'pay-several-strip-18',
+    'pay-several-strip-21',
 ].join(',');
 /*
  * The short screens (the 8g1 critic's P2-2): two heights shorter than the
@@ -3737,6 +3742,13 @@ try {
         }
         if (boxes === 0) {
             verdicts.push('no figure boxes were sampled — vacuous green.');
+        }
+        // A target in a frame turned 45° or more that the sampler cannot read
+        // (round 4, the critic's P3-1): said, never a thrown page.
+        if ((skipTotals.get('turned-too-far') ?? 0) > 0) {
+            verdicts.push(
+                `${skipTotals.get('turned-too-far')} contrast target(s) stand in a frame turned 45° or more, whose lines the sampler cannot solve from their bounds`,
+            );
         }
         if (sheetClassesWrong([...contrastClasses]) !== undefined) {
             verdicts.push(sheetClassesWrong([...contrastClasses]));

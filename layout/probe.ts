@@ -62,6 +62,7 @@ import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
 import { reachesAnything, spillReach } from './spillReach';
+import { CARD_LADDER_LAST_STEP } from './cardLadder';
 import { inkLines, paddingBox, paintClips, type Box } from '../src/ui/signInk';
 import {
     OBS_RAIL_STICKER_HEIGHT,
@@ -392,7 +393,12 @@ function coveredBy(node: Element): string | undefined {
      * point is a point of the box. An unturned box is read exactly as before.
      */
     const angle = angleOf(node);
-    const points: [number, number][] = (lineBoxes.length > 1 ? lineBoxes : [box]).flatMap((r) => {
+    // A broken figure's line boxes are solved from their bounds; past 45°
+    // they cannot be, and the node is read as one box in its own frame
+    // (`ownFrame`, exact at any turn).
+    const lineFrames = angle === 0 || lineBoxes.length <= 1 ? undefined : lineBoxes.map((r) => turnedBox(r, angle));
+    const byLine = lineBoxes.length > 1 && (lineFrames === undefined || lineFrames.every((f) => f !== undefined));
+    const points: [number, number][] = (byLine ? lineBoxes : [box]).flatMap((r, i) => {
         if (angle === 0) {
             return [
                 [r.left + r.width / 2, r.top + r.height / 2] as [number, number],
@@ -402,7 +408,10 @@ function coveredBy(node: Element): string | undefined {
                 [r.right - 2, r.bottom - 2] as [number, number],
             ];
         }
-        const t = turnedBox(r, angle);
+        const t = byLine ? lineFrames![i]! : ownFrame(node, r, angle);
+        if (t === undefined) {
+            return [];
+        }
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
         const at = (dx: number, dy: number): [number, number] => [t.cx + dx * cos - dy * sin, t.cy + dx * sin + dy * cos];
@@ -415,6 +424,9 @@ function coveredBy(node: Element): string | undefined {
     // covered — it is reachable by scrolling, and the tab bar sits outside
     // the clip in flow, so it can never cover what is inside. Points within
     // the clip are still fully checked.
+    if (points.length === 0) {
+        return `${describe(node)} stands in a frame turned ${degrees(angle)} and has no layout box of its own, which the probe cannot read past 45° — it reads a turned element by its own size, and a node with none only under 45°`;
+    }
     const cut = cutSideways(node, box);
     if (cut !== undefined) {
         return cut;
@@ -2117,7 +2129,8 @@ const TIER_0_IN_CARD: ReadonlySet<string> = new Set(['face', 'paid', 'pay']);
  * figures the ladder steps (`CARD_LADDER_FIGURES`), no tier paints larger
  * than the smallest size the tier before it painted, and the last tier is
  * smaller than tier 0 — **unless tier 0 is already at or under the floor's
- * own last step** (`CARD_LADDER_LAST_STEP`: 18px for the face and the pay
+ * own last step** (`CARD_LADDER_LAST_STEP` in `layout/cardLadder.ts`, held to
+ * the sheet by `the-ladders-last-step-is-the-sheets-floor`: 18px for the face and the pay
  * figure, 15px for "You pay"), where a figure has no smaller step to take
  * and the fit rule alone judges it (round 3, the critic's P3-1: a look row
  * whose `paid` is 14px, every step `min(Npx, 14px)`, failed here with every
@@ -2133,13 +2146,6 @@ const TIER_0_IN_CARD: ReadonlySet<string> = new Set(['face', 'paid', 'pay']);
 const CARD_LADDER_CHECK = 'a-card-figure-steps-down-on-every-look';
 /** The figures the ladder steps, as `place:role` (a "You pay" figure carries no role: `paid:figure`). */
 const CARD_LADDER_FIGURES: ReadonlySet<string> = new Set(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
-/** The floor's last step per figure, stall.css's phone block: at or under it tier 0 has no smaller step to take. */
-const CARD_LADDER_LAST_STEP: Readonly<Record<string, number>> = {
-    'face:price': 18,
-    'face:seller-price': 18,
-    'paid:figure': 15,
-    'pay:price': 18,
-};
 type LadderTiers = Record<string, { min: number; max: number }>;
 /** Per look class, per variant (the paint's label), per figure, per tier. */
 const cardLadderSizes: Record<string, Record<string, Record<string, LadderTiers>>> = {};
@@ -5357,6 +5363,13 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         return 'sliver';
     }
     const angle = angleOf(node);
+    // A target in a turned frame is read in that frame (`ownFrame`); one with
+    // no layout size of its own past 45° cannot be, and says so — the runner
+    // fails a pass with any (round 4, the critic's P3-1).
+    const frame = angle === 0 ? undefined : ownFrame(node, full, angle);
+    if (angle !== 0 && frame === undefined) {
+        return 'turned-too-far';
+    }
     const read = lined ? lineRectsOf(node, ink, ownBand) : undefined;
     if (read !== undefined && read.rects.length === 0) {
         return read.why;
@@ -5399,7 +5412,7 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         pad: 0,
         legacyPad: insideTransform(node) ? 8 : 0,
         angle,
-        ...(angle === 0 ? {} : { frame: turnedBox(full, angle) }),
+        ...(angle === 0 ? {} : { frame: frame! }),
         sel: describe(node),
         ...(node.matches(HONEST_SELECTOR) ? { role: node.getAttribute('data-role')! } : {}),
         money,
@@ -5483,18 +5496,47 @@ function angleOf(el: Element | null): number {
  * A turned box before its turn: `getBoundingClientRect()` and
  * `Range.getClientRects()` answer a turned box's axis-aligned bounds, W×H,
  * and for a turn θ those are w·c + h·s by w·s + h·c — solved here for w and
- * h, about the same centre.
+ * h, about the same centre. **Undefined from 45°** (round 4, the critic's
+ * P3-1): there the system is singular (c = s) or gives no positive box, and
+ * the first version threw, so a look that turned a figure that far stopped
+ * the probe page writing any verdict. An element is read by `ownFrame`
+ * instead, which never needs the solve; a line fragment past it is said by
+ * its caller.
  */
-function turnedBox(r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } {
+function turnedBox(r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } | undefined {
     const c = Math.abs(Math.cos(angle));
     const sn = Math.abs(Math.sin(angle));
     const det = c * c - sn * sn;
     const w = angle === 0 ? r.width : (r.width * c - r.height * sn) / det;
     const h = angle === 0 ? r.height : (r.height * c - r.width * sn) / det;
     if (!(det > 0 && w > 0 && h > 0)) {
-        throw new Error(`a box turned ${((angle * 180) / Math.PI).toFixed(2)}° at ${Math.round(r.x)},${Math.round(r.y)} gives no box before its turn`);
+        return undefined;
     }
     return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, w, h };
+}
+
+/**
+ * An element's box before its frame's turn: solved from its bounds under 45°
+ * (`turnedBox`, which every read used before and still uses there, so no
+ * read moves), and past it its layout size (`offsetWidth` × `offsetHeight`,
+ * which no transform touches) about the centre of its turned bounds — exact
+ * at any angle, never singular (round 4, the critic's P3-1). An element with
+ * no layout size of its own (an SVG node) past 45° is undefined.
+ */
+function ownFrame(node: Element, r: DOMRect, angle: number): { cx: number; cy: number; w: number; h: number } | undefined {
+    const solved = turnedBox(r, angle);
+    if (solved !== undefined) {
+        return solved;
+    }
+    if (node instanceof HTMLElement && node.offsetWidth > 0 && node.offsetHeight > 0) {
+        return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, w: node.offsetWidth, h: node.offsetHeight };
+    }
+    return undefined;
+}
+
+/** A turn in degrees, for a sentence. */
+function degrees(angle: number): string {
+    return `${((angle * 180) / Math.PI).toFixed(2)}°`;
 }
 
 /**
@@ -5541,6 +5583,7 @@ function lineRectsOf(
 ): { rects: LineRect[]; why: string } {
     const rects: LineRect[] = [];
     let fragments = 0;
+    let turned = 0;
     const clipped = (owner: Element, r: DOMRect): Hole | undefined => {
         let x0 = r.left;
         let y0 = r.top;
@@ -5567,6 +5610,12 @@ function lineRectsOf(
         if (cut === undefined) return;
         const angle = angleOf(owner);
         const line = turnedBox(r, angle);
+        if (line === undefined) {
+            // A line fragment past 45° cannot be solved from its bounds
+            // (round 4, the critic's P3-1): the target says so.
+            turned += 1;
+            return;
+        }
         rects.push({ ...cut, cx: line.cx, cy: line.cy, rw: line.w, rh: line.h, angle, ink: lineInk, ...(glyph ? { glyph: true as const } : {}) });
     };
     const range = document.createRange();
@@ -5587,6 +5636,9 @@ function lineRectsOf(
             if (svg.closest(CONTRAST) !== node || getComputedStyle(svg).visibility !== 'visible') continue;
             push(svg, svg.getBoundingClientRect(), ink, true);
         }
+    }
+    if (turned > 0) {
+        return { rects: [], why: 'turned-too-far' };
     }
     return { rects, why: fragments === 0 ? 'not-rendered' : 'clipped-away' };
 }
