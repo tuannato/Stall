@@ -6649,6 +6649,36 @@ main 185.6s, the branch 202.2s (+16.6s). The two new passes 4.9s and 5.9s; portr
 of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and
 216.6s.
 
+### What looks:diff shows moved (2026-10-14)
+
+- **Against main** (`pnpm looks:diff main`, 27 screens expected: the seven
+  Cycle cut fixtures, the five touch screens, and at 1280x800 every wall
+  screen the Awning's or the yard's air moves): 1,539 identical, 283 real
+  and expected, 0 not expected, 0 inconclusive. The 774 shots on the new
+  fixtures are not compared — main has no such screens.
+- **Against main with every fixture** (a scratch commit of main `6db735e`
+  plus this branch's fixtures, probe and tests, its app code main's; all 53
+  wall screens expected — every one moves at 1280x800): 1,714 identical,
+  882 real, 0 not expected, 0 inconclusive. Read against the red run cell by
+  cell (screen × shipped look × bare or worn × size), **737 of the 882
+  failed on main and 145 passed on main and still moved**:
+  - one table for every look — a step shrinks on every look where any look
+    overran, so `$999.99` on Modern at the tablet goes 76.8 → 56.8px,
+    steps 1–3 on Modern at 1280, `quote-13` and `usd-13` on Modern at the
+    tall wall, steps 7–9 on Modern (and Rural where it fitted) at 1920;
+  - the break markup at 1920 — from step 4 the figure carries `<wbr>`s and
+    the `role="img"` wrapper so the narrow walls can wrap it, and at 1920,
+    where nothing wraps, 12–19-character figures raster 55–1,948px
+    differently in the same place at the same size (a 1px tag edge on Rural);
+  - the short walls' layout-wide answers — the Awning's and the yard's air
+    at 1280x800 on screens that fitted, every touch quote row below 1920
+    (`$5.00` included), and the payment band at 1280x900 with one item, which
+    main fitted;
+  - the Awning's quote card at 1280x900, which gives its 20px of foot.
+
+  A ladder that moved none of these would be per look (the shop rows'
+  `tierCeilings`) or measured (the sign's name ladder); neither is built.
+
 ### Not measured, stated
 
 - **Off the probe's sizes** (the scratch harness, the 35 Cycle screens,
