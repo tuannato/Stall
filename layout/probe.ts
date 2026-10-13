@@ -380,13 +380,35 @@ function coveredBy(node: Element): string | undefined {
      * hit the row and read as the figure covered by its own row.
      */
     const lineBoxes = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
-    const points: [number, number][] = (lineBoxes.length > 1 ? lineBoxes : [box]).flatMap((r) => [
-        [r.left + r.width / 2, r.top + r.height / 2] as [number, number],
-        [r.left + 2, r.top + 2] as [number, number],
-        [r.right - 2, r.top + 2] as [number, number],
-        [r.left + 2, r.bottom - 2] as [number, number],
-        [r.right - 2, r.bottom - 2] as [number, number],
-    ]);
+    /*
+     * **In the box's own turned frame** (round 3): a box inside a turned
+     * ancestor answers its axis-aligned bounds, and their corners are not the
+     * box — a 750px Rural tag swaying 0.77° on the wall put the bounds'
+     * corners of a 21-character figure 4–5px outside the tag it is drawn in,
+     * and the corner read as the figure covered by its own row. So each
+     * box's five points are taken in the frame it is drawn in, before its
+     * turn (`turnedBox`, the contrast pass's own), and turned back: every
+     * point is a point of the box. An unturned box is read exactly as before.
+     */
+    const angle = angleOf(node);
+    const points: [number, number][] = (lineBoxes.length > 1 ? lineBoxes : [box]).flatMap((r) => {
+        if (angle === 0) {
+            return [
+                [r.left + r.width / 2, r.top + r.height / 2] as [number, number],
+                [r.left + 2, r.top + 2] as [number, number],
+                [r.right - 2, r.top + 2] as [number, number],
+                [r.left + 2, r.bottom - 2] as [number, number],
+                [r.right - 2, r.bottom - 2] as [number, number],
+            ];
+        }
+        const t = turnedBox(r, angle);
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const at = (dx: number, dy: number): [number, number] => [t.cx + dx * cos - dy * sin, t.cy + dx * sin + dy * cos];
+        const hx = t.w / 2 - 2;
+        const hy = t.h / 2 - 2;
+        return [at(0, 0), at(-hx, -hy), at(hx, -hy), at(-hx, hy), at(hx, hy)];
+    });
     // Content inside the shell's scroll region keeps its full rect even when
     // part of it is scrolled out of the clip. A point beyond the clip is not
     // covered — it is reachable by scrolling, and the tab bar sits outside
@@ -1279,7 +1301,22 @@ function measure(screen: string, themeLabel: string): Failure[] {
         const edge = clipper?.getBoundingClientRect();
         const cut = edge !== undefined && (down ? strip.bottom > edge.bottom + 1 : strip.right > edge.right + 1);
         let under: Element | undefined;
-        if (!cut) {
+        // The part of the strip its clipper shows (round 3): a clipper clips
+        // both axes, so where the strip runs past it — down a scroller, under
+        // the dock that stands outside it — it paints nothing and lies under
+        // nothing. A 300px Rural card tilted 0.6° bulges 1.6px a side, and its
+        // strip, the list's whole height, was read as lying under the dock's
+        // tab at 360 though the scroller ends 16px above it.
+        const shown =
+            edge === undefined
+                ? strip
+                : new DOMRect(
+                      Math.max(strip.left, edge.left),
+                      Math.max(strip.top, edge.top),
+                      Math.min(strip.right, edge.right) - Math.max(strip.left, edge.left),
+                      Math.min(strip.bottom, edge.bottom) - Math.max(strip.top, edge.top),
+                  );
+        if (!cut && shown.width > 0 && shown.height > 0) {
             for (const other of root.querySelectorAll<HTMLElement>('button, a, input, select, textarea, [data-role="price"], [data-role="seller-price"], .item-n, .face-nm, .fine, .note, .pub')) {
                 if (other === node || node.contains(other) || other.contains(node)) {
                     continue;
@@ -1288,7 +1325,7 @@ function measure(screen: string, themeLabel: string): Failure[] {
                     continue;
                 }
                 const r = other.getBoundingClientRect();
-                if (r.width > 0 && overlaps(strip, r)) {
+                if (r.width > 0 && overlaps(shown, r)) {
                     under = other;
                     break;
                 }
@@ -2075,21 +2112,39 @@ const TIER_0_IN_CARD: ReadonlySet<string> = new Set(['face', 'paid', 'pay']);
  * `.pay-amt .pay-x span:first-child`, `[data-role='price']` and a `font`
  * shorthand on `.pay-x-n` — each out-ranking stall.css's floor and freezing
  * the figure at every step. So the painted size is held instead, whatever
- * selector set it: on a phone, for every look and each of the four figures
- * the ladder steps (`CARD_LADDER_FIGURES`: the face's asked amount and its
- * quote by role, "You pay", a pay sheet's figure), no tier paints larger
+ * selector set it: on a phone, for every look, **each variant on its own**
+ * (bare, every decoration worn: round 3, the critic's P3-1 — merged into one
+ * range per tier, a worn variant sizing the figure 18px at every tier read as
+ * "grows from tier 0 to tier 1" against the bare 34), and each of the four
+ * figures the ladder steps (`CARD_LADDER_FIGURES`), no tier paints larger
  * than the smallest size the tier before it painted, and the last tier is
- * smaller than tier 0. Read at the end of the page from the sizes every
- * paint collected (`cardLadderSizes`, the smallest and largest per look,
+ * smaller than tier 0 — **unless tier 0 is already at or under the floor's
+ * own last step** (`CARD_LADDER_LAST_STEP`: 18px for the face and the pay
+ * figure, 15px for "You pay"), where a figure has no smaller step to take
+ * and the fit rule alone judges it (round 3, the critic's P3-1: a look row
+ * whose `paid` is 14px, every step `min(Npx, 14px)`, failed here with every
+ * figure fitting). Read at the end of the page from the sizes every paint
+ * collected (`cardLadderSizes`, the smallest and largest per look, variant,
  * figure and tier), so it needs the fixtures at every step, which the runner
- * owes; what it compared is reported per look and figure as the tiers it
- * read (`cardLadderByClass`, `"0123"`), and a figure compared over fewer
- * than all four is a gap. Desk widths keep the design size and are not read.
+ * owes; what it compared is reported per look and figure as the most tiers
+ * one variant read (`cardLadderByClass`, `"0123"`: the ladder fixtures are
+ * painted bare and fully worn), and a figure compared over fewer than all
+ * four is a gap. Desk widths keep the design size and are not
+ * read.
  */
 const CARD_LADDER_CHECK = 'a-card-figure-steps-down-on-every-look';
 /** The figures the ladder steps, as `place:role` (a "You pay" figure carries no role: `paid:figure`). */
 const CARD_LADDER_FIGURES: ReadonlySet<string> = new Set(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
-const cardLadderSizes: Record<string, Record<string, Record<string, { min: number; max: number }>>> = {};
+/** The floor's last step per figure, stall.css's phone block: at or under it tier 0 has no smaller step to take. */
+const CARD_LADDER_LAST_STEP: Readonly<Record<string, number>> = {
+    'face:price': 18,
+    'face:seller-price': 18,
+    'paid:figure': 15,
+    'pay:price': 18,
+};
+type LadderTiers = Record<string, { min: number; max: number }>;
+/** Per look class, per variant (the paint's label), per figure, per tier. */
+const cardLadderSizes: Record<string, Record<string, Record<string, LadderTiers>>> = {};
 const cardLadderByClass: Record<string, Record<string, string>> = {};
 
 function cardFigureFaults(screen: string, label: string): Failure[] {
@@ -2121,7 +2176,7 @@ function cardFigureFaults(screen: string, label: string): Failure[] {
             const ladder = `${place}:${figure.getAttribute('data-role') ?? 'figure'}`;
             if (phone && CARD_LADDER_FIGURES.has(ladder)) {
                 const size = Number.parseFloat(getComputedStyle(figure).fontSize);
-                const at = ((cardLadderSizes[measuringClass] ??= {})[ladder] ??= {});
+                const at = (((cardLadderSizes[measuringClass] ??= {})[label] ??= {})[ladder] ??= {});
                 const was = at[tier];
                 at[tier] = was === undefined ? { min: size, max: size } : { min: Math.min(was.min, size), max: Math.max(was.max, size) };
             }
@@ -2143,24 +2198,36 @@ function cardFigureFaults(screen: string, label: string): Failure[] {
     return out;
 }
 
-/** Every look's painted ladder, read once at the end of the page (`a-card-figure-steps-down-on-every-look`). */
+/** Every look's painted ladder, each variant on its own, read once at the end of the page (`a-card-figure-steps-down-on-every-look`). */
 function cardLadderFaults(): Failure[] {
     const out: Failure[] = [];
-    for (const [cls, figures] of Object.entries(cardLadderSizes)) {
-        for (const [key, tiers] of Object.entries(figures)) {
-            const painted = ['0', '1', '2', '3'].filter((t) => tiers[t] !== undefined);
-            (cardLadderByClass[cls] ??= {})[key] = painted.join('');
-            if (painted.length < 2) continue;
-            const at = (t: string): { min: number; max: number } => tiers[t]!;
-            const sizes = painted.map((t) => `tier ${t} ${at(t).min === at(t).max ? at(t).max : `${at(t).min}–${at(t).max}`}px`).join(', ');
-            for (let i = 1; i < painted.length; i += 1) {
-                if (at(painted[i]!).max > at(painted[i - 1]!).min + 0.01) {
-                    out.push({ screen: 'probe page', theme: cls, check: CARD_LADDER_CHECK, detail: `the ${key} figure grows from tier ${painted[i - 1]} to tier ${painted[i]} (${sizes})` });
+    for (const [cls, variants] of Object.entries(cardLadderSizes)) {
+        // The most tiers one variant compared, per figure: a state screen is
+        // painted bare and fully worn only, so a single decoration's variant
+        // paints tier 0 alone and compares nothing — the report is the
+        // variant that compared the most, and every variant is compared on
+        // its own.
+        const compared: Record<string, string[]> = {};
+        for (const [variant, figures] of Object.entries(variants)) {
+            for (const [key, tiers] of Object.entries(figures)) {
+                const painted = ['0', '1', '2', '3'].filter((t) => tiers[t] !== undefined);
+                if (painted.length > (compared[key]?.length ?? 0)) compared[key] = painted;
+                if (painted.length < 2) continue;
+                const at = (t: string): { min: number; max: number } => tiers[t]!;
+                const sizes = painted.map((t) => `tier ${t} ${at(t).min === at(t).max ? at(t).max : `${at(t).min}–${at(t).max}`}px`).join(', ');
+                for (let i = 1; i < painted.length; i += 1) {
+                    if (at(painted[i]!).max > at(painted[i - 1]!).min + 0.01) {
+                        out.push({ screen: 'probe page', theme: variant, check: CARD_LADDER_CHECK, detail: `the ${key} figure grows from tier ${painted[i - 1]} to tier ${painted[i]} (${sizes})` });
+                    }
+                }
+                const floor = CARD_LADDER_LAST_STEP[key] ?? 0;
+                if (at(painted[0]!).min > floor + 0.01 && !(at(painted.at(-1)!).max < at(painted[0]!).min - 0.01)) {
+                    out.push({ screen: 'probe page', theme: variant, check: CARD_LADDER_CHECK, detail: `the ${key} figure takes no smaller step on its ladder (${sizes})` });
                 }
             }
-            if (!(at(painted.at(-1)!).max < at(painted[0]!).min - 0.01)) {
-                out.push({ screen: 'probe page', theme: cls, check: CARD_LADDER_CHECK, detail: `the ${key} figure takes no smaller step on its ladder (${sizes})` });
-            }
+        }
+        for (const [key, tiers] of Object.entries(compared)) {
+            (cardLadderByClass[cls] ??= {})[key] = tiers.join('');
         }
     }
     return out;
