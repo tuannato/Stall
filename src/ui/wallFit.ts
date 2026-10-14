@@ -226,8 +226,9 @@ function settle(head: HTMLElement, figure: HTMLElement, shape: Shape, start: num
  * the card's edge — a card held down by its code or its sign keeps its
  * figure's size, and the probe's status-line rule says so.
  */
-function relieve(head: HTMLElement, figure: HTMLElement, shape: Shape, start: number, tilt: number): void {
+function relieve(head: HTMLElement, figure: HTMLElement, shape: Shape, start: number, tilt: number): { px: number; over: number } {
     let px = start;
+    dress(head, figure, shape, px);
     let read = gauge(head, figure);
     for (let tries = 0; tries < 6 && read !== undefined && read.over + tilt > 0.5 && px > WALL_FIGURE_MIN_PX; tries += 1) {
         const over = read.over + tilt + 0.5;
@@ -237,11 +238,12 @@ function relieve(head: HTMLElement, figure: HTMLElement, shape: Shape, start: nu
         const after = gauge(head, figure);
         if (after === undefined || after.over > read.over - 0.5 || !stands(after, shape)) {
             dress(head, figure, shape, px);
-            return;
+            break;
         }
         px = next;
         read = after;
     }
+    return { px, over: (read?.over ?? 0) + tilt };
 }
 
 /**
@@ -297,11 +299,16 @@ function fitCard(head: HTMLElement): void {
         // size worth the line: past `STACK_GAIN` of what one line gets.
         const stack = stacks && line !== design ? settle(head, figure, 'stack', design, WALL_FIGURE_MIN_PX) : undefined;
         if (stack !== undefined && (line === undefined || stack > line * STACK_GAIN)) {
-            relieve(head, figure, 'stack', stack, tilt);
+            const stacked = relieve(head, figure, 'stack', stack, tilt);
+            // The stack's extra line is height: where the stacked card still
+            // runs past the status line, one line that clears it wins.
+            if (stacked.over <= 0.5 || line === undefined) return;
+            if (relieve(head, figure, 'line', line, tilt).over > stacked.over) {
+                dress(head, figure, 'stack', stacked.px);
+            }
             return;
         }
         if (line !== undefined) {
-            dress(head, figure, 'line', line);
             relieve(head, figure, 'line', line, tilt);
             return;
         }

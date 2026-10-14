@@ -406,7 +406,7 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         expect(reads(undefined)).toEqual(['clamp(40px, min(10.4cqh, 6.4cqw), 112px)']);
         expect(reads('(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)')).toEqual(['clamp(40px, min(7.4cqh, 6.4cqw), 80px)']);
         expect(reads('(orientation: portrait)')).toEqual(['min(124px, 11.5cqw)']);
-        expect(reads('(orientation: portrait) and (max-height: 1200px)')).toEqual(['10cqw']);
+        expect(reads('(orientation: portrait) and (max-height: 1500px)')).toEqual(['10cqw']);
         const text = css();
         expect(text).not.toMatch(/data-wall-tier|data-wall-break|--sw-fig|--sw-k\b/);
     });

@@ -1909,11 +1909,12 @@ export const SCREENS: Record<string, StallView> = {
         shopTab: 'quotes',
     }),
     /*
-     * The Cycle card's figure ladder (the critic's P1 on narrow-phone round 4,
+     * The Cycle card's figure (the critic's P1 on narrow-phone round 4,
      * pre-existing: the card had one figure size at every length, so the
      * counter tablet cut a 6-character listing and an 8-character XEC quote on
      * every look, and 1280x900 put Neo's `123,456.78 XEC` tail under the
-     * code). One card at the widest figure of each step of
+     * code; fitted to its column since 2026-10-14, `wallFit.ts`). One card
+     * at the widest figure of each length band of
      * `WALL_FIGURE_CEILINGS`, counted as `wallFigureTier` counts (a listing's
      * figure and two for its `from`; these listings are partials, so they
      * carry it), on both rails: listings of 5, 6 (`123.45`, the first to
@@ -1924,7 +1925,8 @@ export const SCREENS: Record<string, StallView> = {
      * machine's fallback, at 27. With the cut fixtures above, every step
      * holds its widest figure of each kind. Measured on every wall pass — the
      * canvas, 1280x900 and 1280x800 (`DESK_WALL_SCREENS` and `WINDOW_SCREENS`
-     * in the runner), the tall wall and the counter tablet — by
+     * in the runner), the tall wall, the counter tablet and the four off-size
+     * walls (`OFF_SIZE_WALLS`) — by
      * `a-cycle-card-shows-every-digit-at-every-wall-size`. Geometry only:
      * `shop-window-cycle`'s ink, and `shop-window-cycle-longest-figure`'s
      * broken one.

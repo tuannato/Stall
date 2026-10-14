@@ -33,8 +33,8 @@ type Model = {
     piecePerPx?: number;
     /** Chrome breaks at `<wbr>` under nowrap: an overflowing line comes back as two lines that fit. */
     chromeWraps?: boolean;
-    /** How far the card runs past the status line at a size. */
-    over?: (px: number) => number;
+    /** How far the card runs past the status line at a size, in a shape. */
+    over?: (px: number, shape: string) => number;
 };
 
 /** A gauge over a model of the card, reading the dress the fit put on it. */
@@ -71,7 +71,7 @@ function modelGauge(model: Model, reads: string[] = []) {
             widest,
             lines,
             block: 1.1 * px * lines,
-            over: model.over?.(px) ?? -10,
+            over: model.over?.(px, shape) ?? -10,
             fits: need <= model.room + 0.5,
         };
     };
@@ -172,6 +172,26 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         setWallFigureGauge(modelGauge({ room: 900, design: 80, perPx: 3, over: (px) => px * 1.1 }));
         fitWallFigures(root);
         expect(sizeOf(figure)).toBe(WALL_FIGURE_MIN_PX);
+    });
+
+    it('takes one line over a stacked listing that would still run past the status line', () => {
+        const { root, head, figure } = wall('12,345,678,901,234.5', { from: true });
+        // One line stands at 39px; stacked, 60px, but the stack's extra line
+        // keeps the card 14px over the status line even at 32px.
+        setWallFigureGauge(
+            modelGauge({
+                room: 702,
+                design: 99,
+                perPx: 8.9,
+                fixed: 200,
+                stackFixed: 70,
+                over: (px, shape) => (shape === 'stack' ? px * 1.1 - 21 : px * 1.1 - 70),
+            }),
+        );
+        fitWallFigures(root);
+        expect(head.hasAttribute('data-wall-wrap')).toBe(false);
+        expect(sizeOf(figure)).toBeGreaterThanOrEqual(WALL_FIGURE_MIN_PX);
+        expect(sizeOf(figure)).toBeLessThanOrEqual((702 - 200) / 8.9);
     });
 
     it('is inert where nothing lays out, and outside a Cycle wall', () => {

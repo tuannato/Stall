@@ -8974,3 +8974,94 @@ resolves); a look sizing the money node's descendants through a rule this
 guard's selector reading misses; Safari and Firefox; the turned frame's fit
 (axes mapped by construction, measured by nothing — the probe paints no
 turned wall).
+
+## The off-size walls: four passes, and what they needed (2026-10-14)
+
+**The passes** (`OFF_SIZE_WALLS` in `probe-passes.mjs`, geometry only, every wall
+screen — 53 — on every look, bare and worn): `side-tablet` 1024x768 (the
+counter tablet on its side), `hd-wall` 1366x768, `tall-tablet` 800x1280 (a
+portrait Android tablet) and `narrow-wall` 680x1000 (the wall's width
+floor). Each names the block its screen enters — `landscapeShort` for the
+first two, `portraitShort` for the others — and fails a page that did not
+enter it. Each owes what every wall pass owes (`WALL_PASS_NAMES` in
+probe-coverage.mjs, held to the runner's list by
+`the-wall-passes-owe-the-cycle-cards-every-step`): the touch wall's
+controls, the status line, and a Cycle figure in every length band on
+every look. The shot plan shoots the same four (`shotPlan.ts`).
+
+**Red on main's code** (scratch clone `0a5abaf`: main's `window.ts`,
+`window.css` and `render.ts` under this branch's probe, runner, fixtures
+and tests; the full runner, the tracked fixture look carried), every
+earlier pass green, the four new ones:
+
+| pass | failures | by check |
+|---|---|---|
+| side-tablet (1024x768) | 954 | covered 438, Cycle figure 387, status line 85, text-spills 42, cut from below 2 |
+| hd-wall (1366x768) | 79 | status line 79 |
+| tall-tablet (800x1280) | 2,241 | cut from below 1,663, status line 330, text-spills 132, cut sideways 56, covered 56, Cycle figure 4 |
+| narrow-wall (680x1000) | 697 | text-spills 348, cut sideways 175, covered 77, cut from below 40, Cycle figure 32, status line 25 |
+
+That run's contrast pass died on a closed DevTools socket past the 300s
+ceiling, on a machine at load 5–8 with another builder's probe running;
+the four passes are geometry only, and the contrast pass carries no job at
+these sizes. On the branch every pass is 0.
+
+**What each size needed, beside the fit** (window.css):
+
+- **The tall portrait line moved from 1200 to 1500** (every
+  `(orientation: portrait) and (max-height: …)` block, and the probe's
+  `portraitTall` / `portraitShort` echoes). 800x1280 and 1024x1366 are both
+  over 1200, and the stacked column ran 112–190px past the status line at
+  800x1280 and cut Rural's code from below. They take the counter tablet's
+  side-by-side arrangement now. Its code is capped by its own column
+  (`min(26cqh, 100cqw - 180px - min(260px, 34cqw))`, floor 280): at 720x1280
+  the tall wall's 26cqh is 333px in a 295px column. 1080x1920 is unchanged.
+- **Under 790px of frame** (1024x768, 1366x768, and the Awning's 1280x900
+  and 1280x800): the Cycle card's padding, gap and caption step down on every
+  look (`--sw-pad` 12, `--sw-gap` 6, `--sw-cap` 6, caption 22px), and so do
+  the sign's padding (12/8) and the status line (8px, 16px) on every wall
+  screen. 768 of frame held the sign, the 280px code with its caption and
+  the status line in 620–680px, and the card ran 7–41px past the line on
+  Rural bare, under the Awning and with the yard. Browse's list ran 11–36px.
+  The yard's air reaches 870px of frame (from 820), for 1152x864.
+- **Landscape below 1280 wide**: every Browse row stands its price under its
+  name and picture, across the row. At 1024 the list is 490px beside the
+  code's 400px column, and a 13-character listing left its name 50px: the
+  rail label ran over the figure (`asked amount is covered`), and a
+  14-character one spilled left over the picture. The touch wall's
+  selection strip keeps its names a column of at least `min(11ch, 30%)` and
+  lets its "incl. surcharge" line wrap. On Neo that line was one nowrap line
+  of 421px, which left the names 48px.
+- **Portrait below 768 wide** (680x1000): Browse rows stand their price across
+  the row, and a touch row stands its price under the stepper too. The Cycle
+  card's air, caption, status line and sign step down, and so does the
+  touch payment band's text (one step under the tablet's custom
+  properties). At 680 the band ran 48px taller than at 768, and Back showed
+  23 of its 64px under the Awning.
+- **The fit** gained one rule here: a stacked listing whose card still runs
+  past the status line takes one line where that clears it (864x1536, Rural
+  worn: stacked at 60px and relieved to 32px, the card stayed 14px over; one
+  line at 39px cleared it).
+
+**Off the passes** (the scratch harness: the 53 wall screens, the shipped
+looks bare and worn and the skeleton — no tracked fixture look — cards
+failing any rule, main's code / the branch): 1920x1080, 1280x900,
+1280x800, 1080x1920, 768x1024, 1440x900, 1600x900, 1920x1200, 2560x1440: 0
+/ 0; 1024x768 237 / 0; 1366x768 79 / 0; 800x1280 280 / 0; 680x1000 102 /
+0; 1280x1024 21 / 0; 1152x864 74 / 0; 1024x1366 284 / 0; 768x1366 295 / 0;
+720x1280 340 / 0; **1280x720 78 / 70** (the Awning and the yard: the card
+up to 20.5 and 30.5px past the status line, the touch wall's shop code cut
+2–8px from below, inside its quiet zone); **900x1600 46 / 25** and
+**864x1536 100 / 41** (Rural with the yard, the tall portrait card up to
+79px past the line; at 864 Neo's long Browse figures beside the 160px
+picture, and the 35-item payment's list). No card fails on the branch that
+did not on main, at any of the 21 sizes.
+
+**Moved at the probed sizes**, stated: the fit's sizes on every Cycle
+screen (the first section above); and the ≤790 frame rules on the Awning's
+walls at 1280x900 (768 of frame) and 1280x800 (668) — the sign, the status
+line and the Cycle card's air.
+
+**Cost**: each new pass 5.8–6.1s on a run at load 2–4 (5.9–6.5s at load
+6–10). The whole run's A/B against main is measured after the merge-ready
+commit (below).

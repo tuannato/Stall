@@ -79,8 +79,8 @@ export const CANVAS = { name: 'canvas', width: 1920, height: 1080 };
  *
  * `window.css` carries three layouts for the cycle card and only two were
  * ever measured: landscape, and `(orientation: portrait) and (max-height:
- * 1200px)` — the counter tablet, which the `TABLET` pass
- * matches. The third, `portrait` with that max-height NOT matching, is the
+ * 1500px)` (1200 until 2026-10-14) — the counter tablet, which the `TABLET`
+ * pass matches. The third, `portrait` with that max-height NOT matching, is the
  * stacked column a wall-mounted portrait screen paints, and **no viewport
  * reached it**: a whole half of the layout this feature was asked for
  * (owner, 2026-09-18: "Cũng thiết kế để hỗ trợ màn hình dọc") sat behind a
@@ -97,8 +97,8 @@ export const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
 /*
  * The counter tablet stood on end — the SHORT portrait block.
  *
- * `(orientation: portrait) and (max-height: 1200px)` was entered by one
- * viewport in the whole matrix, 390x844, and only because the wall fixtures
+ * `(orientation: portrait) and (max-height: 1200px)` (1500 since
+ * 2026-10-14) was entered by one viewport in the whole matrix, 390x844, and only because the wall fixtures
  * ran there. Taking them out of the narrow pass was right — the app cannot
  * paint a wall at 390 — and it left that block measured by nothing while
  * two documents went on describing it as covered (QA, 2026-09-20, measured
@@ -281,6 +281,31 @@ export const WINDOW_SCREENS =
  */
 export const DESK_WALL = { name: 'desk-wall', width: 1280, height: 900 };
 export const SHORT_WALL = { name: 'short-wall', width: 1280, height: 800 };
+/*
+ * The off-size walls (2026-10-14, PLAN § Open's first P1): four screens a
+ * wall is hung on that no pass painted, each measured over every wall screen.
+ * The Cycle card's figure came from a table of sizes measured at the five
+ * sizes the passes above paint, and between them it printed prices that
+ * were not the record's: at 1024x768 (the counter tablet on its side)
+ * `$999.99` read "$999.9" on Neo and `123,456.78 XEC` ran 40px into the
+ * code; at 800x1280 (a portrait Android tablet) the card ran past the status
+ * line and Rural's code was cut from below; at 680x1000 (the wall's floor)
+ * Rural's tag ran out of its column; at 1366x768 cards reached the status
+ * line. The figure is fitted to its column now (`wallFit.ts`), and these are
+ * what hold it there, with the touch wall and the Browse rows beside it.
+ * Each names the block its screen enters (`block`, echoed by the page), so a
+ * pass that painted another layout fails rather than certifying this one.
+ * Each is a `wall` entry of `geometryPlan`, named in `WALL_PASS_NAMES`
+ * (`probe-coverage.mjs`, which derives `GEOMETRY_PASSES` and the two money
+ * surface tables from it) and shot at its size (`SHOT_VIEWPORTS`,
+ * `layout/shotPlan.ts`).
+ */
+export const OFF_SIZE_WALLS = Object.freeze([
+    Object.freeze({ name: 'side-tablet', width: 1024, height: 768, block: 'landscapeShort' }),
+    Object.freeze({ name: 'hd-wall', width: 1366, height: 768, block: 'landscapeShort' }),
+    Object.freeze({ name: 'tall-tablet', width: 800, height: 1280, block: 'portraitShort' }),
+    Object.freeze({ name: 'narrow-wall', width: 680, height: 1000, block: 'portraitShort' }),
+]);
 export const DESK_WALL_SCREENS =
     'shop-window-wall,shop-window-wall-long-name,shop-window-wall-browse-long-name,shop-window-wall-browse-long-figures,' +
     'shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,shop-window-cycle-listing-16,shop-window-cycle-listing-17,' +
@@ -356,6 +381,7 @@ export function geometryPlan({ looks = 'shipped' } = {}) {
         { key: TABLET.name, kind: 'wall', coverage: TABLET.name, vp: TABLET, screens: WINDOW_SCREENS, block: 'portraitShort' },
         { key: DESK_WALL.name, kind: 'wall', coverage: DESK_WALL.name, vp: DESK_WALL, screens: DESK_WALL_SCREENS, block: 'landscapeShort' },
         { key: SHORT_WALL.name, kind: 'wall', coverage: SHORT_WALL.name, vp: SHORT_WALL, screens: WINDOW_SCREENS, block: 'landscapeShort' },
+        ...OFF_SIZE_WALLS.map(({ block, ...vp }) => ({ key: vp.name, kind: 'wall', coverage: vp.name, vp, screens: WINDOW_SCREENS, block })),
         { key: NARROW.name, kind: 'narrow', coverage: NARROW.name, vp: NARROW, screens: NARROW_SCREENS },
         ...SHORT_VIEWPORTS.map((vp) => ({ key: vp.name, kind: 'short', coverage: vp.name, vp, after: [vp.from] })),
         ...REDUCED.map((pass) => ({

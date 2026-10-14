@@ -9945,16 +9945,18 @@ const verdict = {
      * The tall-portrait half of `window.css`, echoed back so the runner
      * can refuse a pass the media feature never reached — the same guard
      * `reducedMotion` gives that pass. It is `portrait` with the
-     * `max-height: 1200px` block NOT matching: a phone and a counter
+     * `max-height: 1500px` block NOT matching (1200 until 2026-10-14,
+     * when a 1280-tall tablet joined the short block): a phone and a counter
      * tablet are portrait too and take the short variant, so the stacked
      * column a wall-mounted screen paints is a third state, and asking
      * only for `portrait` would have certified it from a 390px phone.
      */
-    portraitTall: matchMedia('(orientation: portrait) and (min-height: 1201px)')
+    portraitTall: matchMedia('(orientation: portrait) and (min-height: 1501px)')
         .matches,
     /*
      * The other portrait block — `(orientation: portrait) and
-     * (max-height: 1200px)` — echoed back for its own pass's guard.
+     * (max-height: 1500px)` — echoed back for its own passes' guard (the
+     * counter tablet, and since 2026-10-14 the 800x1280 and 680x1000 walls).
      *
      * It was reached only by the 390x844 mobile pass, and only because
      * the wall fixtures ran there. Taking them out of that pass was
@@ -9966,13 +9968,13 @@ const verdict = {
      * the wall's floor, so the screen is real and the pass is now its
      * own.
      */
-    portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
+    portraitShort: matchMedia('(orientation: portrait) and (max-height: 1500px)')
         .matches,
     /*
      * The short landscape block — `(orientation: landscape) and (max-height:
-     * 900px)` — echoed for the two desk wall passes' guard (1280x900 and
-     * 1280x800, since the Cycle card's ladder): the card's code stands beside
-     * its figure there, and its ladder's wrap is that block's.
+     * 900px)` — echoed for the desk and off-size wall passes' guard
+     * (1280x900, 1280x800, 1024x768, 1366x768): the card's code stands
+     * beside its figure there.
      */
     landscapeShort: matchMedia('(orientation: landscape) and (max-height: 900px)').matches,
     screensMeasured: measured,

@@ -2970,15 +2970,17 @@ try {
     /*
      * Pass 2b, 2c and 2c″: the shop window at a wall size (the `wall` passes
      * of `probe-passes.mjs`: the tall wall `PORTRAIT`, the counter tablet
-     * `TABLET`, and the two desk walls `DESK_WALL` and `SHORT_WALL`). Each
+     * `TABLET`, the two desk walls `DESK_WALL` and `SHORT_WALL`, and since
+     * 2026-10-14 the four off-size walls `OFF_SIZE_WALLS`). Each
      * measures its own list of wall screens (`screens`), and the page echoes
      * the window block it entered: a pass whose block (`block`,
      * `WALL_BLOCKS`) the page did not enter would certify a layout it never
      * painted — `portraitTall` because one viewport in the whole matrix used
      * to reach the tall portrait column, `portraitShort` because taking the
      * wall fixtures off the 390 pass took the short-portrait block's only
-     * reader with them, and `landscapeShort` for the desk walls, where the
-     * Cycle card's code stands beside its figure and its ladder wraps. Each
+     * reader with them, and `landscapeShort` for the desk and off-size
+     * landscape walls, where the Cycle card's code stands beside its figure.
+     * Each
      * owes what the wall passes owe (`probe-coverage.mjs`), the Cycle card's
      * every step on every look among it.
      */

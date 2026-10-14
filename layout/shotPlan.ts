@@ -13,7 +13,9 @@
  *   screens only where the wall fits, as the probe does), 1920×1080 for the
  *   canvas screens, and the shop window's own passes — every wall screen at
  *   1280×900 too, 1080×1920 (the tall wall), 768×1024 (the counter tablet
- *   stood on end) and 1280×800 (the short desk wall).
+ *   stood on end), 1280×800 (the short desk wall), and the four off-size
+ *   walls: 1024×768 (the counter tablet on its side), 1366×768, 800×1280 (a
+ *   portrait Android tablet) and 680×1000 (the wall's floor).
  * - **Variants.** Bare; every decoration worn (one per slot, as the picker
  *   produces) on every screen that wears decorations; and each mood worn
  *   alone, on every screen — the overlay keeps a mood where it drops the
@@ -50,6 +52,12 @@ export const SHOT_VIEWPORTS = {
     // The short desk wall, the probe's own pass since the Cycle card's
     // ladder: a 1280x800 panel, the landscape tablet's size.
     shortWall: { name: 'short-wall', width: 1280, height: 800 },
+    // The four off-size walls, the probe's own passes since the Cycle card's
+    // figure is fitted (`OFF_SIZE_WALLS` in scripts/probe-passes.mjs).
+    sideTablet: { name: 'side-tablet', width: 1024, height: 768 },
+    hdWall: { name: 'hd-wall', width: 1366, height: 768 },
+    tallTablet: { name: 'tall-tablet', width: 800, height: 1280 },
+    narrowWall: { name: 'narrow-wall', width: 680, height: 1000 },
 } as const satisfies Record<string, ShotViewport>;
 
 export type ShotGround = 'dark' | 'light';
@@ -82,7 +90,7 @@ function slug(label: string): string {
  */
 export function shotScreens(withDoor = false): readonly (readonly [ShotViewport, readonly string[]])[] {
     const notDoor = (name: string): boolean => withDoor || name !== 'door';
-    const { phone, desk, canvas, portrait, tablet, shortWall } = SHOT_VIEWPORTS;
+    const { phone, desk, canvas, portrait, tablet, shortWall, sideTablet, hdWall, tallTablet, narrowWall } = SHOT_VIEWPORTS;
     return [
         [phone, screensAt(phone.width, false).filter(notDoor)],
         // The desk's page screens and, since the Cycle card's ladder, the
@@ -93,6 +101,10 @@ export function shotScreens(withDoor = false): readonly (readonly [ShotViewport,
         [portrait, wallScreens()],
         [tablet, wallScreens()],
         [shortWall, wallScreens()],
+        [sideTablet, wallScreens()],
+        [hdWall, wallScreens()],
+        [tallTablet, wallScreens()],
+        [narrowWall, wallScreens()],
     ];
 }
 

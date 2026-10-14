@@ -8,7 +8,7 @@ import { CONTRAST_VIEWPORTS } from './contrastPlan';
 import { SHOT_VIEWPORTS, diffPlan, shotPlan, type ShotJob } from './shotPlan';
 import { lookFromJson, parseWorkshopLook } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
-import { CLEAR_SCREENS, DESK_WALL_SCREENS, WINDOW_SCREENS, geometryPlan } from '../scripts/probe-passes.mjs';
+import { CLEAR_SCREENS, DESK_WALL_SCREENS, OFF_SIZE_WALLS, WINDOW_SCREENS, geometryPlan } from '../scripts/probe-passes.mjs';
 
 function asLook(json: unknown): Look {
     const { theme, rows } = typeof json === 'string' ? parseWorkshopLook(json) : lookFromJson(json);
@@ -73,6 +73,9 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect([...at(jobs, 'portrait')].sort()).toEqual([...wall].sort());
         expect([...at(jobs, 'tablet')].sort()).toEqual([...wall].sort());
         expect([...at(jobs, 'short-wall')].sort()).toEqual([...wall].sort());
+        for (const name of ['side-tablet', 'hd-wall', 'tall-tablet', 'narrow-wall']) {
+            expect([...at(jobs, name)].sort(), name).toEqual([...wall].sort());
+        }
         expect(WINDOW_SCREENS.split(',').sort()).toEqual([...wall].sort());
         // Every wall screen at every wall size since the Cycle card's ladder:
         // the desk wall pass takes, at 1280x900, the canvas ones the desk
@@ -84,6 +87,14 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect(SHOT_VIEWPORTS.portrait).toMatchObject({ width: 1080, height: 1920 });
         expect(SHOT_VIEWPORTS.tablet).toMatchObject({ width: 768, height: 1024 });
         expect(SHOT_VIEWPORTS.shortWall).toMatchObject({ width: 1280, height: 800 });
+        // The off-size walls at the plan's own sizes (`OFF_SIZE_WALLS` in
+        // scripts/probe-passes.mjs): each is a wall pass the next case holds
+        // to shots at its size, and here to a viewport of the shot plan's own.
+        for (const vp of OFF_SIZE_WALLS) {
+            const shot = Object.values(SHOT_VIEWPORTS).find((v) => v.name === vp.name);
+            expect(shot, vp.name).toMatchObject({ width: vp.width, height: vp.height });
+        }
+        expect(OFF_SIZE_WALLS.map((vp) => vp.name)).toEqual(['side-tablet', 'hd-wall', 'tall-tablet', 'narrow-wall']);
         expect(SHOT_VIEWPORTS.canvas).toMatchObject({ width: 1920, height: 1080 });
         // The phone, the desk and the canvas are the probe's own three.
         expect(SHOT_VIEWPORTS.desk).toMatchObject({ width: 1280, height: 900 });
@@ -155,7 +166,7 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
     it('counts the empty kit: one bare paint per probed cell, two for a transparent one', () => {
         const page = Object.keys(SCREENS).filter((name) => !CANVAS_SCREENS.has(name) && name !== 'door');
         const phone = page.filter((name) => SCREENS[name]!.window === undefined).length;
-        const cells = phone + page.length + deskWall.length + CANVAS_SCREENS.size + 3 * wall.length;
+        const cells = phone + page.length + deskWall.length + CANVAS_SCREENS.size + 7 * wall.length;
         const clear = Object.keys(SCREENS).filter((name) => SCREENS[name]!.broadcast?.transparent === true).length;
         expect(shotPlan(skeleton).length).toBe(cells + clear);
         expect(shotPlan(skeleton).every((job) => job.variant === 'bare' && job.flags === 0)).toBe(true);
