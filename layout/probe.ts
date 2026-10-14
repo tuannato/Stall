@@ -691,17 +691,70 @@ function wornVariants(look: Look): readonly (readonly ShippedAttachment[])[] {
  * `seller-price`) and a few kinds of words, and nothing else: words painted
  * over Pay several's "$10.00", over the wall's payment lines and over "You
  * pay" passed every geometry pass, or failed naming a control behind the
- * sheet. So the spilled strip is held against every money node
- * (`MONEY_SET`), Pay several's line figures (`.pay-line-x`, inside the money
- * box `pay-lines`) and every broken figure (`.fig-say`), money first, each
- * by its own line boxes — and a spill over money fails under this name.
- * What `text-spills` already skipped it still skips: the spilling node's own
- * ancestors and descendants, anything `aria-hidden`, and a strip past the
- * part of its clipper that shows (`spillReach`).
+ * sheet. So a spill is held against every money node (`MONEY_SET`), Pay
+ * several's line figures (`.pay-line-x`, inside the money box `pay-lines`),
+ * every broken figure (`.fig-say`) and a figure's own words (`.item-from`,
+ * `.item-u`: "from", the unit, and the label "Not buyable" in a price cell)
+ * — money first, each by its own line boxes — and a spill over money fails
+ * under this name. **What is held is the spilled words** (round 2, the
+ * critic's P3-1): the line boxes of the node's own text past its box's end,
+ * never the box's whole height, which named money far down a tall box that
+ * no glyph stood over (a face card past its edge "under span.addr-short",
+ * the sign's address behind the sheet). Each line box is held to the box's
+ * own extent across the spill, as the strip always was (a line's content
+ * area taller than its box is not the words running past its end), and to
+ * every clip between its text and the node (a name marquee's cell clips the
+ * name it moves; `spilledWords`); a spill with no text past the edge keeps
+ * the strip. **And only within the open sheet** while one is open
+ * (`surface`): its targets are the sheet's, and a node behind the sheet,
+ * under its scrim, is held to its own clipper alone. A figure's own words
+ * are on the list so a money node narrower than its own text, nothing
+ * clipping, is read where its digits land on its unit (the critic's plant F,
+ * which the strip only ever named by the address behind the sheet). What
+ * `text-spills` already skipped it still skips: the
+ * spilling node's own ancestors and descendants, anything `aria-hidden`, and
+ * a strip past the part of its clipper that shows (`spillReach`).
  */
 const SPILL_MONEY_CHECK = 'a-spill-over-any-money-is-read';
-const SPILL_MONEY = `${MONEY}, .pay-line-x, .fig-say`;
+const SPILL_MONEY = `${MONEY}, .pay-line-x, .fig-say, .item-from, .item-u`;
 const SPILL_WORDS = 'button, a, input, select, textarea, .item-n, .face-nm, .fine, .note, .pub';
+
+/**
+ * The line boxes of `node`'s own text, each held to every clip between its
+ * text and `node` on the spill's axis (a name marquee's cell clips the name
+ * it moves, and its layout rects run past it).
+ */
+function spilledWords(node: Element, down: boolean): DOMRect[] {
+    const out: DOMRect[] = [];
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        if ((text.textContent ?? '').trim() === '') continue;
+        const clips: DOMRect[] = [];
+        for (let at = text.parentElement; at !== null && at !== node; at = at.parentElement) {
+            const cs = getComputedStyle(at);
+            if ((down ? cs.overflowY : cs.overflowX) !== 'visible') clips.push(at.getBoundingClientRect());
+        }
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        for (const r of range.getClientRects()) {
+            let left = r.left;
+            let right = r.right;
+            let top = r.top;
+            let bottom = r.bottom;
+            for (const c of clips) {
+                if (down) {
+                    top = Math.max(top, c.top);
+                    bottom = Math.min(bottom, c.bottom);
+                } else {
+                    left = Math.max(left, c.left);
+                    right = Math.min(right, c.right);
+                }
+            }
+            if (right > left && bottom > top) out.push(new DOMRect(left, top, right - left, bottom - top));
+        }
+    }
+    return out;
+}
 
 /**
  * Measure what is on screen. **Separate from painting on purpose**: seeking an
@@ -1342,25 +1395,52 @@ function measure(screen: string, themeLabel: string): Failure[] {
                 ? undefined
                 : { box: edge, clipsX: clipCs.overflowX !== 'visible', clipsY: clipCs.overflowY !== 'visible' };
         if (!cut) {
-            // Money first, so a spill over a figure names the figure and not
-            // a control behind the sheet it stands on.
-            for (const other of [...root.querySelectorAll<HTMLElement>(SPILL_MONEY), ...root.querySelectorAll<HTMLElement>(SPILL_WORDS)]) {
+            // The spilled words themselves (round 2, the critic's P3-1): the
+            // parts of the node's own text past its box's end, never the
+            // box's whole height, which named money far down a tall box that
+            // no glyph stood over. A spill with no text past the edge (an
+            // overflowing picture) keeps the strip.
+            // Held to the box's own extent across the spill (the strip's,
+            // as it always was): a line's content area taller than its box
+            // is not the words running past its end. And text a clip inside
+            // the node hides (a name marquee's cell) is held to that clip.
+            const words = spilledWords(node, down)
+                .filter((r) => r.width > 0 && r.height > 0 && (down ? r.bottom > box.bottom + 1 : r.right > box.right + 1))
+                .map((r) => {
+                    if (down) {
+                        const left = Math.max(r.left, box.left);
+                        return new DOMRect(left, Math.max(r.top, box.bottom), Math.min(r.right, box.right) - left, r.bottom - Math.max(r.top, box.bottom));
+                    }
+                    const top = Math.max(r.top, box.top);
+                    return new DOMRect(Math.max(r.left, box.right), top, r.right - Math.max(r.left, box.right), Math.min(r.bottom, box.bottom) - top);
+                })
+                .filter((r) => r.width > 0 && r.height > 0);
+            const strips = words.length > 0 ? words : [strip];
+            // Money first, so a spill over a figure names the figure; and
+            // while a sheet is open, within it alone — a node behind the
+            // sheet is under its scrim, and a control behind it is too.
+            const targets =
+                surface !== root && !(surface as Element).contains(node)
+                    ? []
+                    : [...surface.querySelectorAll<HTMLElement>(SPILL_MONEY), ...surface.querySelectorAll<HTMLElement>(SPILL_WORDS)];
+            for (const other of targets) {
                 if (other === node || node.contains(other) || other.contains(node)) {
                     continue;
                 }
                 if (other.closest('[aria-hidden="true"]') !== null) {
                     continue;
                 }
-                const reach = spillReach(strip, clip, clipper === null || clipper.contains(other));
-                if (!reachesAnything(reach)) {
-                    continue;
-                }
                 // Each of its own boxes: one for a block, one per line for an
                 // inline figure broken over lines, whose union holds a corner
                 // no glyph of it stands in (`a-spill-over-any-money-is-read`).
-                const hit = [...other.getClientRects()].some(
-                    (r) => r.width > 0 && !(reach.right <= r.left || r.right <= reach.left || reach.bottom <= r.top || r.bottom <= reach.top),
-                );
+                const boxes = [...other.getClientRects()].filter((r) => r.width > 0);
+                const hit = strips.some((s) => {
+                    const reach = spillReach(s, clip, clipper === null || clipper.contains(other));
+                    return (
+                        reachesAnything(reach) &&
+                        boxes.some((r) => !(reach.right <= r.left || r.right <= reach.left || reach.bottom <= r.top || r.bottom <= reach.top))
+                    );
+                });
                 if (hit) {
                     under = other;
                     break;

@@ -6863,7 +6863,7 @@ over most of the money set passed every geometry pass, or failed naming a
 control behind the sheet (the critic's round 4, P2-2: "under button.seg-b",
 "under button.addr" for words over Pay several's "$10.00").
 
-**The rule** (`measure`, `layout/probe.ts`): the spilled strip is held
+**The rule** (round 1's; held against the spilled words, within the open sheet, since round 2, below) (`measure`, `layout/probe.ts`): the spilled strip is held
 against every money node (`MONEY_SET`), Pay several's line figures
 (`.pay-line-x`, inside the money box `pay-lines`) and every broken figure
 (`.fig-say`) — `SPILL_MONEY` — before the words (`SPILL_WORDS`, the old
@@ -7113,3 +7113,57 @@ content area (the text is its line boxes).
   phone and the narrow phone, 52 and 16 at the desk, Neo 78 at the canvas
   and `desk-wall`, 114 at the tall wall, 102 at the tablet and `short-wall`,
   12 in the reduced-motion pass; 0 on main.
+
+**The spill rule names only what the spilled words overlap** (P3-1). Round
+1 held the box's whole height past its end, so money far down a tall box
+was named though no glyph stood over it (under the private look at 0x04,
+nine face cards past their edge at 360 "under span.addr-short", the sign's
+address behind the sheet). Now the line boxes of the node's own text past
+its end are held, each kept to the box's own extent across the spill and to
+every clip between its text and the node (`spilledWords`: a name marquee's
+cell clips the name it moves); a spill with no text past the edge keeps the
+strip. While a sheet is open, the targets are the sheet's (`surface`), and a
+node behind it is held to its own clipper alone. A figure's own words
+(`.item-from`, `.item-u`) join the money list, so a money node narrower
+than its own text is read where its digits land on its unit; with the line
+boxes alone the critic's plant F would have passed. **Not read**: spilled
+words past a box's end that land on text not on either list; a spill
+behind an open sheet over anything but its own clipper.
+
+**Red proofs** (2026-10-14, the scratch clone):
+
+- the critic's plant F (`f-ownbox.css`: Modern's face figure and Neo's pay
+  figure `inline-block`, 1px wide, nothing clipping), on the probe page:
+  "span.x paints 93px past its box (94 > 1), under span.item-u", where round
+  1 named the address behind the sheet;
+- the whole runner (the runs above): this rule Modern 91 and Neo 210 at the
+  phone and the desk (Neo 210 at 360), and no `text-spills` left; main
+  reported Neo's as `text-spills` (210, 56 and 182 under a wrong neighbour)
+  and Modern's as `asked amount is covered` alone;
+- under the private look at 0x04 (below), the nine misnamed spills are gone;
+  the face figure past its card is `a-card-figure-stands-inside-its-row`'s,
+  as it was.
+
+**Unplanted, every shipped look, the skeleton and the tracked fixture read
+0 on all three rules at every geometry pass**, and the round-3 and round-4
+spill reads stay quiet. Two misfires found and closed on the way, both of
+the line boxes: a name marquee's text past its cell (a 5px name spill read
+over the figure on Neo's touch wall at 1920), and a content area taller than
+its box (the face's picture button under the zoom's close, Rural, 7px).
+
+**The private look at 0x04** (`fc874044`, not the pinned pair, read bare
+only; its files not opened): against the critic's run of main with the same
+selection, one new failure — `row-17`, at 360: "span.item-x
+"99,999,999,999.99" has 9.9px of its text cut sideways by div.item"
+(`a-money-figure-never-clips-itself`), not looked at; the nine misnamed
+spills gone; nothing else differs (mobile 21, narrow 148 from 156, the
+sticky-sign pass 7, contrast 3, all as before).
+
+**Cost** (2026-10-14, back to back, load 1.6 rising to 5.4): main 227.5s,
+the branch 240.1s (+12.6s, of 300). The geometry passes 66.6 → 73.3s
+(+6.7s; each of the eight +0.6 to +1.3s); the contrast pass 145.8 → 151.7s,
+where no rule of these runs, so its +5.9s is the load. Timed in the page
+(`performance.now()` around each call, a scratch build): the ink rule
+0.39–0.57s a pass, 3.8s over the eight; the self-clip rule 0.09–0.15s a
+pass, 0.95s over the eight. Round 1's pair was +3.7s of geometry; the
+allow-list roughly doubles that. One pair, not repeated.
