@@ -15,6 +15,7 @@
 // First: it listens for the policy's refusals from the page's first module statement.
 import { cspRefusals, type CspRefusal } from './cspWatch';
 import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
+import { wallFigureTier } from '../src/ui/window';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
 import type { StallView } from '../src/domain/state';
@@ -2359,11 +2360,12 @@ function cardLadderFaults(): Failure[] {
  * read "123,45" on Rural — a thousand times low to a reader who writes the
  * decimal with a comma — and at 1280x900 Neo's `.78 XEC` painted under the
  * code; no pass painted a Cycle figure longer than three characters at any
- * size but 1920x1080. The card now steps its figure down a ladder
- * (`WALL_FIGURE_CEILINGS`, `data-wall-tier` on the head) and, where a wall
- * is narrow, wraps it after a comma; this is what holds that true on every
- * wall pass. For every Cycle card's figure — the money node with its `from`
- * and ` XEC` — and its price cell (a look's tag chrome included):
+ * size but 1920x1080. The card's figure is fitted to its column after the
+ * paint now (`fitWallFigures`, `src/ui/wallFit.ts`, which reads it the way
+ * this rule does), stacked or broken after a comma where one line no longer
+ * stands; this is what holds that true on every wall pass. For every Cycle
+ * card's figure — the money node with its `from` and ` XEC` — and its price
+ * cell (a look's tag chrome included):
  *
  * - every line and the cell stand inside the price's own grid column, so
  *   the figure is never past the card's grid and never under the code or
@@ -2381,11 +2383,11 @@ function cardLadderFaults(): Failure[] {
  * (Rural tilts every third card half a degree and sways its tag 0.8°, so an
  * axis-aligned box of a 160px-tall tag is 2–4px wider than the tag; the
  * transforms are put back before the next rule reads the tree). Counted per
- * look and per step (`cycleFigureByClass`): the runner owes every step on
- * every look on each of the five wall passes.
+ * look and per length band (`cycleFigureByClass`, `wallFigureTier`): the
+ * runner owes every band on every look on each wall pass.
  */
 const CYCLE_FIGURE_CHECK = 'a-cycle-card-shows-every-digit-at-every-wall-size';
-/** Per look class, per `data-wall-tier` (`'0'` for none), how many Cycle figures were read. */
+/** Per look class, per length band (`wallFigureTier`), how many Cycle figures were read. */
 const cycleFigureByClass: Record<string, Record<string, number>> = {};
 
 function cycleFigureFaults(screen: string, label: string): Failure[] {
@@ -2402,7 +2404,9 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
         // the policy refuses an inline `style` attribute, and the app writes
         // inline declarations on a card's boxes (`--sel-i` on a chosen line).
         withTransformsHeldOff([card, head, cell, amount, figure], () => {
-            const tier = head.getAttribute('data-wall-tier') ?? '0';
+            // The figure's length band (`wallFigureTier`): the fit sizes the
+            // figure, the bands say which fixtures every pass owes.
+            const tier = String(wallFigureTier(figure.textContent ?? '', amount.querySelector(':scope > .item-from') !== null));
             const byLook = (cycleFigureByClass[measuringClass] ??= {});
             byLook[tier] = (byLook[tier] ?? 0) + 1;
             const say = (detail: string): void => {

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { renderStall } from '../src/ui/render';
-import { WALL_FIGURE_CEILINGS } from '../src/ui/window';
+import { WALL_FIGURE_CEILINGS, wallFigureTier } from '../src/ui/window';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, SCREENS, STATE_SCREENS, handlers } from './fixtures';
 import { deskWallScreens, wallScreens } from './screenSplit';
 
@@ -22,7 +22,7 @@ function cycleReads(): CycleRead[] {
         out.push({
             screen,
             rail,
-            step: Number(head.getAttribute('data-wall-tier') ?? '0'),
+            step: wallFigureTier(figure.textContent ?? '', from),
             count: (figure.textContent ?? '').length + (from ? 2 : 0),
             figure: figure.textContent ?? '',
         });
@@ -33,12 +33,12 @@ function cycleReads(): CycleRead[] {
 describe('a-cycle-card-shows-every-digit-at-every-wall-size', () => {
     /**
      * The fixtures the probe's rule of this name reads (the Cycle card's
-     * ladder, 2026-10-13): on both rails, every step of `WALL_FIGURE_CEILINGS`
-     * at its widest figure — the step's ceiling as counted (a listing's
-     * figure and two for its `from`), and on the last step the widest any
-     * record can make: the eight-byte listing (28 as counted) and the
-     * eight-byte XEC quote (30) — because a step's size is designed to hold
-     * that figure, and a fixture under it would leave the size unproved.
+     * ladder, 2026-10-13; fitted since 2026-10-14): on both rails, every band
+     * of `WALL_FIGURE_CEILINGS` at its widest figure — the band's ceiling as
+     * counted (a listing's figure and two for its `from`), and on the last
+     * band the widest any record can make: the eight-byte listing (28 as
+     * counted) and the eight-byte XEC quote (30) — so the fit is proved from
+     * three characters to the widest figure a record can make.
      * Every one is measured on every wall pass: a wall screen (the tall
      * wall, the tablet, the short desk wall) and, where the desk pass does
      * not reach it by the canvas split, the desk wall pass's.

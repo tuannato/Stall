@@ -8896,3 +8896,81 @@ and d2) and the move cases of `lets the first reading stand when the code
 moved during the fresh pair` (a 0.01px move, another code's name) fail on
 the fix round's `quiet-zone.mjs` (3 of 19 cases red) and pass on this one.
 The band on the first capture only, nothing moved, is still believed white.
+
+## The Cycle card's figure, fitted to its column (2026-10-14; PLAN § Open's first P1)
+
+The ladder above was a table of sizes by length, one per wall layout,
+measured at the five sizes the passes paint, and it was right only there.
+At 1024x768 (the counter tablet on its side) the short landscape layout's
+steps were pixels measured at 1280 in a price column of 195–264px, and
+`$999.99` read "$999.9" on Neo; where it was right for the widest look it
+shrank every other look with it (the 145 cells above, `$999.99` on Modern
+at the tablet 76.8 → 56.8px).
+
+**What replaced it** (`fitWallFigures`, `src/ui/wallFit.ts`): after every
+wall paint, again when the faces land and when the frame changes size with
+no paint (a `ResizeObserver` on the frame), each Cycle card's figure is
+tried at the size its layout and look give it and made smaller only where
+it does not stand in the price area's grid column — the column read from
+the head's resolved tracks and `grid-template-areas`, the cell and every
+line of its figure inside it, as this rule reads it. The size is the money
+node's own inline `font-size`, which no look sheet out-ranks. Shapes, in
+order, each at the largest size up to the design size that stands, and
+taken only at `WALL_FIGURE_MIN_PX` (32) or more: one line; a listing's
+`from` on its own line (`data-wall-wrap="stack"`, taken where it buys the
+figure 15% over one line); then the comma break (`data-wall-wrap="break"`,
+a figure built with breaks, from band 4) at 32px, smaller only while a
+piece does not stand, to `WALL_FIGURE_FLOOR_PX` (16). A one-line shape that
+stands only because Chrome broke the figure at a `<wbr>` under `nowrap`
+does not count (lines are counted). And a card past the status line takes
+what the figure can give, down to 32px, while giving moves the card's edge
+— read against the card as painted, since Rural tilts every third card and
+its painted box reaches 3px lower (measured at 680x1000, where the fit had
+cleared a box this rule then read 3px over the line). Read with the card's
+turn and the tag's sway off (`holdStill`, shared with this rule), and along
+the frame's own axes, so a `data-turn` wall is measured as it reads.
+
+**The table's CSS is gone**: no `--sw-fig`, `--sw-k`, `data-wall-tier` or
+`data-wall-break`; each layout's `.item-x` rule states its design size
+alone, and the shapes' rules stand outside every container block. The
+length bands (`WALL_FIGURE_CEILINGS`, `wallFigureTier`) size nothing now:
+this rule counts every Cycle figure it reads by band, computed from the
+figure's text, and every wall pass still owes every band on every look.
+
+**The style restore goes through the CSSOM.** This rule held the card still
+by writing `transform`/`rotate` and put the `style` attribute back as a
+string. The money node carries the fit's inline size now, so the string
+was non-empty, and the page's policy refuses an inline style written as an
+attribute: the first run failed `the-probe-page-meets-no-csp-refusal` on
+every geometry pass and 214 times in the contrast pass, and each refused
+restore left the read's `none` on the card. `holdStill` saves and restores
+the two properties instead, in the fit and here.
+
+**Measured** (Chrome, the 53 wall screens, the shipped looks bare and worn
+and the skeleton, the scratch harness): at the five probed sizes, 0
+failures with the fit and no table. The fit's first cut, with no status-line
+relief, put 5 cards over the line at 1920x1080, 47 at 1080x1920 and 70 at
+768x1024: the table had been holding the card's height too, and figures
+given their size back grew the stacked layouts. Sizes given back, against
+the table: `$999.99` at the tablet 76.8px on Modern (56.8), 75.1 on Neo,
+70.7 on Rural; `12,345.67 XEC` at 1280x900 on one line at 56.8 / 48.5 /
+49.7px (38px, wrapped); at 1080x1920 124 / 95.3 / 98.2px.
+
+**Guards changed**: `every-look-that-sizes-its-figure-sizes-every-price-tier`'s
+wall half is gone — a look that sizes the Cycle figure gives the size the
+fit starts from — and `a-look-never-sizes-inside-a-money-node` holds what
+the inline size cannot reach: a font size on the figure's pieces
+(`.fig-say`, `.fig-end`) or a money role's descendant, red on three planted
+rules. The look lint's `data-wall-tier` state is gone (no served sheet
+matches it). Tests: `the-cycle-figure-is-fitted-to-its-column`
+(`wallFit.test.ts`, over a gauge modelling the card: the shapes, the floor,
+a browser-broken line refused, the relief, the restore; and
+`window.test.ts`, the paint and the fonts' refit, red with the refit's
+call taken out).
+
+**Not measured, stated**: a font that fails to load (the fit runs on the
+fallback and again on `document.fonts.ready`, which a failed face also
+resolves); a look sizing the money node's descendants through a rule this
+guard's selector reading misses; Safari and Firefox; the turned frame's fit
+(axes mapped by construction, measured by nothing — the probe paints no
+turned wall).

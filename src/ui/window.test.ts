@@ -24,6 +24,7 @@ import {
     windowTurns,
 } from './window';
 import { nextCard } from '../domain/window';
+import { setWallFigureGauge } from './wallFit';
 import type { TokenPrice } from '../domain/description';
 import { cashtabTokenUrl } from '../domain/cashtab';
 import { formatXec } from '../domain/money';
@@ -307,24 +308,27 @@ describe('a-cycle-card-keeps-its-grid-at-the-cut', () => {
     });
 });
 
-describe('a-cycle-card-shows-every-digit-at-every-wall-size', () => {
+describe('the-cycle-figure-is-fitted-to-its-column', () => {
     /**
-     * The Cycle card's own ladder (the critic's P1 on narrow-phone round 4,
-     * pre-existing): one figure size at every length cut a 6-character
-     * listing and an 8-character XEC quote on the counter tablet, on every
-     * look, and printed `123,456.78 XEC` as "123,45" on Rural. The card now
-     * steps its figure down by length (`WALL_FIGURE_CEILINGS`, counted as
-     * the rows count: two more for a listing's `from`), writes the step on
-     * its head, and from `WALL_BREAK_TIER` carries a soft break after each
-     * comma that the narrow walls wrap at. happy-dom lays nothing out: the
-     * probe's rule of the same name holds the paint on every wall pass.
+     * The Cycle card's figure is fitted to its column after the paint
+     * (`fitWallFigures`, `wallFit.ts`; PLAN § Open's first P1), where a table
+     * of sizes by length, one per wall layout, had been right only at the
+     * five sizes the probe paints: at 1024x768 it printed `$999.99` as
+     * "$999.9" on Neo. What stays in the card's own markup is its length
+     * band (`WALL_FIGURE_CEILINGS`, counted as the rows count: two more for
+     * a listing's `from`), which decides the fixtures every wall pass owes,
+     * and from `WALL_BREAK_TIER` a soft break after each comma that the fit
+     * may break at. happy-dom lays nothing out: the algorithm is held in
+     * `wallFit.test.ts` over an injected gauge, and the probe's
+     * `a-cycle-card-shows-every-digit-at-every-wall-size` holds the paint on
+     * every wall pass.
      */
     const cycleHead = (view: StallView) => paint(view).querySelector<HTMLElement>('.sw-strip .item-head')!;
     const listing = (askedSats: bigint, atoms = 10n) =>
         cycleHead(windowView({ show: 'listings', mode: 'cycle' }, { fetch: { kind: 'offers', offers: [{ ...offer(BEANS), askedSats, atoms }] } }));
     const quote = (price: TokenPrice) => cycleHead(windowView({ show: 'quotes', mode: 'cycle' }, { prices: new Map([[BEANS, price]]) }));
 
-    it('pins the steps and the break by value', () => {
+    it('pins the bands and the break by value', () => {
         expect([...WALL_FIGURE_CEILINGS]).toEqual([5, 7, 9, 11, 13, 16, 19, 22, 26]);
         expect(WALL_BREAK_TIER).toBe(4);
         // The break starts at 12 characters, as counted.
@@ -343,21 +347,25 @@ describe('a-cycle-card-shows-every-digit-at-every-wall-size', () => {
         expect(wallFigureTier('184,467,440,737,095,516.15', true)).toBe(WALL_FIGURE_CEILINGS.length);
     });
 
-    it('writes the step on the card\'s head, none at step 0, on both rails', () => {
-        expect(listing(87_500n).getAttribute('data-wall-tier')).toBeNull();
-        // A whole-lot listing carries no from, and counts its figure alone.
-        expect(listing(120_000n, 1n).getAttribute('data-wall-tier')).toBeNull();
-        expect(listing(120_000n).getAttribute('data-wall-tier')).toBe('1');
-        expect(listing(12_345n).getAttribute('data-wall-tier')).toBe('2');
-        expect(listing(12_345_678n).getAttribute('data-wall-tier')).toBe('4');
-        expect(quote({ code: 'usd', exponent: 2, amount: 500n }).getAttribute('data-wall-tier')).toBeNull();
-        expect(quote({ code: 'xec', exponent: 2, amount: 123n }).getAttribute('data-wall-tier')).toBe('2');
-        expect(quote({ code: 'xec', exponent: 2, amount: 2n ** 64n - 1n }).getAttribute('data-wall-tier')).toBe(String(WALL_FIGURE_CEILINGS.length));
+    it('writes no size of its own on the card: no band, no break, no shape before the fit', () => {
+        for (const head of [
+            listing(87_500n),
+            listing(12_345_678n),
+            listing(2_099_906_103_286_385n),
+            quote({ code: 'usd', exponent: 2, amount: 500n }),
+            quote({ code: 'xec', exponent: 2, amount: 2n ** 64n - 1n }),
+        ]) {
+            expect(head.hasAttribute('data-wall-tier')).toBe(false);
+            expect(head.hasAttribute('data-wall-break')).toBe(false);
+            // happy-dom lays nothing out, so the fit leaves the card as built.
+            expect(head.hasAttribute('data-wall-wrap')).toBe(false);
+            expect(head.querySelector<HTMLElement>('.item-x')!.style.fontSize).toBe('');
+        }
     });
 
-    it('breaks a figure after its commas from the break step, and only there, its digits and its name unchanged', () => {
+    it('builds a figure with a break after each comma from the break band, and only there, its digits and its name unchanged', () => {
         const under = listing(12_345_678n * 10n);
-        // "1,234,567.8" is 11 characters and two for from: step 4, broken.
+        // "1,234,567.8" is 11 characters and two for from: band 4, broken.
         const broken = listing(1_234_567_800n);
         const plain = listing(12_345_600n);
         const figureOf = (head: HTMLElement) => head.querySelector<HTMLElement>('[data-role="price"]')!;
@@ -371,7 +379,8 @@ describe('a-cycle-card-shows-every-digit-at-every-wall-size', () => {
             expect(figure.querySelectorAll('wbr').length).toBe((figure.textContent!.match(/,/g) ?? []).length);
             // The last group keeps whatever follows it — ` XEC` on a quote.
             expect(figure.querySelector('.fig-end')!.textContent).toMatch(/^\d{1,3}(\.\d+)?( XEC)?$/);
-            expect(Number(head.getAttribute('data-wall-tier'))).toBeGreaterThanOrEqual(WALL_BREAK_TIER);
+            const from = head.querySelector('.item-from') !== null;
+            expect(wallFigureTier(figure.textContent!, from)).toBeGreaterThanOrEqual(WALL_BREAK_TIER);
         }
     });
 
@@ -387,62 +396,60 @@ describe('a-cycle-card-shows-every-digit-at-every-wall-size', () => {
         expect(out.length, condition).toBeGreaterThan(0);
         return out;
     };
-    /** The steps a layout sizes, as `--sw-fig` (or the 1080-tall wall's factor `--sw-k`), and the break's size. */
-    const steps = (condition: string): Map<string, string> => {
-        const out = new Map<string, string>();
-        for (const body of bodies(condition)) {
-            for (const m of body.matchAll(/\[data-wall-(tier='(\d)'|break)\] \{\s*--sw-(?:fig|k): ([^;]+);\s*\}/g)) {
-                out.set(m[2] ?? 'break', m[3]!);
-            }
-        }
-        return out;
-    };
     /** The card's own `.item-x` size in a layout. */
     const reads = (condition: string | undefined): string[] => {
         const text = condition === undefined ? css().slice(0, css().indexOf('@container')) : bodies(condition).join('\n');
         return [...text.matchAll(/\.stall\.shop-window\[data-mode='cycle'\] \.item-x \{\s*font-size: ([^;]+);/g)].map((m) => m[1]!);
     };
 
-    it('sizes each layout\'s steps in window.css, each read under that layout\'s own design size', () => {
-        // The card's design size in each layout, read with the step under a min().
-        expect(reads(undefined)).toEqual(['min(var(--sw-fig, 112px), clamp(40px, min(10.4cqh, 6.4cqw), 112px))']);
-        expect(reads('(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)')).toContain(
-            'calc(clamp(40px, min(7.4cqh, 6.4cqw), 80px) * var(--sw-k, 1))',
-        );
-        expect(reads('(orientation: portrait)')).toContain('min(var(--sw-fig, 124px), 124px, 11.5cqw)');
-        expect(reads('(orientation: portrait) and (max-height: 1200px)')).toContain('min(var(--sw-fig, 10cqw), 10cqw)');
-        // The 1920 wall moves nothing of 19 characters or fewer.
-        const tv = steps('(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)');
-        expect([...tv.keys()]).toEqual(['7', '8', '9']);
-        for (const factor of tv.values()) expect(Number(factor)).toBeLessThan(1);
-        const tall = steps('(orientation: landscape) and (min-height: 1201px)');
-        expect([...tall.keys()]).toEqual(['5', '6', '7', '8', '9']);
-        const short = steps('(orientation: landscape) and (max-height: 900px)');
-        expect([...short.keys()]).toEqual(['1', '2', '3', 'break']);
-        const portrait = steps('(orientation: portrait)');
-        expect([...portrait.keys()]).toEqual(['4', '5', '6', '7', '8', '9']);
-        const tablet = steps('(orientation: portrait) and (max-height: 1200px)');
-        expect([...tablet.keys()]).toEqual(['1', '2', '3', 'break']);
-        // Each step is smaller than the one before it, in each layout.
-        const n = (v: string) => Number(/^([\d.]+)/.exec(v)![1]);
-        for (const layout of [tv, tall, short, portrait, tablet]) {
-            const sizes = [...layout.entries()].filter(([step]) => step !== 'break').map(([, v]) => n(v));
-            expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
+    it('gives each layout one design size and no table of sizes by length', () => {
+        expect(reads(undefined)).toEqual(['clamp(40px, min(10.4cqh, 6.4cqw), 112px)']);
+        expect(reads('(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)')).toEqual(['clamp(40px, min(7.4cqh, 6.4cqw), 80px)']);
+        expect(reads('(orientation: portrait)')).toEqual(['min(124px, 11.5cqw)']);
+        expect(reads('(orientation: portrait) and (max-height: 1200px)')).toEqual(['10cqw']);
+        const text = css();
+        expect(text).not.toMatch(/data-wall-tier|data-wall-break|--sw-fig|--sw-k\b/);
+    });
+
+    it('fits the card after every wall paint, and again when the faces land', async () => {
+        const reads: string[] = [];
+        let land = (): void => undefined;
+        Object.defineProperty(document, 'fonts', { value: { ready: new Promise<void>((resolve) => (land = resolve)) }, configurable: true });
+        setWallFigureGauge((head) => {
+            reads.push(head.querySelector('.item-x')!.textContent ?? '');
+            return undefined;
+        });
+        try {
+            paint(windowView({ show: 'listings', mode: 'cycle' }));
+            expect(reads.length).toBe(1);
+            land();
+            for (let i = 0; i < 4; i += 1) await Promise.resolve();
+            expect(reads.length).toBe(2);
+            // Browse has no Cycle card: nothing to fit.
+            paint(windowView({ show: 'listings', mode: 'browse' }));
+            expect(reads.length).toBe(2);
+        } finally {
+            setWallFigureGauge(undefined);
+            delete (document as { fonts?: unknown }).fonts;
         }
     });
 
-    it('wraps from the break step where a wall is narrow, and nowhere else', () => {
+    it('dresses the fit\'s shapes in any layout, and lets only a broken figure wrap', () => {
         const text = css();
-        const wraps = [...text.matchAll(/@container sw ([^{]+)\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)].filter(([, , body]) => /white-space: normal/.test(body!) && /data-wall-break/.test(body!));
-        expect(wraps.map(([, cond]) => cond!.trim())).toEqual([
-            '((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1200px))',
-        ]);
-        expect(wraps[0]![2]).toMatch(/\[data-wall-break\] \.item-x \{[^}]*white-space: normal;/);
-        // The break's own size, on the two narrow walls, and the attribute from the break step.
-        expect(steps('(orientation: landscape) and (max-height: 900px)').get('break')).toBe('38px');
-        expect(steps('(orientation: portrait) and (max-height: 1200px)').get('break')).toBe('32px');
-        expect(listing(1_234_567_800n).hasAttribute('data-wall-break')).toBe(true);
-        expect(listing(12_345_600n).hasAttribute('data-wall-break')).toBe(false);
+        // The shapes' rules stand outside every container block: the fit, not the layout, decides.
+        const top = text.replace(/@container[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
+        for (const rule of [
+            /\[data-wall-wrap\] \.item-x \{\s*grid-area: x;/,
+            /\[data-wall-wrap\] \.item-a:has\(> \.item-u\) \{\s*display: grid;/,
+            /\[data-wall-wrap\] \.item-from \{\s*grid-area: from;/,
+            /\[data-wall-wrap\] \.item-a > \.item-u \{\s*grid-area: u;/,
+            /\[data-wall-wrap='break'\] \.item-x \{\s*white-space: normal;\s*\}/,
+        ]) {
+            expect(top, String(rule)).toMatch(rule);
+        }
+        // white-space: normal on the Cycle figure only under the break shape.
+        const normal = [...text.matchAll(/([^{}]*)\{[^}]*white-space: normal;/g)].map((m) => m[1]!.trim()).filter((sel) => sel.includes('.item-x'));
+        expect(normal.filter((sel) => !sel.includes('fig-wraps'))).toEqual(["[data-wall-wrap='break'] .item-x"]);
     });
 });
 

@@ -225,11 +225,13 @@ describe('a-look-cannot-target-one-seller', () => {
         assert.match(read('src/domain/theme.ts'), /narrowTag\?: 'own-row';/);
         assert.ok(read('src/ui/render.ts').includes("node.setAttribute('data-narrow-tag', 'own-row')"), 'render.ts writes data-narrow-tag');
         assert.deepEqual(STATE_ATTRIBUTES['data-narrow-tag'], ['own-row']);
-        // The Cycle card's steps (2026-10-13), held to the table that writes
-        // them: one value per step past 0, as many as window.ts has ceilings.
-        const ceilings = /export const WALL_FIGURE_CEILINGS = \[([^\]]*)\] as const;/.exec(read('src/ui/window.ts'));
-        assert.ok(ceilings !== null && read('src/ui/window.ts').includes("head.setAttribute('data-wall-tier', String(tier))"), 'window.ts writes data-wall-tier');
-        assert.deepEqual(STATE_ATTRIBUTES['data-wall-tier'], Array.from({ length: ceilings[1].split(',').length }, (_, i) => String(i + 1)));
+        // The Cycle card's figure is fitted after the paint (2026-10-14,
+        // `wallFit.ts`): its shape (`data-wall-wrap`) is the fit's, its size
+        // the money node's inline font-size, and neither is a look's to read.
+        // The step a table once wrote is gone, and is no state a look reads.
+        assert.equal(STATE_ATTRIBUTES['data-wall-tier'], undefined);
+        assert.equal(STATE_ATTRIBUTES['data-wall-wrap'], undefined);
+        assert.ok(!PRESENCE_ATTRIBUTES.includes('data-wall-wrap'));
         for (const [name, values] of Object.entries(LOOK_HOOK_ATTRIBUTES)) {
             assert.deepEqual(STATE_ATTRIBUTES[name], values, `${name} is a state attribute`);
             assert.ok(!app.valued.has(name), `${name} is read by a served sheet now: list it as an ordinary state attribute`);

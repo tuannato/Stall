@@ -551,13 +551,6 @@ const FACE_FIGURE = (selector: string): boolean =>
 const PAY_FIGURE = (selector: string): boolean =>
     /\.pay-x-n(?![\w-])/.test(selector) || (/\.pay-x(?![\w-])/.test(selector) && /\[data-role='price'\]/.test(selector));
 const OVERLAY_STEP = (tier: string): string => `[data-tier='${tier}']`;
-/** The wall's Cycle card's figure: `.item-x` or its money node by role, under `.shop-window` (2026-10-13). */
-const WALL_FIGURE = (selector: string): boolean =>
-    /\.shop-window(?![\w-])/.test(selector) && (/\.item-x(?![\w-])/.test(selector) || /\[data-role='(?:seller-)?price'\]/.test(selector));
-const WALL_STEP = (tier: string): string => `[data-wall-tier='${tier}']`;
-/** Every step of the Cycle card's ladder but 0 (`WALL_FIGURE_CEILINGS`, nine ceilings). */
-const WALL_STEPS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-
 describe('every-look-that-sizes-its-figure-sizes-every-price-tier', () => {
     /**
      * The tier sizes live in each look's sheet, next to its own `.item-x`.
@@ -628,35 +621,49 @@ describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the face a
     });
 });
 
-describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the wall\'s Cycle card', () => {
+/**
+ * A rule that sizes text inside a money node: a subject past `.item-x`, a
+ * money role or `.fig-say`, or `.fig-say` / `.fig-end` themselves.
+ */
+const INSIDE_MONEY = (selector: string): boolean =>
+    /\.fig-(?:say|end)(?![\w-])/.test(selector) ||
+    /(?:\.item-x(?![\w-])|\[data-role='(?:seller-)?price'\])[^ ]* +[^ ]/.test(selector.replace(/ *> */g, ' '));
+
+describe('a-look-never-sizes-inside-a-money-node', () => {
     /**
-     * The Cycle card's ladder (2026-10-13): window.css steps the card's
-     * figure down by `data-wall-tier`, nine steps past the design size, in
-     * each of the wall's layouts — custom properties on the head, read by
-     * the card's own `.item-x` rule at (0,4,0). A look sheet that sizes the
-     * wall's figure at a weight that out-ranks those rules (a worn-only
-     * sheet lands after window.css and wins its ties) freezes the figure at
-     * one size at every length — the defect the ladder closed, on the counter
-     * tablet "123,45" for `123,456.78 XEC` — so a look that sizes it sizes
-     * every step. No shipped look sizes it today; this holds the next one,
-     * over every look sheet a run serves, a private look's included.
+     * The wall's Cycle card is fitted after the paint (2026-10-14,
+     * `wallFit.ts`): its size is the money node's own inline `font-size`,
+     * which no look sheet out-ranks (the look lint refuses `!important`), so
+     * a look that sizes the Cycle figure gives the size the fit starts from
+     * and never one it cannot take down — the table of sizes this replaced
+     * needed every look that sized the figure to size all nine steps. What
+     * the inline size cannot reach is a size set INSIDE the money node: the
+     * figure's pieces (`.fig-say`, `.fig-end`) inherit theirs, and a look
+     * that sized them would freeze the digits at one size whatever the fit
+     * set. So no look sheet sizes text inside a money node, on any surface:
+     * the pieces are the same markup on every card (`moneyFigure`). Over
+     * every look sheet a run serves, a private look's included.
      */
-    it('holds every look sheet that sizes the wall\'s figure under its class to steps 1 to 9', () => {
+    it('holds every look sheet to no font size inside a money node', () => {
         for (const sheet of LOOK_SHEETS) {
-            expect(unsizedSteps(sheet.css, sheet.lookClass!, WALL_FIGURE, WALL_STEP, WALL_STEPS), sheet.path).toEqual([]);
+            const inside = ladderRules(sheet.css).filter((rule) => INSIDE_MONEY(rule.selector) && /(?:^|[;\s])font(?:-size)?\s*:/.test(rule.body));
+            expect(inside.map((rule) => rule.selector), sheet.path).toEqual([]);
         }
     });
 
-    it('goes red on a planted look that sizes the wall\'s figure and forgets steps', async () => {
-        const planted = await plantedSheet(`.stall.${PLANTED_CLASS}.shop-window[data-mode='cycle'] .item-head .item-x { font-size: 60px; }`);
-        expect(unsizedSteps(planted.css, planted.lookClass!, WALL_FIGURE, WALL_STEP, WALL_STEPS)).toEqual(WALL_STEPS);
-        const most = await plantedSheet(
-            `.stall.${PLANTED_CLASS}.shop-window .item-x { font-size: 60px; }\n` +
-                WALL_STEPS.filter((step) => step !== '7')
-                    .map((step) => `.stall.${PLANTED_CLASS}.shop-window .item-head[data-wall-tier='${step}'] .item-x { font-size: ${60 - Number(step) * 4}px; }`)
-                    .join('\n'),
-        );
-        expect(unsizedSteps(most.css, most.lookClass!, WALL_FIGURE, WALL_STEP, WALL_STEPS)).toEqual(['7']);
+    it('goes red on a planted look that sizes a figure\'s pieces or a money role\'s descendant', async () => {
+        for (const rule of [
+            `.${PLANTED_CLASS} .item-x .fig-say { font-size: 70px; }`,
+            `.stall.${PLANTED_CLASS}.shop-window .fig-end { font-size: 70px; }`,
+            `.${PLANTED_CLASS} [data-role="price"] > span { font: 700 70px serif; }`,
+        ]) {
+            const planted = await plantedSheet(rule);
+            const inside = ladderRules(planted.css).filter((r) => INSIDE_MONEY(r.selector) && /(?:^|[;\s])font(?:-size)?\s*:/.test(r.body));
+            expect(inside.length, rule).toBe(1);
+        }
+        // Sizing the money node itself is the look's to do: the fit starts there.
+        const own = await plantedSheet(`.stall.${PLANTED_CLASS}.shop-window[data-mode='cycle'] .item-x { font-size: 60px; }`);
+        expect(ladderRules(own.css).filter((r) => INSIDE_MONEY(r.selector))).toEqual([]);
     });
 });
 
