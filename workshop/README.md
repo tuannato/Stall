@@ -81,6 +81,15 @@ and `workshop:lint` refuses the ways to paint text in a colour the probe
 does not read: `-webkit-text-fill-color`, `-webkit-text-stroke`,
 `background-clip: text`.)*
 
+**A price is dressed as one piece.** When a long price is too wide for its
+box, the app breaks it after its commas (`184,467,` / `440,737,` /
+`095,516.15 XEC`). Style the price as a whole — its colour, face, size,
+weight, shadow and everything around it are yours — but never one part of
+it apart from the rest: every part keeps the price's own colour, opacity,
+face, size and spacing, with no mask, clip, filter or transform of its own.
+A part styled on its own could hide a digit while every other check stays
+green. *(The kit — `workshop:probe`.)*
+
 **QR codes stay black on white, with their quiet margin.** Only the box
 around a code may take your look. *(The kit checks that nothing covers a
 code; its colours and margin, Stall at intake until the kit learns it.)*

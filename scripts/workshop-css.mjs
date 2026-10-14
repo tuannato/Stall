@@ -662,20 +662,20 @@ function lastPseudoElement(selector) {
 const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier)(?![\w-])/;
 
 /**
- * The classes the app writes on a money figure when it breaks or re-flows
- * one (`moneyFigure`, `rowFigure` and `wallFigure` in `src/ui`): `.fig-say`
- * and `.fig-end`, the pieces, and `.fig-wraps` and `.fig-narrow`, the
- * figure's re-flow on its row — every class the app spells `fig-`. **A
- * look dresses a figure only as a whole** (D-2026-10-14-02, the owner's
- * "Theo khuyến nghị"), so a first-party look sheet names none of them. The
- * probe holds every piece to the figure's own computed style whatever
- * selector reaches it (`a-broken-figure-wears-the-figures-own-ink`); this
- * is the belt that says so at the sheet. **The kit is not refused here**:
- * binding a kit designer needs a workshop README line, which is the owner's
- * call — the kit's `workshop:probe` runs the probe rule regardless. Test:
- * `a-look-may-not-dress-a-figures-pieces`.
+ * The classes the app writes on the pieces of a money figure it breaks after
+ * its commas (`moneyFigure` in `src/ui/render.ts`): `.fig-say` and
+ * `.fig-end`. **A look dresses a figure only as a whole** (D-2026-10-14-02,
+ * the owner's "Theo khuyến nghị"), so a first-party look sheet names
+ * neither. `.fig-wraps` and `.fig-narrow` are not pieces — they mark the
+ * whole figure's box in its re-flow — and a look may dress them (round 2,
+ * the critic's P3-3). The probe holds every piece to what an untouched piece
+ * computes whatever selector reaches it
+ * (`a-broken-figure-wears-the-figures-own-ink`); this is the belt that says
+ * so at the sheet. **The kit lint is not changed**: the workshop README
+ * states the rule (D-2026-10-14-06) and names `workshop:probe` as what
+ * checks it. Test: `a-look-may-not-dress-a-figures-pieces`.
  */
-const FIGURE_PIECE = /\.fig-[\w-]+/;
+const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
 
 function selectorProblems(selector, { kit = false } = {}) {
     const out = [];
@@ -687,7 +687,7 @@ function selectorProblems(selector, { kit = false } = {}) {
     const piece = kit ? null : FIGURE_PIECE.exec(selector);
     if (piece !== null) {
         out.push(
-            `"${echo(selector)}" names ${piece[0]}, a piece of a money figure the app breaks or re-flows — a look dresses a figure only as a whole`,
+            `"${echo(selector)}" names ${piece[0]}, a piece of a money figure the app breaks after its commas — a look dresses a figure only as a whole`,
         );
     }
     for (const inner of attributeBlocks(selector)) {
@@ -1573,8 +1573,9 @@ export function lintSheet(css, { art = [] } = {}) {
  * `container-name`, `container-type` or `container`, which would re-point
  * the wall's `@container sw` conditions at a box the look picks
  * (`a-look-names-no-container-of-its-own`); and no selector naming a piece
- * of a money figure the app breaks or re-flows (`.fig-…`), since a look
- * dresses a figure only as a whole (`a-look-may-not-dress-a-figures-pieces`).
+ * of a money figure the app breaks after its commas (`.fig-say`, `.fig-end`),
+ * since a look dresses a figure only as a whole
+ * (`a-look-may-not-dress-a-figures-pieces`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });

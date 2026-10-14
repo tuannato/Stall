@@ -6803,7 +6803,7 @@ places, each the same thing by another property: the text fill and stroke
 line height (font), word spacing and case (spacing); and margins, position
 and `vertical-align`, which move a piece over its neighbour's digits.
 
-**The static belt** (`a-look-may-not-dress-a-figures-pieces`,
+**The static belt** (round 1's; narrowed to the two piece classes in round 2, and the README line added, below) (`a-look-may-not-dress-a-figures-pieces`,
 `scripts/look-lint.test.mjs`): `lintLookSheet` refuses a selector naming any
 class the app spells `fig-` (`.fig-say`, `.fig-end`, `.fig-wraps`,
 `.fig-narrow`; `FIGURE_PIECE` in `scripts/workshop-css.mjs`). A belt only: a
@@ -6983,3 +6983,20 @@ contrast pass 130.1 → 134.1s, where the rules do not run (a contrast page
 asks `?screens=` and measures nothing); that +4.0s is the load. One pair,
 not repeated. All three are computed style, layout rects and the tree's
 own scroll sizes: no capture, no new screen, no new job.
+
+### Round 2 (CRITIC-MONEY-GUARDS, 2026-10-14)
+
+The critic reproduced every round-1 red proof and found the rules read
+less than they say. Each item below replaces the round-1 paragraph it
+names; those paragraphs stay above as the record.
+
+**The static belt refuses the pieces alone** (P3-3): `.fig-say` and
+`.fig-end` (`FIGURE_PIECE`). `.fig-wraps` and `.fig-narrow` mark the whole
+figure's box in its re-flow, which a look may dress
+(`a-look-may-not-dress-a-figures-pieces` now takes them). **The workshop
+README states the rule** (D-2026-10-14-06, the owner's words, as its own
+paragraph after "Money is never covered, cut or faded"), with
+`workshop:probe` as its check; the kit's lint is unchanged.
+`a-look-may-not-dress-a-figures-pieces` holds the line in the README, and
+where it stands. Red: `selectorProblems` without its `FIGURE_PIECE` half,
+and the README line taken out.

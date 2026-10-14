@@ -402,48 +402,66 @@ describe('the-kit-refuses-the-first-party-hooks', () => {
 
 /**
  * The critic's three plants on a broken figure's last group (CRITIC-NARROW-PHONE
- * round 4, P2-1), and a rule on each class the app spells `fig-`.
+ * round 4, P2-1), and a rule on each of the two piece classes.
  */
 const FIGURE_PIECE_RULES = [
     '.t-neo .face-x .fig-end { -webkit-mask-image: linear-gradient(to right, #000 30%, transparent 30%); mask-image: linear-gradient(to right, #000 30%, transparent 30%); }',
     '.t-neo .pay-x .fig-end { clip-path: inset(0 60% 0 0); }',
     '.t-neo .sel-total .fig-end { letter-spacing: -0.5em; }',
     '.t-neo .fig-say { color: #ff00aa; }',
-    '.t-neo .item-a.fig-wraps .item-x { font-size: 12px; }',
-    '.t-neo .item-a:not(.fig-narrow) { color: #ff00aa; }',
+    '.t-neo .x .fig-say > span { font-weight: 300; }',
 ];
 
 describe('a-look-may-not-dress-a-figures-pieces', () => {
     /**
      * D-2026-10-14-02 (the owner: "Theo khuyến nghị"): a look dresses a money
      * figure only as a whole. The probe holds every piece of a broken figure
-     * to the figure's own computed style whatever selector reaches it
+     * to what an untouched piece computes, whatever selector reaches it
      * (`a-broken-figure-wears-the-figures-own-ink`); this is the static belt:
-     * a first-party look sheet names no class the app spells `fig-` — the
-     * shipped looks and every private look a run reads are linted with it
-     * (`the-shipped-look-sheets-pass-the-look-rules`,
-     * `every-private-look-sheet-passes-the-look-rules`). The kit road is the
-     * owner's call — binding a kit designer needs a workshop README line — so
-     * the kit's lint takes them, and its `workshop:probe` runs the probe
-     * rule. Red: `selectorProblems` without its `FIGURE_PIECE` half.
+     * a first-party look sheet names neither piece class, `.fig-say` nor
+     * `.fig-end` — the shipped looks and every private look a run reads are
+     * linted with it (`the-shipped-look-sheets-pass-the-look-rules`,
+     * `every-private-look-sheet-passes-the-look-rules`). `.fig-wraps` and
+     * `.fig-narrow` mark the whole figure's box in its re-flow, which a look
+     * may dress (round 2, the critic's P3-3). The kit lint is unchanged: the
+     * workshop README states the rule, with `workshop:probe` as its check
+     * (D-2026-10-14-06). Red: `selectorProblems` without its `FIGURE_PIECE`
+     * half.
      */
-    it('refuses each in a look sheet, and leaves a figure dressed whole alone', () => {
+    it('refuses each piece class in a look sheet, and leaves a figure dressed whole alone', () => {
         for (const rule of FIGURE_PIECE_RULES) {
             const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
             assert.ok(
-                shipped.some((p) => /a piece of a money figure the app breaks or re-flows — a look dresses a figure only as a whole/.test(p)),
+                shipped.some((p) => /a piece of a money figure the app breaks after its commas — a look dresses a figure only as a whole/.test(p)),
                 `shipped, ${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`,
             );
         }
         accepts('.t-neo .face-x .x { letter-spacing: -0.01em; }');
         accepts('.t-neo .item-x { color: #ff00aa; }');
+        accepts('.t-neo .item-a.fig-wraps .item-x { font-size: 12px; }');
+        accepts('.t-neo .item-a:not(.fig-narrow) { color: #ff00aa; }');
+        accepts('.t-neo .item-a.fig-ending { color: #ff00aa; }');
     });
 
-    it('leaves the kit road as it was: the kit names them until the owner rules', () => {
+    it('leaves the kit lint as it was: the README states the rule and the kit probe checks it', () => {
         for (const rule of FIGURE_PIECE_RULES) {
             const kit = lintSheet(plantedKit(rule));
             assert.ok(!kit.some((p) => /a piece of a money figure/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
         }
+    });
+
+    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06)', () => {
+        const readme = read('workshop/README.md').replace(/\s+/g, ' ');
+        assert.ok(
+            readme.includes(
+                "**A price is dressed as one piece.** When a long price is too wide for its box, the app breaks it after its commas (`184,467,` / `440,737,` / `095,516.15 XEC`). Style the price as a whole — its colour, face, size, weight, shadow and everything around it are yours — but never one part of it apart from the rest: every part keeps the price's own colour, opacity, face, size and spacing, with no mask, clip, filter or transform of its own. A part styled on its own could hide a digit while every other check stays green. *(The kit — `workshop:probe`.)*",
+            ),
+            'the workshop README does not carry the line',
+        );
+        const money = readme.indexOf('**Money is never covered, cut or faded.**');
+        const piece = readme.indexOf('**A price is dressed as one piece.**');
+        const next = readme.indexOf('**QR codes stay black on white');
+        assert.ok(money >= 0 && money < piece && piece < next, 'the line stands after the money paragraph and before the next');
     });
 });
 
