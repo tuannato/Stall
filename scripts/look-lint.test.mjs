@@ -400,6 +400,53 @@ describe('the-kit-refuses-the-first-party-hooks', () => {
     });
 });
 
+/**
+ * The critic's three plants on a broken figure's last group (CRITIC-NARROW-PHONE
+ * round 4, P2-1), and a rule on each class the app spells `fig-`.
+ */
+const FIGURE_PIECE_RULES = [
+    '.t-neo .face-x .fig-end { -webkit-mask-image: linear-gradient(to right, #000 30%, transparent 30%); mask-image: linear-gradient(to right, #000 30%, transparent 30%); }',
+    '.t-neo .pay-x .fig-end { clip-path: inset(0 60% 0 0); }',
+    '.t-neo .sel-total .fig-end { letter-spacing: -0.5em; }',
+    '.t-neo .fig-say { color: #ff00aa; }',
+    '.t-neo .item-a.fig-wraps .item-x { font-size: 12px; }',
+    '.t-neo .item-a:not(.fig-narrow) { color: #ff00aa; }',
+];
+
+describe('a-look-may-not-dress-a-figures-pieces', () => {
+    /**
+     * D-2026-10-14-02 (the owner: "Theo khuyến nghị"): a look dresses a money
+     * figure only as a whole. The probe holds every piece of a broken figure
+     * to the figure's own computed style whatever selector reaches it
+     * (`a-broken-figure-wears-the-figures-own-ink`); this is the static belt:
+     * a first-party look sheet names no class the app spells `fig-` — the
+     * shipped looks and every private look a run reads are linted with it
+     * (`the-shipped-look-sheets-pass-the-look-rules`,
+     * `every-private-look-sheet-passes-the-look-rules`). The kit road is the
+     * owner's call — binding a kit designer needs a workshop README line — so
+     * the kit's lint takes them, and its `workshop:probe` runs the probe
+     * rule. Red: `selectorProblems` without its `FIGURE_PIECE` half.
+     */
+    it('refuses each in a look sheet, and leaves a figure dressed whole alone', () => {
+        for (const rule of FIGURE_PIECE_RULES) {
+            const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(
+                shipped.some((p) => /a piece of a money figure the app breaks or re-flows — a look dresses a figure only as a whole/.test(p)),
+                `shipped, ${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`,
+            );
+        }
+        accepts('.t-neo .face-x .x { letter-spacing: -0.01em; }');
+        accepts('.t-neo .item-x { color: #ff00aa; }');
+    });
+
+    it('leaves the kit road as it was: the kit names them until the owner rules', () => {
+        for (const rule of FIGURE_PIECE_RULES) {
+            const kit = lintSheet(plantedKit(rule));
+            assert.ok(!kit.some((p) => /a piece of a money figure/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
+        }
+    });
+});
+
 describe('a-look-never-hands-a-link-its-browser-colour', () => {
     /**
      * The 8e1 critic's item 10: `color: revert` (or `revert-layer`, or

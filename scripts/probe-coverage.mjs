@@ -89,6 +89,12 @@
  *   mark-hide and pending frame for any carried look with marks or file art.
  * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
  *   `cjk-name` owes the advance it read (`cjkFaces`).
+ * - **`a-broken-figure-wears-the-figures-own-ink`** (D-2026-10-14-02):
+ *   every geometry pass owes, on every look it painted, a broken figure
+ *   whose pieces were held to the figure's own computed style
+ *   (`figureInkByClass`): each pass paints one — the long card and row
+ *   figures on the page and narrow passes, the Cycle card's break steps on
+ *   the canvas and the four wall passes.
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -137,6 +143,12 @@ const PAGE_PASSES = new Set(['mobile', 'desktop']);
  * ladder the two desk wall passes (1280x900, 1280x800).
  */
 const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall']);
+/**
+ * Every geometry pass: the two page passes, the canvas, the four wall passes
+ * and the narrow phone. Each paints a broken money figure on every look
+ * (`a-broken-figure-wears-the-figures-own-ink`).
+ */
+const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
 /**
  * The Cycle card's steps each wall pass owes read on every look it painted
  * (`a-cycle-card-shows-every-digit-at-every-wall-size`): tier 0 and every
@@ -346,6 +358,17 @@ export function probeCoverageGaps(
             }
         }
     }
+    // A broken figure's pieces held to the figure's own ink
+    // (D-2026-10-14-02): on every look a geometry pass painted, since every
+    // one of them paints one.
+    if (GEOMETRY_PASSES.has(pass)) {
+        const ink = report.figureInkByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            if (!((ink[cls] ?? 0) > 0)) {
+                gaps.push(`a-broken-figure-wears-the-figures-own-ink read no broken figure on a ${cls} stall`);
+            }
+        }
+    }
     // The card figures' ladder (2026-10-13): a pass that measures the long
     // figures owes each a read on every look it painted — a fixture that
     // stopped mounting one would leave the rule green over nothing.
@@ -521,8 +544,10 @@ export function probeCoverageLine(pass, report) {
         ? ` · card figures read: ${Object.entries(cardSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}` +
           ` · ladders compared: ${ladderSum}`
         : '';
+    // The money rule of D-2026-10-14-02, on every geometry pass whose page reported it.
+    const money = report.figureInkByClass === undefined ? '' : ` · broken figures held to their ink: ${perClass(report.figureInkByClass)}`;
     if (pass === 'narrow') {
-        return `${cards.replace(/^ · /, '')}${hiddenSmall}${marks}`;
+        return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }
     const cycleSums = {};
     for (const read of Object.values(report.cycleFigureByClass ?? {})) {
@@ -535,7 +560,7 @@ export function probeCoverageLine(pass, report) {
             ? ''
             : ` · Cycle figures read by step: ${Object.entries(cycleSums).sort(([a], [b]) => Number(a) - Number(b)).map(([step, n]) => `${step}:${n}`).join(' ') || 'none'}`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + cycle + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + cycle + money + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
@@ -552,7 +577,7 @@ export function probeCoverageLine(pass, report) {
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
     if (!PAGE_PASSES.has(pass)) {
-        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || (hiddenSmall + marks).replace(/^ · /, '')]
+        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || (money + hiddenSmall + marks).replace(/^ · /, '')]
             .filter(Boolean)
             .join(' · ');
     }
@@ -573,6 +598,7 @@ export function probeCoverageLine(pass, report) {
         ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`) +
         cards +
+        money +
         signs
     );
 }

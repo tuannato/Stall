@@ -24,6 +24,13 @@ const cardRead = {
     cardFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_CARD_STEP])),
     cardLadderByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_LADDER])),
 };
+/*
+ * D-2026-10-14-02: a broken figure held to its ink on every look a pass may
+ * paint — every geometry pass owes it.
+ */
+const moneyRead = {
+    figureInkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 12])),
+};
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
     skipChecks: { 'wall-cycle': 7, 'stream-card': 4, 'stream-ticker': 4 },
@@ -69,6 +76,7 @@ const full = {
     // The Cycle card's ladder (2026-10-13): every step read on every look a
     // wall pass may paint.
     cycleFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, Object.fromEntries(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((step) => [step, 3]))])),
+    ...moneyRead,
 };
 
 describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
@@ -256,7 +264,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -555,6 +563,7 @@ const narrowRead = {
     lookSheetsRead: [...SHIPPED, 't-fixture-private'],
     markChecksByClass: Object.fromEntries(NARROW_LOOKS.filter((cls) => cls !== 't-fixture-private').map((cls) => [cls, 20])),
     ...cardRead,
+    ...moneyRead,
 };
 const NARROW_OPTIONS = { privateClasses: ['t-fixture-private'], sheetedClasses: [...SHIPPED, 't-fixture-private'] };
 /** The narrow read with one look's card figure reads replaced. */
@@ -688,5 +697,49 @@ describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
         const ceilings = source.match(/export const WALL_FIGURE_CEILINGS = \[([^\]]*)\] as const;/);
         assert.ok(ceilings, 'WALL_FIGURE_CEILINGS in window.ts');
         assert.equal(CYCLE_STEPS_OWED.length, ceilings[1].split(',').length + 1);
+    });
+});
+
+/** Every geometry pass the runner names (D-2026-10-14-02's money rule is owed on each). */
+const GEOMETRY = ['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow'];
+const MONEY_RULE = /^a-broken-figure-wears-the-figures-own-ink /;
+
+describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => {
+    /**
+     * D-2026-10-14-02: `a-broken-figure-wears-the-figures-own-ink` runs on
+     * every geometry pass, and every one of them paints a broken figure on
+     * every look — so a fixture that stopped painting one leaves a gap, not a
+     * green pass over nothing. The contrast and reduced-motion passes owe
+     * nothing of it.
+     */
+    it('owes it on every look each geometry pass painted, and names the look that read none', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => MONEY_RULE.test(gap)), [], pass);
+            const short = { ...read, figureInkByClass: { ...read.figureInkByClass, 't-neo': 0 } };
+            assert.deepEqual(
+                probeCoverageGaps(pass, short).filter((gap) => MONEY_RULE.test(gap)),
+                ['a-broken-figure-wears-the-figures-own-ink read no broken figure on a t-neo stall'],
+                pass,
+            );
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, figureInkByClass: {} }).filter((gap) => MONEY_RULE.test(gap)).length,
+                CARD_LOOKS.length,
+                pass,
+            );
+        }
+        for (const pass of ['reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => MONEY_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('prints it on every geometry pass\'s line', () => {
+        const read = { figureInkByClass: { 't-neo': 3, 't-modern': 2 } };
+        assert.match(probeCoverageLine('narrow', read), / · broken figures held to their ink: t-modern 2, t-neo 3/);
+        assert.match(
+            probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, ...read }),
+            /^wall controls read: 2 · status line asked: 3 · broken figures held to their ink: t-modern 2, t-neo 3$/,
+        );
+        assert.match(probeCoverageLine('desktop', { ...full, ...read }), / · broken figures held to their ink: t-modern 2, t-neo 3/);
     });
 });

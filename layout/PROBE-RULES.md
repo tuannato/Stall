@@ -6153,8 +6153,9 @@ and negative letter-spacing on the strip's last group. A mask over the
 whole group was caught. A pixel floor on the figure's own ink would not
 close this; a computed-style check would (every piece computes the money
 node's colour, opacity, visibility, font and letter-spacing, with no mask,
-clip, filter or transform). Not built here; whether a look may style a
-figure's pieces at all is the owner's call.
+clip, filter or transform). Built since, the owner's call taken
+(D-2026-10-14-02: a look dresses a figure only as a whole):
+`a-broken-figure-wears-the-figures-own-ink`, at the end of this file.
 
 ### Two reads corrected (round 3)
 
@@ -6758,3 +6759,96 @@ of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and
   contrast pass samples the wrapped Cycle figure at 1280x900 alone
   (`shop-window-cycle-longest-figure`).
 - The touch wall between 1280 and 1919 wide is measured at 1280 alone.
+
+## A look dresses a money figure only as a whole (D-2026-10-14-02, 2026-10-14)
+
+The owner's decision ("Theo khuyến nghị"): a look may not dress a money
+figure's pieces. Every piece of a broken figure wears the figure's own
+computed colour, opacity, visibility, font and spacing, with no mask, clip,
+`clip-path`, filter or transform of its own; a look dresses the figure only
+as a whole. From the narrow-phone critic's round 4 (P2-1 and P2-2) and the
+wall-cycle critic's P2-1. Three rules, each geometry only, on every
+geometry pass.
+
+### A broken figure wears the figure's own ink (`a-broken-figure-wears-the-figures-own-ink`)
+
+`a-broken-figure-paints-every-digit` (above) reads each piece of a broken
+figure whole, on five contrast screens, and cannot see a piece partly
+hidden: the critic's three plants — a gradient mask over the face's last
+group, an inset `clip-path` on the pay sheet's last group, negative
+`letter-spacing` on the strip's last group — passed the whole runner. A
+pixel floor on the figure's ink would not have closed it (a partly masked
+piece keeps full-ink pixels); computed style does, at every screen and
+every width, for milliseconds.
+
+**The rule** (`figureInkFaults`, `layout/probe.ts`): on every screen, look
+and variant of every geometry pass, every element of every `.fig-say` — the
+`.fig-say` itself and everything under it but a `<wbr>` — computes the
+money node's own value of every property in `FIGURE_INK_SHARED` (colour,
+the text fill and stroke, the text shadow, visibility, the font's family,
+size, weight, style, stretch, variants, features and variations, line
+height, letter and word spacing, case, text security), the initial value of
+every one in `FIGURE_INK_OWN` (opacity 1; no mask image, mask border,
+`clip`, `clip-path`, filter, transform, `rotate`, `scale`, `translate`,
+blend, overflow, `contain`, `content-visibility`, position, vertical align
+or margin of its own), displays as the inline it is (or the block a flex or
+grid parent makes of it), generates no `::before` or `::after`, and runs no
+animation or transition of its own (the read is one instant). The money
+node is the element the figure is written into (`say.parentElement`), the
+ink the digit read reads with. A property the engine does not know computes
+`''` and is not read. The list is wider than the decision's words in four
+places, each the same thing by another property: the text fill and stroke
+(colour), the text shadow and blend (ink), the font's sub-properties and
+line height (font), word spacing and case (spacing); and margins, position
+and `vertical-align`, which move a piece over its neighbour's digits.
+
+**The static belt** (`a-look-may-not-dress-a-figures-pieces`,
+`scripts/look-lint.test.mjs`): `lintLookSheet` refuses a selector naming any
+class the app spells `fig-` (`.fig-say`, `.fig-end`, `.fig-wraps`,
+`.fig-narrow`; `FIGURE_PIECE` in `scripts/workshop-css.mjs`). A belt only: a
+look reaches the pieces with `.item-x span`, `:last-child` or an attribute
+as easily, which the probe rule reads. **The kit road is unchanged**: the
+kit's lint names them freely, because binding a kit designer needs a
+workshop README line, which is the owner's to approve. The kit's
+`workshop:probe` runs the probe rule regardless — and the README's own rule,
+"Money is never covered, cut or faded", does not say a look may not dress
+a piece in another weight or face, so the probe rule binds a kit designer
+past the README's words until a line is added.
+
+**Owed** (`probe-coverage.mjs`, `figureInkByClass`): every geometry pass, on
+every look it painted, a broken figure read. Measured 2026-10-14 on the
+probe page, per look (the skeleton, painted bare only, half): the phone 52,
+the desk 60, the narrow phone 52, the canvas 46, the tall wall 54, the
+counter tablet 54, `desk-wall` 46, `short-wall` 54 (the full runner's
+counts, printed on each pass's `compared:` line).
+
+**Red proofs** (2026-10-14, a scratch clone, each plant appended to
+`stall.css` alone, the probe page at the phone, the desk and the narrow
+phone):
+
+- the critic's mask, `.t-modern .face-x .fig-end { mask-image:
+  linear-gradient(to right, #000 30%, transparent 30%) }` (both prefixes):
+  4 failures at each width, every one this rule ("`.fig-end` has mask-image
+  … of its own"), on `item-listing-long-figure` and
+  `item-quote-long-figure`, bare and worn;
+- the critic's clip, `.t-neo .pay-x .fig-end { clip-path: inset(0 60% 0
+  0) }`: 4 at each width on `pay-longest-figure` and
+  `pay-several-longest-figure` — at 390, where nothing failed before, this
+  rule alone; at 1280 and 360 beside the 28 "asked amount is covered" that
+  caught it there;
+- the critic's spacing, `.t-rural .sel-total .fig-end { letter-spacing:
+  -0.5em }`: 4 at each width on `pay-several-strip-long-figure` and `-21`
+  ("letter-spacing -8px where the figure has normal");
+- a piece reached with no `fig-` class, `.t-modern .face-x .x span > span {
+  animation: om-flick 3s infinite }`: 2 at 390 ("runs an animation or
+  transition of its own", on the span and on `.fig-end`);
+- the static belt: `selectorProblems` without its `FIGURE_PIECE` half,
+  `a-look-may-not-dress-a-figures-pieces` red;
+- **the whole runner** (the three plants appended at once beside the four
+  plants of `a-spill-over-any-money-is-read` and
+  `a-money-figure-never-clips-itself`, in scratch clones of the branch and
+  of main, run back to back): on main nothing read the mask or the spacing,
+  and the clip only as `asked amount is covered` at 1280 and 360 (42
+  each), while the contrast pass read none of the three; on the branch this
+  rule failed 16 at each page pass — 390, 1280 and 360: Modern 4, Neo 6,
+  Rural 6 — and the contrast pass still read none of them.

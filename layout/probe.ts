@@ -2388,6 +2388,159 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **A broken figure wears the figure's own ink** (D-2026-10-14-02, the
+ * owner's "Theo khuyến nghị"; CRITIC-NARROW-PHONE round 4, P2-1). A money
+ * figure broken after its commas (`moneyFigure`) is pieces: `.fig-say`, its
+ * `aria-hidden` span, the comma groups between `<wbr>`s, and `.fig-end`.
+ * `a-broken-figure-paints-every-digit` reads each piece whole — enough
+ * pixels moved toward the figure's ink, the strongest at 3:1 — and cannot
+ * see a piece partly hidden: a gradient mask over the face's last group, an
+ * inset `clip-path` on the pay sheet's last group and negative
+ * `letter-spacing` on the strip's last group each passed the whole runner.
+ * So a look dresses a figure only as a whole. On every screen, look and
+ * variant of every geometry pass, every element of every `.fig-say` — the
+ * `.fig-say` itself and everything under it but a `<wbr>`, which paints
+ * nothing — must compute:
+ *
+ * - the money node's own value of every property in `FIGURE_INK_SHARED`:
+ *   its ink (colour, the text fill and stroke, the text shadow), its
+ *   visibility, its face (family, size, weight, style, stretch, variants,
+ *   features, variations, line height) and its spacing (letter, word, case);
+ * - the initial value of every property in `FIGURE_INK_OWN`: no opacity,
+ *   mask, mask border, clip, `clip-path`, filter, transform (or `rotate`,
+ *   `scale`, `translate`), blend, overflow, `contain`, offset, `vertical-align`,
+ *   margin or `content-visibility` of its own;
+ * - the display it has from the app: inline, or the block a flex or grid
+ *   parent makes of it — never `none`, never a box of its own;
+ * - no `::before` or `::after` that generates anything;
+ * - and no animation or transition of its own: the read is one instant,
+ *   and a piece that moves is dressed at every other.
+ *
+ * The money node is the element the figure is written into
+ * (`say.parentElement`), which is also the ink the digit read reads the
+ * pieces in. Computed style alone: no capture, milliseconds. A look may not
+ * name the pieces at all (`a-look-may-not-dress-a-figures-pieces` in the look
+ * lint, the static belt); this is what holds every other selector that
+ * reaches them — `.item-x span`, `:last-child`, an attribute — and every
+ * screen no sheet was written for. Counted per look (`figureInkByClass`):
+ * the runner owes a read on every look each geometry pass painted
+ * (`probe-coverage.mjs`), since every pass paints a broken figure.
+ */
+const FIGURE_INK_CHECK = 'a-broken-figure-wears-the-figures-own-ink';
+/** Broken figures read, per look class. */
+const figureInkByClass: Record<string, number> = {};
+/** What a piece takes from its money node and must not change. */
+const FIGURE_INK_SHARED: readonly string[] = [
+    'color',
+    '-webkit-text-fill-color',
+    '-webkit-text-stroke-width',
+    '-webkit-text-stroke-color',
+    'text-shadow',
+    'visibility',
+    'font-family',
+    'font-size',
+    'font-weight',
+    'font-style',
+    'font-stretch',
+    'font-variant-caps',
+    'font-variant-numeric',
+    'font-variant-ligatures',
+    'font-variant-east-asian',
+    'font-variant-position',
+    'font-variant-alternates',
+    'font-feature-settings',
+    'font-variation-settings',
+    'line-height',
+    'letter-spacing',
+    'word-spacing',
+    'text-transform',
+    '-webkit-text-security',
+];
+/**
+ * What a piece has of its own: the initial value, as Chrome computes it. A
+ * property the engine does not know computes `''` on both counts and is not
+ * read (`mask-border-source` is behind a flag in some Chromes; its prefixed
+ * twin is read).
+ */
+const FIGURE_INK_OWN: Readonly<Record<string, string>> = {
+    opacity: '1',
+    'mask-image': 'none',
+    '-webkit-mask-image': 'none',
+    'mask-border-source': 'none',
+    '-webkit-mask-box-image-source': 'none',
+    'clip-path': 'none',
+    clip: 'auto',
+    filter: 'none',
+    transform: 'none',
+    rotate: 'none',
+    scale: 'none',
+    translate: 'none',
+    'mix-blend-mode': 'normal',
+    'overflow-x': 'visible',
+    'overflow-y': 'visible',
+    contain: 'none',
+    'content-visibility': 'visible',
+    position: 'static',
+    'vertical-align': 'baseline',
+    'margin-top': '0px',
+    'margin-right': '0px',
+    'margin-bottom': '0px',
+    'margin-left': '0px',
+};
+
+function figureInkFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
+        if (say.closest('.deck-stall') !== null || say.getClientRects().length === 0) continue;
+        const figure = say.parentElement;
+        if (figure === null) continue;
+        figureInkByClass[measuringClass] = (figureInkByClass[measuringClass] ?? 0) + 1;
+        const own = getComputedStyle(figure);
+        const faults: string[] = [];
+        for (const piece of [say, ...say.querySelectorAll<HTMLElement>('*')]) {
+            if (piece.nodeName === 'WBR') continue;
+            const cs = getComputedStyle(piece);
+            const name = piece === say ? '.fig-say' : piece.classList.contains('fig-end') ? '.fig-end' : describe(piece);
+            for (const prop of FIGURE_INK_SHARED) {
+                const mine = cs.getPropertyValue(prop);
+                const its = own.getPropertyValue(prop);
+                if (mine !== its) faults.push(`${name} has ${prop} ${mine || '(none)'} where the figure has ${its || '(none)'}`);
+            }
+            for (const [prop, initial] of Object.entries(FIGURE_INK_OWN)) {
+                const mine = cs.getPropertyValue(prop);
+                if (mine !== '' && mine !== initial) faults.push(`${name} has ${prop} ${mine} of its own`);
+            }
+            const parentDisplay = piece.parentElement === null ? '' : getComputedStyle(piece.parentElement).display;
+            const blockified = /(?:^|\s)(?:flex|grid|inline-flex|inline-grid)$/.test(parentDisplay);
+            const display = blockified ? 'block' : 'inline';
+            if (cs.display !== display) faults.push(`${name} displays ${cs.display}, not the ${display} it is`);
+            for (const pseudo of ['::before', '::after'] as const) {
+                const content = getComputedStyle(piece, pseudo).content;
+                if (content !== 'none' && content !== 'normal' && content !== '') {
+                    faults.push(`${name}${pseudo} generates ${content.slice(0, 24)}`);
+                }
+            }
+            // The read is one instant; a piece that moves on its own is
+            // dressed at every other one.
+            if (piece.getAnimations().length > 0) {
+                faults.push(`${name} runs an animation or transition of its own`);
+            }
+        }
+        if (faults.length > 0) {
+            out.push({
+                screen,
+                theme: label,
+                check: FIGURE_INK_CHECK,
+                detail:
+                    `the broken figure "${(say.getAttribute('aria-label') ?? '').slice(0, 40)}" in ${describe(figure)}: ` +
+                    `${faults.slice(0, 4).join('; ')}${faults.length > 4 ? `; and ${faults.length - 4} more` : ''} — a look dresses a figure only as a whole`,
+            });
+        }
+    }
+    return out;
+}
+
+/*
  * **A payment list that scrolls says how many lines it hides** (2026-09-24,
  * the owner's decision 4). The payment's lines scroll inside the wall's
  * plate under a cap in pixels (`window.css`), and nothing said so: a
@@ -4714,6 +4867,7 @@ for (const screen of measured) {
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...cardFigureFaults(screen, label));
             failures.push(...cycleFigureFaults(screen, label));
+            failures.push(...figureInkFaults(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
@@ -7121,6 +7275,8 @@ const verdict = {
     cardLadderByClass,
     /* Cycle figures read per look and per step (`a-cycle-card-shows-every-digit-at-every-wall-size`). */
     cycleFigureByClass,
+    /* Broken figures whose pieces were held to the figure's own ink, per look (`a-broken-figure-wears-the-figures-own-ink`). */
+    figureInkByClass,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);
