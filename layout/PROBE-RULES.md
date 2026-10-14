@@ -6852,3 +6852,58 @@ phone):
   each), while the contrast pass read none of the three; on the branch this
   rule failed 16 at each page pass — 390, 1280 and 360: Modern 4, Neo 6,
   Rural 6 — and the contrast pass still read none of them.
+
+### A spill over any money is read (`a-spill-over-any-money-is-read`)
+
+`text-spills` held a block's spilled words against controls, two money
+roles (`price`, `seller-price`) and a few kinds of words (`.item-n`,
+`.face-nm`, `.fine`, `.note`, `.pub`), and nothing else, so words painted
+over most of the money set passed every geometry pass, or failed naming a
+control behind the sheet (the critic's round 4, P2-2: "under button.seg-b",
+"under button.addr" for words over Pay several's "$10.00").
+
+**The rule** (`measure`, `layout/probe.ts`): the spilled strip is held
+against every money node (`MONEY_SET`), Pay several's line figures
+(`.pay-line-x`, inside the money box `pay-lines`) and every broken figure
+(`.fig-say`) — `SPILL_MONEY` — before the words (`SPILL_WORDS`, the old
+list less its two money roles), each by its own line boxes
+(`getClientRects`, one for a block, one per line for an inline figure broken
+over lines, whose union holds a corner no glyph of it stands in), and a
+spill over money fails under this name; a spill under a control or cut by
+its clipper is `text-spills` as before. What `text-spills` skipped it still
+skips: the spilling node's own ancestors and descendants, anything
+`aria-hidden`, and the part of the strip its clipper hides from a node
+outside it (`spillReach`). Unplanted, 0 on every look at every geometry
+pass: round 3's false alarm (`pay-several-strip-long-figure`, Rural, 360)
+and round 4's below-the-fold reads stay as they were.
+
+**Red proofs** (2026-10-14, the scratch clone, each plant alone, the probe
+page):
+
+- **Modern, Pay several** (the critic's): `.t-modern .pay-line {
+  grid-template-columns: 20px auto } .t-modern .pay-line dt { white-space:
+  nowrap } .t-modern .pay-line dd { text-align: left }` — 42 failures at
+  each of 390, 1280 and 360 on `pay-several` and
+  `pay-several-figure-lines`, every one this rule, "dt paints 113px past its
+  box (133 > 20), under span.pay-line-x";
+- **Rural, the wall's payment lines** (the same plant at window.css's
+  specificity, `.stall.t-rural.shop-window[data-touch='on'] .sw-pay-line`):
+  196 at the tall wall, the counter tablet and 1280x900 on
+  `shop-window-touch-quotes-pay` and `-3`, 1,911 on the canvas with `-35`,
+  "under dd.sw-pay-v";
+- **Neo, "You pay"** (the critic's: the label over the figure),
+  `.t-neo .row.big { justify-content: flex-start } .t-neo .row.big dt {
+  flex: none; width: 8px }` — 70 at each of 390, 1280 and 360 on
+  `item-listing`, `item-listing-long-figure` and `item-unbuyable-fold`,
+  "dt paints 47px past its box (55 > 8), under dd"; the critic measured 0 on
+  every geometry pass before;
+- **the whole runner** (the runs above): main named the wrong neighbour or
+  nothing — Pay several's words "under button.addr" and "under
+  button.seg-b" (the sign's address and the shop's tabs behind the sheet),
+  the wall's lines "under span.item-n" or "under
+  span.item-foot-words.fine" at the canvas and the tall wall and nothing at
+  the tablet and the two desk walls, "You pay" nothing in geometry but on
+  `item-zoom` ("under button.mini.another", the zoom's close) and the
+  contrast box read's 2.24:1 on the phone and desk jobs; the branch: this
+  rule 98 (Modern) and 154 (Neo; 112 at 360) at each page pass and 1,911
+  (Rural) at each of the five wall passes, and no `text-spills` left.

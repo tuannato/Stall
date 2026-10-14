@@ -684,6 +684,25 @@ function wornVariants(look: Look): readonly (readonly ShippedAttachment[])[] {
     return [[], ...singles, ...alls];
 }
 
+/*
+ * **A spill over any money is read** (`a-spill-over-any-money-is-read`;
+ * CRITIC-NARROW-PHONE round 4, P2-2; D-2026-10-14-02). `text-spills` held a
+ * block's spilled words against controls, two money roles (`price`,
+ * `seller-price`) and a few kinds of words, and nothing else: words painted
+ * over Pay several's "$10.00", over the wall's payment lines and over "You
+ * pay" passed every geometry pass, or failed naming a control behind the
+ * sheet. So the spilled strip is held against every money node
+ * (`MONEY_SET`), Pay several's line figures (`.pay-line-x`, inside the money
+ * box `pay-lines`) and every broken figure (`.fig-say`), money first, each
+ * by its own line boxes — and a spill over money fails under this name.
+ * What `text-spills` already skipped it still skips: the spilling node's own
+ * ancestors and descendants, anything `aria-hidden`, and a strip past the
+ * part of its clipper that shows (`spillReach`).
+ */
+const SPILL_MONEY_CHECK = 'a-spill-over-any-money-is-read';
+const SPILL_MONEY = `${MONEY}, .pay-line-x, .fig-say`;
+const SPILL_WORDS = 'button, a, input, select, textarea, .item-n, .face-nm, .fine, .note, .pub';
+
 /**
  * Measure what is on screen. **Separate from painting on purpose**: seeking an
  * animation and then repainting seeks a tree that is thrown away, and that is
@@ -1323,7 +1342,9 @@ function measure(screen: string, themeLabel: string): Failure[] {
                 ? undefined
                 : { box: edge, clipsX: clipCs.overflowX !== 'visible', clipsY: clipCs.overflowY !== 'visible' };
         if (!cut) {
-            for (const other of root.querySelectorAll<HTMLElement>('button, a, input, select, textarea, [data-role="price"], [data-role="seller-price"], .item-n, .face-nm, .fine, .note, .pub')) {
+            // Money first, so a spill over a figure names the figure and not
+            // a control behind the sheet it stands on.
+            for (const other of [...root.querySelectorAll<HTMLElement>(SPILL_MONEY), ...root.querySelectorAll<HTMLElement>(SPILL_WORDS)]) {
                 if (other === node || node.contains(other) || other.contains(node)) {
                     continue;
                 }
@@ -1334,8 +1355,13 @@ function measure(screen: string, themeLabel: string): Failure[] {
                 if (!reachesAnything(reach)) {
                     continue;
                 }
-                const r = other.getBoundingClientRect();
-                if (r.width > 0 && !(reach.right <= r.left || r.right <= reach.left || reach.bottom <= r.top || r.bottom <= reach.top)) {
+                // Each of its own boxes: one for a block, one per line for an
+                // inline figure broken over lines, whose union holds a corner
+                // no glyph of it stands in (`a-spill-over-any-money-is-read`).
+                const hit = [...other.getClientRects()].some(
+                    (r) => r.width > 0 && !(reach.right <= r.left || r.right <= reach.left || reach.bottom <= r.top || r.bottom <= reach.top),
+                );
+                if (hit) {
                     under = other;
                     break;
                 }
@@ -1343,7 +1369,7 @@ function measure(screen: string, themeLabel: string): Failure[] {
         }
         if (cut || under !== undefined) {
             fail(
-                'text-spills',
+                under !== undefined && under.matches(SPILL_MONEY) ? SPILL_MONEY_CHECK : 'text-spills',
                 `${describe(node)} paints ${spill}px past its box${down ? ', down its vertical lines' : ''} (${down ? node.scrollHeight : node.scrollWidth} > ${down ? node.clientHeight : node.clientWidth})${cut ? ', cut off by ' + describe(clipper!) : ', under ' + describe(under!)}`,
             );
         }
