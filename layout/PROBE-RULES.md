@@ -6782,7 +6782,7 @@ pixel floor on the figure's ink would not have closed it (a partly masked
 piece keeps full-ink pixels); computed style does, at every screen and
 every width, for milliseconds.
 
-**The rule** (`figureInkFaults`, `layout/probe.ts`): on every screen, look
+**The rule** (round 1's; an allow-list over every computed property since round 2, below) (`figureInkFaults`, `layout/probe.ts`): on every screen, look
 and variant of every geometry pass, every element of every `.fig-say` — the
 `.fig-say` itself and everything under it but a `<wbr>` — computes the
 money node's own value of every property in `FIGURE_INK_SHARED` (colour,
@@ -6816,7 +6816,7 @@ workshop README line, which is the owner's to approve. The kit's
 a piece in another weight or face, so the probe rule binds a kit designer
 past the README's words until a line is added.
 
-**Owed** (`probe-coverage.mjs`, `figureInkByClass`): every geometry pass, on
+**Owed** (round 1's; per surface since round 2, below) (`probe-coverage.mjs`, `figureInkByClass`): every geometry pass, on
 every look it painted, a broken figure read. Measured 2026-10-14 on the
 probe page, per look (the skeleton, painted bare only, half): the phone 52,
 the desk 60, the narrow phone 52, the canvas 46, the tall wall 54, the
@@ -7000,3 +7000,75 @@ paragraph after "Money is never covered, cut or faded"), with
 `a-look-may-not-dress-a-figures-pieces` holds the line in the README, and
 where it stands. Red: `selectorProblems` without its `FIGURE_PIECE` half,
 and the README line taken out.
+
+**The ink rule is an allow-list over every computed property** (P2-1).
+Round 1 read 47 named properties, so a piece was still dressed apart from
+its figure through any other: a background in the ink's colour (Neo's
+face, "516.15" a solid block), an outline drawn inward in the ground's
+colour (Neo's pay sheet), a strike in the ground's colour 1.4em thick
+(Rural's strip total), `font-size-adjust: 0.06` (Rural's pay sheet, the
+last group 8×3 px with `font-size` still 18px), `zoom: 0.15` (Modern's pay
+sheet), `word-break: break-all` (a digit group split over two lines on
+Neo's face at 360), and `display: contents` or `none` on `.fig-say`, which
+round 1 skipped as a figure with no box. Now (`figureInkFaults`): for every
+piece — the `.fig-say` and every element under it but a `<wbr>` — every
+longhand `getComputedStyle` yields, custom properties aside, equals what an
+untouched piece computes in its place (`untouchedStyle`: a `span` with an
+inline `all: unset` and `unicode-bidi: normal`, appended to the piece's
+parent for the read and taken out). It inherits what an inherited property
+inherits, takes the initial value of every other, and is blockified by a
+flex, grid or `-webkit-box` parent as the piece is (the critic's P3-3 on
+the display regex is gone with the regex). Each piece is read against its
+own parent, so a dress anywhere in the chain fails where it is written, and
+every piece is read before any reference joins the tree, so a structural
+selector reads them as painted. Three named exceptions:
+
+- the geometry `getComputedStyle` answers from a block's own box — `width`,
+  `height`, `inline-size`, `block-size`, `transform-origin`,
+  `perspective-origin` — on a piece a flex or grid parent blockified, alone
+  (an inline piece computes them as the reference does, and is held to
+  them);
+- `box-sizing`, which the base sheet gives every element of the stall
+  (`.stall *`) and `all: unset` takes off the reference;
+- on `.fig-end`, `text-wrap-mode: nowrap` (and the `white-space` it rolls up
+  to), the base sheet's one rule on it.
+
+Besides: no generated `::before` or `::after`, and no animation or
+transition of its own. **A figure is skipped only when the money node
+itself is not painted** (display `none` on it or an ancestor, the way a
+sheet with no rate hides its figure's row); a `.fig-say` with no box is
+read, and fails on `display` by name (the merge condition). **Not read**:
+the money node's own dress, every property of it (P2-3, the owner's call:
+a look may dress the figure whole); a blockified piece's `width` (a
+`width: 1px` on a `.fig-say` under a flex money node passes here); a state
+(`:hover`, `:focus`) reaching a piece, which no probe rule paints.
+
+**Owed per surface** (P3-3): `figureInkByClass` counts per look and per
+surface (`figureSurface`: `face`, `paid`, `pay`, `line`, `total`, `strip`,
+`chosen`, `row`, `wall`, `cycle`), and the runner owes every surface each
+pass paints, every look (`FIGURE_SURFACES_OWED`): the phone and the narrow
+phone the eight page surfaces, the desk those and `wall` and `cycle`, the
+canvas and the four wall passes `wall` and `cycle`. Measured per shipped
+look (the skeleton, bare only, half): the phone and the narrow phone
+`strip` 6, `row` 10, `chosen` 12, `pay` 6, `line` 8, `total` 4, `face` 4,
+`paid` 2; the desk the same and `wall` 6, `cycle` 2; the canvas and
+`desk-wall` `wall` 6, `cycle` 40; the tall wall, the tablet and
+`short-wall` `wall` 12, `cycle` 42. A plant that hides every figure on one
+surface leaves a gap by name, where round 1's one read a look did not notice
+(the critic's Neo 52 → 40).
+
+**Red proofs** (2026-10-14, a scratch clone of the branch):
+
+- the critic's plants (`b-inkmiss.css` and `b9.css`, appended to
+  `stall.css` at once), on the probe page: 54 failures of this rule at each
+  of 390, 1280 and 360, each plant by its property — "`.fig-say` computes
+  display none" (Modern's strip total and face, Rural's quote face, Neo's
+  chosen line), "display contents" (Rural's face), "`.fig-end` computes
+  background-color …" (Neo's and Modern's face), "outline-…" (Neo's pay
+  sheet), "text-decoration line-through …" (Rural's strip), "font-size-adjust
+  0.06" (Rural's pay sheet), "zoom 0.15" (Modern's pay sheet), "span
+  computes word-break break-all" (Neo's face). Round 1's rule read none of
+  them;
+- the whole runner (every round-2 plant at once, scratch clones of the
+  branch and of main run back to back): this rule 54 at each page pass —
+  Modern 16, Neo 22, Rural 16 — and 0 on main.

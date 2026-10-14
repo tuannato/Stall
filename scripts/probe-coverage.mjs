@@ -90,11 +90,11 @@
  * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
  *   `cjk-name` owes the advance it read (`cjkFaces`).
  * - **`a-broken-figure-wears-the-figures-own-ink`** (D-2026-10-14-02):
- *   every geometry pass owes, on every look it painted, a broken figure
- *   whose pieces were held to the figure's own computed style
- *   (`figureInkByClass`): each pass paints one — the long card and row
- *   figures on the page and narrow passes, the Cycle card's break steps on
- *   the canvas and the four wall passes.
+ *   every geometry pass owes, on every look it painted, a broken figure read
+ *   on every surface it paints one (`FIGURE_SURFACES_OWED`,
+ *   `figureInkByClass`, per look and per surface; round 2, the critic's
+ *   P3-3: one read a look let a surface stop being read, or a plant hide
+ *   every figure on one, and stay green).
  * - **`a-money-figure-never-clips-itself`** (CRITIC-WALL-CYCLE P2-1): every
  *   geometry pass owes, on every look it painted, money figures asked
  *   (`selfClipByClass`).
@@ -153,6 +153,27 @@ const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short
  * (`a-money-figure-never-clips-itself`).
  */
 const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
+/**
+ * The surfaces each geometry pass paints a broken figure on, every look
+ * (`figureSurface` in `layout/probe.ts`; measured 2026-10-14): the page and
+ * narrow passes the item face (`face`), its "You pay" (`paid`), the pay
+ * sheet (`pay`), Pay several's line and total (`line`, `total`), the
+ * selection strip's total and chosen line (`strip`, `chosen`) and a shop row
+ * (`row`); the desk also the wall's Browse row (`wall`) and Cycle card
+ * (`cycle`), which the canvas and the four wall passes paint alone.
+ */
+const PAGE_SURFACES = Object.freeze(['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row']);
+const WALL_SURFACES = Object.freeze(['wall', 'cycle']);
+export const FIGURE_SURFACES_OWED = Object.freeze({
+    mobile: PAGE_SURFACES,
+    narrow: PAGE_SURFACES,
+    desktop: Object.freeze([...PAGE_SURFACES, ...WALL_SURFACES]),
+    canvas: WALL_SURFACES,
+    portrait: WALL_SURFACES,
+    tablet: WALL_SURFACES,
+    'desk-wall': WALL_SURFACES,
+    'short-wall': WALL_SURFACES,
+});
 /**
  * The Cycle card's steps each wall pass owes read on every look it painted
  * (`a-cycle-card-shows-every-digit-at-every-wall-size`): tier 0 and every
@@ -362,15 +383,17 @@ export function probeCoverageGaps(
             }
         }
     }
-    // A broken figure's pieces held to the figure's own ink, and money
-    // figures asked whether they clip themselves (D-2026-10-14-02): on every
-    // look a geometry pass painted, since every one of them paints both.
+    // A broken figure's pieces held to the figure's own ink, on every surface
+    // the pass paints one, and money figures asked whether they clip
+    // themselves (D-2026-10-14-02): on every look a geometry pass painted.
     if (GEOMETRY_PASSES.has(pass)) {
         const ink = report.figureInkByClass ?? {};
         const clip = report.selfClipByClass ?? {};
         for (const cls of report.sheetClasses ?? []) {
-            if (!((ink[cls] ?? 0) > 0)) {
-                gaps.push(`a-broken-figure-wears-the-figures-own-ink read no broken figure on a ${cls} stall`);
+            for (const surface of FIGURE_SURFACES_OWED[pass] ?? []) {
+                if (!(((ink[cls] ?? {})[surface] ?? 0) > 0)) {
+                    gaps.push(`a-broken-figure-wears-the-figures-own-ink read no broken figure on a ${cls} stall's ${surface}`);
+                }
             }
             if (!((clip[cls] ?? 0) > 0)) {
                 gaps.push(`a-money-figure-never-clips-itself asked no money figure on a ${cls} stall`);

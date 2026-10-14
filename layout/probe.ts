@@ -2423,123 +2423,151 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
  * see a piece partly hidden: a gradient mask over the face's last group, an
  * inset `clip-path` on the pay sheet's last group and negative
  * `letter-spacing` on the strip's last group each passed the whole runner.
- * So a look dresses a figure only as a whole. On every screen, look and
- * variant of every geometry pass, every element of every `.fig-say` — the
- * `.fig-say` itself and everything under it but a `<wbr>`, which paints
- * nothing — must compute:
+ * So a look dresses a figure only as a whole.
  *
- * - the money node's own value of every property in `FIGURE_INK_SHARED`:
- *   its ink (colour, the text fill and stroke, the text shadow), its
- *   visibility, its face (family, size, weight, style, stretch, variants,
- *   features, variations, line height) and its spacing (letter, word, case);
- * - the initial value of every property in `FIGURE_INK_OWN`: no opacity,
- *   mask, mask border, clip, `clip-path`, filter, transform (or `rotate`,
- *   `scale`, `translate`), blend, overflow, `contain`, offset, `vertical-align`,
- *   margin or `content-visibility` of its own;
- * - the display it has from the app: inline, or the block a flex or grid
- *   parent makes of it — never `none`, never a box of its own;
- * - no `::before` or `::after` that generates anything;
- * - and no animation or transition of its own: the read is one instant,
- *   and a piece that moves is dressed at every other.
+ * **An allow-list over every computed property** (round 2, the critic's
+ * P2-1: a list of 47 properties let a background in the ink's colour, an
+ * outline drawn inward, a strike in the ground's colour, `font-size-adjust`,
+ * `zoom`, `word-break` and `display: contents` through). On every screen,
+ * look and variant of every geometry pass, for every piece of every
+ * `.fig-say` — the `.fig-say` itself and every element under it but a
+ * `<wbr>`, which paints nothing — every longhand `getComputedStyle` yields
+ * (custom properties aside: they paint nothing until a property reads them,
+ * and that property is read) must equal what **an untouched piece** computes
+ * in the same place (`untouchedStyle`): a `span` with an inline
+ * `all: unset` (and `unicode-bidi: normal`, which `all` leaves) appended to
+ * the piece's parent for the read and taken out again. It inherits what an
+ * inherited property inherits, takes the initial value of every other, and
+ * is blockified by a flex, grid or `-webkit-box` parent exactly as the piece
+ * is. Each piece is read against its own parent, so a dress anywhere in the
+ * chain fails where it is written. Every piece is read before any reference
+ * joins the tree, so a structural selector (`:last-child`) reads them as
+ * painted. The exceptions, each with its reason:
  *
- * The money node is the element the figure is written into
- * (`say.parentElement`), which is also the ink the digit read reads the
- * pieces in. Computed style alone: no capture, milliseconds. A look may not
- * name the pieces at all (`a-look-may-not-dress-a-figures-pieces` in the look
- * lint, the static belt); this is what holds every other selector that
- * reaches them — `.item-x span`, `:last-child`, an attribute — and every
- * screen no sheet was written for. Counted per look (`figureInkByClass`):
- * the runner owes a read on every look each geometry pass painted
- * (`probe-coverage.mjs`), since every pass paints a broken figure.
+ * - `FIGURE_INK_GEOMETRY`, on a piece a flex or grid parent blockified
+ *   alone: `width`, `height`, `inline-size`, `block-size`,
+ *   `transform-origin`, `perspective-origin` — `getComputedStyle` answers
+ *   these from a block's own box, and the reference is an empty span (an
+ *   inline piece computes them as the reference does, and is held to them);
+ * - `box-sizing`: the base sheet gives every element of the stall
+ *   `border-box` (`.stall *`), and `all: unset` takes it off the reference;
+ * - `FIG_END_OWN`: on `.fig-end` alone, `text-wrap-mode: nowrap` (and the
+ *   `white-space` it rolls up to) — the base sheet's one rule on it, the
+ *   last group and the unit on one line (`moneyFigure`).
+ *
+ * Besides: no `::before` or `::after` that generates anything, and no
+ * animation or transition of its own (the read is one instant, and a piece
+ * that moves is dressed at every other one). The money node is the element
+ * the figure is written into (`say.parentElement`), the ink the digit read
+ * reads with. **A figure is skipped only when the money node itself is not
+ * painted** (display `none` on it or an ancestor: a sheet with no rate
+ * hides its figure's row) — never because its `.fig-say` has no box: a
+ * `.fig-say` set to `display: none` or `contents` is read and fails on
+ * `display` by name (the critic's merge condition). Not read here: the
+ * money node's own dress, every property of it included (CRITIC-MONEY-GUARDS
+ * P2-3, the owner's call: a look may dress the figure whole). A look may not
+ * name the pieces at all (`a-look-may-not-dress-a-figures-pieces` in the
+ * look lint, the static belt); this is what holds every other selector that
+ * reaches them — `.x span`, `:last-child`, an attribute — and every screen no
+ * sheet was written for. Counted per look and per surface
+ * (`figureInkByClass`, `figureSurface`): the runner owes each geometry pass
+ * the surfaces it paints on every look it painted (`probe-coverage.mjs`).
  */
 const FIGURE_INK_CHECK = 'a-broken-figure-wears-the-figures-own-ink';
-/** Broken figures read, per look class. */
-const figureInkByClass: Record<string, number> = {};
-/** What a piece takes from its money node and must not change. */
-const FIGURE_INK_SHARED: readonly string[] = [
-    'color',
-    '-webkit-text-fill-color',
-    '-webkit-text-stroke-width',
-    '-webkit-text-stroke-color',
-    'text-shadow',
-    'visibility',
-    'font-family',
-    'font-size',
-    'font-weight',
-    'font-style',
-    'font-stretch',
-    'font-variant-caps',
-    'font-variant-numeric',
-    'font-variant-ligatures',
-    'font-variant-east-asian',
-    'font-variant-position',
-    'font-variant-alternates',
-    'font-feature-settings',
-    'font-variation-settings',
-    'line-height',
-    'letter-spacing',
-    'word-spacing',
-    'text-transform',
-    '-webkit-text-security',
-];
-/**
- * What a piece has of its own: the initial value, as Chrome computes it. A
- * property the engine does not know computes `''` on both counts and is not
- * read (`mask-border-source` is behind a flag in some Chromes; its prefixed
- * twin is read).
- */
-const FIGURE_INK_OWN: Readonly<Record<string, string>> = {
-    opacity: '1',
-    'mask-image': 'none',
-    '-webkit-mask-image': 'none',
-    'mask-border-source': 'none',
-    '-webkit-mask-box-image-source': 'none',
-    'clip-path': 'none',
-    clip: 'auto',
-    filter: 'none',
-    transform: 'none',
-    rotate: 'none',
-    scale: 'none',
-    translate: 'none',
-    'mix-blend-mode': 'normal',
-    'overflow-x': 'visible',
-    'overflow-y': 'visible',
-    contain: 'none',
-    'content-visibility': 'visible',
-    position: 'static',
-    'vertical-align': 'baseline',
-    'margin-top': '0px',
-    'margin-right': '0px',
-    'margin-bottom': '0px',
-    'margin-left': '0px',
-};
+/** Broken figures read, per look class and per surface. */
+const figureInkByClass: Record<string, Record<string, number>> = {};
+/** The properties `getComputedStyle` answers from a block's own box, which an empty reference cannot share (a blockified piece alone). */
+const FIGURE_INK_GEOMETRY: ReadonlySet<string> = new Set([
+    'width',
+    'height',
+    'inline-size',
+    'block-size',
+    'transform-origin',
+    'perspective-origin',
+]);
+/** The base sheet's one rule on `.fig-end` (`white-space: nowrap`), as the longhands compute it. */
+const FIG_END_OWN: Readonly<Record<string, string>> = { 'text-wrap-mode': 'nowrap', 'white-space': 'nowrap' };
+
+/** Every longhand an element computes, custom properties aside, as strings: a snapshot, not the live declaration. */
+function styleOf(el: Element): Map<string, string> {
+    const cs = getComputedStyle(el);
+    const out = new Map<string, string>();
+    for (let i = 0; i < cs.length; i += 1) {
+        const prop = cs.item(i);
+        if (prop.startsWith('--')) continue;
+        out.set(prop, cs.getPropertyValue(prop));
+    }
+    return out;
+}
+
+/** What an element no rule names computes under `parent`: a `span` with `all: unset`, appended for the read and taken out. */
+function untouchedStyle(parent: Element): Map<string, string> {
+    const ref = document.createElement('span');
+    ref.style.setProperty('all', 'unset');
+    ref.style.setProperty('unicode-bidi', 'normal');
+    parent.append(ref);
+    try {
+        return styleOf(ref);
+    } finally {
+        ref.remove();
+    }
+}
+
+/** Whether an element is painted: it, or the nearest ancestor with a box, displays and is not inside a `display: none`. */
+function rendersAt(el: Element): boolean {
+    let at: Element | null = el;
+    while (at !== null && getComputedStyle(at).display === 'contents') at = at.parentElement;
+    return at !== null && getComputedStyle(at).display !== 'none' && at.checkVisibility();
+}
+
+/** Where a broken figure stands, for the coverage the runner owes by surface. */
+function figureSurface(figure: Element): string {
+    if (figure.closest(".shop-window[data-mode='cycle']") !== null) return 'cycle';
+    if (figure.closest('.shop-window') !== null) return 'wall';
+    if (figure.matches('.row.big dd')) return 'paid';
+    if (figure.closest('.face-x') !== null) return 'face';
+    if (figure.closest('.pay-x') !== null) return 'pay';
+    if (figure.matches('.pay-line-x')) return 'line';
+    if (figure.matches('[data-role="pay-total"]')) return 'total';
+    if (figure.matches('[data-role="selection-total"]')) return 'strip';
+    if (figure.closest('.sel-sub') !== null) return 'chosen';
+    if (figure.closest('.item-head') !== null) return 'row';
+    return describe(figure);
+}
 
 function figureInkFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
     for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
-        if (say.closest('.deck-stall') !== null || say.getClientRects().length === 0) continue;
+        if (say.closest('.deck-stall') !== null) continue;
         const figure = say.parentElement;
-        if (figure === null) continue;
-        figureInkByClass[measuringClass] = (figureInkByClass[measuringClass] ?? 0) + 1;
-        const own = getComputedStyle(figure);
+        // Skipped only where the money node itself is not painted — never
+        // because the `.fig-say` has no box, which is what a look hiding it
+        // would give.
+        if (figure === null || !rendersAt(figure)) continue;
+        const surface = figureSurface(figure);
+        const byLook = (figureInkByClass[measuringClass] ??= {});
+        byLook[surface] = (byLook[surface] ?? 0) + 1;
+        const pieces = [say, ...say.querySelectorAll<HTMLElement>('*')].filter((piece) => piece.nodeName !== 'WBR');
+        // Every piece as painted, before any reference joins the tree.
+        const painted = pieces.map((piece) => ({ piece, style: styleOf(piece) }));
+        const untouched = new Map<Element, Map<string, string>>();
+        for (const { piece } of painted) {
+            const parent = piece.parentElement!;
+            if (!untouched.has(parent)) untouched.set(parent, untouchedStyle(parent));
+        }
         const faults: string[] = [];
-        for (const piece of [say, ...say.querySelectorAll<HTMLElement>('*')]) {
-            if (piece.nodeName === 'WBR') continue;
-            const cs = getComputedStyle(piece);
+        for (const { piece, style } of painted) {
+            const want = untouched.get(piece.parentElement!)!;
             const name = piece === say ? '.fig-say' : piece.classList.contains('fig-end') ? '.fig-end' : describe(piece);
-            for (const prop of FIGURE_INK_SHARED) {
-                const mine = cs.getPropertyValue(prop);
-                const its = own.getPropertyValue(prop);
-                if (mine !== its) faults.push(`${name} has ${prop} ${mine || '(none)'} where the figure has ${its || '(none)'}`);
+            const own = piece.classList.contains('fig-end') ? FIG_END_OWN : {};
+            const block = style.get('display') !== 'inline';
+            for (const [prop, value] of style) {
+                if ((block && FIGURE_INK_GEOMETRY.has(prop)) || prop === 'box-sizing' || own[prop] === value) continue;
+                const expected = want.get(prop) ?? '';
+                if (value !== expected) {
+                    faults.push(`${name} computes ${prop} ${value || '(nothing)'}, where an untouched piece computes ${expected || '(nothing)'}`);
+                }
             }
-            for (const [prop, initial] of Object.entries(FIGURE_INK_OWN)) {
-                const mine = cs.getPropertyValue(prop);
-                if (mine !== '' && mine !== initial) faults.push(`${name} has ${prop} ${mine} of its own`);
-            }
-            const parentDisplay = piece.parentElement === null ? '' : getComputedStyle(piece.parentElement).display;
-            const blockified = /(?:^|\s)(?:flex|grid|inline-flex|inline-grid)$/.test(parentDisplay);
-            const display = blockified ? 'block' : 'inline';
-            if (cs.display !== display) faults.push(`${name} displays ${cs.display}, not the ${display} it is`);
             for (const pseudo of ['::before', '::after'] as const) {
                 const content = getComputedStyle(piece, pseudo).content;
                 if (content !== 'none' && content !== 'normal' && content !== '') {
@@ -2558,7 +2586,7 @@ function figureInkFaults(screen: string, label: string): Failure[] {
                 theme: label,
                 check: FIGURE_INK_CHECK,
                 detail:
-                    `the broken figure "${(say.getAttribute('aria-label') ?? '').slice(0, 40)}" in ${describe(figure)}: ` +
+                    `the broken figure "${(say.getAttribute('aria-label') ?? '').slice(0, 40)}" in ${describe(figure)} (${surface}): ` +
                     `${faults.slice(0, 4).join('; ')}${faults.length > 4 ? `; and ${faults.length - 4} more` : ''} — a look dresses a figure only as a whole`,
             });
         }

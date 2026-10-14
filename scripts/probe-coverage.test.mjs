@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, FIGURE_SURFACES_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -29,8 +29,10 @@ const cardRead = {
  * paint, and money figures asked about a self-clip — every geometry pass
  * owes both.
  */
+/** Every surface a broken figure stands on (round 2: the ink rule is owed per surface). */
+const EVERY_SURFACE = Object.fromEntries(['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row', 'wall', 'cycle'].map((surface) => [surface, 4]));
 const moneyRead = {
-    figureInkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 12])),
+    figureInkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_SURFACE])),
     selfClipByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 80])),
 };
 const full = {
@@ -709,31 +711,48 @@ const MONEY_RULE = /^a-(?:broken-figure-wears-the-figures-own-ink|money-figure-n
 describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => {
     /**
      * D-2026-10-14-02: `a-broken-figure-wears-the-figures-own-ink` and
-     * `a-money-figure-never-clips-itself` run on every geometry pass, and
-     * every one of them paints a broken figure and money figures on every
-     * look — so a fixture that stopped painting one leaves a gap, not a green
-     * pass over nothing. The contrast and reduced-motion passes owe neither.
+     * `a-money-figure-never-clips-itself` run on every geometry pass. The ink
+     * rule is owed on every surface a pass paints a broken figure on, every
+     * look (round 2, the critic's P3-3: one read a look let a surface stop
+     * being read and stay green); the self-clip rule some money figures a
+     * look. The contrast and reduced-motion passes owe neither.
      */
-    it('owes both on every look each geometry pass painted, and names the look that read none', () => {
+    it('owes the surfaces each geometry pass paints, by name', () => {
+        const page = ['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row'];
+        assert.deepEqual(FIGURE_SURFACES_OWED, {
+            mobile: page,
+            narrow: page,
+            desktop: [...page, 'wall', 'cycle'],
+            canvas: ['wall', 'cycle'],
+            portrait: ['wall', 'cycle'],
+            tablet: ['wall', 'cycle'],
+            'desk-wall': ['wall', 'cycle'],
+            'short-wall': ['wall', 'cycle'],
+        });
+        assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY].sort());
+    });
+
+    it('owes both on every look each geometry pass painted, and names the look and surface that read none', () => {
         for (const pass of GEOMETRY) {
             const read = { ...full, ...painted, wallControlRolesByClass: undefined };
             assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => MONEY_RULE.test(gap)), [], pass);
+            const surface = FIGURE_SURFACES_OWED[pass].at(-1);
             const short = {
                 ...read,
-                figureInkByClass: { ...read.figureInkByClass, 't-neo': 0 },
+                figureInkByClass: { ...read.figureInkByClass, 't-neo': { ...EVERY_SURFACE, [surface]: 0 } },
                 selfClipByClass: { ...read.selfClipByClass, 't-rural': 0 },
             };
             assert.deepEqual(
                 probeCoverageGaps(pass, short).filter((gap) => MONEY_RULE.test(gap)),
                 [
-                    'a-broken-figure-wears-the-figures-own-ink read no broken figure on a t-neo stall',
+                    `a-broken-figure-wears-the-figures-own-ink read no broken figure on a t-neo stall's ${surface}`,
                     'a-money-figure-never-clips-itself asked no money figure on a t-rural stall',
                 ],
                 pass,
             );
             assert.equal(
                 probeCoverageGaps(pass, { ...read, figureInkByClass: {}, selfClipByClass: {} }).filter((gap) => MONEY_RULE.test(gap)).length,
-                CARD_LOOKS.length * 2,
+                CARD_LOOKS.length * (FIGURE_SURFACES_OWED[pass].length + 1),
                 pass,
             );
         }
@@ -743,12 +762,12 @@ describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => 
     });
 
     it('prints both on every geometry pass\'s line', () => {
-        const read = { figureInkByClass: { 't-neo': 3, 't-modern': 2 }, selfClipByClass: { 't-modern': 40 } };
-        assert.match(probeCoverageLine('narrow', read), / · broken figures held to their ink: t-modern 2, t-neo 3 · money figures asked about a self-clip: t-modern 40/);
+        const read = { figureInkByClass: { 't-neo': { face: 3 }, 't-modern': { cycle: 2, wall: 1 } }, selfClipByClass: { 't-modern': 40 } };
+        assert.match(probeCoverageLine('narrow', read), / · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40/);
         assert.match(
             probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, ...read }),
-            /^wall controls read: 2 · status line asked: 3 · broken figures held to their ink: t-modern 2, t-neo 3 · money figures asked about a self-clip: t-modern 40$/,
+            /^wall controls read: 2 · status line asked: 3 · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40$/,
         );
-        assert.match(probeCoverageLine('desktop', { ...full, ...read }), / · broken figures held to their ink: t-modern 2, t-neo 3 · money figures asked about a self-clip: t-modern 40/);
+        assert.match(probeCoverageLine('desktop', { ...full, ...read }), / · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40/);
     });
 });
