@@ -6917,7 +6917,7 @@ ancestors, never the node itself: Neo's Cycle figure planted
 `display: inline-block; max-width: 2.5em; overflow: hidden` read "12, /
 345." with the probe page silent (the wall-cycle critic's P2-1, plant f).
 
-**The rule** (`moneySelfClipFaults`, `layout/probe.ts`): on every screen,
+**The rule** (round 1's; every clipping box up to the surface since round 2, below) (`moneySelfClipFaults`, `layout/probe.ts`): on every screen,
 look and variant of every geometry pass, every money figure painted with a
 box (`MONEY_FIGURES`: the money set less the two record hexes — a capped,
 scrolling window by the owner's design — and `pay-lines`, a list whose wall
@@ -7072,3 +7072,44 @@ surface leaves a gap by name, where round 1's one read a look did not notice
 - the whole runner (every round-2 plant at once, scratch clones of the
   branch and of main run back to back): this rule 54 at each page pass —
   Modern 16, Neo 22, Rural 16 — and 0 on main.
+
+**The self-clip rule holds every clipping box up to the surface** (P2-2).
+Round 1 asked the node, `.item-a` and `.item-p` whether they clipped
+content larger than themselves, and left out the record hexes and
+`pay-lines` whole because they scroll by design — which admitted `hidden`
+on them, and every other box: `.face-x` cutting a broken figure's second
+line, Pay several's list clipped on the ordinary sheet, a record hex cut to
+one line, a row head cut from below. Now (`cutFromItsSurface`): every money
+node, the hexes and `pay-lines` included, and `.pay-line-x`, has its own
+text — its range's line boxes — held, axis by axis, to the node and every
+ancestor up to its surface (`SELF_CLIP_SURFACE`: `.item`, `.card`,
+`.sheet`, `.zoom-card`, `.poster-page`, inclusive; else up to the shell's
+scroll region, not asked). `auto` or `scroll` on an axis is reachable, and
+above it the text is held to that box's edges; `hidden`, `clip` or a
+painting `contain` is a cut, and text more than a pixel past that box's
+padding box fails, naming it. A cut found inside a turned frame is read
+again with the chain's transforms held off. The second half (own width,
+`cutSideways` over the text) stands. **Not read**: the money node's own
+`clip-path`, mask, opacity, filter, transform, spacing or decoration (P2-3);
+any box's `clip-path`; a cut above the surface (the wall's region, from
+below, is `nothing-on-the-wall-is-cut-from-below`'s); a line's ink past its
+content area (the text is its line boxes).
+
+**Red proofs** (2026-10-14, the scratch clone):
+
+- the critic's four (`e-clip.css` at once), on the probe page: 52 failures
+  of this rule at 390 and at 360 and 56 at 1280 — Modern's face "cut … by
+  div.face-x" on `item-listing-long-figure` and `item-quote-long-figure`;
+  Rural's Pay several "cut from above or below by dl.pay-lines" on the
+  ordinary `pay-several` as well as `-figure-lines`, `-long-figure` and
+  `-longest-figure`; Neo's record hexes "cut from above or below by itself"
+  on `publish-name` and `describe`; Neo's rows "by button.item-head" on
+  `row-17`, `row-21`, `row-longest-figure`, `quote-row-18`,
+  `quote-row-longest-figure` and the strip's rows, and at the desk the
+  wall's Browse rows "by div.item-head.sw-row". Round 1's rule read none;
+- plant f, on the probe page: every Neo Cycle card at the tablet and the
+  canvas ("span.item-x … cut sideways by itself");
+- the whole runner (the runs above): this rule, Neo 28 and Rural 20 at the
+  phone and the narrow phone, 52 and 16 at the desk, Neo 78 at the canvas
+  and `desk-wall`, 114 at the tall wall, 102 at the tablet and `short-wall`,
+  12 in the reduced-motion pass; 0 on main.

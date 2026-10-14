@@ -56,7 +56,7 @@ import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetA
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
-import { MONEY, MONEY_OUTSIDE_PROTECTED, MONEY_SET } from './moneySet';
+import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
@@ -2596,47 +2596,109 @@ function figureInkFaults(screen: string, label: string): Failure[] {
 
 /*
  * **A money figure never clips itself** (CRITIC-WALL-CYCLE, P2-1; folded
- * into D-2026-10-14-02's branch). `cutSideways` walks a money node's
- * ancestors, never the node itself, and `cycleFigureFaults` reads layout
- * rects, which a clip does not shorten: Neo's Cycle figure planted
- * `display: inline-block; max-width: 2.5em; overflow: hidden` read
- * "12, / 345." with the probe silent at every wall size. So on every
- * screen, look and variant of every geometry pass, every money figure
- * (`MONEY_FIGURES`) painted with a box is asked two things:
+ * into D-2026-10-14-02's branch; widened in round 2, CRITIC-MONEY-GUARDS
+ * P2-2). `cutSideways` walks a money node's ancestors sideways only, and
+ * `cycleFigureFaults` reads layout rects, which a clip does not shorten:
+ * Neo's Cycle figure planted `display: inline-block; max-width: 2.5em;
+ * overflow: hidden` read "12, / 345." with the probe silent. Round 1 asked
+ * three boxes (the node, `.item-a`, `.item-p`) whether they clipped content
+ * larger than themselves, and left out the record hexes and `pay-lines`
+ * whole because they scroll by design — which admitted `overflow: hidden`
+ * on them too, and every other box: `.face-x` cutting a broken figure's
+ * second line, Pay several's list clipped on the ordinary sheet, a record
+ * hex cut to one line and a row head cut from below all passed.
  *
- * - **it does not clip its own digits**: neither the node nor its
- *   figure's own boxes (`.item-a`, `.item-p` where it stands in a row or a
- *   card) clips — an `overflow` other than `visible` on an axis, or a
- *   `contain` that paints — with its content larger than its box on that
- *   axis (more than a pixel past the client box);
+ * On every screen, look and variant of every geometry pass, every money node
+ * painted (`MONEY_SET`, the hexes and `pay-lines` included, and Pay several's
+ * line figures, `.pay-line-x`) is asked two things:
+ *
+ * - **no box cuts its text**: its own text — the line boxes of its range —
+ *   is held, axis by axis, to the node and every ancestor up to the surface
+ *   it stands on (`SELF_CLIP_SURFACE`: the card, row card, sheet or plate,
+ *   inclusive; else the shell's scroll region, which is not asked). An
+ *   `overflow` of `auto` or `scroll` on an axis is reachable: the text it
+ *   hides is scrolled to, so above it the text is held to that box's own
+ *   edges. `hidden` or `clip`, or a `contain` that paints, is a cut: text
+ *   more than a pixel past that box's padding box on that axis fails,
+ *   naming the box. A box with no box of its own (inline, `contents`) clips
+ *   nothing and is passed. A cut found inside a turned frame (Rural's tag
+ *   sways) is read again with the chain's transforms held off, as
+ *   `cycleFigureFaults` reads the Cycle card;
  * - **its own width does not cut its text**: where the node's own text runs
- *   past its own box sideways (its `width` or `max-width` narrower than the
- *   figure), the text is held to `cutSideways` — past a side edge or an
- *   ancestor that clips sideways, with nothing to scroll, is cut — which
- *   `cutSideways` only ever asked of the box.
+ *   past its own box sideways, the text is held to `cutSideways` — every
+ *   clipping ancestor and the viewport's side edge, past the surface too.
  *
- * An inline element neither clips nor sets a width, so only its text is
- * read. The ticker's moving ribbon is `cutSideways`' own exception. Counted
- * per look (`selfClipByClass`): the runner owes some on every look each
- * geometry pass painted (`probe-coverage.mjs`).
+ * Not read, stated: the money node's own `clip-path`, mask, opacity,
+ * filter, transform, spacing or decoration (CRITIC-MONEY-GUARDS P2-3, the
+ * owner's call); a clip above the surface from below (the wall's region is
+ * `nothing-on-the-wall-is-cut-from-below`'s); a `clip-path` on any box. The
+ * ticker's moving ribbon is `cutSideways`' own exception. Counted per look
+ * (`selfClipByClass`): the runner owes some on every look each geometry pass
+ * painted (`probe-coverage.mjs`).
  */
 const SELF_CLIP_CHECK = 'a-money-figure-never-clips-itself';
-/** Money figures asked, per look class. */
+/** Money nodes asked, per look class. */
 const selfClipByClass: Record<string, number> = {};
-/**
- * The money set's figures (`MONEY_SET`): every node in it but the two
- * record hexes — a capped, scrolling window by the owner's design
- * (2026-09-01, `.publish-hex` in stall.css), not a figure — and `pay-lines`,
- * a list whose figures are its lines' and whose wall form scrolls by design
- * (`a-payment-list-that-scrolls-says-how-many-lines-it-hides`); plus Pay
- * several's line figures (`.pay-line-x`), which stand inside that list.
- */
-const MONEY_NOT_FIGURES: ReadonlySet<string> = new Set([
-    '[data-role="publish-hex"]',
-    '[data-role="describe-hex"]',
-    '[data-role="pay-lines"]',
-]);
-const MONEY_FIGURES = [...MONEY_SET.filter((sel) => !MONEY_NOT_FIGURES.has(sel)), '.pay-line-x'].join(', ');
+/** The money set and Pay several's line figures (which stand inside the money box `pay-lines`). */
+const MONEY_FIGURES = `${MONEY}, .pay-line-x`;
+/** Where a money node's own surface ends: its card, row card, sheet or plate. */
+const SELF_CLIP_SURFACE = '.item, .card, .sheet, .zoom-card, .poster-page';
+/** Where the walk stops without asking: the shell's scroll region and the stall. */
+const SELF_CLIP_ABOVE = '.stall-scroll, .stall, #app';
+
+/** The text of `node` cut by a box from it up to its surface, as a sentence, or undefined. */
+function cutFromItsSurface(node: HTMLElement): string | undefined {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    if (lines.length === 0) return undefined;
+    let left = Math.min(...lines.map((r) => r.left));
+    let right = Math.max(...lines.map((r) => r.right));
+    let top = Math.min(...lines.map((r) => r.top));
+    let bottom = Math.max(...lines.map((r) => r.bottom));
+    for (let at: Element | null = node; at !== null && !at.matches(SELF_CLIP_ABOVE); at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        if (cs.display !== 'inline' && cs.display !== 'contents' && cs.display !== 'none') {
+            const r = at.getBoundingClientRect();
+            const pad = {
+                left: r.left + Number.parseFloat(cs.borderLeftWidth),
+                right: r.right - Number.parseFloat(cs.borderRightWidth),
+                top: r.top + Number.parseFloat(cs.borderTopWidth),
+                bottom: r.bottom - Number.parseFloat(cs.borderBottomWidth),
+            };
+            const paints = /\b(?:paint|strict|content)\b/.test(cs.contain);
+            const where = at === node ? 'itself' : describe(at);
+            for (const [axis, mode] of [
+                ['x', cs.overflowX],
+                ['y', cs.overflowY],
+            ] as const) {
+                const scrolls = mode === 'auto' || mode === 'scroll';
+                const cuts = mode === 'hidden' || mode === 'clip' || (paints && !scrolls);
+                if (!scrolls && !cuts) continue;
+                const [lo, hi, edgeLo, edgeHi] =
+                    axis === 'x' ? [left, right, pad.left, pad.right] : [top, bottom, pad.top, pad.bottom];
+                const past = Math.max(edgeLo - lo, hi - edgeHi);
+                if (cuts && past > 1) {
+                    return (
+                        `has ${past.toFixed(1)}px of its text cut ${axis === 'x' ? 'sideways' : 'from above or below'} by ${where} ` +
+                        `(overflow ${cs.overflowX} ${cs.overflowY}${paints ? `, contain ${cs.contain}` : ''}; ` +
+                        `width ${cs.width}, max-width ${cs.maxWidth}, height ${cs.height}, max-height ${cs.maxHeight})`
+                    );
+                }
+                // Above this box the text is what this box shows, or scrolls to.
+                if (axis === 'x') {
+                    left = Math.max(left, edgeLo);
+                    right = Math.min(right, edgeHi);
+                } else {
+                    top = Math.max(top, edgeLo);
+                    bottom = Math.min(bottom, edgeHi);
+                }
+            }
+        }
+        if (at.matches(SELF_CLIP_SURFACE)) break;
+    }
+    return undefined;
+}
 
 function moneySelfClipFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
@@ -2649,30 +2711,42 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
         });
     };
     for (const node of document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`)) {
-        if (node.closest('.deck-stall') !== null || node.getClientRects().length === 0) continue;
+        if (node.closest('.deck-stall') !== null || !rendersAt(node)) continue;
         const ribbon = node.closest('[data-ribbon]');
         if (ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still') continue;
         selfClipByClass[measuringClass] = (selfClipByClass[measuringClass] ?? 0) + 1;
-        const boxes = [node, node.closest<HTMLElement>('.item-a'), node.closest<HTMLElement>('.item-p')].filter(
-            (b, i, all): b is HTMLElement => b !== null && all.indexOf(b) === i,
-        );
-        for (const box of boxes) {
-            const cs = getComputedStyle(box);
-            if (cs.display === 'inline' || cs.display === 'contents' || cs.display === 'none') continue;
-            const paints = /\b(?:paint|strict|content)\b/.test(cs.contain);
-            const hiddenX = box.scrollWidth - box.clientWidth;
-            const hiddenY = box.scrollHeight - box.clientHeight;
-            const cutX = (cs.overflowX !== 'visible' || paints) && hiddenX > 1;
-            const cutY = (cs.overflowY !== 'visible' || paints) && hiddenY > 1;
-            if (cutX || cutY) {
-                say(
-                    node,
-                    `is clipped by ${box === node ? 'itself' : `its figure's own box ${describe(box)}`} ` +
-                        `(overflow ${cs.overflowX} ${cs.overflowY}${paints ? `, contain ${cs.contain}` : ''}; ` +
-                        `width ${cs.width}, max-width ${cs.maxWidth}, height ${cs.height}, max-height ${cs.maxHeight}): ` +
-                        `${cutX ? `${hiddenX}px of its content hidden sideways` : ''}${cutX && cutY ? ', ' : ''}${cutY ? `${hiddenY}px hidden down` : ''}`,
-                );
+        let cut = cutFromItsSurface(node);
+        if (cut !== undefined) {
+            // A turned frame (Rural's swaying tag) reads its axis-aligned
+            // bounds a few pixels wide: read again with the turns held off.
+            const chain: HTMLElement[] = [];
+            for (let at: HTMLElement | null = node; at !== null && !at.matches(SELF_CLIP_ABOVE); at = at.parentElement) {
+                chain.push(at);
+                if (at.matches(SELF_CLIP_SURFACE)) break;
             }
+            const turned = chain.some((el) => {
+                const cs = getComputedStyle(el);
+                return cs.transform !== 'none' || cs.rotate !== 'none';
+            });
+            if (turned) {
+                const kept = chain.map((el) => el.getAttribute('style'));
+                for (const el of chain) {
+                    el.style.setProperty('transform', 'none', 'important');
+                    el.style.setProperty('rotate', 'none', 'important');
+                }
+                try {
+                    cut = cutFromItsSurface(node);
+                } finally {
+                    chain.forEach((el, i) => {
+                        const style = kept[i];
+                        if (style === null) el.removeAttribute('style');
+                        else el.setAttribute('style', style!);
+                    });
+                }
+            }
+        }
+        if (cut !== undefined) {
+            say(node, cut);
         }
         const range = document.createRange();
         range.selectNodeContents(node);
@@ -2681,16 +2755,16 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
         const own = node.getBoundingClientRect();
         const left = Math.min(...lines.map((r) => r.left));
         const right = Math.max(...lines.map((r) => r.right));
-        if (left >= own.left - 0.5 && right <= own.right + 0.5) continue;
+        if (getComputedStyle(node).display === 'inline' || (left >= own.left - 0.5 && right <= own.right + 0.5)) continue;
         const top = Math.min(...lines.map((r) => r.top));
         const bottom = Math.max(...lines.map((r) => r.bottom));
-        const cut = cutSideways(node, new DOMRect(left, top, right - left, bottom - top));
-        if (cut !== undefined) {
+        const sideways = cutSideways(node, new DOMRect(left, top, right - left, bottom - top));
+        if (sideways !== undefined) {
             const cs = getComputedStyle(node);
             say(
                 node,
                 `is narrower than its own text (its box ${Math.round(own.left)}–${Math.round(own.right)}, its text ` +
-                    `${Math.round(left)}–${Math.round(right)}; width ${cs.width}, max-width ${cs.maxWidth}), and its text ${cut}`,
+                    `${Math.round(left)}–${Math.round(right)}; width ${cs.width}, max-width ${cs.maxWidth}), and its text ${sideways}`,
             );
         }
     }
