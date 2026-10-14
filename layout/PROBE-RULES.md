@@ -6692,11 +6692,12 @@ of the branch the same night: 239.6s (load 5–8; main 238.5s beside it) and
   XEC, USD and one CNY quote; `₩` and `元` are drawn by the Mac's fallback
   font, and at 1080x1920 their widest figure has 0.7% to spare. On another
   machine's fallback the margin may be negative (the critic, 2026-10-14).
-- **A money figure that clips itself is unseen**: the Cycle rule and
+- **A money figure that clips itself was unseen**: the Cycle rule and
   `cutSideways` read the figure's ancestors, so `overflow: hidden` with a
   `max-width` on the figure itself passed with 0 failures (the critic's
-  plant: "12, / 345." for `12,345.67 XEC`). For the computed-style money
-  rule (D-2026-10-14-02).
+  plant: "12, / 345." for `12,345.67 XEC`). Read since by
+  `a-money-figure-never-clips-itself` (D-2026-10-14-02's branch, at the end
+  of this file).
 - **Off the probe's sizes** (the scratch harness, the 35 Cycle screens,
   every look bare and worn, 280 cards a size; main's code with the same
   fixtures beside it). Figure cut or over the code / card over the status
@@ -6907,3 +6908,78 @@ page):
   contrast box read's 2.24:1 on the phone and desk jobs; the branch: this
   rule 98 (Modern) and 154 (Neo; 112 at 360) at each page pass and 1,911
   (Rural) at each of the five wall passes, and no `text-spills` left.
+
+### A money figure never clips itself (`a-money-figure-never-clips-itself`)
+
+`a-cycle-card-shows-every-digit-at-every-wall-size` reads layout rects,
+which a clip does not shorten, and `cutSideways` walks a money node's
+ancestors, never the node itself: Neo's Cycle figure planted
+`display: inline-block; max-width: 2.5em; overflow: hidden` read "12, /
+345." with the probe page silent (the wall-cycle critic's P2-1, plant f).
+
+**The rule** (`moneySelfClipFaults`, `layout/probe.ts`): on every screen,
+look and variant of every geometry pass, every money figure painted with a
+box (`MONEY_FIGURES`: the money set less the two record hexes — a capped,
+scrolling window by the owner's design — and `pay-lines`, a list whose wall
+form scrolls by design; plus `.pay-line-x`) is asked two things:
+
+- **it does not clip its own digits**: neither the node nor its figure's own
+  boxes (`.item-a`, `.item-p` where it stands in a row or a card) has an
+  `overflow` other than `visible` on an axis, or a `contain` that paints,
+  with its content more than a pixel larger than its client box on that
+  axis — named with its `width`, `max-width`, `height` and `max-height`;
+- **its own width does not cut its text**: where the node's own text runs
+  past its own box sideways, the text is held to `cutSideways` (a side edge
+  or an ancestor clipping sideways, nothing scrolling), which only ever read
+  the box. Much of this `text-spills` also reads — a block whose visible
+  overflow crosses its nearest clipper — so this half overlaps it; it reads
+  every clipping ancestor and the viewport, and names the money.
+
+An inline element neither clips nor sets a width, so only its text is read.
+The ticker's moving ribbon is `cutSideways`' own exception. Not read,
+stated: a `clip-path` or mask on the money node itself (CLAUDE §6's "a look
+hiding money by opacity, clip, mask or transform", still the owner's call),
+and a cut from below by an ancestor (the node's and its boxes' own
+vertical clip is read; `nothing-on-the-wall-is-cut-from-below` reads the
+wall's). **Owed** (`selfClipByClass`): every geometry pass, money figures
+asked on every look it painted (593–1,441 a shipped look a pass, the
+skeleton 148–469).
+
+**Red proofs** (2026-10-14, the scratch clone, the probe page):
+
+- **plant f** (the critic's), `.t-neo.shop-window[data-mode='cycle']
+  .item-head .item-p .item-x { display: inline-block; max-width: 2.5em;
+  overflow: hidden }`: 2 failures (bare and worn) on every Neo Cycle screen
+  at the counter tablet and the canvas, e.g. "span.item-x
+  "123.45 XEC" is clipped by itself (overflow hidden hidden; width
+  80.625px, max-width 80.64px …): 119px of its content hidden sideways";
+  beside them, at the tablet and the canvas, the plant's own
+  `nothing-in-the-body-reaches-the-status-line` (its lines wrap and the card
+  grows);
+- **the second half**, `.stall.t-neo:not(.shop-window) .item-head .item-x {
+  display: inline-block; width: 1px; white-space: nowrap }`: 30 at 390 and
+  18 at 1280 on `offers`, "is narrower than its own text (its box 336–337,
+  its text 336–385 …), and its text is cut sideways by div.item", one "runs
+  past the viewport's side edge" — beside `text-spills`, which reads the
+  same block's spill;
+- **the whole runner** (the runs above): main failed plant f only by its
+  side effects — the contrast pass's digit read on the one wrapped Cycle job
+  pair (`shop-window-cycle-longest-figure` at the desk: "2 of its 20 letters
+  and digits stand on no line of it"), the status line and the Cycle rule
+  where the clipped box wrapped; the branch: this rule on every Neo Cycle
+  card, 70 at the canvas, 98 at the tall wall, 86 at the tablet, 70 at
+  `desk-wall`, 86 at `short-wall` and 16 at the desk.
+
+### Cost (the three rules)
+
+Back to back on this Mac, 2026-10-14 07:08 and 07:12 (load 2.0 rising to
+5.1 — another builder's work beside the runs), the full runner with no
+selection: main 203.2s, the branch 208.2s (+5.0s, of 300). The geometry
+passes 57.5 → 61.2s (+3.7s): the phone 8.3 → 11.2s, the desk 10.3 → 12.7s,
+the canvas 5.7 → 5.8s, the tall wall 7.7 → 8.1s, the tablet 5.7 → 6.1s,
+`desk-wall` 4.7 → 4.9s, `short-wall` 6.7 → 5.8s and the narrow phone 8.4 →
+6.6s (the last two faster on the branch: the machine, not the rules). The
+contrast pass 130.1 → 134.1s, where the rules do not run (a contrast page
+asks `?screens=` and measures nothing); that +4.0s is the load. One pair,
+not repeated. All three are computed style, layout rects and the tree's
+own scroll sizes: no capture, no new screen, no new job.

@@ -56,7 +56,7 @@ import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetA
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
-import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
+import { MONEY, MONEY_OUTSIDE_PROTECTED, MONEY_SET } from './moneySet';
 import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
@@ -2567,6 +2567,109 @@ function figureInkFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **A money figure never clips itself** (CRITIC-WALL-CYCLE, P2-1; folded
+ * into D-2026-10-14-02's branch). `cutSideways` walks a money node's
+ * ancestors, never the node itself, and `cycleFigureFaults` reads layout
+ * rects, which a clip does not shorten: Neo's Cycle figure planted
+ * `display: inline-block; max-width: 2.5em; overflow: hidden` read
+ * "12, / 345." with the probe silent at every wall size. So on every
+ * screen, look and variant of every geometry pass, every money figure
+ * (`MONEY_FIGURES`) painted with a box is asked two things:
+ *
+ * - **it does not clip its own digits**: neither the node nor its
+ *   figure's own boxes (`.item-a`, `.item-p` where it stands in a row or a
+ *   card) clips — an `overflow` other than `visible` on an axis, or a
+ *   `contain` that paints — with its content larger than its box on that
+ *   axis (more than a pixel past the client box);
+ * - **its own width does not cut its text**: where the node's own text runs
+ *   past its own box sideways (its `width` or `max-width` narrower than the
+ *   figure), the text is held to `cutSideways` — past a side edge or an
+ *   ancestor that clips sideways, with nothing to scroll, is cut — which
+ *   `cutSideways` only ever asked of the box.
+ *
+ * An inline element neither clips nor sets a width, so only its text is
+ * read. The ticker's moving ribbon is `cutSideways`' own exception. Counted
+ * per look (`selfClipByClass`): the runner owes some on every look each
+ * geometry pass painted (`probe-coverage.mjs`).
+ */
+const SELF_CLIP_CHECK = 'a-money-figure-never-clips-itself';
+/** Money figures asked, per look class. */
+const selfClipByClass: Record<string, number> = {};
+/**
+ * The money set's figures (`MONEY_SET`): every node in it but the two
+ * record hexes — a capped, scrolling window by the owner's design
+ * (2026-09-01, `.publish-hex` in stall.css), not a figure — and `pay-lines`,
+ * a list whose figures are its lines' and whose wall form scrolls by design
+ * (`a-payment-list-that-scrolls-says-how-many-lines-it-hides`); plus Pay
+ * several's line figures (`.pay-line-x`), which stand inside that list.
+ */
+const MONEY_NOT_FIGURES: ReadonlySet<string> = new Set([
+    '[data-role="publish-hex"]',
+    '[data-role="describe-hex"]',
+    '[data-role="pay-lines"]',
+]);
+const MONEY_FIGURES = [...MONEY_SET.filter((sel) => !MONEY_NOT_FIGURES.has(sel)), '.pay-line-x'].join(', ');
+
+function moneySelfClipFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const say = (node: Element, detail: string): void => {
+        out.push({
+            screen,
+            theme: label,
+            check: SELF_CLIP_CHECK,
+            detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}" ${detail} at ${window.innerWidth}x${window.innerHeight}`,
+        });
+    };
+    for (const node of document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`)) {
+        if (node.closest('.deck-stall') !== null || node.getClientRects().length === 0) continue;
+        const ribbon = node.closest('[data-ribbon]');
+        if (ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still') continue;
+        selfClipByClass[measuringClass] = (selfClipByClass[measuringClass] ?? 0) + 1;
+        const boxes = [node, node.closest<HTMLElement>('.item-a'), node.closest<HTMLElement>('.item-p')].filter(
+            (b, i, all): b is HTMLElement => b !== null && all.indexOf(b) === i,
+        );
+        for (const box of boxes) {
+            const cs = getComputedStyle(box);
+            if (cs.display === 'inline' || cs.display === 'contents' || cs.display === 'none') continue;
+            const paints = /\b(?:paint|strict|content)\b/.test(cs.contain);
+            const hiddenX = box.scrollWidth - box.clientWidth;
+            const hiddenY = box.scrollHeight - box.clientHeight;
+            const cutX = (cs.overflowX !== 'visible' || paints) && hiddenX > 1;
+            const cutY = (cs.overflowY !== 'visible' || paints) && hiddenY > 1;
+            if (cutX || cutY) {
+                say(
+                    node,
+                    `is clipped by ${box === node ? 'itself' : `its figure's own box ${describe(box)}`} ` +
+                        `(overflow ${cs.overflowX} ${cs.overflowY}${paints ? `, contain ${cs.contain}` : ''}; ` +
+                        `width ${cs.width}, max-width ${cs.maxWidth}, height ${cs.height}, max-height ${cs.maxHeight}): ` +
+                        `${cutX ? `${hiddenX}px of its content hidden sideways` : ''}${cutX && cutY ? ', ' : ''}${cutY ? `${hiddenY}px hidden down` : ''}`,
+                );
+            }
+        }
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+        if (lines.length === 0) continue;
+        const own = node.getBoundingClientRect();
+        const left = Math.min(...lines.map((r) => r.left));
+        const right = Math.max(...lines.map((r) => r.right));
+        if (left >= own.left - 0.5 && right <= own.right + 0.5) continue;
+        const top = Math.min(...lines.map((r) => r.top));
+        const bottom = Math.max(...lines.map((r) => r.bottom));
+        const cut = cutSideways(node, new DOMRect(left, top, right - left, bottom - top));
+        if (cut !== undefined) {
+            const cs = getComputedStyle(node);
+            say(
+                node,
+                `is narrower than its own text (its box ${Math.round(own.left)}–${Math.round(own.right)}, its text ` +
+                    `${Math.round(left)}–${Math.round(right)}; width ${cs.width}, max-width ${cs.maxWidth}), and its text ${cut}`,
+            );
+        }
+    }
+    return out;
+}
+
+/*
  * **A payment list that scrolls says how many lines it hides** (2026-09-24,
  * the owner's decision 4). The payment's lines scroll inside the wall's
  * plate under a cap in pixels (`window.css`), and nothing said so: a
@@ -4894,6 +4997,7 @@ for (const screen of measured) {
             failures.push(...cardFigureFaults(screen, label));
             failures.push(...cycleFigureFaults(screen, label));
             failures.push(...figureInkFaults(screen, label));
+            failures.push(...moneySelfClipFaults(screen, label));
             failures.push(...smallTextFaults(screen, label));
             failures.push(...tileLetterCuts(screen, label));
             failures.push(...markFaults(screen, label, look));
@@ -7303,6 +7407,8 @@ const verdict = {
     cycleFigureByClass,
     /* Broken figures whose pieces were held to the figure's own ink, per look (`a-broken-figure-wears-the-figures-own-ink`). */
     figureInkByClass,
+    /* Money figures asked whether they clip themselves, per look (`a-money-figure-never-clips-itself`). */
+    selfClipByClass,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);

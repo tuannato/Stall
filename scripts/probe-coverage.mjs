@@ -95,6 +95,9 @@
  *   (`figureInkByClass`): each pass paints one — the long card and row
  *   figures on the page and narrow passes, the Cycle card's break steps on
  *   the canvas and the four wall passes.
+ * - **`a-money-figure-never-clips-itself`** (CRITIC-WALL-CYCLE P2-1): every
+ *   geometry pass owes, on every look it painted, money figures asked
+ *   (`selfClipByClass`).
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -146,7 +149,8 @@ const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short
 /**
  * Every geometry pass: the two page passes, the canvas, the four wall passes
  * and the narrow phone. Each paints a broken money figure on every look
- * (`a-broken-figure-wears-the-figures-own-ink`).
+ * (`a-broken-figure-wears-the-figures-own-ink`) and money figures
+ * (`a-money-figure-never-clips-itself`).
  */
 const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
 /**
@@ -358,14 +362,18 @@ export function probeCoverageGaps(
             }
         }
     }
-    // A broken figure's pieces held to the figure's own ink
-    // (D-2026-10-14-02): on every look a geometry pass painted, since every
-    // one of them paints one.
+    // A broken figure's pieces held to the figure's own ink, and money
+    // figures asked whether they clip themselves (D-2026-10-14-02): on every
+    // look a geometry pass painted, since every one of them paints both.
     if (GEOMETRY_PASSES.has(pass)) {
         const ink = report.figureInkByClass ?? {};
+        const clip = report.selfClipByClass ?? {};
         for (const cls of report.sheetClasses ?? []) {
             if (!((ink[cls] ?? 0) > 0)) {
                 gaps.push(`a-broken-figure-wears-the-figures-own-ink read no broken figure on a ${cls} stall`);
+            }
+            if (!((clip[cls] ?? 0) > 0)) {
+                gaps.push(`a-money-figure-never-clips-itself asked no money figure on a ${cls} stall`);
             }
         }
     }
@@ -544,8 +552,12 @@ export function probeCoverageLine(pass, report) {
         ? ` · card figures read: ${Object.entries(cardSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}` +
           ` · ladders compared: ${ladderSum}`
         : '';
-    // The money rule of D-2026-10-14-02, on every geometry pass whose page reported it.
-    const money = report.figureInkByClass === undefined ? '' : ` · broken figures held to their ink: ${perClass(report.figureInkByClass)}`;
+    // The money rules of D-2026-10-14-02, on every geometry pass whose page reported them.
+    const money =
+        report.figureInkByClass === undefined && report.selfClipByClass === undefined
+            ? ''
+            : ` · broken figures held to their ink: ${perClass(report.figureInkByClass)}` +
+              ` · money figures asked about a self-clip: ${perClass(report.selfClipByClass)}`;
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }
