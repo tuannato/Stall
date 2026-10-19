@@ -55,6 +55,7 @@ import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from '.
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
+import { PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
@@ -3226,15 +3227,28 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   `visible` paints no colour, and one whose `display` is `contents` has no
  *   box, yet each ends the walk as an opaque ground (the critic's V and DC,
  *   round 5), and what lies under it is not read (P2-1);
- * - a paint a box outside the walk lays under the glyphs: a sibling's
- *   background or shadow run under them, a positioned box (the coverage
- *   rules'), an in-flow `::before` or `::after` of any element (a look's is
+ * - a paint a box outside the walk lays under or over the glyphs: a
+ *   sibling's background or shadow run under them; a box laid over them by
+ *   an absolute or fixed position, or a decoration, is the box sweep's (the
+ *   coverage rules'), but a box moved over the figure by a relative offset,
+ *   a transform or a negative margin, with `pointer-events: none`, or a
+ *   target's own glyph scaled over it, is read by no geometry rule, and by
+ *   the contrast pass only as the figure's ground — a cover whose own ground
+ *   contrasts with the figure's ink passes (the critic's PC2, the no-escrow
+ *   note moved over the pay sheet's figure), a contrast target's glyphs over
+ *   another target's money are blank in both captures, since the pass blanks
+ *   every target's glyphs at once (SVs), and a look pseudo moved over a
+ *   figure on a screen the pass does not sample is read by nothing (PW; the
+ *   critic's P2-1 on round 7, older than the branch, for the step before
+ *   8g2); an in-flow `::before` or `::after` of any element (a look's is
  *   the contrast pass's look-pseudo frames', which read its paint — its
  *   glyphs whatever their colour since round 7, its ground and its border —
- *   inside a protected box, on the screens it samples; one the app's own
- *   sheets generate is chrome), a blend such a box composes with what lies
- *   under it, and what a `backdrop-filter` blur on the figure or a box above
- *   spreads from beside the box under it;
+ *   inside a protected box, on the screens it samples, at the frozen
+ *   instant: one a look animates invisible at that instant, 400ms, is not
+ *   read, the critic's PSa2; one the app's own sheets generate is chrome),
+ *   a blend such a box composes with what lies under it, and what a
+ *   `backdrop-filter` blur on the figure or a box above spreads from beside
+ *   the box under it;
  * - a paint's geometry beyond its rect: the paints are composited as plain
  *   stacking (source-over, in paint order — every blend from the figure up
  *   to the stall is held to `normal`, and `isolation`, which only keeps
@@ -8649,8 +8663,11 @@ function ringLines(
 
 /**
  * **The contrast pass blanks the glyphs and nothing else** (round 6, the
- * critic's shared root of BL2, SZ and G2 on round 5, and of N9a on round 4).
- * Every target and every element under it had its `color` set transparent,
+ * critic's shared root of BL2, SZ and G2 on round 5, and of N9a on round 4),
+ * **every target's at once**: so a target's glyphs moved over another
+ * target's money are blank in both captures, and read by nothing (the
+ * critic's SVs on round 7, stated). Every target and every element under it
+ * had its `color` set transparent,
  * and `color` is not only the glyphs' ink: it is `currentColor`, so every
  * background, border, box shadow and gradient stop a look wrote from it went
  * transparent with the glyphs, and the ground capture never held them — a
@@ -8670,7 +8687,11 @@ function ringLines(
  * transparent) dropped it.
  *
  * **Every look pseudo keeps its glyphs** (round 7, the critic's P1-1 on
- * round 6). A `::before` or `::after` inherits the transparent fill, as it
+ * round 6; every pseudo whose rule names a look's or a decoration's class
+ * anywhere in its selector since round 8, `lookPseudoOf`, the critic's PSc
+ * and PSci; read at the frozen instant alone, so one a look animates
+ * invisible at 400ms is not read, the critic's PSa2). A `::before` or
+ * `::after` inherits the transparent fill, as it
  * inherited the transparent colour. A pseudo of the app's own sheets that
  * inherits its host's ink goes blank with it, as before; one that sets a
  * colour of its own keeps its glyphs, as it did; and **every look pseudo**
@@ -9255,8 +9276,11 @@ function pageHeight(scope: ParentNode): number {
  * reads stands clear. So it is measured the only way a pseudo can be: by
  * its paint. A **look pseudo** is a `::before` or `::after` a look sheet or
  * a decoration rule generates — a rule whose selector names a look's class
- * (`t-…`) or a decoration's (`att-…`); the base sheet's own pseudos are the
- * app's chrome, held by the geometry rules like any node. Every element in
+ * (`t-…`) or a decoration's (`att-…`) anywhere in it, a compound included
+ * (`lookPseudoOf`, `layout/lookRule.ts`; round 8, the critic's PSc:
+ * `.stall.t-modern …::after` was the app's to this read until then); the
+ * base sheet's own pseudos are the app's chrome, held by the geometry rules
+ * like any node. Every element in
  * the contrast job's scope that generates one is marked here
  * (`data-probe-lp-before` / `-after`); the runner captures the frame once
  * more with every marked pseudo at `visibility: hidden`
@@ -9265,8 +9289,6 @@ function pageHeight(scope: ParentNode): number {
  * pixel that changed is a look pseudo painting inside a protected box, and
  * the job fails. No capture where no look pseudo exists.
  */
-const LOOK_RULE = /(?:^|[\s>+~,(])\.(?:t-[a-z0-9]+|att-[a-z0-9-]+)\b/;
-const PSEUDO_AT = /::?(before|after)\b/;
 
 /** Every rule in every sheet on the page, `@media` and other groups opened. */
 function styleRules(): CSSStyleRule[] {
@@ -9298,10 +9320,10 @@ function markLookPseudos(scope: ParentNode): number {
     }
     let n = 0;
     for (const rule of styleRules()) {
-        for (const one of rule.selectorText.split(',')) {
-            const pseudo = PSEUDO_AT.exec(one);
-            if (pseudo === null || !LOOK_RULE.test(one)) continue;
-            const host = one.replace(/::?(?:before|after)\b/g, '').trim() || '*';
+        for (const one of selectorList(rule.selectorText)) {
+            const look = lookPseudoOf(one);
+            if (look === undefined) continue;
+            const { which, host } = look;
             let hosts: NodeListOf<Element>;
             try {
                 hosts = scope.querySelectorAll(host);
@@ -9310,7 +9332,6 @@ function markLookPseudos(scope: ParentNode): number {
             }
             for (const el of hosts) {
                 if (el.closest('.deck-stall') !== null) continue;
-                const which = pseudo[1] as 'before' | 'after';
                 const content = getComputedStyle(el, `::${which}`).content;
                 if (content === 'none' || content === 'normal') continue;
                 if (!el.hasAttribute(`data-probe-lp-${which}`)) {
@@ -9444,25 +9465,7 @@ const LEGACY_COMPOSITE: Readonly<Record<string, string>> = { add: 'source-over',
 const ART_ATTR = /^data-probe-art(?:-before|-after)?$/;
 let artSheet: CSSStyleSheet | undefined;
 
-/** A selector list split at its top-level commas (a comma inside `:is()` or `[...]` is not a separator). */
-function selectorList(text: string): string[] {
-    const out: string[] = [];
-    let depth = 0;
-    let start = 0;
-    for (let i = 0; i < text.length; i += 1) {
-        const c = text[i];
-        if (c === '(' || c === '[') depth += 1;
-        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
-        else if (c === ',' && depth === 0) {
-            out.push(text.slice(start, i));
-            start = i + 1;
-        }
-    }
-    out.push(text.slice(start));
-    return out.map((one) => one.trim()).filter((one) => one !== '');
-}
-
-/** A computed comma list split at its top-level commas. */
+/** A computed comma list split at its top-level commas (`selectorList`, `layout/lookRule.ts`). */
 const layersOf = (value: string): string[] => selectorList(value);
 
 /**
