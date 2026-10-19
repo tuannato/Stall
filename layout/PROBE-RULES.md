@@ -8165,3 +8165,141 @@ noise (the phone pass alone 11.2s against 10.3s, the desk 12.4s against
 blanking keeps each element's fill, marks and pseudo-elements) 25.6s against
 26.9s over 802 calls. The planted runs (ceiling 1200s): 269.9s and 239.5s at
 load up to 12, the failures' own reads and the machine.
+
+### Round 7: every look pseudo's glyphs kept, a layer's tiles read against their area, an SVG element's colour kept (CRITIC-MONEY-GUARDS, re-review of round 6)
+
+The critic found that round 6 made the branch worse than its parent on one
+lint-admitted plant, and that the layer read was looser than it said. Each
+paragraph below replaces the round-6 paragraph it names, which stays above as
+the record.
+
+**Every look pseudo keeps its glyphs** (the critic's P1-1 on round 6, a
+regression; `keepGlyphs`, `adoptPseudoFillSheet`). Round 6 blanked the glyphs
+through `-webkit-text-fill-color` and put a pseudo-element's fill back only
+where its colour differed from its host's. A look pseudo in its host's own
+ink — written by name (PS: `.t-modern .stall-tagline::after { content: '◆';
+color: rgb(118, 118, 118); position: relative; top: 32px; font-size: 40px; … }`
+under a tagline of that colour) or inherited (PSi, on Rural) — then took the
+transparent fill and was blank in both frames of
+`no-look-pseudo-paints-inside-a-protected-box`: a 40px diamond over the
+address, every pass green. Under the old blanking PS's own colour beat its
+host's transparent one and it was caught; PSi, inheriting the transparent
+colour, never was. Now every pseudo `markLookPseudos` marks
+(`data-probe-lp-*`) keeps its glyphs whatever its colour, as does any pseudo
+with a colour of its own (`data-probe-pf-*`); its fill is put back to the fill
+it painted before its host was blanked, read off the pseudo and carried on its
+host as `--probe-pf-before` / `--probe-pf-after` (round 6 put it back to the
+pseudo's `currentcolor`, which is the same unless a look gives the pseudo a
+fill of its own). A pseudo the app's own sheets generate that inherits its
+host's ink goes blank with it, as before. A look pseudo's glyphs are ground
+wherever they paint (D6(ii)).
+
+**A gradient layer is read where its tiles are proved to paint**
+(`layerCovers`, `MIN_TILE_PX`, `layout/groundStack.ts`; the critic's P1-2 and
+P2-2 on round 6). Round 6 took any length or percentage with a non-zero digit
+as a tile with an area, and a layer that did not repeat on both axes as one
+that might not paint anywhere. Both were wrong, measured on a bare page in
+Chrome 155: a gradient tile under 1/64px on an axis paints nothing
+(`0.015px` nothing, `0.016px` the box whole; `0.001px` under `round`
+nothing), so `background-size: 0.001px 0.001px` over a ground in the ink's
+own colour was read as a white ground and hid the figure (SZt, SZt-tier); and
+a `no-repeat` gradient that fills its box paints the box whole, so the
+skeleton's `.buy` written that way failed 186 times (FP). Now each tile
+dimension is resolved against the layer's positioning area (`auto`, `cover`
+and `contain` the area's own extent, a length, a percentage of the area; a
+`calc()` size is not taken apart), and each axis answers on its own:
+
+- an axis that **repeats** (`repeat`, `round`) covers the whole clip area —
+  when its tile is at least `MIN_TILE_PX`, one pixel, far above Chrome's
+  1/64px (a `round` tile is rescaled by at most a third);
+- an axis that **does not** (`no-repeat`, `space`, the other axis of
+  `repeat-x` and `repeat-y`) covers the positioning area's span when one tile
+  at least that long, and at least `MIN_TILE_PX`, is placed over all of it by
+  its computed `background-position-x` / `-y` (a percentage, a length, or a
+  `calc()` of the two — Chrome computes `right 10px` to `calc(100% - 10px)`);
+  a `local` layer's lone tile proves nothing;
+- anything else covers nothing.
+
+The probe reads a layer as a paint over the part of its clip area both axes
+cover, and as a paint that may be absent (`MAY_BE_ABSENT`) over the rest of it;
+a layer whose tiles repeat over both axes is one paint, as before. So FP is a
+ground again, SZ (one white pixel, `no-repeat`) and SZt (under 1/64px) cover
+nothing, and a `no-repeat` tile that fills only the padding box is tried absent
+over the border's bands. Unit-held in `layout/groundStack.test.ts`.
+
+**An SVG element keeps its colour** (the critic's P2-1 on round 6;
+`SVG_GLYPH_PAINTS`, `blankGlyphs`). Round 6 kept the old blanking for an SVG
+element — its `color` transparent — which blanked its strokes and fills and
+also dropped a background, border or shadow it wore in `currentColor`: `.t-modern
+.step .ic { position: relative; left: -215px; width: 116px; height: 20px;
+background-color: currentColor }` laid an ink bar over "2 × $5.00 = $10.00" in
+Pay several's strip with every pass green (SV). Now an SVG element's `fill`,
+`stroke`, `stop-color`, `flood-color` and `lighting-color` are set transparent
+where their computed colour is the element's computed `color` (the old
+blanking's reach), and its `color` stays. A literal paint equal to the ink by
+name is blanked too, as a decoration line is.
+
+**The dump is unchanged.** `scripts/contrast-dump.mjs` against the critic's run
+at `537b8a2` reads all 15,016 boxes identical, and all 823 job records
+identical field by field, the seconds aside; every summary line of the contrast
+pass is the same, the timings and which tab ran which job aside (this round's
+code in a clone, 2026-10-19). Neo's Wearing line's `// ` is the only look
+pseudo with glyphs on the shipped looks, and its colour is its own, so round 6
+already kept it; no shipped `svg` in a target wears a `currentColor` ground.
+
+**Not read, stated**, for the line clause (the critic's P3-1 and P3-2 on round
+6, neither planted, no fixture reaching either): fragments of different text
+nodes whose baselines stand within 0.15em of the smaller face (a pixel at
+least) are one line, and pixels are compared only between lines, so where one
+text node's fragment is a line of its own and another node's text is piled
+onto it within 0.15em, only their order is read (no money node's markup sets
+that today); and a text node with a right-to-left run is cut into several
+rects on one line, so a later text node on that line can join the first rect's
+line and be read out of its order — and the order rule reads visual order, so
+a legitimate Hebrew or Arabic item name in Pay several's lines
+(`dl.pay-lines`, a money node) fails "drawn out of its order" (a false red,
+older than round 6). The line clause, worded to the code (P3-3): each
+character goes to the line whose top is nearest its own **among the lines that
+hold it across (every line where none does), ties within half a pixel taken in
+the text's order**.
+
+**Unplanted, every shipped look, the skeleton and the tracked fixture read 0
+on every rule at every pass** (the whole runner in a clone of this round's
+code, 2026-10-19, 211.5s of 300; and in the worktree, 2026-10-20, 210.3s).
+The worktree's run moved one box against the critic's `537b8a2` dump, and it
+is not this round's: Neo's `pay-qr-lede` line (`p.fine`) on
+`pay-several-longest-figure` at 1280, bare, read 7.03:1 where it reads 6.80:1
+— the same box, the same two line rects and 4,228 pixels, the same job record.
+The clone of this round's code read 6.80:1, and of the 50 dumps of this
+branch in the worktree and the scratch clones the box read 7.03:1 twice: this
+run and one on `b39776e` (round 3), whichever tab ran the job. Both far above
+3:1; the cause, a pixel of the capture that varies between runs, not found.
+
+**Red proofs** (2026-10-19; the critic's plants appended before each look
+sheet's reduce block — FP before `stall.css`'s — in local clones, their
+ceiling raised to 1200s for the planted runs alone; the same plants in a clone
+of `537b8a2` and one of this round; the counts are failures a pass — the
+phone, the desk, the canvas, the tall wall, the tablet, `desk-wall`,
+`short-wall`, the narrow phone, the reduced-motion pass — and the contrast
+pass's failures by target):
+
+| plant | `537b8a2` | round 7 |
+|---|---|---|
+| PS (Modern, the tagline's diamond in its ink by name) | 0 | contrast 104: "`button.addr` changes 839 px when the look's pseudo-elements are hidden" 68 (34 and 34), and `.addr-short` / `.addr-full` read at 1.23–1.57:1, 36 |
+| PSi (Rural, the same diamond inheriting its host's ink) | 0 | contrast 72: `button.addr` in the look-pseudo frames, 36 and 36 |
+| SV (Modern, an SVG glyph's `currentColor` ground over the strip's line) | 0 | contrast 42: `button.step` read over its glyph at 1.00:1, 32; the selection line `span.sel-sub.in` at 1.00:1, 6, and its broken figure, 2; `span.sel-sub` at 1.43–1.88:1, 2 |
+| SZt (Rural, `0.001px` white tiles over a `currentColor` ground) | geometry 0; contrast 159 | geometry 501, 591, 384, 474, 201, 111, 201, 286, 88 ("its gradient, where its tiles fall over its ground … 1.00:1"); contrast 159 |
+| SZt-tier (Neo, the same in black, Cycle step 3 alone) | 0 | the canvas, the tall wall, the tablet, `desk-wall` and `short-wall` 6 each (`shop-window-cycle-listing-9`, `-quote-10`, `-usd-11`, bare and worn); the contrast pass samples no Cycle step-3 figure |
+| FP (the skeleton's `.buy` as a `no-repeat` gradient of its own accent) | 63, 64, 0, 0, 0, 0, 0, 55, 4 | 0 |
+| BL2, L2, G2 (rounds 5 and 6) | BL2 439, 513, 300, 374, 179, 105, 179, 262, 64 and contrast 155; L2 phone 4 (Modern 2, Neo 2), narrow 6; G2 contrast 32 | the same |
+| SZ (round 5, one white pixel `no-repeat`; a run of its own, since it and SZt share `.t-rural .item-x`) | 501, 591, 384, 474, 201, 111, 201, 286, 88 and contrast 159 (round 6's) | the same |
+
+Every failure in the planted runs names a plant's target.
+
+**Cost** (2026-10-20, this Mac, back to back, the ceiling at 300s in both):
+this round in the worktree 210.3s (load 2.1 → 3.2), `537b8a2` in a clean
+clone 208.8s (3.2 → 4.2), **+1.5s**; the eleven geometry passes summed 76.3s
+against 78.5s, the contrast pass 126.8s against 122.6s, its prepare phase
+(where the blanking keeps each element's fill, marks, SVG paints and
+pseudo-elements) 27.1s against 26.8s over 802 calls. The planted runs (ceiling
+1200s): 247.6s (round 7) and 240.4s (`537b8a2`) with set A, 218.7s with SZ.

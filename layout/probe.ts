@@ -3185,6 +3185,17 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * - where the figure's box stands (`DRESS_FREE`'s placement: a figure moved
  *   is the coverage, spill and clip rules'), and a single line set so tight
  *   that the line above or below stands on its glyphs;
+ * - within a flow, two cases (the critic's P3-1 and P3-2 on round 6, not
+ *   planted, no fixture reaching either): fragments of different text nodes
+ *   within 0.15em of one baseline are one line, and pixels are compared
+ *   only between lines, so where one text node's fragment is a line of its
+ *   own and another node's text is piled onto it within 0.15em, only their
+ *   order is read; and a text node with a right-to-left run is cut into
+ *   several rects on one line, so a later text node on that line can join
+ *   the first rect's line and be read out of its order — and the order rule
+ *   reads visual order, so a legitimate Hebrew or Arabic item name in Pay
+ *   several's lines (`dl.pay-lines`) fails "drawn out of its order" (a false
+ *   red, stated);
  * - across the flows of one node, all but two things: a flow is one
  *   element's text wherever the layout puts its pieces — the anonymous boxes
  *   a grid or a flex container makes of an element's own text runs are one
