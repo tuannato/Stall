@@ -2882,8 +2882,11 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * an inherited longhand reaches it from any box above). The reference sits
  * outside the stall on purpose: an inherited longhand a look sets on a box
  * above the figure reaches the figure, and a reference inside the stall
- * would inherit the same dress and call it untouched. The conditions,
- * each with its reason, are `dressHeldFault`'s:
+ * would inherit the same dress and call it untouched. A free longhand may
+ * compute anything, so it is not read (`dressReadList`); in this Chrome
+ * every longhand is free or held but one, `text-fit`, which must equal the
+ * reference — and so must every longhand a newer engine adds, until it is
+ * named. The conditions, each with its reason, are `dressHeldFault`'s:
  * - no `clip-path`, `clip`, mask image or mask border source — the figure's
  *   own shape cuts its own digits (a box above it may clip, read 3.);
  * - no `filter`, `mix-blend-mode`, `-webkit-box-reflect`, motion path
@@ -2970,9 +2973,11 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * pentagon on `.item-p` — only if its shape encloses the figure's ink
  * (`inkLines`, the sign rule's model: the glyphs' measured reach about the
  * baseline, the advance along the line), read in the box's own frame: every
- * transform from the figure up to the stall is held off for the read, as
- * `cycleFigureFaults` reads the Cycle card, so a swaying tag is read in the
- * frame its polygon is written in. A `clip-path` `inset()`, `circle()` or
+ * transform from the figure up to the stall is held off for the read
+ * (`withTransformsHeldOff`, once a measurement for every figure under a
+ * clip, put back through the CSSOM), as `cycleFigureFaults` reads the Cycle
+ * card, so a swaying tag is read in the frame its polygon is written in. A
+ * `clip-path` `inset()`, `circle()` or
  * `ellipse()` is resolved (`paintClips`), a `polygon()` through
  * `parsePolygon` with every corner and edge of every ink box inside it and
  * no vertex inside an ink box (a notch cut into the figure), a `clip:

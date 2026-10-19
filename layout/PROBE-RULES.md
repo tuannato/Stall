@@ -7167,3 +7167,288 @@ where no rule of these runs, so its +5.9s is the load. Timed in the page
 0.39–0.57s a pass, 3.8s over the eight; the self-clip rule 0.09–0.15s a
 pass, 0.95s over the eight. Round 1's pair was +3.7s of geometry; the
 allow-list roughly doubles that. One pair, not repeated.
+
+### Round 3: a money figure is never misdressed (`a-money-figure-is-never-misdressed`, D-2026-10-19-01)
+
+The owner's decision on the round-1 critic's P2-3 ("chọn a"): dressing the
+whole money figure must not misstate it. Round 2 held a broken figure's
+pieces to the figure and every box that clips its text, and left the
+figure's own dress unread: `.item-x { clip-path: inset(0 0 0 55%) }` read
+"200 XEC" for 1,200 XEC on every ordinary row of Neo with the whole runner
+green on `offers`, `letter-spacing: -0.45em` piled Modern's digits, and an
+opacity, a zoom, a `font-size-adjust`, a negative `text-indent`, a ground in
+the ink's own colour and a box's `clip-path` across the digits each hid or
+shrank a figure under every rule.
+
+**The subjects** (`moneyDressFaults`, `layout/probe.ts`): on every screen,
+look and variant of every geometry pass, every money node painted
+(`MONEY_SET`), Pay several's line figures (`.pay-line-x`) and the element
+every broken figure is written into (`.fig-say`'s parent), the door's deck
+minis aside and a node not rendered skipped. Three reads.
+
+**1. Its own dress: an allow-list over every computed longhand.** The
+subject, and every element under it that holds text (a button's words in
+their span; a `.fig-say` subtree is the ink rule's), computes longhand by
+longhand, custom properties aside, what an untouched element computes
+**outside the stall** (`dressReference`: a `span` with `all: unset`
+appended to the stall's own parent, read once a page) — or the longhand is
+in a family a look may dress freely (`DRESS_FREE`), or it is held to a
+condition (`DRESS_HELD`), read whatever the reference says. The reference
+stands outside the stall because an inherited longhand a look writes on a
+box above the figure reaches the figure, and a reference inside the stall
+would inherit the same dress and call it untouched; the conditions are
+read absolutely for the same reason. (Round 2's piece rule reads a piece
+against its own parent, which is right for a piece and blind for the
+figure.) A free longhand may compute anything, so it is not read
+(`dressReadList`); in this Chrome every longhand is free or held but one,
+`text-fit`, which must equal the reference — and so must every longhand a
+newer engine adds, until it is named. (Of this Chrome's 480 longhands, 43
+are held, 436 free and that one left; three held names it does not list —
+`-webkit-mask-image` and `-webkit-background-clip`, aliases it computes as
+`mask-image` and `background-clip`, and `mask-border-source`, a longhand it
+does not have, whose part `-webkit-mask-box-image-source` plays.)
+
+**Why not "the node with the look's dress removed"**, which the decision
+asked for if it could be made sound: the dress comes off only by taking
+the look's `t-*` and `att-*` classes off the stall and putting them back,
+which cancels and restarts every animation the look runs (the tree the
+probe seeked and measured is no longer that tree), starts a transition on
+every property a look transitions (`getComputedStyle` then answers the old
+value at the transition's first frame, so the reference reads the very
+dress it was meant to remove), and lays the whole stall out twice a screen.
+The untouched element outside the stall needs none of that.
+
+The free families, each with the reason it cannot misstate a figure (the
+table's own words): the room around the box and its edge (painted outside
+the content where the glyphs stand); its size (what it cuts is the
+self-clip rule's); where it stands and how it lays out its content (a
+figure moved is the coverage, spill and clip rules'); the face, size,
+weight and setting of its text (the same digits in another face; the size
+has its floor, the faces are held to the served ones statically); every
+colour but the ground's (the contrast pass reads ink on ground); paint
+beside, under or behind the glyphs (a box shadow, a backdrop filter, the
+background's position and size, a border image, the mask longhands that do
+nothing without a mask image, a decoration's colour and style without a
+line); the corners and the rules between rows and columns; how the box
+answers a hand, a scroll or the top layer; the timing of a motion; what
+means nothing without a transform or a motion path; a prefixed twin of a
+free longhand; SVG paint; lists, tables and pages.
+
+The conditions (`dressHeldFault`), each with its reason:
+
+- no `clip-path`, `clip`, mask image, mask border or mask box image on the
+  figure itself: its own shape cuts its own digits (a box above may clip,
+  read 3.);
+- no `filter`, `mix-blend-mode`, `-webkit-box-reflect`, motion path,
+  individual `rotate`, `scale` or `translate`, and no `transform` but none —
+  save **a uniform scale of at least 1, unturned and unmoved**: the stream
+  card's pulse (`bc-pulse`, broadcast.css) grows a figure that changed to
+  106% for 0.4 s;
+- `opacity` 1, `visibility` and `content-visibility` visible, `zoom` 1, no
+  `font-size-adjust` (the critic's zoom 0.15 and adjust 0.06 painted an 18px
+  group 9×4 and 8×3 px with `font-size` still 18px, the size the type floor
+  reads), `content` `normal`;
+- no negative `word-spacing` or `text-indent`;
+- **a negative `letter-spacing` may take up the room between two glyphs and
+  no more** (`spacingPiles`): for every two adjacent characters of its text,
+  the spaces between them counted, the spacing may not make their inks share
+  a pixel the face keeps apart — both glyphs drawn alone on a canvas in the
+  text's computed face, at the spacing and at none, and the pixels both cover
+  at least half counted (a pair whose ink boxes stay apart is not drawn; a
+  pair's answer is kept for the run, by face, spacing and pair). The
+  decision's words were "no negative letter-spacing", which fails every look
+  but Neo: the theme table's price track is `-.02em` on the default row
+  (Modern's, so the skeleton's and the tracked fixture's), and Modern's and
+  Rural's sheets set `-0.01em` on `.item-x` — on the money nodes, −0.16 to
+  −1.6px. That is a design the owner approved and misstates nothing, so the
+  rule reads the piling, not the sign; the literal reading, and its cost of
+  changing every figure's tracking, is the owner's to take. A first reading
+  by ink boxes alone was wrong the other way: it failed `7,` on every long
+  figure (the 7's bar overhangs the comma's box, and their inks never meet).
+  Measured on a canvas (2026-10-19): at `-0.02em` no pair of the ten
+  figures, the comma and the point shares a pixel in Inter 800, Stall Serif
+  700 or JetBrains Mono 700 at 25–26px, nor in the first two at 120px; the
+  first shared pixels come near `-0.08em` in Inter 800 at 120px ("71"), near
+  `-0.05em` in Stall Serif 700 at 120px ("34"), near `-0.15em` in JetBrains
+  Mono 700 at 26px ("00"); the critic's `-0.45em` shares 67–1,825 pixels on
+  the worst pair. **The canvas draws proportional figures where the sheets
+  set tabular ones** (no canvas takes `font-variant-numeric`): Inter's
+  tabular 0 and 4 are 0.03em narrower than its proportional ones (64.6
+  against 67.4 and 67.6px at 100px; Stall Serif's tabular figures are as
+  wide or wider, JetBrains Mono's equal), so within about 0.03em of the
+  spacing where two Inter digits touch, the rule can read them apart where
+  the screen sets them touching;
+- the glyphs painted in the figure's ink: `-webkit-text-fill-color` is
+  `color`, no `-webkit-text-stroke`, no `-webkit-text-security`, no
+  `background-clip: text`;
+- **no ground in the ink's own colour**: a `background-color`, or a colour
+  stop of a gradient, at least half opaque, reads 3:1 against the ink
+  (`MIN_CONTRAST`); a picture under a figure (`url()`, `image-set()`) fails,
+  a ground this rule cannot read; a fainter tint is the contrast pass's;
+- **no outline across its glyphs**: the outline's inner edge (the border box
+  moved out by `outline-offset`, in by a negative one) stands outside every
+  line's ink (`inkLines`);
+- **no line through or over it**: no `line-through` or `overline` in effect
+  on its text (`-webkit-text-decorations-in-effect`, which carries a line
+  drawn from any box above) or written on a box up to its surface, and an
+  underline only at the face's own thickness and position; no
+  `text-emphasis-style`;
+- **no copy of it**: a `text-shadow` layer blurred at least as far as it
+  stands off is a glow; a sharp layer stands within 0.12em of the glyphs it
+  copies (`DRESS_SHADOW_EM`: under the thinnest stem of a served face's "1",
+  0.13em in JetBrains Mono 700 — Inter 800 0.16em, Stall Serif 700 0.15em,
+  on a canvas at 100px) or within the rain outline's reach, which small text
+  wears in its ground's colour — a sharp copy farther off stands apart from
+  the stroke it copies, a second figure;
+- read in order: `direction` ltr, no `bidi-override`, `writing-mode`
+  `horizontal-tb` (and its prefixed twin), no `display` that prints a list
+  marker;
+- every keyframe of every animation it runs, and of a transition while one
+  runs, each held longhand resolved and held to its condition
+  (`animationFaults`): the pass freezes one instant, and a figure is not
+  dressed at the others. A value is resolved on one scratch block in a
+  fixed, zero-sized, hidden box outside the stall that contains its own
+  layout (a scratch put into the figure's own row and taken out re-laid the
+  page out on the next read, every row; on an element with no box a
+  transform resolves to `none`); a value naming a custom property is
+  resolved where the box stands;
+- no generated `::before` or `::after` on it or an element under it with
+  text.
+
+**2. The boxes that hold it, up to its surface** (`SELF_CLIP_SURFACE`,
+inclusive; else up to the shell's scroll region). A paint effect that is
+not inherited never reaches the figure's computed style, so the boxes are
+read where the effect is written — a plant on `.item-a` in place of
+`.item-x` is the obvious way round part 1: no `filter`, `mix-blend-mode`,
+reflection, motion path, `zoom` but 1, opacity under 1, or `transform`,
+`rotate` or `scale` but a turn of at most 10° (`DRESS_TILT_DEG`) with any
+shift and no shrink, stretch, skew or mirror — at rest and at every keyframe
+of an animation the box runs (a keyframe that moves a `clip-path` fails: a
+clip that moves is read at no instant). One exception, named: the stream
+card's stale plate (`.bc[data-state='stale'] .plate`, opacity 0.72), which
+says its figure is old by fading it — the app's own sentence; no fixture
+paints it today. Rural's tag sways ±0.8° (`t-rural-tag`, read keyframe by
+keyframe) and its rows tilt 0.6°; the ticker's ribbon only shifts.
+
+**3. Every clip above it, up to the stall.** A box above the figure may
+clip, mask or `clip-path` it only where its shape encloses the figure's
+ink (`inkLines`, the sign rule's model), read in the box's own frame: every
+transform from each such figure to the stall is held off once a
+measurement (`withTransformsHeldOff`: inline, `!important`, and put back
+longhand by longhand through the CSSOM — the policy refuses an inline
+`style` attribute, and the first build's `setAttribute('style', …)` restore
+failed the full runner 846 times on `the-probe-page-meets-no-csp-refusal`),
+as `cycleFigureFaults` reads the Cycle card, so Rural's swaying tag is read
+in the frame its polygon is written in. An `inset()`, `circle()` or
+`ellipse()` is resolved by `paintClips`; a `polygon()` through
+`parsePolygon`, every corner and every 2px of every edge of every ink box
+inside it and no vertex inside an ink box (a notch cut into the figure); a
+`clip: rect()` as a box. Any other shape (`path()`, a box keyword, `url()`),
+any mask, and any `clip-path` above a box that scrolls fail: a shape this
+rule cannot read is not a shape it passes, and a figure that scrolls under a
+clip is not read whole by one reading at rest. `overflow` is
+`a-money-figure-never-clips-itself`'s.
+
+**Not read, stated**: a figure a look hides whole — a money node not
+rendered is skipped, as the ink rule skips it, because the app hides
+figures too (a sheet with no rate, the address's two spans by width), and
+of the money set only the price role and "You pay" are held to having a box
+at all (`coveredBy`); an element under the subject that is not rendered;
+where the figure's box stands; a filter, opacity, transform or blend on a
+box above the surface; a shrink by a font feature (`font-variant-position`,
+`sups`), which keeps the computed size the floor reads; an in-flow pseudo of
+a box above it (the contrast pass's look-pseudo frames read its paint
+inside a protected box); a `:hover` or `:focus` state, and a transition
+until it runs; the figure's words beside it (`.item-from`, `.item-u`); a
+clip above the stall.
+
+**Owed** (`dressByClass`, `dressClipByClass`, `probe-coverage.mjs`;
+`the-dress-rule-is-owed-on-every-look-and-under-rurals-tag`): every
+geometry pass, money figures read on every look it painted; and on every
+geometry pass that painted Rural, a figure read under its tag's clip-path —
+Rural's notch is part 3's one shipped subject, and a pass that read none
+compared no shape. Measured (2026-10-19, the shipped looks, the fixture,
+the skeleton bare only): the phone 1,069–1,198 a look (the skeleton 444),
+Rural 501 under its tag; the desk 1,158–1,309 (472), 591; the canvas
+1,030–1,390 (261), 384; the tall wall 1,082–1,462 (256), 474; the tablet
+and `short-wall` 692–916 (178), 201; `desk-wall` 608–812 (151), 111; the
+narrow phone 774–849 (337), 286.
+
+**Shipped looks, the skeleton and the tracked fixture read 0 at every
+geometry pass.** The rule's own errors found on the way, none a look's: the
+ink-box reading of a negative spacing (`7,`, above); `mask-border-source`,
+which this Chrome computes as an empty string, read as none; the restore
+through the style attribute (part 3).
+
+**Red proofs** (2026-10-19):
+
+- **the critic's eight, through the whole runner** (one run, every plant
+  appended at once to the three look sheets of the worktree and taken out
+  after; a scratch clone of the branch's parent, `757feb6`, run back to
+  back with the same plants): `.t-neo .item-x { clip-path: inset(0 0 0
+  55%) }` (the owner's example), `.t-modern .item-x { letter-spacing:
+  -0.45em }`, `.t-rural .x { opacity: 0.12 }`, `.t-modern .pay-x-n { zoom:
+  0.15 }`, `.t-rural .pay-x-n { font-size-adjust: 0.06 }`, `.t-neo
+  .pay-total { text-indent: -40px }`, `.t-neo .x { background-color:
+  currentColor }`, `.t-rural .item-a { clip-path: inset(0 0 0 50%) }` (a
+  box above the figure). This rule, each by its own words, on every pass
+  the plant's screens are measured — the clip-path on the figure ("a
+  clip-path (inset(0px 0px 0px 55%)) on the figure itself") Neo 470 at the
+  phone, 552 at the desk, 342 at the canvas, 424 at the tall wall, 190 at
+  the tablet and `short-wall`, 108 at `desk-wall`, 274 at the narrow phone
+  and 76 in the reduced-motion pass; the spacing ("letter-spacing -11.7px
+  piles "87": 59 pixels of their inks overlap that the face keeps apart")
+  Modern 439, 513, 300, 374, 179, 105, 179, 262 and 64; the box's clip-path
+  ("has its ink at … cut by span.item-a's clip-path inset(0px 0px 0px
+  50%)") Rural 501, 583, 384, 474, 201, 111, 201, 286 and 88; the zoom
+  Modern 29 at each page pass (5 reduced); the adjust Rural 31 (7); the
+  opacity Rural 34, 34, 27; the ground ("a ground its own ink reads at
+  1.00:1 …") Neo 32, 32, 26; the indent Neo 8 at each page pass. On the
+  parent, none of this rule (it is not there), and of the eight only side
+  effects: the ink rule saw the zoom through the computed widths of the
+  pieces' medium borders (6 a page pass), the card rule and the self-clip
+  rule saw the indent push Pay several's total past its row (8 each), and
+  the contrast pass's digit read saw broken figures on its five screens (44
+  figures) — nothing on `offers`, nothing on the walls or the canvas;
+- **every other branch, on the probe page** (a second set at once, the
+  phone and the desk): opacity 0.1 on `.item-a` ("span.item-a above it:
+  opacity 0.1", 423 at the phone), a blur on `.face-x`, `scale(0.3)` on
+  `.pay-x` ("shrinks or stretches it"), `scaleX(-1)` on `.item-a`
+  ("mirrors it"), `rotate: 180deg` on `.face-x` ("a turn of 180° (more
+  than a 10° tilt)"), `mix-blend-mode: difference` on `.face-x`, a
+  line-through on `.row.big` (named on the box and as in effect on the
+  figure), a gradient mask on Pay several's total block ("stands under a
+  mask"), `clip-path: path(…)` on a row head ("a clip-path this rule cannot
+  read"), a sharp `text-shadow: 0.6em 0 0` ("a copy farther off than 4.3px
+  stands apart"), `direction: rtl` with `bidi-override`,
+  `-webkit-text-security: disc`, `text-fit: grow` (the residual: "which no
+  rule lets a look dress"), and a `::after` generating `◆`; each failed
+  under this rule by its own words;
+- **the owed counts**: `the-dress-rule-is-owed-on-every-look-and-under-rurals-tag`
+  red with the owed read taken out on either half.
+
+**The private look at 0x04** (`fc874044`, not the pinned pair; its files not
+opened): the branch and its parent with the same selection, back to back,
+fail the same 179 lines, line for line — the phone 21, the narrow phone
+148, the short phone 7, contrast 3, all pre-existing — and none is this
+rule's. It read `t-inkwash` 151–471 money figures a pass, the skeleton's
+counts to within one: the look is painted bare only, as the round-2 critic
+found, so what its worn dress does under this rule is not read.
+
+**Cost** (2026-10-19, the full runner with no selection — the tracked
+fixture carried — against the branch's parent, on this Mac at load 3 to 7,
+another builder's work beside the runs). The rule as first built cost the
+geometry passes 24.6s (73.6 → 98.2s; 230.1 → 262.0s in all): it read every
+longhand, put a scratch element into each figure's row to resolve a
+keyframe (which re-laid the page out on the next read), and held the
+transforms off once a figure. Read once where they repeat (`dressReadList`,
+`boxFaults`, `clipsAtAll`, the reference once a page, a pair's piling once a
+run, one contained scratch box, one hold for every clipped figure), the same
+answers cost: parent first, 249.1s against 267.5s (+18.4s; geometry 81.4 →
+94.1s, +12.7s); branch first, 257.3s against 247.4s (+9.9s; geometry 90.6
+against 84.0s, +6.6s); the contrast pass, where no rule of these runs, moved
+1.9 and 2.1s with the load. Timed in the page (`performance.now()` around
+the call, a scratch build): 0.5–1.1s a pass, 6.2s over the eight — part 2
+0.05–0.17s, part 3 0.07–0.30s, the held and unfreed longhands 0.08–0.12s,
+the piling 0.03–0.06s a pass. **The margin is thin**: 257–268s of the 300s
+ceiling under this load, against a measured parent of 230–249s.
