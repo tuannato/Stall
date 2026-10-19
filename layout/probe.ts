@@ -3090,14 +3090,17 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   figure.
  *
  * **2. Its lines, a neighbour's shadow and an outline above** (in its own
- * frame, read 4.'s hold): **its text's lines** (`lineFault`, where its text
- * is one inline flow — every text node of it set in the same block) stand
- * in order — line by line from the top, left to right along a line, as the
- * text runs, so columns or a reversed flow fail — with no line break
- * between two digits or a digit and a point (an address and a record's
- * bytes aside, which wrap anywhere by design), and two lines whose glyphs
- * share a pixel (drawn on a canvas where they stand) fail, so a
- * `line-height` cannot pile them; **a sharp `text-shadow` of a box beside
+ * frame, read 4.'s hold): **its text's lines** (`lineFault`, flow by flow —
+ * a flow is the text set in one block, so a look's `display: flex` that
+ * blockifies a figure's pieces makes flows of them, round 5) stand in order
+ * within each flow — line by line from the top, left to right along a line,
+ * as the text runs, so columns or a reversed flow fail — with no line
+ * break between two digits or a digit and a point (an address and a
+ * record's bytes aside, which wrap anywhere by design), and two lines whose
+ * glyphs share a pixel (drawn on a canvas where they stand) fail, so a
+ * `line-height` cannot pile them; across flows, no two fragments of
+ * different flows share a pixel, and a flow the text enters does not begin
+ * above, or beside on the left of, the flow it leaves; **a sharp `text-shadow` of a box beside
  * it** (`neighbourShadowFault`: any element with text of its own under its
  * grandparent — its parent where the grandparent is the stall — its unit,
  * its "from") whose copy meets its ink fails, painted over it where that
@@ -3999,7 +4002,7 @@ function spacingPiles(text: string, cs: CSSStyleDeclaration): string | undefined
 }
 
 /** A run of a text node on one line: its text, its line box, its face and its place in the text. */
-type Fragment = { text: string; rect: Box; cs: CSSStyleDeclaration; order: number };
+type Fragment = { text: string; rect: Box; cs: CSSStyleDeclaration; order: number; owner: Element };
 
 /** The text of `node` as fragments, one per text node and line, in the text's own order. */
 function fragmentsOf(node: Element): Fragment[] {
@@ -4015,7 +4018,7 @@ function fragmentsOf(node: Element): Fragment[] {
         if (rects.length === 0) continue;
         const cs = getComputedStyle(owner);
         if (rects.length === 1) {
-            out.push({ text: text.data, rect: rects[0]!, cs, order: out.length });
+            out.push({ text: text.data, rect: rects[0]!, cs, order: out.length, owner });
             continue;
         }
         // One text node on several lines: each character goes with the line
@@ -4036,7 +4039,7 @@ function fragmentsOf(node: Element): Fragment[] {
             words[line] += ch;
         }
         rects.forEach((r, i) => {
-            if (words[i] !== '') out.push({ text: words[i]!, rect: r, cs, order: out.length });
+            if (words[i] !== '') out.push({ text: words[i]!, rect: r, cs, order: out.length, owner });
         });
     }
     return out;
@@ -4086,9 +4089,15 @@ function linesShareInk(a: readonly Fragment[], b: readonly Fragment[], inks: Rea
 
 /**
  * Why the lines of a money node's text misstate it, or undefined (the
- * re-review's P1-3 and P2-1), read where its text is one inline flow (every
- * text node of it set in the same block, so a list's rows and a button's
- * words in their own boxes are not one flow):
+ * re-review's P1-3 and P2-1; round 5, the critic's P1-3 on round 4). Its
+ * text is read **flow by flow**: a flow is the text set in one block (the
+ * nearest box above a text that is not `inline` or `contents`), so a list's
+ * rows, a button's words in a box of their own, and the pieces a look's
+ * `display: flex` blockifies — Pay several's total's "= ", its figure and
+ * " in total" — are flows of their own. Round 4 read a node only when its
+ * text was one flow, and one `display: flex` on `pay-total` made its
+ * eight-byte figure and " in total" two flows printed over each other with
+ * the rule silent. In each flow:
  * - **in order**: its fragments, taken line by line from the top and left to
  *   right along each line, are the text's own order — multi-column, a
  *   reversed flow, an `order` or a grid placement that moves a part of the
@@ -4100,11 +4109,25 @@ function linesShareInk(a: readonly Fragment[], b: readonly Fragment[], inks: Rea
  * - **lines apart**: two lines whose inks meet are drawn on a canvas where
  *   they stand, and a pixel both cover at least half fails — a `line-height`
  *   that piles a broken figure's lines on each other.
+ * And across the flows, held apart and in order:
+ * - **apart**: two fragments of different flows whose inks meet are drawn
+ *   where they stand, and a pixel both cover at least half fails;
+ * - **in order**: where the text enters a flow for the first time, that
+ *   flow does not begin before the flow it leaves began — its first
+ *   fragment's box is not wholly above that one's, nor beside it on its left
+ *   (`row-reverse` printing "in total … =") — read on the flows' first
+ *   fragments, so a column of words that wraps beside a figure is in order;
+ *   text that comes back to a flow it already began is that flow's order.
+ * Not read across flows, stated: a break inside a digit group (two flows
+ * are two boxes; a group split between them is the flow's own pieces, read
+ * within it), and the order of a flow that begins beside another but lower
+ * than its first line.
  */
 function lineFault(node: HTMLElement, groups: boolean): string | undefined {
     const frags = fragmentsOf(node);
     if (frags.length < 2) return undefined;
-    // One inline flow: the nearest box each text sets its lines in is one box.
+    // The flow a text sets its lines in: the nearest box above it that is
+    // not inline (or `contents`), the node itself at most.
     const flowRoot = (el: Element): Element => {
         let at = el;
         while (at !== node && at.parentElement !== null) {
@@ -4114,19 +4137,68 @@ function lineFault(node: HTMLElement, groups: boolean): string | undefined {
         }
         return at;
     };
-    const roots = new Set<Element>();
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
-        if ((t.textContent ?? '').trim() !== '' && t.parentElement !== null) roots.add(flowRoot(t.parentElement));
-    }
-    if (roots.size !== 1) return undefined;
-    // Lines: fragments that stand on one baseline (within 0.15em of the
-    // smaller face, a pixel at least) — never by their boxes' overlap, which
-    // a `line-height` piling two lines on each other makes complete.
     const canvas = (pileCanvas ??= document.createElement('canvas'));
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     const inks = new Map<Fragment, Box & { base: number }>();
     for (const f of frags) inks.set(f, fragmentInk(f, ctx));
+    const rootOf = new Map<Fragment, Element>();
+    const flows: Fragment[][] = [];
+    const flowAt = new Map<Element, number>();
+    for (const f of frags) {
+        const root = flowRoot(f.owner);
+        rootOf.set(f, root);
+        let k = flowAt.get(root);
+        if (k === undefined) {
+            k = flows.length;
+            flowAt.set(root, k);
+            flows.push([]);
+        }
+        flows[k]!.push(f);
+    }
+    for (const flow of flows) {
+        const why = flowFault(node, flow, groups, inks);
+        if (why !== undefined) return why;
+    }
+    if (flows.length < 2) return undefined;
+    // Across the flows: their words' fragments (white space draws nothing).
+    const words = frags.filter((f) => f.text.trim() !== '');
+    const firstOf = new Map<Element, Fragment>();
+    for (const f of words) if (!firstOf.has(rootOf.get(f)!)) firstOf.set(rootOf.get(f)!, f);
+    for (let i = 1; i < words.length; i += 1) {
+        const ra = rootOf.get(words[i - 1]!)!;
+        const rb = rootOf.get(words[i]!)!;
+        // Only where the text enters a flow for the first time: back in a
+        // flow it already began (" in total" after the figure), the order
+        // is that flow's own, read within it.
+        if (ra === rb || firstOf.get(rb) !== words[i]) continue;
+        const a = firstOf.get(ra)!.rect;
+        const b = firstOf.get(rb)!.rect;
+        const above = b.bottom <= a.top + 0.5;
+        const beside = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 && b.right <= a.left + 0.5;
+        if (above || beside) {
+            return `its parts are drawn out of their order: "${firstOf.get(rb)!.text.trim().slice(0, 12)}" stands ${above ? 'above' : 'before'} "${firstOf.get(ra)!.text.trim().slice(0, 12)}" though it comes after (a reversed or reordered flow)`;
+        }
+    }
+    for (let i = 0; i < words.length; i += 1) {
+        for (let j = i + 1; j < words.length; j += 1) {
+            const a = words[i]!;
+            const b = words[j]!;
+            if (rootOf.get(a) === rootOf.get(b) || !meets(inks.get(a)!, inks.get(b)!)) continue;
+            const shared = linesShareInk([a], [b], inks);
+            if (shared > 0) {
+                return `its parts pile on each other: ${shared} pixels of "${a.text.trim().slice(0, 16)}" and "${b.text.trim().slice(0, 16)}", set in two boxes, overlap`;
+            }
+        }
+    }
+    return undefined;
+}
+
+/** Why one flow of a money node's text misstates it (`lineFault`'s three reads within a flow), or undefined. */
+function flowFault(node: HTMLElement, frags: readonly Fragment[], groups: boolean, inks: ReadonlyMap<Fragment, Box & { base: number }>): string | undefined {
+    if (frags.length < 2) return undefined;
+    // Lines: fragments that stand on one baseline (within 0.15em of the
+    // smaller face, a pixel at least) — never by their boxes' overlap, which
+    // a `line-height` piling two lines on each other makes complete.
     const lines: Fragment[][] = [];
     for (const f of [...frags].sort((x, y) => inks.get(x)!.base - inks.get(y)!.base || x.rect.left - y.rect.left)) {
         const base = inks.get(f)!.base;
