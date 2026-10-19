@@ -3305,7 +3305,7 @@ function shadowFault(value: string, sizePx: number): string | undefined {
         const [x = 0, y = 0, blur = 0] = lengths;
         const off = Math.hypot(x, y);
         if (off > reach + 0.01 && blur < off) {
-            return `a sharp text-shadow ${x}px ${y}px off its glyphs (blur ${blur}px; ${layer.trim().slice(0, 60)}): a copy farther off than ${reach.toFixed(1)}px stands apart from the stroke it copies, a second figure`;
+            return `a sharp text-shadow ${x}px ${y}px off its glyphs (blur ${blur}px, ${layer.trim().slice(0, 60)}): a copy farther off than ${reach.toFixed(1)}px stands apart from the stroke it copies, a second figure`;
         }
     }
     return undefined;
