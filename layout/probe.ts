@@ -54,6 +54,7 @@ import {
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, mostOpaque, srgbColour, worstGround, type StackPaint } from './groundStack';
+import { lineOfCharacter } from './charLines';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
@@ -3103,7 +3104,10 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * **2. Its lines, a neighbour's shadow and an outline above** (in its own
  * frame, read 4.'s hold): **its text's lines** (`lineFault`, flow by flow —
  * a flow is the text set in one block, so a look's `display: flex` that
- * blockifies a figure's pieces makes flows of them, round 5) stand in order
+ * blockifies a figure's pieces makes flows of them, round 5; a text node set
+ * over several lines is cut by line, each character given to the line whose
+ * top is nearest its own, and two lines of one text node are two lines
+ * however close a `line-height` piles them, round 6) stand in order
  * within each flow — line by line from the top, left to right along a line,
  * as the text runs, so columns or a reversed flow fail — with no line
  * break between two digits or a digit and a point (an address and a
@@ -4077,10 +4081,16 @@ function spacingPiles(text: string, cs: CSSStyleDeclaration): string | undefined
     return undefined;
 }
 
-/** A run of a text node on one line: its text, its line box, its face and its place in the text. */
-type Fragment = { text: string; rect: Box; cs: CSSStyleDeclaration; order: number; owner: Element };
+/** A run of a text node on one line: its text, its line box, its face, its place in the text and the text node it is cut from. */
+type Fragment = { text: string; rect: Box; cs: CSSStyleDeclaration; order: number; owner: Element; source: Text };
 
-/** The text of `node` as fragments, one per text node and line, in the text's own order. */
+/**
+ * The text of `node` as fragments, one per text node and line, in the
+ * text's own order. A text node set over several lines is cut by its line
+ * rects, each character given to the line whose top is nearest its own
+ * (`lineOfCharacter`, `layout/charLines.ts`; round 6, the critic's P1-3 on
+ * round 5: by its middle, two lines piled within half a line read as one).
+ */
 function fragmentsOf(node: Element): Fragment[] {
     const out: Fragment[] = [];
     const range = document.createRange();
@@ -4094,28 +4104,29 @@ function fragmentsOf(node: Element): Fragment[] {
         if (rects.length === 0) continue;
         const cs = getComputedStyle(owner);
         if (rects.length === 1) {
-            out.push({ text: text.data, rect: rects[0]!, cs, order: out.length, owner });
+            out.push({ text: text.data, rect: rects[0]!, cs, order: out.length, owner, source: text });
             continue;
         }
         // One text node on several lines: each character goes with the line
-        // box its own box stands in.
+        // whose top its own box shares — never by its middle, which every
+        // line of a node piled within half a line holds.
         const words = rects.map(() => '');
         let line = 0;
         let at = 0;
+        let previous: Box | undefined;
         for (const ch of text.data) {
             range.setStart(text, at);
             range.setEnd(text, at + ch.length);
             at += ch.length;
             const r = range.getBoundingClientRect();
             if (r.width > 0 || r.height > 0) {
-                const mid = r.top + r.height / 2;
-                const found = rects.findIndex((l) => mid >= l.top && mid <= l.bottom && r.left >= l.left - 1 && r.right <= l.right + 1);
-                if (found >= 0) line = found;
+                line = lineOfCharacter(r, rects, line, previous);
+                previous = r;
             }
             words[line] += ch;
         }
         rects.forEach((r, i) => {
-            if (words[i] !== '') out.push({ text: words[i]!, rect: r, cs, order: out.length, owner });
+            if (words[i] !== '') out.push({ text: words[i]!, rect: r, cs, order: out.length, owner, source: text });
         });
     }
     return out;
@@ -4274,12 +4285,18 @@ function flowFault(node: HTMLElement, frags: readonly Fragment[], groups: boolea
     if (frags.length < 2) return undefined;
     // Lines: fragments that stand on one baseline (within 0.15em of the
     // smaller face, a pixel at least) — never by their boxes' overlap, which
-    // a `line-height` piling two lines on each other makes complete.
+    // a `line-height` piling two lines on each other makes complete — and
+    // never two fragments of one text node, which are two of its lines by
+    // construction however close a `line-height` piles them (round 6).
     const lines: Fragment[][] = [];
     for (const f of [...frags].sort((x, y) => inks.get(x)!.base - inks.get(y)!.base || x.rect.left - y.rect.left)) {
         const base = inks.get(f)!.base;
         const size = pxOf(f.cs.fontSize);
-        const line = lines.find((l) => Math.abs(inks.get(l[0]!)!.base - base) <= Math.max(1, 0.15 * Math.min(size, pxOf(l[0]!.cs.fontSize))));
+        const line = lines.find(
+            (l) =>
+                !l.some((g) => g.source === f.source) &&
+                Math.abs(inks.get(l[0]!)!.base - base) <= Math.max(1, 0.15 * Math.min(size, pxOf(l[0]!.cs.fontSize))),
+        );
         if (line === undefined) lines.push([f]);
         else line.push(f);
     }
