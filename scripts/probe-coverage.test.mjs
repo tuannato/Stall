@@ -1004,7 +1004,11 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
             if (['wall', 'narrow', 'reduced'].includes(pass.kind)) assert.ok((pass.screens ?? '').split(',').every((screen) => screen !== ''), pass.key);
             if (pass.kind === 'wall') assert.ok(Object.hasOwn(WALL_BLOCKS, pass.block), `${pass.key} names the block ${pass.block}`);
         });
-        for (const key of GEOMETRY_CANARY) assert.ok(keys.includes(key), `the canary reads ${key}, which the plan has no pass for`);
+        // Two picks, each a list of keys tried in order; the first falls back
+        // on the reduced-motion pass at the phone where no look has a
+        // sticky desk sign (the probe-shard critic's N4).
+        assert.deepEqual(GEOMETRY_CANARY, [['short-desk', 'reduced-motion @mobile'], ['reduced-motion @canvas']]);
+        for (const key of GEOMETRY_CANARY.flat()) assert.ok(keys.includes(key), `the canary reads ${key}, which the plan has no pass for`);
     });
 
     it('fails a pass the module gains before the tables name it, and a table row the module dropped', () => {

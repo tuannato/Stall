@@ -40,7 +40,8 @@ export declare const DESK_WALL_SCREENS: string;
 export declare const ALL_VIEWPORTS: readonly Viewport[];
 export declare const REDUCED: readonly { readonly vp: Viewport; readonly screens: string }[];
 export declare const CLEAR_SCREENS: readonly string[];
-export declare const GEOMETRY_CANARY: readonly string[];
+/** Each pick a list of plan keys, tried in order: the first whose walk measured something is read again. */
+export declare const GEOMETRY_CANARY: readonly (readonly string[])[];
 export declare const CONTRAST_PASS: Pass & { readonly viewports: readonly Viewport[] };
 export declare const TRANSPARENCY_PASS: Pass & { readonly vp: Viewport; readonly screens: string };
 export declare function geometryPlan(options?: { looks?: 'shipped' | 'workshop' }): Pass[];

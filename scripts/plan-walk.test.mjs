@@ -147,6 +147,42 @@ describe('the-geometry-passes-walk-in-plan-order-on-every-tab', () => {
         assert.deepEqual(printed.sort(), [0, 1]);
     });
 
+    it('reads a pick’s next key in its place when its own walk measured nothing, and a pick that measured nothing on no tab', async () => {
+        // The probe-shard critic's N4: the short pass at the desk measures
+        // nothing where no look has a sticky sign, and the canary read one
+        // pass again instead of two. `b` and `e` measure nothing here.
+        const plan = planOf([
+            ['a', 30],
+            ['b', 5],
+            ['c', 5],
+            ['d', 5],
+            ['e', 5],
+        ]);
+        const quiet = new Set(['b', 'e']);
+        const { result } = await walked(plan, 2, {
+            picks: [['b', 'c'], ['d'], ['e'], ['not-in-the-plan', 'a']],
+            measured: (answer) => !quiet.has(answer.key),
+        });
+        // `b` measured nothing, so `c` is read in its place; `d` as itself;
+        // `e` on no tab; the last pick's first key is not in the plan, so `a`.
+        assert.deepEqual(result.picks, [2, 3, 0]);
+        for (const n of result.picks) {
+            const read = result.readAgain.get(n);
+            assert.ok(read !== undefined, `${plan[n].key} was not read again`);
+            assert.notEqual(read.tab, result.ranOn[n]);
+        }
+        assert.equal(result.readAgain.has(1), false);
+        assert.equal(result.readAgain.has(4), false);
+        assert.equal(result.readAgain.size, 3);
+        // A pick whose first key measured reads that key, not the next.
+        const both = await walked(plan, 2, { picks: [['d', 'c']], measured: (answer) => !quiet.has(answer.key) });
+        assert.deepEqual(both.result.picks, [3]);
+        // Two picks falling back on one pass read it once.
+        const once = await walked(plan, 2, { picks: [['b', 'c'], ['e', 'c']], measured: (answer) => !quiet.has(answer.key) });
+        assert.deepEqual(once.result.picks, [2]);
+        assert.equal(once.result.readAgain.size, 1);
+    });
+
     it('refuses a pass that reads one after it in the plan', async () => {
         const plan = planOf([
             ['a', 5, ['b']],

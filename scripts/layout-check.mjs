@@ -275,7 +275,7 @@ const GEOMETRY_KINDS_RUN = new Set(['page', 'wall', 'narrow', 'short', 'reduced'
             faults.push(`the wall pass ${pass.key} names the block ${pass.block}, which is not one of ${Object.keys(WALL_BLOCKS).join(', ')}`);
         }
     }
-    for (const key of GEOMETRY_CANARY) {
+    for (const key of GEOMETRY_CANARY.flat()) {
         if (!GEOMETRY_PLAN.some((pass) => pass.key === key)) faults.push(`the geometry canary reads ${key} again, and the plan has no such pass`);
     }
     faults.push(
@@ -375,7 +375,10 @@ async function readVerdict(cdp, sessionId, pass, url) {
             // And measured as a visitor's page paints, on whichever tab it
             // ran (the geometry passes walk on the contrast pass's tabs): a
             // hidden page runs no animation frame, an unfocused one is not
-            // the page the first tab measures. A belt no run has tripped.
+            // the page the first tab measures. A belt no real run has
+            // tripped; its red proof is a tab whose `document.hasFocus` is
+            // made to answer false (the probe-shard critic's P1d), which
+            // fails every pass that tab runs.
             report.failures.push(...(await unshownFailures(cdp, sessionId)));
             // And at the size the plan entry names, as the page measured it.
             const offPlan = viewportOffPlan(pass, GEOMETRY_PLAN, await evalJson(cdp, sessionId, '[innerWidth, innerHeight]'));
@@ -2457,10 +2460,11 @@ function geometryRecordDiffers(walked, again) {
  * What a tab's page is (`the-geometry-passes-read-the-same-on-every-tab`):
  * the probe page at the desk's size with no screen measured, and everything
  * about it a tab could make different — its size and density, the screen,
- * every media feature a sheet could ask, whether it is visible and focused,
- * its sheets and their rule counts, any sheet adopted onto it, its globals,
- * the natives a probe reads time and layout through, its locale and its
- * faces. Read on the first tab before the walk and on every tab after it,
+ * the root's and the body's own `style` attribute and the spacing, size,
+ * face and writing direction text on them computes to, every media feature
+ * a sheet could ask, whether it is visible and focused, its sheets and their
+ * rule counts, any sheet adopted onto it, its globals, the natives a probe
+ * reads time and layout through, its locale and its faces. Read on the first tab before the walk and on every tab after it,
  * and every one after must be the one before. The passes read again
  * (`GEOMETRY_CANARY`) catch a tab state that moves a verdict on the passes
  * they are; this catches a page one tab alone is handed — a sheet or a
@@ -2477,8 +2481,20 @@ const TAB_PRINT = `(() => {
         '(dynamic-range: high)', '(color-gamut: p3)', '(monochrome)', 'print',
     ].map((q) => q + ' ' + matchMedia(q).matches);
     const native = (f) => Function.prototype.toString.call(f);
+    // The root's and the body's own style, set on the element rather than
+    // by a sheet (the probe-shard critic's N2: a letter-spacing set on one
+    // tab's <html> by script moved verdicts and no key of the print), and
+    // what text on them computes to.
+    const own = (el) => {
+        if (el === null || el === undefined) return null;
+        const cs = getComputedStyle(el);
+        return [el.getAttribute('style'), cs.letterSpacing, cs.wordSpacing, cs.fontSize, cs.lineHeight, cs.fontFamily,
+            cs.fontKerning, cs.fontVariantLigatures, cs.textRendering, cs.zoom, cs.writingMode, cs.direction];
+    };
     return {
         size: [innerWidth, innerHeight, devicePixelRatio, visualViewport?.scale ?? 1],
+        root: own(document.documentElement),
+        body: own(document.body),
         screen: [screen.width, screen.height, screen.colorDepth, screen.orientation?.type ?? ''],
         media,
         shown: [document.visibilityState, document.hasFocus()],
@@ -2690,12 +2706,16 @@ try {
      * The tabs the geometry passes and the contrast pass walk on
      * (`CONTRAST_TABS`): the first is the session the transparency pass also
      * uses, the rest are targets of the same Chrome, each in a window of its
-     * own (the contrast pass's reason, below). Every tab's page is focused
-     * whether or not its window is (`Emulation.setFocusEmulationEnabled`):
-     * one headless window is focused already, a second window is not, and a
-     * pass must not read one way on the first tab and another on the second.
-     * Each tab has its own page, viewport and emulated media; nothing a pass
-     * reads is another tab's.
+     * own (the contrast pass's reason, below). Every tab's page is asked to
+     * be focused (`Emulation.setFocusEmulationEnabled`), so a pass cannot read
+     * one way on the first tab and another on the second. Measured since
+     * (the probe-shard critic, Chrome 154 `--headless=new`): every target
+     * reports itself visible and focused without it too — a second window,
+     * a background tab in the first's window, the first tab — so it is kept
+     * as a belt, beside the check every verdict read makes
+     * (`unshownFailures`), whose red proof is a page whose
+     * `document.hasFocus` answers false. Each tab has its own page, viewport
+     * and emulated media; nothing a pass reads is another tab's.
      */
     const tabs = [{ index: 0, cdp, sessionId, targetId: undefined }];
     for (let index = 1; index < CONTRAST_TABS; index += 1) {
@@ -3318,15 +3338,17 @@ try {
      * whichever tab ran it, after whatever that tab ran before, is the
      * passes' hermeticity, and this holds it on every run with more than one
      * tab, as `the-contrast-pass-reads-the-same-on-every-tab` holds the
-     * contrast jobs'. A sample of passes (`GEOMETRY_CANARY`) is read again on
-     * a tab other than the one that ran it — by a tab whose hand-out has run
-     * out, so the reads fill the time it would stand waiting for the others
-     * — and each must hand back the same verdict as the walk's answer: the
-     * page's whole report, the lines it says less their clocks, and what it
-     * adds to the totals, byte for byte (`geometryRecordDiffers`), or the run
-     * fails naming the pass and both tabs. Read again, compared, never
-     * folded; a pass whose walk measured nothing (a short pass with no
-     * sticky sign) is not compared.
+     * contrast jobs'. A sample of passes (`GEOMETRY_CANARY`, two picks) is
+     * read again on a tab other than the one that ran it — by a tab whose
+     * hand-out has run out, so the reads fill the time it would stand
+     * waiting for the others — and each must hand back the same verdict as
+     * the walk's answer: the page's whole report, the lines it says less
+     * their clocks, and what it adds to the totals, byte for byte
+     * (`geometryRecordDiffers`), or the run fails naming the pass and both
+     * tabs. Read again, compared, never folded. A pass whose walk measured
+     * nothing (a short pass with no sticky sign) is not read again: its
+     * pick's next key is, so a run reads two passes again whatever looks it
+     * carries.
      */
     currentStep = 'the geometry passes';
     watchedTabs = tabs;
@@ -3360,6 +3382,9 @@ try {
         run: (tab, pass, deps) => pass.run(tab, deps),
         commit: commitGeometryPass,
         picks: tabs.length > 1 ? GEOMETRY_CANARY : [],
+        // A pass whose walk measured nothing (the short pass with no sticky
+        // sign) is not read again; its pick's next key is, in its place.
+        measured: (answer) => answer?.report !== undefined,
         tabIndex: (tab) => tab.index,
         onStart: (tab, pass, n, again) => {
             tab.step = `geometry ${again ? 'canary' : 'pass'} ${pass.key}`;
@@ -3493,8 +3518,10 @@ try {
      * sheet's close and a face's back control, and `:focus-visible` paints a
      * ring only in a focused page. One headless window is focused already
      * (measured: `document.hasFocus()` true with and without this, and the
-     * per-box dump identical, 4575 of 4575); a second window is not, so every
-     * tab asks for it, and each page load is held to it (`loadContrastPage`).
+     * per-box dump identical, 4575 of 4575), and so, measured since (the
+     * probe-shard critic), is a second window and a background tab; every
+     * tab asks for it anyway, as a belt, and each page load is held to it
+     * (`loadContrastPage`).
      */
     const readyTab = async (tabSession) => {
         await cdp.send('Page.enable', {}, tabSession);
@@ -3631,6 +3658,10 @@ try {
     let quietPixels = 0;
     // The codes read dark on a job's capture and white on a fresh pair (`readQuietZones`), said whatever the verdict.
     const quietReadAgain = [];
+    // The same, on the jobs the cross-tab canary read again (the probe-shard
+    // critic's N6): those reads are compared and never folded, so their
+    // sightings were lost.
+    const canaryQuietReadAgain = [];
     // D14: the least the sign's name read per look and decoration state
     // (line read, or ring read where it wears the outline), and how the
     // name was painted where it was read (`nameChrome`).
@@ -3970,6 +4001,7 @@ try {
             const boxesOf = (out) => new Map(out.dumpBoxes.map((box) => [box.key, JSON.stringify(box)]));
             contrastRun.canary = [...picks].sort(([a], [b]) => a - b).map(([n, why]) => {
                 const { tab, again } = readAgain.get(n);
+                for (const line of again.quietReadAgain ?? []) canaryQuietReadAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
                 const sameBoxes = JSON.stringify(again.dumpBoxes) === JSON.stringify(answers[n].dumpBoxes);
                 const said = { key: queue[n].key, why, ranOn: ranOn[n], readOn: tab, same: sameRecord && sameBoxes };
@@ -4367,7 +4399,10 @@ try {
         );
         console.log(
             `  quiet zone, read again on a fresh pair and white there: ` +
-                (quietReadAgain.length === 0 ? 'none' : `${quietReadAgain.length}${quietReadAgain.map((line) => `\n    ${line}`).join('')}`),
+                (quietReadAgain.length === 0 ? 'none' : `${quietReadAgain.length}${quietReadAgain.map((line) => `\n    ${line}`).join('')}`) +
+                (canaryQuietReadAgain.length === 0
+                    ? `; on the canary's reads again: none`
+                    : `; on the canary's reads again: ${canaryQuietReadAgain.length}${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
         );
     }
     // Every prepared node that gave no box, by the page's reason, whatever
@@ -4669,6 +4704,16 @@ try {
                     contrastTabsWhy: contrastRun.tabsWhy,
                     ranOn: contrastRun.ranOn,
                     canary: contrastRun.canary,
+                    // The codes read dark and then white on a fresh pair
+                    // (`readQuietZones`), on the walk's jobs and on the
+                    // canary's reads again: how many, and which (each
+                    // sighting's first line), so a reader comparing runs can
+                    // find a code that recurs (the probe-shard critic's N6).
+                    quietReadAgain: {
+                        walk: quietReadAgain.length,
+                        canary: canaryQuietReadAgain.length,
+                        sightings: [...quietReadAgain, ...canaryQuietReadAgain].map((line) => line.split('\n')[0]),
+                    },
                 },
                 jobs: runDumpJobs,
                 boxes: runDumpBoxes,

@@ -16,10 +16,15 @@
  * - A pass that throws stops the hand-out. The other tabs finish what they
  *   hold; the earliest pass in the plan that threw is the `fault`, and only
  *   the passes before it are committed — the same passes at any tab count.
- * - Once a tab's hand-out runs out, it reads again each pick (`picks`, by
- *   key) that another tab ran, and keeps what it read apart (`readAgain`),
- *   never committed; then runs `tail` (the runner's page print). Neither runs
- *   after a fault.
+ * - Once a tab's hand-out runs out, it reads again each pick (`picks`) that
+ *   another tab ran, and keeps what it read apart (`readAgain`), never
+ *   committed; then runs `tail` (the runner's page print). Neither runs
+ *   after a fault. A pick is a key, or a list of keys tried in order: the
+ *   first whose own answer `measured` says measured something is the one
+ *   read again (the runner's short pass at the desk measures nothing where
+ *   no look has a sticky sign, and its fallback is then read in its place),
+ *   and a pick none of whose keys measured anything is read on no tab. The
+ *   indexes read again, one per pick, are `picks` in the result.
  */
 
 /**
@@ -31,7 +36,8 @@
  *   afterOf?: (pass: P) => string[],
  *   run: (tab: T, pass: P, deps: (R | undefined)[]) => Promise<R>,
  *   commit: (answer: R, n: number) => void,
- *   picks?: string[],
+ *   picks?: (string | readonly string[])[],
+ *   measured?: (answer: R) => boolean,
  *   tail?: (tab: T) => Promise<void>,
  *   onStart?: (tab: T, pass: P, n: number, again: boolean) => void,
  *   onEnd?: (tab: T, pass: P, n: number, ms: number, again: boolean) => void,
@@ -47,6 +53,7 @@ export async function walkPlan({
     run,
     commit,
     picks = [],
+    measured = () => true,
     tail,
     onStart = () => {},
     onEnd = () => {},
@@ -87,7 +94,39 @@ export async function walkPlan({
         }
         return deps;
     };
-    const pickIndexes = picks.map((key) => index.get(key)).filter((n) => n !== undefined);
+    // Each pick as the plan indexes of its keys, in the order they are tried.
+    const groups = picks
+        .map((pick) => (typeof pick === 'string' ? [pick] : [...pick]).map((key) => index.get(key)).filter((n) => n !== undefined))
+        .filter((group) => group.length > 0);
+    /**
+     * Which pass of a pick is read again: the first whose own answer is in
+     * and measured something, or undefined. Asked only once the hand-out has
+     * run out, when every pass has been handed out and settles.
+     * @type {Map<number, Promise<number | undefined>>}
+     */
+    const choices = new Map();
+    /** @type {Map<number, number>} */
+    const chosen = new Map();
+    const choose = (g) => {
+        if (!choices.has(g)) {
+            choices.set(
+                g,
+                (async () => {
+                    for (const n of groups[g]) {
+                        const answer = await settled[n].promise;
+                        // A pass another pick already reads is not read twice.
+                        if ([...chosen.values()].includes(n)) continue;
+                        if (answer !== undefined && measured(answer)) {
+                            chosen.set(g, n);
+                            return n;
+                        }
+                    }
+                    return undefined;
+                })(),
+            );
+        }
+        return choices.get(g);
+    };
     const taken = new Set();
     /** @type {Map<number, { tab: number, answer: R, ms: number }>} */
     const readAgain = new Map();
@@ -113,9 +152,21 @@ export async function walkPlan({
             }
         }
         while (fault === undefined && readFault === undefined) {
-            const n = pickIndexes.find((pick) => !taken.has(pick) && ranOn[pick] !== tabIndex(tab));
+            let n;
+            for (let g = 0; g < groups.length && n === undefined; g += 1) {
+                if (taken.has(g)) continue;
+                const at = await choose(g);
+                if (taken.has(g)) continue;
+                if (at === undefined) {
+                    // No key of the pick measured anything: read on no tab.
+                    taken.add(g);
+                    continue;
+                }
+                if (ranOn[at] === tabIndex(tab)) continue;
+                taken.add(g);
+                n = at;
+            }
             if (n === undefined) break;
-            taken.add(n);
             const pass = plan[n];
             const started = now();
             try {
@@ -141,5 +192,6 @@ export async function walkPlan({
     // How many passes after the fault in the plan ran on other tabs before
     // the hand-out stopped, and are not committed.
     const lostAfterFault = fault === undefined ? 0 : answers.filter((answer, n) => n > fault.n && answer !== undefined).length;
+    const pickIndexes = groups.flatMap((group, g) => (chosen.has(g) ? [chosen.get(g)] : []));
     return { answers, ranOn, fault, unanswered, lostAfterFault, readAgain, readFault, picks: pickIndexes };
 }

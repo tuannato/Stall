@@ -368,21 +368,29 @@ export function geometryPlan({ looks = 'shipped' } = {}) {
 /*
  * The geometry passes read again on another tab on every run with more
  * than one (`the-geometry-passes-read-the-same-on-every-tab`), each compared
- * with the walk's own answer: the cheapest two, where a tab's state could
- * reach a verdict — the reduced-motion pass on the canvas, which sets an
- * emulated media feature on its tab and takes it off again, and the short
- * pass at the desk, a page pass with no media feature, where a sticky sign
- * gave it something to measure (a pass that measured nothing is not
- * compared). Every pass was read again on the other tab, byte for byte,
- * before these were chosen, and the others cost 4–35s each to read again
- * (`PROBE-RULES.md`, "The geometry passes walk on two tabs"). What a pass
- * the sample does not read could still differ by is held by the page print
- * (`TAB_PRINT`, in the runner). Each is a key of `geometryPlan`'s, which
- * `every-pass-the-runner-runs-is-in-a-coverage-table` holds: a key the plan
- * no longer has would be read again on no tab, and the walk drops it in
- * silence (`walkPlan`'s `picks`).
+ * with the walk's own answer: two picks, the cheapest passes where a tab's
+ * state could reach a verdict. Each pick is a list of keys tried in order
+ * (`walkPlan`'s `picks`): the first whose walk measured something is read
+ * again. The first pick is the short pass at the desk, a page pass with no
+ * media feature, where a sticky sign gave it something to measure — and,
+ * where no look has a sticky desk sign (the workshop's probe, a selection
+ * with none), the reduced-motion pass at the phone instead (2.9–4.2s), so a
+ * run reads two passes again whatever it carries (the probe-shard critic's
+ * N4: until 2026-10-20 such a run read one). The second is the
+ * reduced-motion pass on the canvas, which sets an emulated media feature on
+ * its tab and takes it off again. Every pass was read again on the other
+ * tab, byte for byte, before these were chosen, and the others cost 4–35s
+ * each to read again (`PROBE-RULES.md`, "The geometry passes walk on two
+ * tabs"). What a pass the sample does not read could still differ by is held
+ * by the page print (`TAB_PRINT`, in the runner). Each is a key of
+ * `geometryPlan`'s, which `every-pass-the-runner-runs-is-in-a-coverage-table`
+ * holds and the runner checks before it builds: a key the plan no longer has
+ * would be read again on no tab, and the walk drops it in silence.
  */
-export const GEOMETRY_CANARY = ['short-desk', 'reduced-motion @canvas'];
+export const GEOMETRY_CANARY = Object.freeze([
+    Object.freeze(['short-desk', 'reduced-motion @mobile']),
+    Object.freeze(['reduced-motion @canvas']),
+]);
 
 /** Pass 4, the rendered-pixel contrast pass, at the page passes' viewports, on its own plan (`layout/contrastPlan.ts`). */
 export const CONTRAST_PASS = Object.freeze({ key: 'contrast', kind: 'contrast', coverage: 'contrast', viewports: ALL_VIEWPORTS });
