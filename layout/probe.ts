@@ -3149,6 +3149,28 @@ function dressFree(prop: string): boolean {
     return DRESS_FREE.some(([pattern]) => pattern.test(prop));
 }
 
+/**
+ * The longhands the own read asks, once a page: every longhand this engine
+ * computes (custom properties aside) that is held or in no free family. A
+ * free longhand may compute anything, so it is not read at all — the
+ * allow-list's answer is the same, at a tenth of the reads.
+ */
+let dressRead: { held: readonly string[]; rest: readonly string[] } | undefined;
+function dressReadList(): { held: readonly string[]; rest: readonly string[] } {
+    if (dressRead !== undefined) return dressRead;
+    const cs = getComputedStyle(document.documentElement);
+    const held: string[] = [];
+    const rest: string[] = [];
+    for (let i = 0; i < cs.length; i += 1) {
+        const prop = cs.item(i);
+        if (prop.startsWith('--')) continue;
+        if (DRESS_HELD.has(prop)) held.push(prop);
+        else if (!dressFree(prop)) rest.push(prop);
+    }
+    dressRead = { held, rest };
+    return dressRead;
+}
+
 const pxOf = (v: string): number => Number.parseFloat(v) || 0;
 const noMask = (v: string): boolean => v === '' || v === 'none';
 
@@ -3292,6 +3314,8 @@ function shadowFault(value: string, sizePx: number): string | undefined {
 let pileCanvas: HTMLCanvasElement | undefined;
 /** Overlapping ink pixels per face, spacing and pair, across the whole run: the same pairs recur on every screen. */
 const pileCache = new Map<string, number>();
+/** The pixels a spacing adds to a pair's shared ink (0 where their ink boxes stay apart), across the whole run. */
+const pileSeen = new Map<string, number>();
 
 /**
  * How many pixels two glyphs' inks share, both at least half covered, with
@@ -3370,18 +3394,24 @@ function spacingPiles(text: string, cs: CSSStyleDeclaration): string | undefined
         if (j >= chars.length) break;
         const [a, b, between] = [chars[i]!, chars[j]!, chars.slice(i + 1, j).join('')];
         i = j - 1;
-        // The boxes first: a pair whose ink boxes stay apart cannot share ink.
-        ctx.font = font;
-        ctx.fontKerning = 'normal';
-        ctx.letterSpacing = `${ls}px`;
-        ctx.wordSpacing = `${ws}px`;
-        const origin = ctx.measureText(a + between + b).width - ctx.measureText(b).width;
-        ctx.letterSpacing = '0px';
-        ctx.wordSpacing = '0px';
-        if (origin - ctx.measureText(b).actualBoundingBoxLeft - ctx.measureText(a).actualBoundingBoxRight >= 0) continue;
-        const added =
-            sharedInk(font, cs.fontVariantCaps, cs.fontStretch, a, between, b, ls, ws, size) -
-            sharedInk(font, cs.fontVariantCaps, cs.fontStretch, a, between, b, 0, 0, size);
+        const key = `${font}|${cs.fontVariantCaps}|${cs.fontStretch}|${ls}|${ws}|${a}${between}${b}`;
+        let added = pileSeen.get(key);
+        if (added === undefined) {
+            // The boxes first: a pair whose ink boxes stay apart cannot share ink.
+            ctx.font = font;
+            ctx.fontKerning = 'normal';
+            ctx.letterSpacing = `${ls}px`;
+            ctx.wordSpacing = `${ws}px`;
+            const origin = ctx.measureText(a + between + b).width - ctx.measureText(b).width;
+            ctx.letterSpacing = '0px';
+            ctx.wordSpacing = '0px';
+            added =
+                origin - ctx.measureText(b).actualBoundingBoxLeft - ctx.measureText(a).actualBoundingBoxRight >= 0
+                    ? 0
+                    : sharedInk(font, cs.fontVariantCaps, cs.fontStretch, a, between, b, ls, ws, size) -
+                      sharedInk(font, cs.fontVariantCaps, cs.fontStretch, a, between, b, 0, 0, size);
+            pileSeen.set(key, added);
+        }
         if (added > 0) {
             return `letter-spacing ${cs.letterSpacing} piles "${a}${between}${b}": ${added} pixels of their inks overlap that the face keeps apart`;
         }
@@ -3504,37 +3534,76 @@ function outlineFault(el: Element, cs: CSSStyleDeclaration): string | undefined 
 const kebab = (key: string): string => (key === 'cssFloat' ? 'float' : key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`));
 
 /**
- * Every keyframe of every animation or running transition on `el`, each
- * held longhand it sets resolved where `el` stands (on a scratch element in
- * `el`'s parent, so a `var()` resolves as it would) and held by `judge`.
+ * The element a keyframe's value is resolved on: one per page, a block in a
+ * fixed, zero-sized, hidden box outside the stall that contains its own
+ * layout (`contain: strict`), so setting a value on it lays out that box
+ * alone (a scratch put into the figure's own row and taken out again
+ * re-laid the page out on the next read, every row) and a transform still
+ * resolves to a matrix (on an element with no box it resolves to `none`). A
+ * value that names a custom property is resolved where the box stands
+ * instead, so the `var()` resolves as it would; a percentage in a keyframe
+ * resolves against the scratch's empty box, which moves a shift and never
+ * a turn or a scale.
  */
-function animationFaults(el: Element, judge: (prop: string, value: string) => string | undefined): string[] {
+let keyframeScratch: HTMLElement | undefined;
+function resolveKeyframe(el: Element, prop: string, raw: string): string {
+    if (raw.includes('var(')) {
+        const scratch = document.createElement('span');
+        scratch.style.setProperty('all', 'unset');
+        (el.parentElement ?? document.body).append(scratch);
+        try {
+            scratch.style.setProperty(prop, raw);
+            return getComputedStyle(scratch).getPropertyValue(prop);
+        } finally {
+            scratch.remove();
+        }
+    }
+    if (keyframeScratch === undefined || !keyframeScratch.isConnected) {
+        const box = document.createElement('div');
+        for (const [p, v] of [
+            ['position', 'fixed'],
+            ['left', '0'],
+            ['top', '0'],
+            ['width', '0'],
+            ['height', '0'],
+            ['overflow', 'hidden'],
+            ['contain', 'strict'],
+            ['visibility', 'hidden'],
+            ['pointer-events', 'none'],
+        ] as const) {
+            box.style.setProperty(p, v);
+        }
+        keyframeScratch = document.createElement('div');
+        box.append(keyframeScratch);
+        document.body.append(box);
+    }
+    keyframeScratch.style.setProperty(prop, raw);
+    const value = getComputedStyle(keyframeScratch).getPropertyValue(prop);
+    keyframeScratch.style.removeProperty(prop);
+    return value;
+}
+
+/**
+ * Every keyframe of every animation or running transition on `el`: each
+ * longhand `wants` names that a keyframe sets, resolved (`resolveKeyframe`)
+ * and held by `judge`.
+ */
+function animationFaults(el: Element, wants: (prop: string) => boolean, judge: (prop: string, value: string) => string | undefined): string[] {
     const out: string[] = [];
     const anims = el.getAnimations();
-    if (anims.length === 0) return out;
-    const parent = el.parentElement ?? document.body;
-    const scratch = document.createElement('span');
-    scratch.style.setProperty('all', 'unset');
-    parent.append(scratch);
-    try {
-        for (const anim of anims) {
-            const effect = anim.effect;
-            if (!(effect instanceof KeyframeEffect)) continue;
-            const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
-            for (const frame of effect.getKeyframes()) {
-                for (const [key, raw] of Object.entries(frame)) {
-                    if (['offset', 'computedOffset', 'easing', 'composite'].includes(key) || typeof raw !== 'string') continue;
-                    const prop = kebab(key);
-                    scratch.style.setProperty(prop, raw);
-                    const value = getComputedStyle(scratch).getPropertyValue(prop);
-                    scratch.style.removeProperty(prop);
-                    const why = judge(prop, value);
-                    if (why !== undefined) out.push(`${why}, at ${Math.round((frame.computedOffset ?? 0) * 100)}% of ${name}`);
-                }
+    for (const anim of anims) {
+        const effect = anim.effect;
+        if (!(effect instanceof KeyframeEffect)) continue;
+        const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
+        for (const frame of effect.getKeyframes()) {
+            for (const [key, raw] of Object.entries(frame)) {
+                if (['offset', 'computedOffset', 'easing', 'composite'].includes(key) || typeof raw !== 'string') continue;
+                const prop = kebab(key);
+                if (!wants(prop)) continue;
+                const why = judge(prop, resolveKeyframe(el, prop, raw));
+                if (why !== undefined) out.push(`${why}, at ${Math.round((frame.computedOffset ?? 0) * 100)}% of ${name}`);
             }
         }
-    } finally {
-        scratch.remove();
     }
     return out;
 }
@@ -3572,8 +3641,14 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
 }
 const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale'] as const;
 
-/** An untouched element's every longhand outside `stall` (the docblock's reference), cached per measurement. */
-let dressRefs = new Map<Element, Map<string, string>>();
+/**
+ * An untouched element's every longhand outside `stall` (the docblock's
+ * reference), read once a page for each element a stall stands in: that
+ * element is the same on every paint, and nothing a paint writes outside
+ * the stall reaches a longhand the reference answers for (the own read asks
+ * it only of the longhands no family frees and no condition holds).
+ */
+const dressRefs = new Map<Element, Map<string, string>>();
 function dressReference(stall: Element): Map<string, string> {
     const host = stall.parentElement ?? document.body;
     let ref = dressRefs.get(host);
@@ -3630,70 +3705,51 @@ function clipRectOf(el: Element, value: string): Box | undefined {
     };
 }
 
-/**
- * Why a clip above `node`, up to its stall, cuts the figure's ink, or
- * undefined (3. in the docblock). Read with every transform from `node` up
- * to the stall held off.
- */
-function clippedAbove(node: HTMLElement): { why?: string; read: boolean } {
+/** Whether a box clips, masks or `clip-path`s at all, once a measurement. */
+let clipsSeen = new Map<Element, boolean>();
+function clipsAtAll(el: Element): boolean {
+    let known = clipsSeen.get(el);
+    if (known === undefined) {
+        const cs = getComputedStyle(el);
+        known = cs.clipPath !== 'none' || cs.clip !== 'auto' || MASK_PROPS.some((p) => !noMask(cs.getPropertyValue(p).trim()));
+        clipsSeen.set(el, known);
+    }
+    return known;
+}
+
+/** The boxes above `node` up to its stall, when one of them clips, masks or `clip-path`s at all; else undefined. */
+function clipChainOf(node: HTMLElement): HTMLElement[] | undefined {
     const chain: HTMLElement[] = [];
     for (let at: HTMLElement | null = node.parentElement; at !== null; at = at.parentElement) {
         chain.push(at);
         if (at.classList.contains('stall') || at.id === 'app') break;
     }
-    const clipped = chain.filter((el) => {
-        const cs = getComputedStyle(el);
-        return cs.clipPath !== 'none' || cs.clip !== 'auto' || MASK_PROPS.some((p) => !noMask(cs.getPropertyValue(p).trim()));
-    });
-    if (clipped.length === 0) return { read: false };
-    const turned = [node, ...chain].filter((el) => {
+    return chain.some(clipsAtAll) ? chain : undefined;
+}
+
+/** The transforms a clip read holds off, longhand by longhand. */
+const HELD_OFF = ['transform', 'rotate', 'scale', 'translate'] as const;
+
+/**
+ * Hold every transform on `els` off while `read` runs, and put each back
+ * through the CSSOM, longhand by longhand: the policy refuses an inline
+ * `style` attribute (`style-src-attr`), so a `setAttribute('style', …)`
+ * restore would leave a box without the inline declarations it had — the
+ * stall's own custom properties among them — for every rule measured after.
+ * A box that had no inline style is left with none.
+ */
+function withTransformsHeldOff<T>(els: Iterable<HTMLElement>, read: () => T): T {
+    const turned = [...els].filter((el) => {
         const cs = getComputedStyle(el);
         return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
     });
-    // Held off and put back through the CSSOM, longhand by longhand: the
-    // policy refuses an inline `style` attribute (`style-src-attr`), so a
-    // `setAttribute('style', …)` restore would leave the box without the
-    // inline declarations it had — the stall's own custom properties among
-    // them — for every rule measured after this one.
-    const HELD_OFF = ['transform', 'rotate', 'scale', 'translate'] as const;
     const kept = turned.map((el) => HELD_OFF.map((p) => [el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const));
     const bare = turned.map((el) => !el.hasAttribute('style'));
     for (const el of turned) {
         for (const p of HELD_OFF) el.style.setProperty(p, 'none', 'important');
     }
     try {
-        const inks = inkLines(node);
-        let scrolledBelow = '';
-        for (const at of chain) {
-            const cs = getComputedStyle(at);
-            const where = describe(at);
-            const mask = MASK_PROPS.map((p) => cs.getPropertyValue(p).trim()).find((v) => !noMask(v));
-            if (mask !== undefined) return { read: true, why: `stands under a mask on ${where} (${mask.slice(0, 60)}): a mask fades the figure in any shape` };
-            if (cs.clip !== 'auto') {
-                const box = clipRectOf(at, cs.clip);
-                if (box === undefined) return { read: true, why: `stands under a clip this rule cannot read on ${where} (${cs.clip})` };
-                const out = inks.find((l) => l.left < box.left - 1 || l.right > box.right + 1 || l.top < box.top - 1 || l.bottom > box.bottom + 1);
-                if (out !== undefined) return { read: true, why: `has its ink cut by ${where}'s clip ${cs.clip}` };
-            }
-            if (cs.clipPath !== 'none') {
-                if (scrolledBelow !== '') {
-                    return { read: true, why: `stands under a clip-path on ${where} above ${scrolledBelow}, which scrolls: one reading at rest is not every scroll (${cs.clipPath.slice(0, 60)})` };
-                }
-                const shape = paintClips(at).find((c) => c.kind !== 'axes');
-                if (shape?.kind === 'shape') {
-                    const out = inks.find((l) => !shape.inside(l));
-                    if (out !== undefined) return { read: true, why: `has its ink at ${Math.round(out.left)}–${Math.round(out.right)} × ${Math.round(out.top)}–${Math.round(out.bottom)} cut by ${where}'s clip-path ${cs.clipPath.slice(0, 60)}` };
-                } else {
-                    const frame = at.getBoundingClientRect();
-                    const poly = cs.clipPath.startsWith('polygon(') ? parsePolygon(cs.clipPath, frame.width, frame.height) : undefined;
-                    if (poly === undefined) return { read: true, why: `stands under a clip-path this rule cannot read on ${where}: ${cs.clipPath.slice(0, 60)}` };
-                    const out = inks.find((l) => !boxInPolygon(l, poly, frame));
-                    if (out !== undefined) return { read: true, why: `has its ink at ${Math.round(out.left)}–${Math.round(out.right)} × ${Math.round(out.top)}–${Math.round(out.bottom)} cut by ${where}'s clip-path ${cs.clipPath.slice(0, 60)}` };
-                }
-            }
-            if (scrolledBelow === '' && paintClips(at).some((c) => c.kind === 'axes' && (c.scrollsX || c.scrollsY))) scrolledBelow = where;
-        }
-        return { read: true };
+        return read();
     } finally {
         turned.forEach((el, i) => {
             HELD_OFF.forEach((p, j) => {
@@ -3701,16 +3757,82 @@ function clippedAbove(node: HTMLElement): { why?: string; read: boolean } {
                 if (value === '') el.style.removeProperty(p);
                 else el.style.setProperty(p, value, priority);
             });
-            // A box that had no inline style is left with none (removing an
-            // attribute is not an inline style the policy refuses).
             if (bare[i] && el.getAttribute('style') === '') el.removeAttribute('style');
         });
     }
 }
 
+/**
+ * Why a clip on `chain` (the boxes above `node` up to its stall) cuts the
+ * figure's ink, or undefined (3. in the docblock), read with every
+ * transform from `node` to the stall held off (`withTransformsHeldOff`).
+ */
+function clipCut(node: HTMLElement, chain: readonly HTMLElement[]): string | undefined {
+    const inks = inkLines(node);
+    let scrolledBelow = '';
+    for (const at of chain) {
+        const cs = getComputedStyle(at);
+        const where = describe(at);
+        const mask = MASK_PROPS.map((p) => cs.getPropertyValue(p).trim()).find((v) => !noMask(v));
+        if (mask !== undefined) return `stands under a mask on ${where} (${mask.slice(0, 60)}): a mask fades the figure in any shape`;
+        if (cs.clip !== 'auto') {
+            const box = clipRectOf(at, cs.clip);
+            if (box === undefined) return `stands under a clip this rule cannot read on ${where} (${cs.clip})`;
+            const out = inks.find((l) => l.left < box.left - 1 || l.right > box.right + 1 || l.top < box.top - 1 || l.bottom > box.bottom + 1);
+            if (out !== undefined) return `has its ink cut by ${where}'s clip ${cs.clip}`;
+        }
+        if (cs.clipPath !== 'none') {
+            if (scrolledBelow !== '') {
+                return `stands under a clip-path on ${where} above ${scrolledBelow}, which scrolls: one reading at rest is not every scroll (${cs.clipPath.slice(0, 60)})`;
+            }
+            const shape = paintClips(at).find((c) => c.kind !== 'axes');
+            let out: Box | undefined;
+            if (shape?.kind === 'shape') {
+                out = inks.find((l) => !shape.inside(l));
+            } else {
+                const frame = at.getBoundingClientRect();
+                const poly = cs.clipPath.startsWith('polygon(') ? parsePolygon(cs.clipPath, frame.width, frame.height) : undefined;
+                if (poly === undefined) return `stands under a clip-path this rule cannot read on ${where}: ${cs.clipPath.slice(0, 60)}`;
+                out = inks.find((l) => !boxInPolygon(l, poly, frame));
+            }
+            if (out !== undefined) {
+                return `has its ink at ${Math.round(out.left)}–${Math.round(out.right)} × ${Math.round(out.top)}–${Math.round(out.bottom)} cut by ${where}'s clip-path ${cs.clipPath.slice(0, 60)}`;
+            }
+        }
+        if (scrolledBelow === '' && paintClips(at).some((c) => c.kind === 'axes' && (c.scrollsX || c.scrollsY))) scrolledBelow = where;
+    }
+    return undefined;
+}
+
+/** A box's own faults as a box holding a figure (2.), once a measurement: siblings share their boxes. */
+let boxFaultsSeen = new Map<Element, string[]>();
+function boxFaults(at: HTMLElement): string[] {
+    const known = boxFaultsSeen.get(at);
+    if (known !== undefined) return known;
+    const out: string[] = [];
+    const cs = getComputedStyle(at);
+    for (const prop of BOX_HELD) {
+        const why = boxHeldFault(prop, cs.getPropertyValue(prop), at);
+        if (why !== undefined) out.push(`${describe(at)} above it: ${why}`);
+    }
+    const line = decorationFault(cs);
+    if (line !== undefined) out.push(`${describe(at)} above it draws ${line.replace(/^an? /, 'a ')}`);
+    for (const why of animationFaults(
+        at,
+        (prop) => prop === 'clip-path' || (BOX_HELD as readonly string[]).includes(prop),
+        (prop, value) => (prop === 'clip-path' && value !== cs.clipPath ? `a clip-path that moves (${value.slice(0, 40)})` : boxHeldFault(prop, value, at)),
+    )) {
+        out.push(`${describe(at)} above it: ${why}`);
+    }
+    boxFaultsSeen.set(at, out);
+    return out;
+}
+
 function moneyDressFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
-    dressRefs = new Map();
+    boxFaultsSeen = new Map();
+    clipsSeen = new Map();
+    const read: { node: HTMLElement; faults: string[]; chain: HTMLElement[] | undefined }[] = [];
     const subjects = new Set<HTMLElement>(document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`));
     for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
         if (say.parentElement !== null) subjects.add(say.parentElement);
@@ -3728,13 +3850,14 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
         for (const el of own) {
             const name = el === node ? 'it' : describe(el);
             const cs = getComputedStyle(el);
-            for (const [prop, value] of styleOf(el)) {
-                if (DRESS_HELD.has(prop)) {
-                    const why = dressHeldFault(prop, value, cs);
-                    if (why !== undefined) faults.push(`${name}: ${why}`);
-                    continue;
-                }
-                if (value === (ref.get(prop) ?? '') || dressFree(prop)) continue;
+            const longhands = dressReadList();
+            for (const prop of longhands.held) {
+                const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs);
+                if (why !== undefined) faults.push(`${name}: ${why}`);
+            }
+            for (const prop of longhands.rest) {
+                const value = cs.getPropertyValue(prop);
+                if (value === (ref.get(prop) ?? '')) continue;
                 faults.push(`${name} computes ${prop} ${value || '(nothing)'}, which no rule lets a look dress (untouched: ${ref.get(prop) || '(nothing)'})`);
             }
             for (const why of [groundFault(cs), outlineFault(el, cs), decorationFault(cs)]) {
@@ -3752,7 +3875,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
                     }
                 }
             }
-            for (const why of animationFaults(el, (prop, value) => (DRESS_HELD.has(prop) ? dressHeldFault(prop, value, getComputedStyle(el)) : undefined))) {
+            for (const why of animationFaults(el, (prop) => DRESS_HELD.has(prop), (prop, value) => dressHeldFault(prop, value, cs))) {
                 faults.push(`${name}: ${why}`);
             }
             for (const pseudo of ['::before', '::after'] as const) {
@@ -3765,34 +3888,35 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
         // 2. The boxes that hold it, up to its surface: the paint effects that
         // are not inherited, and the lines a decoration draws across it.
         for (let at: HTMLElement | null = node.parentElement; at !== null && !at.matches(SELF_CLIP_ABOVE); at = at.parentElement) {
-            const cs = getComputedStyle(at);
-            for (const prop of BOX_HELD) {
-                const why = boxHeldFault(prop, cs.getPropertyValue(prop), at);
-                if (why !== undefined) faults.push(`${describe(at)} above it: ${why}`);
-            }
-            const line = decorationFault(cs);
-            if (line !== undefined) faults.push(`${describe(at)} above it draws ${line.replace(/^an? /, 'a ')}`);
-            for (const why of animationFaults(at, (prop, value) =>
-                prop === 'clip-path' && value !== cs.clipPath ? `a clip-path that moves (${value.slice(0, 40)})` : boxHeldFault(prop, value, at),
-            )) {
-                faults.push(`${describe(at)} above it: ${why}`);
-            }
+            faults.push(...boxFaults(at));
             if (at.matches(SELF_CLIP_SURFACE)) break;
         }
-        // 3. Every clip above it, up to the stall, in its own frame.
-        const clip = clippedAbove(node);
-        if (clip.read) dressClipByClass[measuringClass] = (dressClipByClass[measuringClass] ?? 0) + 1;
-        if (clip.why !== undefined) faults.push(clip.why);
-        if (faults.length > 0) {
-            out.push({
-                screen,
-                theme: label,
-                check: DRESS_CHECK,
-                detail:
-                    `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}": ` +
-                    `${faults.slice(0, 4).join('; ')}${faults.length > 4 ? `; and ${faults.length - 4} more` : ''} — a look dresses a money figure as a whole, and that dress may not misstate it`,
-            });
-        }
+        read.push({ node, faults, chain: clipChainOf(node) });
+    }
+    // 3. Every clip above a figure, up to the stall, in its own frame: one
+    // hold of the transforms for every figure that stands under a clip.
+    const clipped = read.filter((r) => r.chain !== undefined);
+    if (clipped.length > 0) {
+        const boxes = new Set<HTMLElement>();
+        for (const r of clipped) for (const el of [r.node, ...r.chain!]) boxes.add(el);
+        withTransformsHeldOff(boxes, () => {
+            for (const r of clipped) {
+                dressClipByClass[measuringClass] = (dressClipByClass[measuringClass] ?? 0) + 1;
+                const why = clipCut(r.node, r.chain!);
+                if (why !== undefined) r.faults.push(why);
+            }
+        });
+    }
+    for (const { node, faults } of read) {
+        if (faults.length === 0) continue;
+        out.push({
+            screen,
+            theme: label,
+            check: DRESS_CHECK,
+            detail:
+                `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}": ` +
+                `${faults.slice(0, 4).join('; ')}${faults.length > 4 ? `; and ${faults.length - 4} more` : ''} — a look dresses a money figure as a whole, and that dress may not misstate it`,
+        });
     }
     return out;
 }
