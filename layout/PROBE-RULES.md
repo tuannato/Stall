@@ -7749,3 +7749,205 @@ boxes grown by the text's size) +0.7–1.1s. **The margin is gone**: the
 critic's recommendation stands — run the geometry passes on the contrast
 pass's two tabs before `wall-offsize` merges on top; raising the ceiling is
 the owner's last choice.
+
+### Round 5: colours through the engine, the ground composited, lines across flows (CRITIC-MONEY-GUARDS, re-review of round 4)
+
+The critic found round 4's promise still not kept: a whole figure was hidden
+with the whole runner green by a ground in a colour space the reader did not
+parse (P1-1), by grounds each under half opaque that are opaque together
+(P1-2), and by one `display: flex` that made Pay several's total two flows
+the line read skipped (P1-3). Each paragraph below replaces the round-4
+paragraph it names; those stay above as the record.
+
+**Every colour is a colour, resolved by the engine** (P1-1; `dressColour`,
+`colourTokens` in `layout/groundStack.ts`). Round 4 read `rgb()`,
+`color(srgb …)` and `oklab()` (`colourOf`) and took anything else for no
+colour, so `inkOf` gave nothing and the ground reads returned at once, and
+the ink's alpha passed. The build lowers a literal `oklch()`, `lab()` or
+`color(display-p3 …)` to rgb, but not a colour that depends on the element:
+Chrome computes `color-mix(in oklch, currentColor …)`, or a mix over a
+`var()`, as `oklch(…)` or `lab(…)` (the critic's measurement; and this
+round's plant read `oklch(0.202724 0.00758435 none / 0.06)` for a 6% ink).
+Now every colour a computed value writes — every colour function with its
+balanced arguments, the two keywords, a hex colour, and every bare word
+`CSS.supports('color', …)` takes for one (a named colour) — is handed back
+to the engine: set on a span in the document's head as `color-mix(in srgb,
+<it> 100%, transparent)` and read back from its computed `color`, which
+Chrome writes `color(srgb r g b / a)`: the page's own conversion, unrounded,
+a channel outside 0–1 clipped as the display clips it; `currentcolor` is
+the element's own computed `color`. Memoised per string a page. A value
+whose parentheses do not balance, a colour the engine refuses, or a
+one-colour property that does not hold exactly one colour is **a colour
+this rule cannot read, and fails** ("a background colour this rule cannot
+read", "an ink this rule cannot read"). Why the engine and not a canvas: a
+canvas hands back eight premultiplied bits, losing a faint layer's hue, and
+`fillStyle` has no element to take `currentcolor` from. The ink's alpha
+(`color`, held at 1) is read the same way. The other colour readers in the
+probe (the outline's, the at-rest rule's, the halo rule's) keep
+`colourOf`: a colour they cannot parse fails there already, or is the
+contrast pass's.
+
+**The ground under the glyphs is the paints composited** (P1-2, replacing
+round 4's "A ground in the ink's colour is read from every paint under the
+glyphs"; `groundStackFault`, `worstGround`). The same paints are read, from
+the element up to and with the nearest box whose background colour is
+opaque (or the stall): its own background colour, image layers (a gradient
+by its stops, a picture by its place), box shadows, borders and border
+image, and each box above's background colour, box shadows, borders and
+border image (`boxPaintsOf`, cached per box a measurement, the element's
+own and a box above's apart). They are judged together: each stretch of
+the glyphs' ink (`inkLines`), cut by every box in the walk that clips what
+it holds, is cut into cells by the paints' edges, and on each cell the
+paints that cover it are composited source-over in paint order — a box's
+outer shadows (the last listed lowest), its background colour, its image's
+layers (the last lowest), its inset shadows, its borders, its border image,
+then the next box down — a gradient tried at each of its stops (at most
+`STACK_CHOICES_CAP`, 256, ways a cell, or the stack is one this rule
+cannot read). A cell whose composite is at least half opaque and reads
+under 3:1 against the ink fails, naming the paints on it, top first. Where
+the walk reached an opaque ground the cell is opaque and the judgement is
+the ground the colours paint; five layers of the ink's own colour at 0.49
+(0.97 opaque together) fail where round 4 passed each alone, and one such
+layer over a cream card (the card showing through at 5.4:1) still reads.
+**Its geometry is read only when the colours cannot pass it alone**
+(`everyMixReads`): a composite's colour is, channel by channel, a weighted
+mean of the paints' colours (blending in encoded sRGB), and where a stack is
+judged at all a paint of alpha α weighs at most α / 0.5 of it — so the
+lightest and darkest means those caps allow bound its luminance, and a
+stack whose bound lies wholly on one side of the band that reads under 3:1
+against the ink passes unmeasured, as does a stack that can never be half
+opaque (`mostOpaque`). The bound counts every paint and every stop as if
+they met one cell, so it is loose (a card's four borders and its shadows
+all count): on the phone pass over the shipped looks and the skeleton,
+2,829 of 4,070 stacks still read their geometry. Unit-held in `layout/groundStack.test.ts` (the critic's N9a and
+N9b as numbers, a contrasting paint covering half the ink, a gradient's
+stops, the cap, the bound).
+
+**The figure's lines, flow by flow** (P1-3, replacing round 4's "The
+figure's lines … where its text is one inline flow"; `lineFault`,
+`flowFault`). A flow is the text set in one block — the nearest box above
+a text that is not `inline` or `contents`. Round 4 read a node only when
+its text was one flow, so `.t-modern .pay-total { display: flex;
+flex-direction: column; width: 9em; line-height: 0.3 }`, which blockifies
+the figure's `.fig-say`, printed the eight-byte figure over " in total" with
+the rule silent. Now each flow is read for order, digit-group breaks and
+piled lines as round 4 read the one flow; and across flows, two fragments
+of different flows whose inks meet are drawn where they stand and a pixel
+both cover at least half fails, and where the text enters a flow for the
+first time, that flow's first fragment may not stand wholly above, or
+beside on the left of, the first fragment of the flow it leaves (a
+`row-reverse` printing "in total … =") — text that comes back to a flow it
+began is that flow's own order. On the shipped looks and the skeleton the
+one money node whose text is several flows is Pay several's
+list (`dl.pay-lines`, 28 a page pass, counted over those four looks), and
+it reads clean; the whole runner, the tracked fixture carried, reads 0. Not
+read across flows, stated: a break inside a digit group (a group split
+between two boxes is read within the flow that holds it), and the order of
+a flow that begins beside another but below its first line.
+
+**A pass the coverage tables do not name is a gap** (P3).
+`GEOMETRY_PASSES` is exported beside `PASSES_OWING_NO_GEOMETRY` (the short
+screens, the reduced-motion pass and the contrast pass, each with its
+reason); `probeCoverageGaps` gaps on a pass in neither, and
+`every-pass-the-runner-runs-is-in-a-coverage-table` reads every viewport the
+runner defines off `scripts/layout-check.mjs` (`{ name: '…', width: … }`)
+and holds each to the two lists, every geometry pass to the runner, and both
+surface tables' keys to `GEOMETRY_PASSES`. So `wall-offsize`'s four
+viewports turn `pnpm test` red until they are named, and a run that reaches
+one unnamed fails as a rule that compared nothing. Red: a planted `{ name:
+'side-tablet', width: 1024, height: 768 }` in the runner, and `short-wall`
+taken out of `GEOMETRY_PASSES`.
+
+**Not read, stated** (the docblock's list, corrected to what the rule
+reads, P3-3): a money node not rendered (`display: none`,
+`content-visibility: hidden`), skipped; where the figure's box stands; a
+single line set so tight that the line above or below stands on its glyphs;
+across flows, a break inside a digit group and the order of a flow beginning
+beside another but lower; `hyphenate-character`; **a box above's background
+image** (its gradients and pictures — the contrast pass's, and only on the
+screens it samples: a look can scope such a paint to `data-wall-tier`,
+`data-paying`, `data-touch` or `data-turn`, or to a screen the contrast pass
+does not sample, and nothing reads it there — the critic's P2-1); **a paint
+above the nearest box with an opaque background colour, whatever that
+colour covers** (its `background-clip`, its rounded corners, ink that runs
+past it — P2-1); a paint a box outside the walk lays under the glyphs (a
+sibling's background or shadow, a positioned box — the coverage rules' —
+and an in-flow `::before`/`::after` of a box above); a gradient between its
+stops (each stop is tried, not the colours interpolated between two, nor an
+`in <space>` interpolation's), a paint's rounded corners, the glyphs as
+pixels (a cell is judged under the line's ink box, between glyphs too); the
+ink's alpha in the contrast box read, and the contrast pass's blanking
+through `color`, which drops a `currentColor` ground from its capture; a
+shrink by a font feature; a stack of glows; **a neighbour's shadow from
+beyond the grandparent** (the critic's N6: 121 sharp copies of
+`[data-role="pay-final"]` moved 490–530px up erase "You pay" — P2-3); **a
+state no pass paints** — `:hover`, `:focus`, `:focus-visible`,
+`:focus-within`, `:active` — **and a turned wall** (`[data-turn]`): both
+look lints admit a clip scoped to either (P2-2); a box above the stall.
+
+**Unplanted, every shipped look, the skeleton and the tracked fixture read 0
+on the rule at every geometry pass** (the whole runner, 2026-10-19, 291.0s
+of 300 at load 4.6–5.9).
+
+**Red proofs** (2026-10-19). First on the probe page, the plants appended to
+the look sheets of the branch tip `5612189` and of this round, each built
+into the scratchpad, the phone and the desk passes over `offers`,
+`item-listing`, `item-quote`, `pay`, `pay-several`, `pay-several-long-figure`
+and `pay-several-longest-figure`: at `5612189` the set read 2 failures a
+pass, both the plain `$10.50` total on `pay-several` (one flow, which round 4
+read); this round reads 84 a pass, each plant by its own words. Then the
+whole runner on this round (a local clone, its ceiling raised to 1200s for
+the planted run alone, the sheets planted there), failing figures per pass —
+the phone, the desk, the canvas, the tall wall, the tablet, `desk-wall`,
+`short-wall`, the narrow phone, the reduced-motion pass; a pass the plant's
+screens are not on left out:
+
+- `.t-rural .x { background-color: color-mix(in oklch, currentColor 100%,
+  transparent) }` (N9a; Chrome computes `oklch(…)`): "the ground under its
+  glyphs (its ground) reads at 1.00:1 on its ink" — the listing and quote
+  faces, 34, 34, narrow 27;
+- `.t-rural .item-x` with `background-color` and four inset `box-shadow`
+  layers, each `color-mix(in srgb, currentColor 49%, transparent)` (N9b,
+  0.97 opaque together): "the ground under its glyphs (its inset box-shadow
+  over its inset box-shadow over … and 2 more) reads at 1.11:1 on its ink,
+  1.00 opaque together" — 501, 591, 384, 474, 201, 111, 201, 286, 88;
+- `.t-modern .pay-total { display: flex; flex-direction: column; width:
+  9em; line-height: 0.3 }` (N4′): "its lines pile on each other: 187 pixels
+  of "368,934,881,474," and "191,032.30 XEC" overlap" (the figure's own
+  flow), on `pay-several-long-figure` and `pay-several-longest-figure`, and
+  on `pay-several`'s `$10.50` as round 4 read it — 6, 6, narrow 6;
+- `.t-rural .pay-total { display: flex; flex-direction: row-reverse;
+  justify-content: flex-end }` (N4b): "its text is drawn out of its order:
+  "in total" stands before "=" though it comes after" — 4, 4, narrow 4;
+- `.t-modern .pay-x-n { color: color-mix(in oklch, var(--s-text) 6%,
+  transparent) }` (the critic's runtime ink at 6%, which Chrome computes as
+  `oklch(0.202724 0.00758435 none / 0.06)`): "an ink at alpha 0.06" — 29,
+  29, narrow 29, reduced 5. The contrast pass stops at this plant's first
+  sampled pay sheet ("unreadable computed colour", the runner's `rgbaOf`,
+  unchanged here): that half is loud, but only on the screens it samples.
+
+And on the probe page, at `5612189` 0 and this round 55 a pass on Modern: the
+three boxes above the row figure (`.item-head`, `.item-p`, `.item-a`) each at
+`color-mix(in oklch, currentColor 49%, transparent)` — "the ground under its
+glyphs (span.item-a's ground over span.item-p's ground over
+button.item-head's ground over div.item's ground) reads at 1.47:1".
+
+The coverage tables: a planted `{ name: 'side-tablet', width: 1024, height:
+768 }` in the runner, and `short-wall` taken out of `GEOMETRY_PASSES`, each
+turn `every-pass-the-runner-runs-is-in-a-coverage-table` red.
+
+**Cost** (2026-10-19, this Mac; the branch tip `5612189` and this round in
+local clones, back to back, two pairs, the ceiling raised to 1200s in both
+for the timing alone). The whole runner: `5612189` 268.9s, this round
+231.3s (load 4.7–5.6, the contrast pass alone 159.0s against 123.0s — the
+machine, not the code); this round 207.5s, `5612189` 207.2s (load 3.3–4.6).
+The eight geometry passes summed: 91.6s against 94.0s, and 74.2s against
+72.5s — **+1.7 to +2.4s**. In the page (the phone and the desk passes on
+every screen, `performance.now()` around the ground reads, scratch builds,
+two pairs): round 4's two ground reads 0.18–0.21s a page pass, this
+round's stack 0.30–0.38s; the whole dress rule 1.10–1.47s against
+1.22–1.55s. The colour bound passes 1,241 of the phone pass's 4,070 stacks
+(the shipped looks and the skeleton) unmeasured (2,829 read their geometry); the line read across flows runs on
+28 nodes a page pass. The unplanted runner in the worktree: 291.0s of 300
+at load 4.6–5.9, the margin the machine's (the critic's figures for
+`main` itself past 300s stand).
