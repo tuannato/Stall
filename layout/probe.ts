@@ -3234,9 +3234,12 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   sibling's background or shadow run under them; a box laid over them by
  *   an absolute or fixed position, or a decoration, is the box sweep's (the
  *   coverage rules'), but a box moved over the figure by a relative offset,
- *   a transform or a negative margin, with `pointer-events: none`, or a
- *   target's own glyph scaled over it, is read by no geometry rule, and by
- *   the contrast pass only as the figure's ground — a cover whose own ground
+ *   a transform or a negative margin, or a target's own glyph scaled over
+ *   it, is read by no geometry rule — whatever its `pointer-events` over
+ *   every money node but the price and "You pay" (and the unbuyable label),
+ *   the only nodes `coveredBy`'s hit test is asked about, and over those two
+ *   with `pointer-events: none` (the critic's PC2 and PC3′) — and by the
+ *   contrast pass only as the figure's ground — a cover whose own ground
  *   contrasts with the figure's ink passes (the critic's PC2, the no-escrow
  *   note moved over the pay sheet's figure), a contrast target's glyphs over
  *   another target's money are blank in both captures, since the pass blanks
