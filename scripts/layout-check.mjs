@@ -55,6 +55,9 @@ import {
     VIEWPORTS,
     WALL_BLOCKS,
     geometryPlan,
+    passesNotRun,
+    runnerPasses,
+    viewportOffPlan,
 } from './probe-passes.mjs';
 import { carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
@@ -248,6 +251,14 @@ process.on('exit', () => {
  * a viewport of its own: a pass is an entry there, run here by its kind
  * (`GEOMETRY_KINDS_RUN`), and a kind this run has no runner for stops it
  * before it builds.
+ *
+ * The coverage tables are held to the module's list (`runnerPasses`), and
+ * this run builds from the plan and the two pixel passes, so before it
+ * builds it holds that list to what it will run (`passesNotRun`): an entry
+ * there this run would not run, or a pass this run runs the list does not
+ * name, stops it (`the-runner-runs-every-pass-the-module-lists`; the
+ * probe-shard critic's B1, whose planted `lap-wall` and `contrast-tablet`
+ * passes were certified by the tables and measured by nothing).
  */
 const GEOMETRY_PLAN = geometryPlan({ looks: LOOKS });
 const GEOMETRY_KINDS_RUN = new Set(['page', 'wall', 'narrow', 'short', 'reduced', 'worn-only']);
@@ -267,6 +278,14 @@ const GEOMETRY_KINDS_RUN = new Set(['page', 'wall', 'narrow', 'short', 'reduced'
     for (const key of GEOMETRY_CANARY) {
         if (!GEOMETRY_PLAN.some((pass) => pass.key === key)) faults.push(`the geometry canary reads ${key} again, and the plan has no such pass`);
     }
+    faults.push(
+        ...passesNotRun(runnerPasses({ looks: LOOKS }), {
+            geometry: GEOMETRY_PLAN,
+            contrast: CONTRAST_PASS,
+            transparency: TRANSPARENCY_PASS,
+            kindsRun: GEOMETRY_KINDS_RUN,
+        }),
+    );
     if (faults.length > 0) {
         console.error(`layout-check: probe-passes.mjs plans a pass this run cannot make —\n${faults.map((f) => `  ${f}`).join('\n')}`);
         process.exit(1);
@@ -321,8 +340,20 @@ const VERDICT_TIMEOUT_MS = 120_000;
  * Navigate and wait for the probe's own verdict rather than for `load`: the
  * page writes `#layout-result` while its module evaluates, and an icon request
  * that never answers must not be able to hang the run.
+ *
+ * `pass` is the plan entry the verdict is read for, the object the plan holds
+ * (`GEOMETRY_PLAN`): one that is not refuses the read before it navigates,
+ * and a page whose size is not that entry's viewport fails the pass
+ * (`every-viewport-the-runner-measures-is-a-module-pass`, `viewportOffPlan`;
+ * the probe-shard critic's N1). This is the run-time half of "the runner
+ * names no viewport of its own": the text check
+ * (`runnerViewportLiterals`, `probe-coverage.test.mjs`) reads the shapes it
+ * was written for, and a size built from constants or a spread went past it.
+ * What it does not see: a pass that never asks this function for a verdict.
  */
-async function readVerdict(cdp, sessionId, url) {
+async function readVerdict(cdp, sessionId, pass, url) {
+    const notInPlan = viewportOffPlan(pass, GEOMETRY_PLAN, pass?.vp === undefined ? undefined : [pass.vp.width, pass.vp.height]);
+    if (notInPlan !== undefined) throw new Error(`${notInPlan} (every-viewport-the-runner-measures-is-a-module-pass)`);
     currentStep = `the probe page's verdict at ${url.replace(/^http:\/\/localhost:\d+\//, '')}`;
     await cdp.send('Page.navigate', { url }, sessionId);
     for (let i = 0; i < 150; i += 1) {
@@ -346,6 +377,16 @@ async function readVerdict(cdp, sessionId, url) {
             // hidden page runs no animation frame, an unfocused one is not
             // the page the first tab measures. A belt no run has tripped.
             report.failures.push(...(await unshownFailures(cdp, sessionId)));
+            // And at the size the plan entry names, as the page measured it.
+            const offPlan = viewportOffPlan(pass, GEOMETRY_PLAN, await evalJson(cdp, sessionId, '[innerWidth, innerHeight]'));
+            if (offPlan !== undefined) {
+                report.failures.push({
+                    screen: 'probe page',
+                    theme: '-',
+                    check: 'every-viewport-the-runner-measures-is-a-module-pass',
+                    detail: offPlan,
+                });
+            }
             return report;
         }
         await sleep(100);
@@ -2680,7 +2721,7 @@ try {
         );
         let report;
         try {
-            report = await readVerdict(cdp, tab.sessionId, probeUrl(vp));
+            report = await readVerdict(cdp, tab.sessionId, pass, probeUrl(vp));
         } catch (err) {
             g.error(`✗ ${vp.name}: ${err.message}`);
             g.failed = true;
@@ -2927,7 +2968,7 @@ try {
         const wanted = pass.screens.split(',').length;
         const label = `${vp.name} (${vp.width}x${vp.height}, shop window)`;
         try {
-            const wv = await readVerdict(cdp, tab.sessionId, probeUrl(vp, `&screens=${pass.screens}`));
+            const wv = await readVerdict(cdp, tab.sessionId, pass, probeUrl(vp, `&screens=${pass.screens}`));
             g.report = wv;
             if (wv.viewport !== vp.width) {
                 g.failed = true;
@@ -3002,7 +3043,7 @@ try {
         const wanted = pass.screens.split(',').length;
         const label = `${vp.name} (${vp.width}x${vp.height}, the money screens)`;
         try {
-            const nv = await readVerdict(cdp, tab.sessionId, probeUrl(vp, `&screens=${pass.screens}`));
+            const nv = await readVerdict(cdp, tab.sessionId, pass, probeUrl(vp, `&screens=${pass.screens}`));
             g.report = nv;
             const spent = g.took();
             const wrongPrivate = privateLooksWrong(nv.privateClasses);
@@ -3084,7 +3125,7 @@ try {
             tab.sessionId,
         );
         try {
-            const sv = await readVerdict(cdp, tab.sessionId, probeUrl(vp, `&sticky=${classes.join(',')}`));
+            const sv = await readVerdict(cdp, tab.sessionId, pass, probeUrl(vp, `&sticky=${classes.join(',')}`));
             g.report = sv;
             const spent = g.took();
             const echoed = JSON.stringify(sv.stickyOnly ?? null);
@@ -3162,7 +3203,7 @@ try {
             const wanted = pass.screens.split(',').length;
             const label = `reduced-motion (${pass.screens.replace(/,/g, ', ')} @${pass.vp.name})`;
             try {
-                const rm = await readVerdict(cdp, tab.sessionId, probeUrl(pass.vp, `&screens=${pass.screens}`));
+                const rm = await readVerdict(cdp, tab.sessionId, pass, probeUrl(pass.vp, `&screens=${pass.screens}`));
                 g.report = rm;
                 // The page's own answer, not the request: emulation that silently
                 // did not apply is how 500px once passed as 390, and a screen list

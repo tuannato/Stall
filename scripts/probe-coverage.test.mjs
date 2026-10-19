@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
     CARD_FIGURES_OWED,
     CARD_LADDERS_OWED,
@@ -16,7 +20,20 @@ import {
     probeCoverageLine,
     wornSheetJobFaults,
 } from './probe-coverage.mjs';
-import { GEOMETRY_CANARY, PASS_KINDS, WALL_BLOCKS, geometryPlan, runnerPasses } from './probe-passes.mjs';
+import {
+    CONTRAST_PASS,
+    GEOMETRY_CANARY,
+    PASS_KINDS,
+    TABLET,
+    TRANSPARENCY_PASS,
+    WALL_BLOCKS,
+    WINDOW_SCREENS,
+    geometryPlan,
+    passesNotRun,
+    runnerPasses,
+    viewportOffPlan,
+} from './probe-passes.mjs';
+import { withoutSelection } from './looks-selection.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -918,11 +935,18 @@ function passTableFaults(passes, { geometry = GEOMETRY_PASSES, none = PASSES_OWI
 }
 
 /**
- * A viewport written in the runner's own text, in any of the shapes the
- * round-5 test's pattern missed: a width or height given as a literal, a
- * name beside a width or height in either order, a name beside a spread of
- * another viewport — quoted any way. The runner names no viewport of its
- * own; every pass is an entry of `probe-passes.mjs`.
+ * A viewport written in the runner's own text — the static belt under the
+ * run-time check (`viewportOffPlan`, `every-viewport-the-runner-measures-is-a-module-pass`).
+ * It reads exactly five shapes, its keys quoted any way or not at all:
+ * a `width` or `height` key whose value starts with a digit or a quote (a
+ * literal); an object literal with no brace inside it holding a `name` key
+ * and a `width` or `height` key, in either order; and one holding a `name`
+ * key and a spread, in either order. It misses everything else: a size
+ * from constants or arithmetic with no `name` beside it
+ * (`{ width: SIDE_W, height: SIDE_H }`), a spread with no `name`
+ * (`{ ...TABLET, height: TABLET.height - 256 }`), an object with a brace
+ * inside it — the shapes the run-time check refuses instead
+ * (the probe-shard critic's N1).
  */
 function runnerViewportLiterals(source) {
     const key = (name) => String.raw`['"\x60]?\b${name}\b['"\x60]?\s*:`;
@@ -1039,6 +1063,14 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
         ]) {
             assert.notDeepEqual(runnerViewportLiterals(`${runner}\n${planted}\n`), [], planted);
         }
+        // What it misses, stated: the run-time check refuses these
+        // (`every-viewport-the-runner-measures-is-a-module-pass`).
+        for (const missed of [
+            'const SIDE_W = 1024; const SIDE_H = 768;\nawait cdp.send(\'Emulation.setDeviceMetricsOverride\', { width: SIDE_W, height: SIDE_H, deviceScaleFactor: 1, mobile: false });',
+            'const SQUARE = { ...TABLET, height: TABLET.height - 256 };',
+        ]) {
+            assert.deepEqual(runnerViewportLiterals(`${runner}\n${missed}\n`).filter((hit) => !runnerViewportLiterals(runner).includes(hit)), [], missed);
+        }
     });
 
     it('names a pass in no table as a gap at run time, and only such a pass', () => {
@@ -1048,5 +1080,161 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
         for (const pass of [...GEOMETRY_PASSES, ...Object.keys(PASSES_OWING_NO_GEOMETRY)]) {
             assert.ok(!probeCoverageGaps(pass, {}).some((gap) => gap.includes('in no coverage table')), pass);
         }
+    });
+});
+
+/** The repository's root, where the runner is run from. */
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+/** The geometry kinds the runner has a runner for: every kind but the two pixel passes' (`GEOMETRY_KINDS_RUN`). */
+const KINDS_RUN = new Set(Object.keys(PASS_KINDS).filter((kind) => kind !== 'contrast' && kind !== 'transparency'));
+/** What the runner builds its passes from, for `looks`. */
+const builtFor = (looks) => ({ geometry: geometryPlan({ looks }), contrast: CONTRAST_PASS, transparency: TRANSPARENCY_PASS, kindsRun: KINDS_RUN });
+/** The critic's two plants (B1, `critps/plant-runnerpasses4.diff`): a wall size and a second contrast pass, listed and never run. */
+const LAP_WALL = { key: 'lap-wall', kind: 'wall', coverage: 'lap-wall', vp: { name: 'lap-wall', width: 1024, height: 768 }, screens: WINDOW_SCREENS, block: 'landscapeShort' };
+const CONTRAST_TABLET = { key: 'contrast-tablet', kind: 'contrast', coverage: 'contrast-tablet', viewports: [TABLET] };
+
+/**
+ * The runner run with `runnerPasses` planted to list one more pass, through
+ * a module hook that hands it a planted `probe-passes.mjs` (the real one,
+ * with `runnerPasses` extended) and touches nothing else. It stops before it
+ * builds, so it starts no server and no browser; `PATH` holds no `npx`, so a
+ * runner that went on would fail at its build rather than run a probe.
+ */
+function runnerWithListed(extra) {
+    const dir = mkdtempSync(join(tmpdir(), 'stall-runner-plant-'));
+    try {
+        const real = pathToFileURL(join(ROOT, 'scripts', 'probe-passes.mjs')).href;
+        writeFileSync(
+            join(dir, 'plant.mjs'),
+            `export * from ${JSON.stringify(real)};\n` +
+                `import { runnerPasses as real } from ${JSON.stringify(real)};\n` +
+                `export function runnerPasses(options) { return [...real(options), ${JSON.stringify(extra)}]; }\n`,
+        );
+        writeFileSync(
+            join(dir, 'hooks.mjs'),
+            `export async function resolve(specifier, context, next) {\n` +
+                `    if (specifier === './probe-passes.mjs' && context.parentURL?.endsWith('/scripts/layout-check.mjs')) {\n` +
+                `        return { url: new URL('./plant.mjs', import.meta.url).href, shortCircuit: true };\n` +
+                `    }\n` +
+                `    return next(specifier, context);\n` +
+                `}\n`,
+        );
+        writeFileSync(join(dir, 'register.mjs'), `import { register } from 'node:module';\nregister('./hooks.mjs', import.meta.url);\n`);
+        return spawnSync(process.execPath, ['--import', pathToFileURL(join(dir, 'register.mjs')).href, 'scripts/layout-check.mjs'], {
+            cwd: ROOT,
+            env: { ...withoutSelection(process.env), PATH: '/usr/bin:/bin', LAYOUT_PORT: '4398', LAYOUT_CDP_PORT: '9418' },
+            encoding: 'utf8',
+            timeout: 60_000,
+        });
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+describe('the-runner-runs-every-pass-the-module-lists', () => {
+    /**
+     * The probe-shard critic's B1: the coverage tables were held to
+     * `runnerPasses`, which the runner never read — it builds the geometry
+     * walk from `geometryPlan` and the pixel passes from `CONTRAST_PASS` and
+     * `TRANSPARENCY_PASS` — so a pass listed there and named in the tables
+     * (`lap-wall`, a second contrast pass) passed every test and was measured
+     * by nothing. The runner now holds the list to what it builds before it
+     * builds (`passesNotRun`), and stops on any difference.
+     */
+    it('lists exactly the passes the runner builds, by value and in order, on the ordinary probe and the kit’s', () => {
+        assert.deepEqual(passesNotRun(runnerPasses({ looks: 'shipped' }), builtFor('shipped')), []);
+        assert.deepEqual(passesNotRun(runnerPasses({ looks: 'workshop' }), builtFor('workshop')), []);
+    });
+
+    it('refuses an entry the runner will not run, an entry it runs otherwise, a pass it runs that is not listed, and another order', () => {
+        const listed = runnerPasses({ looks: 'shipped' });
+        const built = builtFor('shipped');
+        // The critic's two plants.
+        assert.deepEqual(passesNotRun([...listed, LAP_WALL], built), [
+            "the module lists lap-wall, a wall pass, and the runner's geometry walk has no such pass: it would never run",
+        ]);
+        const contrast = passesNotRun([...listed, CONTRAST_TABLET], built);
+        assert.equal(contrast.length, 1);
+        assert.match(contrast[0], /^the module lists a contrast pass, contrast-tablet, the runner will not run: it runs one contrast pass, contrast /);
+        // The plant planted where the walk runs, in place of a pass: refused both ways.
+        const tablet = listed.findIndex((pass) => pass.key === 'tablet');
+        assert.deepEqual(passesNotRun(listed.map((pass, n) => (n === tablet ? LAP_WALL : pass)), built), [
+            "the module lists lap-wall, a wall pass, and the runner's geometry walk has no such pass: it would never run",
+            'the runner runs the geometry pass tablet and the module does not list it',
+        ]);
+        // The same key, another value: the runner would run something else.
+        const moved = passesNotRun(listed.map((pass, n) => (n === tablet ? { ...pass, vp: { ...pass.vp, height: pass.vp.height - 256 } } : pass)), built);
+        assert.equal(moved.length, 1);
+        assert.match(moved[0], /^the module lists tablet as .*"height":768.* and the runner runs it as .*"height":1024/);
+        // A pass the runner runs that the list does not name.
+        assert.deepEqual(passesNotRun(listed.filter((pass) => pass.kind !== 'transparency'), built), [
+            'the runner runs the transparency pass transparency and the module does not list it',
+        ]);
+        // The same pixel pass twice, a kind with no runner, two passes of one key, another order.
+        assert.deepEqual(passesNotRun([...listed, CONTRAST_PASS], built), [
+            'the module lists two passes keyed contrast',
+            'the module lists the contrast pass contrast 2 times; the runner runs it once',
+            'the module lists the passes in another order than the runner runs them (the geometry walk in plan order, then contrast, then transparency)',
+        ]);
+        assert.deepEqual(passesNotRun([...listed, { ...LAP_WALL, kind: 'sideways' }], built), [
+            'the module lists lap-wall, a sideways pass, and the runner has no runner for that kind',
+        ]);
+        assert.deepEqual(passesNotRun([listed[1], listed[0], ...listed.slice(2)], built), [
+            'the module lists the passes in another order than the runner runs them (the geometry walk in plan order, then contrast, then transparency)',
+        ]);
+    });
+
+    it('is asked by the runner before it builds: the runner given either plant exits 1 naming it, and builds nothing', () => {
+        for (const [extra, said] of [
+            [LAP_WALL, "the module lists lap-wall, a wall pass, and the runner's geometry walk has no such pass: it would never run"],
+            [CONTRAST_TABLET, 'the module lists a contrast pass, contrast-tablet, the runner will not run'],
+        ]) {
+            const run = runnerWithListed(extra);
+            assert.equal(run.status, 1, `${extra.key}: exit ${run.status}, signal ${run.signal}\n${run.stdout}\n${run.stderr}`);
+            assert.match(run.stderr, /layout-check: probe-passes\.mjs plans a pass this run cannot make —/);
+            assert.ok(run.stderr.includes(said), run.stderr);
+            assert.ok(!/vite build|preview server|Chrome/.test(run.stdout + run.stderr), `${extra.key}: the runner went on\n${run.stdout}\n${run.stderr}`);
+        }
+    });
+});
+
+describe('every-viewport-the-runner-measures-is-a-module-pass', () => {
+    /**
+     * The probe-shard critic's N1: the runner's text check reads five shapes,
+     * and a size built from constants (`SIDE_W`, `SIDE_H`) or a spread of
+     * another viewport (`{ ...TABLET, height: TABLET.height - 256 }`) went
+     * past it. `readVerdict` takes the plan entry it reads a verdict for and
+     * holds the page to it (`viewportOffPlan`): the entry must be the plan's
+     * own object, and the page's measured size that entry's viewport.
+     */
+    it('passes a plan entry measured at its own size, and refuses an entry not in the plan or a page at another size', () => {
+        const plan = geometryPlan({ looks: 'shipped' });
+        for (const pass of plan) assert.equal(viewportOffPlan(pass, plan, [pass.vp.width, pass.vp.height]), undefined, pass.key);
+        const tablet = plan.find((pass) => pass.key === 'tablet');
+        // The critic's plant: a pass after the walk at a size from constants.
+        const SIDE_W = 1024;
+        const SIDE_H = 768;
+        assert.equal(
+            viewportOffPlan({ key: 'side', vp: { width: SIDE_W, height: SIDE_H } }, plan, [SIDE_W, SIDE_H]),
+            'a verdict was read for side ({"height":768,"width":1024}), which is not an entry of the plan probe-passes.mjs lays out',
+        );
+        // The tablet's own entry, the page emulated at the constants, or at a spread of it.
+        assert.equal(viewportOffPlan(tablet, plan, [SIDE_W, SIDE_H]), "the page measured 1024x768 where the plan's tablet pass names 768x1024");
+        const square = { ...TABLET, height: TABLET.height - 256 };
+        assert.equal(viewportOffPlan(tablet, plan, [square.width, square.height]), "the page measured 768x768 where the plan's tablet pass names 768x1024");
+        // A copy of a plan entry is not the plan's: the runner reads only what it walks.
+        assert.match(viewportOffPlan({ ...tablet }, plan, [768, 1024]), /which is not an entry of the plan/);
+        assert.match(viewportOffPlan({ ...tablet, vp: square }, plan, [768, 768]), /which is not an entry of the plan/);
+        assert.match(viewportOffPlan(undefined, plan, [768, 1024]), /a verdict was read for a pass \(null\)/);
+        assert.equal(viewportOffPlan(tablet, plan, undefined), "the page measured undefinedxundefined where the plan's tablet pass names 768x1024");
+    });
+
+    it('is asked by every read of a verdict, with the plan entry it is read for', () => {
+        const runner = readFileSync(new URL('./layout-check.mjs', import.meta.url), 'utf8');
+        assert.match(runner, /async function readVerdict\(cdp, sessionId, pass, url\) \{\n    const notInPlan = viewportOffPlan\(pass, GEOMETRY_PLAN, /);
+        assert.match(runner, /const offPlan = viewportOffPlan\(pass, GEOMETRY_PLAN, await evalJson\(cdp, sessionId, '\[innerWidth, innerHeight\]'\)\);/);
+        const calls = [...runner.matchAll(/readVerdict\(([^)]*)/g)].map((m) => m[1]);
+        assert.ok(calls.length >= 5, calls.join(' | '));
+        for (const args of calls.slice(1)) assert.match(args, /^cdp, tab\.sessionId, pass, probeUrl\((?:pass\.)?vp\b/, args);
     });
 });

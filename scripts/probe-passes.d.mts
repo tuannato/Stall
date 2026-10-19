@@ -45,3 +45,8 @@ export declare const CONTRAST_PASS: Pass & { readonly viewports: readonly Viewpo
 export declare const TRANSPARENCY_PASS: Pass & { readonly vp: Viewport; readonly screens: string };
 export declare function geometryPlan(options?: { looks?: 'shipped' | 'workshop' }): Pass[];
 export declare function runnerPasses(options?: { looks?: 'shipped' | 'workshop' }): Pass[];
+export declare function passesNotRun(
+    listed: readonly Pass[],
+    built: { geometry: readonly Pass[]; contrast: Pass; transparency: Pass; kindsRun: ReadonlySet<string> },
+): string[];
+export declare function viewportOffPlan(pass: Pass | undefined, plan: readonly Pass[], measured: readonly number[] | undefined): string | undefined;

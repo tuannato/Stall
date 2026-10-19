@@ -396,7 +396,125 @@ export const TRANSPARENCY_PASS = Object.freeze({
     screens: CLEAR_SCREENS.join(','),
 });
 
-/** Every pass the runner runs, in the order it runs them. */
+/**
+ * Every pass the module lists, in the order the runner runs them: the list
+ * the coverage tables are held to (`every-pass-the-runner-runs-is-in-a-coverage-table`).
+ * The runner does not build from this list — it builds the geometry walk
+ * from `geometryPlan` and the two pixel passes from `CONTRAST_PASS` and
+ * `TRANSPARENCY_PASS` — so before it builds anything it holds this list to
+ * those (`passesNotRun`) and stops on any difference: an entry here the
+ * runner would not run is a pass the tables certify and no run measures
+ * (the probe-shard critic's B1, 2026-10-20).
+ */
 export function runnerPasses({ looks = 'shipped' } = {}) {
     return [...geometryPlan({ looks }), CONTRAST_PASS, TRANSPARENCY_PASS];
+}
+
+/** A value as one string, its object keys sorted, for comparing passes by value. */
+function canonical(value) {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+    if (value !== null && typeof value === 'object') {
+        return `{${Object.keys(value)
+            .sort()
+            .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+            .join(',')}}`;
+    }
+    return JSON.stringify(value) ?? 'undefined';
+}
+
+/**
+ * Where the passes the module lists (`listed`, `runnerPasses`) and the
+ * passes the runner builds disagree, one sentence each; none when they are
+ * the same passes, by value, in the same order (the probe-shard critic's B1:
+ * the coverage tables were held to `runnerPasses`, which the runner never
+ * read, so an entry there was certified and never run).
+ *
+ * `built` is what the runner builds its passes from: `geometry`, the plan
+ * its walk hands out (`geometryPlan`, in order); `contrast` and
+ * `transparency`, the one pass of each it runs after the walk; `kindsRun`,
+ * the geometry kinds it has a runner for. Refused, each by name:
+ * - an entry the runner will not run — a geometry entry the plan does not
+ *   hold, a second contrast or transparency pass, an entry of a kind the
+ *   runner has no runner for;
+ * - an entry the runner runs otherwise than listed (the same key, another
+ *   value: a viewport, a screen list, a block);
+ * - a pass the runner runs that the list does not name;
+ * - and an order the runner does not run them in (the geometry passes in
+ *   plan order, then the contrast pass, then the transparency pass).
+ *
+ * Pure (`the-runner-runs-every-pass-the-module-lists`).
+ */
+export function passesNotRun(listed, { geometry, contrast, transparency, kindsRun }) {
+    const faults = [];
+    const pixel = { contrast, transparency };
+    const geometryAt = new Map(geometry.map((pass, n) => [pass.key, n]));
+    const keys = new Set();
+    const order = [];
+    for (const pass of listed) {
+        if (keys.has(pass.key)) faults.push(`the module lists two passes keyed ${pass.key}`);
+        keys.add(pass.key);
+        if (Object.hasOwn(pixel, pass.kind)) {
+            const run = pixel[pass.kind];
+            if (canonical(pass) !== canonical(run)) {
+                faults.push(
+                    `the module lists a ${pass.kind} pass, ${pass.key}, the runner will not run: it runs one ${pass.kind} pass, ` +
+                        `${run.key} (${canonical(run)}), and this is ${canonical(pass)}`,
+                );
+                continue;
+            }
+            order.push(pass.kind === 'contrast' ? geometry.length : geometry.length + 1);
+            continue;
+        }
+        if (!kindsRun.has(pass.kind)) {
+            faults.push(`the module lists ${pass.key}, a ${pass.kind} pass, and the runner has no runner for that kind`);
+            continue;
+        }
+        const n = geometryAt.get(pass.key);
+        if (n === undefined) {
+            faults.push(`the module lists ${pass.key}, a ${pass.kind} pass, and the runner's geometry walk has no such pass: it would never run`);
+            continue;
+        }
+        if (canonical(pass) !== canonical(geometry[n])) {
+            faults.push(`the module lists ${pass.key} as ${canonical(pass)} and the runner runs it as ${canonical(geometry[n])}`);
+            continue;
+        }
+        order.push(n);
+    }
+    for (const pass of geometry) {
+        if (!listed.some((at) => at.key === pass.key && !Object.hasOwn(pixel, at.kind))) {
+            faults.push(`the runner runs the geometry pass ${pass.key} and the module does not list it`);
+        }
+    }
+    for (const [kind, run] of Object.entries(pixel)) {
+        const named = listed.filter((pass) => pass.kind === kind && canonical(pass) === canonical(run));
+        if (named.length === 0) faults.push(`the runner runs the ${kind} pass ${run.key} and the module does not list it`);
+        else if (named.length > 1) faults.push(`the module lists the ${kind} pass ${run.key} ${named.length} times; the runner runs it once`);
+    }
+    if (order.some((at, i) => i > 0 && at <= order[i - 1])) {
+        faults.push('the module lists the passes in another order than the runner runs them (the geometry walk in plan order, then contrast, then transparency)');
+    }
+    return faults;
+}
+
+/**
+ * Why a page a geometry pass read a verdict on is not one the module names,
+ * or undefined (`every-viewport-the-runner-measures-is-a-module-pass`, the
+ * probe-shard critic's N1). `pass` must be an entry of the runner's own plan
+ * (`plan`, `geometryPlan` as the runner holds it: the same object, never a
+ * copy or a spread of one), and the page's size as the page measured it
+ * (`measured`, `[innerWidth, innerHeight]`) that entry's viewport. A verdict
+ * read at a size the module does not name — a viewport built from
+ * constants, a spread of another, arithmetic — is refused here, at run time,
+ * where the runner's text check (`runnerViewportLiterals`) catches only the
+ * shapes it was written for. Pure.
+ */
+export function viewportOffPlan(pass, plan, measured) {
+    if (pass === undefined || pass === null || !plan.includes(pass)) {
+        return `a verdict was read for ${pass?.key ?? 'a pass'} (${canonical(pass?.vp ?? null)}), which is not an entry of the plan probe-passes.mjs lays out`;
+    }
+    const [width, height] = Array.isArray(measured) ? measured : [];
+    if (width !== pass.vp.width || height !== pass.vp.height) {
+        return `the page measured ${width}x${height} where the plan's ${pass.key} pass names ${pass.vp.width}x${pass.vp.height}`;
+    }
+    return undefined;
 }
