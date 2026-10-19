@@ -450,17 +450,19 @@ describe('a-look-may-not-dress-a-figures-pieces', () => {
         }
     });
 
-    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06, D-2026-10-19-02)', () => {
+    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06, D-2026-10-19-02, D-2026-10-20-01)', () => {
         const readme = read('workshop/README.md').replace(/\s+/g, ' ');
         // D-2026-10-14-06, its "shadow and everything around it" narrowed to
         // "the box around it" by D-2026-10-19-02: the probe holds a far
         // shadow and every box around the figure since D-2026-10-19-01.
         const piece =
-            "**A price is dressed as one piece.** When a long price is too wide for its box, the app breaks it after its commas (`184,467,` / `440,737,` / `095,516.15 XEC`). Style the price as a whole — its colour, face, size, weight and the box around it are yours — but never one part of it apart from the rest: every part keeps the price's own colour, opacity, face, size and spacing, with no mask, clip, filter or transform of its own. A part styled on its own could hide a digit while every other check stays green. *(The kit — `workshop:probe`.)*";
+            "**A price is dressed as one piece.** When a long price is too wide for its box, the app breaks it after its commas (`184,467,` / `440,737,` / `095,516.15 XEC`). Style the price as a whole — its colour, face, size, weight and the box around it are yours — but never one part of it apart from the rest: every part keeps the price's own colour, opacity, face, size and spacing, with no mask, clip, filter or transform of its own. A part styled on its own could hide a digit while every other check stays green. *(The kit — `workshop:probe`, on the screens and states it paints; Stall at intake for the rest, such as a pointer's hover, a turned wall and a screen the kit does not measure.)*";
         // D-2026-10-19-02: what `a-money-figure-is-never-misdressed` holds
-        // the whole figure to, in the kit's words.
+        // the whole figure to, in the kit's words. D-2026-10-20-01 split
+        // both labels: the probe paints no hover, no turned wall and not
+        // every screen, so the rest is Stall's at intake.
         const whole =
-            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe`.)*';
+            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe`, on the screens and states it paints; Stall at intake for the rest, such as a pointer\'s hover, a turned wall and a screen the kit does not measure.)*';
         assert.ok(readme.includes(piece), 'the workshop README does not carry the piece line');
         assert.ok(readme.includes(whole), 'the workshop README does not carry the whole-price line');
         assert.ok(!readme.includes('shadow and everything around it are yours'), 'the README still says a shadow and everything around the price are a look\'s');
