@@ -33,6 +33,8 @@ type Model = {
     piecePerPx?: number;
     /** Chrome breaks at `<wbr>` under nowrap: an overflowing line comes back as two lines that fit. */
     chromeWraps?: boolean;
+    /** And the price cell then reads stretched across its column, as the real one does. */
+    cellFills?: boolean;
     /** How far the card runs past the status line at a size, in a shape. */
     over?: (px: number, shape: string) => number;
 };
@@ -52,6 +54,7 @@ function modelGauge(model: Model, reads: string[] = []) {
                 lines = 2;
                 widest = fig / 2;
                 need = (model.fixed ?? 0) + widest;
+                if (model.cellFills === true) need = Math.max(need, model.room);
             }
         } else if (shape === 'stack') {
             need = (model.stackFixed ?? 0) + fig;
@@ -119,6 +122,20 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         expect(sizeOf(figure)).toBeLessThanOrEqual(400 / 7.8);
         expect(sizeOf(figure)).toBeGreaterThanOrEqual(WALL_FIGURE_MIN_PX);
         expect(head.hasAttribute('data-wall-wrap')).toBe(false);
+    });
+
+    it('takes the largest size that stands where its first estimate lands far under it', () => {
+        const { root, head, figure } = wall('$1,234,567.89', { breaks: true });
+        // At the design size Chrome breaks the line at a <wbr> and the cell
+        // reads stretched across the column, so the estimate takes the
+        // figure to half its size (39.9px); one line stands up to
+        // 1034 / 13.65 = 75.75px (measured in Chrome: Neo's figure on the
+        // tall wall, taken at 66.7px where 113 stands).
+        setWallFigureGauge(modelGauge({ room: 1034, design: 79.92, perPx: 13.65, chromeWraps: true, cellFills: true }));
+        fitWallFigures(root);
+        expect(head.hasAttribute('data-wall-wrap')).toBe(false);
+        expect(sizeOf(figure)).toBeLessThanOrEqual(1034 / 13.65);
+        expect(sizeOf(figure)).toBeGreaterThan(1034 / 13.65 - 0.5);
     });
 
     it('stands a listing\'s from above its figure where that buys the figure a size worth the line', () => {

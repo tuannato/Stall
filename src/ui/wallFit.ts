@@ -196,28 +196,49 @@ function stands(read: WallFigureRead, shape: Shape): boolean {
     return read.fits && (shape === 'break' || read.lines <= 1);
 }
 
+/** How close the fit comes to the largest size that stands, px. */
+const FIT_PRECISION_PX = 0.5;
+
 /**
  * The largest size from `start` down to `floor` at which the card stands in
  * `shape` — the size left set — or undefined, the floor left set, when none
- * does. Each try scales by what the last read says the figure needs on one
- * line (the money node scales with its size, `from`, ` XEC` and a tag's
- * chrome do not), and at least 1% down, so a read that does not move cannot
- * loop.
+ * does. Until a size stands, each try scales by what the last read says the
+ * figure needs on one line (the money node scales with its size, `from`,
+ * ` XEC` and a tag's chrome do not), and at least 1% down, so a read that
+ * does not move cannot loop. **That scale is an estimate, and it can land
+ * far under the answer**: a figure Chrome broke at a `<wbr>` reads its
+ * price cell stretched across the column, so what stands beside the figure
+ * reads larger than it is — measured, Neo's `$1,234,567.89` on the tall wall
+ * was taken at 66.7px where one line stands at 113px. So once a size
+ * stands below one that did not, the gap between the two is halved, to
+ * `FIT_PRECISION_PX`, and the largest size read standing is the one taken.
  */
 function settle(head: HTMLElement, figure: HTMLElement, shape: Shape, start: number, floor: number): number | undefined {
     let px = Math.max(start, floor);
-    for (let tries = 0; tries < 8; tries += 1) {
+    // The largest size read standing, and the smallest read not standing.
+    let stood: number | undefined;
+    let failed: number | undefined;
+    for (let tries = 0; tries < 14; tries += 1) {
         dress(head, figure, shape, px);
         const read = gauge(head, figure);
         if (read === undefined) return undefined;
-        if (stands(read, shape)) return px;
-        if (px <= floor) return undefined;
+        if (stands(read, shape)) stood = px;
+        else failed = px;
+        if (stood !== undefined) {
+            if (failed === undefined || failed - stood <= FIT_PRECISION_PX) break;
+            const half = Math.floor(((stood + failed) / 2) * 10) / 10;
+            if (half <= stood) break;
+            px = half;
+            continue;
+        }
+        if (px <= floor) break;
         const rest = read.need - read.widest;
         const wanted = shape === 'break' ? read.need : rest + read.figure;
         const scale = Math.min((read.room - rest) / Math.max(wanted - rest, 1), read.room / Math.max(wanted, 1), 0.99);
         px = Math.max(Math.floor(px * Math.max(scale, 0) * 10) / 10, floor);
     }
-    return undefined;
+    dress(head, figure, shape, stood ?? floor);
+    return stood;
 }
 
 /**

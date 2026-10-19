@@ -8975,6 +8975,55 @@ guard's selector reading misses; Safari and Firefox; the turned frame's fit
 (axes mapped by construction, measured by nothing — the probe paints no
 turned wall).
 
+### The largest size that stands, not the first (2026-10-19)
+
+`settle` scaled each try by what the last read said the figure needs on
+one line and took the first size that stood. That estimate can land far
+under the answer: a figure Chrome broke at a `<wbr>` reads its price cell
+stretched across the column, so what stands beside the figure reads
+larger than it is. Measured in Chrome on the showroom, at sizes the probe
+paints, figures that stood whole on main came out smaller than main, with
+nothing cut for any rule to see: Neo's `123,456,789,012.34 XEC` at
+1920x1080 43.5px (main 67.9; one line stands at 75.8), Rural's 41.8 (78.1
+stands); Neo's `$1,234,567.89` at 1080x1920 66.7px (main 103.7; 113.6
+stands), Rural's 64.6 (120.6). `settle` now halves the gap between the
+largest size read standing and the smallest read not standing, to
+`FIT_PRECISION_PX` (0.5px), and takes the largest. Test: `takes the
+largest size that stands where its first estimate lands far under it`
+(the model gauge's `cellFills`), red on the old `settle`: 39.9px where
+75.75 stands. Every probe pass is green after it, and a scratch run of
+the probe at 13 sizes off the passes fails card for card as it did before
+the fix.
+
+**Against main, now** (the showroom, every Cycle screen, the three shipped
+looks bare and worn, the money node's computed size after the faces land),
+larger / same / smaller:
+
+| size | larger | same | smaller |
+|---|---|---|---|
+| 768x1024 | 88 | 146 | 0 |
+| 1920x1080 | 66 | 168 | 0 |
+| 1080x1920 | 126 | 108 | 0 |
+| 1280x900 | 99 | 48 | **87** |
+| 1280x800 | 112 | 50 | **72** |
+| 1024x768 | 27 | 44 | 163 |
+| 800x1280 | 19 | 20 | 195 |
+| 1366x768 | 145 | 50 | 39 |
+| 680x1000 | 70 | 160 | 4 |
+
+**The 159 smaller at the two 1280-wide short walls are a shape, not a
+read**: all of them are figures of 16 to 30 characters (as counted) that
+main's ladder broke after a comma at 38px there, and they now print at
+32–37.4px — one line, a stacked `from`, or broken at 32px — because the
+fit breaks only where no one-line shape stands at 32px. Letting the break
+compete with one line, as the stack does, would give them their size back
+and, unbounded, would also break figures on the 1920 wall and the tall
+wall that main and the fit keep on one line; a question of taste, for the
+owner (PLAN § Open), not built. At the four off-size walls main's sizes
+were the defect (cut, under the code, or past the status line), so a
+smaller figure there is the fix: at 800x1280 the side-by-side card's
+design size is 80px against the stacked column's 92.
+
 ## The off-size walls: four passes, and what they needed (2026-10-14)
 
 **The passes** (`OFF_SIZE_WALLS` in `probe-passes.mjs`, geometry only, every wall
