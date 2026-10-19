@@ -3151,7 +3151,9 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   that the line above or below stands on its glyphs;
  * - the lines of a figure whose text stands in several boxes (a list's
  *   rows, a button's words in a box of their own): `lineFault` reads one
- *   inline flow;
+ *   inline flow; and the character `hyphenate-character` prints where
+ *   `hyphens` breaks a word of a figure's words (a break inside a digit
+ *   group, which no dictionary hyphenates, fails as a break);
  * - a box above's background image — its gradients and pictures, where a
  *   box paints its decoration (the rain's tiles, the aurora's washes, Neo's
  *   brackets), placed and sized by a position and a size this read does
@@ -3544,13 +3546,14 @@ function borderImageReach(cs: CSSStyleDeclaration): number {
  * read, only when a paint's colour fails.
  *
  * `against`, for a box above the text (`groundAboveFault`): the ink is the
- * text's, not the box's own, and the box's background image is not read —
+ * text's, not the box's own (`near`, boxes the ink stands inside, asked
+ * before the ink is measured), and the box's background image is not read —
  * a box above paints its decoration in those layers (the rain's tiles, the
  * aurora's washes, Neo's brackets and scanlines), each placed and sized by
  * a position and a size this read does not resolve, and what they paint
  * under a figure is the contrast pass's, read at the rain's worst.
  */
-function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly Box[], against?: Colour): string | undefined {
+function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly Box[], against?: Colour, near?: () => readonly Box[]): string | undefined {
     const ink = against ?? inkOf(cs);
     if (ink === undefined) return undefined;
     const fails = (c: Colour): number | undefined => {
@@ -3591,7 +3594,8 @@ function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly 
         const { pad } = box();
         return { left: Math.max(i.left, pad.left), right: Math.min(i.right, pad.right), top: Math.max(i.top, pad.top), bottom: Math.min(i.bottom, pad.bottom) };
     };
-    const under = (region: readonly Box[]): boolean => inks().some((i) => region.some((r) => meets(painted(i), r)));
+    const under = (region: readonly Box[]): boolean =>
+        (near === undefined || near().some((n) => region.some((r) => meets(n, r)))) && inks().some((i) => region.some((r) => meets(painted(i), r)));
     const picture = (v: string): boolean => /url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(v);
     const clipBox = (k: string): Box => (k.includes('content') ? box().content : k.includes('padding') ? box().pad : box().border);
     const clips = cs.backgroundClip.split(',').map((v) => v.trim());
@@ -3656,6 +3660,43 @@ function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly 
     return undefined;
 }
 
+/**
+ * What a box paints that `groundAboveFault` asks of it, once a measurement
+ * (the rows of a list share their boxes): whether its background colour is
+ * opaque, the colours of the paints it reads (its background colour, box
+ * shadows, the borders that have a width, a border image's stops), and
+ * whether one of them cannot be read by colour (a picture as a border
+ * image, a box shadow this rule cannot parse) — so a box whose colours all
+ * read against an ink is passed without its geometry.
+ */
+type AbovePaints = { opaque: boolean; colours: Colour[]; unread: boolean };
+let abovePaintsSeen = new Map<Element, AbovePaints>();
+function abovePaints(at: Element, cs: CSSStyleDeclaration): AbovePaints {
+    const known = abovePaintsSeen.get(at);
+    if (known !== undefined) return known;
+    const colours: Colour[] = [];
+    const bg = colourOf(cs.backgroundColor);
+    if (bg !== undefined) colours.push(bg);
+    let unread = false;
+    const shadows = dressShadowsOf(cs.boxShadow);
+    if (shadows === undefined) unread = true;
+    else for (const sh of shadows) colours.push(sh.colour);
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+        const style = cs.getPropertyValue(`border-${side}-style`);
+        if (!((Number.parseFloat(cs.getPropertyValue(`border-${side}-width`)) || 0) > 0) || style === 'none' || style === 'hidden') continue;
+        const c = colourOf(cs.getPropertyValue(`border-${side}-color`));
+        if (c !== undefined) colours.push(c);
+    }
+    const source = cs.borderImageSource;
+    if (source !== 'none' && source !== '') {
+        if (/url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(source)) unread = true;
+        else colours.push(...coloursIn(source));
+    }
+    const out = { opaque: bg !== undefined && bg.alpha >= 0.999, colours, unread };
+    abovePaintsSeen.set(at, out);
+    return out;
+}
+
 /** Whether a box paints an opaque background colour: the nearest such box is the ground every paint above it is hidden behind. */
 function opaqueGround(cs: CSSStyleDeclaration): boolean {
     const c = colourOf(cs.backgroundColor);
@@ -3697,6 +3738,17 @@ function groundAboveFault(el: HTMLElement, cs: CSSStyleDeclaration, stall: Eleme
     if (ink === undefined || opaqueGround(cs)) return undefined;
     // The boxes that clip the text on its way up, read as boxes only when asked.
     const cutters: [Element, CSSStyleDeclaration][] = clipsContent(cs) ? [[el, cs]] : [];
+    // Its text's line boxes grown by its size each way: the glyphs' ink stands
+    // inside them, read before the ink is measured.
+    let nearBoxes: Box[] | undefined;
+    const near = (): readonly Box[] => {
+        if (nearBoxes !== undefined) return nearBoxes;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const em = pxOf(cs.fontSize);
+        nearBoxes = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => grown({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }, em));
+        return nearBoxes;
+    };
     const shown = (): readonly Box[] => {
         const cuts = cutters.map(([c, ccs]) => paddingBoxOf(c, ccs));
         return inks()
@@ -3710,9 +3762,14 @@ function groundAboveFault(el: HTMLElement, cs: CSSStyleDeclaration, stall: Eleme
     };
     for (let at = el.parentElement; at !== null && at.id !== 'app'; at = at.parentElement) {
         const acs = getComputedStyle(at);
-        const why = groundFault(at, acs, shown, ink);
-        if (why !== undefined) return `${describe(at)} above it: ${why}`;
-        if (at === stall || opaqueGround(acs)) break;
+        const paints = abovePaints(at, acs);
+        // Its geometry only where a paint's colour does not read on the ink.
+        const fails = (c: Colour): boolean => c.alpha >= DRESS_GROUND_ALPHA && contrastRatio(rgbOf(c), rgbOf(ink)) < DRESS_GROUND_CONTRAST;
+        if (paints.unread || paints.colours.some(fails)) {
+            const why = groundFault(at, acs, shown, ink, near);
+            if (why !== undefined) return `${describe(at)} above it: ${why}`;
+        }
+        if (at === stall || paints.opaque) break;
         if (clipsContent(acs)) cutters.push([at, acs]);
     }
     return undefined;
@@ -4661,6 +4718,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
     boxFaultsSeen = new Map();
     clipsSeen = new Map();
     shadowersSeen = new Map();
+    abovePaintsSeen = new Map();
     const read: { node: HTMLElement; stall: Element; faults: string[]; chain: HTMLElement[] | undefined }[] = [];
     const subjects = new Set<HTMLElement>(document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`));
     for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
