@@ -53,6 +53,7 @@ import {
 } from './looks';
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
+import { STACK_CHOICES_CAP, colourTokens, everyMixReads, mostOpaque, srgbColour, worstGround, type StackPaint } from './groundStack';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
@@ -3040,28 +3041,38 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   touching;
  * - the glyphs are painted in the figure's ink: no `-webkit-text-security`,
  *   no `background-clip: text`;
- * - **no ground in the ink's colour, from any paint under the glyphs**
- *   (`groundFault`): on the element itself, the background colour and
- *   every layer of its image over their clip box, every `box-shadow` layer
- *   (an inset one over the padding box outside its hole, an outer one
- *   outside the border box), every border side with a width, and a
- *   `border-image` (over the padding box with `fill`, over its border bands
- *   and outset otherwise); **and on every box above it** up to and with the
- *   stall (`groundAboveFault`), the background colour, box shadows, borders
- *   and border image of each, against the element's ink, over its glyphs as
- *   painted (cut by every box between that clips what it holds), until the
- *   nearest box with an opaque background colour, which hides every paint
- *   above it (read, then the walk stops; an element with an opaque
- *   background colour of its own stands on its own ground). Each paint,
- *   where it meets the ink (a box that clips its content paints no glyph
- *   outside its padding box), at least half opaque and under `MIN_CONTRAST`
- *   (3:1) against the ink, fails; a picture there (`url()`,
- *   `image-set()`) — the element's own background or border image, or a
- *   box above's border image — is a ground this rule cannot read, and
- *   fails.
+ * - **no ground under its glyphs that reads under 3:1 against its ink,
+ *   with every paint under them composited** (`groundStackFault`, round 5;
+ *   the pure half is `layout/groundStack.ts`): on the element itself, the
+ *   background colour and every layer of its image over their clip box,
+ *   every `box-shadow` layer (an inset one over the padding box outside its
+ *   hole, an outer one outside the border box), every border side with a
+ *   width, and a `border-image` (over the padding box with `fill`, over its
+ *   border bands and outset otherwise); **and on every box above it** up to
+ *   and with the stall, the background colour, box shadows, borders and
+ *   border image of each — until the nearest box with an opaque background
+ *   colour, which hides every paint above it (read, then the walk stops; an
+ *   element with an opaque background colour of its own stands on its own
+ *   ground). Every stretch of its glyphs' ink, as painted (cut by every box
+ *   in that walk that clips what it holds), is cut into cells by the
+ *   paints' edges, and on each cell the paints that cover it are
+ *   composited in paint order, a gradient tried at each of its stops: a
+ *   cell whose composite is at least `DRESS_GROUND_ALPHA` (half) opaque and
+ *   reads under `MIN_CONTRAST` (3:1) against the ink fails, so five layers
+ *   of the ink's colour at 0.49 fail together where round 4 passed each
+ *   alone. **Every colour is resolved by the engine** (`dressColour`): a
+ *   colour function, a keyword or a named colour, `currentcolor` the
+ *   element's own `color`, read back in sRGB through `color-mix(in srgb,
+ *   … 100%, transparent)` — so a ground in `color-mix(in oklch,
+ *   currentColor 100%, transparent)`, which Chrome computes as `oklch(…)`,
+ *   is the ink's colour and fails; a colour the engine refuses or a value
+ *   this reader cannot take apart fails as "a colour this rule cannot
+ *   read", never "no colour". A picture there (`url()`, `image-set()`) —
+ *   the element's own background or border image, or a box above's border
+ *   image — is a ground this rule cannot read, and fails.
  *   A shadow's blur is not added to where it paints: the blur's half-opaque
- *   line is the unblurred edge. A tint under half opacity is the contrast
- *   pass's;
+ *   line is the unblurred edge. A stack less than half opaque is mostly
+ *   what lies below it: the contrast pass's;
  * - **no outline drawn across its glyphs**: its own outline's inner edge
  *   (the border box moved out by `outline-offset`, in by a negative one)
  *   stands outside every line's ink (`inkLines`), and the ring of a box
@@ -3100,12 +3111,13 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * glyphs share a pixel (drawn on a canvas where they stand) fail, so a
  * `line-height` cannot pile them; across flows, no two fragments of
  * different flows share a pixel, and a flow the text enters does not begin
- * above, or beside on the left of, the flow it leaves; **a sharp `text-shadow` of a box beside
- * it** (`neighbourShadowFault`: any element with text of its own under its
- * grandparent — its parent where the grandparent is the stall — its unit,
- * its "from") whose copy meets its ink fails, painted over it where that
- * element follows it, as a ground in its ink's colour where it comes
- * before; and **the outline of a box above it** up to the stall
+ * above, or beside on the left of, the flow it leaves; **a sharp
+ * `text-shadow` of a box beside it** (`neighbourShadowFault`: any element
+ * with text of its own under its grandparent — its parent where the
+ * grandparent is the stall — its unit, its "from") whose copy meets its ink
+ * fails, painted over it where that element follows it, as a ground in its
+ * ink's colour where it comes before; and **the outline of a box above
+ * it** up to the stall
  * (`outlineAboveFault`) whose ring meets its ink fails.
  *
  * **3. Every box that holds it, up to and with the stall.** A paint effect
@@ -3144,44 +3156,68 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *
  * Not read, stated:
  * - a figure a look hides whole: a money node not rendered (`display: none`
- *   on it or above it, `content-visibility`) is skipped, as the ink rule
- *   skips it, since the app hides figures too (a sheet with no rate, the
- *   address's two spans by width); of the money set only the price role
- *   and "You pay" are held to having a box at all (`coveredBy`); an element
- *   under the subject that is not rendered;
+ *   on it or above it, `content-visibility: hidden`) is skipped, as the ink
+ *   rule skips it, since the app hides figures too (a sheet with no rate,
+ *   the address's two spans by width, both by `hidden` or a width rule); of
+ *   the money set only the price role and "You pay" are held to having a
+ *   box at all (`coveredBy`); an element under the subject that is not
+ *   rendered;
  * - where the figure's box stands (`DRESS_FREE`'s placement: a figure moved
  *   is the coverage, spill and clip rules'), and a single line set so tight
  *   that the line above or below stands on its glyphs;
- * - the lines of a figure whose text stands in several boxes (a list's
- *   rows, a button's words in a box of their own): `lineFault` reads one
- *   inline flow; and the character `hyphenate-character` prints where
- *   `hyphens` breaks a word of a figure's words (a break inside a digit
- *   group, which no dictionary hyphenates, fails as a break);
+ * - across two flows of one node: a break inside a digit group (a group
+ *   split between two boxes is read within the flow that holds it), and the
+ *   order of a flow that begins beside another but below its first line;
+ *   and the character `hyphenate-character` prints where `hyphens` breaks a
+ *   word of a figure's words (a break inside a digit group, which no
+ *   dictionary hyphenates, fails as a break);
  * - a box above's background image — its gradients and pictures, where a
  *   box paints its decoration (the rain's tiles, the aurora's washes, Neo's
  *   brackets), placed and sized by a position and a size this read does
- *   not resolve: what it paints under a figure is the contrast pass's, on
- *   the screens it samples, the rain at its worst; and a paint above the
- *   nearest box with an opaque background colour, even where the figure's
- *   ink runs past that box;
- * - an in-flow `::before` or `::after` of a box above it (the contrast
- *   pass's look-pseudo frames read their paint inside a protected box);
+ *   not resolve: what it paints under a figure is the contrast pass's, and
+ *   only on the screens it samples (390, 1280 and 1920 wide, less the
+ *   geometry-only screens) — a look can scope such a paint to a state the
+ *   look rules let it read (`data-wall-tier`, `data-paying`, `data-touch`,
+ *   `data-turn`) or to a screen the contrast pass does not sample, and no
+ *   rule reads it there (the critic's P2-1, round 4);
+ * - a paint above the nearest box with an opaque background colour, even
+ *   where that colour does not reach the figure's ink — its
+ *   `background-clip`, its rounded corners, or ink that runs past the box:
+ *   the walk stops there whatever the box's colour covers (P2-1);
+ * - a paint a box outside the walk lays under the glyphs: a sibling's
+ *   background or shadow run under them, a positioned box (the coverage
+ *   rules'), and an in-flow `::before` or `::after` of a box above it (the
+ *   contrast pass's look-pseudo frames read their paint inside a protected
+ *   box, on the screens it samples);
+ * - a gradient between its stops: each stop is tried, not the colours a
+ *   gradient interpolates between two of them (nor an `in <space>`
+ *   interpolation's); a paint's rounded corners (a paint is read over its
+ *   whole rect); the glyphs as pixels (a cell is judged where the line's ink
+ *   box stands, between glyphs too);
  * - the ink's alpha in the contrast box read (`scripts/layout-check.mjs`
  *   reads a computed ink's red, green and blue alone): on a money subject
  *   this rule refuses an ink under alpha 1 first; every other target reads
- *   as before;
+ *   as before; and the contrast pass blanks a target's glyphs through
+ *   `color`, so a ground in `currentColor` drops out of its ground capture
+ *   (the critic's root cause on round 4, not built);
  * - a shrink by a font feature (`font-variant-position`, `sups`, `dnom`),
  *   which keeps the computed size the type floor reads — none shrank a
  *   digit in the served subsets (the critic's A3, D5); the glyphs a look's
  *   own face draws (intake's);
  * - a stack of glows (each blurred as far as it stands off); a neighbour's
- *   shadow from farther than the figure's grandparent, a neighbour's glow,
- *   or the rain's outline on a neighbour;
- * - a `:hover` or `:focus` state, and a transition until it runs;
+ *   shadow from farther than the figure's grandparent — a sharp shadow of a
+ *   line elsewhere on the sheet, moved hundreds of pixels onto the figure,
+ *   erases "You pay" with every pass green (the critic's P2-3, round 4) — a
+ *   neighbour's glow, or the rain's outline on a neighbour;
+ * - a state no pass paints: `:hover`, `:focus`, `:focus-visible`,
+ *   `:focus-within` and `:active` (a figure clipped under the pointer
+ *   passes; both look lints admit it, the critic's P2-2), and a transition
+ *   until it runs;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
- *   turned wall.
+ *   turned wall (`[data-turn]`), so a rule a look scopes to one is read by
+ *   nothing (P2-2).
  *
  * Counted per look and per surface (`dressByClass`, `dressSurface`), and the
  * figures read under a box's `clip-path` or clip per look
@@ -3255,7 +3291,7 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
     ],
     [
         /^border(-.*)?$/,
-        'the box\'s edge, painted in the border area: where text runs onto it, its colour is read as a ground under the glyphs (`groundFault`)',
+        'the box\'s edge, painted in the border area: where text runs onto it, its colour is read as a ground under the glyphs (`groundStackFault`)',
     ],
     [
         /^((min|max)-)?(width|height|inline-size|block-size)$|^aspect-ratio$|^box-sizing$/,
@@ -3275,7 +3311,7 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
     ],
     [
         /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin|blend-mode)|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
-        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers) is read as a ground (`groundFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
+        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
     ],
     [
         /^(cursor|pointer-events|user-select|-webkit-user-select|touch-action|appearance|-webkit-appearance|caret-.*|will-change|-webkit-user-drag|-webkit-user-modify|interactivity|interpolate-size|scroll-timeline(-.*)?|view-timeline(-.*)?|timeline-scope|view-transition-.*|-webkit-highlight|speak(-as)?|dynamic-range-limit)$/,
@@ -3456,19 +3492,96 @@ function boxScaleFault(value: string): string | undefined {
     return x! >= 0.999 && Math.abs(x! - y!) < 0.001 && Math.abs(z! - 1) < 0.001 ? undefined : `a scale of ${value} (it shrinks, stretches or mirrors the figure)`;
 }
 
-/** The ink a subject's glyphs are painted in: the fill colour, which the held reads keep equal to `color`. */
-function inkOf(cs: CSSStyleDeclaration): Colour | undefined {
-    return colourOf(cs.getPropertyValue('-webkit-text-fill-color')) ?? colourOf(cs.color);
+/**
+ * **Every colour the dress rule reads is a colour, resolved by the engine**
+ * (round 5, the critic's P1-1 on round 4). Round 4 parsed `rgb()`,
+ * `color(srgb …)` and `oklab()` and read anything else as no colour, so a
+ * ground in `color-mix(in oklch, currentColor 100%, transparent)` — which
+ * Chrome computes as `oklch(…)`, since the build can lower a literal colour
+ * and not one that depends on the element — passed every check while it
+ * hid the whole figure. Now every colour a computed value writes
+ * (`colourTokens`, `layout/groundStack.ts`: every colour function with its
+ * arguments, every colour keyword, and every bare word the engine takes for
+ * a colour) is handed back to the engine and read in sRGB: set on a
+ * detached span in the document's head as `color-mix(in srgb, <it> 100%,
+ * transparent)`, whose computed value Chrome writes as `color(srgb r g b /
+ * a)` — the same conversion the page's own paint makes, unrounded, a channel
+ * outside 0–1 clipped as the display clips it. `currentcolor` is the
+ * element's own computed `color`. A colour the engine refuses, a value
+ * whose parentheses do not balance, or one that writes a colour in a form
+ * the reader does not take is **a colour this rule cannot read, and fails**
+ * — never "no colour". Why the engine and not a canvas: a canvas returns
+ * eight bits of premultiplied colour, which loses a faint layer's hue, and
+ * `fillStyle` takes no `currentcolor` of the element's.
+ */
+let colourProbe: HTMLElement | undefined;
+const engineColours = new Map<string, Colour | null>();
+function engineColour(text: string): Colour | undefined {
+    const known = engineColours.get(text);
+    if (known !== undefined) return known ?? undefined;
+    if (colourProbe === undefined || !colourProbe.isConnected) {
+        colourProbe = document.createElement('span');
+        colourProbe.setAttribute('aria-hidden', 'true');
+        document.head.append(colourProbe);
+    }
+    colourProbe.style.removeProperty('color');
+    colourProbe.style.setProperty('color', `color-mix(in srgb, ${text} 100%, transparent)`);
+    const taken = colourProbe.style.getPropertyValue('color') !== '';
+    const read = taken ? srgbColour(getComputedStyle(colourProbe).color) : undefined;
+    colourProbe.style.removeProperty('color');
+    engineColours.set(text, read ?? null);
+    return read;
 }
 
-/** Every colour written in a computed value (a gradient's stops), parsed. */
-function coloursIn(value: string): Colour[] {
+/** Bare words the engine takes for a colour (a named colour), once a page. */
+const colourWords = new Map<string, boolean>();
+function isColourWord(word: string): boolean {
+    let known = colourWords.get(word);
+    if (known === undefined) {
+        known = CSS.supports('color', word);
+        colourWords.set(word, known);
+    }
+    return known;
+}
+
+/** A colour as written in a computed value, resolved (`current` stands for `currentcolor`), or `undefined`: a colour this rule cannot read. */
+function dressColour(token: string, current?: string): Colour | undefined {
+    let text = token.trim();
+    if (/currentcolor/i.test(text)) {
+        if (current === undefined || /currentcolor/i.test(current)) return undefined;
+        text = text.replace(/currentcolor/gi, current);
+    }
+    return engineColour(text);
+}
+
+/** The colours a computed value writes, in order (`colourTokens` and the named colours among its words). */
+function colourItems(value: string): string[] | undefined {
+    const read = colourTokens(value);
+    return read === undefined ? undefined : [...read.tokens, ...read.words.filter(isColourWord)];
+}
+
+/** Every colour a computed value writes (a gradient's stops), resolved, or `undefined` when one of them, or the value, cannot be read. */
+function dressColoursIn(value: string, current?: string): Colour[] | undefined {
+    const items = colourItems(value);
+    if (items === undefined) return undefined;
     const out: Colour[] = [];
-    for (const m of value.matchAll(/(?:rgba?\([^)]*\)|color\(srgb[^)]*\)|oklab\([^)]*\))/g)) {
-        const c = colourOf(m[0]);
-        if (c !== undefined) out.push(c);
+    for (const item of items) {
+        const c = dressColour(item, current);
+        if (c === undefined) return undefined;
+        out.push(c);
     }
     return out;
+}
+
+/** A one-colour value (a background colour, a border's, an ink), resolved, or `undefined` when it is not exactly one colour this rule can read. */
+function dressSingleColour(value: string, current?: string): Colour | undefined {
+    const items = colourItems(value);
+    return items === undefined || items.length !== 1 ? undefined : dressColour(items[0]!, current);
+}
+
+/** The ink a subject's glyphs are painted in, resolved: the fill colour, which the held reads keep equal to `color`, or `color`; `undefined` when neither reads. */
+function dressInk(cs: CSSStyleDeclaration): Colour | undefined {
+    return dressSingleColour(cs.getPropertyValue('-webkit-text-fill-color'), cs.color) ?? dressSingleColour(cs.color);
 }
 
 const rgbOf = (c: Colour): { r: number; g: number; b: number } => ({ r: c.rgb[0], g: c.rgb[1], b: c.rgb[2] });
@@ -3497,17 +3610,18 @@ function boxMinus(outer: Box, inner: Box): Box[] {
     return out;
 }
 
-/** A computed `box-shadow` layer, its colour whole (the halo rule's `boxShadowsOf` reads its alpha alone). */
+/** A computed `box-shadow` layer, its colour whole and resolved (the halo rule's `boxShadowsOf` reads its alpha alone). */
 type DressShadow = { colour: Colour; x: number; y: number; blur: number; spread: number; inset: boolean };
-/** A computed `box-shadow` as its layers, or undefined when a layer does not read. */
-function dressShadowsOf(value: string): DressShadow[] | undefined {
+/** A computed `box-shadow` as its layers, or undefined when a layer does not read — its colour among them (`dressColour`; `current` is the box's `color`). */
+function dressShadowsOf(value: string, current?: string): DressShadow[] | undefined {
     if (value === 'none' || value === '') return [];
     const out: DressShadow[] = [];
     for (const part of splitLayers(value)) {
-        const m = /(rgba?\([^)]*\)|color\([^)]*\)|oklab\([^)]*\))/.exec(part);
-        const colour = m === null ? undefined : colourOf(m[1]!);
-        if (m === null || colour === undefined) return undefined;
-        const rest = part.replace(m[1]!, '');
+        const items = colourItems(part);
+        if (items === undefined || items.length !== 1) return undefined;
+        const colour = dressColour(items[0]!, current);
+        if (colour === undefined) return undefined;
+        const rest = part.replace(items[0]!, ' ');
         const [x = 0, y = 0, blur = 0, spread = 0] = [...rest.matchAll(/(-?[\d.]+)px/g)].map((n) => Number(n[1]));
         out.push({ colour, x, y, blur, spread, inset: /\binset\b/.test(rest) });
     }
@@ -3532,52 +3646,43 @@ function borderImageReach(cs: CSSStyleDeclaration): number {
 }
 
 /**
- * Why something paints the ink's colour under the glyphs, or undefined
- * (`DRESS_GROUND_*`; the re-review's P1-1). Every paint an element puts
- * under its own text is read, each where it paints: the background colour
- * and its image's layers over their clip box; every `box-shadow` layer, an
- * inset one over the padding box outside its hole (the padding box moved by
- * its offset and shrunk by its spread), an outer one outside the border box;
- * every border side that has a width; and a `border-image`, over the
- * padding box where its slice says `fill`, over its border bands (and its
- * outset) otherwise. A paint at least half opaque that reads under
- * `MIN_CONTRAST` against the ink, over any ink of the element (`inks`),
- * fails; a picture there (`url()`, `image-set()`) is a ground this rule
- * cannot read, and fails. A shadow's blur is not added to where it paints:
- * the blur's half-opaque line is the unblurred edge, and a paint fainter
- * than half is the contrast pass's. `inks` is asked, and the box's geometry
- * read, only when a paint's colour fails.
- *
- * `against`, for a box above the text (`groundAboveFault`): the ink is the
- * text's, not the box's own (`near`, boxes the ink stands inside, asked
- * before the ink is measured), and the box's background image is not read —
- * a box above paints its decoration in those layers (the rain's tiles, the
- * aurora's washes, Neo's brackets and scanlines), each placed and sized by
- * a position and a size this read does not resolve, and what they paint
- * under a figure is the contrast pass's, read at the rain's worst.
+ * A box's paints as the ground stack reads them (`groundStackFault`), once a
+ * measurement: in paint order, bottom first — its outer box shadows (the last
+ * listed lowest), its background colour over the last layer's clip box, its
+ * background image's layers (the element's own only, the last listed lowest:
+ * a gradient by its stops, a picture by its place), its inset shadows, every
+ * border side that has a width, and a border image (over the padding box
+ * where its slice says `fill`, over its bands and outset otherwise) — each
+ * with where it paints, read only when asked; whether its background colour
+ * is opaque; or why one of its colours cannot be read.
  */
-function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly Box[], against?: Colour, near?: () => readonly Box[]): string | undefined {
-    const ink = against ?? inkOf(cs);
-    if (ink === undefined) return undefined;
-    const fails = (c: Colour): number | undefined => {
-        if (c.alpha < DRESS_GROUND_ALPHA) return undefined;
-        const ratio = contrastRatio(rgbOf(c), rgbOf(ink));
-        return ratio < DRESS_GROUND_CONTRAST ? ratio : undefined;
+type BoxPaint = { what: string; candidates: Colour[]; picture?: string; above?: Element; rects: () => Box[] };
+type BoxPaints = { paints: BoxPaint[]; opaque: boolean; unread?: string };
+let ownPaintsSeen = new Map<Element, BoxPaints>();
+let abovePaintsSeen = new Map<Element, BoxPaints>();
+function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPaints {
+    const seen = own ? ownPaintsSeen : abovePaintsSeen;
+    const known = seen.get(at);
+    if (known !== undefined) return known;
+    const done = (out: BoxPaints): BoxPaints => {
+        seen.set(at, out);
+        return out;
     };
-    const whose = against === undefined ? 'its own ink' : "the figure's ink";
-    const say = (what: string, c: Colour, ratio: number): string =>
-        `${what} ${whose} reads at ${ratio.toFixed(2)}:1 on, under its glyphs (rgb(${c.rgb.join(', ')}) under ink rgb(${ink.rgb.join(', ')}))`;
+    const unread = (what: string, value: string): BoxPaints =>
+        done({ paints: [], opaque: false, unread: `${what} this rule cannot read (${value.slice(0, 60)})` });
+    const current = cs.color;
+    const whose = own ? 'its ' : `${describe(at)}'s `;
+    const above = own ? undefined : at;
     const bw = {
         top: Number.parseFloat(cs.borderTopWidth) || 0,
         right: Number.parseFloat(cs.borderRightWidth) || 0,
         bottom: Number.parseFloat(cs.borderBottomWidth) || 0,
         left: Number.parseFloat(cs.borderLeftWidth) || 0,
     };
-    // The box's geometry, read once a paint's colour fails.
     let geo: { border: Box; pad: Box; content: Box } | undefined;
     const box = (): { border: Box; pad: Box; content: Box } => {
         if (geo !== undefined) return geo;
-        const r = el.getBoundingClientRect();
+        const r = at.getBoundingClientRect();
         const border: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
         const pad: Box = { left: border.left + bw.left, top: border.top + bw.top, right: border.right - bw.right, bottom: border.bottom - bw.bottom };
         const content: Box = {
@@ -3589,121 +3694,79 @@ function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly 
         geo = { border, pad, content };
         return geo;
     };
-    // A box that clips its content (an `overflow` but visible, a painting
-    // `contain`) paints no glyph inside it outside its padding box.
-    const clipsOwn = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || /\b(?:paint|strict|content)\b/.test(cs.contain);
-    const painted = (i: Box): Box => {
-        if (!clipsOwn) return i;
-        const { pad } = box();
-        return { left: Math.max(i.left, pad.left), right: Math.min(i.right, pad.right), top: Math.max(i.top, pad.top), bottom: Math.min(i.bottom, pad.bottom) };
-    };
-    const under = (region: readonly Box[]): boolean =>
-        (near === undefined || near().some((n) => region.some((r) => meets(n, r)))) && inks().some((i) => region.some((r) => meets(painted(i), r)));
     const picture = (v: string): boolean => /url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(v);
     const clipBox = (k: string): Box => (k.includes('content') ? box().content : k.includes('padding') ? box().pad : box().border);
     const clips = cs.backgroundClip.split(',').map((v) => v.trim());
-    // The background colour paints over the last layer's clip box.
-    const bg = colourOf(cs.backgroundColor);
-    const bgRatio = bg === undefined ? undefined : fails(bg);
-    if (bg !== undefined && bgRatio !== undefined && under([clipBox(clips[clips.length - 1] ?? 'border-box')])) return say('a ground', bg, bgRatio);
-    const image = cs.backgroundImage;
-    if (image !== 'none' && against === undefined) {
-        const layers = splitLayers(image);
-        for (let i = 0; i < layers.length; i += 1) {
+    const paints: BoxPaint[] = [];
+    const shadows = dressShadowsOf(cs.boxShadow, current);
+    if (shadows === undefined) return unread('a box-shadow', cs.boxShadow);
+    for (const sh of shadows.filter((s) => !s.inset).reverse()) {
+        paints.push({ what: `${whose}box-shadow`, candidates: [sh.colour], rects: () => boxMinus(grown(moved(box().border, sh.x, sh.y), sh.spread), box().border) });
+    }
+    const bg = dressSingleColour(cs.backgroundColor, current);
+    if (bg === undefined) return unread('a background colour', cs.backgroundColor);
+    paints.push({ what: `${whose}ground`, candidates: [bg], rects: () => [clipBox(clips[clips.length - 1] ?? 'border-box')] });
+    // A box above paints its decoration in its background image (the rain's
+    // tiles, the aurora's washes, Neo's brackets and scanlines), placed and
+    // sized by a position and a size this read does not resolve: not read
+    // there (the contrast pass's, on the screens it samples).
+    if (own && cs.backgroundImage !== 'none') {
+        const layers = splitLayers(cs.backgroundImage);
+        for (let i = layers.length - 1; i >= 0; i -= 1) {
+            const layer = layers[i]!;
             const clip = clips[i % clips.length] ?? 'border-box';
-            if (picture(layers[i]!)) {
-                if (under([clipBox(clip)])) return `a picture under its glyphs (${layers[i]!.slice(0, 60)}), a ground this rule cannot read`;
+            if (layer === 'none') continue;
+            if (picture(layer)) {
+                paints.push({ what: 'a picture', candidates: [], picture: layer, rects: () => [clipBox(clip)] });
                 continue;
             }
-            for (const c of coloursIn(layers[i]!)) {
-                const ratio = fails(c);
-                if (ratio !== undefined && under([clipBox(clip)])) return say('a gradient stop', c, ratio);
-            }
+            const stops = dressColoursIn(layer, current);
+            if (stops === undefined) return unread('a background layer', layer);
+            if (stops.length > 0) paints.push({ what: 'its gradient', candidates: stops, rects: () => [clipBox(clip)] });
         }
     }
-    const shadows = dressShadowsOf(cs.boxShadow);
-    if (shadows === undefined) return `a box-shadow this rule cannot read (${cs.boxShadow.slice(0, 60)})`;
-    for (const sh of shadows) {
-        const ratio = fails(sh.colour);
-        if (ratio === undefined) continue;
-        const { border, pad } = box();
-        const region = sh.inset ? boxMinus(pad, grown(moved(pad, sh.x, sh.y), -sh.spread)) : boxMinus(grown(moved(border, sh.x, sh.y), sh.spread), border);
-        if (under(region)) return say(sh.inset ? 'an inset box-shadow' : 'a box-shadow', sh.colour, ratio);
+    for (const sh of shadows.filter((s) => s.inset).reverse()) {
+        paints.push({ what: `${whose}inset box-shadow`, candidates: [sh.colour], rects: () => boxMinus(box().pad, grown(moved(box().pad, sh.x, sh.y), -sh.spread)) });
     }
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
         const w = bw[side];
         const style = cs.getPropertyValue(`border-${side}-style`);
         if (!(w > 0) || style === 'none' || style === 'hidden') continue;
-        const c = colourOf(cs.getPropertyValue(`border-${side}-color`));
-        const ratio = c === undefined ? undefined : fails(c);
-        if (c === undefined || ratio === undefined) continue;
-        const { border } = box();
-        const band: Box =
-            side === 'top'
-                ? { ...border, bottom: border.top + w }
-                : side === 'bottom'
-                  ? { ...border, top: border.bottom - w }
-                  : side === 'left'
-                    ? { ...border, right: border.left + w }
-                    : { ...border, left: border.right - w };
-        if (under([band])) return say(`a ${side} border`, c, ratio);
+        const value = cs.getPropertyValue(`border-${side}-color`);
+        const c = dressSingleColour(value, current);
+        if (c === undefined) return unread(`a ${side} border's colour`, value);
+        paints.push({
+            what: `${whose}${side} border`,
+            candidates: [c],
+            rects: () => {
+                const { border } = box();
+                return [
+                    side === 'top'
+                        ? { ...border, bottom: border.top + w }
+                        : side === 'bottom'
+                          ? { ...border, top: border.bottom - w }
+                          : side === 'left'
+                            ? { ...border, right: border.left + w }
+                            : { ...border, left: border.right - w },
+                ];
+            },
+        });
     }
     const source = cs.borderImageSource;
     if (source !== 'none' && source !== '') {
-        const colours = picture(source) ? undefined : coloursIn(source).filter((c) => fails(c) !== undefined);
-        if (colours === undefined || colours.length > 0) {
+        const rects = (): Box[] => {
             const reach = grown(box().border, borderImageReach(cs));
-            const region = /\bfill\b/.test(cs.borderImageSlice) ? [reach] : boxMinus(reach, box().pad);
-            if (under(region)) {
-                if (colours === undefined) return `a border image that is a picture (${source.slice(0, 60)}) under its glyphs, a ground this rule cannot read`;
-                return say('a border image', colours[0]!, fails(colours[0]!)!);
-            }
+            return /\bfill\b/.test(cs.borderImageSlice) ? [reach] : boxMinus(reach, box().pad);
+        };
+        if (picture(source)) {
+            paints.push({ what: `${whose}border image`, candidates: [], picture: source, above, rects });
+        } else {
+            const stops = dressColoursIn(source, current);
+            if (stops === undefined) return unread('a border image', source);
+            paints.push({ what: `${whose}border image`, candidates: stops, rects });
         }
     }
-    return undefined;
-}
-
-/**
- * What a box paints that `groundAboveFault` asks of it, once a measurement
- * (the rows of a list share their boxes): whether its background colour is
- * opaque, the colours of the paints it reads (its background colour, box
- * shadows, the borders that have a width, a border image's stops), and
- * whether one of them cannot be read by colour (a picture as a border
- * image, a box shadow this rule cannot parse) — so a box whose colours all
- * read against an ink is passed without its geometry.
- */
-type AbovePaints = { opaque: boolean; colours: Colour[]; unread: boolean };
-let abovePaintsSeen = new Map<Element, AbovePaints>();
-function abovePaints(at: Element, cs: CSSStyleDeclaration): AbovePaints {
-    const known = abovePaintsSeen.get(at);
-    if (known !== undefined) return known;
-    const colours: Colour[] = [];
-    const bg = colourOf(cs.backgroundColor);
-    if (bg !== undefined) colours.push(bg);
-    let unread = false;
-    const shadows = dressShadowsOf(cs.boxShadow);
-    if (shadows === undefined) unread = true;
-    else for (const sh of shadows) colours.push(sh.colour);
-    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-        const style = cs.getPropertyValue(`border-${side}-style`);
-        if (!((Number.parseFloat(cs.getPropertyValue(`border-${side}-width`)) || 0) > 0) || style === 'none' || style === 'hidden') continue;
-        const c = colourOf(cs.getPropertyValue(`border-${side}-color`));
-        if (c !== undefined) colours.push(c);
-    }
-    const source = cs.borderImageSource;
-    if (source !== 'none' && source !== '') {
-        if (/url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(source)) unread = true;
-        else colours.push(...coloursIn(source));
-    }
-    const out = { opaque: bg !== undefined && bg.alpha >= 0.999, colours, unread };
-    abovePaintsSeen.set(at, out);
-    return out;
-}
-
-/** Whether a box paints an opaque background colour: the nearest such box is the ground every paint above it is hidden behind. */
-function opaqueGround(cs: CSSStyleDeclaration): boolean {
-    const c = colourOf(cs.backgroundColor);
-    return c !== undefined && c.alpha >= 0.999;
+    return done({ paints, opaque: bg.alpha >= 0.999 });
 }
 
 /** Whether a box clips what it holds to its padding box (an `overflow` but visible, a painting `contain`). */
@@ -3723,57 +3786,70 @@ function paddingBoxOf(el: Element, cs: CSSStyleDeclaration): Box {
 }
 
 /**
- * Why a box above an element with text paints a ground in that text's ink
- * under its glyphs, or undefined (round 4: P1-1's "every paint source",
- * the boxes that hold the figure as well as the figure): from the element's
- * parent up to and with its stall, each box's background colour, box
- * shadows, borders and border image are read as `groundFault` reads the
- * element's own, against the element's ink and over its glyphs as painted —
- * cut by every box between that clips what it holds, so a payment's lines
- * scrolled out of their list at rest stand under no border of the plate —
- * until the nearest box with an opaque background colour, which hides
- * every paint above it (read, then the walk stops); an element whose own
- * background colour is opaque stands on its own ground, and the walk does
- * not start. A box's geometry is read only once a paint's colour fails.
+ * Why the ground under an element's glyphs reads under `MIN_CONTRAST`
+ * against its ink, or undefined (round 5, the critic's P1-2 on round 4: the
+ * paints judged one at a time, so five layers of the ink's own colour at
+ * 0.49 alpha — 0.97 opaque together — passed). Every paint under the
+ * glyphs, from the element up to and with the nearest box whose background
+ * colour is opaque (which hides every paint above it; an element whose own
+ * is opaque stands on its own ground) or the stall, is read by its colour
+ * and where it paints (`boxPaintsOf`), and they are judged **together**:
+ * each stretch of the glyphs' ink, as painted — cut by every box in that
+ * walk that clips what it holds — is cut into cells by the paints' edges,
+ * and on each cell the paints that cover it are composited in paint order,
+ * a gradient tried at each stop (`worstGround`, `layout/groundStack.ts`); a
+ * cell whose composite is at least `DRESS_GROUND_ALPHA` opaque and reads
+ * under `MIN_CONTRAST` against the ink fails. Where the walk reached an
+ * opaque ground, every cell it covers is opaque, and the judgement is the
+ * ground the colours paint; where it did not, a stack less than half
+ * opaque is mostly what lies below it, and the contrast pass's.
+ * A picture under the glyphs — the element's own background image or a
+ * border image of any box in the walk — is a ground this rule cannot read,
+ * and fails. Its geometry and its ink are read only when the colours alone
+ * cannot pass it: a stack no blend of whose colours, each weighed by its
+ * alpha, reads under the floor (`everyMixReads`), or whose most opaque total
+ * stays under the alpha floor (`mostOpaque`), passes unmeasured.
  */
-function groundAboveFault(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element, inks: () => readonly Box[]): string | undefined {
-    const ink = inkOf(cs);
-    if (ink === undefined || opaqueGround(cs)) return undefined;
-    // The boxes that clip the text on its way up, read as boxes only when asked.
-    const cutters: [Element, CSSStyleDeclaration][] = clipsContent(cs) ? [[el, cs]] : [];
-    // Its text's line boxes grown by its size each way: the glyphs' ink stands
-    // inside them, read before the ink is measured.
-    let nearBoxes: Box[] | undefined;
-    const near = (): readonly Box[] => {
-        if (nearBoxes !== undefined) return nearBoxes;
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const em = pxOf(cs.fontSize);
-        nearBoxes = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => grown({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }, em));
-        return nearBoxes;
-    };
-    const shown = (): readonly Box[] => {
-        const cuts = cutters.map(([c, ccs]) => paddingBoxOf(c, ccs));
-        return inks()
-            .map((i) =>
-                cuts.reduce<Box>(
-                    (b, c) => ({ left: Math.max(b.left, c.left), right: Math.min(b.right, c.right), top: Math.max(b.top, c.top), bottom: Math.min(b.bottom, c.bottom) }),
-                    i,
-                ),
-            )
-            .filter((b) => b.right - b.left > 0.5 && b.bottom - b.top > 0.5);
-    };
-    for (let at = el.parentElement; at !== null && at.id !== 'app'; at = at.parentElement) {
-        const acs = getComputedStyle(at);
-        const paints = abovePaints(at, acs);
-        // Its geometry only where a paint's colour does not read on the ink.
-        const fails = (c: Colour): boolean => c.alpha >= DRESS_GROUND_ALPHA && contrastRatio(rgbOf(c), rgbOf(ink)) < DRESS_GROUND_CONTRAST;
-        if (paints.unread || paints.colours.some(fails)) {
-            const why = groundFault(at, acs, shown, ink, near);
-            if (why !== undefined) return `${describe(at)} above it: ${why}`;
+function groundStackFault(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element, inks: () => readonly Box[]): string | undefined {
+    const ink = dressInk(cs);
+    if (ink === undefined) return `an ink this rule cannot read (${cs.color.slice(0, 60)})`;
+    const chain: { at: Element; cs: CSSStyleDeclaration; read: BoxPaints }[] = [];
+    for (let at: Element | null = el; at !== null && at.id !== 'app'; at = at.parentElement) {
+        const acs = at === el ? cs : getComputedStyle(at);
+        const read = boxPaintsOf(at, acs, at === el);
+        if (read.unread !== undefined) return at === el ? read.unread : `${describe(at)} above it: ${read.unread}`;
+        chain.push({ at, cs: acs, read });
+        if (read.opaque || at === stall) break;
+    }
+    // Bottom first: the ground the walk stopped at, then each box below it.
+    const stack = [...chain].reverse().flatMap((c) => c.read.paints);
+    const pictures = stack.filter((p) => p.picture !== undefined);
+    const coloured = stack.filter((p) => p.picture === undefined);
+    if (pictures.length === 0) {
+        if (mostOpaque(coloured.map((p) => p.candidates)) < DRESS_GROUND_ALPHA) return undefined;
+        if (everyMixReads(coloured.map((p) => p.candidates), ink.rgb, DRESS_GROUND_CONTRAST, DRESS_GROUND_ALPHA)) return undefined;
+    }
+    const cuts = chain.filter((c) => clipsContent(c.cs)).map((c) => paddingBoxOf(c.at, c.cs));
+    const shown = inks()
+        .map((i) => cuts.reduce<Box>((b, c) => ({ left: Math.max(b.left, c.left), right: Math.min(b.right, c.right), top: Math.max(b.top, c.top), bottom: Math.min(b.bottom, c.bottom) }), i))
+        .filter((b) => b.right - b.left > 0.5 && b.bottom - b.top > 0.5);
+    for (const p of pictures) {
+        if (shown.some((i) => p.rects().some((r) => meets(i, r)))) {
+            const pic = p.picture!.slice(0, 60);
+            if (p.what === 'a picture') return `a picture under its glyphs (${pic}), a ground this rule cannot read`;
+            return `${p.above === undefined ? '' : `${describe(p.above)} above it: `}a border image that is a picture (${pic}) under its glyphs, a ground this rule cannot read`;
         }
-        if (at === stall || paints.opaque) break;
-        if (clipsContent(acs)) cutters.push([at, acs]);
+    }
+    const judged: StackPaint[] = coloured.map((p) => ({ what: p.what, candidates: p.candidates, rects: p.rects() }));
+    const rgbText = (rgb: readonly number[]): string => rgb.map((v) => Math.round(v)).join(', ');
+    for (const i of shown) {
+        const v = worstGround(judged, i, ink.rgb, DRESS_GROUND_CONTRAST, DRESS_GROUND_ALPHA);
+        if (v === undefined) continue;
+        if ('tooMany' in v) return `${v.tooMany} ways of choosing the gradient stops under its glyphs, more than this rule reads (${STACK_CHOICES_CAP})`;
+        return (
+            `the ground under its glyphs (${v.paints.slice(0, 4).join(' over ')}${v.paints.length > 4 ? ` and ${v.paints.length - 4} more` : ''}) ` +
+            `reads at ${v.ratio.toFixed(2)}:1 on its ink, ${v.ground.alpha.toFixed(2)} opaque together (rgb(${rgbText(v.ground.rgb)}) under ink rgb(${rgbText(ink.rgb)}))`
+        );
     }
     return undefined;
 }
@@ -4299,7 +4375,7 @@ function dressHeldFault(prop: string, value: string, cs: CSSStyleDeclaration): s
             return /\btext\b/.test(value) ? `background-clip ${value}: its glyphs are painted by the background` : undefined;
         case 'background-color':
         case 'background-image':
-            // Read together by `groundFault`, once per element.
+            // Read together by `groundStackFault`, once per element.
             return undefined;
         case 'outline-style':
         case 'outline-width':
@@ -4331,8 +4407,12 @@ function dressHeldFault(prop: string, value: string, cs: CSSStyleDeclaration): s
             // The ink's own alpha is a fade like `opacity` (the re-review's
             // P1-2: `rgb(… / 0.06)` left "You pay" at 6% with every check
             // green). The fill is held to `color`, so it is held with it.
-            const c = colourOf(value);
-            return c !== undefined && c.alpha < 0.999 ? `an ink at alpha ${c.alpha} (${value}): a faded ink is a faded figure` : undefined;
+            // Resolved by the engine (round 5, the critic's P1-1): an ink in
+            // a form no parser here took was no ink at all, and an ink mixed
+            // at 6% at run time passed.
+            const c = dressSingleColour(value);
+            if (c === undefined) return `an ink this rule cannot read (${value.slice(0, 60)})`;
+            return c.alpha < 0.999 ? `an ink at alpha ${Number(c.alpha.toFixed(3))} (${value.slice(0, 60)}): a faded ink is a faded figure` : undefined;
         }
         case 'backdrop-filter':
             return backdropFault(value);
@@ -4790,6 +4870,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
     boxFaultsSeen = new Map();
     clipsSeen = new Map();
     shadowersSeen = new Map();
+    ownPaintsSeen = new Map();
     abovePaintsSeen = new Map();
     const read: { node: HTMLElement; stall: Element; faults: string[]; chain: HTMLElement[] | undefined }[] = [];
     const subjects = new Set<HTMLElement>(document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`));
@@ -4823,12 +4904,9 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
             }
             let inks: readonly Box[] | undefined;
             const elInks = (): readonly Box[] => (inks ??= inkLines(el));
-            for (const why of [groundFault(el, cs, elInks), outlineFault(el, cs), decorationFault(cs)]) {
+            for (const why of [groundStackFault(el, cs, stall, elInks), outlineFault(el, cs), decorationFault(cs)]) {
                 if (why !== undefined) faults.push(`${name}: ${why}`);
             }
-            // A box above it, the figure itself for an element under it.
-            const above = groundAboveFault(el, cs, stall, elInks);
-            if (above !== undefined) faults.push(el === node ? above : `${name}: ${above}`);
             if (pxOf(cs.letterSpacing) < 0) {
                 // Read in runs: consecutive text nodes set in one face and
                 // spacing are one line of glyphs, so a broken figure's groups
@@ -4892,7 +4970,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
                 if (lines !== undefined) r.faults.push(lines);
                 let inks: readonly Box[] | undefined;
                 const nodeInks = (): readonly Box[] => (inks ??= inkLines(r.node));
-                const beside = neighbourShadowFault(r.node, inkOf(getComputedStyle(r.node)), nodeInks);
+                const beside = neighbourShadowFault(r.node, dressInk(getComputedStyle(r.node)), nodeInks);
                 if (beside !== undefined) r.faults.push(beside);
                 const ringed = outlineAboveFault(r.node, r.stall, nodeInks);
                 if (ringed !== undefined) r.faults.push(ringed);
