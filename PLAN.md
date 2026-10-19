@@ -875,6 +875,41 @@ money path this app can have, because nothing on it is derived.
   `/guide` should qualify a tablet on its side until this lands is the
   owner's call. Source: `private/design/workshop-2026-09-23/CRITIC-WALL-CYCLE.md`.
 
+- **Before 8g2, the money guards' open list** (the money-guards critic's
+  merged list, round 8, `private/design/workshop-2026-09-23/CRITIC-MONEY-GUARDS.md`;
+  money-guards merged 2026-10-20 at `0b73b9a`). In order:
+  1. **A box moved over money.** A box moved over a money node by a
+     relative offset, a transform or a negative margin, or a target's glyph
+     scaled over one, is read by no geometry rule except over the price and
+     "You pay" (`coveredBy`'s hit test), and there only with
+     `pointer-events` left on. The contrast pass reads it as the figure's
+     ground, so a cover with its own contrasting ground passes (the
+     critic's PC2, PC3′, SVs, PW; PQ over a pay code). The fix to measure
+     first: a hit test with `pointer-events` forced on over every money
+     node and every protected box, on every pass, false reds counted
+     before it binds; and the digit read on every money node on the
+     sampled screens. Then whether the README's "most" can go is the
+     owner's (D-2026-10-20-02, -03).
+  2. **A run under the private look at 0x04's selection** (`pnpm test` and
+     the whole runner), with its sheet grepped first for a `fixed` or
+     `local` background attachment near money (now read as possibly
+     absent, so a false red at the port), relative offsets and transforms
+     near money, animated pseudos, and a look pseudo on a sheet's scrim.
+  3. **Round 4's P2s:** a box above's background image off the sampled
+     screens and the walk's stop at an invisible or `display: contents`
+     box; a static belt in the look lint for clips scoped to hover, focus,
+     the tap highlight or a turned wall; a neighbour's far shadow.
+  4. **Smaller, stated:** a look pseudo animated invisible at the frozen
+     instant (PSa2); a gradient between its stops off the sampled screens
+     and at a device pixel ratio over 1 (G2); `markLookPseudos` never
+     marks a pseudo of the job's scope element itself (one line); a
+     fragmented box's positioning area; the RTL false red in
+     `dl.pay-lines`; dashed, dotted, double and 3D borders read as their
+     colour.
+  The quiet-zone flake and the coverage table's text match ride the
+  probe-shard branch; wall-offsize's four passes must be named in the
+  coverage tables before it lands.
+
 - **A screen shorter than the wall's floor stopped being a wall, and that
   is a behaviour change.** The floor asks the short painted axis now
   (2026-09-20), which is what makes "a phone is not a wall" true turned or
