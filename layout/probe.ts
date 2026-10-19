@@ -53,7 +53,7 @@ import {
 } from './looks';
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
-import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, worstGround, type StackPaint } from './groundStack';
+import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
 import { PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
@@ -3053,8 +3053,11 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   where its tiles are proved to paint (`layerCovers`, each tile dimension
  *   resolved against the positioning area: on an axis that repeats, tiles of
  *   at least `MIN_TILE_PX` cover the whole clip area; on one that does not,
- *   one tile at least the area long, placed over it, covers the area's span;
- *   round 7, the critic's P1-2 and P2-2 on round 6) and tried absent as well
+ *   one tile at least the area long, placed over it, covers the area's span —
+ *   on a `scroll` layer alone: a `fixed` layer's area is the viewport only
+ *   while no box above is transformed, and a `local` one's scrolls, so a
+ *   lone tile of either proves nothing (round 8, the critic's FX); round 7,
+ *   the critic's P1-2 and P2-2 on round 6) and tried absent as well
  *   as at each stop over the rest of its clip area (round 6, the critic's
  *   SZ) — every
  *   `box-shadow` layer (an inset one over the padding box outside its
@@ -3256,7 +3259,15 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   clip area its tiles are proved to cover, and tried absent and at each
  *   stop over the rest of it, not where each tile falls (a tile under
  *   `MIN_TILE_PX` on an axis proves nothing there, a lone tile only where it
- *   spans its whole positioning area; round 7); a
+ *   spans its whole positioning area, on a `scroll` layer; round 7, and
+ *   round 8 for `fixed`); the positioning area is the element's bounding
+ *   box, which for an inline split over lines or a block split over columns
+ *   is not the box Chrome places a tile in (it lays the fragments end to
+ *   end), so a lone tile over such a box can leave a fragment bare and be
+ *   read as covering it — no money glyph owner a look can tile wraps so but
+ *   a broken figure's pieces, whose every longhand
+ *   `a-broken-figure-wears-the-figures-own-ink` holds (the critic's P3-1 on
+ *   round 7); a
  *   `dashed`, `dotted` or `double` border paints its band in part and is
  *   read as its colour over the whole band; a 3D border — `inset`,
  *   `outset`, `groove`, `ridge` — paints two other shades of its colour
@@ -3398,7 +3409,7 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
     ],
     [
         /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin)|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
-        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers, where their tiles fall: `layerCovers` resolves each tile against its positioning area and reads the repeat and the position, and where a layer is not proved to cover it is read as absent too) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
+        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers, where their tiles fall: `layerCovers` resolves each tile against its positioning area and reads the repeat, the position and the attachment, and where a layer is not proved to cover it is read as absent too) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
     ],
     [
         /^(cursor|pointer-events|user-select|-webkit-user-select|touch-action|appearance|-webkit-appearance|caret-.*|will-change|-webkit-user-drag|-webkit-user-modify|interactivity|interpolate-size|scroll-timeline(-.*)?|view-timeline(-.*)?|timeline-scope|view-transition-.*|-webkit-highlight|speak(-as)?|dynamic-range-limit)$/,
@@ -3832,23 +3843,22 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
             // paint that may not be there, every cell judged with it and
             // without it (round 6, the critic's P1-2 on round 5; round 7,
             // the critic's P1-2 and P2-2 on round 6).
+            // A lone tile is placed only on a `scroll` layer: a `fixed` one
+            // is the viewport's only while no box above is transformed, and
+            // Rural's tag sways (round 8, the critic's FX); a `local` one
+            // scrolls with the content. Their tiles that repeat are read
+            // against the smaller of the origin box and the viewport
+            // (`tileArea`).
             const origin = origins[i % origins.length] ?? 'padding-box';
             const attachment = attachments[i % attachments.length] ?? 'scroll';
-            const areaBox = (): Box =>
-                attachment === 'fixed'
-                    ? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
-                    : origin.includes('content')
-                      ? box().content
-                      : origin.includes('border')
-                        ? box().border
-                        : box().pad;
+            const areaBox = (): Box => (origin.includes('content') ? box().content : origin.includes('border') ? box().border : box().pad);
             const a = areaBox();
             const [coverX, coverY] = layerCovers(
                 repeats[i % repeats.length] ?? 'repeat',
                 sizes[i % sizes.length] ?? 'auto',
                 [positionsX[i % positionsX.length] ?? '0%', positionsY[i % positionsY.length] ?? '0%'],
-                { w: a.right - a.left, h: a.bottom - a.top },
-                attachment !== 'local',
+                tileArea(attachment, { w: a.right - a.left, h: a.bottom - a.top }, { w: window.innerWidth, h: window.innerHeight }),
+                attachment,
             );
             const proved = coverX !== 'none' && coverY !== 'none';
             let parts: { inside: Box[]; outside: Box[] } | undefined;

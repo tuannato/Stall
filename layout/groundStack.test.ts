@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Colour } from './atRest';
-import { colourTokens, composite, cellsOf, everyMixReads, layerCovers, luminance, mostOpaque, srgbColour, worstGround, STACK_CHOICES_CAP } from './groundStack';
+import { colourTokens, composite, cellsOf, everyMixReads, layerCovers, luminance, mostOpaque, srgbColour, tileArea, worstGround, STACK_CHOICES_CAP } from './groundStack';
 
 const c = (r: number, g: number, b: number, alpha = 1): Colour => ({ rgb: [r, g, b], alpha });
 const INK: [number, number, number] = [74, 52, 30]; // a Rural-brown ink
@@ -98,7 +98,7 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
         expect(2 ** 9).toBeGreaterThan(STACK_CHOICES_CAP);
     });
 
-    it('takes a gradient layer as covering only where its tiles, resolved against their area, paint (rounds 6 and 7, the critic’s SZ, SZt and FP)', () => {
+    it('takes a gradient layer as covering only where its tiles, resolved against their area, paint (rounds 6 to 8, the critic’s SZ, SZt, FP and FX)', () => {
         const area = { w: 120, h: 40 };
         const at0: [string, string] = ['0%', '0%'];
         const both = (v: string) => [v, v];
@@ -145,8 +145,22 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
         expect(layerCovers('repeat space', 'auto 10px', at0, area)).toEqual(['painting-area', 'none']);
         // A `local` layer's area scrolls with the content: one tile proves
         // nothing there, tiles that repeat still do.
-        expect(layerCovers('no-repeat', 'auto', at0, area, false)).toEqual(both('none'));
-        expect(layerCovers('repeat', 'auto', at0, area, false)).toEqual(both('painting-area'));
+        expect(layerCovers('no-repeat', 'auto', at0, area, 'local')).toEqual(both('none'));
+        expect(layerCovers('repeat', 'auto', at0, area, 'local')).toEqual(both('painting-area'));
+        // The critic's FX (round 8, P1-2 on round 7): a `fixed` layer's area
+        // is the viewport only while no box above is transformed — under
+        // Rural's swaying tag Chrome paints it as `scroll`, and a viewport
+        // tile at `150% 150%` lands off the figure. One tile proves nothing
+        // on a `fixed` layer, however it fills the viewport; tiles that
+        // repeat still do. Red with round 7's `attachment !== 'local'`.
+        const viewport = { w: 768, h: 1024 };
+        expect(layerCovers('no-repeat', '768px 1024px', ['150%', '150%'], viewport, 'fixed')).toEqual(both('none'));
+        expect(layerCovers('no-repeat', 'auto', at0, area, 'fixed')).toEqual(both('none'));
+        expect(layerCovers('space', 'cover', at0, area, 'fixed')).toEqual(both('none'));
+        expect(layerCovers('repeat-x', 'auto', at0, area, 'fixed')).toEqual(['painting-area', 'none']);
+        expect(layerCovers('repeat', '4px 4px', at0, area, 'fixed')).toEqual(both('painting-area'));
+        // ... and the same tile on a `scroll` layer is placed by its position.
+        expect(layerCovers('no-repeat', '768px 1024px', ['150%', '150%'], viewport, 'scroll')).toEqual(both('positioning-area'));
         // A tile with no area paints nothing, and a positioning area with
         // none places no tile this reader vouches for.
         expect(layerCovers('repeat', '0px auto', at0, area)).toEqual(['none', 'painting-area']);
@@ -157,6 +171,22 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
         expect(layerCovers('repeat', 'calc(50% + 2px) auto', at0, area)).toEqual(['none', 'painting-area']);
         expect(layerCovers('no-repeat', 'auto', ['anchor(--x)', '0%'], area)).toEqual(['none', 'positioning-area']);
         expect(layerCovers('repeat repeat repeat', 'auto', at0, area)).toEqual(both('none'));
+    });
+
+    it('resolves a fixed layer’s tiles against the smaller of its box and the viewport (round 8)', () => {
+        const own = { w: 102, h: 37 };
+        const viewport = { w: 1920, h: 1080 };
+        // A `fixed` layer may be painted against its own box (a transform
+        // above) or the viewport; the smaller area reads a percentage tile
+        // no larger than the engine may paint it.
+        expect(tileArea('fixed', own, viewport)).toEqual(own);
+        expect(tileArea('fixed', { w: 3000, h: 37 }, viewport)).toEqual({ w: 1920, h: 37 });
+        expect(tileArea('scroll', own, viewport)).toEqual(own);
+        expect(tileArea('local', own, viewport)).toEqual(own);
+        // 0.06% of the viewport is 1.15px, of a 102px box 0.06px: read
+        // against the box, under `MIN_TILE_PX`, it proves nothing.
+        expect(layerCovers('repeat', '0.06% 0.06%', ['0%', '0%'], tileArea('fixed', own, viewport), 'fixed')).toEqual(['none', 'none']);
+        expect(layerCovers('repeat', '0.06% 0.06%', ['0%', '0%'], viewport, 'fixed')).toEqual(['painting-area', 'none']);
     });
 
     it('judges a layer that may not cover with it and without it (round 6, the critic’s SZ)', () => {

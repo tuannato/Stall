@@ -240,33 +240,52 @@ function tileOffset(value: string, free: number): number | undefined {
  * - on an axis that **repeats** (`repeat` or `round`), the tiles meet edge to
  *   edge across the whole painting area — **when the tile is at least
  *   `MIN_TILE_PX` on that axis** (Chrome paints nothing for a tile under
- *   1/64px, and `round` rescales a tile by at most a third, still far above
- *   that edge);
+ *   1/64px. `round` rescales a tile so a whole number of them fill its
+ *   area: one no larger than the area shrinks by at most a third, still far
+ *   above that edge, and one larger becomes the area itself — never under
+ *   the edge, since a box with an extent has at least one layout unit,
+ *   1/64px, and Chrome paints a tile of that; round 8, the critic's P3-4 on
+ *   round 7, where round 7 said "at most a third" of every tile);
  * - on an axis that **does not** (`no-repeat`, `space`, or `repeat-x`'s and
  *   `repeat-y`'s other axis), one tile is placed by the position — it covers
  *   the positioning area's span when it is at least that area and
  *   `MIN_TILE_PX` long and its `position` (one layer's computed
  *   `background-position-x` and `-y`: a percentage, a length, or a `calc()`
  *   of the two) puts it over all of it (a `space` tile at least the area
- *   long is placed once by its position, as `no-repeat` is); `placed` false
- *   (a `local` attachment, whose area scrolls with the content) proves
- *   nothing there;
+ *   long is placed once by its position, as `no-repeat` is) — **for a
+ *   `scroll` layer alone** (`attachment`, the layer's computed
+ *   `background-attachment`). A `local` layer's area scrolls with the
+ *   content, and a `fixed` layer's is the viewport only while no box above
+ *   it is transformed: under a transform, a `rotate` or a transform
+ *   animation, Chrome paints `fixed` as `scroll` (CSS Transforms; measured
+ *   by the critic in Chrome 155, a viewport-sized tile at `150% 150%` landed
+ *   off a 102 × 37 box), and Rural sways its tag and tilts every third card —
+ *   so the critic's FX, a white viewport tile over a ground in the ink's
+ *   colour on the Cycle card's figure, read as a white ground there (round
+ *   8, the critic's P1-2 on round 7). A lone tile of either proves nothing;
  * - otherwise, nowhere.
  * A layer covers a pixel of its clip area only where both axes say so; the
  * rest of it is a paint that may not be there, judged with it and without
  * it. So a gradient written `no-repeat` that fills its box (the critic's FP)
  * covers its box, and one pixel square (SZ) or under 1/64px (SZt) covers
- * nothing. `area` is the positioning area's size: its origin box, or the
- * viewport where the layer is `fixed`; one with no width or no height places
- * no tile this reader vouches for.
+ * nothing. `area` is the size the tiles are resolved against (`tileArea`):
+ * the origin box, or, for a `fixed` layer, the smaller of that box and the
+ * viewport on each axis; one with no width or no height places no tile this
+ * reader vouches for. The area is the element's bounding box, which for an
+ * inline split over lines or a block split over columns is not the box
+ * Chrome positions a tile in (it lays the fragments end to end); no money
+ * glyph owner a look can tile wraps so today but a broken figure's pieces,
+ * whose every longhand `a-broken-figure-wears-the-figures-own-ink` holds
+ * (the critic's P3-1 on round 7, stated).
  */
 export function layerCovers(
     repeat: string,
     size: string,
     position: readonly [string, string],
     area: { w: number; h: number },
-    placed = true,
+    attachment = 'scroll',
 ): readonly [AxisCover, AxisCover] {
+    const placed = attachment === 'scroll';
     const keys = repeat.trim().split(/\s+/);
     const pair: readonly [string, string] | undefined =
         keys.length === 1
@@ -296,6 +315,25 @@ export function layerCovers(
         return offset !== undefined && offset <= slack && offset + t >= extent - slack ? 'positioning-area' : 'none';
     };
     return [axis(pair?.[0], tile[0], area.w, position[0]), axis(pair?.[1], tile[1], area.h, position[1])];
+}
+
+/**
+ * The size a layer's tiles are resolved against (`layerCovers`' `area`): the
+ * layer's origin box (`own`) for a `scroll` or `local` layer. A `fixed`
+ * layer's positioning area is the viewport, or its origin box where a box
+ * above is transformed (Chrome paints it as `scroll` there), and this reader
+ * does not ask which: it takes the smaller of the two on each axis, so a tile
+ * given as a percentage of its area is never read larger than the engine may
+ * paint it (round 8, the critic's P1-2 on round 7). A `fixed` lone tile
+ * proves nothing either way; only tiles that repeat are read, and a smaller
+ * area only ever reads them smaller.
+ */
+export function tileArea(
+    attachment: string,
+    own: { w: number; h: number },
+    viewport: { w: number; h: number },
+): { w: number; h: number } {
+    return attachment === 'fixed' ? { w: Math.min(own.w, viewport.w), h: Math.min(own.h, viewport.h) } : own;
 }
 
 /** A colour's relative luminance, read off the one contrast formula the app uses (black's luminance is 0). */
