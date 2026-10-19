@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Colour } from './atRest';
-import { colourTokens, composite, cellsOf, everyMixReads, luminance, mostOpaque, srgbColour, worstGround, STACK_CHOICES_CAP } from './groundStack';
+import { colourTokens, composite, cellsOf, everyMixReads, layerCovers, luminance, mostOpaque, srgbColour, worstGround, STACK_CHOICES_CAP } from './groundStack';
 
 const c = (r: number, g: number, b: number, alpha = 1): Colour => ({ rgb: [r, g, b], alpha });
 const INK: [number, number, number] = [74, 52, 30]; // a Rural-brown ink
@@ -96,6 +96,45 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
         const many = Array.from({ length: 9 }, (_, i) => ({ what: `g${i}`, candidates: [CREAM, c(250, 250, 250)], rects: OVER }));
         expect(worstGround(many, GLYPHS, INK, 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
         expect(2 ** 9).toBeGreaterThan(STACK_CHOICES_CAP);
+    });
+
+    it('takes a gradient layer as covering its clip area only when its tiles meet on both axes (round 6, the critic’s SZ)', () => {
+        const area = { w: 120, h: 40 };
+        // The initial values, and every tiling that repeats on both axes with
+        // a tile that has an area, wherever the position puts the first tile.
+        expect(layerCovers('repeat', 'auto', area)).toBe(true);
+        expect(layerCovers('repeat', 'auto auto', area)).toBe(true);
+        expect(layerCovers('round', 'cover', area)).toBe(true);
+        expect(layerCovers('repeat round', '1px 1px', area)).toBe(true);
+        expect(layerCovers('repeat', '50% auto', area)).toBe(true);
+        expect(layerCovers('repeat', '0.5px 3px', area)).toBe(true);
+        // The critic's SZ: one white pixel, not repeated.
+        expect(layerCovers('no-repeat', '1px 1px', area)).toBe(false);
+        // Its control: a whole tile, placed off the box.
+        expect(layerCovers('no-repeat', 'auto', area)).toBe(false);
+        // One axis repeated, or tiles spaced apart.
+        expect(layerCovers('repeat-x', 'auto', area)).toBe(false);
+        expect(layerCovers('repeat no-repeat', 'auto', area)).toBe(false);
+        expect(layerCovers('space', 'auto', area)).toBe(false);
+        expect(layerCovers('repeat space', 'auto', area)).toBe(false);
+        // A tile with no area paints nothing, and a positioning area with
+        // none places no tile this reader vouches for.
+        expect(layerCovers('repeat', '0px auto', area)).toBe(false);
+        expect(layerCovers('repeat', 'auto 0%', area)).toBe(false);
+        expect(layerCovers('repeat', 'auto', { w: 120, h: 0 })).toBe(false);
+        expect(layerCovers('repeat', '10px 10px', { w: 0, h: 40 })).toBe(false);
+        // A size this reader does not take apart is not proved.
+        expect(layerCovers('repeat', 'calc(50% + 2px) auto', area)).toBe(false);
+    });
+
+    it('judges a layer that may not cover with it and without it (round 6, the critic’s SZ)', () => {
+        // A ground in the ink's own colour under a white layer read as
+        // covering passes; read as a paint that may be absent, it fails.
+        const ground = { what: 'its ground', candidates: [ink(1)], rects: OVER };
+        const white = c(255, 255, 255);
+        expect(worstGround([ground, { what: 'its gradient', candidates: [white], rects: OVER }], GLYPHS, INK, 3, 0.5)).toBeUndefined();
+        const v = worstGround([ground, { what: 'its gradient, where its tiles fall', candidates: [white, c(0, 0, 0, 0)], rects: OVER }], GLYPHS, INK, 3, 0.5);
+        expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
     });
 
     it('leaves a stack under half opaque to the contrast pass', () => {

@@ -164,6 +164,39 @@ export function srgbColour(text: string): Colour | undefined {
     return undefined;
 }
 
+/**
+ * Whether a gradient layer of a background paints every pixel of its clip
+ * area (round 6, the critic's P1-2 on round 5: a white layer one pixel
+ * square, `no-repeat`, was read over the whole box and hid a ground in the
+ * ink's own colour). Its tiles are read, not trusted: a layer covers its
+ * clip area only when it **repeats on both axes** (`repeat` or `round`,
+ * whose tiles meet edge to edge wherever the position puts the first — a
+ * `space` leaves gaps between them, and `no-repeat`, `repeat-x` and
+ * `repeat-y` leave the box but the tile's own row, column or rect) **and
+ * its tile has an area** (`size`, the layer's computed `background-size`:
+ * `auto`, `cover` and `contain` are the positioning `area` for a gradient,
+ * which has no size of its own, and that area must have both a width and a
+ * height; a length or a percentage of the area must be more than nothing,
+ * and anything this reader does not take apart — a `calc()` — is not
+ * proved). A layer that does not cover is a paint that
+ * may not be under a given pixel, and the probe judges every cell both with
+ * it and without it. `repeat` is one layer's keywords, `size` one layer's
+ * value.
+ */
+export function layerCovers(repeat: string, size: string, area: { w: number; h: number }): boolean {
+    const keys = repeat.trim().split(/\s+/);
+    if (keys.length > 2 || !keys.every((k) => k === 'repeat' || k === 'round')) return false;
+    // A positioning area with no width or no height places no tile this
+    // reader can vouch for, whatever the size says.
+    if (!(area.w > 0 && area.h > 0)) return false;
+    const tokens = size.trim().split(/\s+(?![^(]*\))/).filter((t) => t !== '');
+    if (tokens.length === 1 && (tokens[0] === 'cover' || tokens[0] === 'contain')) return true;
+    if (tokens.length < 1 || tokens.length > 2) return false;
+    const [w, h = 'auto'] = tokens;
+    const dim = (t: string): boolean => t === 'auto' || /^([\d.]*[1-9][\d.]*)(px|%)$/.test(t);
+    return dim(w!) && dim(h);
+}
+
 /** A colour's relative luminance, read off the one contrast formula the app uses (black's luminance is 0). */
 export function luminance(rgb: readonly [number, number, number]): number {
     return contrastRatio({ r: rgb[0], g: rgb[1], b: rgb[2] }, { r: 0, g: 0, b: 0 }) * 0.05 - 0.05;

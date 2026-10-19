@@ -53,7 +53,7 @@ import {
 } from './looks';
 import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
-import { STACK_CHOICES_CAP, colourTokens, everyMixReads, mostOpaque, srgbColour, worstGround, type StackPaint } from './groundStack';
+import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
@@ -2996,8 +2996,10 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * each with its reason, are `dressHeldFault`'s and the reads it names:
  * - no `clip-path`, `clip`, mask image or mask border on the figure — its
  *   own shape cuts its own digits (a box above it may clip, read 4.);
- * - no `filter`, `mix-blend-mode`, `-webkit-box-reflect`, motion path
- *   (`offset-path`), individual `rotate`/`scale`/`translate`, and no
+ * - no `filter`, `mix-blend-mode`, `background-blend-mode` (round 6, the
+ *   critic's BL2: a blend of its background's layers paints a colour no
+ *   layer is, which the composite below does not model), `-webkit-box-reflect`,
+ *   motion path (`offset-path`), individual `rotate`/`scale`/`translate`, and no
  *   `transform` but none — save **a uniform scale of at least 1** with no
  *   turn, skew, flip or shift: the stream card's pulse (`bc-pulse` in
  *   broadcast.css) grows a figure that changed 6% for 0.4 s and never
@@ -3045,8 +3047,12 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * - **no ground under its glyphs that reads under 3:1 against its ink,
  *   with every paint under them composited** (`groundStackFault`, round 5;
  *   the pure half is `layout/groundStack.ts`): on the element itself, the
- *   background colour and every layer of its image over their clip box,
- *   every `box-shadow` layer (an inset one over the padding box outside its
+ *   background colour and every layer of its image over their clip area
+ *   (`background-clip`, `border-area` its border's bands) — a gradient whose
+ *   tiles may leave a pixel of that area bare (`layerCovers`: it does not
+ *   repeat on both axes, or its tile or positioning area has no width or
+ *   height, or its size is one this read does not take apart) tried absent
+ *   as well as at each stop (round 6, the critic's SZ) — every `box-shadow` layer (an inset one over the padding box outside its
  *   hole, an outer one outside the border box), every border side with a
  *   width, and a `border-image` (over the padding box with `fill`, over its
  *   border bands and outset otherwise); **and on every box above it** up to
@@ -3128,6 +3134,8 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * that is not inherited never reaches the figure's computed style, so it is
  * read where it is written: no box between the figure and its stall runs a
  * `filter`, a `backdrop-filter` but a blur, a `mix-blend-mode`, a
+ * `background-blend-mode` (round 6; every box the ground walk reads is
+ * among them), a
  * reflection, a motion path or a `zoom` but 1, an opacity under 1 (save the
  * stream card's stale plate, `.bc[data-state='stale'] .plate`, which says
  * its figure is old by fading it — the app's sentence, which no fixture
@@ -3314,8 +3322,8 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
         'a colour: whether the ink reads on its ground is the contrast pass\'s (a ground in the ink\'s own colour is held below)',
     ],
     [
-        /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin|blend-mode)|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
-        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
+        /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin)|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
+        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers, where their tiles fall: `layerCovers` reads the repeat, the size and the origin, and a layer it cannot prove covers is read as absent too) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
     ],
     [
         /^(cursor|pointer-events|user-select|-webkit-user-select|touch-action|appearance|-webkit-appearance|caret-.*|will-change|-webkit-user-drag|-webkit-user-modify|interactivity|interpolate-size|scroll-timeline(-.*)?|view-timeline(-.*)?|timeline-scope|view-transition-.*|-webkit-highlight|speak(-as)?|dynamic-range-limit)$/,
@@ -3361,6 +3369,7 @@ const DRESS_HELD: ReadonlySet<string> = new Set([
     '-webkit-mask-box-image-source',
     'filter',
     'mix-blend-mode',
+    'background-blend-mode',
     '-webkit-box-reflect',
     'offset-path',
     'rotate',
@@ -3654,13 +3663,16 @@ function borderImageReach(cs: CSSStyleDeclaration): number {
  * measurement: in paint order, bottom first — its outer box shadows (the last
  * listed lowest), its background colour over the last layer's clip box, its
  * background image's layers (the element's own only, the last listed lowest:
- * a gradient by its stops, a picture by its place), its inset shadows, every
+ * a gradient by its stops, and as absent too where its tiles may leave a
+ * pixel bare, `layerCovers`; a picture by its place), its inset shadows, every
  * border side that has a width, and a border image (over the padding box
  * where its slice says `fill`, over its bands and outset otherwise) — each
  * with where it paints, read only when asked; whether its background colour
  * is opaque; or why one of its colours cannot be read.
  */
 type BoxPaint = { what: string; candidates: Colour[]; picture?: string; above?: Element; rects: () => Box[] };
+/** The candidate a paint that may leave a pixel bare is tried at: nothing at all. */
+const MAY_BE_ABSENT: Colour = { rgb: [0, 0, 0], alpha: 0 };
 type BoxPaints = { paints: BoxPaint[]; opaque: boolean; unread?: string };
 let ownPaintsSeen = new Map<Element, BoxPaints>();
 let abovePaintsSeen = new Map<Element, BoxPaints>();
@@ -3699,7 +3711,10 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
         return geo;
     };
     const picture = (v: string): boolean => /url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(v);
-    const clipBox = (k: string): Box => (k.includes('content') ? box().content : k.includes('padding') ? box().pad : box().border);
+    // Where a background layer (and the colour, by the last layer's) is
+    // clipped to: `border-area` paints the border's bands alone.
+    const clipRects = (k: string): Box[] =>
+        k === 'border-area' ? boxMinus(box().border, box().pad) : [k.includes('content') ? box().content : k.includes('padding') ? box().pad : box().border];
     const clips = cs.backgroundClip.split(',').map((v) => v.trim());
     const paints: BoxPaint[] = [];
     const shadows = dressShadowsOf(cs.boxShadow, current);
@@ -3709,24 +3724,45 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
     }
     const bg = dressSingleColour(cs.backgroundColor, current);
     if (bg === undefined) return unread('a background colour', cs.backgroundColor);
-    paints.push({ what: `${whose}ground`, candidates: [bg], rects: () => [clipBox(clips[clips.length - 1] ?? 'border-box')] });
+    paints.push({ what: `${whose}ground`, candidates: [bg], rects: () => clipRects(clips[clips.length - 1] ?? 'border-box') });
     // A box above paints its decoration in its background image (the rain's
     // tiles, the aurora's washes, Neo's brackets and scanlines), placed and
     // sized by a position and a size this read does not resolve: not read
     // there (the contrast pass's, on the screens it samples).
     if (own && cs.backgroundImage !== 'none') {
         const layers = splitLayers(cs.backgroundImage);
+        const repeats = splitLayers(cs.backgroundRepeat);
+        const sizes = splitLayers(cs.backgroundSize);
+        const origins = splitLayers(cs.backgroundOrigin);
+        const attachments = splitLayers(cs.backgroundAttachment);
         for (let i = layers.length - 1; i >= 0; i -= 1) {
             const layer = layers[i]!;
             const clip = clips[i % clips.length] ?? 'border-box';
             if (layer === 'none') continue;
             if (picture(layer)) {
-                paints.push({ what: 'a picture', candidates: [], picture: layer, rects: () => [clipBox(clip)] });
+                paints.push({ what: 'a picture', candidates: [], picture: layer, rects: () => clipRects(clip) });
                 continue;
             }
             const stops = dressColoursIn(layer, current);
             if (stops === undefined) return unread('a background layer', layer);
-            if (stops.length > 0) paints.push({ what: 'its gradient', candidates: stops, rects: () => [clipBox(clip)] });
+            if (stops.length === 0) continue;
+            // A layer whose tiles may leave a pixel of its clip area bare
+            // (`layerCovers`: it repeats on both axes with a tile that has an
+            // area, or it is not proved to cover) is a paint that may not be
+            // there: every cell is judged with it and without it (round 6,
+            // the critic's P1-2 on round 5).
+            const origin = origins[i % origins.length] ?? 'padding-box';
+            const area = (): { w: number; h: number } => {
+                if ((attachments[i % attachments.length] ?? 'scroll') === 'fixed') return { w: window.innerWidth, h: window.innerHeight };
+                const b = origin.includes('content') ? box().content : origin.includes('border') ? box().border : box().pad;
+                return { w: b.right - b.left, h: b.bottom - b.top };
+            };
+            const covers = layerCovers(repeats[i % repeats.length] ?? 'repeat', sizes[i % sizes.length] ?? 'auto', area());
+            paints.push({
+                what: covers ? 'its gradient' : 'its gradient, where its tiles fall',
+                candidates: covers ? stops : [...stops, MAY_BE_ABSENT],
+                rects: () => clipRects(clip),
+            });
         }
     }
     for (const sh of shadows.filter((s) => s.inset).reverse()) {
@@ -4338,6 +4374,9 @@ function flowFault(node: HTMLElement, frags: readonly Fragment[], groups: boolea
     return undefined;
 }
 
+/** Whether a computed `background-blend-mode` (one keyword a layer) blends no layer. */
+const blendsNormally = (value: string): boolean => value === '' || value.split(',').every((v) => v.trim() === 'normal');
+
 /** Why a held longhand's value fails on the figure or an element under it with text, or undefined. */
 function dressHeldFault(prop: string, value: string, cs: CSSStyleDeclaration): string | undefined {
     switch (prop) {
@@ -4354,6 +4393,8 @@ function dressHeldFault(prop: string, value: string, cs: CSSStyleDeclaration): s
             return value === 'none' ? undefined : `a filter (${value.slice(0, 60)})`;
         case 'mix-blend-mode':
             return value === 'normal' ? undefined : `mix-blend-mode ${value}: a blend composes the glyphs with what is under them`;
+        case 'background-blend-mode':
+            return blendsNormally(value) ? undefined : `background-blend-mode ${value.slice(0, 40)}: a blend composes its background's layers into a colour none of them is`;
         case '-webkit-box-reflect':
             return value === 'none' ? undefined : `a reflection (${value.slice(0, 40)}): a second figure`;
         case 'offset-path':
@@ -4582,6 +4623,8 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return value === 'none' ? undefined : `a filter (${value.slice(0, 60)})`;
         case 'mix-blend-mode':
             return value === 'normal' ? undefined : `mix-blend-mode ${value}`;
+        case 'background-blend-mode':
+            return blendsNormally(value) ? undefined : `background-blend-mode ${value.slice(0, 40)}`;
         case '-webkit-box-reflect':
             return value === 'none' ? undefined : `a reflection (${value.slice(0, 40)})`;
         case 'offset-path':
@@ -4609,7 +4652,7 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return undefined;
     }
 }
-const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'backdrop-filter'] as const;
+const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'backdrop-filter'] as const;
 
 /**
  * An untouched element's every longhand outside `stall` (the docblock's
