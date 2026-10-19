@@ -7250,10 +7250,13 @@ The conditions (`dressHeldFault`), each with its reason:
   reads), `content` `normal`;
 - no negative `word-spacing` or `text-indent`;
 - **a negative `letter-spacing` may take up the room between two glyphs and
-  no more** (`spacingPiles`): for every two adjacent characters of its text,
-  the spaces between them counted, the spacing may not make their inks share
-  a pixel the face keeps apart — both glyphs drawn alone on a canvas in the
-  text's computed face, at the spacing and at none, and the pixels both cover
+  no more** (`spacingPiles`): for every two adjacent characters of its text
+  (read in runs of one face and spacing, so a broken figure's groups — a
+  text node each, `.fig-end` its own — are read across the comma where they
+  meet), the spaces between them counted, the spacing may not make their
+  inks share a pixel the face keeps apart — both glyphs drawn alone on a
+  canvas in the text's computed face, at the spacing and at none, and the
+  pixels both cover
   at least half counted (a pair whose ink boxes stay apart is not drawn; a
   pair's answer is kept for the run, by face, spacing and pair). The
   decision's words were "no negative letter-spacing", which fails every look

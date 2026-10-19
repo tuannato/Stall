@@ -2902,8 +2902,10 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * - no `content` but `normal` (an element's own text replaced);
  * - no negative `word-spacing` or `text-indent`;
  * - **`letter-spacing` may take up the room between two glyphs and no
- *   more** (`spacingPiles`): for every two adjacent characters of its text,
- *   the spaces between them counted, a negative spacing may not make their
+ *   more** (`spacingPiles`): for every two adjacent characters of its text
+ *   (read in runs of one face and spacing, so a broken figure's groups are
+ *   read across the comma where they meet), the spaces between them
+ *   counted, a negative spacing may not make their
  *   inks share a pixel the face keeps apart — both glyphs drawn alone on a
  *   canvas in the text's computed face, at the spacing and at none, and the
  *   pixels both cover at least half counted (a pair whose ink boxes stay
@@ -3869,11 +3871,24 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
                 if (why !== undefined) faults.push(`${name}: ${why}`);
             }
             if (pxOf(cs.letterSpacing) < 0) {
+                // Read in runs: consecutive text nodes set in one face and
+                // spacing are one line of glyphs, so a broken figure's groups
+                // (a text node each, `.fig-end` its own) are read across the
+                // comma where one group meets the next.
+                const runs: { text: string; cs: CSSStyleDeclaration }[] = [];
+                let key = '';
                 const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
                 for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
                     const owner = t.parentElement;
-                    if (owner === null || (t as Text).data.trim() === '') continue;
-                    const why = spacingPiles((t as Text).data, getComputedStyle(owner));
+                    if (owner === null) continue;
+                    const ocs = getComputedStyle(owner);
+                    const k = `${ocs.fontStyle}|${ocs.fontWeight}|${ocs.fontSize}|${ocs.fontFamily}|${ocs.letterSpacing}|${ocs.wordSpacing}|${ocs.textTransform}|${ocs.fontVariantCaps}|${ocs.fontStretch}`;
+                    if (k === key && runs.length > 0) runs[runs.length - 1]!.text += (t as Text).data;
+                    else runs.push({ text: (t as Text).data, cs: ocs });
+                    key = k;
+                }
+                for (const run of runs) {
+                    const why = run.text.trim() === '' ? undefined : spacingPiles(run.text, run.cs);
                     if (why !== undefined) {
                         faults.push(`${name}: ${why}`);
                         break;
