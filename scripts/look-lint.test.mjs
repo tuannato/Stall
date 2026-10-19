@@ -450,7 +450,7 @@ describe('a-look-may-not-dress-a-figures-pieces', () => {
         }
     });
 
-    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06, D-2026-10-19-02, D-2026-10-20-01)', () => {
+    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06, D-2026-10-19-02, D-2026-10-20-01, D-2026-10-20-02)', () => {
         const readme = read('workshop/README.md').replace(/\s+/g, ' ');
         // D-2026-10-14-06, its "shadow and everything around it" narrowed to
         // "the box around it" by D-2026-10-19-02: the probe holds a far
@@ -460,17 +460,31 @@ describe('a-look-may-not-dress-a-figures-pieces', () => {
         // D-2026-10-19-02: what `a-money-figure-is-never-misdressed` holds
         // the whole figure to, in the kit's words. D-2026-10-20-01 split
         // both labels: the probe paints no hover, no turned wall and not
-        // every screen, so the rest is Stall's at intake.
+        // every screen, so the rest is Stall's at intake. D-2026-10-20-02
+        // (round 8): the probe catches "most of this" there, not all — a box
+        // moved over a figure by a relative offset, or a target's glyph
+        // scaled over it, passes it (the critic's PC2, SVs and PW on round
+        // 7) — on this paragraph and the money one; the piece paragraph keeps
+        // its label, true as written.
         const whole =
-            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe`, on the screens and states it paints; Stall at intake for the rest, such as a pointer\'s hover, a turned wall and a screen the kit does not measure.)*';
+            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe` catches most of this on the screens and states it paints; Stall checks the rest at intake, such as a pointer\'s hover, a turned wall and a screen the kit does not measure.)*';
+        // The money paragraph's label, pinned since round 8 (the critic's
+        // P3-2 on round 7: reverted, it kept this test green), and the lint
+        // sentence folded into it.
+        const moneyLabel =
+            "*(The kit — `workshop:probe` catches most of this on the screens and states it paints; Stall checks the rest at intake, such as a pointer's hover, a turned wall and a screen the kit does not measure. And `workshop:lint` refuses the ways to paint text in a colour the probe does not read: `-webkit-text-fill-color`, `-webkit-text-stroke`, `background-clip: text`.)*";
         assert.ok(readme.includes(piece), 'the workshop README does not carry the piece line');
         assert.ok(readme.includes(whole), 'the workshop README does not carry the whole-price line');
+        assert.ok(readme.includes(moneyLabel), 'the workshop README does not carry the money paragraph\'s label');
         assert.ok(!readme.includes('shadow and everything around it are yours'), 'the README still says a shadow and everything around the price are a look\'s');
         const money = readme.indexOf('**Money is never covered, cut or faded.**');
         const at = readme.indexOf(piece);
         const after = readme.indexOf(whole);
         const next = readme.indexOf('**QR codes stay black on white');
         assert.ok(money >= 0 && money < at, 'the piece line stands after the money paragraph');
+        // The label closes the money paragraph, and the piece line follows it.
+        assert.equal(readme.indexOf(moneyLabel), at - moneyLabel.length - 1, 'the money paragraph ends with its label, right before the piece line');
+        assert.ok(readme.indexOf(moneyLabel) > money, 'the money label stands in the money paragraph');
         // The whole-price line follows the piece line directly, then the QR paragraph.
         assert.equal(after, at + piece.length + 1, 'the whole-price line stands right after the piece line');
         assert.equal(next, after + whole.length + 1, 'the QR paragraph stands right after the whole-price line');
