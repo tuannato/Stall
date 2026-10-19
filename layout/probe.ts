@@ -3052,9 +3052,11 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   tiles may leave a pixel of that area bare (`layerCovers`: it does not
  *   repeat on both axes, or its tile or positioning area has no width or
  *   height, or its size is one this read does not take apart) tried absent
- *   as well as at each stop (round 6, the critic's SZ) — every `box-shadow` layer (an inset one over the padding box outside its
+ *   as well as at each stop (round 6, the critic's SZ) — every
+ *   `box-shadow` layer (an inset one over the padding box outside its
  *   hole, an outer one outside the border box), every border side with a
- *   width, and a `border-image` (over the padding box with `fill`, over its
+ *   width (its colour over its band, whatever its style), and a
+ *   `border-image` (over the padding box with `fill`, over its
  *   border bands and outset otherwise); **and on every box above it** up to
  *   and with the stall, the background colour, box shadows, borders and
  *   border image of each — until the nearest box with an opaque background
@@ -3063,7 +3065,9 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   ground). Every stretch of its glyphs' ink, as painted (cut by every box
  *   in that walk that clips what it holds), is cut into cells by the
  *   paints' edges, and on each cell the paints that cover it are
- *   composited in paint order, a gradient tried at each of its stops: a
+ *   composited as plain stacking — source-over, in paint order; every
+ *   blend that would compose them otherwise is held to `normal`, above —
+ *   a gradient tried at each of its stops: a
  *   cell whose composite is at least `DRESS_GROUND_ALPHA` (half) opaque and
  *   reads under `MIN_CONTRAST` (3:1) against the ink fails, so five layers
  *   of the ink's colour at 0.49 fail together where round 4 passed each
@@ -3166,7 +3170,8 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * not read here (`a-money-figure-never-clips-itself`'s, which reads a
  * rounded box's corners along their curves since round 4).
  *
- * Not read, stated:
+ * Not read, stated (round 6: the list says what the code reads, the
+ * critic's corrections on round 5):
  * - a figure a look hides whole: a money node not rendered (`display: none`
  *   on it or above it, `content-visibility: hidden`) is skipped, as the ink
  *   rule skips it, since the app hides figures too (a sheet with no rate,
@@ -3177,41 +3182,76 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * - where the figure's box stands (`DRESS_FREE`'s placement: a figure moved
  *   is the coverage, spill and clip rules'), and a single line set so tight
  *   that the line above or below stands on its glyphs;
- * - across two flows of one node: a break inside a digit group (a group
- *   split between two boxes is read within the flow that holds it), and the
- *   order of a flow that begins beside another but below its first line;
+ * - across the flows of one node, all but two things: a flow is one
+ *   element's text wherever the layout puts its pieces — the anonymous boxes
+ *   a grid or a flex container makes of an element's own text runs are one
+ *   flow — and where the text enters a flow for the first time, that flow's
+ *   first fragment may stand neither wholly above the first fragment of the
+ *   flow it leaves nor wholly to its left on a line that overlaps it; text
+ *   that comes back to a flow it already began is read in that flow's order
+ *   alone. So a grid on Pay several's total that sets " in total" beside the
+ *   figure's second line (the critic's OR: "= 368,934,881,474, / in total
+ *   191,032.30 XEC") reads in order, and so does a flow that begins beside
+ *   another but lower; a break inside a digit group between two flows (a
+ *   group split between two boxes is read within the flow that holds it);
  *   and the character `hyphenate-character` prints where `hyphens` breaks a
  *   word of a figure's words (a break inside a digit group, which no
  *   dictionary hyphenates, fails as a break);
  * - a box above's background image — its gradients and pictures, where a
  *   box paints its decoration (the rain's tiles, the aurora's washes, Neo's
- *   brackets), placed and sized by a position and a size this read does
- *   not resolve: what it paints under a figure is the contrast pass's, and
+ *   brackets): what it paints under a figure is the contrast pass's, and
  *   only on the screens it samples (390, 1280 and 1920 wide, less the
  *   geometry-only screens) — a look can scope such a paint to a state the
  *   look rules let it read (`data-wall-tier`, `data-paying`, `data-touch`,
  *   `data-turn`) or to a screen the contrast pass does not sample, and no
  *   rule reads it there (the critic's P2-1, round 4);
- * - a paint above the nearest box with an opaque background colour, even
- *   where that colour does not reach the figure's ink — its
- *   `background-clip`, its rounded corners, or ink that runs past the box:
- *   the walk stops there whatever the box's colour covers (P2-1);
+ * - what lies above the nearest box with an opaque background colour: the
+ *   walk stops at that box whether or not its colour is under the glyphs —
+ *   its `background-clip`, its rounded corners, ink that runs past it — and
+ *   whether or not it paints at all: a box whose `visibility` is not
+ *   `visible` paints no colour, and one whose `display` is `contents` has no
+ *   box, yet each ends the walk as an opaque ground (the critic's V and DC,
+ *   round 5), and what lies under it is not read (P2-1);
  * - a paint a box outside the walk lays under the glyphs: a sibling's
  *   background or shadow run under them, a positioned box (the coverage
- *   rules'), and an in-flow `::before` or `::after` of a box above it (the
+ *   rules'), an in-flow `::before` or `::after` of a box above it (the
  *   contrast pass's look-pseudo frames read their paint inside a protected
- *   box, on the screens it samples);
+ *   box, on the screens it samples), a blend such a box composes with what
+ *   lies under it, and what a `backdrop-filter` blur on the figure or a box
+ *   above spreads from beside the box under it;
+ * - a paint's geometry beyond its rect: the paints are composited as plain
+ *   stacking (source-over, in paint order — every blend from the figure up
+ *   to the stall is held to `normal`, and `isolation`, which only keeps
+ *   blends in, is free); an own gradient layer whose tiles may leave a pixel
+ *   bare is tried absent and at each stop wherever its clip area meets the
+ *   ink, not where its tiles fall (stricter than it paints, never looser); a
+ *   `dashed`, `dotted` or `double` border paints its band in part and is
+ *   read as its colour over the whole band; a 3D border — `inset`,
+ *   `outset`, `groove`, `ridge` — paints two other shades of its colour
+ *   (Chrome paints `inset #dddddd` `rgb(137, 137, 137)` on its top and left
+ *   and white on its bottom and right; the critic's P3-2) and is read as its
+ *   colour; a paint's rounded corners (a paint is read over its whole rect);
+ *   the glyphs as pixels (a cell is judged where the line's ink box stands,
+ *   between glyphs too);
  * - a gradient between its stops: each stop is tried, not the colours a
- *   gradient interpolates between two of them (nor an `in <space>`
- *   interpolation's); a paint's rounded corners (a paint is read over its
- *   whole rect); the glyphs as pixels (a cell is judged where the line's ink
- *   box stands, between glyphs too);
+ *   gradient paints between two of them (nor an `in <space>`
+ *   interpolation's), so a ramp whose every stop reads can paint the ink's
+ *   own colour between them — the critic's G2, white and black 1px apart
+ *   under a `#767676` ink, paints a mid grey and "You pay" at 1.13–1.32:1
+ *   (literal stops, and stops written from `currentColor`). The
+ *   contrast pass reads it, whether its stops are literals or written from
+ *   `currentColor` (round 6), on the screens it samples alone (390, 1280 and
+ *   1920 wide, the geometry-only screens aside, at a device pixel ratio of
+ *   1); no rule reads it on the tall wall, the tablet, the short walls, the
+ *   narrow phone or a screen the pass does not sample;
  * - the ink's alpha in the contrast box read (`scripts/layout-check.mjs`
  *   reads a computed ink's red, green and blue alone): on a money subject
  *   this rule refuses an ink under alpha 1 first; every other target reads
- *   as before; and the contrast pass blanks a target's glyphs through
- *   `color`, so a ground in `currentColor` drops out of its ground capture
- *   (the critic's root cause on round 4, not built);
+ *   as before; and what the contrast pass blanks with the glyphs (round 6,
+ *   `blankGlyphs`): an SVG glyph through its `color`, and a decoration
+ *   line, an emphasis mark or a text stroke whose colour is the element's
+ *   `color` — so one a look writes in the ink's colour by name is blanked
+ *   too, and not read as ground;
  * - a shrink by a font feature (`font-variant-position`, `sups`, `dnom`),
  *   which keeps the computed size the type floor reads — none shrank a
  *   digit in the served subsets (the critic's A3, D5); the glyphs a look's
@@ -3223,8 +3263,10 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   neighbour's glow, or the rain's outline on a neighbour;
  * - a state no pass paints: `:hover`, `:focus`, `:focus-visible`,
  *   `:focus-within` and `:active` (a figure clipped under the pointer
- *   passes; both look lints admit it, the critic's P2-2), and a transition
- *   until it runs;
+ *   passes; both look lints admit it, the critic's P2-2), a transition
+ *   until it runs, and the tap highlight (`-webkit-tap-highlight-color`, a
+ *   free colour, painted over a control on a tap; the critic's P3-5, not
+ *   measured);
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
@@ -3836,8 +3878,11 @@ function paddingBoxOf(el: Element, cs: CSSStyleDeclaration): Box {
  * and where it paints (`boxPaintsOf`), and they are judged **together**:
  * each stretch of the glyphs' ink, as painted — cut by every box in that
  * walk that clips what it holds — is cut into cells by the paints' edges,
- * and on each cell the paints that cover it are composited in paint order,
- * a gradient tried at each stop (`worstGround`, `layout/groundStack.ts`); a
+ * and on each cell the paints that cover it are composited as plain
+ * stacking (source-over, in paint order: every blend from the figure up to
+ * the stall is held to `normal`), a gradient tried at each stop and, where
+ * its tiles may leave the cell bare, absent (`worstGround`,
+ * `layout/groundStack.ts`); a
  * cell whose composite is at least `DRESS_GROUND_ALPHA` opaque and reads
  * under `MIN_CONTRAST` against the ink fails. Where the walk reached an
  * opaque ground, every cell it covers is opaque, and the judgement is the
@@ -9593,8 +9638,9 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
      * line's ground at 1.20:1) is gone with the line-rect read: a pseudo
      * beside the text lies outside every line rect, and one that paints
      * over the text is ground and read as such — which the sheet used to
-     * hide. A pseudo inherits the inline transparent ink where it sets no
-     * colour of its own. A whole-box money read is safe from a pseudo's glyph
+     * hide. A pseudo inherits the transparent fill where it sets no colour
+     * of its own, and keeps its glyphs where it does (`blankGlyphs`, round
+     * 6). A whole-box money read is safe from a pseudo's glyph
      * only because no look pseudo may paint inside a protected box
      * (`no-look-pseudo-paints-inside-a-protected-box`, D6(i)).
      */

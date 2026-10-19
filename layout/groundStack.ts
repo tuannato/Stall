@@ -323,7 +323,8 @@ const covers = (r: Box, cell: Box): boolean => {
  * The worst ground the paints put under one stretch of ink (`ink`, a glyph
  * line's ink box), or `undefined` when every cell reads: the stretch is cut
  * into cells by every paint's edges; on each, the paints that cover it are
- * composited in paint order (`paints` is bottom first), a gradient tried at
+ * composited source-over in paint order (`paints` is bottom first; a blend
+ * is the probe's to hold to `normal`), a gradient tried at
  * each of its stops, and a cell whose composite is at least `alphaFloor`
  * opaque and reads under `floor` against the ink fails. Under `alphaFloor`
  * the cell's ground is mostly what lies below the stack — the contrast

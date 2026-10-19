@@ -7951,3 +7951,217 @@ round's stack 0.30–0.38s; the whole dress rule 1.10–1.47s against
 28 nodes a page pass. The unplanted runner in the worktree: 291.0s of 300
 at load 4.6–5.9, the margin the machine's (the critic's figures for
 `main` itself past 300s stand).
+
+### Round 6: a blend held, a layer read where its tiles fall, a line split by its top, the contrast pass blanking the glyphs alone (CRITIC-MONEY-GUARDS, re-review of round 5)
+
+The critic found four plants, each admitted by both look lints, that hide or
+garble a money figure with the whole runner green: a blended ground (BL2), a
+white layer one pixel square "covering" a ground in the ink's colour (SZ), two
+lines of one text node piled within half a line (L2), and a ramp whose every
+stop reads painting the ink's grey between them (G2). Three of them, and
+round 4's N9a, wrote their paint from `currentColor`, which the contrast pass
+blanked with the glyphs. Each paragraph below replaces the round-5 paragraph it
+names, which stays above as the record.
+
+**A blend is held** (BL2). `background-blend-mode` was free (the paint family
+of `DRESS_FREE`), and the composite is source-over whatever it says:
+`.t-modern .item-x { background-color: rgb(from currentColor 255 255 255);
+background-image: linear-gradient(<the ink's inverse>, <the ink's inverse>);
+background-blend-mode: difference }` read as the inverse over white, and
+painted the ink. It is held now to `normal` (`DRESS_HELD`, `dressHeldFault`)
+on the figure and every element under it with text, and on every box from it
+up to and with the stall (`BOX_HELD`, `boxHeldFault`, which holds every box the
+ground walk reads), beside `mix-blend-mode`, which was held in both places
+already — at rest and at every keyframe. No served sheet sets either.
+`isolation` stays free: the tracked fixture's sheet sets it on
+`.stall-headings`, and it only keeps blends in; with every blend from the
+figure up to the stall held to `normal` it cannot change a colour (the z-order
+it gives a positioned child is the coverage rules').
+
+**A gradient layer is read where its tiles fall** (SZ; `layerCovers` in
+`layout/groundStack.ts`). Round 5 read each of the element's own gradient
+layers over its whole clip box, its size, position and repeat unread, so
+`background-size: 1px 1px; background-repeat: no-repeat` made one white pixel
+a ground over the whole figure. Now a layer covers its clip area only when it
+repeats on both axes (`repeat` or `round`; `space`, `no-repeat`, `repeat-x` and
+`repeat-y` leave pixels bare) with a tile that has a width and a height (`auto`,
+`cover` or `contain`, or a length or percentage over zero; a `calc()` is not
+taken apart) over a positioning area that has both (its origin box, or the
+viewport where the layer is `fixed`). Any other layer is tried absent as well
+as at each stop (`MAY_BE_ABSENT`, a candidate at alpha 0), so every cell is
+judged with it and without it — the sound choice of the two the brief offered:
+reading the tiles' places would need the position, the size and the origin
+resolved for every repeat mode and still meet the interpolation between stops
+in the tile; tried absent, a layer is judged everywhere it might paint and
+everywhere it might not, which is stricter than it paints and never looser. A
+repeating layer at any position covers, so the shipped looks' layers keep the
+read they had: the whole runner reads them 0. `background-clip: border-area`
+(Chrome 155 supports it) clips a layer, and the colour under the last one, to
+the border's bands.
+
+**A character goes to the line it stands on** (L2; `lineOfCharacter` in
+`layout/charLines.ts`). `fragmentsOf` gave each character of a text node set
+over several lines to the first line whose rect held the character's middle; a
+line's rect is its content area, a whole line tall whatever `line-height`
+says, so at `line-height: 0.3` every character of the second line had its
+middle in the first line's rect, the node read as one line, and "lines apart"
+never ran. Chrome sets a character's range rect at its line's own top
+(measured in Chrome 155 at `line-height` 0, 0.3, 0.35 and 1.2: every
+character's top is its line's to the pixel), so each character goes to the line
+whose top is nearest its own among the lines that hold it across; where lines
+share a top (`line-height: 0`) a character that steps back left of the one
+before it starts the next line. And `flowFault` never folds two fragments of
+one text node into one line by their baselines: they are two of its lines by
+construction, however close they stand. Unit-held in `layout/charLines.test.ts`
+on the rects Chrome hands the probe at 0.3, 0 and 1.2.
+
+**The contrast pass blanks the glyphs alone** (the shared root of BL2, SZ and
+G2 on round 5, and of N9a on round 4; `blankGlyphs`, `showGlyphs`,
+`glyphsBlanked`). The prepare set every target's `color`, and every element's
+under it, transparent; `color` is also `currentColor`, so every ground,
+border, shadow and gradient stop a look wrote from it left the ground capture
+with the glyphs. Now an HTML element's glyphs go through
+`-webkit-text-fill-color: transparent !important` and `color` stays. What
+`color` painted as part of the glyphs still goes with them: an SVG element (a
+drawn glyph, stroked and filled in `currentColor`) keeps the old blanking, and
+a decoration line, an emphasis mark or a text stroke whose computed colour is
+the element's `color` is set transparent beside the fill (`GLYPH_MARKS`). A
+`::before` or `::after` inherits the transparent fill, as it inherited the
+transparent colour; one that sets a colour of its own kept its glyphs under the
+old blanking and keeps them now (`data-probe-pf-*` and an adopted sheet that
+puts its fill back to its own `currentColor`), so the look-pseudo frames
+(D6(i)) still see a glyph a look pseudo prints in a colour of its own. The
+ring read's and the broken-figure read's second captures show and blank the
+fill the same way, and every ink read takes the backup where the glyphs were
+blanked. **The dump is unchanged**: `scripts/contrast-dump.mjs` against the
+critic's run at `afbc626` (the shipped looks, the skeleton and the tracked
+fixture) reads all 15,016 boxes over 823 jobs identical, on this round's code
+in a clone (2026-10-19) and again in the worktree's own run; every summary line
+of the pass (the ring, the sign name, the quiet zone, the boxes given no box,
+the text no target reads) is the same, the contrast pages loaded (11 and 12)
+and the seconds aside.
+
+**Not read, stated** (the docblock's list, rewritten to what the code reads,
+the critic's corrections on round 5): a money node not rendered, skipped; where
+the figure's box stands, and a single line set so tight that the line above or
+below stands on its glyphs; **across the flows of one node, all but two
+things** — a flow is one element's text wherever the layout puts its pieces
+(the anonymous boxes a grid or flex container makes of its text runs are one
+flow), and where the text enters a flow for the first time, that flow's first
+fragment stands neither wholly above the first fragment of the flow it leaves
+nor wholly to its left on a line that overlaps it; text that comes back to a
+flow it already began is read in that flow's order alone, so the critic's OR
+(a grid on the total setting " in total" beside the figure's second line) reads
+in order, as does a flow that begins beside another but lower; a break inside
+a digit group between two flows; `hyphenate-character`; **a box above's
+background image** (the contrast pass's, on the screens it samples — P2-1, not
+built); **what lies above the nearest box with an opaque background colour**,
+which stops the walk whether or not its colour is under the glyphs (its
+`background-clip`, its corners, ink past it) and whether or not it paints at
+all (`visibility` not `visible`, the critic's V; `display: contents`, DC) —
+P2-1, not built; a paint a box outside the walk lays under the glyphs (a
+sibling's, a positioned box, an in-flow pseudo of a box above, a blend such a
+box composes, and what a `backdrop-filter` blur spreads from beside the box);
+**a paint's geometry beyond its rect** — the paints are composited as plain
+stacking (every blend in the walk held to `normal`), a layer that may not cover
+is tried absent wherever its clip area meets the ink rather than where its
+tiles fall, a `dashed`, `dotted` or `double` border is read as its colour over
+its whole band, a 3D border (`inset`, `outset`, `groove`, `ridge`) as its
+colour where Chrome paints two other shades (the critic's P3-2), rounded
+corners, the glyphs as pixels; **a gradient between its stops** (below); the
+ink's alpha in the contrast box read, and what the contrast pass blanks with
+the glyphs (an SVG glyph, and a line, mark or stroke whose colour is the
+element's `color` — so one written in the ink's colour by name); a shrink by a
+font feature; a look's own face; a stack of glows, **a neighbour's shadow from
+beyond the grandparent** (P2-3, not built), a neighbour's glow; **a state no
+pass paints** — `:hover`, `:focus`, `:focus-visible`, `:focus-within`,
+`:active`, a transition until it runs, and the tap highlight
+(`-webkit-tap-highlight-color`, a free colour; the critic's P3-5, not measured)
+— **and a turned wall** (P2-2, the static belt not built); a box above the
+stall; the canvas's proportional figures.
+
+**A gradient between its stops** (G2, the critic's P1-4). The dress rule tries
+each stop, not what a gradient paints between two of them: the critic's
+`repeating-linear-gradient(90deg, white 0, black 1px, white 2px)` under a
+`#767676` ink on Neo's "You pay" reads at 4.54:1 and 4.62:1 by its stops and
+paints a mid grey. **Read now by the contrast pass, written either way, and
+only where it samples**: with literal stops at 1.13–1.15:1 (the critic's run,
+which caught it before this round), and with stops written from `currentColor`
+— which the old blanking dropped — at 1.30–1.32:1 (taken to be Oklab's
+middle grey: stops in relative colour syntax are not legacy colours, which CSS
+interpolates in Oklab, and Oklab's middle between white and black is
+`rgb(99, 99, 99)`, 1.32:1 on the ink; inferred from the spec and the figure,
+not measured), on
+the six pay screens that paint "You pay" at 390 and 1280, bare and worn. No
+rule reads it on the tall wall, the tablet, the short walls, the narrow phone,
+the geometry-only screens or any state no pass paints, and every pass paints at
+a device pixel ratio of 1: at 2 or 3 the ramp paints stripes, not one grey
+(the critic's still). The interpolation read in the dress rule (each adjacent
+pair of stops sampled through the engine, or the segment's luminance tested
+against the band) is not built.
+
+**The coverage test's one textual shape** (the critic's P3-1) waits for
+`probe-shard`, which restructures the runner's viewports; nothing here touches
+`scripts/layout-check.mjs`.
+
+**Unplanted, every shipped look, the skeleton and the tracked fixture read 0
+on every rule at every pass** (the whole runner in the worktree, 2026-10-19,
+207.6s of 300 at load 2.8–2.9).
+
+**Red proofs** (2026-10-19; the critic's plants appended to the look sheets of
+local clones, their ceiling raised to 1200s for the planted runs alone; the
+counts are failing figures a pass — the phone, the desk, the canvas, the tall
+wall, the tablet, `desk-wall`, `short-wall`, the narrow phone, the
+reduced-motion pass; a pass the plant's screens are not on left out). On
+`afbc626` the critic's runs read BL2, SZ and G2 0 everywhere, and L2 4 (the
+narrow pass's eight-byte totals, three lines of pieces), nothing naming the
+`$10.50` total or the address.
+
+- BL2, `.t-modern .item-x` (above): "background-blend-mode difference: a blend
+  composes its background's layers into a colour none of them is" — 439, 513,
+  300, 374, 179, 105, 179, 262, 64. The contrast pass, after this round's
+  blanking: "sits on paint at 1.00:1" on the phone 62, the desk 77, the canvas
+  6, and the broken-figure read 4 and 6 (`pay-several-strip-long-figure`,
+  `quote-row-longest-figure` and, at 1280, `shop-window-cycle-longest-figure`)
+  (before: 0).
+- SZ, `.t-rural .item-x { background-color: currentColor; background-image:
+  linear-gradient(#fff, #fff); background-size: 1px 1px; background-repeat:
+  no-repeat }`: "the ground under its glyphs (its gradient, where its tiles
+  fall over its ground) reads at 1.00:1 on its ink" — 501, 591, 384, 474, 201,
+  111, 201, 286, 88. The contrast pass: 64, 79, 6, and the broken-figure read 4
+  and 6 (before: 0).
+- SZ-lit, `.t-modern .pay-x-n { background-color: var(--s-text);
+  background-image: linear-gradient(#fff, #fff); background-position: -9999px
+  0; background-repeat: no-repeat }`: the same words — 29, 29, narrow 29,
+  reduced 5 (before: 0 in geometry; the contrast pass caught it, 12 and 12 and
+  the broken-figure read 4 and 4, before and after).
+- L2, `.t-modern .pay-total { line-height: 0.3 }`: "its lines pile on each
+  other: 116 pixels of "= $10.50 in tota" and "seller's records" overlap" —
+  the phone 2, the narrow phone 6 (the `$10.50` total, bare and worn, and the
+  eight-byte totals the round-5 read already caught); at 1280 the total is one
+  line. And `.t-neo .addr-full { line-height: 0.35 }` on `addr-shown`: "28
+  pixels of "ecash:qpjqjm0las" and "7hv09" overlap" — the phone 2 (one line at
+  1280). The contrast pass does not read a pile (a money box is read with its
+  glyphs blanked), before or after.
+- G2, `.t-neo .pay-x-n { color: #767676; background-image:
+  repeating-linear-gradient(90deg, rgb(from currentColor 255 255 255) 0,
+  rgb(from currentColor 0 0 0) 1px, rgb(from currentColor 255 255 255) 2px)
+  }`: 0 in geometry (between its stops, above). The contrast pass: "sits on
+  paint at 1.30–1.32:1" on `pay`, `pay-xec`, `pay-moved`, `pay-several`,
+  `pay-longest-figure` and `pay-several-longest-figure`, at 390 and 1280, bare
+  and worn — 12 and 12 — and the broken-figure read 4 and 4 (before: 0).
+
+Every failure in both planted runs names a plant's target; the geometry counts
+are the same with and without the new blanking (it touches the contrast pass
+alone), and the contrast pass read 32 figures under 3:1 before it (SZ-lit's)
+and 378 after.
+
+**Cost** (2026-10-19, this Mac; `afbc626` in a local clone and this round in
+the worktree, back to back, one pair, the ceiling at 300s in both). The whole
+runner: this round 207.6s (load 2.9 → 2.8), `afbc626` 208.5s (2.3 → 4.1). The
+eight geometry passes summed: 73.5s against 72.3s, **+1.2s**, inside a run's
+noise (the phone pass alone 11.2s against 10.3s, the desk 12.4s against
+12.2s); the contrast pass 121.1s against 121.7s, its prepare phase (where the
+blanking keeps each element's fill, marks and pseudo-elements) 25.6s against
+26.9s over 802 calls. The planted runs (ceiling 1200s): 269.9s and 239.5s at
+load up to 12, the failures' own reads and the machine.
