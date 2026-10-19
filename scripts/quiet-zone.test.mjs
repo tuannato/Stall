@@ -5,7 +5,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { QUIET_MODULES, QUIET_ZONE_FLOOR, quietZonePixels, readQuietZone } from './quiet-zone.mjs';
+import { QUIET_MODULES, QUIET_ZONE_FLOOR, quietReadingLine, quietZonePixels, readQuietZone, readQuietZones } from './quiet-zone.mjs';
 
 const OPEN = { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity };
 
@@ -94,3 +94,113 @@ describe('a-code-keeps-its-quiet-zone-white', () => {
         assert.match(quietZonePixels({ ...CODE, module: 0.4 }, 400, 400).fault, /no quiet zone/);
     });
 });
+
+/** A zone as `__quietZones` reports it. */
+const named = (z, name = 'pay-qr') => ({ ...z, name, turned: false });
+const white = shot(400, 400);
+/** A band of the page over the top of the ring: the flake's shape. */
+const banded = shot(400, 400, (x, y) => (y >= 10 && y < 26 ? [18, 21, 26] : undefined));
+/** A fresh pair that answers `answer`, counting how often it was asked. */
+const counted = (answer) => {
+    const calls = { n: 0 };
+    return { calls, again: async () => ((calls.n += 1), answer) };
+};
+
+describe('a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair', () => {
+    /**
+     * The money-guards round-7 critic's P2-3: a pay screen's code read part
+     * of its quiet zone non-white and white on a rerun, four times, once on
+     * main. A code that reads dark is read again on a fresh pair — a new
+     * capture and the zones read beside it — and the fresh pair's reading
+     * is the verdict; a real defect is steady state and reads dark there
+     * too. Never a weaker read: a fresh pair that cannot read the code
+     * leaves the first reading standing.
+     */
+    it('reads a clean code once and asks for no fresh pair', async () => {
+        const { calls, again } = counted({ why: ['never asked'] });
+        const reads = await readQuietZones({ img: white, zones: [named(CODE)], at: { shot: [400, 400] } }, again);
+        assert.equal(calls.n, 0);
+        assert.equal(reads[0].r.bad, 0);
+        assert.equal(reads[0].retry, undefined);
+    });
+
+    it('believes the fresh pair when the first capture read dark and the second white, and keeps both readings', async () => {
+        const { calls, again } = counted({ img: white, zones: [named(CODE)], at: { pair: 'fresh' }, before: [named({ ...CODE, y: 12 })] });
+        const reads = await readQuietZones({ img: banded, zones: [named(CODE)], at: { pair: 'first' } }, again);
+        assert.equal(calls.n, 1);
+        assert.equal(reads[0].r.bad, 0);
+        assert.ok(reads[0].retry.first.r.bad > 0);
+        assert.deepEqual(reads[0].retry.first.r.dark, [11, 11, 233, 25]);
+        assert.deepEqual(reads[0].retry.first.at, { pair: 'first' });
+        assert.deepEqual(reads[0].retry.again.at, { pair: 'fresh' });
+        assert.equal(reads[0].retry.again.before.y, 12);
+        assert.equal(reads[0].retry.why, undefined);
+    });
+
+    it('still fails a quiet zone that is dark on both captures', async () => {
+        const { calls, again } = counted({ img: banded, zones: [named(CODE)], at: {} });
+        const reads = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, again);
+        assert.equal(calls.n, 1);
+        assert.ok(reads[0].r.bad > 0);
+        assert.ok(reads[0].retry.again.r.bad > 0);
+    });
+
+    it('asks once for every dark code, and reads again only the codes that read dark', async () => {
+        const other = named({ ...CODE, x: 250, y: 250, side: 140, module: 4 }, 'share-qr');
+        const { calls, again } = counted({ img: white, zones: [named(CODE), other], at: {} });
+        const reads = await readQuietZones({ img: banded, zones: [named(CODE), other], at: {} }, again);
+        assert.equal(calls.n, 1);
+        assert.equal(reads[1].retry, undefined);
+        assert.equal(reads[1].r.bad, 0);
+        assert.equal(reads[0].r.bad, 0);
+    });
+
+    it('lets the first reading stand when the fresh pair cannot be had, paints other codes, or cannot read the code', async () => {
+        const cases = [
+            [{ why: ['the shot is 400x300 where the job is 400x400'] }, /the shot is 400x300/],
+            [{ img: white, zones: [named(CODE, 'share-qr')], at: {} }, /painted the codes share-qr where the first had pay-qr/],
+            [{ img: white, zones: [], at: {} }, /painted the codes none where the first had pay-qr/],
+            [{ img: white, zones: [named({ ...CODE, clip: { x0: 500, y0: -Infinity, x1: Infinity, y1: Infinity } })], at: {} }, /no pixel of its quiet zone is on screen/],
+            [{ img: white, zones: [{ ...named(CODE), turned: true }], at: {} }, /its frame is turned/],
+            [{ img: white, zones: [named({ ...CODE, corner: 6 })], at: {} }, /past one module/],
+        ];
+        for (const [answer, why] of cases) {
+            const reads = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, async () => answer);
+            assert.ok(reads[0].r.bad > 0, String(why));
+            assert.match(reads[0].retry.why.join(' '), why);
+            assert.equal(reads[0].retry.again, undefined);
+        }
+    });
+
+    it('asks for no fresh pair over a fault, a turned code or a code with nothing on screen', async () => {
+        const { calls, again } = counted({ why: ['never asked'] });
+        const reads = await readQuietZones(
+            {
+                img: banded,
+                zones: [
+                    named({ ...CODE, corner: 6 }),
+                    { ...named(CODE), turned: true },
+                    named({ ...CODE, clip: { x0: 500, y0: -Infinity, x1: Infinity, y1: Infinity } }),
+                ],
+                at: {},
+            },
+            again,
+        );
+        assert.equal(calls.n, 0);
+        assert.match(reads[0].r.fault, /past one module/);
+        assert.equal(reads[1].turned, true);
+        assert.equal(reads[2].r.px, 0);
+    });
+
+    it('says a reading with what a person needs to find the cause', () => {
+        const z = { ...named(CODE), scrolled: [{ at: 'div.sheet', top: 120, left: 0 }] };
+        const line = quietReadingLine({ z, r: readQuietZone(banded, z), at: { shot: [400, 400], page: { dpr: 1 } } }, { ...z, y: 14 });
+        assert.match(line, /^\d+ of \d+ dark \(the first at 11,11 rgb\(18,21,26\), spanning 11,11,233,25\)/);
+        assert.match(line, /the code at 10\.0,10\.0 side 225\.0 module 5\.00, clip/);
+        assert.match(line, /at 10\.0,14\.0 side 225\.0 module 5\.00 just before its capture/);
+        assert.match(line, /scrolled div\.sheet 120,0/);
+        assert.match(line, /\{"shot":\[400,400\],"page":\{"dpr":1\}\}$/);
+        assert.match(quietReadingLine({ z: named(CODE), r: readQuietZone(white, CODE), at: undefined }), /^0 of \d+ dark — .* — nothing above it scrolled$/);
+    });
+});
+

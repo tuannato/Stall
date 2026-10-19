@@ -40,7 +40,7 @@ import {
     waitUntil,
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
-import { QUIET_ZONE_FLOOR, readQuietZone } from './quiet-zone.mjs';
+import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -1209,6 +1209,34 @@ async function captureShot(cdp, sessionId) {
     return decodePng(await captureRaw(cdp, sessionId));
 }
 
+/*
+ * What a quiet-zone reading was taken on (`readQuietZones`, said by
+ * `quietReadingLine` when a code reads dark): the capture's size, that it
+ * has no clip (`captureRaw` shoots the whole surface) at the emulated device
+ * scale of 1, how long after the capture the zones were read, and the page
+ * as it is now — its device pixel ratio, its size, its scroll and its visual
+ * viewport. A layout that moved between the capture and the read is one
+ * suspect, a stale raster another; this is what tells them apart.
+ */
+const QUIET_PAGE = `(() => {
+    const vv = window.visualViewport;
+    return {
+        dpr: devicePixelRatio,
+        inner: [innerWidth, innerHeight],
+        scroll: [scrollX, scrollY],
+        visual: vv === null ? null : [vv.offsetLeft, vv.offsetTop, vv.pageLeft, vv.pageTop, vv.width, vv.height, vv.scale],
+        focus: document.activeElement === null ? null : document.activeElement.tagName.toLowerCase() + (document.activeElement.getAttribute('data-role') === null ? '' : '[' + document.activeElement.getAttribute('data-role') + ']'),
+    };
+})()`;
+async function quietContext(cdp, sessionId, shot, msAfterCapture) {
+    return {
+        shot: [shot.width, shot.height],
+        clip: 'none',
+        scale: 1,
+        readMsAfterCapture: Math.round(msAfterCapture),
+        page: await evalJson(cdp, sessionId, QUIET_PAGE),
+    };
+}
 
 /** The sign's name or tagline, by a target's description (D14). */
 const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
@@ -1244,6 +1272,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     const codesRead = new Map();
     const codesReadByClass = {};
     let quietPixels = 0;
+    const quietReadAgain = [];
     let ringTargets = 0;
     let ringPixels = 0;
     let ringLeastPerChar = Infinity;
@@ -1412,10 +1441,12 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                 // re-read from this job's last prepare at that viewport.
                 const capture = async () => {
                     const png = await timed('capture', () => captureRaw(cdp, sessionId));
+                    const capturedAt = performance.now();
                     const shot = await timed('decode', async () => decodePng(png));
                     const bad = shot.width !== vp.width || shot.height !== shotH;
                     return {
                         shot,
+                        capturedAt,
                         why: bad ? [`the shot is ${shot.width}x${shot.height} where the job is ${vp.width}x${shotH}`] : [],
                     };
                 };
@@ -1423,7 +1454,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     const live = await liveBoxes();
                     return { live, why: liveEcho(live, nonce, vp.width, shotH) };
                 };
-                let { shot: img, why: shotWhy } = await capture();
+                let { shot: img, why: shotWhy, capturedAt: imgAt } = await capture();
                 if (shotWhy.length > 0) {
                     refuse(shotWhy);
                     return;
@@ -1522,6 +1553,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         retryWhy = [...again.why, ...againRead.why];
                         if (retryWhy.length > 0) break;
                         img = again.shot;
+                        imgAt = again.capturedAt;
                         if (againRead.live.boxes.length === targets.length) {
                             targets = againRead.live.boxes;
                             t = targets[ti];
@@ -1595,14 +1627,36 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  */
                 if (retryWhy.length === 0) {
                     for (const line of prep.nameChrome ?? []) nameChromeSeen.add(line);
+                    /*
+                     * A code that reads dark is read again on a fresh pair
+                     * before it is believed, the ring read's own rule
+                     * (`readQuietZones`): a new capture, the zones read just
+                     * before and just after it. The reading that decides is
+                     * the fresh pair's, and both readings are said — on the
+                     * failure, and on the pass's `quiet zone, read again`
+                     * line when the second is white — with the code's box,
+                     * what above it was scrolled, and the page and capture
+                     * as they were (`quietContext`): the flake this is for
+                     * has no known cause yet.
+                     */
+                    const zonesAt = performance.now();
                     const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
-                    for (const z of zones) {
+                    const firstAt = zones.length === 0 ? undefined : await quietContext(cdp, sessionId, img, zonesAt - imgAt);
+                    const reads = await readQuietZones({ img, zones, at: firstAt }, async () => {
+                        await sleep(250);
+                        const before = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                        const fresh = await capture();
+                        const readAt = performance.now();
+                        const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                        if (fresh.why.length > 0) return { why: fresh.why };
+                        return { img: fresh.shot, zones: after, before, at: await quietContext(cdp, sessionId, fresh.shot, readAt - fresh.capturedAt) };
+                    });
+                    for (const { z, r, turned, retry } of reads) {
                         const code = `${vp.name}/${screen}:${z.name}`;
-                        if (z.turned) {
+                        if (turned) {
                             codesUnread.set(code, 'its frame is turned');
                             continue;
                         }
-                        const r = readQuietZone(img, z);
                         const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
                         if (r.fault !== undefined) {
                             dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
@@ -1615,11 +1669,22 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         codesRead.set(code, (codesRead.get(code) ?? 0) + 1);
                         (codesReadByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                         quietPixels += r.px;
+                        const readings =
+                            retry === undefined
+                                ? ''
+                                : `\n        first capture: ${quietReadingLine(retry.first)}` +
+                                  (retry.again === undefined
+                                      ? `\n        not read again: ${retry.why.join('; ')}`
+                                      : `\n        fresh pair: ${quietReadingLine(retry.again, retry.again.before)}`);
                         if (r.bad > 0) {
                             dim.push(
                                 `${at} has ${r.bad} of ${r.px} quiet-zone pixel(s) under ${QUIET_ZONE_FLOOR} on a channel ` +
-                                    `(the first at ${r.first.x},${r.first.y}, rgb(${r.first.rgb.join(',')})) — a-code-keeps-its-quiet-zone-white`,
+                                    `(the first at ${r.first.x},${r.first.y}, rgb(${r.first.rgb.join(',')}))` +
+                                    (retry?.again === undefined ? '' : ' on the fresh pair too') +
+                                    ` — a-code-keeps-its-quiet-zone-white${readings}`,
                             );
+                        } else if (retry !== undefined) {
+                            quietReadAgain.push(`${at}: dark on the first capture, white on a fresh pair${readings}`);
                         }
                     }
                 }
@@ -1667,6 +1732,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         const whyAgain = [...again.why, ...againRead.why];
                         if (whyAgain.length === 0 && againRead.live.boxes.length === targets.length) {
                             img = again.shot;
+                            imgAt = again.capturedAt;
                             targets = againRead.live.boxes;
                             retried = true;
                             pair = await shownPair();
@@ -2149,6 +2215,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             codesRead,
             codesReadByClass,
             quietPixels,
+            quietReadAgain,
             ringTargets,
             ringPixels,
             ringLeastPerChar,
@@ -3517,6 +3584,8 @@ try {
     const codesReadByClass = {};
     const codesUnread = new Map();
     let quietPixels = 0;
+    // The codes read dark on a job's capture and white on a fresh pair (`readQuietZones`), said whatever the verdict.
+    const quietReadAgain = [];
     // D14: the least the sign's name read per look and decoration state
     // (line read, or ring read where it wears the outline), and how the
     // name was painted where it was read (`nameChrome`).
@@ -3651,6 +3720,7 @@ try {
                 for (const code of codes) into.add(code);
             }
             quietPixels += out.quietPixels;
+            quietReadAgain.push(...out.quietReadAgain);
             ringTargets += out.ringTargets;
             ringPixels += out.ringPixels;
             ringLeastPerChar = Math.min(ringLeastPerChar, out.ringLeastPerChar);
@@ -4249,6 +4319,10 @@ try {
         console.log(
             `  quiet zone, codes painted and not read: ` +
                 (notRead.length === 0 ? 'none' : notRead.map((code) => (codesUnread.has(code) ? `${code} (${codesUnread.get(code)})` : code)).join(', ')),
+        );
+        console.log(
+            `  quiet zone, read again on a fresh pair and white there: ` +
+                (quietReadAgain.length === 0 ? 'none' : `${quietReadAgain.length}${quietReadAgain.map((line) => `\n    ${line}`).join('')}`),
         );
     }
     // Every prepared node that gave no box, by the page's reason, whatever
