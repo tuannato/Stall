@@ -8175,8 +8175,8 @@ function targetFor(node: HTMLElement): ContrastTarget | string {
         box = { x, y: box.y, width: right - x, height: box.height };
     }
     // The colour the glyphs would paint in: read from the blanking backup,
-    // because a re-read after `__contrastPrepare` sees `transparent`.
-    const ink = node.style.color === 'transparent' ? node.dataset['probeInk']! : style.color;
+    // which a re-read after `__contrastPrepare` takes (`glyphsBlanked`).
+    const ink = glyphsBlanked(node) ? node.dataset['probeInk']! : style.color;
     node.dataset['probeInk'] = ink;
     const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
     const ring = Math.max(0, outlineOf(node));
@@ -8448,7 +8448,7 @@ function lineRectsOf(
         if (owner.closest(CONTRAST) !== node) continue;
         const cs = getComputedStyle(owner);
         if (cs.visibility !== 'visible') continue;
-        const lineInk = owner === node ? ink : owner instanceof HTMLElement && owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
+        const lineInk = owner === node ? ink : owner instanceof HTMLElement && glyphsBlanked(owner) ? (owner.dataset['probeInk'] ?? cs.color) : cs.color;
         range.selectNodeContents(text);
         for (const r of range.getClientRects()) push(owner, r, lineInk, false);
     }
@@ -8502,7 +8502,7 @@ function ringLines(
         // A broken figure's pieces are read hidden or not (`hidden`): a piece
         // a look hid paints nothing, and the read finds no glyph in it.
         if (cs.visibility !== 'visible' && opts.hidden !== true) continue;
-        const ink = opts.ink ?? (owner.style.color === 'transparent' ? (owner.dataset['probeInk'] ?? cs.color) : cs.color);
+        const ink = opts.ink ?? (glyphsBlanked(owner) ? ((owner as HTMLElement).dataset['probeInk'] ?? cs.color) : cs.color);
         const value = text.textContent ?? '';
         for (let i = 0; i < value.length; ) {
             const cp = value.codePointAt(i)!;
@@ -8542,8 +8542,96 @@ function ringLines(
 }
 
 /**
+ * **The contrast pass blanks the glyphs and nothing else** (round 6, the
+ * critic's shared root of BL2, SZ and G2 on round 5, and of N9a on round 4).
+ * Every target and every element under it had its `color` set transparent,
+ * and `color` is not only the glyphs' ink: it is `currentColor`, so every
+ * background, border, box shadow and gradient stop a look wrote from it went
+ * transparent with the glyphs, and the ground capture never held them — a
+ * ground in the ink's own colour written as `currentColor`, or a white layer
+ * over one, passed the pass that exists to read what is painted. Now an
+ * HTML element's glyphs go through `-webkit-text-fill-color: transparent`
+ * and its `color` stays: every `currentColor` paint stands in the capture as
+ * it stands on the screen. What `color` painted as part of the glyphs goes
+ * with them, as it went before: an SVG element (a drawn glyph, stroked and
+ * filled in `currentColor`) keeps the old blanking, and a decoration line, an
+ * emphasis mark or a text stroke whose colour is the element's `color` — its
+ * `currentColor` — is set transparent beside the fill (`GLYPH_MARKS`). A
+ * `::before` or `::after` inherits the transparent fill, as it inherited the
+ * transparent colour; one that sets a colour of its own kept its glyphs
+ * then, and keeps them now (`data-probe-pf-*`, its fill put back to its own
+ * `currentColor` while its host is blanked), so the look-pseudo frames
+ * (D6(i)) still see a glyph a look pseudo prints in a colour of its own.
+ */
+const GLYPH_FILL = '-webkit-text-fill-color';
+/** The marks drawn with the glyphs in their own `color` when a look names no other. */
+const GLYPH_MARKS = ['text-decoration-color', 'text-emphasis-color', '-webkit-text-stroke-color'] as const;
+/** What a prepared element had inline before its glyphs were blanked, for showing them again. */
+const glyphKept = new WeakMap<Element, { fill: readonly [string, string]; marks: readonly (readonly [string, string, string])[] }>();
+
+/** Remember what an element wears for its glyphs, before any element is blanked (the marks blanked are those its `color` paints). */
+function keepGlyphs(el: HTMLElement): void {
+    if (glyphKept.has(el)) return;
+    const cs = getComputedStyle(el);
+    glyphKept.set(el, {
+        fill: [el.style.getPropertyValue(GLYPH_FILL), el.style.getPropertyPriority(GLYPH_FILL)],
+        marks: GLYPH_MARKS.filter((p) => cs.getPropertyValue(p) === cs.color).map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const),
+    });
+    if (el instanceof SVGElement) return;
+    for (const which of ['before', 'after'] as const) {
+        const ps = getComputedStyle(el, `::${which}`);
+        if (ps.content !== 'none' && ps.content !== 'normal' && ps.color !== cs.color) el.setAttribute(`data-probe-pf-${which}`, '');
+    }
+}
+
+let pseudoFillSheetAdopted = false;
+/** The pseudo-elements with a colour of their own keep their glyphs while their host is blanked; the marks of an earlier prepare cleared. */
+function adoptPseudoFillSheet(): void {
+    for (const el of document.querySelectorAll('[data-probe-pf-before], [data-probe-pf-after]')) {
+        el.removeAttribute('data-probe-pf-before');
+        el.removeAttribute('data-probe-pf-after');
+    }
+    if (pseudoFillSheetAdopted) return;
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(
+        `[data-probe-pf-before]::before,[data-probe-pf-after]::after{${GLYPH_FILL}:currentcolor!important}`,
+    );
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    pseudoFillSheetAdopted = true;
+}
+
+/** Blank an element's glyphs: its fill and the marks its `color` paints, or an SVG element's `color`. */
+function blankGlyphs(el: HTMLElement): void {
+    if (el instanceof SVGElement) {
+        el.style.setProperty('color', 'transparent', 'important');
+        return;
+    }
+    el.style.setProperty(GLYPH_FILL, 'transparent', 'important');
+    for (const [p] of glyphKept.get(el)?.marks ?? []) el.style.setProperty(p, 'transparent', 'important');
+}
+
+/** Show an element's glyphs again: what it wore inline put back. */
+function showGlyphs(el: HTMLElement): void {
+    if (el instanceof SVGElement) {
+        el.style.color = el.dataset['probeColor'] ?? '';
+        return;
+    }
+    const kept = glyphKept.get(el);
+    const put = (p: string, value: string, priority: string): void => {
+        if (value === '') el.style.removeProperty(p);
+        else el.style.setProperty(p, value, priority);
+    };
+    put(GLYPH_FILL, kept?.fill[0] ?? '', kept?.fill[1] ?? '');
+    for (const [p, value, priority] of kept?.marks ?? []) put(p, value, priority);
+}
+
+/** Whether the prepare blanked an element's glyphs, so its own computed ink is the backup's. */
+const glyphsBlanked = (el: Element): boolean =>
+    el instanceof HTMLElement || el instanceof SVGElement ? el.style.getPropertyValue(GLYPH_FILL) === 'transparent' || el.style.color === 'transparent' : false;
+
+/**
  * The ring read's second capture: every prepared target that wears the
- * outline, and each descendant, has its glyphs shown again (the colour the
+ * outline, and each descendant, has its glyphs shown again (the fill the
  * prepare blanked, put back) or blanked once more. A pseudo-element with an
  * ink of its own paints in both captures and one inheriting the line's
  * follows it; the mask is read inside the text nodes' own line boxes either
@@ -8557,9 +8645,9 @@ window.__contrastGlyphs = async (show: boolean) => {
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
             if (show) {
-                el.style.color = el.dataset['probeColor'];
+                showGlyphs(el);
             } else {
-                el.style.setProperty('color', 'transparent', 'important');
+                blankGlyphs(el);
             }
         }
     }
@@ -8570,7 +8658,7 @@ window.__contrastGlyphs = async (show: boolean) => {
 /**
  * The broken-figure read's second capture (round 3, the critic's P2-1):
  * every prepared money node holding a `.fig-say` has its glyphs shown again
- * (the colour the prepare blanked, each element its own, put back) or
+ * (the fill the prepare blanked, each element its own, put back) or
  * blanked once more. A piece a look made transparent is put back
  * transparent, and one it hid stays hidden: what the read then finds is what
  * the look paints.
@@ -8583,9 +8671,9 @@ window.__contrastFigureGlyphs = async (show: boolean) => {
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
             if (show) {
-                el.style.color = el.dataset['probeColor'];
+                showGlyphs(el);
             } else {
-                el.style.setProperty('color', 'transparent', 'important');
+                blankGlyphs(el);
             }
         }
     }
@@ -9452,11 +9540,13 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     // Every ink in every target's subtree, before any of it is blanked: a
     // child inherits its colour, and read after its parent went transparent
     // it reads transparent — the ring read's lines are read against these.
+    adoptPseudoFillSheet();
     for (const node of preparedNodes) {
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) {
                 el.dataset['probeColor'] = el.style.color;
                 el.dataset['probeInk'] ??= getComputedStyle(el).color;
+                keepGlyphs(el);
             }
         }
     }
@@ -9475,7 +9565,10 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             el.style.transition = 'none';
             // Important: an animation outranks an ordinary inline declaration,
             // so an animated ink or glow (the hum's lamp) stayed painted.
-            el.style.setProperty('color', 'transparent', 'important');
+            // The glyphs alone (round 6, `blankGlyphs`): `color` stays, so a
+            // ground, border or shadow written from `currentColor` is in the
+            // capture as it is on the screen.
+            blankGlyphs(el);
 
             // Every shadow off but an outline (round 8): the outline is the
             // ground the ring read measures, so it stays in both captures;
