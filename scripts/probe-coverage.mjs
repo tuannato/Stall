@@ -168,8 +168,9 @@ export const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait
  * owed nothing — `FIGURE_SURFACES_OWED[pass] ?? []` — so a pass added to
  * the runner and not here would read nothing and stay green). A pass in
  * neither is a gap (`probeCoverageGaps`), and every pass the runner runs
- * (`runnerPasses` in `probe-passes.mjs`, which the runner builds every pass
- * from) is held to the two lists, both ways, by
+ * (`runnerPasses` in `probe-passes.mjs`, which the runner holds to the
+ * passes it builds before it builds, `passesNotRun`) is held to the two
+ * lists, both ways, by
  * `every-pass-the-runner-runs-is-in-a-coverage-table`.
  */
 export const PASSES_OWING_NO_GEOMETRY = Object.freeze({

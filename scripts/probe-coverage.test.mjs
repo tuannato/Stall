@@ -971,10 +971,13 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
      * height before width, after a spread, as a template literal or in double
      * quotes went past it (the money-guards critic, round 5). Since the probe
      * shard's rebase (2026-10-20) every pass is a value in
-     * `probe-passes.mjs`, which the runner builds every pass from and this
-     * reads, compared with the tables by value, both ways
-     * (`passTableFaults`); and the runner's own text names no viewport
-     * (`runnerViewportLiterals`).
+     * `probe-passes.mjs`: this reads its list (`runnerPasses`), compared
+     * with the tables by value, both ways (`passTableFaults`); the runner
+     * holds that list to the passes it builds before it builds
+     * (`the-runner-runs-every-pass-the-module-lists`), reads each verdict at
+     * a plan entry's own size (`every-viewport-the-runner-measures-is-a-module-pass`),
+     * and its own text names no viewport in the shapes
+     * `runnerViewportLiterals` reads.
      */
     it('reads every pass the runner runs, and each is in exactly the table its kind owes, both ways', () => {
         assert.deepEqual(passTableFaults(runnerPasses({ looks: 'shipped' })), []);

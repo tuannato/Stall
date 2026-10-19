@@ -3,9 +3,12 @@
  * kind, the screens it measures and the plan the geometry walk hands out
  * (`walkPlan`, `plan-walk.mjs`) — and the contrast and transparency passes
  * after it. Side-effect free and importing nothing, so the runner and the
- * tests read one list: the runner builds every pass from it, and
+ * tests read one module: the runner builds the geometry walk from
+ * `geometryPlan` and the pixel passes from `CONTRAST_PASS` and
+ * `TRANSPARENCY_PASS`, and before it builds holds the list the tests read
+ * (`runnerPasses`) to those (`passesNotRun`); and
  * `every-pass-the-runner-runs-is-in-a-coverage-table`
- * (`probe-coverage.test.mjs`) holds it to `GEOMETRY_PASSES` and
+ * (`probe-coverage.test.mjs`) holds that list to `GEOMETRY_PASSES` and
  * `PASSES_OWING_NO_GEOMETRY` (`probe-coverage.mjs`) by value, both ways.
  *
  * **Adding a pass is one entry here and its rows in those tables.** A pass of
