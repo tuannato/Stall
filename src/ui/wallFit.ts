@@ -55,8 +55,9 @@
  * of a swaying tag changes with the moment), and along the frame's own
  * inline axis, so a screen turned by `data-turn` is measured as it reads.
  *
- * Cost, stated: a money figure's size depends on layout. Up to a dozen
- * layouts of one card per paint, on the Cycle card alone.
+ * Cost, stated: a money figure's size depends on layout. Each read is a
+ * layout of the card: five to nine a card on average over the probe's wall
+ * passes (0.3–0.8s a pass, 2026-10-19), 43 at most, on the Cycle card alone.
  */
 
 /** The smallest size the Cycle card prints its figure on one line; past it the figure breaks after its commas. */

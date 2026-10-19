@@ -853,27 +853,65 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
-- **P1, live and older than the 360px work, narrowed: the wall's Cycle card
-  still misprints prices on screen sizes the probe does not paint.** Fixed
-  on 2026-10-14 at the five wall sizes the probe paints (1920x1080,
-  1280x900, 1280x800, 1080x1920, 768x1024) by a length ladder for the card's
-  figure, with a comma break inside its grid past the last step; main failed
-  thousands of checks per wall pass there, the fix none. **Still broken off
-  them:** at 1024x768 (the counter tablet on its side) `$999.99` shows as
-  "$999.9" on Neo and `123,456.78 XEC` runs 40px into the code on Neo and
-  Rural (1,923 cards failing, from main's 5,239); at 800x1280 the card runs
-  past the status line and Rural's code is cut from below; 680x1000 fails on
-  Rural. **Next, its own branch, before 8g2:** a probe pass at each of these
-  sizes (about 5–6 s each), landing with its fix; the critic's preferred fix
-  is a measured fit after paint, like the seller's-name ladder, which would
-  also give back the size the one shared table took from figures that fitted
-  on main (145 cells; `$999.99` on Modern at the tablet, 76.8 → 56.8px). Two
-  changes to the touch wall came with the fix and are stated for the
-  owner: on landscape walls 900 tall and under the list yields its row to a
-  standing payment (approved before for the counter tablet only), and below
-  1920 every touch quote row puts its figure on a row of its own. Whether
-  `/guide` should qualify a tablet on its side until this lands is the
-  owner's call. Source: `private/design/workshop-2026-09-23/CRITIC-WALL-CYCLE.md`.
+- **P1, narrowed twice: off every pass, the wall still runs past its status
+  line at 1280x720 and on tall narrow portraits, and cuts a price at
+  864x1536.** Since 2026-10-14 the Cycle card's figure is fitted to its
+  column after the paint (`src/ui/wallFit.ts`), where a table of sizes by
+  length had been right only at the five probed sizes and printed `$999.99`
+  as "$999.9" on Neo at 1024x768. Each figure takes the largest size, up to
+  its layout's own, at which it stands in the price's grid column: on one
+  line, or with a listing's `from` stacked above it where that buys it 15%
+  more; where neither stands at 32px, a figure of 12 characters or more as
+  counted (`WALL_BREAK_TIER`) breaks after its commas at 32px, and a shorter
+  one is made smaller, to 16px. The digits stay in one node under one
+  `role="img"` name, and the fit runs again when the faces land and when the
+  frame changes size. Four passes hold it at 1024x768, 1366x768, 800x1280
+  and 680x1000, every wall screen on every look (main's code fails 955, 79,
+  2,241 and 697 checks there). Through the probe at 13 more sizes, nothing
+  fails that did not fail on main, and ten of them are green. Against main,
+  no figure is smaller at 768x1024, 1920x1080 or 1080x1920. **For the owner,
+  two shapes:** 275 figures of 13 to 30 characters print smaller than main
+  on a card that passed on main — 159 at 1280x900 and 1280x800, 30 at
+  1366x768, 76 at 1024x768, 10 at 800x1280 — every one a figure main's table
+  broke after a comma (at 38px, or 33.6–52px in 800x1280's stacked column).
+  209 of them the fit breaks too, but at 32px, because it breaks at its
+  one-line floor and never larger; 66 it keeps on one line or stacked at
+  32–37.5px, because it breaks only where no one-line shape stands at 32px.
+  Breaking at the largest size that stands would give the first group their
+  size back with more lines; letting the break compete with one line would
+  give the second theirs and, unbounded, would break figures the 1920 and
+  tall walls keep on one line. Cost: every visitor +5,569 bytes (882,054 of
+  915,000); the probe +27s on the quiet run of the morning (215s of 300),
+  and 261–280s against main's 219s back to back on the afternoon of
+  2026-10-19, past the 240s sharding line — not raised (D-2026-10-19-02):
+  the probe's own branch splits it before this merges.
+  **Still red, off the passes, and this entry's next step:** 1280x720
+  under the Awning and with Rural's yard (the Cycle card and Browse's list
+  up to 30.5px past the status line, the touch wall's shop code cut 2–8px
+  from below, inside its quiet zone, with the code already at its floor);
+  and portrait screens over 1500 tall and narrower than 1080 — at 900x1600
+  Rural's card with the yard runs up to 36px past the line, and at
+  864x1536 up to 79px, the eight-byte Browse figures on Neo and Rural are
+  cut by their card, and the 35-item payment's list on Rural with the yard
+  never shows a whole row. Neither shape has a pass, and the fit's own work
+  does not close either.
+  **For the owner, behaviour changes this fix made:** a portrait screen up
+  to 1500 tall (800x1280, 1024x1366, 768x1366) takes the counter tablet's
+  side-by-side card rather than the stacked column; under 790px of frame
+  (768-tall walls, and the Awning's 1280x900 and 1280x800) the sign, the
+  status line and the Cycle card's air are smaller; below 1280 wide in
+  landscape and 768 in portrait every Browse row stands its price across the
+  row; and a money figure's size now depends on layout — against main's
+  table, over every Cycle screen on the three shipped looks bare and worn at
+  the nine sizes, larger in 752 of 2,106 cells, the same in 794, smaller in
+  560: the 275 above, and 285 on cards main's code failed. The two
+  touch-wall changes of the round before were kept by the owner on
+  2026-10-14. The `/guide` question was whether to qualify a tablet on its
+  side until this lands: 1024x768 is measured and green, so it falls away
+  when this merges.
+  Sources: `private/design/workshop-2026-09-23/CRITIC-WALL-CYCLE.md`;
+  `layout/PROBE-RULES.md`, "The Cycle card's figure, fitted to its column"
+  and "The off-size walls".
 
 - **Before 8g2, the money guards' open list** (the money-guards critic's
   merged list, round 8, `private/design/workshop-2026-09-23/CRITIC-MONEY-GUARDS.md`;

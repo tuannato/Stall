@@ -8968,6 +8968,13 @@ a browser-broken line refused, the relief, the restore; and
 `window.test.ts`, the paint and the fonts' refit, red with the refit's
 call taken out).
 
+**The ladder's thin margins are gone with it** (2026-10-19): the 0.7% at
+1080x1920 above was the table's, measured in this Mac's fallback `₩`. The
+fit reads the face the machine actually draws, so a wider `₩` or `元` on
+another machine is made smaller, not cut. A `₩` figure is still painted
+by no pass (the fixtures carry XEC, USD and `cny-27`), so that is proved
+by the mechanism, not observed.
+
 **Not measured, stated**: a font that fails to load (the fit runs on the
 fallback and again on `document.fonts.ready`, which a failed face also
 resolves); a look sizing the money node's descendants through a rule this
@@ -9011,18 +9018,34 @@ larger / same / smaller:
 | 1366x768 | 145 | 50 | 39 |
 | 680x1000 | 70 | 160 | 4 |
 
-**The 159 smaller at the two 1280-wide short walls are a shape, not a
-read**: all of them are figures of 16 to 30 characters (as counted) that
-main's ladder broke after a comma at 38px there, and they now print at
-32–37.4px — one line, a stacked `from`, or broken at 32px — because the
-fit breaks only where no one-line shape stands at 32px. Letting the break
-compete with one line, as the stack does, would give them their size back
-and, unbounded, would also break figures on the 1920 wall and the tall
-wall that main and the fit keep on one line; a question of taste, for the
-owner (PLAN § Open), not built. At the four off-size walls main's sizes
-were the defect (cut, under the code, or past the status line), so a
-smaller figure there is the fix: at 800x1280 the side-by-side card's
-design size is 80px against the stacked column's 92.
+**The 159 smaller at the two 1280-wide short walls are two shapes, not a
+read** (read again the afternoon of 2026-10-19, the same counts, and split
+by shape): every one is a figure of 16 to 30 characters (as counted) that
+main's ladder broke after a comma at 38px, on a card that passed on main.
+112 are broken by the fit too, at 32px: the fit breaks at
+`WALL_FIGURE_MIN_PX` and goes smaller only while a piece does not stand,
+never larger. 47 print on one line or with a stacked `from` at 32–37.4px,
+because the fit breaks only where no one-line shape stands at 32px.
+Breaking at the largest size that stands, as one line is fitted, would give
+the first group their size back at the cost of more lines and a taller
+card; letting the break compete with one line would give the second group
+theirs and, unbounded, would also break figures on the 1920 wall and the
+tall wall that main and the fit keep on one line. Both are questions of
+taste, for the owner (PLAN § Open), not built.
+
+**The same two shapes at the off-size walls.** Smaller than main on a card
+that passed on main: 30 cells at 1366x768 (main 38px, broken; the fit
+32–37.5px — 14 broken, 9 stacked, 7 on one line — at 22 to 30 characters),
+76 at 1024x768 (main 38px, broken; the fit 32–32.5px, 74 broken, at 13 to
+30 characters) and 10 at 800x1280 (main 33.6–52px, broken in the stacked
+column; the fit 32–33.8px, 9 broken, at 18 to 28 characters). Every other
+smaller cell there is a card main's code failed — 9 of 39 at 1366x768, 87
+of 163 at 1024x768, all 4 at 680x1000 and 185 of 195 at 800x1280, where the
+side-by-side card's design size is 80px against the stacked column's 92 —
+and there a smaller figure is the fix. Read by matching each smaller cell
+to the red run's failures on main's code, by screen, look and bare or worn.
+This paragraph said, until then, that every smaller figure at the off-size
+walls was a defect on main: it was wrong for 116 cells.
 
 ## The off-size walls: four passes, and what they needed (2026-10-14)
 
@@ -9054,6 +9077,16 @@ That run's contrast pass died on a closed DevTools socket past the 300s
 ceiling, on a machine at load 5–8 with another builder's probe running;
 the four passes are geometry only, and the contrast pass carries no job at
 these sizes. On the branch every pass is 0.
+
+**Taken again 2026-10-19** (a fresh clone of the same shape: main's three
+files at `c17ae5a` over the branch head `9a8cffe`), the whole runner with
+its contrast pass green: side-tablet 955 (one `asked amount is covered`
+more, at one of an animation's moments), hd-wall 79, tall-tablet 2,241,
+narrow-wall 697, by check as the table says; every earlier pass green.
+And once more that afternoon over the head `0d95080`, the runner stopped
+after its geometry passes: 955 failures on 304 cards, 79 on 79, 2,241 on
+373 and 697 on 113, by check exactly as the morning's; the five older wall
+passes green.
 
 **What each size needed, beside the fit** (window.css):
 
@@ -9106,11 +9139,82 @@ up to 20.5 and 30.5px past the status line, the touch wall's shop code cut
 picture, and the 35-item payment's list). No card fails on the branch that
 did not on main, at any of the 21 sizes.
 
+**Measured again 2026-10-19 with the probe itself**: the runner in a
+scratch clone, its `OFF_SIZE_WALLS` grown by 13 sizes (no block asked, the
+contrast pass not run), every wall screen on every look bare and worn,
+the skeleton and the tracked fixture look among them; main's three files
+in a second clone beside it. Failures (cards failing):
+
+| size | main's code | the branch |
+|---|---|---|
+| 1280x720 | 84 (78) | **73 (70)** |
+| 1280x768 | 79 (79) | 0 |
+| 1152x864 | 108 (82) | 0 |
+| 1440x900 | 0 | 0 |
+| 1600x900 | 0 | 0 |
+| 1280x1024 | 21 (21) | 0 |
+| 1920x1200 | 0 | 0 |
+| 2560x1440 | 0 | 0 |
+| 900x1600 | 46 (46) | **25 (25)** |
+| 864x1536 | 341 (114) | **195 (35)** |
+| 1024x1366 | 2,020 (363) | 0 |
+| 768x1366 | 2,456 (368) | 0 |
+| 720x1280 | 2,935 (445) | 0 |
+
+Taken again the same afternoon over the head `0d95080`, both sides: every
+figure in the table the same, card for card. Every card × check that fails
+on the branch fails on main too, at all three red sizes. What is left: at
+1280x720 the Awning's and the yard's cards and Browse lists past the status
+line (up to 30.5px; 50 failures) and the touch wall's shop code cut 2–8px
+from below by the body (23); at 900x1600 the yard's tall portrait card past
+the line (up to 35.8px); at 864x1536 the yard's card up to 79.4px past it,
+the 35-item payment's list on Rural with the yard (a scroller showing 28px
+of a 48–51px row), and `shop-window-browse-long-figures` on Neo and Rural,
+bare and worn (the row painting 35–38px past its card).
+
 **Moved at the probed sizes**, stated: the fit's sizes on every Cycle
 screen (the first section above); and the ≤790 frame rules on the Awning's
 walls at 1280x900 (768 of frame) and 1280x800 (668) — the sign, the status
 line and the Cycle card's air.
 
 **Cost**: each new pass 5.8–6.1s on a run at load 2–4 (5.9–6.5s at load
-6–10). The whole run's A/B against main is measured after the merge-ready
-commit (below).
+6–10). **Back to back on this Mac, the morning of 2026-10-19** (the tracked
+fixture look carried, two contrast tabs): main 189.3s and 185.8s (load
+2.7–3), the branch 214.7s (load 3–4.5) — **+27s**, 214.7 of 300. The four
+new passes 6.1 / 5.9 / 5.8 / 6.0s (23.8s); the five older wall passes +0.2s
+each, the fit's own reads (portrait 7.7–7.9 → 8.1s, tablet 5.7 → 5.9,
+desk-wall 4.7–4.8 → 4.9, short-wall 5.6–5.7 → 5.9, canvas 5.4–5.5 → 5.5);
+the contrast pass 113.6–113.7 → 115.0s (the same 796 jobs). Two other
+branch runs that morning read 240.9s (load 4–5 at the start) and 243.3s
+(the load went to 9.8 mid-run, another worktree's job). That last run
+failed one contrast job, `pay-several-longest-figure` at 390 on Neo, its
+pay code's quiet zone half dark (12,244 of 23,088 pixels) — a page screen
+the branch changes nothing on, green on both main runs, the other two
+branch runs and the red run. Read as a capture race under that load; not
+reproduced, not chased.
+
+**Back to back again that afternoon**, the machine slower (load 2.7–3 at
+each start): main 218.6s, the branch 280.0s and 261.3s — **+43 to +61s**,
+both branch runs past the 240s sharding line and within 20–39s of the 300s
+ceiling. The four new passes 9.8 / 9.5 / 9.6 / 9.0s and 10.0 / 9.7 / 8.8 /
+8.1s; the contrast pass 132.5s on main, 141.2s and 118.9s on the branch,
+its capture's mean 81, 87 and 73ms, so that pass moves with the machine and
+not with the branch. The phone pass, which the branch does not change, read
+8.9–17.2s across the afternoon's five runs (two of them scratch clones
+stopped after the geometry passes), so a lone figure says little: the four
+passes cost 24–38s, the rest is noise and the older wall passes. **The
+fit's own share, timed in the page** (a scratch clone, every Cycle card's
+fit summed per pass): 0.28–0.81s per wall pass, over 312–381 cards and
+1,904–3,424 reads (five to nine a card) — the passes cost what 53 screens
+on every look cost, and making the fit cheaper would buy a second or two.
+The ceiling stays (D-2026-10-19-02): the probe is split across two tabs on
+its own branch, which lands before this one merges.
+
+**Weight** (`src/bundle.test.ts`, main in a scratch clone at `c17ae5a` and
+the branch head `0d95080`, read the same afternoon): every visitor 876,485
+→ 882,054 bytes (+5,569: the entry script 715,801 → 720,557, +4,756 — the
+fit is more than the "few hundred bytes" the critic guessed — and the entry
+sheet 156,659 → 157,472, +813), 32,946 left under the 915,000 ceiling; a
+deploy build carrying the tracked fixture look 893,567 → 899,138 (15,862
+left), one carrying the canary 899,122 (15,878 left). On demand
+unchanged, 265,386.
