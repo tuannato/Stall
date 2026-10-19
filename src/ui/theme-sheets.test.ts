@@ -519,8 +519,54 @@ const ladderRules = (css: string): { selector: string; body: string }[] =>
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/@media[^{]*\{/g, '')
         .matchAll(/([^{}]+)\{([^}]*)\}/g)].flatMap(([, selectors, body]) =>
-        selectors!.split(',').map((selector) => ({ selector: selector.trim().replace(/"/g, "'").replace(/\s+/g, ' '), body: body! })),
+        topLevel(selectors!).map((selector) => ({ selector: selector.trim().replace(/"/g, "'").replace(/\s+/g, ' '), body: body! })),
     );
+
+/**
+ * A selector list split at its top-level commas — never one inside `:is()`,
+ * `:where()`, `:not()`, `:has()` or an attribute (the wall-offsize critic's
+ * item 8: split at every comma, `.t-x :is(.item-x, .pay-x) span` read as two
+ * selectors neither of which sized inside a money node).
+ */
+function topLevel(list: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < list.length; i += 1) {
+        const c = list[i]!;
+        if (c === '(' || c === '[') depth += 1;
+        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+        else if (c === ',' && depth === 0) {
+            out.push(list.slice(start, i));
+            start = i + 1;
+        }
+    }
+    out.push(list.slice(start));
+    return out.filter((part) => part.trim() !== '');
+}
+
+/**
+ * One selector read as the plain selectors it matches by: each `:is()`,
+ * `:where()` or `:matches()` replaced by each of its alternatives in turn,
+ * so a money node named inside one is read where it stands.
+ */
+function alternatives(selector: string): string[] {
+    const at = /:(?:is|where|matches)\(/.exec(selector);
+    if (at === null) return [selector];
+    const open = at.index + at[0].length - 1;
+    let depth = 0;
+    let close = selector.length;
+    for (let i = open; i < selector.length; i += 1) {
+        if (selector[i] === '(') depth += 1;
+        else if (selector[i] === ')' && --depth === 0) {
+            close = i;
+            break;
+        }
+    }
+    return topLevel(selector.slice(open + 1, close)).flatMap((alt) =>
+        alternatives(`${selector.slice(0, at.index)}${alt.trim()}${selector.slice(close + 1)}`),
+    );
+}
 
 /** Every look sheet the guards read with the class it is under: the shipped three, the kit's, the harness fixture's and every private look's. */
 const LOOK_SHEETS = SERVED.filter((sheet) => ['look', 'kit', 'fixture', 'private'].includes(sheet.role) && sheet.lookClass !== undefined);
@@ -623,18 +669,25 @@ describe('every-look-that-sizes-its-figure-sizes-every-price-tier — the face a
 
 /**
  * A rule that sizes text inside a money node: a subject past `.item-x`, a
- * money role or `.fig-say`, or `.fig-say` / `.fig-end` themselves.
+ * money role or `.fig-say`, or `.fig-say` / `.fig-end` themselves — read
+ * over each plain selector the rule matches by (`alternatives`), so a money
+ * node named inside `:is()` is read where it stands.
  */
 const INSIDE_MONEY = (selector: string): boolean =>
-    /\.fig-(?:say|end)(?![\w-])/.test(selector) ||
-    /(?:\.item-x(?![\w-])|\[data-role='(?:seller-)?price'\])[^ ]* +[^ ]/.test(selector.replace(/ *> */g, ' '));
+    alternatives(selector).some(
+        (plain) =>
+            /\.fig-(?:say|end)(?![\w-])/.test(plain) ||
+            /(?:\.item-x(?![\w-])|\[data-role='(?:seller-)?price'\])[^ ]* +[^ ]/.test(plain.replace(/ *> */g, ' ')),
+    );
 
 describe('a-look-never-sizes-inside-a-money-node', () => {
     /**
      * The wall's Cycle card is fitted after the paint (2026-10-14,
      * `wallFit.ts`): its size is the money node's own inline `font-size`,
-     * which no look sheet out-ranks (the look lint refuses `!important`), so
-     * a look that sizes the Cycle figure gives the size the fit starts from
+     * which no rule in a look sheet out-ranks (the look lint refuses
+     * `!important`; an animation and a running transition do, which the fit
+     * holds off and the look lint refuses, `a-look-never-animates-a-money-nodes-size`),
+     * so a look that sizes the Cycle figure gives the size the fit starts from
      * and never one it cannot take down — the table of sizes this replaced
      * needed every look that sized the figure to size all nine steps. What
      * the inline size cannot reach is a size set INSIDE the money node: the
@@ -656,14 +709,25 @@ describe('a-look-never-sizes-inside-a-money-node', () => {
             `.${PLANTED_CLASS} .item-x .fig-say { font-size: 70px; }`,
             `.stall.${PLANTED_CLASS}.shop-window .fig-end { font-size: 70px; }`,
             `.${PLANTED_CLASS} [data-role="price"] > span { font: 700 70px serif; }`,
+            // The critic's item 8: a money node named inside `:is()`, which a
+            // split at every comma read as two selectors that sized nothing.
+            `.${PLANTED_CLASS} :is(.item-x, .pay-x) span { font-size: 70px; }`,
         ]) {
             const planted = await plantedSheet(rule);
             const inside = ladderRules(planted.css).filter((r) => INSIDE_MONEY(r.selector) && /(?:^|[;\s])font(?:-size)?\s*:/.test(r.body));
             expect(inside.length, rule).toBe(1);
         }
-        // Sizing the money node itself is the look's to do: the fit starts there.
-        const own = await plantedSheet(`.stall.${PLANTED_CLASS}.shop-window[data-mode='cycle'] .item-x { font-size: 60px; }`);
+        // Sizing the money node itself is the look's to do: the fit starts there,
+        // named plainly or inside `:is()` beside another box.
+        const own = await plantedSheet(
+            `.stall.${PLANTED_CLASS}.shop-window[data-mode='cycle'] .item-x { font-size: 60px; }\n.${PLANTED_CLASS} :is(.item-x, .bc-p) { font-size: 60px; }`,
+        );
         expect(ladderRules(own.css).filter((r) => INSIDE_MONEY(r.selector))).toEqual([]);
+        expect(alternatives(`.${PLANTED_CLASS} :is(.item-x, :where(.pay-x, .face-x)) span`)).toEqual([
+            `.${PLANTED_CLASS} .item-x span`,
+            `.${PLANTED_CLASS} .pay-x span`,
+            `.${PLANTED_CLASS} .face-x span`,
+        ]);
     });
 });
 
