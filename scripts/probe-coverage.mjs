@@ -98,6 +98,13 @@
  * - **`a-money-figure-never-clips-itself`** (CRITIC-WALL-CYCLE P2-1): every
  *   geometry pass owes, on every look it painted, money figures asked
  *   (`selfClipByClass`).
+ * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
+ *   geometry pass owes, on every look it painted, money figures held to
+ *   their dress (`dressByClass`), and, where it painted Rural, a money
+ *   figure read under a box's `clip-path` on Rural (`dressClipByClass`) —
+ *   Rural's notched tag is the subject, so a pass that read none stopped
+ *   measuring the half of the rule that reads a clip's shape against the
+ *   ink.
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -399,6 +406,19 @@ export function probeCoverageGaps(
                 gaps.push(`a-money-figure-never-clips-itself asked no money figure on a ${cls} stall`);
             }
         }
+        // A money figure held to its dress on every look, and — where the pass
+        // painted Rural — one read under its tag's clip-path (D-2026-10-19-01).
+        const dress = report.dressByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            if (!((dress[cls] ?? 0) > 0)) {
+                gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall`);
+            }
+        }
+        // Rural's tag is a notched polygon on the figure's column: a pass that
+        // painted Rural and read no figure under it read no clip's shape.
+        if ((report.sheetClasses ?? []).includes('t-rural') && !(((report.dressClipByClass ?? {})['t-rural'] ?? 0) > 0)) {
+            gaps.push('a-money-figure-is-never-misdressed read no money figure under a clip-path on a t-rural stall');
+        }
     }
     // The card figures' ladder (2026-10-13): a pass that measures the long
     // figures owes each a read on every look it painted — a fixture that
@@ -577,10 +597,14 @@ export function probeCoverageLine(pass, report) {
         : '';
     // The money rules of D-2026-10-14-02, on every geometry pass whose page reported them.
     const money =
-        report.figureInkByClass === undefined && report.selfClipByClass === undefined
+        (report.figureInkByClass === undefined && report.selfClipByClass === undefined
             ? ''
             : ` · broken figures held to their ink: ${perClass(report.figureInkByClass)}` +
-              ` · money figures asked about a self-clip: ${perClass(report.selfClipByClass)}`;
+              ` · money figures asked about a self-clip: ${perClass(report.selfClipByClass)}`) +
+        (report.dressByClass === undefined
+            ? ''
+            : ` · money figures held to their dress: ${perClass(report.dressByClass)}` +
+              ` · under a clip: ${perClass(report.dressClipByClass)}`);
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }

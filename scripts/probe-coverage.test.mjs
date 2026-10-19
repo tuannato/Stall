@@ -34,6 +34,10 @@ const EVERY_SURFACE = Object.fromEntries(['face', 'paid', 'pay', 'line', 'total'
 const moneyRead = {
     figureInkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_SURFACE])),
     selfClipByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 80])),
+    // D-2026-10-19-01: every look's money figures held to their dress, and
+    // Rural's under its notched tag.
+    dressByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 900])),
+    dressClipByClass: { 't-rural': 300 },
 };
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
@@ -268,7 +272,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -769,5 +773,68 @@ describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => 
             /^wall controls read: 2 · status line asked: 3 · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40$/,
         );
         assert.match(probeCoverageLine('desktop', { ...full, ...read }), / · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40/);
+    });
+});
+
+const DRESS_RULE = /^a-money-figure-is-never-misdressed /;
+
+describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
+    /**
+     * D-2026-10-19-01: `a-money-figure-is-never-misdressed` runs on every
+     * geometry pass. It owes money figures read on every look a pass painted,
+     * and — where the pass painted Rural, whose tag is a notched polygon on
+     * the figure's column — a figure read under that clip, or the half of
+     * the rule that reads a clip's shape against the ink compared nothing.
+     */
+    it('owes a read on every look each geometry pass painted, and names the look that read none', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => DRESS_RULE.test(gap)), [], pass);
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, dressByClass: { ...read.dressByClass, 't-neo': 0 } }).filter((gap) => DRESS_RULE.test(gap)),
+                ['a-money-figure-is-never-misdressed read no money figure on a t-neo stall'],
+                pass,
+            );
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, dressByClass: {} }).filter((gap) => DRESS_RULE.test(gap)).length,
+                CARD_LOOKS.length,
+                pass,
+            );
+        }
+        for (const pass of ['reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => DRESS_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('owes a figure read under Rural\'s tag where the pass painted Rural, and nothing of a pass that painted none', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined, dressClipByClass: {} };
+            assert.deepEqual(
+                probeCoverageGaps(pass, read).filter((gap) => DRESS_RULE.test(gap)),
+                ['a-money-figure-is-never-misdressed read no money figure under a clip-path on a t-rural stall'],
+                pass,
+            );
+            // A figure read under another look's clip is not Rural's.
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, dressClipByClass: { 't-neo': 4 } }).filter((gap) => DRESS_RULE.test(gap)).length,
+                1,
+                pass,
+            );
+            // A pass that painted no Rural (a kit run) owes no clip.
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, sheetClasses: ['t-workshop'], dressByClass: { 't-workshop': 40 } }).filter((gap) => DRESS_RULE.test(gap)),
+                [],
+                pass,
+            );
+        }
+    });
+
+    it('prints what it read on every geometry pass\'s line', () => {
+        const read = { dressByClass: { 't-neo': 12, 't-rural': 9 }, dressClipByClass: { 't-rural': 4 } };
+        assert.match(probeCoverageLine('narrow', read), / · money figures held to their dress: t-neo 12, t-rural 9 · under a clip: t-rural 4/);
+        assert.match(
+            probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, dressByClass: { 't-modern': 3 } }),
+            /^wall controls read: 2 · status line asked: 3 · money figures held to their dress: t-modern 3 · under a clip: none$/,
+        );
     });
 });
