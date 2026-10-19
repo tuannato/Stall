@@ -1,7 +1,4 @@
 // @vitest-environment happy-dom
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { WINDOW_MIN_PX } from '../src/ui/render';
 import { CANVAS_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
@@ -11,21 +8,11 @@ import { CONTRAST_VIEWPORTS } from './contrastPlan';
 import { SHOT_VIEWPORTS, diffPlan, shotPlan, type ShotJob } from './shotPlan';
 import { lookFromJson, parseWorkshopLook } from './workshopLook';
 import { KIT_SKELETON, lookFileText } from './workshopStarter';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+import { CLEAR_SCREENS, DESK_WALL_SCREENS, WINDOW_SCREENS, geometryPlan } from '../scripts/probe-passes.mjs';
 
 function asLook(json: unknown): Look {
     const { theme, rows } = typeof json === 'string' ? parseWorkshopLook(json) : lookFromJson(json);
     return { id: theme.id, label: theme.label, theme, rows };
-}
-
-/** A list literal out of the runner, read as text: the runner is `.mjs` and TS cannot import it (TS7016). */
-function runnerList(name: string): string[] {
-    const source = readFileSync(join(ROOT, 'scripts/layout-check.mjs'), 'utf8');
-    const at = source.indexOf(`const ${name} =`);
-    expect(at, `${name} in layout-check.mjs`).toBeGreaterThan(-1);
-    const statement = source.slice(at, source.indexOf(';', at));
-    return [...statement.matchAll(/'([^']+)'/g)].flatMap((m) => m[1]!.split(',')).filter((s) => s !== '');
 }
 
 const skeleton = asLook(lookFileText(KIT_SKELETON));
@@ -86,11 +73,11 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect([...at(jobs, 'portrait')].sort()).toEqual([...wall].sort());
         expect([...at(jobs, 'tablet')].sort()).toEqual([...wall].sort());
         expect([...at(jobs, 'short-wall')].sort()).toEqual([...wall].sort());
-        expect([...runnerList('WINDOW_SCREENS')].sort()).toEqual([...wall].sort());
+        expect(WINDOW_SCREENS.split(',').sort()).toEqual([...wall].sort());
         // Every wall screen at every wall size since the Cycle card's ladder:
         // the desk wall pass takes, at 1280x900, the canvas ones the desk
         // pass does not reach — the touch wall and the Cycle ladder among them.
-        expect([...runnerList('DESK_WALL_SCREENS')].sort()).toEqual([...deskWall].sort());
+        expect(DESK_WALL_SCREENS.split(',').sort()).toEqual([...deskWall].sort());
         for (const name of ['shop-window-touch-quotes-pay', 'shop-window-cycle-listing-26', 'shop-window-cycle-quote-30']) {
             expect(deskWall, name).toContain(name);
         }
@@ -107,6 +94,19 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         expect([SHOT_VIEWPORTS.phone.width, SHOT_VIEWPORTS.phone.height]).toEqual(probe('mobile'));
         expect([SHOT_VIEWPORTS.desk.width, SHOT_VIEWPORTS.desk.height]).toEqual(probe('desktop'));
         expect([SHOT_VIEWPORTS.canvas.width, SHOT_VIEWPORTS.canvas.height]).toEqual(probe('canvas'));
+    });
+
+    it('shoots every wall pass the runner runs at its own size, every screen it measures', () => {
+        // Read off the runner's own plan (`probe-passes.mjs`), so a wall pass
+        // added there is shot here or this fails, by name.
+        const walls = geometryPlan().filter((pass) => pass.kind === 'wall');
+        expect(walls.length).toBeGreaterThan(0);
+        for (const pass of walls) {
+            const shot = new Set(
+                jobs.filter((job) => job.viewport.width === pass.vp!.width && job.viewport.height === pass.vp!.height).map((job) => job.screen),
+            );
+            for (const screen of pass.screens!.split(',')) expect(shot.has(screen), `${screen} at ${pass.key}`).toBe(true);
+        }
     });
 
     it('shoots every variant: bare, every decoration where decorations paint, each mood everywhere, and each mood with every decoration', () => {
@@ -138,7 +138,7 @@ describe('the-shots-cover-every-probed-screen-and-variant', () => {
         // Every screen on the transparent wire — the runner's three clear
         // screens, and the /stream hero, which is composed on that ground too.
         const transparent = Object.keys(SCREENS).filter((name) => SCREENS[name]!.broadcast?.transparent === true);
-        for (const screen of runnerList('CLEAR_SCREENS')) {
+        for (const screen of CLEAR_SCREENS) {
             expect(transparent, screen).toContain(screen);
         }
         for (const job of jobs) {

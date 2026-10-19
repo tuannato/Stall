@@ -8,12 +8,15 @@ import {
     DRESS_SURFACES_OWED,
     FIGURE_SURFACES_OWED,
     GEOMETRY_PASSES,
+    PAGE_PASSES,
     PASSES_OWING_NO_GEOMETRY,
+    WALL_PASSES,
     owedFaults,
     probeCoverageGaps,
     probeCoverageLine,
     wornSheetJobFaults,
 } from './probe-coverage.mjs';
+import { GEOMETRY_CANARY, PASS_KINDS, WALL_BLOCKS, geometryPlan, runnerPasses } from './probe-passes.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -873,13 +876,64 @@ describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
 });
 
 /**
- * Every pass the runner defines, read off its own source: each viewport is an
- * object literal `{ name: '<pass>', width: <px>, … }` in
- * `scripts/layout-check.mjs` (`VIEWPORTS`, `CANVAS`, `PORTRAIT`, `TABLET`,
- * `NARROW`, `SHORT_VIEWPORTS`, `DESK_WALL`, `SHORT_WALL`).
+ * Where a list of passes (`runnerPasses` in `probe-passes.mjs`, or a planted
+ * one) and the coverage tables disagree, one sentence each. Both ways: a
+ * pass the tables do not name owes nothing (`FIGURE_SURFACES_OWED[pass] ??
+ * []`), and a table row no pass has is a pass that stopped running while its
+ * rule kept reading green on the passes that did.
  */
-function runnerPasses(source) {
-    return [...source.matchAll(/\{\s*name:\s*'([a-z0-9-]+)',\s*width:\s*\d+/g)].map((m) => m[1]);
+function passTableFaults(passes, { geometry = GEOMETRY_PASSES, none = PASSES_OWING_NO_GEOMETRY, wall = WALL_PASSES, page = PAGE_PASSES, kinds = PASS_KINDS } = {}) {
+    const faults = [];
+    const named = new Set(passes.map((pass) => pass.coverage));
+    const keys = new Set();
+    for (const pass of passes) {
+        if (keys.has(pass.key)) faults.push(`two passes are keyed ${pass.key}`);
+        keys.add(pass.key);
+        const kind = kinds[pass.kind];
+        if (kind === undefined) {
+            faults.push(`${pass.key} is of kind ${pass.kind}, which PASS_KINDS does not name`);
+            continue;
+        }
+        const inGeometry = geometry.has(pass.coverage);
+        const inNone = Object.hasOwn(none, pass.coverage);
+        if (!inGeometry && !inNone) faults.push(`the runner's ${pass.coverage} pass is in no coverage table`);
+        else if (kind.geometry && !inGeometry) faults.push(`${pass.coverage} is a ${pass.kind} pass, which owes the geometry rules, and GEOMETRY_PASSES does not name it`);
+        else if (!kind.geometry && !inNone) faults.push(`${pass.coverage} is a ${pass.kind} pass, which owes no geometry rule, and PASSES_OWING_NO_GEOMETRY does not say why`);
+        if (pass.kind === 'wall' && !wall.has(pass.coverage)) faults.push(`${pass.coverage} is a wall pass and WALL_PASSES does not name it, so it owes no wall control`);
+    }
+    for (const name of geometry) {
+        if (Object.hasOwn(none, name)) faults.push(`${name} is in both GEOMETRY_PASSES and PASSES_OWING_NO_GEOMETRY`);
+        if (!named.has(name)) faults.push(`${name} is in GEOMETRY_PASSES and the runner runs no such pass`);
+    }
+    for (const name of Object.keys(none)) {
+        if (!named.has(name)) faults.push(`${name} is in PASSES_OWING_NO_GEOMETRY and the runner runs no such pass`);
+    }
+    for (const name of wall) {
+        if (!named.has(name)) faults.push(`${name} is in WALL_PASSES and the runner runs no such pass`);
+    }
+    for (const name of page) {
+        if (!passes.some((pass) => pass.coverage === name && pass.kind === 'page')) faults.push(`${name} is in PAGE_PASSES and the runner runs no such page pass`);
+    }
+    return faults;
+}
+
+/**
+ * A viewport written in the runner's own text, in any of the shapes the
+ * round-5 test's pattern missed: a width or height given as a literal, a
+ * name beside a width or height in either order, a name beside a spread of
+ * another viewport — quoted any way. The runner names no viewport of its
+ * own; every pass is an entry of `probe-passes.mjs`.
+ */
+function runnerViewportLiterals(source) {
+    const key = (name) => String.raw`['"\x60]?\b${name}\b['"\x60]?\s*:`;
+    const patterns = [
+        new RegExp(String.raw`${key('(?:width|height)')}\s*(?:\d|['"\x60])`, 'g'),
+        new RegExp(String.raw`\{[^{}]*${key('name')}[^{}]*${key('(?:width|height)')}[^{}]*\}`, 'g'),
+        new RegExp(String.raw`\{[^{}]*${key('(?:width|height)')}[^{}]*${key('name')}[^{}]*\}`, 'g'),
+        new RegExp(String.raw`\{[^{}]*\.\.\.[^{}]*${key('name')}[^{}]*\}`, 'g'),
+        new RegExp(String.raw`\{[^{}]*${key('name')}[^{}]*\.\.\.[^{}]*\}`, 'g'),
+    ];
+    return [...new Set(patterns.flatMap((pattern) => [...source.matchAll(pattern)].map((m) => m[0])))];
 }
 
 describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
@@ -888,17 +942,26 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
      * and `GEOMETRY_PASSES.has(pass)` let a pass the tables do not name owe
      * nothing, so a viewport added to the runner — `wall-offsize`'s four,
      * after its merge — would read the money rules on nothing and stay green.
-     * Every viewport the runner defines is now in `GEOMETRY_PASSES` (and so,
-     * by the tests above, in both surface tables) or in
-     * `PASSES_OWING_NO_GEOMETRY` with its reason, and a pass in neither is a
-     * gap at run time.
+     * Round 5's test read the runner's viewports out of its text with one
+     * pattern, `{ name: '…', width: N`, and a viewport written width first,
+     * height before width, after a spread, as a template literal or in double
+     * quotes went past it (the money-guards critic, round 5). Since the probe
+     * shard's rebase (2026-10-20) every pass is a value in
+     * `probe-passes.mjs`, which the runner builds every pass from and this
+     * reads, compared with the tables by value, both ways
+     * (`passTableFaults`); and the runner's own text names no viewport
+     * (`runnerViewportLiterals`).
      */
-    it('reads every viewport the runner defines, and each is in a table', () => {
-        const passes = runnerPasses(readFileSync(new URL('./layout-check.mjs', import.meta.url), 'utf8'));
-        for (const pass of GEOMETRY_PASSES) assert.ok(passes.includes(pass), `${pass} is in GEOMETRY_PASSES and the runner defines no such viewport`);
-        for (const pass of passes) {
-            assert.ok(GEOMETRY_PASSES.has(pass) || Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass), `the runner's ${pass} pass is in no coverage table`);
-        }
+    it('reads every pass the runner runs, and each is in exactly the table its kind owes, both ways', () => {
+        assert.deepEqual(passTableFaults(runnerPasses({ looks: 'shipped' })), []);
+        // The kit's probe runs a subset: the worn-only road is the ordinary run's alone.
+        const kit = runnerPasses({ looks: 'workshop' }).map((pass) => pass.key);
+        assert.deepEqual(
+            kit,
+            runnerPasses({ looks: 'shipped' })
+                .map((pass) => pass.key)
+                .filter((key) => key !== 'worn-only sheet'),
+        );
         assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
         assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
         for (const [pass, why] of Object.entries(PASSES_OWING_NO_GEOMETRY)) {
@@ -907,11 +970,75 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
         }
     });
 
-    it('fails a viewport the runner gains before the tables name it', () => {
-        const planted = "const SIDE_TABLET = { name: 'side-tablet', width: 1024, height: 768, block: 'landscapeShort' };";
-        const passes = runnerPasses(planted);
-        assert.deepEqual(passes, ['side-tablet']);
-        assert.ok(!GEOMETRY_PASSES.has('side-tablet') && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, 'side-tablet'));
+    it('lays out a plan the walk can walk: keys unique, each read after what it reads, the canary on the plan, every wall in a block the page echoes', () => {
+        const plan = geometryPlan({ looks: 'shipped' });
+        const keys = plan.map((pass) => pass.key);
+        assert.equal(new Set(keys).size, keys.length);
+        plan.forEach((pass, n) => {
+            for (const after of pass.after ?? []) assert.ok(keys.indexOf(after) >= 0 && keys.indexOf(after) < n, `${pass.key} reads ${after}, which is not before it`);
+            assert.ok(Number.isInteger(pass.vp.width) && pass.vp.width > 0 && Number.isInteger(pass.vp.height) && pass.vp.height > 0, pass.key);
+            if (['wall', 'narrow', 'reduced'].includes(pass.kind)) assert.ok((pass.screens ?? '').split(',').every((screen) => screen !== ''), pass.key);
+            if (pass.kind === 'wall') assert.ok(Object.hasOwn(WALL_BLOCKS, pass.block), `${pass.key} names the block ${pass.block}`);
+        });
+        for (const key of GEOMETRY_CANARY) assert.ok(keys.includes(key), `the canary reads ${key}, which the plan has no pass for`);
+    });
+
+    it('fails a pass the module gains before the tables name it, and a table row the module dropped', () => {
+        const passes = runnerPasses({ looks: 'shipped' });
+        // wall-offsize's four, planted as entries of the module.
+        const planted = [
+            { key: 'side-tablet', kind: 'wall', coverage: 'side-tablet', vp: { name: 'side-tablet', width: 1024, height: 768 }, screens: 'a', block: 'landscapeShort' },
+            { key: 'hd-wall', kind: 'wall', coverage: 'hd-wall', vp: { name: 'hd-wall', width: 1366, height: 768 }, screens: 'a', block: 'landscapeShort' },
+        ];
+        assert.deepEqual(passTableFaults([...passes, planted[0]]), [
+            "the runner's side-tablet pass is in no coverage table",
+            'side-tablet is a wall pass and WALL_PASSES does not name it, so it owes no wall control',
+        ]);
+        // Named as a geometry pass and not as a wall: still a fault.
+        assert.deepEqual(passTableFaults([...passes, planted[1]], { geometry: new Set([...GEOMETRY_PASSES, 'hd-wall']) }), [
+            'hd-wall is a wall pass and WALL_PASSES does not name it, so it owes no wall control',
+        ]);
+        // Named where its kind owes no geometry: a fault.
+        assert.deepEqual(passTableFaults([...passes, planted[1]], { none: { ...PASSES_OWING_NO_GEOMETRY, 'hd-wall': 'planted, with a reason long enough' }, wall: new Set([...WALL_PASSES, 'hd-wall']) }), [
+            'hd-wall is a wall pass, which owes the geometry rules, and GEOMETRY_PASSES does not name it',
+        ]);
+        // Named in every table it owes: clean.
+        assert.deepEqual(passTableFaults([...passes, planted[1]], { geometry: new Set([...GEOMETRY_PASSES, 'hd-wall']), wall: new Set([...WALL_PASSES, 'hd-wall']) }), []);
+        // A row dropped from the tables, and a pass dropped from the module.
+        const without = (set, name) => new Set([...set].filter((n) => n !== name));
+        assert.deepEqual(passTableFaults(passes, { geometry: without(GEOMETRY_PASSES, 'narrow') }), ["the runner's narrow pass is in no coverage table"]);
+        const { transparency: _dropped, ...noTransparency } = PASSES_OWING_NO_GEOMETRY;
+        assert.deepEqual(passTableFaults(passes, { none: noTransparency }), ["the runner's transparency pass is in no coverage table"]);
+        assert.deepEqual(passTableFaults(passes.filter((pass) => pass.key !== 'tablet')), [
+            'tablet is in GEOMETRY_PASSES and the runner runs no such pass',
+            'tablet is in WALL_PASSES and the runner runs no such pass',
+        ]);
+        assert.deepEqual(passTableFaults(passes.filter((pass) => pass.coverage !== 'reduced-motion')), [
+            'reduced-motion is in PASSES_OWING_NO_GEOMETRY and the runner runs no such pass',
+        ]);
+        assert.deepEqual(passTableFaults([...passes, { ...passes[0], kind: 'sideways' }]), ['two passes are keyed mobile', 'mobile is of kind sideways, which PASS_KINDS does not name']);
+    });
+
+    it('builds every pass from the module, and names no viewport of its own in any shape', () => {
+        const runner = readFileSync(new URL('./layout-check.mjs', import.meta.url), 'utf8');
+        assert.match(runner, /\} from '\.\/probe-passes\.mjs';/);
+        assert.match(runner, /const GEOMETRY_PLAN = geometryPlan\(\{ looks: LOOKS \}\);/);
+        assert.match(runner, /const GEOMETRY_PASSES = GEOMETRY_PLAN\.map\(\(pass\) => \(\{ key: pass\.key, after: pass\.after, run: RUN_KIND\[pass\.kind\]\(pass\) \}\)\);/);
+        assert.match(runner, /plan: GEOMETRY_PASSES,/);
+        assert.deepEqual(runnerViewportLiterals(runner), []);
+        // The shapes the round-5 pattern missed, and the one it read.
+        for (const planted of [
+            "const SIDE_TABLET = { name: 'side-tablet', width: 1024, height: 768 };",
+            "const SIDE_TABLET = { width: 1024, height: 768, name: 'side-tablet' };",
+            "const SIDE_TABLET = { name: 'side-tablet', height: 768, width: 1024 };",
+            "const SIDE_TABLET = { ...TABLET, name: 'side-tablet' };",
+            'const SIDE_TABLET = { name: `side-tablet`, width: 1024, height: 768 };',
+            'const SIDE_TABLET = { "name": "side-tablet", "width": 1024, "height": 768 };',
+            "const SIDE_TABLET = { name: 'side-tablet', width: SIDE_W, height: SIDE_H };",
+            "const SIDE_TABLET = { name: 'side-tablet', ...TABLET };",
+        ]) {
+            assert.notDeepEqual(runnerViewportLiterals(`${runner}\n${planted}\n`), [], planted);
+        }
     });
 
     it('names a pass in no table as a gap at run time, and only such a pass', () => {

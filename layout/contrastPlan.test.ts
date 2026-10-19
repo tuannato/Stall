@@ -1,7 +1,4 @@
 // @vitest-environment happy-dom
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
@@ -10,8 +7,7 @@ import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
 import { KIT_SKELETON } from './workshopStarter';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+import { CANVAS, CONTRAST_PASS } from '../scripts/probe-passes.mjs';
 
 function count(jobs: readonly ContrastJob[], viewport: string): number {
     return jobs.filter((job) => job.viewport === viewport).length;
@@ -100,10 +96,11 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             ['desktop', 1280, 900, false],
             ['canvas', 1920, 1080, true],
         ]);
-        const runner = readFileSync(join(ROOT, 'scripts/layout-check.mjs'), 'utf8');
-        expect(runner).toContain("{ name: 'mobile', width: 390, height: 844 }");
-        expect(runner).toContain("{ name: 'desktop', width: 1280, height: 900 }");
-        expect(runner).toContain("const CANVAS = { name: 'canvas', width: 1920, height: 1080 }");
+        // The runner's contrast pass walks the module's viewports
+        // (`CONTRAST_PASS` in `probe-passes.mjs`), read by value.
+        expect(CONTRAST_PASS.viewports.map((vp) => [vp.name, vp.width, vp.height, vp === CANVAS])).toEqual(
+            CONTRAST_VIEWPORTS.map((vp) => [vp.name, vp.width, vp.height, vp.canvas]),
+        );
         expect(WINDOW_MIN_PX).toBeGreaterThan(390);
         expect(WINDOW_MIN_PX).toBeLessThanOrEqual(1280);
     });

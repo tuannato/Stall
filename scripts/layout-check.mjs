@@ -45,6 +45,17 @@ import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
 import { walkPlan } from './plan-walk.mjs';
+import {
+    ALL_VIEWPORTS,
+    CANVAS,
+    CONTRAST_PASS,
+    GEOMETRY_CANARY,
+    PASS_KINDS,
+    TRANSPARENCY_PASS,
+    VIEWPORTS,
+    WALL_BLOCKS,
+    geometryPlan,
+} from './probe-passes.mjs';
 import { carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
@@ -229,243 +240,38 @@ process.on('exit', () => {
     if (appConfigMoved()) process.exitCode = 1;
 });
 
-const VIEWPORTS = [
-    { name: 'mobile', width: 390, height: 844 },
-    { name: 'desktop', width: 1280, height: 900 },
-];
-/**
- * The OBS Browser Source, and the only viewport the broadcast screens are
- * measured at. The overlay is sized for it — plate 252px, QR 204px, price
- * 39px — so certifying that chrome at 390px measures pixels nobody paints,
- * and the page widths skip it for the same reason in reverse. The page owns
- * the split (`screensForViewport` in `layout/probe.ts`); this passes the flag
- * and then checks the answer, because a filter nobody audits is how a pass
- * measures nothing and prints a tick.
- */
-const CANVAS = { name: 'canvas', width: 1920, height: 1080 };
-/**
- * A television hung the tall way, which is what a shop window often is.
- *
- * `window.css` carries three layouts for the cycle card and only two were
- * ever measured: landscape, and `(orientation: portrait) and (max-height:
- * 1200px)` — the counter tablet, which the `TABLET` pass below
- * matches. The third, `portrait` with that max-height NOT matching, is the
- * stacked column a wall-mounted portrait screen paints, and **no viewport
- * reached it**: a whole half of the layout this feature was asked for
- * (owner, 2026-09-18: "Cũng thiết kế để hỗ trợ màn hình dọc") sat behind a
- * media query the probe could not enter, so every run printed a tick over
- * CSS nothing had executed.
- *
- * It runs the shop-window screens alone, through `?screens=`, the way the
- * reduced-motion pass runs the animating ones: the rest of the app has no
- * portrait-only rule and re-measuring it would double the run for nothing.
- * The verdict echoes the media condition back (`portraitTall`) so a pass
- * that silently stayed landscape fails instead of passing.
- */
-const PORTRAIT = { name: 'portrait', width: 1080, height: 1920 };
 /*
- * The counter tablet stood on end — the SHORT portrait block.
- *
- * `(orientation: portrait) and (max-height: 1200px)` was entered by one
- * viewport in the whole matrix, 390x844, and only because the wall fixtures
- * ran there. Taking them out of the narrow pass was right — the app cannot
- * paint a wall at 390 — and it left that block measured by nothing while
- * two documents went on describing it as covered (QA, 2026-09-20, measured
- * against the real `window.css` in Chrome). 768 is over the wall's floor
- * and CLAUDE §4 names the counter tablet, so the screen is real; this pass
- * is what the mobile one was standing in for.
+ * Every pass this run makes — its viewport, its kind, the screens it
+ * measures and the order the geometry walk hands it out — is a value in
+ * `probe-passes.mjs`, which the tests read too
+ * (`every-pass-the-runner-runs-is-in-a-coverage-table`). Nothing here names
+ * a viewport of its own: a pass is an entry there, run here by its kind
+ * (`GEOMETRY_KINDS_RUN`), and a kind this run has no runner for stops it
+ * before it builds.
  */
-const TABLET = { name: 'tablet', width: 768, height: 1024 };
-/*
- * The narrow phone (2026-10-13; the 8g1 critic's P2-3 and P2-4, the owner's
- * D-2026-10-13-02): 360x800, the narrowest phone the matrix measures, for
- * the screens that carry money and nothing else — geometry only, no
- * contrast. Every page pass ran at 390 and wider, so a figure, a pay code or
- * a row that holds at 390 and not at 360 went unseen: the item face's figure
- * spilled at 16 characters on Neo, and every pay code painted narrower than
- * the gate was told.
- *
- * The list (`NARROW_SCREENS`), and why each is on it:
- * - the rows: `unbuyable` (listing rows and the row's "Not buyable" label)
- *   and the selection strip with its quote rows and steppers
- *   (`pay-several-strip`, `pay-several-strip-xec`, `pay-several-ask`);
- * - the item faces: `item-listing`, `item-quote`, `item-unbuyable-fold`
- *   (a figure beside a fold that lists a refused take) and the two long
- *   figures (`item-listing-long-figure`, `item-quote-long-figure`);
- * - the pay sheet: `pay`, `pay-xec`, `pay-moved` (the restated figure on
- *   the control), `pay-dust`, `pay-long-figure`, `pay-longest-figure` (the
- *   eight-byte quote, its figure broken; round 4);
- * - Pay several: `pay-several`, `pay-several-long-figure`,
- *   `pay-several-longest-figure` (both items this stall's, every figure
- *   broken; round 4);
- * - the rest of the money set on a phone: `activity` (the receipt's
- *   amount), `describe` (the seller's figure read back and the record's
- *   hex), `publish-name` (the stall record's hex), `pay-tag` (the figure
- *   on paper);
- * - the card ladder's every step at its widest (`item-listing-figure-14`,
- *   `-17`, `-21`; `item-quote-figure-14`, `-17`, `-21`; `pay-figure-14`,
- *   `-17`; `pay-several-figure-lines`) and the rows at the longest figures
- *   (`row-longest-figure`, `quote-row-longest-figure`), round 2;
- * - the shop's rows on every look (round 3): `offers`,
- *   `plugin-missing-quotes`, `quotes-signs` and `pay-inr`, off this pass in
- *   round 2 while Rural's name column fell under its 64px floor at 360 (224
- *   failures) and 375 (14), back since Rural's tier-1 and tier-2 tags take
- *   a row of their own below 390 (`narrowTag`, D-2026-10-13-04); the rows
- *   either side of the re-flow's cut (`quote-row-1m`, `row-15-16`,
- *   `row-17`, `quote-row-18`, `row-21`); and the selection strip at the
- *   longest total (`pay-several-strip-long-figure`) and at 18 and 21
- *   characters (`pay-several-strip-18`, `-21`, round 4).
- * The QR gate's rule reads every pay sheet's code here
- * (`PAY_QR_NARROWEST_PX`). `layout/PROBE-RULES.md`, "The narrow phone".
- */
-const NARROW = { name: 'narrow', width: 360, height: 800 };
-const NARROW_SCREENS = [
-    'unbuyable',
-    'pay-several-strip',
-    'pay-several-strip-xec',
-    'pay-several-ask',
-    'item-listing',
-    'item-quote',
-    'item-unbuyable-fold',
-    'item-listing-long-figure',
-    'item-quote-long-figure',
-    'pay',
-    'pay-xec',
-    'pay-moved',
-    'pay-dust',
-    'pay-long-figure',
-    'pay-longest-figure',
-    'pay-several',
-    'pay-several-long-figure',
-    'pay-several-longest-figure',
-    'activity',
-    'describe',
-    'publish-name',
-    'pay-tag',
-    // Round 2: the card ladder's every step at its widest, and the rows at
-    // the longest figures (the critic's P2-2 and P2-6).
-    'item-listing-figure-14',
-    'item-listing-figure-17',
-    'item-listing-figure-21',
-    'item-quote-figure-14',
-    'item-quote-figure-17',
-    'item-quote-figure-21',
-    'pay-figure-14',
-    'pay-figure-17',
-    'pay-several-figure-lines',
-    'row-longest-figure',
-    'quote-row-longest-figure',
-    // Round 3: the shop's rows on every look, Rural's narrow tags included;
-    // the rows either side of the re-flow's cut; the strip's longest total.
-    'offers',
-    'plugin-missing-quotes',
-    'quotes-signs',
-    'pay-inr',
-    'quote-row-1m',
-    'row-15-16',
-    'row-17',
-    'quote-row-18',
-    'row-21',
-    'pay-several-strip-long-figure',
-    // Round 4 (the critic's P3-4): the strip's total at 18 and 21
-    // characters, either side of where ` XEC` stood alone on its line.
-    'pay-several-strip-18',
-    'pay-several-strip-21',
-].join(',');
-/*
- * The short screens (the 8g1 critic's P2-2): two heights shorter than the
- * page passes' 844 and 900, where a sign that fits those first stops
- * fitting. A sticky sign stays at its inset while its region scrolls, so on
- * a short screen a tall one keeps its address, and then its name, off
- * screen at every scroll but the end. Run for the looks each page pass
- * found a sticky sign on (`from`), and only there (`?sticky=`,
- * `layout/probe.ts`): a look with no sticky sign costs nothing, and a run
- * with none skips the pass.
- *
- * **What these sizes are, and what the pass does not measure.** 375x667 and
- * 1280x720 are device screen sizes, not browser viewports: the probe
- * emulates no browser chrome (`mobile: false`), so a viewport with its
- * toolbars up is shorter than either (the critic's figure for an iPhone SE
- * with Safari's toolbars is about 548px tall; unmeasured here). Not
- * measured: a landscape phone (844x390), which takes the desk rules, where
- * the tracked fixture `t-fixture-private` would fail (the critic's reading
- * through the probe page, not a runner pass); and a look that is sticky
- * only under a condition the phone and desk passes do not enter (a
- * reduced-motion block, say), because the pass measures only the looks
- * those two passes found sticky (`stickySeen`).
- */
-const SHORT_VIEWPORTS = [
-    { name: 'short-phone', width: 375, height: 667, from: 'mobile' },
-    { name: 'short-desk', width: 1280, height: 720, from: 'desktop' },
-];
-const WINDOW_SCREENS =
-    'shop-window-cycle,shop-window-browse,shop-window-quotes,shop-window-wall,' +
-    // The touch wall (2026-09-21): the strip and its steppers, and the
-    // payment the press froze. Both passes below read this list, so both
-    // the portrait screen and the counter tablet measure them.
-    'shop-window-touch-quotes,shop-window-touch-quotes-pay,' +
-    // A payment of several items, and of the cap (2026-09-24, the critic,
-    // P1): the tablet band held for one item and was cut again at three.
-    'shop-window-touch-quotes-pay-3,shop-window-touch-quotes-pay-35,' +
-    // An unbuyable offer on a wall (2026-09-23), in a Browse row, and the
-    // Cycle card that skips it (since 2026-09-24): the tall wall and the
-    // tablet lay both out on their own.
-    'shop-window-unbuyable,shop-window-cycle-unbuyable,' +
-    // The sign under stress (8f2): a 32-byte name on the Cycle card and in
-    // Browse, at the desk width and at a wall size, a name in stacked-mark
-    // capitals and a CJK name (`the-sellers-name-stands-whole`).
-    'shop-window-long-name,shop-window-browse-long-name,shop-window-stacked-name,shop-window-cjk-name,' +
-    'shop-window-wall-long-name,shop-window-wall-browse-long-name,' +
-    // The rows of the wall at long figures (round 3, P2-3 of the critic):
-    // the counter tablet is where a 14-character listing and a 17-character
-    // quote first failed to fit on main. (No apostrophe in this comment:
-    // `the-shots-cover-every-probed-screen-and-variant` reads the quoted
-    // names out of this list.)
-    'shop-window-browse-long-figures,shop-window-quotes-long-figures,' +
-    'shop-window-wall-browse-long-figures,shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,' +
-    // The Cycle card at the rows cuts (round 4) and at the widest figure of
-    // each step of its own ladder, and the eight-byte listing as a page
-    // screen: every one measured on every wall pass since the card has a
-    // ladder (no apostrophe in this comment, for the reason above).
-    'shop-window-cycle-listing-16,shop-window-cycle-listing-17,shop-window-cycle-listing-18,shop-window-cycle-quote-16,' +
-    'shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19,shop-window-cycle-listing-5,' +
-    'shop-window-cycle-listing-6,shop-window-cycle-listing-7,shop-window-cycle-listing-9,shop-window-cycle-listing-11,' +
-    'shop-window-cycle-listing-14,shop-window-cycle-listing-20,shop-window-cycle-listing-24,shop-window-cycle-listing-26,' +
-    'shop-window-cycle-quote-8,shop-window-cycle-quote-9,shop-window-cycle-quote-10,shop-window-cycle-quote-13,' +
-    'shop-window-cycle-quote-22,shop-window-cycle-quote-26,shop-window-cycle-quote-30,shop-window-cycle-usd-5,' +
-    'shop-window-cycle-usd-7,shop-window-cycle-usd-9,shop-window-cycle-usd-11,shop-window-cycle-usd-13,shop-window-cycle-usd-22,' +
-    'shop-window-cycle-usd-27,shop-window-cycle-cny-27,' +
-    'shop-window-cycle-longest-figure';
-/*
- * The two desk wall passes (the Cycle card's ladder, 2026-10-13). A wall is
- * also a 1280-wide panel: 1280x900 is the desk pass's own size and 1280x800
- * the landscape tablet's, and the Cycle card printed a figure that was not
- * the covenant's at both — at 1280x900 Neo's `.78 XEC` under the code, at
- * 1280x800 the card over the status line — while no pass measured a wall
- * screen there but the page screens the desk pass reaches by the canvas
- * split. So the desk wall pass measures, at 1280x900, every wall screen the
- * canvas split keeps off the desk pass (`DESK_WALL_SCREENS`: the touch wall,
- * the Cycle ladder and the canvas twins; `deskWallScreens()` in
- * layout/screenSplit.ts), and the short wall pass measures every wall screen
- * at 1280x800 (`WINDOW_SCREENS`). Both are held to the shot plan by
- * `the-shots-cover-every-probed-screen-and-variant` (no apostrophe in this
- * comment, for the reason above).
- */
-const DESK_WALL = { name: 'desk-wall', width: 1280, height: 900 };
-const SHORT_WALL = { name: 'short-wall', width: 1280, height: 800 };
-const DESK_WALL_SCREENS =
-    'shop-window-wall,shop-window-wall-long-name,shop-window-wall-browse-long-name,shop-window-wall-browse-long-figures,' +
-    'shop-window-touch-quotes-long-figures,shop-window-touch-quotes-16,shop-window-cycle-listing-16,shop-window-cycle-listing-17,' +
-    'shop-window-cycle-listing-18,' +
-    'shop-window-cycle-quote-16,shop-window-cycle-quote-17,shop-window-cycle-quote-18,shop-window-cycle-quote-19,' +
-    'shop-window-cycle-listing-5,shop-window-cycle-listing-6,shop-window-cycle-listing-7,shop-window-cycle-listing-9,' +
-    'shop-window-cycle-listing-11,shop-window-cycle-listing-14,shop-window-cycle-listing-20,shop-window-cycle-listing-24,' +
-    'shop-window-cycle-listing-26,shop-window-cycle-quote-8,shop-window-cycle-quote-9,shop-window-cycle-quote-10,' +
-    'shop-window-cycle-quote-13,shop-window-cycle-quote-22,shop-window-cycle-quote-26,shop-window-cycle-quote-30,' +
-    'shop-window-cycle-usd-5,shop-window-cycle-usd-7,shop-window-cycle-usd-9,shop-window-cycle-usd-11,shop-window-cycle-usd-13,' +
-    'shop-window-cycle-usd-22,shop-window-cycle-usd-27,shop-window-cycle-cny-27,shop-window-touch-quotes,' +
-    'shop-window-touch-quotes-pay,shop-window-touch-quotes-pay-3,shop-window-touch-quotes-pay-35';
-const ALL_VIEWPORTS = [...VIEWPORTS, CANVAS];
+const GEOMETRY_PLAN = geometryPlan({ looks: LOOKS });
+const GEOMETRY_KINDS_RUN = new Set(['page', 'wall', 'narrow', 'short', 'reduced', 'worn-only']);
+{
+    const faults = [];
+    for (const kind of Object.keys(PASS_KINDS)) {
+        if (!GEOMETRY_KINDS_RUN.has(kind) && kind !== CONTRAST_PASS.kind && kind !== TRANSPARENCY_PASS.kind) {
+            faults.push(`the pass kind ${kind} has no runner here`);
+        }
+    }
+    for (const pass of GEOMETRY_PLAN) {
+        if (!GEOMETRY_KINDS_RUN.has(pass.kind)) faults.push(`the geometry pass ${pass.key} is of kind ${pass.kind}, which no runner here runs`);
+        if (pass.kind === 'wall' && !Object.hasOwn(WALL_BLOCKS, pass.block)) {
+            faults.push(`the wall pass ${pass.key} names the block ${pass.block}, which is not one of ${Object.keys(WALL_BLOCKS).join(', ')}`);
+        }
+    }
+    for (const key of GEOMETRY_CANARY) {
+        if (!GEOMETRY_PLAN.some((pass) => pass.key === key)) faults.push(`the geometry canary reads ${key} again, and the plan has no such pass`);
+    }
+    if (faults.length > 0) {
+        console.error(`layout-check: probe-passes.mjs plans a pass this run cannot make —\n${faults.map((f) => `  ${f}`).join('\n')}`);
+        process.exit(1);
+    }
+}
 
 const probeUrl = (vp, extra = '') =>
     `http://localhost:${PORT}/${PROBE_PAGE}?viewport=${vp === CANVAS ? 'canvas' : 'page'}${extra}`;
@@ -1402,6 +1208,7 @@ async function captureRaw(cdp, sessionId) {
 async function captureShot(cdp, sessionId) {
     return decodePng(await captureRaw(cdp, sessionId));
 }
+
 
 /** The sign's name or tagline, by a target's description (D14). */
 const isName = (sel) => /(^|\.)stall-(?:name|tagline)(\.|$)/.test(sel);
@@ -2492,21 +2299,6 @@ function geometryRecord(key, tab) {
     return g;
 }
 /*
- * The geometry passes read again on another tab on every run with more
- * than one (`the-geometry-passes-read-the-same-on-every-tab`), each compared
- * with the walk's own answer: the cheapest two, where a tab's state could
- * reach a verdict — the reduced-motion pass on the canvas, which sets an
- * emulated media feature on its tab and takes it off again, and the short
- * pass at the desk, a page pass with no media feature, where a sticky sign
- * gave it something to measure (a pass that measured nothing is not
- * compared). Every pass was read again on the other tab, byte for byte,
- * before these were chosen, and the others cost 4–35s each to read again
- * (`PROBE-RULES.md`, "The geometry passes walk on two tabs"). What a pass
- * the sample does not read could still differ by is held by the page print
- * (`TAB_PRINT`).
- */
-const GEOMETRY_CANARY = ['short-desk', 'reduced-motion @canvas'];
-/*
  * Where a pass read again differs from the walk's answer, or undefined: the
  * page's whole report, byte for byte; the lines it says, less the time each
  * prints; whether it failed; and every total it adds. Said as the first
@@ -2811,8 +2603,9 @@ try {
      * the lines it says and what it adds to the run's totals, which only
      * `commitGeometryPass` writes, in plan order.
      */
-    const pagePass = (vp) => async (tab) => {
-        const g = geometryRecord(vp.name, tab);
+    const pagePass = (pass) => async (tab) => {
+        const vp = pass.vp;
+        const g = geometryRecord(pass.key, tab);
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',
             { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
@@ -2913,7 +2706,7 @@ try {
         }
         g.worn.push(...(report.wornClasses ?? []));
         for (const code of report.codesPainted ?? []) g.codes.push(`${vp.name}/${code}`);
-        const gaps = probeCoverageGaps(vp.name, report, {
+        const gaps = probeCoverageGaps(pass.coverage, report, {
             shippedClasses: SHIPPED_SHEET_CLASSES,
             privateClasses: PRIVATE_SHEET_CLASSES,
             paidPrivateClasses: PAID_PRIVATE_CLASSES,
@@ -2965,7 +2758,7 @@ try {
                     ' the clip tolerance is eating the cover check',
             );
         }
-        const compared = probeCoverageLine(vp.name, report);
+        const compared = probeCoverageLine(pass.coverage, report);
         if (report.failures.length === 0) {
             if (gaps.length === 0) {
                 g.log(
@@ -2997,16 +2790,17 @@ try {
      * ordinary run only: the kit's page is built from the same probe, and
      * the road is the app's, not the look's.
      */
-    const wornOnlyPass = async (tab) => {
-        const g = geometryRecord('worn-only sheet', tab);
+    const wornOnlyPass = (pass) => async (tab) => {
+        const vp = pass.vp;
+        const g = geometryRecord(pass.key, tab);
         const label = 'worn-only sheet (a-worn-only-sheet-loads-under-the-production-policy)';
         try {
             await cdp.send(
                 'Emulation.setDeviceMetricsOverride',
-                { width: VIEWPORTS[1].width, height: VIEWPORTS[1].height, deviceScaleFactor: 1, mobile: false },
+                { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
                 tab.sessionId,
             );
-            await cdp.send('Page.navigate', { url: probeUrl(VIEWPORTS[1], '&screens=') }, tab.sessionId);
+            await cdp.send('Page.navigate', { url: probeUrl(vp, '&screens=') }, tab.sessionId);
             await waitForFlag(cdp, tab.sessionId, '__probeReady');
             const missing = `/assets/no-such-look-sheet-${Date.now().toString(36)}.css`;
             const r = await cdp.send(
@@ -3041,189 +2835,32 @@ try {
     };
 
     /*
-     * Pass 2b: the shop window hung the tall way. See `PORTRAIT` above for
-     * why this is a pass of its own and not another entry in ALL_VIEWPORTS —
-     * it measures four screens, not the matrix.
+     * Pass 2b, 2c and 2c″: the shop window at a wall size (the `wall` passes
+     * of `probe-passes.mjs`: the tall wall `PORTRAIT`, the counter tablet
+     * `TABLET`, and the two desk walls `DESK_WALL` and `SHORT_WALL`). Each
+     * measures its own list of wall screens (`screens`), and the page echoes
+     * the window block it entered: a pass whose block (`block`,
+     * `WALL_BLOCKS`) the page did not enter would certify a layout it never
+     * painted — `portraitTall` because one viewport in the whole matrix used
+     * to reach the tall portrait column, `portraitShort` because taking the
+     * wall fixtures off the 390 pass took the short-portrait block's only
+     * reader with them, and `landscapeShort` for the desk walls, where the
+     * Cycle card's code stands beside its figure and its ladder wraps. Each
+     * owes what the wall passes owe (`probe-coverage.mjs`), the Cycle card's
+     * every step on every look among it.
      */
-    const portraitPass = async (tab) => {
-        const g = geometryRecord(PORTRAIT.name, tab);
-        await cdp.send(
-            'Emulation.setDeviceMetricsOverride',
-            { width: PORTRAIT.width, height: PORTRAIT.height, deviceScaleFactor: 1, mobile: false },
-            tab.sessionId,
-        );
-        const wanted = WINDOW_SCREENS.split(',').length;
-        const label = `portrait (${PORTRAIT.width}x${PORTRAIT.height}, shop window)`;
-        try {
-            const pv = await readVerdict(
-                cdp,
-                tab.sessionId,
-                probeUrl(PORTRAIT, `&screens=${WINDOW_SCREENS}`),
-            );
-            g.report = pv;
-            if (pv.viewport !== PORTRAIT.width) {
-                g.failed = true;
-                g.error(
-                    `✗ ${label}: asked for ${PORTRAIT.width}px and the page measured ${pv.viewport}px.`,
-                );
-            } else if (sheetClassesWrong(pv.sheetClasses) !== undefined) {
-                g.failed = true;
-                g.error(`✗ ${label}: ${sheetClassesWrong(pv.sheetClasses)}`);
-            } else if (pv.portraitTall !== true) {
-                // The emulation applied a size and the media query still did
-                // not match: the pass would measure the landscape or the
-                // short-portrait layout and print a tick for the tall one.
-                g.failed = true;
-                g.error(
-                    `✗ ${label}: the page never entered the tall-portrait block —` +
-                        ' this pass would certify a layout it did not paint.',
-                );
-            } else if ((pv.screensMeasured ?? []).length !== wanted) {
-                g.failed = true;
-                g.error(
-                    `✗ ${label}: measured ${(pv.screensMeasured ?? []).length} of ${wanted}` +
-                        ' screens — vacuous green.',
-                );
-            } else {
-                // Both halves, always: a coverage gap printed in place of the
-                // failures hid them (the critic, 2026-09-24). The wall rule
-                // owes every one of the touch wall's roles here — a fixture
-                // that stopped mounting its controls would leave it green
-                // over nothing (`probe-coverage.mjs`).
-                g.outlined.push(...(pv.outlinedTargets ?? []));
-                g.worn.push(...(pv.wornClasses ?? []));
-                for (const code of pv.codesPainted ?? []) g.codes.push(`${PORTRAIT.name}/${code}`);
-                const gaps = probeCoverageGaps(PORTRAIT.name, pv, { privateClasses: PRIVATE_SHEET_CLASSES });
-                const compared = probeCoverageLine(PORTRAIT.name, pv);
-                if (pv.failures.length === 0 && gaps.length === 0) {
-                    g.log(
-                        `✓ ${label}: ${wanted} screens, every look — ${g.took()}\n    compared: ${compared}` +
-                            `\n    faces: ${facesLine(pv.faces)}`,
-                    );
-                } else {
-                    g.failed = true;
-                    if (pv.failures.length > 0) {
-                        g.error(`✗ ${label}: ${pv.failures.length} failure(s) — ${g.took()}`);
-                        for (const f of pv.failures) {
-                            g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
-                        }
-                    }
-                    if (gaps.length > 0) {
-                        g.error(`✗ ${label}: a rule compared nothing it owes —`);
-                        for (const gap of gaps) g.error(`    ${gap}`);
-                    }
-                    g.error(`    compared: ${compared}`);
-                }
-            }
-        } catch (err) {
-            g.failed = true;
-            g.error(`✗ ${label}: ${err.message}`);
-        }
-        return g;
-    };
-
-    /*
-     * Pass 2c: the counter tablet stood on end. See `TABLET` above — this
-     * exists because removing the wall fixtures from the 390px pass took
-     * the short-portrait block's only reader with them.
-     */
-    const tabletPass = async (tab) => {
-        const g = geometryRecord(TABLET.name, tab);
-        await cdp.send(
-            'Emulation.setDeviceMetricsOverride',
-            { width: TABLET.width, height: TABLET.height, deviceScaleFactor: 1, mobile: false },
-            tab.sessionId,
-        );
-        const wanted = WINDOW_SCREENS.split(',').length;
-        const label = `tablet (${TABLET.width}x${TABLET.height}, shop window)`;
-        try {
-            const tv = await readVerdict(
-                cdp,
-                tab.sessionId,
-                probeUrl(TABLET, `&screens=${WINDOW_SCREENS}`),
-            );
-            g.report = tv;
-            if (tv.viewport !== TABLET.width) {
-                g.failed = true;
-                g.error(
-                    `✗ ${label}: asked for ${TABLET.width}px and the page measured ${tv.viewport}px.`,
-                );
-            } else if (sheetClassesWrong(tv.sheetClasses) !== undefined) {
-                g.failed = true;
-                g.error(`✗ ${label}: ${sheetClassesWrong(tv.sheetClasses)}`);
-            } else if (tv.portraitShort !== true) {
-                // The same guard `portraitTall` gives the pass above: an
-                // emulation that applied a size while the query did not
-                // match would certify a layout this pass never painted.
-                g.failed = true;
-                g.error(
-                    `✗ ${label}: the page never entered the short-portrait block —` +
-                        ' this pass would certify a layout it did not paint.',
-                );
-            } else if ((tv.screensMeasured ?? []).length !== wanted) {
-                g.failed = true;
-                g.error(
-                    `✗ ${label}: measured ${(tv.screensMeasured ?? []).length} of ${wanted}` +
-                        ' screens — vacuous green.',
-                );
-            } else {
-                // Both halves, always: a coverage gap printed in place of the
-                // failures hid them (the critic, 2026-09-24). The wall rule
-                // owes every one of the touch wall's roles here — a fixture
-                // that stopped mounting its controls would leave it green
-                // over nothing (`probe-coverage.mjs`).
-                g.outlined.push(...(tv.outlinedTargets ?? []));
-                g.worn.push(...(tv.wornClasses ?? []));
-                for (const code of tv.codesPainted ?? []) g.codes.push(`${TABLET.name}/${code}`);
-                const gaps = probeCoverageGaps(TABLET.name, tv, { privateClasses: PRIVATE_SHEET_CLASSES });
-                const compared = probeCoverageLine(TABLET.name, tv);
-                if (tv.failures.length === 0 && gaps.length === 0) {
-                    g.log(
-                        `✓ ${label}: ${wanted} screens, every look — ${g.took()}\n    compared: ${compared}` +
-                            `\n    faces: ${facesLine(tv.faces)}`,
-                    );
-                } else {
-                    g.failed = true;
-                    if (tv.failures.length > 0) {
-                        g.error(`✗ ${label}: ${tv.failures.length} failure(s) — ${g.took()}`);
-                        for (const f of tv.failures) {
-                            g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
-                        }
-                    }
-                    if (gaps.length > 0) {
-                        g.error(`✗ ${label}: a rule compared nothing it owes —`);
-                        for (const gap of gaps) g.error(`    ${gap}`);
-                    }
-                    g.error(`    compared: ${compared}`);
-                }
-            }
-        } catch (err) {
-            g.failed = true;
-            g.error(`✗ ${label}: ${err.message}`);
-        }
-        return g;
-    };
-
-    /*
-     * Pass 2c″: the two desk wall passes (`DESK_WALL` and `SHORT_WALL` above,
-     * 2026-10-13): a wall that is a 1280-wide panel, 900 and 800 tall. Both
-     * enter the short landscape block (`landscapeShort`), where the Cycle
-     * card's code stands beside its figure and its ladder wraps; a pass that
-     * did not would certify a layout it never painted. Each owes what the
-     * other wall passes owe (`probe-coverage.mjs`), the Cycle card's every
-     * step on every look among it.
-     */
-    const wallPass = (vp, screens) => async (tab) => {
-        const g = geometryRecord(vp.name, tab);
+    const wallPass = (pass) => async (tab) => {
+        const vp = pass.vp;
+        const g = geometryRecord(pass.key, tab);
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',
             { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
             tab.sessionId,
         );
-        const wanted = screens.split(',').length;
+        const wanted = pass.screens.split(',').length;
         const label = `${vp.name} (${vp.width}x${vp.height}, shop window)`;
         try {
-            const wv = await readVerdict(cdp, tab.sessionId, probeUrl(vp, `&screens=${screens}`));
+            const wv = await readVerdict(cdp, tab.sessionId, probeUrl(vp, `&screens=${pass.screens}`));
             g.report = wv;
             if (wv.viewport !== vp.width) {
                 g.failed = true;
@@ -3231,21 +2868,29 @@ try {
             } else if (sheetClassesWrong(wv.sheetClasses) !== undefined) {
                 g.failed = true;
                 g.error(`✗ ${label}: ${sheetClassesWrong(wv.sheetClasses)}`);
-            } else if (wv.landscapeShort !== true) {
+            } else if (wv[pass.block] !== true) {
+                // The emulation applied a size and the media query still did
+                // not match: the pass would measure another layout and print
+                // a tick for this one.
                 g.failed = true;
                 g.error(
-                    `✗ ${label}: the page never entered the short-landscape block —` +
+                    `✗ ${label}: the page never entered the ${WALL_BLOCKS[pass.block]} block —` +
                         ' this pass would certify a layout it did not paint.',
                 );
             } else if ((wv.screensMeasured ?? []).length !== wanted) {
                 g.failed = true;
                 g.error(`✗ ${label}: measured ${(wv.screensMeasured ?? []).length} of ${wanted} screens — vacuous green.`);
             } else {
+                // Both halves, always: a coverage gap printed in place of the
+                // failures hid them (the critic, 2026-09-24). The wall rule
+                // owes every one of the touch wall's roles here — a fixture
+                // that stopped mounting its controls would leave it green
+                // over nothing (`probe-coverage.mjs`).
                 g.outlined.push(...(wv.outlinedTargets ?? []));
                 g.worn.push(...(wv.wornClasses ?? []));
                 for (const code of wv.codesPainted ?? []) g.codes.push(`${vp.name}/${code}`);
-                const gaps = probeCoverageGaps(vp.name, wv, { privateClasses: PRIVATE_SHEET_CLASSES });
-                const compared = probeCoverageLine(vp.name, wv);
+                const gaps = probeCoverageGaps(pass.coverage, wv, { privateClasses: PRIVATE_SHEET_CLASSES });
+                const compared = probeCoverageLine(pass.coverage, wv);
                 if (wv.failures.length === 0 && gaps.length === 0) {
                     g.log(
                         `✓ ${label}: ${wanted} screens, every look — ${g.took()}\n    compared: ${compared}` +
@@ -3274,29 +2919,30 @@ try {
     };
 
     /*
-     * Pass 2c′: the narrow phone (`NARROW` above). Geometry only, the money
-     * screens alone. The page's own width is the measurement (`viewport`),
+     * Pass 2c′: the narrow phone (`NARROW` in `probe-passes.mjs`). Geometry
+     * only, the money screens alone. The page's own width is the measurement (`viewport`),
      * as on every pass: an emulation that applied another width would
      * certify a phone nobody measured. Its cost is printed on its line.
      */
-    const narrowPass = async (tab) => {
-        const g = geometryRecord(NARROW.name, tab);
+    const narrowPass = (pass) => async (tab) => {
+        const vp = pass.vp;
+        const g = geometryRecord(pass.key, tab);
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',
-            { width: NARROW.width, height: NARROW.height, deviceScaleFactor: 1, mobile: false },
+            { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false },
             tab.sessionId,
         );
-        const wanted = NARROW_SCREENS.split(',').length;
-        const label = `narrow (${NARROW.width}x${NARROW.height}, the money screens)`;
+        const wanted = pass.screens.split(',').length;
+        const label = `${vp.name} (${vp.width}x${vp.height}, the money screens)`;
         try {
-            const nv = await readVerdict(cdp, tab.sessionId, probeUrl(NARROW, `&screens=${NARROW_SCREENS}`));
+            const nv = await readVerdict(cdp, tab.sessionId, probeUrl(vp, `&screens=${pass.screens}`));
             g.report = nv;
             const spent = g.took();
             const wrongPrivate = privateLooksWrong(nv.privateClasses);
             const noQuote = payScreensMissingQuote(nv.screensMeasured ?? [], nv.screensWithQuote ?? []);
-            if (nv.viewport !== NARROW.width) {
+            if (nv.viewport !== vp.width) {
                 g.failed = true;
-                g.error(`✗ ${label}: asked for ${NARROW.width}px and the page measured ${nv.viewport}px.`);
+                g.error(`✗ ${label}: asked for ${vp.width}px and the page measured ${nv.viewport}px.`);
             } else if (wrongPrivate !== undefined) {
                 g.failed = true;
                 g.error(`✗ ${label}: ${wrongPrivate}`);
@@ -3314,12 +2960,12 @@ try {
             } else {
                 g.outlined.push(...(nv.outlinedTargets ?? []));
                 g.worn.push(...(nv.wornClasses ?? []));
-                for (const code of nv.codesPainted ?? []) g.codes.push(`${NARROW.name}/${code}`);
-                const gaps = probeCoverageGaps(NARROW.name, nv, {
+                for (const code of nv.codesPainted ?? []) g.codes.push(`${vp.name}/${code}`);
+                const gaps = probeCoverageGaps(pass.coverage, nv, {
                     privateClasses: PRIVATE_SHEET_CLASSES,
                     sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
                 });
-                const compared = probeCoverageLine(NARROW.name, nv);
+                const compared = probeCoverageLine(pass.coverage, nv);
                 if (nv.failures.length === 0 && gaps.length === 0) {
                     g.log(
                         `✓ ${label}: ${wanted} screens, every look — ${spent}\n    compared: ${compared}` +
@@ -3348,7 +2994,7 @@ try {
     };
 
     /*
-     * Pass 2d: the short screens (`SHORT_VIEWPORTS`), for the looks a page
+     * Pass 2d: the short screens (`SHORT_VIEWPORTS` in `probe-passes.mjs`), for the looks a page
      * pass found a sticky sign on. The page reads `?sticky=` and measures
      * those looks alone, and on each paint only where the sign is sticky:
      * the scroll pass, `a-sticky-sign-fits-its-region` and
@@ -3356,8 +3002,9 @@ try {
      * runs after the page pass it reads (`after`), on whichever tab is free:
      * the looks are that pass's own answer, never the run's totals.
      */
-    const shortPass = (vp) => async (tab, [from]) => {
-        const g = geometryRecord(vp.name, tab);
+    const shortPass = (pass) => async (tab, [from]) => {
+        const vp = pass.vp;
+        const g = geometryRecord(pass.key, tab);
         const classes = from?.sticky?.classes ?? [];
         const label = `short (${vp.width}x${vp.height}, sticky signs)`;
         if (classes.length === 0) {
@@ -3425,44 +3072,15 @@ try {
     };
 
     /*
-     * Pass 3: reduced motion. Three `prefers-reduced-motion` blocks ship in
-     * `stall.css` and no guard had ever run under them. Only the animating
-     * screens are re-measured — the media doubles a run, and a still page is
-     * the page already measured above.
-     *
-     * The animating screens, each at the width it is painted at. `broadcast`
-     * is here because `broadcast.css` is a fifth sheet with its own reduce
-     * block and its own two keyframes (`bc-in`, `bc-pulse`) — a block nothing
-     * had ever executed — and it is measured on the canvas because that is the
-     * only viewport its screens run at. The fixture carries `broadcastStepped`
-     * and `broadcastPulse` so both classes are on the tree; without them this
-     * pass would still print a tick while stilling nothing.
-     *
-     * `broadcast-quotes` is the second card the sheet animates: the pulse sits
-     * on `[data-role="seller-price"]` there, a different selector in the same
-     * reduce block, and a block that stilled only the other role would pass
-     * this pass while a stream kept moving.
+     * Pass 3: reduced motion (`REDUCED` in `probe-passes.mjs`, which says
+     * why each screen is there): the animating screens again, each at the
+     * width it is painted at, under `prefers-reduced-motion: reduce`.
      *
      * Each pass sets the media feature on its own tab and takes it off again
      * whatever happens, so the next pass that tab runs is measured without it.
      */
-    const REDUCED = [
-        // Renamed with the fixture 2026-09-04: the one publish screen became
-        // two record sheets, and both are measured — they share `.sheet`'s
-        // transition but not their contents, and a still page is only proved
-        // still for the tree that was actually painted.
-        // `plugin-missing-quotes` since 2026-09-09: the populated quote rail,
-        // whose name button and words line carry the marquee — without it the
-        // kill for those two would be proved on no screen at all.
-        { vp: VIEWPORTS[0], screens: 'offers,plugin-missing-quotes,publish-name,describe,pay' },
-        // `broadcast-ticker-live` since 2026-09-21: the ribbon's own
-        // keyframe (`tk-run`), running in this fixture and killed in the
-        // sheet's last block — the pinned ticker screens animate nothing
-        // and would prove nothing here.
-        { vp: CANVAS, screens: 'broadcast,broadcast-quotes,broadcast-ticker-live' },
-    ];
     const reducedPass = (pass) => async (tab) => {
-        const g = geometryRecord(`reduced-motion @${pass.vp.name}`, tab);
+        const g = geometryRecord(pass.key, tab);
         await cdp.send(
             'Emulation.setEmulatedMedia',
             { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] },
@@ -3530,20 +3148,23 @@ try {
     };
 
     /*
-     * The geometry passes, in the order they are said (`GEOMETRY_PASSES`).
-     * A short pass reads the page pass it names in `after`, and waits for it.
+     * The geometry passes, in the order they are said (`GEOMETRY_PASSES`):
+     * the plan `probe-passes.mjs` lays out (`GEOMETRY_PLAN`), each entry run
+     * by its kind. A short pass reads the page pass it names in `after`, and
+     * waits for it.
      */
-    const GEOMETRY_PASSES = [
-        ...ALL_VIEWPORTS.map((vp) => ({ key: vp.name, run: pagePass(vp) })),
-        ...(LOOKS === 'shipped' ? [{ key: 'worn-only sheet', run: wornOnlyPass }] : []),
-        { key: PORTRAIT.name, run: portraitPass },
-        { key: TABLET.name, run: tabletPass },
-        { key: DESK_WALL.name, run: wallPass(DESK_WALL, DESK_WALL_SCREENS) },
-        { key: SHORT_WALL.name, run: wallPass(SHORT_WALL, WINDOW_SCREENS) },
-        { key: NARROW.name, run: narrowPass },
-        ...SHORT_VIEWPORTS.map((vp) => ({ key: vp.name, after: [vp.from], run: shortPass(vp) })),
-        ...REDUCED.map((pass) => ({ key: `reduced-motion @${pass.vp.name}`, run: reducedPass(pass) })),
-    ];
+    const RUN_KIND = {
+        page: pagePass,
+        'worn-only': wornOnlyPass,
+        wall: wallPass,
+        narrow: narrowPass,
+        short: shortPass,
+        reduced: reducedPass,
+    };
+    if (Object.keys(RUN_KIND).sort().join() !== [...GEOMETRY_KINDS_RUN].sort().join()) {
+        throw new Error(`the runners here (${Object.keys(RUN_KIND).join(', ')}) are not the kinds GEOMETRY_KINDS_RUN says (${[...GEOMETRY_KINDS_RUN].join(', ')})`);
+    }
+    const GEOMETRY_PASSES = GEOMETRY_PLAN.map((pass) => ({ key: pass.key, after: pass.after, run: RUN_KIND[pass.kind](pass) }));
     /*
      * One pass's answer folded into the run's totals, and its lines said.
      * Called in plan order, as each answer and every answer before it is in,
@@ -3745,6 +3366,8 @@ try {
      * mobile-only pass certifies pixels nobody paints at 1280.
      */
     const contrastStartedAt = performance.now();
+    // The contrast pass's viewports (`CONTRAST_PASS` in `probe-passes.mjs`).
+    const CONTRAST_VIEWPORTS = CONTRAST_PASS.viewports;
     /*
      * Both contrast passes run on a page whose clock is fixed
      * (`FIXED_CLOCK`, shared with `looks-diff.mjs`): the pay fixtures stamp
@@ -4071,7 +3694,7 @@ try {
          * is read from the first tab's. Every open is settled before a
          * failure is said: no tab is left loading behind the pass's error.
          */
-        for (const opened of await Promise.allSettled(tabs.map((tab) => openViewport(tab, ALL_VIEWPORTS[0])))) {
+        for (const opened of await Promise.allSettled(tabs.map((tab) => openViewport(tab, CONTRAST_VIEWPORTS[0])))) {
             if (opened.status === 'rejected') throw opened.reason;
         }
         await timed('plan reads', async () => {
@@ -4079,7 +3702,7 @@ try {
             owed ??= await evalJson(cdp, sessionId, 'window.__contrastOwed()');
             honestOwed ??= await evalJson(cdp, sessionId, 'window.__honestOwed()');
         });
-        for (const vp of ALL_VIEWPORTS) {
+        for (const vp of CONTRAST_VIEWPORTS) {
             // The plan's viewport is this one.
             const planned = plan.find((j) => j.viewport === vp.name);
             if (planned !== undefined && (planned.width !== vp.width || planned.height !== vp.height)) {
@@ -4088,7 +3711,7 @@ try {
                 );
             }
         }
-        for (const tab of tabs) await holdScreensToPlan(tab, ALL_VIEWPORTS[0], plan);
+        for (const tab of tabs) await holdScreensToPlan(tab, CONTRAST_VIEWPORTS[0], plan);
         /*
          * The walk, on every tab at once (`CONTRAST_TABS`). The jobs are
          * handed out one at a time in plan order — viewport by viewport, as
@@ -4105,8 +3728,8 @@ try {
          * the plan is the pass's, and only the jobs before it in the plan are
          * folded — the same jobs at any tab count.
          */
-        const viewportNamed = new Map(ALL_VIEWPORTS.map((vp) => [vp.name, vp]));
-        const queue = ALL_VIEWPORTS.flatMap((vp) => plan.filter((planned) => planned.viewport === vp.name));
+        const viewportNamed = new Map(CONTRAST_VIEWPORTS.map((vp) => [vp.name, vp]));
+        const queue = CONTRAST_VIEWPORTS.flatMap((vp) => plan.filter((planned) => planned.viewport === vp.name));
         const answers = new Array(queue.length);
         const ranOn = new Array(queue.length);
         let handedOut = 0;
@@ -4196,7 +3819,7 @@ try {
             const pick = (n, why) => {
                 if (n >= 0 && !picks.has(n)) picks.set(n, why);
             };
-            for (const vp of ALL_VIEWPORTS) pick(queue.findIndex((j) => j.viewport === vp.name), `the first ${vp.name} job`);
+            for (const vp of CONTRAST_VIEWPORTS) pick(queue.findIndex((j) => j.viewport === vp.name), `the first ${vp.name} job`);
             pick(answers.findIndex((out) => out.horizonKeys.size > 0), "the first read at Grid horizon's worst");
             pick(
                 answers.findIndex((out) => (out.dumpJobs[0].lookPseudos?.marks ?? 0) > 0 && out.dumpJobs[0].artOff !== undefined),
@@ -4214,7 +3837,7 @@ try {
             // back (where the walk left it).
             const byTab = new Map(tabs.map((tab) => [tab, []]));
             for (const n of picks.keys()) byTab.get(tabs[(ranOn[n] + 1) % tabs.length]).push(n);
-            const viewportAt = (n) => ALL_VIEWPORTS.findIndex((vp) => vp.name === queue[n].viewport);
+            const viewportAt = (n) => CONTRAST_VIEWPORTS.findIndex((vp) => vp.name === queue[n].viewport);
             const readAgain = new Map();
             const settled = await Promise.allSettled(
                 [...byTab].map(async ([tab, ns]) => {
@@ -4700,20 +4323,19 @@ try {
      * `fromSurface: true` included, and PNG alpha is unpremultiplied
      * (`255,255,255,235` for a 92% white plate).
      *
-     * **Every clear screen, not one.** Each carries a different figure over
-     * the stream — the covenant's asked amount on one, the seller's own quote
-     * on the other — and a card this pass never shot is a card nobody proved
-     * legible over video.
+     * Every clear screen, not one (`TRANSPARENCY_PASS` in `probe-passes.mjs`
+     * says why), at the canvas.
      */
-    const CLEAR_SCREENS = ['broadcast-clear', 'broadcast-quotes-clear', 'broadcast-ticker-clear'];
+    const CLEAR_SCREENS = TRANSPARENCY_PASS.screens.split(',');
+    const clearVp = TRANSPARENCY_PASS.vp;
     try {
         await cdp.send(
             'Emulation.setDeviceMetricsOverride',
-            { width: CANVAS.width, height: CANVAS.height, deviceScaleFactor: 1, mobile: false },
+            { width: clearVp.width, height: clearVp.height, deviceScaleFactor: 1, mobile: false },
             sessionId,
         );
         currentStep = 'transparency: loading the canvas page';
-        await cdp.send('Page.navigate', { url: probeUrl(CANVAS, '&screens=') }, sessionId);
+        await cdp.send('Page.navigate', { url: probeUrl(clearVp, '&screens=') }, sessionId);
         await waitForFlag(cdp, sessionId, '__probeReady');
         // Every face loaded before the first job (`every-face-is-loaded-before-the-probe-measures`).
         const faceEcho = await evalJson(cdp, sessionId, 'window.__faces ?? null');
@@ -4749,7 +4371,7 @@ try {
                     const echo = (why) => {
                         if (why.length > 0) throw new Error(`${screen} / theme ${theme}: ${why.join('; ')}`);
                     };
-                    echo(paintEcho({ screen, look: theme, flags, sheetClass }, prep, nonce, CANVAS.width, CANVAS.height));
+                    echo(paintEcho({ screen, look: theme, flags, sheetClass }, prep, nonce, clearVp.width, clearVp.height));
                     if (prep.targets.length === 0) {
                         throw new Error(`${screen} prepared no figure boxes — vacuous green.`);
                     }
@@ -4766,9 +4388,9 @@ try {
                         }
                     };
                     const sized = (shot) =>
-                        shot.width === CANVAS.width && shot.height === CANVAS.height
+                        shot.width === clearVp.width && shot.height === clearVp.height
                             ? []
-                            : [`the shot is ${shot.width}x${shot.height} where the job is ${CANVAS.width}x${CANVAS.height}`];
+                            : [`the shot is ${shot.width}x${shot.height} where the job is ${clearVp.width}x${clearVp.height}`];
                     let img = await clearShot();
                     echo(sized(img));
                     if (img.bpp !== 4) {
@@ -4794,7 +4416,7 @@ try {
                         );
                     }
                     const firstRead = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                    echo(liveEcho(firstRead, nonce, CANVAS.width, CANVAS.height));
+                    echo(liveEcho(firstRead, nonce, clearVp.width, clearVp.height));
                     let targets = firstRead.boxes;
                     const job = { pass: 'transparency', viewport: 'canvas', screen, look: theme, flags };
                     const record = {
@@ -4841,7 +4463,7 @@ try {
                         img = await clearShot();
                         echo(sized(img));
                         const again = await evalJson(cdp, sessionId, 'window.__contrastBoxes()');
-                        echo(liveEcho(again, nonce, CANVAS.width, CANVAS.height));
+                        echo(liveEcho(again, nonce, clearVp.width, clearVp.height));
                         if (again.boxes.length === targets.length) targets = again.boxes;
                         ({ found, values } = sample(img));
                     }

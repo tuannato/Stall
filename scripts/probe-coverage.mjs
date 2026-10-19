@@ -148,13 +148,13 @@ const SKIP_SURFACES = {
     canvas: ['stream-card', 'stream-ticker'],
 };
 /** The passes the row-size and ladder rules read: page screens only. */
-const PAGE_PASSES = new Set(['mobile', 'desktop']);
+export const PAGE_PASSES = new Set(['mobile', 'desktop']);
 /**
  * The passes that paint the touch wall, whose controls the wall rule reads:
  * the canvas, the tall wall, the counter tablet, and since the Cycle card's
  * ladder the two desk wall passes (1280x900, 1280x800).
  */
-const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall']);
+export const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall']);
 /**
  * Every geometry pass: the two page passes, the canvas, the four wall passes
  * and the narrow phone. Each paints a broken money figure on every look
@@ -167,15 +167,18 @@ export const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait
  * name (round 5, the critic's P3 on round 4: a pass the tables do not name
  * owed nothing — `FIGURE_SURFACES_OWED[pass] ?? []` — so a pass added to
  * the runner and not here would read nothing and stay green). A pass in
- * neither is a gap (`probeCoverageGaps`), and every viewport the runner
- * defines is held to the two lists by
+ * neither is a gap (`probeCoverageGaps`), and every pass the runner runs
+ * (`runnerPasses` in `probe-passes.mjs`, which the runner builds every pass
+ * from) is held to the two lists, both ways, by
  * `every-pass-the-runner-runs-is-in-a-coverage-table`.
  */
 export const PASSES_OWING_NO_GEOMETRY = Object.freeze({
     'short-phone': 'a short screen (375x667) measured for the sticky signs the phone pass found, and nothing else; the runner holds it to its own owed reads',
     'short-desk': 'a short screen (1280x720) measured for the sticky signs the desk pass found, and nothing else; the runner holds it to its own owed reads',
     'reduced-motion': 'the reduced-motion pass measures the animating screens again under the reduce block; the geometry passes owe the money rules',
+    'worn-only-sheet': "one job, the worn-only road under the production policy, held to its own faults (`wornSheetJobFaults`); it paints no screen's money",
     contrast: 'the contrast pass reads pixels on its own plan and owes its own jobs',
+    transparency: 'the transparent wire reads the clear overlay screens over black and white on its own jobs; the canvas pass owes their geometry',
 });
 /**
  * The surfaces each geometry pass paints a broken figure on, every look
