@@ -161,7 +161,22 @@ const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short
  * (`a-broken-figure-wears-the-figures-own-ink`) and money figures
  * (`a-money-figure-never-clips-itself`).
  */
-const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
+export const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
+/**
+ * The runner's other passes, each with why it owes nothing these tables
+ * name (round 5, the critic's P3 on round 4: a pass the tables do not name
+ * owed nothing — `FIGURE_SURFACES_OWED[pass] ?? []` — so a pass added to
+ * the runner and not here would read nothing and stay green). A pass in
+ * neither is a gap (`probeCoverageGaps`), and every viewport the runner
+ * defines is held to the two lists by
+ * `every-pass-the-runner-runs-is-in-a-coverage-table`.
+ */
+export const PASSES_OWING_NO_GEOMETRY = Object.freeze({
+    'short-phone': 'a short screen (375x667) measured for the sticky signs the phone pass found, and nothing else; the runner holds it to its own owed reads',
+    'short-desk': 'a short screen (1280x720) measured for the sticky signs the desk pass found, and nothing else; the runner holds it to its own owed reads',
+    'reduced-motion': 'the reduced-motion pass measures the animating screens again under the reduce block; the geometry passes owe the money rules',
+    contrast: 'the contrast pass reads pixels on its own plan and owes its own jobs',
+});
 /**
  * The surfaces each geometry pass paints a broken figure on, every look
  * (`figureSurface` in `layout/probe.ts`; measured 2026-10-14): the page and
@@ -271,6 +286,9 @@ export function probeCoverageGaps(
     { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [] } = {},
 ) {
     const gaps = [];
+    if (!GEOMETRY_PASSES.has(pass) && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass)) {
+        gaps.push(`the ${pass} pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why`);
+    }
     const sheetsRead = new Set(report.lookSheetsRead ?? []);
     for (const cls of sheetedClasses) {
         if (!sheetsRead.has(cls)) {

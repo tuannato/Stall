@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, DRESS_SURFACES_OWED, FIGURE_SURFACES_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import {
+    CARD_FIGURES_OWED,
+    CARD_LADDERS_OWED,
+    CYCLE_STEPS_OWED,
+    DRESS_SURFACES_OWED,
+    FIGURE_SURFACES_OWED,
+    GEOMETRY_PASSES,
+    PASSES_OWING_NO_GEOMETRY,
+    owedFaults,
+    probeCoverageGaps,
+    probeCoverageLine,
+    wornSheetJobFaults,
+} from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -857,5 +869,57 @@ describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
             probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, dressByClass: { 't-modern': { wall: 3 } } }),
             /^wall controls read: 2 · status line asked: 3 · money figures held to their dress: t-modern wall:3 · under a clip: none$/,
         );
+    });
+});
+
+/**
+ * Every pass the runner defines, read off its own source: each viewport is an
+ * object literal `{ name: '<pass>', width: <px>, … }` in
+ * `scripts/layout-check.mjs` (`VIEWPORTS`, `CANVAS`, `PORTRAIT`, `TABLET`,
+ * `NARROW`, `SHORT_VIEWPORTS`, `DESK_WALL`, `SHORT_WALL`).
+ */
+function runnerPasses(source) {
+    return [...source.matchAll(/\{\s*name:\s*'([a-z0-9-]+)',\s*width:\s*\d+/g)].map((m) => m[1]);
+}
+
+describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
+    /**
+     * Round 5 (the critic's P3 on round 4): `FIGURE_SURFACES_OWED[pass] ?? []`
+     * and `GEOMETRY_PASSES.has(pass)` let a pass the tables do not name owe
+     * nothing, so a viewport added to the runner — `wall-offsize`'s four,
+     * after its merge — would read the money rules on nothing and stay green.
+     * Every viewport the runner defines is now in `GEOMETRY_PASSES` (and so,
+     * by the tests above, in both surface tables) or in
+     * `PASSES_OWING_NO_GEOMETRY` with its reason, and a pass in neither is a
+     * gap at run time.
+     */
+    it('reads every viewport the runner defines, and each is in a table', () => {
+        const passes = runnerPasses(readFileSync(new URL('./layout-check.mjs', import.meta.url), 'utf8'));
+        for (const pass of GEOMETRY_PASSES) assert.ok(passes.includes(pass), `${pass} is in GEOMETRY_PASSES and the runner defines no such viewport`);
+        for (const pass of passes) {
+            assert.ok(GEOMETRY_PASSES.has(pass) || Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass), `the runner's ${pass} pass is in no coverage table`);
+        }
+        assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
+        assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
+        for (const [pass, why] of Object.entries(PASSES_OWING_NO_GEOMETRY)) {
+            assert.ok(!GEOMETRY_PASSES.has(pass), pass);
+            assert.ok(why.length > 20, `${pass} owes nothing without a reason`);
+        }
+    });
+
+    it('fails a viewport the runner gains before the tables name it', () => {
+        const planted = "const SIDE_TABLET = { name: 'side-tablet', width: 1024, height: 768, block: 'landscapeShort' };";
+        const passes = runnerPasses(planted);
+        assert.deepEqual(passes, ['side-tablet']);
+        assert.ok(!GEOMETRY_PASSES.has('side-tablet') && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, 'side-tablet'));
+    });
+
+    it('names a pass in no table as a gap at run time, and only such a pass', () => {
+        assert.deepEqual(probeCoverageGaps('side-tablet', {}), [
+            'the side-tablet pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why',
+        ]);
+        for (const pass of [...GEOMETRY_PASSES, ...Object.keys(PASSES_OWING_NO_GEOMETRY)]) {
+            assert.ok(!probeCoverageGaps(pass, {}).some((gap) => gap.includes('in no coverage table')), pass);
+        }
     });
 });
