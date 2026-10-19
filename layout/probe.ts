@@ -485,6 +485,11 @@ function coveredBy(node: Element): string | undefined {
  * clip grammar fails loudly instead of being measured wrong.
  */
 function parsePolygon(clip: string, w: number, h: number): [number, number][] | undefined {
+    // A reference box after the shape (`polygon(…) content-box`) moves and
+    // sizes the polygon away from the border box this reads it against:
+    // refused here, so every caller fails closed (CRITIC-MONEY-GUARDS
+    // re-review, P3); `polygonIn` resolves it where a rule needs to.
+    if (clip.slice(clip.lastIndexOf(')') + 1).trim() !== '') return undefined;
     const inner = clip.slice(clip.indexOf('(') + 1, clip.lastIndexOf(')'));
     const resolve = (token: string, size: number): number | undefined => {
         const t = token.trim();
@@ -2390,13 +2395,10 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
         if (head === null || head === undefined || cell === null || cell === undefined || amount === null || amount === undefined || figure === null || figure === undefined) {
             continue;
         }
-        const turned = [card, head, cell, amount, figure];
-        const kept = turned.map((el) => el.getAttribute('style'));
-        for (const el of turned) {
-            el.style.setProperty('transform', 'none', 'important');
-            el.style.setProperty('rotate', 'none', 'important');
-        }
-        try {
+        // Held off and put back through the CSSOM (`withTransformsHeldOff`):
+        // the policy refuses an inline `style` attribute, and the app writes
+        // inline declarations on a card's boxes (`--sel-i` on a chosen line).
+        withTransformsHeldOff([card, head, cell, amount, figure], () => {
             const tier = head.getAttribute('data-wall-tier') ?? '0';
             const byLook = (cycleFigureByClass[measuringClass] ??= {});
             byLook[tier] = (byLook[tier] ?? 0) + 1;
@@ -2427,7 +2429,7 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
             }
             if (column === undefined) {
                 say(`stands in no grid column of its card (${hcs.gridTemplateColumns})`);
-                continue;
+                return;
             }
             const left = Math.min(box.left, ...lines.map((r) => r.left));
             const right = Math.max(box.right, ...lines.map((r) => r.right));
@@ -2483,13 +2485,7 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
                     }
                 }
             }
-        } finally {
-            turned.forEach((el, i) => {
-                const style = kept[i];
-                if (style === null) el.removeAttribute('style');
-                else el.setAttribute('style', style!);
-            });
-        }
+        });
     }
     return out;
 }
@@ -2701,10 +2697,14 @@ function figureInkFaults(screen: string, label: string): Failure[] {
  *   hides is scrolled to, so above it the text is held to that box's own
  *   edges. `hidden` or `clip`, or a `contain` that paints, is a cut: text
  *   more than a pixel past that box's padding box on that axis fails,
- *   naming the box. A box with no box of its own (inline, `contents`) clips
- *   nothing and is passed. A cut found inside a turned frame (Rural's tag
- *   sways) is read again with the chain's transforms held off, as
- *   `cycleFigureFaults` reads the Cycle card;
+ *   naming the box; a box that cuts with rounded corners cuts along their
+ *   inner curve (`roundedCut`, round 4: each radius less its borders, the
+ *   ink's corners read against it; a corner shape under `superellipse(1)`
+ *   is a corner this read cannot resolve, and fails). A box with no box of
+ *   its own (inline, `contents`) clips nothing and is passed. A cut found
+ *   inside a turned frame (Rural's tag sways) is read again with the
+ *   chain's transforms held off (`withTransformsHeldOff`, through the
+ *   CSSOM), as `cycleFigureFaults` reads the Cycle card;
  * - **its own width does not cut its text**: where the node's own text runs
  *   past its own box sideways, the text is held to `cutSideways` — every
  *   clipping ancestor and the viewport's side edge, past the surface too.
@@ -2729,6 +2729,106 @@ const SELF_CLIP_SURFACE = '.item, .card, .sheet, .zoom-card, .poster-page';
 const SELF_CLIP_ABOVE = '.stall-scroll, .stall, #app';
 
 /** The text of `node` cut by a box from it up to its surface, as a sentence, or undefined. */
+/** A corner's two radii, horizontal then vertical. */
+type Radii = { tl: [number, number]; tr: [number, number]; br: [number, number]; bl: [number, number] };
+
+/**
+ * `radii` scaled the way CSS scales corner radii that overrun a side (one
+ * factor for all, the least side's), for a box `w` wide and `h` tall.
+ */
+function fittedRadii(radii: Radii, w: number, h: number): Radii {
+    const f = Math.min(
+        1,
+        w / Math.max(1e-6, radii.tl[0] + radii.tr[0]),
+        w / Math.max(1e-6, radii.bl[0] + radii.br[0]),
+        h / Math.max(1e-6, radii.tl[1] + radii.bl[1]),
+        h / Math.max(1e-6, radii.tr[1] + radii.br[1]),
+    );
+    const k = (r: [number, number]): [number, number] => [r[0] * f, r[1] * f];
+    return { tl: k(radii.tl), tr: k(radii.tr), br: k(radii.br), bl: k(radii.bl) };
+}
+
+/** Whether point (x, y) stands inside `box` with rounded corners `radii` (already fitted), `tol` px of rounding allowed. */
+function insideRounded(box: Box, radii: Radii, x: number, y: number, tol = 1): boolean {
+    if (x < box.left - tol || x > box.right + tol || y < box.top - tol || y > box.bottom + tol) return false;
+    const corner = (cx: number, cy: number, [rx, ry]: [number, number]): boolean =>
+        rx <= 0 || ry <= 0 || ((x - cx) / (rx + tol)) ** 2 + ((y - cy) / (ry + tol)) ** 2 <= 1;
+    if (x < box.left + radii.tl[0] && y < box.top + radii.tl[1]) return corner(box.left + radii.tl[0], box.top + radii.tl[1], radii.tl);
+    if (x > box.right - radii.tr[0] && y < box.top + radii.tr[1]) return corner(box.right - radii.tr[0], box.top + radii.tr[1], radii.tr);
+    if (x > box.right - radii.br[0] && y > box.bottom - radii.br[1]) return corner(box.right - radii.br[0], box.bottom - radii.br[1], radii.br);
+    if (x < box.left + radii.bl[0] && y > box.bottom - radii.bl[1]) return corner(box.left + radii.bl[0], box.bottom - radii.bl[1], radii.bl);
+    return true;
+}
+
+/** A computed corner radius (`10px`, `10px 4px`, `50%`) against a box `w` by `h`. */
+function radiusOf(value: string, w: number, h: number): [number, number] {
+    const parts = value.trim().split(/\s+/);
+    const at = (v: string | undefined, basis: number): number => (v === undefined ? Number.NaN : v.endsWith('%') ? (Number.parseFloat(v) / 100) * basis : Number.parseFloat(v) || 0);
+    const rx = at(parts[0], w);
+    const ry = parts.length > 1 ? at(parts[1], h) : at(parts[0], h);
+    return [Number.isFinite(rx) ? Math.max(0, rx) : 0, Number.isFinite(ry) ? Math.max(0, ry) : 0];
+}
+
+/**
+ * Why a box that clips with rounded corners cuts `node`'s ink, or
+ * undefined (the re-review's P3): an `overflow` clip follows the inner
+ * curve of the box's `border-radius` (each radius less its borders), so the
+ * padding rectangle alone read a corner's cut as whole. A corner shape but
+ * `round` is a corner this read cannot resolve, and fails.
+ */
+function roundedCut(at: Element, cs: CSSStyleDeclaration, node: Element, where: string, lines: readonly DOMRect[]): string | undefined {
+    const r = at.getBoundingClientRect();
+    const outer: Radii = {
+        tl: radiusOf(cs.borderTopLeftRadius, r.width, r.height),
+        tr: radiusOf(cs.borderTopRightRadius, r.width, r.height),
+        br: radiusOf(cs.borderBottomRightRadius, r.width, r.height),
+        bl: radiusOf(cs.borderBottomLeftRadius, r.width, r.height),
+    };
+    if (![outer.tl, outer.tr, outer.br, outer.bl].some(([x, y]) => x > 0 && y > 0)) return undefined;
+    for (const corner of ['top-left', 'top-right', 'bottom-right', 'bottom-left']) {
+        // `superellipse(1)` is `round`, the default; a larger exponent
+        // (`squircle`, `square`) bulges outside the round curve, so the round
+        // curve is read for it and errs inward. One under 1 (`bevel`,
+        // `scoop`, `notch`) cuts inside it: a corner this read cannot resolve.
+        const shape = cs.getPropertyValue(`corner-${corner}-shape`).trim();
+        const k = /^superellipse\((-?(?:[\d.]+|infinity))\)$/.exec(shape)?.[1];
+        const exponent = k === undefined ? Number.NaN : k === 'infinity' ? Infinity : k === '-infinity' ? -Infinity : Number(k);
+        if (shape !== '' && shape !== 'round' && !(exponent >= 1)) return `stands under a corner of ${where} shaped ${shape}, a corner this read cannot resolve`;
+    }
+    const bt = Number.parseFloat(cs.borderTopWidth) || 0;
+    const br = Number.parseFloat(cs.borderRightWidth) || 0;
+    const bb = Number.parseFloat(cs.borderBottomWidth) || 0;
+    const bl = Number.parseFloat(cs.borderLeftWidth) || 0;
+    const fitted = fittedRadii(outer, r.width, r.height);
+    const inner: Radii = {
+        tl: [Math.max(0, fitted.tl[0] - bl), Math.max(0, fitted.tl[1] - bt)],
+        tr: [Math.max(0, fitted.tr[0] - br), Math.max(0, fitted.tr[1] - bt)],
+        br: [Math.max(0, fitted.br[0] - br), Math.max(0, fitted.br[1] - bb)],
+        bl: [Math.max(0, fitted.bl[0] - bl), Math.max(0, fitted.bl[1] - bb)],
+    };
+    const pad: Box = { left: r.left + bl, top: r.top + bt, right: r.right - br, bottom: r.bottom - bb };
+    const corners = (l: Box): [number, number][] => [
+        [l.left, l.top],
+        [l.right, l.top],
+        [l.right, l.bottom],
+        [l.left, l.bottom],
+    ];
+    // The line boxes first: a figure's ink stands inside its content area,
+    // so line boxes inside the curve hold ink inside it.
+    if (lines.every((l) => corners(l).every(([x, y]) => insideRounded(pad, inner, x, y)))) return undefined;
+    const cut = inkLines(node).find((l) =>
+        [
+            [l.left, l.top],
+            [l.right, l.top],
+            [l.right, l.bottom],
+            [l.left, l.bottom],
+        ].some(([x, y]) => !insideRounded(pad, inner, x!, y!)),
+    );
+    return cut === undefined
+        ? undefined
+        : `has its ink at ${Math.round(cut.left)}–${Math.round(cut.right)} × ${Math.round(cut.top)}–${Math.round(cut.bottom)} cut by the rounded corner of ${where} (border-radius ${cs.borderRadius})`;
+}
+
 function cutFromItsSurface(node: HTMLElement): string | undefined {
     const range = document.createRange();
     range.selectNodeContents(node);
@@ -2776,6 +2876,12 @@ function cutFromItsSurface(node: HTMLElement): string | undefined {
                     bottom = Math.min(bottom, edgeHi);
                 }
             }
+            // A box that cuts follows the inner curve of its corners.
+            const cutsAtAll = [cs.overflowX, cs.overflowY].some((m) => m === 'hidden' || m === 'clip') || (paints && ![cs.overflowX, cs.overflowY].some((m) => m === 'auto' || m === 'scroll'));
+            if (cutsAtAll) {
+                const rounded = roundedCut(at, cs, node, where, lines);
+                if (rounded !== undefined) return rounded;
+            }
         }
         if (at.matches(SELF_CLIP_SURFACE)) break;
     }
@@ -2808,23 +2914,12 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
             }
             const turned = chain.some((el) => {
                 const cs = getComputedStyle(el);
-                return cs.transform !== 'none' || cs.rotate !== 'none';
+                return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
             });
             if (turned) {
-                const kept = chain.map((el) => el.getAttribute('style'));
-                for (const el of chain) {
-                    el.style.setProperty('transform', 'none', 'important');
-                    el.style.setProperty('rotate', 'none', 'important');
-                }
-                try {
-                    cut = cutFromItsSurface(node);
-                } finally {
-                    chain.forEach((el, i) => {
-                        const style = kept[i];
-                        if (style === null) el.removeAttribute('style');
-                        else el.setAttribute('style', style!);
-                    });
-                }
+                // Through the CSSOM (`withTransformsHeldOff`): the policy
+                // refuses an inline `style` attribute.
+                cut = withTransformsHeldOff(chain, () => cutFromItsSurface(node));
             }
         }
         if (cut !== undefined) {
@@ -2855,20 +2950,23 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
 
 /*
  * **A money figure is never misdressed** (D-2026-10-19-01, the owner's "chọn
- * a"; CRITIC-MONEY-GUARDS P2-3). `a-broken-figure-wears-the-figures-own-ink`
- * holds a figure's pieces to the figure, and every other money rule reads
- * where the figure's box stands — so a look that dressed the figure WHOLE
- * could still misstate it with every check green: `.item-x { clip-path:
- * inset(0 0 0 55%) }` read "200 XEC" for 1,200 XEC on every ordinary row,
- * `letter-spacing: -0.45em` piled the digits, and an opacity, a zoom, a
- * `font-size-adjust`, a negative `text-indent` or a ground in the ink's own
- * colour each hid or shrank the figure under every rule. A look dresses the
+ * a"; CRITIC-MONEY-GUARDS P2-3 and its re-review of rounds 2 and 3).
+ * `a-broken-figure-wears-the-figures-own-ink` holds a figure's pieces to the
+ * figure, and every other money rule reads where the figure's box stands —
+ * so a look that dressed the figure WHOLE could still misstate it with every
+ * check green: `.item-x { clip-path: inset(0 0 0 55%) }` read "200 XEC" for
+ * 1,200 XEC on every ordinary row, `letter-spacing: -0.45em` piled the
+ * digits, and an opacity, a zoom, a `font-size-adjust`, a negative
+ * `text-indent`, a ground in the ink's own colour — through a background, an
+ * inset `box-shadow`, a `border-image` or a border the text ran onto — an ink
+ * at 6% alpha and a `line-height` that piled a broken figure's lines each
+ * hid, shrank or garbled a figure under every rule. A look dresses the
  * figure as a whole, and that dress may not misstate it.
  *
  * On every screen, look and variant of every geometry pass, the subjects are
  * every money node painted (`MONEY_SET`, Pay several's line figures
  * `.pay-line-x`, and the element every broken figure is written into,
- * `.fig-say`'s parent), the door's deck minis aside. Three reads:
+ * `.fig-say`'s parent), the door's deck minis aside. Four reads:
  *
  * **1. Its own dress, an allow-list over every computed longhand.** The
  * subject and every element under it that holds text (its words in a
@@ -2877,117 +2975,149 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * computes outside the stall (`dressReference`: a `span` with `all: unset`
  * appended to the stall's own parent for the read) — or the longhand is one
  * a look may dress freely (`DRESS_FREE`, every family with the reason it
- * cannot misstate a figure), or one held to a condition here
- * (`DRESS_HELD`, read on every subject whatever the reference says, since
- * an inherited longhand reaches it from any box above). The reference sits
- * outside the stall on purpose: an inherited longhand a look sets on a box
- * above the figure reaches the figure, and a reference inside the stall
- * would inherit the same dress and call it untouched. A free longhand may
- * compute anything, so it is not read (`dressReadList`); in this Chrome
- * every longhand is free or held but one, `text-fit`, which must equal the
- * reference — and so must every longhand a newer engine adds, until it is
- * named. The conditions, each with its reason, are `dressHeldFault`'s:
+ * cannot misstate a figure, or the read that holds what it does), or one
+ * held to a condition here (`DRESS_HELD`, read on every subject whatever the
+ * reference says, since an inherited longhand reaches it from any box
+ * above). The reference sits outside the stall on purpose: an inherited
+ * longhand a look sets on a box above the figure reaches the figure, and a
+ * reference inside the stall would inherit the same dress and call it
+ * untouched. A free longhand may compute anything, so it is not read
+ * (`dressReadList`); in this Chrome every longhand is free or held but one,
+ * `text-fit`, which must equal the reference — and so must every longhand a
+ * newer engine adds, until it is named. The conditions, each with its
+ * reason, are `dressHeldFault`'s:
  * - no `clip-path`, `clip`, mask image or mask border source — the figure's
- *   own shape cuts its own digits (a box above it may clip, read 3.);
+ *   own shape cuts its own digits (a box above it may clip, read 4.);
  * - no `filter`, `mix-blend-mode`, `-webkit-box-reflect`, motion path
  *   (`offset-path`), individual `rotate`/`scale`/`translate`, and no
  *   `transform` but none — save **a uniform scale of at least 1** with no
  *   turn, skew, flip or shift: the stream card's pulse (`bc-pulse` in
  *   broadcast.css) grows a figure that changed 6% for 0.4 s and never
- *   shrinks, turns or moves it;
- * - `opacity` 1, `visibility` and `content-visibility` visible, `zoom` 1, no
+ *   shrinks, turns or moves it; a `backdrop-filter` but a blur
+ *   (`backdropFault`: any other function repaints the ground behind the
+ *   glyphs from what is behind it);
+ * - `opacity` 1 and **an opaque ink**: `color` at alpha 1, so a faded ink
+ *   is held like a faded box (`-webkit-text-fill-color` is held to `color`,
+ *   and a text stroke to no width at all, so their alphas are held with
+ *   it); `visibility` and `content-visibility` visible, `zoom` 1, no
  *   `font-size-adjust`: a zoom of 0.15 or an adjust of 0.06 painted an 18px
  *   figure 9×4 px and 8×3 px while `font-size` still said 18px, the size
  *   the type floor reads (the critic's plants);
- * - no `content` but `normal` (an element's own text replaced);
+ * - no `content` but `normal` (an element's own text replaced); no
+ *   `text-overflow` but `clip` and no `line-clamp` (an ellipsis printed in
+ *   place of digits, or of a broken figure's later lines);
  * - no negative `word-spacing` or `text-indent`;
  * - **`letter-spacing` may take up the room between two glyphs and no
  *   more** (`spacingPiles`): for every two adjacent characters of its text
  *   (read in runs of one face and spacing, so a broken figure's groups are
  *   read across the comma where they meet), the spaces between them
- *   counted, a negative spacing may not make their
- *   inks share a pixel the face keeps apart — both glyphs drawn alone on a
- *   canvas in the text's computed face, at the spacing and at none, and the
- *   pixels both cover at least half counted (a pair whose ink boxes stay
- *   apart is not drawn; the counts are kept for the run, by face, spacing
- *   and pair). The owner's words were "no negative letter-spacing"; the
- *   theme table's price track is `-.02em` on the default row and Modern's
- *   and Rural's sheets set `-0.01em` on `.item-x`, so Modern, Rural, the
- *   skeleton and the tracked fixture tighten their figure today (Neo's row
- *   tracks it out, `.02em`). At `-0.02em` no pair of the ten figures, the
- *   comma and the point shares a pixel in Inter 800, Stall Serif 700 or
- *   JetBrains Mono 700 at 25–26px, nor in the first two at 120px; the first
- *   shared pixels come near `-0.08em` in Inter 800 at 120px ("71"), near
- *   `-0.05em` in Stall Serif 700 at 120px ("34") and near `-0.15em` in
- *   JetBrains Mono 700 at 26px ("00"), measured 2026-10-19. What the rule
- *   reads is the piling, not the sign. The canvas draws proportional
- *   figures where the sheets set tabular ones (no canvas takes
- *   `font-variant-numeric`): in Inter the tabular 0 and 4 are 0.03em
- *   narrower than the proportional ones (64.6 against 67.4 and 67.6 at
- *   100px), so within about 0.03em of where two digits touch the canvas can
- *   read them apart where the screen sets them touching;
+ *   counted, a negative spacing may not make their inks share a pixel the
+ *   face keeps apart — both glyphs drawn alone on a canvas in the text's
+ *   computed face, at the spacing and at none, and the pixels both cover at
+ *   least half counted (a pair whose ink boxes stay apart is not drawn; the
+ *   counts are kept for the run, by face, spacing and pair). The owner's
+ *   words were "no negative letter-spacing"; the theme table's price track
+ *   is `-.02em` on the default row and Modern's and Rural's sheets set
+ *   `-0.01em` on `.item-x`, so Modern, Rural, the skeleton and the tracked
+ *   fixture tighten their figure today (Neo's row tracks it out, `.02em`).
+ *   At `-0.02em` no pair of the ten figures, the comma and the point shares
+ *   a pixel in Inter 800, Stall Serif 700 or JetBrains Mono 700 at 25–26px,
+ *   nor in the first two at 120px; the first shared pixels come near
+ *   `-0.08em` in Inter 800 at 120px ("71"), near `-0.05em` in Stall Serif
+ *   700 at 120px ("34") and near `-0.15em` in JetBrains Mono 700 at 26px
+ *   ("00"), measured 2026-10-19. What the rule reads is the piling, not the
+ *   sign. The canvas draws proportional figures where the sheets set
+ *   tabular ones (no canvas takes `font-variant-numeric`): in Inter the
+ *   tabular 0 and 4 are 0.03em narrower than the proportional ones (64.6
+ *   against 67.4 and 67.6 at 100px), so within about 0.03em of where two
+ *   digits touch the canvas can read them apart where the screen sets them
+ *   touching;
  * - the glyphs are painted in the figure's ink: `-webkit-text-fill-color`
  *   is `color`, no `-webkit-text-stroke`, no `-webkit-text-security`, no
  *   `background-clip: text`;
- * - **no ground in the ink's colour**: a `background-color`, or a colour
- *   stop of a `background-image` gradient, at least half opaque, reads at
- *   `MIN_CONTRAST` (3:1) against the ink or better; a picture
- *   (`url()`, `image-set()`) under a figure is a ground this rule cannot
- *   read, and fails. A tint under half opacity is the contrast pass's;
+ * - **no ground in the ink's colour, from any paint under the glyphs**
+ *   (`groundFault`): the background colour and every layer of its image
+ *   over their clip box, every `box-shadow` layer (an inset one over the
+ *   padding box outside its hole, an outer one outside the border box),
+ *   every border side with a width, and a `border-image` (over the padding
+ *   box with `fill`, over its border bands and outset otherwise) — each,
+ *   where it meets the element's ink (a box that clips its content paints
+ *   no glyph outside its padding box), at least half opaque and under
+ *   `MIN_CONTRAST` (3:1) against the ink, fails; a picture there (`url()`,
+ *   `image-set()`) is a ground this rule cannot read, and fails. A tint under
+ *   half opacity is the contrast pass's;
  * - **no outline drawn across its glyphs**: an outline's inner edge (the
  *   border box moved out by `outline-offset`, in by a negative one) stands
  *   outside every line's ink (`inkLines`);
  * - **no line through or over it**: no `line-through` and no `overline` in
  *   effect on its text (`-webkit-text-decorations-in-effect`, which carries
- *   a line drawn from any box above) nor on a box above it up to its
- *   surface, and an underline there at the face's own thickness and
- *   position (`auto` or `from-font`, an offset of `auto` or at least zero);
- *   no `text-emphasis-style` (a mark printed over every digit);
- * - **no copy of it**: a `text-shadow` layer blurred at least as far as it
- *   stands off is a glow; a sharp one stands within `DRESS_SHADOW_EM`
- *   (0.12em, under the thinnest stem of a served face's figure, 0.13em) of
- *   the glyphs it copies, or within the rain outline's reach — a sharp copy
- *   farther off stands apart from the stroke it copies, a second figure;
+ *   a line drawn from any box above) nor on a box above it up to the stall,
+ *   and an underline there at the face's own thickness and position (`auto`
+ *   or `from-font`, an offset of `auto` or at least zero); no
+ *   `text-emphasis-style` (a mark printed over every digit);
+ * - **no copy of it, and no smear** (`shadowFault`): a `text-shadow` layer
+ *   blurred at least as far as it stands off is a glow; the sharp layers and
+ *   the glyph itself stand within `DRESS_SHADOW_EM` (0.12em, under the
+ *   thinnest stem of a served face's figure, 0.13em) of each other, two by
+ *   two — the set's spread, not each layer's offset, so a ring of copies
+ *   each 0.12em off does not fill the counters; the rain's outline (one
+ *   opaque colour, unblurred, exactly one of the two sets) stands apart;
  * - read in order: `direction` ltr, no `bidi-override`, `writing-mode`
  *   `horizontal-tb`, and no `display` that prints a list marker;
  * - an animation it runs is read at every keyframe (`animationFaults`): each
- *   held longhand a keyframe sets is resolved where the subject stands and
- *   held to its condition, so a figure is not dressed at the instants the
- *   pass does not freeze; a transition is read the same way while one runs;
+ *   held longhand a keyframe sets is resolved and held to its condition, so
+ *   a figure is not dressed at the instants the pass does not freeze; a
+ *   transition is read the same way while one runs;
  * - it and every element under it with text generate no `::before` or
  *   `::after`: a generated glyph or block beside the digits is not the
  *   figure.
  *
- * **2. The boxes that hold it, up to its surface** (its card, row card,
- * sheet or plate, `SELF_CLIP_SURFACE`, inclusive; else up to the stall). A
- * paint effect that is not inherited never reaches the figure's computed
- * style, so it is read where it is written: no box between the figure and
- * its surface runs a `filter`, a `mix-blend-mode`, a reflection, a motion
- * path or a `zoom` but 1, an opacity under 1 (save the stream card's stale
- * plate, `.bc[data-state='stale'] .plate`, which says its figure is old by
- * fading it — the app's sentence, which no fixture paints today), or a
- * transform but a turn of at most `DRESS_TILT_DEG` (10°) with any shift and
- * no shrink, skew or flip (Rural's tag sways ±0.8° and its rows tilt 0.6°)
- * — read at rest and at every keyframe of an animation it runs.
+ * **2. Its lines, and a neighbour's shadow** (in its own frame, read 4.'s
+ * hold): **its text's lines** (`lineFault`, where its text is one inline
+ * flow) stand in order — line by line from the top, left to right along a
+ * line, as the text runs, so columns or a reversed flow fail — with no
+ * line break between two digits or a digit and a point (an address and a
+ * record's bytes aside, which wrap anywhere by design), and two lines whose
+ * glyphs share a pixel (drawn on a canvas where they stand) fail, so a
+ * `line-height` cannot pile them; and **a sharp `text-shadow` of a box
+ * beside it** (`neighbourShadowFault`: any element with text of its own
+ * under its parent and grandparent — its unit, its "from") whose copy meets
+ * its ink fails, painted over it where that element follows it, as a ground
+ * in its ink's colour where it comes before.
  *
- * **3. Every clip above it, up to the stall.** A box above the figure may
+ * **3. Every box that holds it, up to and with the stall.** A paint effect
+ * that is not inherited never reaches the figure's computed style, so it is
+ * read where it is written: no box between the figure and its stall runs a
+ * `filter`, a `backdrop-filter` but a blur, a `mix-blend-mode`, a
+ * reflection, a motion path or a `zoom` but 1, an opacity under 1 (save the
+ * stream card's stale plate, `.bc[data-state='stale'] .plate`, which says
+ * its figure is old by fading it — the app's sentence, which no fixture
+ * paints today), or a transform but a turn of at most `DRESS_TILT_DEG` (10°)
+ * with any shift and no shrink, skew or flip (Rural's tag sways ±0.8° and
+ * its rows tilt 0.6°; a screen hung sideways turns the whole stall a quarter
+ * turn, `[data-turn]`, and the figure stands upright on the screen it is
+ * painted for) — read at rest and at every keyframe of an animation it
+ * runs.
+ *
+ * **4. Every clip above it, up to the stall.** A box above the figure may
  * clip, mask or `clip-path` it for decoration — Rural's tag is a notched
  * pentagon on `.item-p` — only if its shape encloses the figure's ink
  * (`inkLines`, the sign rule's model: the glyphs' measured reach about the
  * baseline, the advance along the line), read in the box's own frame: every
  * transform from the figure up to the stall is held off for the read
- * (`withTransformsHeldOff`, once a measurement for every figure under a
- * clip, put back through the CSSOM), as `cycleFigureFaults` reads the Cycle
- * card, so a swaying tag is read in the frame its polygon is written in. A
- * `clip-path` `inset()`, `circle()` or
- * `ellipse()` is resolved (`paintClips`), a `polygon()` through
- * `parsePolygon` with every corner and edge of every ink box inside it and
- * no vertex inside an ink box (a notch cut into the figure), a `clip:
- * rect()` as a box; any other shape — `path()`, a box keyword, a `url()` —
- * and any mask fail: a shape this rule cannot read is not a shape it
- * passes. A `clip-path` above a box that scrolls fails too: the figure moves
- * under it and one reading at rest is not every scroll. `overflow` is not
- * read here (`a-money-figure-never-clips-itself`'s).
+ * (`withTransformsHeldOff`, once a measurement for every figure, put back
+ * through the CSSOM), as `cycleFigureFaults` reads the Cycle card, so a
+ * swaying tag is read in the frame its polygon is written in. A `clip-path`
+ * `inset()` — with its `round` corners' curves (`insetRounded`) —
+ * `circle()` or `ellipse()` is resolved, a `polygon()` in the reference box
+ * it names (`polygonIn`) with every corner and edge of every ink box inside
+ * it and no vertex inside an ink box (a notch cut into the figure), a
+ * `clip: rect()` as a box; any other shape — `path()`, a box keyword, a
+ * `url()` — and any mask fail: a shape this rule cannot read is not a shape
+ * it passes. A `clip-path` above a box that scrolls fails too: the figure
+ * moves under it and one reading at rest is not every scroll. `overflow` is
+ * not read here (`a-money-figure-never-clips-itself`'s, which reads a
+ * rounded box's corners as curves since round 4).
  *
  * Not read, stated: a figure a look hides whole — a money node not
  * rendered (`display: none` on it or above it, `content-visibility`) is
@@ -2996,37 +3126,69 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * only the price role and "You pay" are held to having a box at all
  * (`coveredBy`); an element under the subject that is not rendered; where
  * the figure's box stands (`DRESS_FREE`'s placement: a figure moved is the
- * coverage, spill and clip rules'); a filter, opacity, transform or blend
- * on a box above the surface; a shrink by a font feature
- * (`font-variant-position`, `sups`), which keeps the computed size the type
- * floor reads; an in-flow `::before` or `::after` of a box above it (the
- * contrast pass's look-pseudo frames read their paint inside a protected
- * box); a `:hover` or `:focus` state, and a transition until it runs; the
- * figure's words beside it (`.item-from`, `.item-u`); a clip above the
- * stall. Counted per look (`dressByClass`), and the figures read under a
- * box's `clip-path` or clip per look too (`dressClipByClass`): the runner
- * owes a read on every look each geometry pass painted and, on a pass that
- * painted Rural, a figure read under its tag's clip-path
- * (`probe-coverage.mjs`).
+ * coverage, spill and clip rules'); a box's ground above the figure (its
+ * background, its shadow: the contrast pass's, on the screens it samples);
+ * a shrink by a font feature (`font-variant-position`, `sups`), which keeps
+ * the computed size the type floor reads; the glyphs a look's own face
+ * draws (intake's); an in-flow `::before` or `::after` of a box above it
+ * (the contrast pass's look-pseudo frames read their paint inside a
+ * protected box); a stack of glows (each blurred as far as it stands off);
+ * a neighbour's shadow from farther than the figure's grandparent, or from
+ * the rain's outline; a `:hover` or `:focus` state, and a transition until
+ * it runs; a clip above the stall. Counted per look and per surface
+ * (`dressByClass`, `dressSurface`), and the figures read under a box's
+ * `clip-path` or clip per look (`dressClipByClass`): the runner owes a read
+ * on every surface each geometry pass paints, on every look it painted,
+ * and, on a pass that painted Rural, a figure read under its tag's
+ * clip-path (`probe-coverage.mjs`).
  */
 const DRESS_CHECK = 'a-money-figure-is-never-misdressed';
-/** Money subjects read, per look class. */
-const dressByClass: Record<string, number> = {};
+/** Money subjects read, per look class and per surface (`dressSurface`). */
+const dressByClass: Record<string, Record<string, number>> = {};
+/** The money nodes whose text is no figure: an address and a record's bytes wrap anywhere by design. */
+const NOT_FIGURE_TEXT = '.addr-short, .addr-full, [data-role="publish-hex"], [data-role="describe-hex"]';
+
+/**
+ * Where a money subject stands, for the coverage the runner owes by surface
+ * (the re-review's P3, round 1's P3-3 again: one read a look let a surface
+ * stop being read and stay green): the stream's card and ticker, the wall's
+ * Cycle card, its payment plate and its rows, a printed tag, a sheet, the
+ * sign, the selection strip, an item face, a shop row (its foot included),
+ * an Activity receipt, the door's open control, the Studio, and any other
+ * card (the first stall's).
+ */
+function dressSurface(node: Element): string {
+    if (node.closest('.broadcast') !== null) return node.closest('.tk') !== null ? 'ticker' : 'stream';
+    if (node.closest(".shop-window[data-mode='cycle']") !== null) return 'cycle';
+    if (node.closest('.shop-window') !== null) return node.closest('.sw-paying') !== null ? 'plate' : 'wall';
+    if (node.closest('.poster-page') !== null) return 'tag';
+    if (node.closest('.sheet') !== null) return 'sheet';
+    if (node.closest('.stall-head') !== null) return 'sign';
+    if (node.closest('.sel-strip') !== null) return 'strip';
+    if (node.closest('.item-face, .face-x') !== null) return 'face';
+    if (node.closest('.item-head, .item') !== null) return 'row';
+    if (node.matches('[data-role="receipt-amount"]')) return 'activity';
+    if (node.closest('.door-unit') !== null) return 'door';
+    if (node.closest('.studio') !== null) return 'studio';
+    return 'card';
+}
 /** Money subjects read under a box's `clip-path` or `clip`, per look class. */
 const dressClipByClass: Record<string, number> = {};
 /** The largest turn a box holding a figure may take: a tilt, not a turn (Rural's tag sways ±0.8°, its rows tilt 0.6°). */
 const DRESS_TILT_DEG = 10;
 /**
- * How far a sharp `text-shadow` layer may stand off the glyphs it copies, as
- * a share of the text's size: under a digit's stem, so the copy overlaps the
- * stroke it copies and reads as depth (the thinnest stem of a served face's
+ * How far apart the sharp copies of a figure's glyphs may stand — every
+ * sharp `text-shadow` layer and the glyph itself, two by two — as a share of
+ * the text's size: under a digit's stem, so every copy overlaps the stroke
+ * it copies and the set reads as depth (the thinnest stem of a served face's
  * figure "1" measured 0.13em, JetBrains Mono 700; Inter 800 0.16em, Stall
- * Serif 700 0.15em, at 100px on a canvas, 2026-10-19). Never under the rain
- * outline's own reach (`OUTLINE_2`'s farthest offset), which small text
- * wears in its ground's colour.
+ * Serif 700 0.15em, at 100px on a canvas, 2026-10-19). The set's spread,
+ * not each layer's offset (the re-review's P2-3: eight layers each 0.12em
+ * off, in a ring, filled the 6's counter). The rain's outline — one opaque
+ * colour, unblurred, exactly one of the two sets (`outlineSet`) — is the
+ * ground's own and stands apart from this read.
  */
 const DRESS_SHADOW_EM = 0.12;
-const DRESS_SHADOW_FLOOR_PX = Math.max(...OUTLINE_2.map(([x, y]) => Math.hypot(x, y)));
 /** A ground at least this opaque is read against the ink; a fainter tint is the contrast pass's. */
 const DRESS_GROUND_ALPHA = 0.5;
 /** The legibility floor (`MIN_CONTRAST` in src/domain/theme.ts). */
@@ -3045,7 +3207,7 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
     ],
     [
         /^border(-.*)?$/,
-        'the box\'s edge, painted in the border area and never in the content where the glyphs stand',
+        'the box\'s edge, painted in the border area: where text runs onto it, its colour is read as a ground under the glyphs (`groundFault`)',
     ],
     [
         /^((min|max)-)?(width|height|inline-size|block-size)$|^aspect-ratio$|^box-sizing$/,
@@ -3056,19 +3218,19 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
         'where the box stands and how it lays out its content: a figure moved is the coverage, spill and clip rules\'',
     ],
     [
-        /^(color|font(-(?!size-adjust$).*)?|line-height|text-transform|text-align(-last)?|text-justify|white-space(-collapse)?|text-wrap(-.*)?|word-break|overflow-wrap|line-break|hyphens|hyphenate-.*|tab-size|text-rendering|-webkit-font-smoothing|text-size-adjust|-webkit-text-size-adjust|text-overflow|text-spacing-trim|text-autospace|hanging-punctuation|-webkit-locale|quotes|line-clamp|-webkit-line-clamp|initial-letter|text-box(-.*)?|dominant-baseline|baseline-.*|alignment-baseline|ruby-.*|text-combine-upright|text-orientation|-webkit-rtl-ordering|-webkit-line-break|math-.*|word-wrap)$/,
-        'the face, size, weight and setting of the text: the same digits in another face; the size has its floor (`small-text-is-at-least-11px`), the faces are held to the served ones statically, and an orientation means nothing across a line',
+        /^(font(-(?!size-adjust$).*)?|line-height|text-transform|text-align(-last)?|text-justify|white-space(-collapse)?|text-wrap(-.*)?|word-break|overflow-wrap|line-break|hyphens|hyphenate-.*|tab-size|text-rendering|-webkit-font-smoothing|text-size-adjust|-webkit-text-size-adjust|text-spacing-trim|text-autospace|hanging-punctuation|-webkit-locale|quotes|initial-letter|text-box(-.*)?|dominant-baseline|baseline-.*|alignment-baseline|ruby-.*|text-combine-upright|text-orientation|-webkit-rtl-ordering|-webkit-line-break|math-.*|word-wrap)$/,
+        'the face, size, weight and setting of the text: the same digits in another face (a served face is held to its glyphs statically; a look\'s own face draws what its glyphs draw, which intake reviews); the size has its floor (`small-text-is-at-least-11px`); where the lines of a figure fall — its line height, where it breaks — is read by what it does (`lineFault`: lines apart, in order, no break inside a digit group); an orientation means nothing across a line',
     ],
     [
         /-color$|^accent-color$|^color-scheme$|^forced-color-adjust$|^print-color-adjust$|^-webkit-print-color-adjust$/,
         'a colour: whether the ink reads on its ground is the contrast pass\'s (a ground in the ink\'s own colour is held below)',
     ],
     [
-        /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin|blend-mode)|backdrop-filter|-webkit-backdrop-filter|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
-        'paints beside, under or behind the glyphs and never over them, or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
+        /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin|blend-mode)|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
+        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers) is read as a ground (`groundFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
     ],
     [
-        /^(cursor|pointer-events|user-select|-webkit-user-select|touch-action|appearance|-webkit-appearance|caret-.*|will-change|-webkit-user-drag|-webkit-user-modify|interactivity|interpolate-size|scroll-timeline(-.*)?|view-timeline(-.*)?|timeline-scope|view-transition-.*|-webkit-highlight|speak(-as)?|dynamic-range-limit|hyphenate-character)$/,
+        /^(cursor|pointer-events|user-select|-webkit-user-select|touch-action|appearance|-webkit-appearance|caret-.*|will-change|-webkit-user-drag|-webkit-user-modify|interactivity|interpolate-size|scroll-timeline(-.*)?|view-timeline(-.*)?|timeline-scope|view-transition-.*|-webkit-highlight|speak(-as)?|dynamic-range-limit)$/,
         'how the box answers a hand or a reader: it paints nothing',
     ],
     [
@@ -3149,6 +3311,11 @@ const DRESS_HELD: ReadonlySet<string> = new Set([
     '-webkit-writing-mode',
     '-webkit-mask-box-image',
     '-webkit-text-decorations-in-effect',
+    'color',
+    'backdrop-filter',
+    'text-overflow',
+    'line-clamp',
+    '-webkit-line-clamp',
 ]);
 
 /** Whether a longhand is one a look may dress freely (`DRESS_FREE`). */
@@ -3258,28 +3425,167 @@ function coloursIn(value: string): Colour[] {
 
 const rgbOf = (c: Colour): { r: number; g: number; b: number } => ({ r: c.rgb[0], g: c.rgb[1], b: c.rgb[2] });
 
-/** Why a ground is in the ink's own colour, or undefined (`DRESS_GROUND_*`). */
-function groundFault(cs: CSSStyleDeclaration): string | undefined {
+/** Two boxes share more than half a pixel each way. */
+const meets = (a: Box, b: Box): boolean =>
+    Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+/** `b` grown by `d` on every side (shrunk for a negative `d`). */
+const grown = (b: Box, d: number): Box => ({ left: b.left - d, right: b.right + d, top: b.top - d, bottom: b.bottom + d });
+/** `b` moved by (x, y). */
+const moved = (b: Box, x: number, y: number): Box => ({ left: b.left + x, right: b.right + x, top: b.top + y, bottom: b.bottom + y });
+/** Box `outer` less box `inner`, as up to four bands. */
+function boxMinus(outer: Box, inner: Box): Box[] {
+    const i = {
+        left: Math.max(outer.left, inner.left),
+        right: Math.min(outer.right, inner.right),
+        top: Math.max(outer.top, inner.top),
+        bottom: Math.min(outer.bottom, inner.bottom),
+    };
+    if (i.right <= i.left || i.bottom <= i.top) return [outer];
+    const out: Box[] = [];
+    if (i.top > outer.top) out.push({ ...outer, bottom: i.top });
+    if (i.bottom < outer.bottom) out.push({ ...outer, top: i.bottom });
+    if (i.left > outer.left) out.push({ left: outer.left, right: i.left, top: i.top, bottom: i.bottom });
+    if (i.right < outer.right) out.push({ left: i.right, right: outer.right, top: i.top, bottom: i.bottom });
+    return out;
+}
+
+/** A computed `box-shadow` layer, its colour whole (the halo rule's `boxShadowsOf` reads its alpha alone). */
+type DressShadow = { colour: Colour; x: number; y: number; blur: number; spread: number; inset: boolean };
+/** A computed `box-shadow` as its layers, or undefined when a layer does not read. */
+function dressShadowsOf(value: string): DressShadow[] | undefined {
+    if (value === 'none' || value === '') return [];
+    const out: DressShadow[] = [];
+    for (const part of splitLayers(value)) {
+        const m = /(rgba?\([^)]*\)|color\([^)]*\)|oklab\([^)]*\))/.exec(part);
+        const colour = m === null ? undefined : colourOf(m[1]!);
+        if (m === null || colour === undefined) return undefined;
+        const rest = part.replace(m[1]!, '');
+        const [x = 0, y = 0, blur = 0, spread = 0] = [...rest.matchAll(/(-?[\d.]+)px/g)].map((n) => Number(n[1]));
+        out.push({ colour, x, y, blur, spread, inset: /\binset\b/.test(rest) });
+    }
+    return out;
+}
+
+/** Why a `backdrop-filter` is not a blur alone, or undefined: any other function repaints the ground behind the glyphs as a function of what is behind it, which no read here can know. */
+function backdropFault(value: string): string | undefined {
+    return value === 'none' || value === '' || /^(blur\([^)]*\)\s*)+$/.test(value.trim())
+        ? undefined
+        : `a backdrop-filter (${value.slice(0, 60)}): it repaints the ground behind the glyphs, a ground this rule cannot read`;
+}
+
+/** A computed `border-image-outset` against the border widths, as one reach outward (the largest side). */
+function borderImageReach(cs: CSSStyleDeclaration): number {
+    const widths = [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth].map((v) => Number.parseFloat(v) || 0);
+    const parts = cs.borderImageOutset.trim().split(/\s+/);
+    return Math.max(
+        0,
+        ...parts.map((v, i) => (v.endsWith('px') ? Number.parseFloat(v) : (Number.parseFloat(v) || 0) * (widths[i % 4] ?? 0))),
+    );
+}
+
+/**
+ * Why something paints the ink's own colour under the glyphs, or undefined
+ * (`DRESS_GROUND_*`; the re-review's P1-1). Every paint an element puts
+ * under its own text is read, each where it paints: the background colour
+ * and its image's layers over their clip box; every `box-shadow` layer, an
+ * inset one over the padding box outside its hole (the padding box moved by
+ * its offset and shrunk by its spread), an outer one outside the border box;
+ * every border side that has a width; and a `border-image`, over the
+ * padding box where its slice says `fill`, over its border bands (and its
+ * outset) otherwise. A paint at least half opaque that reads under
+ * `MIN_CONTRAST` against the ink, over any ink of the element (`inks`),
+ * fails; a picture there (`url()`, `image-set()`) is a ground this rule
+ * cannot read, and fails. `inks` is asked only when a paint's colour fails.
+ */
+function groundFault(el: Element, cs: CSSStyleDeclaration, inks: () => readonly Box[]): string | undefined {
     const ink = inkOf(cs);
     if (ink === undefined) return undefined;
-    const against = (c: Colour, where: string): string | undefined => {
+    const fails = (c: Colour): number | undefined => {
         if (c.alpha < DRESS_GROUND_ALPHA) return undefined;
         const ratio = contrastRatio(rgbOf(c), rgbOf(ink));
-        return ratio < DRESS_GROUND_CONTRAST
-            ? `a ground its own ink reads at ${ratio.toFixed(2)}:1 on (${where} rgb(${c.rgb.join(', ')}) under ink rgb(${ink.rgb.join(', ')}))`
-            : undefined;
+        return ratio < DRESS_GROUND_CONTRAST ? ratio : undefined;
     };
+    const say = (what: string, c: Colour, ratio: number): string =>
+        `${what} its own ink reads at ${ratio.toFixed(2)}:1 on, under its glyphs (rgb(${c.rgb.join(', ')}) under ink rgb(${ink.rgb.join(', ')}))`;
+    // A box that clips its content (an `overflow` but visible, a painting
+    // `contain`) paints no glyph of its own outside its padding box.
+    const clipsOwn = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || /\b(?:paint|strict|content)\b/.test(cs.contain);
+    const painted = (i: Box): Box =>
+        clipsOwn ? { left: Math.max(i.left, pad.left), right: Math.min(i.right, pad.right), top: Math.max(i.top, pad.top), bottom: Math.min(i.bottom, pad.bottom) } : i;
+    const under = (region: readonly Box[]): boolean => inks().some((i) => region.some((r) => meets(painted(i), r)));
+    const picture = (v: string): boolean => /url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(v);
+    const r = el.getBoundingClientRect();
+    const border: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    const bw = {
+        top: Number.parseFloat(cs.borderTopWidth) || 0,
+        right: Number.parseFloat(cs.borderRightWidth) || 0,
+        bottom: Number.parseFloat(cs.borderBottomWidth) || 0,
+        left: Number.parseFloat(cs.borderLeftWidth) || 0,
+    };
+    const pad: Box = { left: border.left + bw.left, top: border.top + bw.top, right: border.right - bw.right, bottom: border.bottom - bw.bottom };
+    const content: Box = {
+        left: pad.left + (Number.parseFloat(cs.paddingLeft) || 0),
+        top: pad.top + (Number.parseFloat(cs.paddingTop) || 0),
+        right: pad.right - (Number.parseFloat(cs.paddingRight) || 0),
+        bottom: pad.bottom - (Number.parseFloat(cs.paddingBottom) || 0),
+    };
+    const clipBox = (k: string): Box => (k.includes('content') ? content : k.includes('padding') ? pad : border);
+    const clips = cs.backgroundClip.split(',').map((v) => v.trim());
+    // The background colour paints over the last layer's clip box.
     const bg = colourOf(cs.backgroundColor);
-    const fromColour = bg === undefined ? undefined : against(bg, 'background-color');
-    if (fromColour !== undefined) return fromColour;
+    const bgRatio = bg === undefined ? undefined : fails(bg);
+    if (bg !== undefined && bgRatio !== undefined && under([clipBox(clips[clips.length - 1] ?? 'border-box')])) return say('a ground', bg, bgRatio);
     const image = cs.backgroundImage;
-    if (image === 'none') return undefined;
-    if (/url\(|image-set\(|cross-fade\(|element\(|paint\(/.test(image)) {
-        return `a picture under its glyphs (${image.slice(0, 60)}), a ground this rule cannot read`;
+    if (image !== 'none') {
+        const layers = splitLayers(image);
+        for (let i = 0; i < layers.length; i += 1) {
+            const box = clipBox(clips[i % clips.length] ?? 'border-box');
+            if (picture(layers[i]!)) {
+                if (under([box])) return `a picture under its glyphs (${layers[i]!.slice(0, 60)}), a ground this rule cannot read`;
+                continue;
+            }
+            for (const c of coloursIn(layers[i]!)) {
+                const ratio = fails(c);
+                if (ratio !== undefined && under([box])) return say('a gradient stop', c, ratio);
+            }
+        }
     }
-    for (const c of coloursIn(image)) {
-        const why = against(c, 'a gradient stop');
-        if (why !== undefined) return why;
+    const shadows = dressShadowsOf(cs.boxShadow);
+    if (shadows === undefined) return `a box-shadow this rule cannot read (${cs.boxShadow.slice(0, 60)})`;
+    for (const sh of shadows) {
+        const ratio = fails(sh.colour);
+        if (ratio === undefined) continue;
+        const region = sh.inset ? boxMinus(pad, grown(moved(pad, sh.x, sh.y), -sh.spread)) : boxMinus(grown(moved(border, sh.x, sh.y), sh.spread), border);
+        if (under(region)) return say(sh.inset ? 'an inset box-shadow' : 'a box-shadow', sh.colour, ratio);
+    }
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+        const w = bw[side];
+        const style = cs.getPropertyValue(`border-${side}-style`);
+        if (!(w > 0) || style === 'none' || style === 'hidden') continue;
+        const c = colourOf(cs.getPropertyValue(`border-${side}-color`));
+        const ratio = c === undefined ? undefined : fails(c);
+        if (c === undefined || ratio === undefined) continue;
+        const band: Box =
+            side === 'top'
+                ? { ...border, bottom: border.top + w }
+                : side === 'bottom'
+                  ? { ...border, top: border.bottom - w }
+                  : side === 'left'
+                    ? { ...border, right: border.left + w }
+                    : { ...border, left: border.right - w };
+        if (under([band])) return say(`a ${side} border`, c, ratio);
+    }
+    const source = cs.borderImageSource;
+    if (source !== 'none' && source !== '') {
+        const reach = grown(border, borderImageReach(cs));
+        const region = /\bfill\b/.test(cs.borderImageSlice) ? [reach] : boxMinus(reach, pad);
+        if (under(region)) {
+            if (picture(source)) return `a border image that is a picture (${source.slice(0, 60)}) under its glyphs, a ground this rule cannot read`;
+            for (const c of coloursIn(source)) {
+                const ratio = fails(c);
+                if (ratio !== undefined) return say('a border image', c, ratio);
+            }
+        }
     }
     return undefined;
 }
@@ -3298,21 +3604,102 @@ function decorationFault(cs: CSSStyleDeclaration): string | undefined {
     return undefined;
 }
 
+/** The layers of a computed `text-shadow` the copy reads judge: the sharp ones (blurred less than they stand off), the rain's outline set apart. */
+function sharpCopies(shadows: readonly Shadow[]): Shadow[] {
+    const hard = shadows.filter((sh) => sh.alpha === 1 && sh.blur === 0);
+    const outline =
+        hard.length > 0 &&
+        hard.every((sh) => sh.rgb.every((c, i) => c === hard[0]!.rgb[i])) &&
+        outlineSet(hard.map((sh) => [sh.x, sh.y] as const)) > 0;
+    return shadows.filter((sh) => !(outline && hard.includes(sh)) && sh.alpha > 0 && sh.blur < Math.hypot(sh.x, sh.y));
+}
+
 /**
- * Why a `text-shadow` makes a second figure, or undefined: a layer blurred
- * at least as far as it stands off is a glow or a smudge, and a sharp layer
- * stands within `DRESS_SHADOW_EM` of the text's size (or the outline's
- * reach) of the glyphs it copies.
+ * Why a `text-shadow` makes a second figure or smears the first, or
+ * undefined: a layer blurred at least as far as it stands off is a glow;
+ * the sharp layers and the glyph itself stand within `DRESS_SHADOW_EM` of
+ * the text's size of each other, two by two (the rain's outline aside).
  */
 function shadowFault(value: string, sizePx: number): string | undefined {
     if (value === 'none') return undefined;
-    const reach = Math.max(DRESS_SHADOW_FLOOR_PX, DRESS_SHADOW_EM * sizePx);
-    for (const layer of value.split(/,(?![^()]*\))/)) {
-        const lengths = [...layer.replace(/(?:rgba?|color|oklab)\([^)]*\)/g, '').matchAll(/(-?[\d.]+)px/g)].map((m) => Number(m[1]));
-        const [x = 0, y = 0, blur = 0] = lengths;
-        const off = Math.hypot(x, y);
-        if (off > reach + 0.01 && blur < off) {
-            return `a sharp text-shadow ${x}px ${y}px off its glyphs (blur ${blur}px, ${layer.trim().slice(0, 60)}): a copy farther off than ${reach.toFixed(1)}px stands apart from the stroke it copies, a second figure`;
+    const shadows = shadowsOf(value);
+    if (shadows === undefined) return `a text-shadow this rule cannot read (${value.slice(0, 60)})`;
+    const sharp = sharpCopies(shadows);
+    if (sharp.length === 0) return undefined;
+    const points: (readonly [number, number])[] = [[0, 0], ...sharp.map((sh) => [sh.x, sh.y] as const)];
+    let spread = 0;
+    for (let i = 0; i < points.length; i += 1) {
+        for (let j = i + 1; j < points.length; j += 1) {
+            spread = Math.max(spread, Math.hypot(points[i]![0] - points[j]![0], points[i]![1] - points[j]![1]));
+        }
+    }
+    const reach = DRESS_SHADOW_EM * sizePx;
+    return spread > reach + 0.01
+        ? `${sharp.length} sharp text-shadow layer(s) whose copies, with the glyph itself, stand up to ${spread.toFixed(1)}px apart: copies farther apart than ${reach.toFixed(1)}px (${DRESS_SHADOW_EM}em) stand apart from the strokes they copy, or fill the counters between them`
+        : undefined;
+}
+
+/**
+ * Why a sharp `text-shadow` of a box beside the figure reaches its ink, or
+ * undefined (the re-review's P2-4): every element with text of its own under
+ * the figure's parent and grandparent (its unit, its "from", the words of
+ * its line) but the figure, its own boxes and the boxes it stands in. A
+ * sharp layer's copy of that element's text (its line boxes moved by the
+ * layer's offset and grown by its blur) that meets the figure's ink fails —
+ * painted over the glyphs where the element follows the figure, and where
+ * it comes before, as a ground in the ink's own colour. The rain's outline
+ * and every glow are not read.
+ */
+/** An element with text of its own that wears a sharp `text-shadow`, its copies' layers and its text's line boxes. */
+type Shadower = { el: HTMLElement; sharp: Shadow[]; lines: Box[] } | { el: HTMLElement; unread: string };
+/** The shadowers under a scope, once a measurement: the rows of a list share their grandparent. */
+let shadowersSeen = new Map<Element, Shadower[]>();
+function shadowersUnder(scope: Element): Shadower[] {
+    const known = shadowersSeen.get(scope);
+    if (known !== undefined) return known;
+    const out: Shadower[] = [];
+    const range = document.createRange();
+    for (const el of scope.querySelectorAll<HTMLElement>('*')) {
+        const texts = [...el.childNodes].filter((c) => c.nodeType === Node.TEXT_NODE && (c.textContent ?? '').trim() !== '');
+        if (texts.length === 0) continue;
+        const value = getComputedStyle(el).textShadow;
+        if (value === 'none') continue;
+        const shadows = shadowsOf(value);
+        if (shadows === undefined) {
+            out.push({ el, unread: value });
+            continue;
+        }
+        const sharp = sharpCopies(shadows);
+        if (sharp.length === 0) continue;
+        const lines: Box[] = [];
+        for (const c of texts) {
+            range.selectNodeContents(c);
+            for (const q of range.getClientRects()) if (q.width > 0 && q.height > 0) lines.push({ left: q.left, top: q.top, right: q.right, bottom: q.bottom });
+        }
+        out.push({ el, sharp, lines });
+    }
+    shadowersSeen.set(scope, out);
+    return out;
+}
+
+function neighbourShadowFault(node: HTMLElement, ink: Colour | undefined, inks: () => readonly Box[]): string | undefined {
+    const parent = node.parentElement;
+    const scope = parent?.parentElement !== null && parent?.parentElement !== undefined && !parent.parentElement.classList.contains('stall') ? parent.parentElement : parent;
+    if (scope === null || scope === undefined) return undefined;
+    for (const s of shadowersUnder(scope)) {
+        const el = s.el;
+        if (el === node || node.contains(el) || el.contains(node)) continue;
+        if ('unread' in s) return `stands beside ${describe(el)}, whose text-shadow this rule cannot read (${s.unread.slice(0, 60)})`;
+        const follows = (node.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+        for (const sh of s.sharp) {
+            const copies = s.lines.map((l) => grown(moved(l, sh.x, sh.y), sh.blur));
+            if (!inks().some((i) => copies.some((c) => meets(i, c)))) continue;
+            if (follows) {
+                return `${describe(el)} beside it lays a sharp text-shadow (${sh.x}px ${sh.y}px, rgb(${sh.rgb.join(', ')})) over its glyphs`;
+            }
+            if (ink !== undefined && sh.alpha >= DRESS_GROUND_ALPHA && contrastRatio(rgbOf({ rgb: sh.rgb, alpha: 1 }), rgbOf(ink)) < DRESS_GROUND_CONTRAST) {
+                return `${describe(el)} beside it lays a sharp text-shadow in its ink's own colour (${sh.x}px ${sh.y}px) under its glyphs`;
+            }
         }
     }
     return undefined;
@@ -3426,6 +3813,181 @@ function spacingPiles(text: string, cs: CSSStyleDeclaration): string | undefined
     return undefined;
 }
 
+/** A run of a text node on one line: its text, its line box, its face and its place in the text. */
+type Fragment = { text: string; rect: Box; cs: CSSStyleDeclaration; order: number };
+
+/** The text of `node` as fragments, one per text node and line, in the text's own order. */
+function fragmentsOf(node: Element): Fragment[] {
+    const out: Fragment[] = [];
+    const range = document.createRange();
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+        const text = t as Text;
+        const owner = text.parentElement;
+        if (owner === null || text.data === '') continue;
+        range.selectNodeContents(text);
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+        if (rects.length === 0) continue;
+        const cs = getComputedStyle(owner);
+        if (rects.length === 1) {
+            out.push({ text: text.data, rect: rects[0]!, cs, order: out.length });
+            continue;
+        }
+        // One text node on several lines: each character goes with the line
+        // box its own box stands in.
+        const words = rects.map(() => '');
+        let line = 0;
+        let at = 0;
+        for (const ch of text.data) {
+            range.setStart(text, at);
+            range.setEnd(text, at + ch.length);
+            at += ch.length;
+            const r = range.getBoundingClientRect();
+            if (r.width > 0 || r.height > 0) {
+                const mid = r.top + r.height / 2;
+                const found = rects.findIndex((l) => mid >= l.top && mid <= l.bottom && r.left >= l.left - 1 && r.right <= l.right + 1);
+                if (found >= 0) line = found;
+            }
+            words[line] += ch;
+        }
+        rects.forEach((r, i) => {
+            if (words[i] !== '') out.push({ text: words[i]!, rect: r, cs, order: out.length });
+        });
+    }
+    return out;
+}
+
+/** A fragment's ink across its line: its glyphs' measured reach about its baseline, on a canvas in its face. */
+function fragmentInk(f: Fragment, ctx: CanvasRenderingContext2D): Box & { base: number } {
+    ctx.font = `${f.cs.fontStyle} ${f.cs.fontWeight} ${f.cs.fontSize} ${f.cs.fontFamily}`;
+    ctx.letterSpacing = '0px';
+    const m = ctx.measureText(f.text.trim() === '' ? f.text : f.text.trim());
+    const base = f.rect.top + m.fontBoundingBoxAscent;
+    return { left: f.rect.left, right: f.rect.right, top: base - m.actualBoundingBoxAscent, bottom: base + m.actualBoundingBoxDescent, base };
+}
+
+/** The pixels the glyphs of two lines' fragments share, both at least half covered, drawn on a canvas where they stand. */
+function linesShareInk(a: readonly Fragment[], b: readonly Fragment[], inks: ReadonlyMap<Fragment, Box>): number {
+    const all = [...a, ...b].map((f) => inks.get(f)!);
+    const left = Math.floor(Math.min(...all.map((i) => i.left)) - 4);
+    const top = Math.floor(Math.min(...all.map((i) => i.top)) - 4);
+    const width = Math.ceil(Math.max(...all.map((i) => i.right)) - left + 8);
+    const height = Math.ceil(Math.max(...all.map((i) => i.bottom)) - top + 8);
+    if (width <= 0 || height <= 0 || width * height > 4_000_000) return 0;
+    const canvas = (pileCanvas ??= document.createElement('canvas'));
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    const draw = (frags: readonly Fragment[]): Uint8ClampedArray => {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#000';
+        for (const f of frags) {
+            ctx.font = `${f.cs.fontStyle} ${f.cs.fontWeight} ${f.cs.fontSize} ${f.cs.fontFamily}`;
+            ctx.fontKerning = 'normal';
+            ctx.letterSpacing = f.cs.letterSpacing === 'normal' ? '0px' : f.cs.letterSpacing;
+            ctx.wordSpacing = f.cs.wordSpacing === 'normal' ? '0px' : f.cs.wordSpacing;
+            const m = ctx.measureText(f.text);
+            const painted = f.cs.textTransform === 'uppercase' ? f.text.toUpperCase() : f.cs.textTransform === 'lowercase' ? f.text.toLowerCase() : f.text;
+            ctx.fillText(painted, f.rect.left - left, f.rect.top + m.fontBoundingBoxAscent - top);
+        }
+        return ctx.getImageData(0, 0, width, height).data;
+    };
+    const pa = draw(a);
+    const pb = draw(b);
+    let n = 0;
+    for (let i = 3; i < pa.length; i += 4) if (pa[i]! >= 128 && pb[i]! >= 128) n += 1;
+    return n;
+}
+
+/**
+ * Why the lines of a money node's text misstate it, or undefined (the
+ * re-review's P1-3 and P2-1), read where its text is one inline flow (every
+ * text node of it set in the same block, so a list's rows and a button's
+ * words in their own boxes are not one flow):
+ * - **in order**: its fragments, taken line by line from the top and left to
+ *   right along each line, are the text's own order — multi-column, a
+ *   reversed flow, an `order` or a grid placement that moves a part of the
+ *   figure fails;
+ * - **no break inside a digit group** (`groups`, every money node but an
+ *   address and a record's bytes, which wrap anywhere by design): where one
+ *   line ends and the next begins between two digits, or between a digit and
+ *   a point — `word-break: break-all`, `line-break: anywhere` — fails;
+ * - **lines apart**: two lines whose inks meet are drawn on a canvas where
+ *   they stand, and a pixel both cover at least half fails — a `line-height`
+ *   that piles a broken figure's lines on each other.
+ */
+function lineFault(node: HTMLElement, groups: boolean): string | undefined {
+    const frags = fragmentsOf(node);
+    if (frags.length < 2) return undefined;
+    // One inline flow: the nearest box each text sets its lines in is one box.
+    const flowRoot = (el: Element): Element => {
+        let at = el;
+        while (at !== node && at.parentElement !== null) {
+            const d = getComputedStyle(at).display;
+            if (d !== 'inline' && d !== 'contents') break;
+            at = at.parentElement;
+        }
+        return at;
+    };
+    const roots = new Set<Element>();
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+        if ((t.textContent ?? '').trim() !== '' && t.parentElement !== null) roots.add(flowRoot(t.parentElement));
+    }
+    if (roots.size !== 1) return undefined;
+    // Lines: fragments that stand on one baseline (within 0.15em of the
+    // smaller face, a pixel at least) — never by their boxes' overlap, which
+    // a `line-height` piling two lines on each other makes complete.
+    const canvas = (pileCanvas ??= document.createElement('canvas'));
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    const inks = new Map<Fragment, Box & { base: number }>();
+    for (const f of frags) inks.set(f, fragmentInk(f, ctx));
+    const lines: Fragment[][] = [];
+    for (const f of [...frags].sort((x, y) => inks.get(x)!.base - inks.get(y)!.base || x.rect.left - y.rect.left)) {
+        const base = inks.get(f)!.base;
+        const size = pxOf(f.cs.fontSize);
+        const line = lines.find((l) => Math.abs(inks.get(l[0]!)!.base - base) <= Math.max(1, 0.15 * Math.min(size, pxOf(l[0]!.cs.fontSize))));
+        if (line === undefined) lines.push([f]);
+        else line.push(f);
+    }
+    lines.sort((x, y) => inks.get(x[0]!)!.base - inks.get(y[0]!)!.base);
+    for (const l of lines) l.sort((x, y) => x.rect.left - y.rect.left);
+    const seen = lines.flat();
+    for (let i = 1; i < seen.length; i += 1) {
+        if (seen[i]!.order < seen[i - 1]!.order) {
+            return `its text is drawn out of its order: "${seen[i - 1]!.text.trim().slice(0, 12)}" stands before "${seen[i]!.text.trim().slice(0, 12)}" though it comes after (columns, a reversed flow or a moved part)`;
+        }
+    }
+    if (lines.length < 2) return undefined;
+    const lineOf = new Map<Fragment, number>();
+    lines.forEach((l, i) => l.forEach((f) => lineOf.set(f, i)));
+    if (groups) {
+        for (let i = 1; i < frags.length; i += 1) {
+            const a = frags[i - 1]!;
+            const b = frags[i]!;
+            if (lineOf.get(a) === lineOf.get(b)) continue;
+            const x = a.text[a.text.length - 1] ?? '';
+            const y = b.text[0] ?? '';
+            const digit = /[0-9]/;
+            if ((digit.test(x) && digit.test(y)) || (x === '.' && digit.test(y)) || (digit.test(x) && y === '.')) {
+                return `a line break inside a digit group ("…${a.text.trim().slice(-4)}" / "${b.text.trim().slice(0, 4)}…"): a group split over two lines reads as two numbers`;
+            }
+        }
+    }
+    const span = (l: readonly Fragment[]): Box => {
+        const b = l.map((f) => inks.get(f)!);
+        return { left: Math.min(...b.map((i) => i.left)), right: Math.max(...b.map((i) => i.right)), top: Math.min(...b.map((i) => i.top)), bottom: Math.max(...b.map((i) => i.bottom)) };
+    };
+    for (let i = 1; i < lines.length; i += 1) {
+        if (!meets(span(lines[i - 1]!), span(lines[i]!))) continue;
+        const shared = linesShareInk(lines[i - 1]!, lines[i]!, inks);
+        if (shared > 0) {
+            return `its lines pile on each other: ${shared} pixels of "${lines[i - 1]!.map((f) => f.text).join('').trim().slice(0, 16)}" and "${lines[i]!.map((f) => f.text).join('').trim().slice(0, 16)}" overlap (line-height ${getComputedStyle(node).lineHeight})`;
+        }
+    }
+    return undefined;
+}
+
 /** Why a held longhand's value fails on the figure or an element under it with text, or undefined. */
 function dressHeldFault(prop: string, value: string, cs: CSSStyleDeclaration): string | undefined {
     switch (prop) {
@@ -3508,6 +4070,20 @@ function dressHeldFault(prop: string, value: string, cs: CSSStyleDeclaration): s
             return undefined;
         case 'content':
             return value === 'normal' || value === 'none' ? undefined : `content ${value.slice(0, 40)}: the element's own text replaced`;
+        case 'color': {
+            // The ink's own alpha is a fade like `opacity` (the re-review's
+            // P1-2: `rgb(… / 0.06)` left "You pay" at 6% with every check
+            // green). The fill is held to `color`, so it is held with it.
+            const c = colourOf(value);
+            return c !== undefined && c.alpha < 0.999 ? `an ink at alpha ${c.alpha} (${value}): a faded ink is a faded figure` : undefined;
+        }
+        case 'backdrop-filter':
+            return backdropFault(value);
+        case 'text-overflow':
+            return value === 'clip' || value === '' ? undefined : `text-overflow ${value}: an ellipsis printed in place of digits`;
+        case 'line-clamp':
+        case '-webkit-line-clamp':
+            return value === 'none' || value === '' ? undefined : `${prop} ${value}: the figure's later lines cut away and an ellipsis printed in their place`;
         case '-webkit-writing-mode':
             return value === 'horizontal-tb' ? undefined : `writing-mode ${value}: a figure read across is read down`;
         case '-webkit-mask-box-image':
@@ -3633,12 +4209,20 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return value === 'none' ? undefined : `a motion path (${value.slice(0, 40)})`;
         case 'zoom':
             return Number.parseFloat(value) === 1 ? undefined : `zoom ${value}`;
-        case 'transform':
+        case 'transform': {
+            // A screen hung sideways turns the whole stall a quarter turn
+            // (`[data-turn]`, window.css): the figure stands upright on the
+            // screen it is painted for.
+            const t = matrixParts(value);
+            if (el.matches('.stall[data-turn]') && t !== undefined && Math.abs(Math.abs(t.deg) - 90) < 0.01 && Math.abs(t.sx - 1) < 0.001 && Math.abs(t.sy - 1) < 0.001 && t.det > 0) return undefined;
             return boxTransformFault(value);
+        }
         case 'rotate':
             return boxRotateFault(value);
         case 'scale':
             return boxScaleFault(value);
+        case 'backdrop-filter':
+            return backdropFault(value);
         case 'clip-path':
             // Read at rest against the ink (3.); a clip that moves is read at no instant.
             return undefined;
@@ -3646,7 +4230,7 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return undefined;
     }
 }
-const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale'] as const;
+const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'backdrop-filter'] as const;
 
 /**
  * An untouched element's every longhand outside `stall` (the docblock's
@@ -3770,6 +4354,78 @@ function withTransformsHeldOff<T>(els: Iterable<HTMLElement>, read: () => T): T 
 }
 
 /**
+ * A box's reference box for a basic shape (`border-box` by default): the
+ * box `padding-box` and `content-box` name inside it, `margin-box` outside
+ * it; `fill-box` is the content box and `stroke-box` and `view-box` the
+ * border box, for a box with a CSS layout box.
+ */
+function referenceBox(el: Element, cs: CSSStyleDeclaration, keyword: string): DOMRect {
+    const r = el.getBoundingClientRect();
+    const n = (v: string): number => Number.parseFloat(v) || 0;
+    const inset = (t: number, rr: number, b: number, l: number): DOMRect => new DOMRect(r.left + l, r.top + t, r.width - l - rr, r.height - t - b);
+    const pad = (): [number, number, number, number] => [n(cs.borderTopWidth), n(cs.borderRightWidth), n(cs.borderBottomWidth), n(cs.borderLeftWidth)];
+    switch (keyword) {
+        case 'padding-box':
+            return inset(...pad());
+        case 'content-box':
+        case 'fill-box': {
+            const [t, rr, b, l] = pad();
+            return inset(t + n(cs.paddingTop), rr + n(cs.paddingRight), b + n(cs.paddingBottom), l + n(cs.paddingLeft));
+        }
+        case 'margin-box':
+            return inset(-n(cs.marginTop), -n(cs.marginRight), -n(cs.marginBottom), -n(cs.marginLeft));
+        default:
+            return r;
+    }
+}
+
+/**
+ * A computed `polygon(…)` with its reference box resolved (the re-review's
+ * P3: `parsePolygon` reads a polygon against the border box and refuses a
+ * keyword; here the keyword names the frame the vertices are written in),
+ * or undefined for a grammar `parsePolygon` refuses.
+ */
+function polygonIn(el: Element, cs: CSSStyleDeclaration): { poly: [number, number][]; frame: DOMRect } | undefined {
+    const value = cs.clipPath;
+    const close = value.lastIndexOf(')');
+    const keyword = value.slice(close + 1).trim();
+    if (keyword !== '' && !/^(border-box|padding-box|content-box|margin-box|fill-box|stroke-box|view-box)$/.test(keyword)) return undefined;
+    const frame = referenceBox(el, cs, keyword);
+    const poly = parsePolygon(value.slice(0, close + 1), frame.width, frame.height);
+    return poly === undefined ? undefined : { poly, frame };
+}
+
+/**
+ * A computed `inset(… round …)` as its box and its fitted corner radii,
+ * undefined for an inset with no `round`, and null for one this read does
+ * not parse.
+ */
+function insetRounded(el: Element, value: string): { box: Box; radii: Radii } | null | undefined {
+    const m = /^inset\((.*) round (.*)\)\s*(border-box|padding-box|content-box|margin-box|fill-box|stroke-box|view-box)?$/.exec(value.trim());
+    if (m === null) return value.includes(' round ') ? null : undefined;
+    const ref = referenceBox(el, getComputedStyle(el), m[3] ?? 'border-box');
+    const len = (v: string, basis: number): number => (v.endsWith('%') ? (Number.parseFloat(v) / 100) * basis : Number.parseFloat(v));
+    const [ts = '0', rs = ts, bs = ts, ls = rs] = m[1]!.trim().split(/\s+/);
+    const [t, r, b, l] = [len(ts, ref.height), len(rs, ref.width), len(bs, ref.height), len(ls, ref.width)];
+    if (![t, r, b, l].every((v) => Number.isFinite(v))) return null;
+    const box: Box = { left: ref.left + l!, top: ref.top + t!, right: ref.right - r!, bottom: ref.bottom - b! };
+    const [hs, vs] = m[2]!.split('/').map((p) => p.trim().split(/\s+/));
+    const four = (vals: string[] | undefined, basis: number): number[] | undefined => {
+        if (vals === undefined) return undefined;
+        const [a = '0', bb = a, c = a, d = bb] = vals;
+        const n = [a, bb, c, d].map((v) => len(v, basis));
+        return n.every((v) => Number.isFinite(v)) ? n : undefined;
+    };
+    const w = box.right - box.left;
+    const h = box.bottom - box.top;
+    const hr = four(hs, ref.width);
+    const vr = vs === undefined ? (hs === undefined ? undefined : four(hs, ref.height)) : four(vs, ref.height);
+    if (hr === undefined || vr === undefined) return null;
+    const radii = fittedRadii({ tl: [hr[0]!, vr[0]!], tr: [hr[1]!, vr[1]!], br: [hr[2]!, vr[2]!], bl: [hr[3]!, vr[3]!] }, w, h);
+    return { box, radii };
+}
+
+/**
  * Why a clip on `chain` (the boxes above `node` up to its stall) cuts the
  * figure's ink, or undefined (3. in the docblock), read with every
  * transform from `node` to the stall held off (`withTransformsHeldOff`).
@@ -3794,13 +4450,25 @@ function clipCut(node: HTMLElement, chain: readonly HTMLElement[]): string | und
             }
             const shape = paintClips(at).find((c) => c.kind !== 'axes');
             let out: Box | undefined;
-            if (shape?.kind === 'shape') {
+            const rounded = cs.clipPath.startsWith('inset(') ? insetRounded(at, cs.clipPath) : undefined;
+            if (rounded === null) return `stands under a clip-path this rule cannot read on ${where}: ${cs.clipPath.slice(0, 60)}`;
+            if (rounded !== undefined) {
+                // An `inset(… round …)` is the box with its corners' curves
+                // (`signInk`'s shape reads it square).
+                out = inks.find((l) =>
+                    [
+                        [l.left, l.top],
+                        [l.right, l.top],
+                        [l.right, l.bottom],
+                        [l.left, l.bottom],
+                    ].some(([x, y]) => !insideRounded(rounded.box, rounded.radii, x!, y!)),
+                );
+            } else if (shape?.kind === 'shape') {
                 out = inks.find((l) => !shape.inside(l));
             } else {
-                const frame = at.getBoundingClientRect();
-                const poly = cs.clipPath.startsWith('polygon(') ? parsePolygon(cs.clipPath, frame.width, frame.height) : undefined;
+                const poly = cs.clipPath.startsWith('polygon(') ? polygonIn(at, cs) : undefined;
                 if (poly === undefined) return `stands under a clip-path this rule cannot read on ${where}: ${cs.clipPath.slice(0, 60)}`;
-                out = inks.find((l) => !boxInPolygon(l, poly, frame));
+                out = inks.find((l) => !boxInPolygon(l, poly.poly, poly.frame));
             }
             if (out !== undefined) {
                 return `has its ink at ${Math.round(out.left)}–${Math.round(out.right)} × ${Math.round(out.top)}–${Math.round(out.bottom)} cut by ${where}'s clip-path ${cs.clipPath.slice(0, 60)}`;
@@ -3839,6 +4507,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
     boxFaultsSeen = new Map();
     clipsSeen = new Map();
+    shadowersSeen = new Map();
     const read: { node: HTMLElement; faults: string[]; chain: HTMLElement[] | undefined }[] = [];
     const subjects = new Set<HTMLElement>(document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`));
     for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
@@ -3848,7 +4517,9 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
         if (node.closest('.deck-stall') !== null || !rendersAt(node)) continue;
         const stall = node.closest('.stall');
         if (stall === null) continue;
-        dressByClass[measuringClass] = (dressByClass[measuringClass] ?? 0) + 1;
+        const byLook = (dressByClass[measuringClass] ??= {});
+        const surface = dressSurface(node);
+        byLook[surface] = (byLook[surface] ?? 0) + 1;
         const faults: string[] = [];
         const ref = dressReference(stall);
         // 1. Its own dress, and every element under it with text but a
@@ -3867,7 +4538,8 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
                 if (value === (ref.get(prop) ?? '')) continue;
                 faults.push(`${name} computes ${prop} ${value || '(nothing)'}, which no rule lets a look dress (untouched: ${ref.get(prop) || '(nothing)'})`);
             }
-            for (const why of [groundFault(cs), outlineFault(el, cs), decorationFault(cs)]) {
+            let inks: readonly Box[] | undefined;
+            for (const why of [groundFault(el, cs, () => (inks ??= inkLines(el))), outlineFault(el, cs), decorationFault(cs)]) {
                 if (why !== undefined) faults.push(`${name}: ${why}`);
             }
             if (pxOf(cs.letterSpacing) < 0) {
@@ -3905,24 +4577,38 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
                 }
             }
         }
-        // 2. The boxes that hold it, up to its surface: the paint effects that
-        // are not inherited, and the lines a decoration draws across it.
-        for (let at: HTMLElement | null = node.parentElement; at !== null && !at.matches(SELF_CLIP_ABOVE); at = at.parentElement) {
+        // 2. Every box that holds it, up to and with the stall: the paint
+        // effects that are not inherited, and the lines a decoration draws
+        // across it.
+        for (let at: HTMLElement | null = node.parentElement; at !== null && at.id !== 'app'; at = at.parentElement) {
             faults.push(...boxFaults(at));
-            if (at.matches(SELF_CLIP_SURFACE)) break;
+            if (at === stall) break;
         }
         read.push({ node, faults, chain: clipChainOf(node) });
     }
-    // 3. Every clip above a figure, up to the stall, in its own frame: one
-    // hold of the transforms for every figure that stands under a clip.
-    const clipped = read.filter((r) => r.chain !== undefined);
-    if (clipped.length > 0) {
+    // In each figure's own frame — one hold of every transform from every
+    // figure up to its stall (Rural's tag sways and its rows tilt, so a line
+    // of a figure stands on no one baseline at rest): the lines of its text
+    // and a neighbour's shadow over its ink, and 3., every clip above it up
+    // to the stall.
+    if (read.length > 0) {
         const boxes = new Set<HTMLElement>();
-        for (const r of clipped) for (const el of [r.node, ...r.chain!]) boxes.add(el);
+        for (const r of read) {
+            for (let at: HTMLElement | null = r.node; at !== null && at.id !== 'app'; at = at.parentElement) {
+                if (boxes.has(at)) break;
+                boxes.add(at);
+            }
+        }
         withTransformsHeldOff(boxes, () => {
-            for (const r of clipped) {
+            for (const r of read) {
+                const lines = lineFault(r.node, !r.node.matches(NOT_FIGURE_TEXT));
+                if (lines !== undefined) r.faults.push(lines);
+                let inks: readonly Box[] | undefined;
+                const beside = neighbourShadowFault(r.node, inkOf(getComputedStyle(r.node)), () => (inks ??= inkLines(r.node)));
+                if (beside !== undefined) r.faults.push(beside);
+                if (r.chain === undefined) continue;
                 dressClipByClass[measuringClass] = (dressClipByClass[measuringClass] ?? 0) + 1;
-                const why = clipCut(r.node, r.chain!);
+                const why = clipCut(r.node, r.chain);
                 if (why !== undefined) r.faults.push(why);
             }
         });

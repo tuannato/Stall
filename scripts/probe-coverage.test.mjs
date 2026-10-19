@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, FIGURE_SURFACES_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, DRESS_SURFACES_OWED, FIGURE_SURFACES_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -31,12 +31,16 @@ const cardRead = {
  */
 /** Every surface a broken figure stands on (round 2: the ink rule is owed per surface). */
 const EVERY_SURFACE = Object.fromEntries(['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row', 'wall', 'cycle'].map((surface) => [surface, 4]));
+/** Every surface a money figure stands on (round 4: the dress rule is owed per surface). */
+const EVERY_DRESS_SURFACE = Object.fromEntries(
+    ['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag', 'cycle', 'plate', 'wall', 'stream', 'ticker'].map((surface) => [surface, 30]),
+);
 const moneyRead = {
     figureInkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_SURFACE])),
     selfClipByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 80])),
     // D-2026-10-19-01: every look's money figures held to their dress, and
     // Rural's under its notched tag.
-    dressByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 900])),
+    dressByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_DRESS_SURFACE])),
     dressClipByClass: { 't-rural': 300 },
 };
 const full = {
@@ -786,18 +790,35 @@ describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
      * the figure's column — a figure read under that clip, or the half of
      * the rule that reads a clip's shape against the ink compared nothing.
      */
-    it('owes a read on every look each geometry pass painted, and names the look that read none', () => {
+    it('owes the surfaces each geometry pass paints, by name', () => {
+        const page = ['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag'];
+        const wall = ['cycle', 'plate', 'wall'];
+        assert.deepEqual(DRESS_SURFACES_OWED, {
+            mobile: page,
+            desktop: [...page, 'cycle', 'wall'],
+            narrow: ['activity', 'face', 'row', 'sheet', 'sign', 'strip', 'tag'],
+            canvas: [...wall, 'stream', 'ticker'],
+            portrait: wall,
+            tablet: wall,
+            'desk-wall': wall,
+            'short-wall': wall,
+        });
+        assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY].sort());
+    });
+
+    it('owes a read on every surface of every look each geometry pass painted, and names the look and surface that read none', () => {
         for (const pass of GEOMETRY) {
             const read = { ...full, ...painted, wallControlRolesByClass: undefined };
             assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => DRESS_RULE.test(gap)), [], pass);
+            const surface = DRESS_SURFACES_OWED[pass].at(-1);
             assert.deepEqual(
-                probeCoverageGaps(pass, { ...read, dressByClass: { ...read.dressByClass, 't-neo': 0 } }).filter((gap) => DRESS_RULE.test(gap)),
-                ['a-money-figure-is-never-misdressed read no money figure on a t-neo stall'],
+                probeCoverageGaps(pass, { ...read, dressByClass: { ...read.dressByClass, 't-neo': { ...EVERY_DRESS_SURFACE, [surface]: 0 } } }).filter((gap) => DRESS_RULE.test(gap)),
+                [`a-money-figure-is-never-misdressed read no money figure on a t-neo stall's ${surface}`],
                 pass,
             );
             assert.equal(
                 probeCoverageGaps(pass, { ...read, dressByClass: {} }).filter((gap) => DRESS_RULE.test(gap)).length,
-                CARD_LOOKS.length,
+                CARD_LOOKS.length * DRESS_SURFACES_OWED[pass].length,
                 pass,
             );
         }
@@ -822,7 +843,7 @@ describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
             );
             // A pass that painted no Rural (a kit run) owes no clip.
             assert.deepEqual(
-                probeCoverageGaps(pass, { ...read, sheetClasses: ['t-workshop'], dressByClass: { 't-workshop': 40 } }).filter((gap) => DRESS_RULE.test(gap)),
+                probeCoverageGaps(pass, { ...read, sheetClasses: ['t-workshop'], dressByClass: { 't-workshop': EVERY_DRESS_SURFACE } }).filter((gap) => DRESS_RULE.test(gap)),
                 [],
                 pass,
             );
@@ -830,11 +851,11 @@ describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
     });
 
     it('prints what it read on every geometry pass\'s line', () => {
-        const read = { dressByClass: { 't-neo': 12, 't-rural': 9 }, dressClipByClass: { 't-rural': 4 } };
-        assert.match(probeCoverageLine('narrow', read), / · money figures held to their dress: t-neo 12, t-rural 9 · under a clip: t-rural 4/);
+        const read = { dressByClass: { 't-neo': { row: 12 }, 't-rural': { face: 9, row: 2 } }, dressClipByClass: { 't-rural': 4 } };
+        assert.match(probeCoverageLine('narrow', read), / · money figures held to their dress: t-neo row:12, t-rural face:9\/row:2 · under a clip: t-rural 4/);
         assert.match(
-            probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, dressByClass: { 't-modern': 3 } }),
-            /^wall controls read: 2 · status line asked: 3 · money figures held to their dress: t-modern 3 · under a clip: none$/,
+            probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, dressByClass: { 't-modern': { wall: 3 } } }),
+            /^wall controls read: 2 · status line asked: 3 · money figures held to their dress: t-modern wall:3 · under a clip: none$/,
         );
     });
 });

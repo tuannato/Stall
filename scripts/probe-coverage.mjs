@@ -100,7 +100,9 @@
  *   (`selfClipByClass`).
  * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
  *   geometry pass owes, on every look it painted, money figures held to
- *   their dress (`dressByClass`), and, where it painted Rural, a money
+ *   their dress on every surface it paints one (`DRESS_SURFACES_OWED`,
+ *   `dressByClass`, per look and per surface since round 4), and, where it
+ *   painted Rural, a money
  *   figure read under a box's `clip-path` on Rural (`dressClipByClass`) —
  *   Rural's notched tag is the subject, so a pass that read none stopped
  *   measuring the half of the rule that reads a clip's shape against the
@@ -180,6 +182,29 @@ export const FIGURE_SURFACES_OWED = Object.freeze({
     tablet: WALL_SURFACES,
     'desk-wall': WALL_SURFACES,
     'short-wall': WALL_SURFACES,
+});
+/**
+ * The surfaces each geometry pass paints a money figure on, every look
+ * (`dressSurface` in `layout/probe.ts`; measured 2026-10-19): the page
+ * passes the sign, a shop row, an item face, a sheet, the selection strip, a
+ * printed tag, an Activity receipt, the Studio and a card (the first
+ * stall's); the desk also the wall's rows and Cycle card; the narrow phone
+ * its money screens' seven; the canvas the wall, its payment plate, its
+ * Cycle card and the stream's card and ticker; the other wall passes the
+ * wall, the plate and the Cycle card. The door's open control is Modern's
+ * alone (the door wears the default look) and is owed nowhere.
+ */
+const DRESS_PAGE_SURFACES = Object.freeze(['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag']);
+const DRESS_WALL_SURFACES = Object.freeze(['cycle', 'plate', 'wall']);
+export const DRESS_SURFACES_OWED = Object.freeze({
+    mobile: DRESS_PAGE_SURFACES,
+    desktop: Object.freeze([...DRESS_PAGE_SURFACES, 'cycle', 'wall']),
+    narrow: Object.freeze(['activity', 'face', 'row', 'sheet', 'sign', 'strip', 'tag']),
+    canvas: Object.freeze([...DRESS_WALL_SURFACES, 'stream', 'ticker']),
+    portrait: DRESS_WALL_SURFACES,
+    tablet: DRESS_WALL_SURFACES,
+    'desk-wall': DRESS_WALL_SURFACES,
+    'short-wall': DRESS_WALL_SURFACES,
 });
 /**
  * The Cycle card's steps each wall pass owes read on every look it painted
@@ -406,12 +431,15 @@ export function probeCoverageGaps(
                 gaps.push(`a-money-figure-never-clips-itself asked no money figure on a ${cls} stall`);
             }
         }
-        // A money figure held to its dress on every look, and — where the pass
-        // painted Rural — one read under its tag's clip-path (D-2026-10-19-01).
+        // A money figure held to its dress on every surface the pass paints,
+        // on every look, and — where the pass painted Rural — one read under
+        // its tag's clip-path (D-2026-10-19-01; per surface since round 4).
         const dress = report.dressByClass ?? {};
         for (const cls of report.sheetClasses ?? []) {
-            if (!((dress[cls] ?? 0) > 0)) {
-                gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall`);
+            for (const surface of DRESS_SURFACES_OWED[pass] ?? []) {
+                if (!(((dress[cls] ?? {})[surface] ?? 0) > 0)) {
+                    gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall's ${surface}`);
+                }
             }
         }
         // Rural's tag is a notched polygon on the figure's column: a pass that
