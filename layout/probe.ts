@@ -3650,9 +3650,16 @@ function clippedAbove(node: HTMLElement): { why?: string; read: boolean } {
         const cs = getComputedStyle(el);
         return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
     });
-    const kept = turned.map((el) => el.getAttribute('style'));
+    // Held off and put back through the CSSOM, longhand by longhand: the
+    // policy refuses an inline `style` attribute (`style-src-attr`), so a
+    // `setAttribute('style', …)` restore would leave the box without the
+    // inline declarations it had — the stall's own custom properties among
+    // them — for every rule measured after this one.
+    const HELD_OFF = ['transform', 'rotate', 'scale', 'translate'] as const;
+    const kept = turned.map((el) => HELD_OFF.map((p) => [el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const));
+    const bare = turned.map((el) => !el.hasAttribute('style'));
     for (const el of turned) {
-        for (const p of ['transform', 'rotate', 'scale', 'translate']) el.style.setProperty(p, 'none', 'important');
+        for (const p of HELD_OFF) el.style.setProperty(p, 'none', 'important');
     }
     try {
         const inks = inkLines(node);
@@ -3689,9 +3696,14 @@ function clippedAbove(node: HTMLElement): { why?: string; read: boolean } {
         return { read: true };
     } finally {
         turned.forEach((el, i) => {
-            const style = kept[i];
-            if (style === null) el.removeAttribute('style');
-            else el.setAttribute('style', style!);
+            HELD_OFF.forEach((p, j) => {
+                const [value, priority] = kept[i]![j]!;
+                if (value === '') el.style.removeProperty(p);
+                else el.style.setProperty(p, value, priority);
+            });
+            // A box that had no inline style is left with none (removing an
+            // attribute is not an inline style the policy refuses).
+            if (bare[i] && el.getAttribute('style') === '') el.removeAttribute('style');
         });
     }
 }
