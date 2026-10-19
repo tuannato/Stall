@@ -9182,6 +9182,19 @@ screen (the first section above); and the ≤790 frame rules on the Awning's
 walls at 1280x900 (768 of frame) and 1280x800 (668) — the sign, the status
 line and the Cycle card's air.
 
+**What `looks:diff` shows moved** (2026-10-19, `pnpm looks:diff main
+--expect` the 53 wall screens, the app code of `0d95080`, unchanged since):
+1,975 identical, 1,893 real and expected, 0 not expected, 0 inconclusive,
+of 3,868 shots over 10 viewports (4,919s; a run that morning on the same
+tree read the same counts in 4,311s). At the five probed sizes every wall
+screen moved: the Cycle screens on every shipped look (194 shots at
+1280x900, 194 at 1280x800, 126 at 1080x1920, 88 at 768x1024, 60 at
+1920x1080), and the 14 other wall screens on Modern worn alone at 1280x900
+and 1280x800 — the Awning under the ≤790 frame rules. At the off-size
+walls, which main paints too, 234 Cycle shots and 84 others each, 214 and
+35 at 800x1280. No screen off the wall moved. The tokens are whole screens,
+so this split by size is read from the log, not asserted by the command.
+
 **Cost**: each new pass 5.8–6.1s on a run at load 2–4 (5.9–6.5s at load
 6–10). **Back to back on this Mac, the morning of 2026-10-19** (the tracked
 fixture look carried, two contrast tabs): main 189.3s and 185.8s (load
