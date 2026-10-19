@@ -165,36 +165,137 @@ export function srgbColour(text: string): Colour | undefined {
 }
 
 /**
- * Whether a gradient layer of a background paints every pixel of its clip
- * area (round 6, the critic's P1-2 on round 5: a white layer one pixel
- * square, `no-repeat`, was read over the whole box and hid a ground in the
- * ink's own colour). Its tiles are read, not trusted: a layer covers its
- * clip area only when it **repeats on both axes** (`repeat` or `round`,
- * whose tiles meet edge to edge wherever the position puts the first — a
- * `space` leaves gaps between them, and `no-repeat`, `repeat-x` and
- * `repeat-y` leave the box but the tile's own row, column or rect) **and
- * its tile has an area** (`size`, the layer's computed `background-size`:
- * `auto`, `cover` and `contain` are the positioning `area` for a gradient,
- * which has no size of its own, and that area must have both a width and a
- * height; a length or a percentage of the area must be more than nothing,
- * and anything this reader does not take apart — a `calc()` — is not
- * proved). A layer that does not cover is a paint that
- * may not be under a given pixel, and the probe judges every cell both with
- * it and without it. `repeat` is one layer's keywords, `size` one layer's
- * value.
+ * The least a gradient layer's tile may measure on an axis, in CSS pixels,
+ * for this reader to take its tiles as painting (round 7, the critic's P1-2
+ * on round 6): Chrome paints nothing at all for a gradient tile under 1/64px
+ * on an axis (measured in Chrome 155: `0.015px` paints nothing, `0.016px`
+ * paints the box whole; `0.001px` under `round` nothing), so a tile that
+ * small over a ground in the ink's own colour hid the figure while this
+ * read composited the layer over it. One pixel is far above that edge, and a
+ * tile under it is a paint this reader does not vouch for.
  */
-export function layerCovers(repeat: string, size: string, area: { w: number; h: number }): boolean {
+export const MIN_TILE_PX = 1;
+
+/**
+ * Where a gradient layer's tiles are proved to paint on one axis: across the
+ * whole painting area (its clip area — tiles that repeat meet edge to edge
+ * wherever the position puts the first, and go on into the border's bands),
+ * across its positioning area alone (one tile at least as large as that
+ * area, placed where it covers all of it), or nowhere this reader vouches
+ * for.
+ */
+export type AxisCover = 'painting-area' | 'positioning-area' | 'none';
+
+/** A number as a computed value writes it (`0.5`, `-12`, `1e-05`). */
+const NUMBER = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[-+]?\\d+)?';
+const PX = new RegExp(`^(${NUMBER})px$`, 'i');
+const PERCENT = new RegExp(`^(${NUMBER})%$`, 'i');
+
+/** A computed `background-size` dimension against its positioning area's extent: `auto` the extent (a gradient has no size of its own), a length, or a percentage of it; anything else (a `calc()`) undefined. */
+function tileLength(token: string, extent: number): number | undefined {
+    if (token === 'auto') return extent;
+    const px = PX.exec(token);
+    if (px !== null) return Number(px[1]);
+    const pct = PERCENT.exec(token);
+    return pct === null ? undefined : (Number(pct[1]) / 100) * extent;
+}
+
+/**
+ * A computed `background-position-x` or `-y` as the tile's offset from the
+ * positioning area's start, `free` the area less the tile: a percentage of
+ * `free`, a length, or a `calc()` that sums the two (`calc(100% - 10px)`,
+ * which Chrome computes `right 10px` to); anything else undefined.
+ */
+function tileOffset(value: string, free: number): number | undefined {
+    const term = (t: string): number | undefined => {
+        const px = PX.exec(t);
+        if (px !== null) return Number(px[1]);
+        const pct = PERCENT.exec(t);
+        return pct === null ? undefined : (Number(pct[1]) / 100) * free;
+    };
+    const v = value.trim();
+    const plain = term(v);
+    if (plain !== undefined) return plain;
+    const inner = /^calc\((.*)\)$/.exec(v)?.[1];
+    if (inner === undefined) return undefined;
+    const parts = inner.trim().split(/\s+([+-])\s+/);
+    let sum = term(parts[0]!);
+    for (let i = 1; i < parts.length && sum !== undefined; i += 2) {
+        const t = term(parts[i + 1] ?? '');
+        sum = t === undefined ? undefined : parts[i] === '+' ? sum + t : sum - t;
+    }
+    return sum;
+}
+
+/**
+ * Where a gradient layer of a background is proved to paint, axis by axis
+ * (round 6, the critic's P1-2 on round 5: a white layer one pixel square,
+ * `no-repeat`, was read over the whole box and hid a ground in the ink's
+ * own colour; round 7, the critic's P1-2 and P2-2 on round 6). Its tiles are
+ * read, not trusted, **with each tile dimension resolved against the
+ * positioning `area`** (`size`, one layer's computed `background-size`:
+ * `auto`, `cover` and `contain` are the area's own extent for a gradient,
+ * which has no size of its own; a length; a percentage of the area; a
+ * `calc()` is not taken apart):
+ * - on an axis that **repeats** (`repeat` or `round`), the tiles meet edge to
+ *   edge across the whole painting area — **when the tile is at least
+ *   `MIN_TILE_PX` on that axis** (Chrome paints nothing for a tile under
+ *   1/64px, and `round` rescales a tile by at most a third, still far above
+ *   that edge);
+ * - on an axis that **does not** (`no-repeat`, `space`, or `repeat-x`'s and
+ *   `repeat-y`'s other axis), one tile is placed by the position — it covers
+ *   the positioning area's span when it is at least that area and
+ *   `MIN_TILE_PX` long and its `position` (one layer's computed
+ *   `background-position-x` and `-y`: a percentage, a length, or a `calc()`
+ *   of the two) puts it over all of it (a `space` tile at least the area
+ *   long is placed once by its position, as `no-repeat` is); `placed` false
+ *   (a `local` attachment, whose area scrolls with the content) proves
+ *   nothing there;
+ * - otherwise, nowhere.
+ * A layer covers a pixel of its clip area only where both axes say so; the
+ * rest of it is a paint that may not be there, judged with it and without
+ * it. So a gradient written `no-repeat` that fills its box (the critic's FP)
+ * covers its box, and one pixel square (SZ) or under 1/64px (SZt) covers
+ * nothing. `area` is the positioning area's size: its origin box, or the
+ * viewport where the layer is `fixed`; one with no width or no height places
+ * no tile this reader vouches for.
+ */
+export function layerCovers(
+    repeat: string,
+    size: string,
+    position: readonly [string, string],
+    area: { w: number; h: number },
+    placed = true,
+): readonly [AxisCover, AxisCover] {
     const keys = repeat.trim().split(/\s+/);
-    if (keys.length > 2 || !keys.every((k) => k === 'repeat' || k === 'round')) return false;
-    // A positioning area with no width or no height places no tile this
-    // reader can vouch for, whatever the size says.
-    if (!(area.w > 0 && area.h > 0)) return false;
+    const pair: readonly [string, string] | undefined =
+        keys.length === 1
+            ? keys[0] === 'repeat-x'
+                ? ['repeat', 'no-repeat']
+                : keys[0] === 'repeat-y'
+                  ? ['no-repeat', 'repeat']
+                  : [keys[0]!, keys[0]!]
+            : keys.length === 2
+              ? [keys[0]!, keys[1]!]
+              : undefined;
     const tokens = size.trim().split(/\s+(?![^(]*\))/).filter((t) => t !== '');
-    if (tokens.length === 1 && (tokens[0] === 'cover' || tokens[0] === 'contain')) return true;
-    if (tokens.length < 1 || tokens.length > 2) return false;
-    const [w, h = 'auto'] = tokens;
-    const dim = (t: string): boolean => t === 'auto' || /^([\d.]*[1-9][\d.]*)(px|%)$/.test(t);
-    return dim(w!) && dim(h);
+    const tile: readonly [number | undefined, number | undefined] =
+        tokens.length === 1 && (tokens[0] === 'cover' || tokens[0] === 'contain')
+            ? [area.w, area.h]
+            : tokens.length === 1 || tokens.length === 2
+              ? [tileLength(tokens[0]!, area.w), tileLength(tokens[1] ?? 'auto', area.h)]
+              : [undefined, undefined];
+    // A hundredth of a pixel of rounding either way: a strip that thin is
+    // under what Chrome paints a tile in at all.
+    const slack = 0.01;
+    const axis = (key: string | undefined, t: number | undefined, extent: number, at: string): AxisCover => {
+        if (key === undefined || t === undefined || !(extent > 0) || !(t >= MIN_TILE_PX)) return 'none';
+        if (key === 'repeat' || key === 'round') return 'painting-area';
+        if ((key !== 'no-repeat' && key !== 'space') || !placed || t < extent - slack) return 'none';
+        const offset = tileOffset(at, extent - t);
+        return offset !== undefined && offset <= slack && offset + t >= extent - slack ? 'positioning-area' : 'none';
+    };
+    return [axis(pair?.[0], tile[0], area.w, position[0]), axis(pair?.[1], tile[1], area.h, position[1])];
 }
 
 /** A colour's relative luminance, read off the one contrast formula the app uses (black's luminance is 0). */

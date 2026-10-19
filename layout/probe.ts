@@ -3048,11 +3048,14 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   with every paint under them composited** (`groundStackFault`, round 5;
  *   the pure half is `layout/groundStack.ts`): on the element itself, the
  *   background colour and every layer of its image over their clip area
- *   (`background-clip`, `border-area` its border's bands) — a gradient whose
- *   tiles may leave a pixel of that area bare (`layerCovers`: it does not
- *   repeat on both axes, or its tile or positioning area has no width or
- *   height, or its size is one this read does not take apart) tried absent
- *   as well as at each stop (round 6, the critic's SZ) — every
+ *   (`background-clip`, `border-area` its border's bands) — a gradient read
+ *   where its tiles are proved to paint (`layerCovers`, each tile dimension
+ *   resolved against the positioning area: on an axis that repeats, tiles of
+ *   at least `MIN_TILE_PX` cover the whole clip area; on one that does not,
+ *   one tile at least the area long, placed over it, covers the area's span;
+ *   round 7, the critic's P1-2 and P2-2 on round 6) and tried absent as well
+ *   as at each stop over the rest of its clip area (round 6, the critic's
+ *   SZ) — every
  *   `box-shadow` layer (an inset one over the padding box outside its
  *   hole, an outer one outside the border box), every border side with a
  *   width (its colour over its band, whatever its style), and a
@@ -3222,9 +3225,11 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * - a paint's geometry beyond its rect: the paints are composited as plain
  *   stacking (source-over, in paint order — every blend from the figure up
  *   to the stall is held to `normal`, and `isolation`, which only keeps
- *   blends in, is free); an own gradient layer whose tiles may leave a pixel
- *   bare is tried absent and at each stop wherever its clip area meets the
- *   ink, not where its tiles fall (stricter than it paints, never looser); a
+ *   blends in, is free); an own gradient layer is read over the part of its
+ *   clip area its tiles are proved to cover, and tried absent and at each
+ *   stop over the rest of it, not where each tile falls (a tile under
+ *   `MIN_TILE_PX` on an axis proves nothing there, a lone tile only where it
+ *   spans its whole positioning area; round 7); a
  *   `dashed`, `dotted` or `double` border paints its band in part and is
  *   read as its colour over the whole band; a 3D border — `inset`,
  *   `outset`, `groove`, `ridge` — paints two other shades of its colour
@@ -3365,7 +3370,7 @@ const DRESS_FREE: readonly (readonly [RegExp, string])[] = [
     ],
     [
         /^(box-shadow|background-(position|position-x|position-y|size|repeat|attachment|origin)|border-image(-.*)?|mask-(clip|composite|mode|origin|position|repeat|size|type|border-(mode|outset|repeat|slice|width))|-webkit-mask-(clip|composite|origin|position|position-x|position-y|repeat|size|box-image-(outset|repeat|slice|width))|paint-order|shape-.*|image-rendering|image-orientation|object-.*|text-decoration-(color|skip-ink|style|skip.*)|text-underline-position|text-emphasis-(color|position))$/,
-        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers, where their tiles fall: `layerCovers` reads the repeat, the size and the origin, and a layer it cannot prove covers is read as absent too) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
+        'paints beside, under or behind the glyphs and never over them — and every paint under them (a box shadow, a border image, the background\'s layers, where their tiles fall: `layerCovers` resolves each tile against its positioning area and reads the repeat and the position, and where a layer is not proved to cover it is read as absent too) is read as a ground (`groundStackFault`) — or nothing at all without a held longhand (a mask image, a decoration line, an emphasis mark, a text stroke)',
     ],
     [
         /^(cursor|pointer-events|user-select|-webkit-user-select|touch-action|appearance|-webkit-appearance|caret-.*|will-change|-webkit-user-drag|-webkit-user-modify|interactivity|interpolate-size|scroll-timeline(-.*)?|view-timeline(-.*)?|timeline-scope|view-transition-.*|-webkit-highlight|speak(-as)?|dynamic-range-limit)$/,
@@ -3705,8 +3710,9 @@ function borderImageReach(cs: CSSStyleDeclaration): number {
  * measurement: in paint order, bottom first — its outer box shadows (the last
  * listed lowest), its background colour over the last layer's clip box, its
  * background image's layers (the element's own only, the last listed lowest:
- * a gradient by its stops, and as absent too where its tiles may leave a
- * pixel bare, `layerCovers`; a picture by its place), its inset shadows, every
+ * a gradient by its stops where its tiles are proved to paint, and as absent
+ * too over the rest of its clip area, `layerCovers`; a picture by its
+ * place), its inset shadows, every
  * border side that has a width, and a border image (over the padding box
  * where its slice says `fill`, over its bands and outset otherwise) — each
  * with where it paints, read only when asked; whether its background colour
@@ -3780,6 +3786,8 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
         for (let i = layers.length - 1; i >= 0; i -= 1) {
             const layer = layers[i]!;
             const clip = clips[i % clips.length] ?? 'border-box';
+        const positionsX = splitLayers(cs.backgroundPositionX);
+        const positionsY = splitLayers(cs.backgroundPositionY);
             if (layer === 'none') continue;
             if (picture(layer)) {
                 paints.push({ what: 'a picture', candidates: [], picture: layer, rects: () => clipRects(clip) });
@@ -3788,23 +3796,62 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
             const stops = dressColoursIn(layer, current);
             if (stops === undefined) return unread('a background layer', layer);
             if (stops.length === 0) continue;
-            // A layer whose tiles may leave a pixel of its clip area bare
-            // (`layerCovers`: it repeats on both axes with a tile that has an
-            // area, or it is not proved to cover) is a paint that may not be
-            // there: every cell is judged with it and without it (round 6,
-            // the critic's P1-2 on round 5).
+            // Where a layer's tiles are proved to paint (`layerCovers`: each
+            // axis's tile resolved against the positioning area — tiles that
+            // repeat at 1px or more cover the whole clip area, one tile at
+            // least the area long and placed over it covers that area's
+            // span) it is a paint like any; the rest of its clip area is a
+            // paint that may not be there, every cell judged with it and
+            // without it (round 6, the critic's P1-2 on round 5; round 7,
+            // the critic's P1-2 and P2-2 on round 6).
             const origin = origins[i % origins.length] ?? 'padding-box';
-            const area = (): { w: number; h: number } => {
-                if ((attachments[i % attachments.length] ?? 'scroll') === 'fixed') return { w: window.innerWidth, h: window.innerHeight };
-                const b = origin.includes('content') ? box().content : origin.includes('border') ? box().border : box().pad;
-                return { w: b.right - b.left, h: b.bottom - b.top };
+            const attachment = attachments[i % attachments.length] ?? 'scroll';
+            const areaBox = (): Box =>
+                attachment === 'fixed'
+                    ? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+                    : origin.includes('content')
+                      ? box().content
+                      : origin.includes('border')
+                        ? box().border
+                        : box().pad;
+            const a = areaBox();
+            const [coverX, coverY] = layerCovers(
+                repeats[i % repeats.length] ?? 'repeat',
+                sizes[i % sizes.length] ?? 'auto',
+                [positionsX[i % positionsX.length] ?? '0%', positionsY[i % positionsY.length] ?? '0%'],
+                { w: a.right - a.left, h: a.bottom - a.top },
+                attachment !== 'local',
+            );
+            const proved = coverX !== 'none' && coverY !== 'none';
+            let parts: { inside: Box[]; outside: Box[] } | undefined;
+            const part = (): { inside: Box[]; outside: Box[] } => {
+                if (parts !== undefined) return parts;
+                const span = areaBox();
+                const inside: Box[] = [];
+                const outside: Box[] = [];
+                for (const r of clipRects(clip)) {
+                    const covered: Box = {
+                        left: coverX === 'painting-area' ? r.left : Math.max(r.left, span.left),
+                        right: coverX === 'painting-area' ? r.right : Math.min(r.right, span.right),
+                        top: coverY === 'painting-area' ? r.top : Math.max(r.top, span.top),
+                        bottom: coverY === 'painting-area' ? r.bottom : Math.min(r.bottom, span.bottom),
+                    };
+                    if (proved && covered.right > covered.left && covered.bottom > covered.top) {
+                        inside.push(covered);
+                        outside.push(...boxMinus(r, covered));
+                    } else {
+                        outside.push(r);
+                    }
+                }
+                parts = { inside, outside };
+                return parts;
             };
-            const covers = layerCovers(repeats[i % repeats.length] ?? 'repeat', sizes[i % sizes.length] ?? 'auto', area());
-            paints.push({
-                what: covers ? 'its gradient' : 'its gradient, where its tiles fall',
-                candidates: covers ? stops : [...stops, MAY_BE_ABSENT],
-                rects: () => clipRects(clip),
-            });
+            if (proved) paints.push({ what: 'its gradient', candidates: stops, rects: () => part().inside });
+            // A layer whose tiles repeat over its whole clip area leaves none
+            // of it bare, and is one paint as before.
+            if (!proved || coverX === 'positioning-area' || coverY === 'positioning-area') {
+                paints.push({ what: 'its gradient, where its tiles fall', candidates: [...stops, MAY_BE_ABSENT], rects: () => part().outside });
+            }
         }
     }
     for (const sh of shadows.filter((s) => s.inset).reverse()) {

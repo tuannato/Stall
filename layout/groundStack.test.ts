@@ -98,33 +98,65 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
         expect(2 ** 9).toBeGreaterThan(STACK_CHOICES_CAP);
     });
 
-    it('takes a gradient layer as covering its clip area only when its tiles meet on both axes (round 6, the critic’s SZ)', () => {
+    it('takes a gradient layer as covering only where its tiles, resolved against their area, paint (rounds 6 and 7, the critic’s SZ, SZt and FP)', () => {
         const area = { w: 120, h: 40 };
+        const at0: [string, string] = ['0%', '0%'];
+        const both = (v: string) => [v, v];
         // The initial values, and every tiling that repeats on both axes with
-        // a tile that has an area, wherever the position puts the first tile.
-        expect(layerCovers('repeat', 'auto', area)).toBe(true);
-        expect(layerCovers('repeat', 'auto auto', area)).toBe(true);
-        expect(layerCovers('round', 'cover', area)).toBe(true);
-        expect(layerCovers('repeat round', '1px 1px', area)).toBe(true);
-        expect(layerCovers('repeat', '50% auto', area)).toBe(true);
-        expect(layerCovers('repeat', '0.5px 3px', area)).toBe(true);
-        // The critic's SZ: one white pixel, not repeated.
-        expect(layerCovers('no-repeat', '1px 1px', area)).toBe(false);
-        // Its control: a whole tile, placed off the box.
-        expect(layerCovers('no-repeat', 'auto', area)).toBe(false);
-        // One axis repeated, or tiles spaced apart.
-        expect(layerCovers('repeat-x', 'auto', area)).toBe(false);
-        expect(layerCovers('repeat no-repeat', 'auto', area)).toBe(false);
-        expect(layerCovers('space', 'auto', area)).toBe(false);
-        expect(layerCovers('repeat space', 'auto', area)).toBe(false);
+        // a tile of a pixel or more, wherever the position puts the first.
+        expect(layerCovers('repeat', 'auto', at0, area)).toEqual(both('painting-area'));
+        expect(layerCovers('repeat', 'auto auto', at0, area)).toEqual(both('painting-area'));
+        expect(layerCovers('round', 'cover', at0, area)).toEqual(both('painting-area'));
+        expect(layerCovers('repeat round', '1px 1px', ['13px', 'calc(50% - 2px)'], area)).toEqual(both('painting-area'));
+        expect(layerCovers('repeat', '50% auto', at0, area)).toEqual(both('painting-area'));
+        // The critic’s SZt (round 6): a tile under 1/64px, which Chrome does
+        // not paint at all, however it repeats — and under a pixel, which
+        // this reader does not vouch for.
+        expect(layerCovers('repeat', '0.001px 0.001px', at0, area)).toEqual(both('none'));
+        expect(layerCovers('repeat', '0.01px', at0, area)).toEqual(['none', 'painting-area']);
+        expect(layerCovers('repeat', '0.001% 0.001%', at0, area)).toEqual(both('none'));
+        expect(layerCovers('round', '0.001px auto', at0, area)).toEqual(['none', 'painting-area']);
+        expect(layerCovers('repeat', '1e-05px auto', at0, area)).toEqual(['none', 'painting-area']);
+        expect(layerCovers('repeat', '0.5px 3px', at0, area)).toEqual(['none', 'painting-area']);
+        // A percentage resolved against its area: 1% of 120 is 1.2px.
+        expect(layerCovers('repeat', '1% 1%', at0, area)).toEqual(['painting-area', 'none']);
+        // The critic’s SZ: one white pixel, not repeated.
+        expect(layerCovers('no-repeat', '1px 1px', at0, area)).toEqual(both('none'));
+        // The critic’s FP (round 6): a no-repeat tile that fills its area
+        // covers it, at any position that keeps it over the area.
+        expect(layerCovers('no-repeat', 'auto', at0, area)).toEqual(both('positioning-area'));
+        expect(layerCovers('no-repeat', '100% 100%', ['50%', '100%'], area)).toEqual(both('positioning-area'));
+        expect(layerCovers('no-repeat', 'cover', ['0px', '0px'], area)).toEqual(both('positioning-area'));
+        expect(layerCovers('space', 'auto', at0, area)).toEqual(both('positioning-area'));
+        expect(layerCovers('no-repeat', '300px 60px', ['50%', '25%'], area)).toEqual(both('positioning-area'));
+        // ... and not where a length moves it off a pixel of the area, a
+        // percentage outside 0–100% leaves an edge bare, or it is smaller.
+        expect(layerCovers('no-repeat', 'auto', ['calc(100% - 10px)', '0%'], area)).toEqual(['none', 'positioning-area']);
+        expect(layerCovers('no-repeat', 'auto', ['2px', '0%'], area)).toEqual(['none', 'positioning-area']);
+        expect(layerCovers('no-repeat', '300px 60px', ['150%', '0px'], area)).toEqual(['none', 'positioning-area']);
+        expect(layerCovers('no-repeat', '119px auto', at0, area)).toEqual(['none', 'positioning-area']);
+        expect(layerCovers('no-repeat', 'auto', ['calc(50% + 2px)', '0%'], area)).toEqual(['none', 'positioning-area']);
+        // A `space` tile smaller than its area leaves gaps.
+        expect(layerCovers('space', '10px 10px', at0, area)).toEqual(both('none'));
+        // One axis repeated, the other one tile over its area.
+        expect(layerCovers('repeat-x', 'auto', at0, area)).toEqual(['painting-area', 'positioning-area']);
+        expect(layerCovers('repeat no-repeat', '4px auto', at0, area)).toEqual(['painting-area', 'positioning-area']);
+        expect(layerCovers('repeat-y', '4px auto', at0, area)).toEqual(['none', 'painting-area']);
+        expect(layerCovers('repeat space', 'auto 10px', at0, area)).toEqual(['painting-area', 'none']);
+        // A `local` layer's area scrolls with the content: one tile proves
+        // nothing there, tiles that repeat still do.
+        expect(layerCovers('no-repeat', 'auto', at0, area, false)).toEqual(both('none'));
+        expect(layerCovers('repeat', 'auto', at0, area, false)).toEqual(both('painting-area'));
         // A tile with no area paints nothing, and a positioning area with
         // none places no tile this reader vouches for.
-        expect(layerCovers('repeat', '0px auto', area)).toBe(false);
-        expect(layerCovers('repeat', 'auto 0%', area)).toBe(false);
-        expect(layerCovers('repeat', 'auto', { w: 120, h: 0 })).toBe(false);
-        expect(layerCovers('repeat', '10px 10px', { w: 0, h: 40 })).toBe(false);
-        // A size this reader does not take apart is not proved.
-        expect(layerCovers('repeat', 'calc(50% + 2px) auto', area)).toBe(false);
+        expect(layerCovers('repeat', '0px auto', at0, area)).toEqual(['none', 'painting-area']);
+        expect(layerCovers('repeat', 'auto 0%', at0, area)).toEqual(['painting-area', 'none']);
+        expect(layerCovers('repeat', 'auto', at0, { w: 120, h: 0 })).toEqual(['painting-area', 'none']);
+        expect(layerCovers('repeat', '10px 10px', at0, { w: 0, h: 40 })).toEqual(['none', 'painting-area']);
+        // A size or a position this reader does not take apart is not proved.
+        expect(layerCovers('repeat', 'calc(50% + 2px) auto', at0, area)).toEqual(['none', 'painting-area']);
+        expect(layerCovers('no-repeat', 'auto', ['anchor(--x)', '0%'], area)).toEqual(['none', 'positioning-area']);
+        expect(layerCovers('repeat repeat repeat', 'auto', at0, area)).toEqual(both('none'));
     });
 
     it('judges a layer that may not cover with it and without it (round 6, the critic’s SZ)', () => {
