@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { CARD_FIGURES_OWED, CARD_LADDERS_OWED, CYCLE_STEPS_OWED, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import {
+    CARD_FIGURES_OWED,
+    CARD_LADDERS_OWED,
+    CYCLE_STEPS_OWED,
+    DRESS_SURFACES_OWED,
+    FIGURE_SURFACES_OWED,
+    GEOMETRY_PASSES,
+    PASSES_OWING_NO_GEOMETRY,
+    owedFaults,
+    probeCoverageGaps,
+    probeCoverageLine,
+    wornSheetJobFaults,
+} from './probe-coverage.mjs';
 
 const SHIPPED = ['t-modern', 't-neo', 't-rural'];
 /*
@@ -23,6 +35,25 @@ const EVERY_LADDER = Object.fromEntries(['face:price', 'face:seller-price', 'pai
 const cardRead = {
     cardFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_CARD_STEP])),
     cardLadderByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_LADDER])),
+};
+/*
+ * D-2026-10-14-02: a broken figure held to its ink on every look a pass may
+ * paint, and money figures asked about a self-clip — every geometry pass
+ * owes both.
+ */
+/** Every surface a broken figure stands on (round 2: the ink rule is owed per surface). */
+const EVERY_SURFACE = Object.fromEntries(['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row', 'wall', 'cycle'].map((surface) => [surface, 4]));
+/** Every surface a money figure stands on (round 4: the dress rule is owed per surface). */
+const EVERY_DRESS_SURFACE = Object.fromEntries(
+    ['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag', 'cycle', 'plate', 'wall', 'stream', 'ticker'].map((surface) => [surface, 30]),
+);
+const moneyRead = {
+    figureInkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_SURFACE])),
+    selfClipByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 80])),
+    // D-2026-10-19-01: every look's money figures held to their dress, and
+    // Rural's under its notched tag.
+    dressByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_DRESS_SURFACE])),
+    dressClipByClass: { 't-rural': 300 },
 };
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
@@ -69,6 +100,7 @@ const full = {
     // The Cycle card's ladder (2026-10-13): every step read on every look a
     // wall pass may paint.
     cycleFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, Object.fromEntries(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((step) => [step, 3]))])),
+    ...moneyRead,
 };
 
 describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
@@ -256,7 +288,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -555,6 +587,7 @@ const narrowRead = {
     lookSheetsRead: [...SHIPPED, 't-fixture-private'],
     markChecksByClass: Object.fromEntries(NARROW_LOOKS.filter((cls) => cls !== 't-fixture-private').map((cls) => [cls, 20])),
     ...cardRead,
+    ...moneyRead,
 };
 const NARROW_OPTIONS = { privateClasses: ['t-fixture-private'], sheetedClasses: [...SHIPPED, 't-fixture-private'] };
 /** The narrow read with one look's card figure reads replaced. */
@@ -688,5 +721,205 @@ describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
         const ceilings = source.match(/export const WALL_FIGURE_CEILINGS = \[([^\]]*)\] as const;/);
         assert.ok(ceilings, 'WALL_FIGURE_CEILINGS in window.ts');
         assert.equal(CYCLE_STEPS_OWED.length, ceilings[1].split(',').length + 1);
+    });
+});
+
+/** Every geometry pass the runner names (D-2026-10-14-02's two money rules are owed on each). */
+const GEOMETRY = ['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow'];
+const MONEY_RULE = /^a-(?:broken-figure-wears-the-figures-own-ink|money-figure-never-clips-itself) /;
+
+describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => {
+    /**
+     * D-2026-10-14-02: `a-broken-figure-wears-the-figures-own-ink` and
+     * `a-money-figure-never-clips-itself` run on every geometry pass. The ink
+     * rule is owed on every surface a pass paints a broken figure on, every
+     * look (round 2, the critic's P3-3: one read a look let a surface stop
+     * being read and stay green); the self-clip rule some money figures a
+     * look. The contrast and reduced-motion passes owe neither.
+     */
+    it('owes the surfaces each geometry pass paints, by name', () => {
+        const page = ['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row'];
+        assert.deepEqual(FIGURE_SURFACES_OWED, {
+            mobile: page,
+            narrow: page,
+            desktop: [...page, 'wall', 'cycle'],
+            canvas: ['wall', 'cycle'],
+            portrait: ['wall', 'cycle'],
+            tablet: ['wall', 'cycle'],
+            'desk-wall': ['wall', 'cycle'],
+            'short-wall': ['wall', 'cycle'],
+        });
+        assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY].sort());
+    });
+
+    it('owes both on every look each geometry pass painted, and names the look and surface that read none', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => MONEY_RULE.test(gap)), [], pass);
+            const surface = FIGURE_SURFACES_OWED[pass].at(-1);
+            const short = {
+                ...read,
+                figureInkByClass: { ...read.figureInkByClass, 't-neo': { ...EVERY_SURFACE, [surface]: 0 } },
+                selfClipByClass: { ...read.selfClipByClass, 't-rural': 0 },
+            };
+            assert.deepEqual(
+                probeCoverageGaps(pass, short).filter((gap) => MONEY_RULE.test(gap)),
+                [
+                    `a-broken-figure-wears-the-figures-own-ink read no broken figure on a t-neo stall's ${surface}`,
+                    'a-money-figure-never-clips-itself asked no money figure on a t-rural stall',
+                ],
+                pass,
+            );
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, figureInkByClass: {}, selfClipByClass: {} }).filter((gap) => MONEY_RULE.test(gap)).length,
+                CARD_LOOKS.length * (FIGURE_SURFACES_OWED[pass].length + 1),
+                pass,
+            );
+        }
+        for (const pass of ['reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => MONEY_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('prints both on every geometry pass\'s line', () => {
+        const read = { figureInkByClass: { 't-neo': { face: 3 }, 't-modern': { cycle: 2, wall: 1 } }, selfClipByClass: { 't-modern': 40 } };
+        assert.match(probeCoverageLine('narrow', read), / · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40/);
+        assert.match(
+            probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, ...read }),
+            /^wall controls read: 2 · status line asked: 3 · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40$/,
+        );
+        assert.match(probeCoverageLine('desktop', { ...full, ...read }), / · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40/);
+    });
+});
+
+const DRESS_RULE = /^a-money-figure-is-never-misdressed /;
+
+describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
+    /**
+     * D-2026-10-19-01: `a-money-figure-is-never-misdressed` runs on every
+     * geometry pass. It owes money figures read on every look a pass painted,
+     * and — where the pass painted Rural, whose tag is a notched polygon on
+     * the figure's column — a figure read under that clip, or the half of
+     * the rule that reads a clip's shape against the ink compared nothing.
+     */
+    it('owes the surfaces each geometry pass paints, by name', () => {
+        const page = ['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag'];
+        const wall = ['cycle', 'plate', 'wall'];
+        assert.deepEqual(DRESS_SURFACES_OWED, {
+            mobile: page,
+            desktop: [...page, 'cycle', 'wall'],
+            narrow: ['activity', 'face', 'row', 'sheet', 'sign', 'strip', 'tag'],
+            canvas: [...wall, 'stream', 'ticker'],
+            portrait: wall,
+            tablet: wall,
+            'desk-wall': wall,
+            'short-wall': wall,
+        });
+        assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY].sort());
+    });
+
+    it('owes a read on every surface of every look each geometry pass painted, and names the look and surface that read none', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => DRESS_RULE.test(gap)), [], pass);
+            const surface = DRESS_SURFACES_OWED[pass].at(-1);
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, dressByClass: { ...read.dressByClass, 't-neo': { ...EVERY_DRESS_SURFACE, [surface]: 0 } } }).filter((gap) => DRESS_RULE.test(gap)),
+                [`a-money-figure-is-never-misdressed read no money figure on a t-neo stall's ${surface}`],
+                pass,
+            );
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, dressByClass: {} }).filter((gap) => DRESS_RULE.test(gap)).length,
+                CARD_LOOKS.length * DRESS_SURFACES_OWED[pass].length,
+                pass,
+            );
+        }
+        for (const pass of ['reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => DRESS_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('owes a figure read under Rural\'s tag where the pass painted Rural, and nothing of a pass that painted none', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined, dressClipByClass: {} };
+            assert.deepEqual(
+                probeCoverageGaps(pass, read).filter((gap) => DRESS_RULE.test(gap)),
+                ['a-money-figure-is-never-misdressed read no money figure under a clip-path on a t-rural stall'],
+                pass,
+            );
+            // A figure read under another look's clip is not Rural's.
+            assert.equal(
+                probeCoverageGaps(pass, { ...read, dressClipByClass: { 't-neo': 4 } }).filter((gap) => DRESS_RULE.test(gap)).length,
+                1,
+                pass,
+            );
+            // A pass that painted no Rural (a kit run) owes no clip.
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, sheetClasses: ['t-workshop'], dressByClass: { 't-workshop': EVERY_DRESS_SURFACE } }).filter((gap) => DRESS_RULE.test(gap)),
+                [],
+                pass,
+            );
+        }
+    });
+
+    it('prints what it read on every geometry pass\'s line', () => {
+        const read = { dressByClass: { 't-neo': { row: 12 }, 't-rural': { face: 9, row: 2 } }, dressClipByClass: { 't-rural': 4 } };
+        assert.match(probeCoverageLine('narrow', read), / · money figures held to their dress: t-neo row:12, t-rural face:9\/row:2 · under a clip: t-rural 4/);
+        assert.match(
+            probeCoverageLine('tablet', { wallControlChecks: 2, statusLineChecks: 3, dressByClass: { 't-modern': { wall: 3 } } }),
+            /^wall controls read: 2 · status line asked: 3 · money figures held to their dress: t-modern wall:3 · under a clip: none$/,
+        );
+    });
+});
+
+/**
+ * Every pass the runner defines, read off its own source: each viewport is an
+ * object literal `{ name: '<pass>', width: <px>, … }` in
+ * `scripts/layout-check.mjs` (`VIEWPORTS`, `CANVAS`, `PORTRAIT`, `TABLET`,
+ * `NARROW`, `SHORT_VIEWPORTS`, `DESK_WALL`, `SHORT_WALL`).
+ */
+function runnerPasses(source) {
+    return [...source.matchAll(/\{\s*name:\s*'([a-z0-9-]+)',\s*width:\s*\d+/g)].map((m) => m[1]);
+}
+
+describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
+    /**
+     * Round 5 (the critic's P3 on round 4): `FIGURE_SURFACES_OWED[pass] ?? []`
+     * and `GEOMETRY_PASSES.has(pass)` let a pass the tables do not name owe
+     * nothing, so a viewport added to the runner — `wall-offsize`'s four,
+     * after its merge — would read the money rules on nothing and stay green.
+     * Every viewport the runner defines is now in `GEOMETRY_PASSES` (and so,
+     * by the tests above, in both surface tables) or in
+     * `PASSES_OWING_NO_GEOMETRY` with its reason, and a pass in neither is a
+     * gap at run time.
+     */
+    it('reads every viewport the runner defines, and each is in a table', () => {
+        const passes = runnerPasses(readFileSync(new URL('./layout-check.mjs', import.meta.url), 'utf8'));
+        for (const pass of GEOMETRY_PASSES) assert.ok(passes.includes(pass), `${pass} is in GEOMETRY_PASSES and the runner defines no such viewport`);
+        for (const pass of passes) {
+            assert.ok(GEOMETRY_PASSES.has(pass) || Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass), `the runner's ${pass} pass is in no coverage table`);
+        }
+        assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
+        assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
+        for (const [pass, why] of Object.entries(PASSES_OWING_NO_GEOMETRY)) {
+            assert.ok(!GEOMETRY_PASSES.has(pass), pass);
+            assert.ok(why.length > 20, `${pass} owes nothing without a reason`);
+        }
+    });
+
+    it('fails a viewport the runner gains before the tables name it', () => {
+        const planted = "const SIDE_TABLET = { name: 'side-tablet', width: 1024, height: 768, block: 'landscapeShort' };";
+        const passes = runnerPasses(planted);
+        assert.deepEqual(passes, ['side-tablet']);
+        assert.ok(!GEOMETRY_PASSES.has('side-tablet') && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, 'side-tablet'));
+    });
+
+    it('names a pass in no table as a gap at run time, and only such a pass', () => {
+        assert.deepEqual(probeCoverageGaps('side-tablet', {}), [
+            'the side-tablet pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why',
+        ]);
+        for (const pass of [...GEOMETRY_PASSES, ...Object.keys(PASSES_OWING_NO_GEOMETRY)]) {
+            assert.ok(!probeCoverageGaps(pass, {}).some((gap) => gap.includes('in no coverage table')), pass);
+        }
     });
 });

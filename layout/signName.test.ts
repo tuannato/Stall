@@ -41,8 +41,11 @@ describe('the-sellers-name-on-the-sign-reads', () => {
     it('is blanked with its glow, past any animation that sets either', () => {
         // An animation outranks an ordinary inline declaration: the hum's
         // failing lamp sets its colour and its glow, and blanked the old way
-        // it stayed painted and was read as its own ground.
-        expect(PROBE).toContain("el.style.setProperty('color', 'transparent', 'important')");
+        // it stayed painted and was read as its own ground. Since round 6 of
+        // the money dress rule the glyphs are blanked through their fill, and
+        // `color` stays (`blankGlyphs`): a `currentColor` ground is read.
+        expect(PROBE).toContain("el.style.setProperty(GLYPH_FILL, 'transparent', 'important')");
+        expect(PROBE).toContain("el.style.setProperty(p, 'transparent', 'important')");
         expect(PROBE).toContain("el.style.setProperty('text-shadow', 'none', 'important')");
         expect(PROBE).not.toMatch(/el\.style\.color = 'transparent'/);
         expect(PROBE).not.toMatch(/el\.style\.textShadow = 'none'/);

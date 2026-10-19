@@ -89,6 +89,24 @@
  *   mark-hide and pending frame for any carried look with marks or file art.
  * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
  *   `cjk-name` owes the advance it read (`cjkFaces`).
+ * - **`a-broken-figure-wears-the-figures-own-ink`** (D-2026-10-14-02):
+ *   every geometry pass owes, on every look it painted, a broken figure read
+ *   on every surface it paints one (`FIGURE_SURFACES_OWED`,
+ *   `figureInkByClass`, per look and per surface; round 2, the critic's
+ *   P3-3: one read a look let a surface stop being read, or a plant hide
+ *   every figure on one, and stay green).
+ * - **`a-money-figure-never-clips-itself`** (CRITIC-WALL-CYCLE P2-1): every
+ *   geometry pass owes, on every look it painted, money figures asked
+ *   (`selfClipByClass`).
+ * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
+ *   geometry pass owes, on every look it painted, money figures held to
+ *   their dress on every surface it paints one (`DRESS_SURFACES_OWED`,
+ *   `dressByClass`, per look and per surface since round 4), and, where it
+ *   painted Rural, a money
+ *   figure read under a box's `clip-path` on Rural (`dressClipByClass`) —
+ *   Rural's notched tag is the subject, so a pass that read none stopped
+ *   measuring the half of the rule that reads a clip's shape against the
+ *   ink.
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -137,6 +155,72 @@ const PAGE_PASSES = new Set(['mobile', 'desktop']);
  * ladder the two desk wall passes (1280x900, 1280x800).
  */
 const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall']);
+/**
+ * Every geometry pass: the two page passes, the canvas, the four wall passes
+ * and the narrow phone. Each paints a broken money figure on every look
+ * (`a-broken-figure-wears-the-figures-own-ink`) and money figures
+ * (`a-money-figure-never-clips-itself`).
+ */
+export const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
+/**
+ * The runner's other passes, each with why it owes nothing these tables
+ * name (round 5, the critic's P3 on round 4: a pass the tables do not name
+ * owed nothing — `FIGURE_SURFACES_OWED[pass] ?? []` — so a pass added to
+ * the runner and not here would read nothing and stay green). A pass in
+ * neither is a gap (`probeCoverageGaps`), and every viewport the runner
+ * defines is held to the two lists by
+ * `every-pass-the-runner-runs-is-in-a-coverage-table`.
+ */
+export const PASSES_OWING_NO_GEOMETRY = Object.freeze({
+    'short-phone': 'a short screen (375x667) measured for the sticky signs the phone pass found, and nothing else; the runner holds it to its own owed reads',
+    'short-desk': 'a short screen (1280x720) measured for the sticky signs the desk pass found, and nothing else; the runner holds it to its own owed reads',
+    'reduced-motion': 'the reduced-motion pass measures the animating screens again under the reduce block; the geometry passes owe the money rules',
+    contrast: 'the contrast pass reads pixels on its own plan and owes its own jobs',
+});
+/**
+ * The surfaces each geometry pass paints a broken figure on, every look
+ * (`figureSurface` in `layout/probe.ts`; measured 2026-10-14): the page and
+ * narrow passes the item face (`face`), its "You pay" (`paid`), the pay
+ * sheet (`pay`), Pay several's line and total (`line`, `total`), the
+ * selection strip's total and chosen line (`strip`, `chosen`) and a shop row
+ * (`row`); the desk also the wall's Browse row (`wall`) and Cycle card
+ * (`cycle`), which the canvas and the four wall passes paint alone.
+ */
+const PAGE_SURFACES = Object.freeze(['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row']);
+const WALL_SURFACES = Object.freeze(['wall', 'cycle']);
+export const FIGURE_SURFACES_OWED = Object.freeze({
+    mobile: PAGE_SURFACES,
+    narrow: PAGE_SURFACES,
+    desktop: Object.freeze([...PAGE_SURFACES, ...WALL_SURFACES]),
+    canvas: WALL_SURFACES,
+    portrait: WALL_SURFACES,
+    tablet: WALL_SURFACES,
+    'desk-wall': WALL_SURFACES,
+    'short-wall': WALL_SURFACES,
+});
+/**
+ * The surfaces each geometry pass paints a money figure on, every look
+ * (`dressSurface` in `layout/probe.ts`; measured 2026-10-19): the page
+ * passes the sign, a shop row, an item face, a sheet, the selection strip, a
+ * printed tag, an Activity receipt, the Studio and a card (the first
+ * stall's); the desk also the wall's rows and Cycle card; the narrow phone
+ * its money screens' seven; the canvas the wall, its payment plate, its
+ * Cycle card and the stream's card and ticker; the other wall passes the
+ * wall, the plate and the Cycle card. The door's open control is Modern's
+ * alone (the door wears the default look) and is owed nowhere.
+ */
+const DRESS_PAGE_SURFACES = Object.freeze(['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag']);
+const DRESS_WALL_SURFACES = Object.freeze(['cycle', 'plate', 'wall']);
+export const DRESS_SURFACES_OWED = Object.freeze({
+    mobile: DRESS_PAGE_SURFACES,
+    desktop: Object.freeze([...DRESS_PAGE_SURFACES, 'cycle', 'wall']),
+    narrow: Object.freeze(['activity', 'face', 'row', 'sheet', 'sign', 'strip', 'tag']),
+    canvas: Object.freeze([...DRESS_WALL_SURFACES, 'stream', 'ticker']),
+    portrait: DRESS_WALL_SURFACES,
+    tablet: DRESS_WALL_SURFACES,
+    'desk-wall': DRESS_WALL_SURFACES,
+    'short-wall': DRESS_WALL_SURFACES,
+});
 /**
  * The Cycle card's steps each wall pass owes read on every look it painted
  * (`a-cycle-card-shows-every-digit-at-every-wall-size`): tier 0 and every
@@ -202,6 +286,9 @@ export function probeCoverageGaps(
     { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [] } = {},
 ) {
     const gaps = [];
+    if (!GEOMETRY_PASSES.has(pass) && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass)) {
+        gaps.push(`the ${pass} pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why`);
+    }
     const sheetsRead = new Set(report.lookSheetsRead ?? []);
     for (const cls of sheetedClasses) {
         if (!sheetsRead.has(cls)) {
@@ -344,6 +431,39 @@ export function probeCoverageGaps(
                     gaps.push(`a-cycle-card-shows-every-digit-at-every-wall-size read no step-${step} Cycle figure on a ${cls} wall`);
                 }
             }
+        }
+    }
+    // A broken figure's pieces held to the figure's own ink, on every surface
+    // the pass paints one, and money figures asked whether they clip
+    // themselves (D-2026-10-14-02): on every look a geometry pass painted.
+    if (GEOMETRY_PASSES.has(pass)) {
+        const ink = report.figureInkByClass ?? {};
+        const clip = report.selfClipByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            for (const surface of FIGURE_SURFACES_OWED[pass] ?? []) {
+                if (!(((ink[cls] ?? {})[surface] ?? 0) > 0)) {
+                    gaps.push(`a-broken-figure-wears-the-figures-own-ink read no broken figure on a ${cls} stall's ${surface}`);
+                }
+            }
+            if (!((clip[cls] ?? 0) > 0)) {
+                gaps.push(`a-money-figure-never-clips-itself asked no money figure on a ${cls} stall`);
+            }
+        }
+        // A money figure held to its dress on every surface the pass paints,
+        // on every look, and — where the pass painted Rural — one read under
+        // its tag's clip-path (D-2026-10-19-01; per surface since round 4).
+        const dress = report.dressByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            for (const surface of DRESS_SURFACES_OWED[pass] ?? []) {
+                if (!(((dress[cls] ?? {})[surface] ?? 0) > 0)) {
+                    gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall's ${surface}`);
+                }
+            }
+        }
+        // Rural's tag is a notched polygon on the figure's column: a pass that
+        // painted Rural and read no figure under it read no clip's shape.
+        if ((report.sheetClasses ?? []).includes('t-rural') && !(((report.dressClipByClass ?? {})['t-rural'] ?? 0) > 0)) {
+            gaps.push('a-money-figure-is-never-misdressed read no money figure under a clip-path on a t-rural stall');
         }
     }
     // The card figures' ladder (2026-10-13): a pass that measures the long
@@ -521,8 +641,18 @@ export function probeCoverageLine(pass, report) {
         ? ` · card figures read: ${Object.entries(cardSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}` +
           ` · ladders compared: ${ladderSum}`
         : '';
+    // The money rules of D-2026-10-14-02, on every geometry pass whose page reported them.
+    const money =
+        (report.figureInkByClass === undefined && report.selfClipByClass === undefined
+            ? ''
+            : ` · broken figures held to their ink: ${perClass(report.figureInkByClass)}` +
+              ` · money figures asked about a self-clip: ${perClass(report.selfClipByClass)}`) +
+        (report.dressByClass === undefined
+            ? ''
+            : ` · money figures held to their dress: ${perClass(report.dressByClass)}` +
+              ` · under a clip: ${perClass(report.dressClipByClass)}`);
     if (pass === 'narrow') {
-        return `${cards.replace(/^ · /, '')}${hiddenSmall}${marks}`;
+        return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }
     const cycleSums = {};
     for (const read of Object.values(report.cycleFigureByClass ?? {})) {
@@ -535,7 +665,7 @@ export function probeCoverageLine(pass, report) {
             ? ''
             : ` · Cycle figures read by step: ${Object.entries(cycleSums).sort(([a], [b]) => Number(a) - Number(b)).map(([step, n]) => `${step}:${n}`).join(' ') || 'none'}`;
     const wall = WALL_PASSES.has(pass)
-        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + cycle + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
+        ? `wall controls read: ${report.wallControlChecks ?? 0} · status line asked: ${report.statusLineChecks ?? 0}` + cycle + money + sliverLine(report.wallSlivers ?? []) + hiddenSmall + marks + signs
         : '';
     if (UNBUYABLE_PLACES[pass] === undefined) return wall;
     const read = Object.entries(report.unbuyableChecks ?? {})
@@ -552,7 +682,7 @@ export function probeCoverageLine(pass, report) {
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
     if (!PAGE_PASSES.has(pass)) {
-        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || (hiddenSmall + marks).replace(/^ · /, '')]
+        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || (money + hiddenSmall + marks).replace(/^ · /, '')]
             .filter(Boolean)
             .join(' · ');
     }
@@ -573,6 +703,7 @@ export function probeCoverageLine(pass, report) {
         ` · bunting rows swept: ${report.buntingChecks ?? 0}` +
         (tiers === '' ? '' : ` · skeleton ladder: ${tiers}`) +
         cards +
+        money +
         signs
     );
 }
