@@ -103,8 +103,9 @@ rest at intake, such as a pointer's hover, a turned wall and a screen the
 kit does not measure.)*
 
 **QR codes stay black on white, with their quiet margin.** Only the box
-around a code may take your look. *(The kit checks that nothing covers a
-code; its colours and margin, Stall at intake until the kit learns it.)*
+around a code may take your look. *(The kit catches most of what could
+cover a code on the screens and states it paints; the rest, and a code's
+colours and margin, Stall at intake until the kit learns them.)*
 
 **No page scrolls sideways, and no words run under a control or past the
 edge of their box.** *(The kit.)*
