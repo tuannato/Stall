@@ -8428,3 +8428,178 @@ passes summed 75.3s against 78.0s, the contrast pass 120.9s against 121.1s,
 its prepare phase (where `markLookPseudos` runs) 25.5s against 25.3s over
 802 calls. The planted runs (ceiling 1200s): 227.6s (PSc, PSci, FX) and
 239.2s (with round 6's six).
+
+## The geometry passes walk on two tabs (2026-10-19, D-2026-10-19-02 (3))
+
+The owner's decision: the 300s ceiling stays, and the geometry passes run on
+the contrast pass's tabs instead. With the money rules a run was 280–291s
+under load (the dress rule's cost, above), and `wall-offsize` adds four wall
+passes, +43–61s by its own measure.
+
+**What changed** (`scripts/layout-check.mjs`, `scripts/plan-walk.mjs`). The
+tabs are made before the geometry passes, by the contrast pass's own rule and
+count (`CONTRAST_TABS`, `LAYOUT_CONTRAST_TABS`), and every tab's page is
+focused by emulation (`Emulation.setFocusEmulationEnabled`, which the
+contrast pass already set on every tab) — a second window is not focused
+otherwise, and a pass must not read one way on one tab and another on the
+next. Each geometry pass is a function of the tab it runs on and the answers
+it reads, and hands back its record (`geometryRecord`): the lines it says,
+whether it failed, the page's report, and what it adds to the totals the
+contrast pass and the coverage read later (the worn classes, the outlines,
+the marks, the codes, a page pass's sticky looks, a carried look's clip
+points). Nothing in a pass writes a total. `walkPlan` hands the passes out in
+plan order to whichever tab is free and commits each record in plan order as
+soon as it and every record before it are in (`commitGeometryPass`), so the
+lines come out in the order they always did, on the stream each names, while
+the walk runs. A short pass reads the page pass it names (`after`) and waits
+for it; a reduced-motion pass sets the media feature on its own tab and takes
+it off in a `finally`. A pass that throws stops the hand-out: the other tabs
+finish what they hold, the earliest pass in the plan that threw is the run's
+error, and only the passes before it are said (and how many after it ran and
+are not reported). A pass that comes back with no record of its own fails the
+run naming it. The output gains three lines after the passes: `geometry:` (the
+walk's wall time, and each tab's passes, busy time and reads again),
+`geometry passes:` (each pass's own time and the tab it ran on, in plan
+order) and the canary's line. A pass's printed time is now its own, from the
+moment its tab took it (the old `took()` counted from the previous stamp, so
+the portrait line carried the worn-only job's time).
+
+**Found on the way, both fixed.** (1) The ask for a verdict (`readVerdict`)
+waits out the page's one synchronous pass, under the run's 30s command bound:
+read again under two tabs at load ~14, the phone pass took 30.3s and the
+desk pass 30.2s, and both "read no report" (the bound fired); a phone pass on
+one tab under a 2× CPU throttle took 38.1s. The old runner would have failed
+such a pass as a page that hung, at one tab, on a slow enough machine. The
+ask has its own bound now, `VERDICT_TIMEOUT_MS` (120s); the watchdog still
+holds the run. (2) A belt: every verdict read checks the page is visible and
+focused (`unshownFailures`), a failure of the pass if not. No run tripped it.
+
+**`the-geometry-passes-read-the-same-on-every-tab`**, in the spirit of the
+contrast pass's canary, two parts, on every run with more than one tab:
+
+- **Two passes read again** (`GEOMETRY_CANARY`): the reduced-motion pass on
+  the canvas and the short pass at the desk where a sticky sign gave it
+  something to measure (a pass that measured nothing is not compared). Each
+  is read by a tab other than the one that ran it, once that tab's hand-out
+  has run out, so the reads fill the time it would stand waiting; each must
+  hand back the walk's answer byte for byte — the page's whole report, the
+  lines it says less their clocks, and every total it adds
+  (`geometryRecordDiffers`). The report's one clock, `faces.waitedMs`, and
+  the faces line's "asked, N ms" are set aside.
+- **The page print** (`TAB_PRINT`): the probe page at the desk's size with
+  no screen, read on the first tab before the walk and on every tab after
+  its reads — size and density, the screen, nineteen media features, visible
+  and focused, every sheet and its rule count, every adopted sheet, the
+  window's own property names, the source text of the natives a probe reads
+  time and layout through, locale, and every face's status. Every print after
+  must equal the one before (`tabPrintDiffers` names what moved).
+
+Why two parts. Before the picks were chosen, every pass was read again on the
+other tab (a scratch hook, not kept), at load ~15: the first run found the
+two clocks and the 30s bound above; after them, **11 of 11 passes the same,
+byte for byte**. The others cost 4–35s each to read again, so the standing
+canary reads the two cheapest — and a sample of passes only sees a tab state
+that moves its own verdicts: a rule adopted onto tab 1's pages
+(`.stall-head { margin-top: 2px }`) moved the desk pass's clip count from
+2530/26204 to 2644/26519 and neither picked pass. The print sees it whatever
+pass it would move.
+
+**Proved red**, each a temporary plant, reverted:
+
+- **A rule on one tab's pages** (that adopted sheet, through
+  `Page.addScriptToEvaluateOnNewDocument` on tab 1): "tab 1's page after the
+  walk is not the page before it — adopted (only after: 1)"; both passes
+  read again the same, as above.
+- **The media feature left on** (the reduced-motion pass's `finally` emptied,
+  so each tab that ran one keeps `prefers-reduced-motion: reduce`): both
+  prints differ at `media` ("(prefers-reduced-motion: reduce) false" before,
+  "true" after), and "short-desk ran on tab 0 and read again on tab 1: its
+  report differs at 1 key(s): reducedMotion (false → true)". The print alone
+  would not have caught it had both tabs leaked and been compared only with
+  each other, which is why it is compared with the page before the walk.
+- **A pass answering another's record** (the narrow pass handing back the
+  tablet's key): "1 geometry pass(es) handed to a tab came back with no record
+  of their own: narrow", `layout-check: FAILED`, exit 1, and the narrow line
+  not said.
+- **A throw on the second tab** (tab 1 throwing on the portrait pass): the
+  four passes before it said, "layout-check: PLANT D: tab 1 threw on the
+  portrait pass", exit 1.
+- **The walk itself** (`plan-walk.test.mjs`, seven cases over passes whose
+  durations the test chooses): five mutations of `walkPlan` — commit on
+  arrival, a fault not stopping the hand-out, a pick read on its own tab, a
+  foreign record committed, a dependency not awaited — each turn one to three
+  cases red.
+
+**The same output, and where it is not.** The geometry lines, times and the
+font wait masked, are the same in the old runner (one geometry tab), this
+branch at one tab and this branch at two: identical over all five final runs
+below. Over the day's 30 runs two lines moved, and neither is a verdict:
+
+- the canvas pass's clip count, 311/7760 or 313/7762, **on one tab and on
+  two alike** — 313 on one tab at load ~6.2 and under a 2× CPU throttle, 311
+  on two tabs in six runs at load 1.3–6.5 — because `marquee.ts` and
+  `broadcast.ts` continue a running line by `Date.now()` across repaints, so
+  where a run stands when a variant is measured depends on the time between
+  paints: the pace, not the tab (the ledger's "257/259 … varies by itself"
+  is the same);
+- the worn-only job's art list, "200, 200" or "200" (the resource entries
+  seen two animation frames after its sheet lands): "200" in 6 of 23 runs
+  with the job on tab 1, never in the 8 with it on tab 0 (one tab, and the
+  old runner), and "200, 200" in three one-tab runs with the job moved right
+  after the desk pass. Not proven either way whether that is the tab or the
+  pace; `wornSheetJobFaults` passes it both ways. The contrast
+dumps: two tabs and one tab on this branch against the old runner's
+(5612189 at the same tree), 15,016 boxes identical, 0 moved; one later old
+run moved one box (`desktop/item-listing` worn, `button.item-back`, 3.73 →
+6.15), read 3.73 by every other run old or new — the old runner's own flake.
+
+**Measured** on this Mac (Apple A18 Pro: 2 performance and 4 efficiency
+cores, 8 GiB), shared with other agents' runs, so the load is given; loads are
+the 1-minute average sampled every 15s, median (min–max). The old runner is
+`money-guards` at 5612189 in a scratch clone, its ceiling raised in the clone
+for the measurement; "one tab" is this branch with `LAYOUT_CONTRAST_TABS=1`,
+which puts the contrast pass on one tab too.
+
+| run | load | geometry | contrast | total |
+|---|---|---|---|---|
+| this branch, one tab (a) | 2.3 (2.0–2.8) | 73.9s | 177.7s | 260.9s |
+| this branch, two tabs (a) | 3.0 (2.2–4.3) | 54.2s | 118.1s | 190.8s |
+| old runner (geometry one tab, contrast two) | 3.5 (3.3–4.8) | ~79.3s | 131.1s | 230.8s |
+| this branch, two tabs (b) | 5.0 (4.2–6.6) | 76.4s | 139.9s | 234.1s |
+| this branch, one tab (b) | 4.2 (2.9–5.1) | 106.6s | 190.2s | 308.5s |
+
+(The old runner prints no geometry total; ~79.3s is its passes' printed
+times summed.) Earlier pairs on near-final code (three picks, the print
+compared tab to tab): one tab 148.0s of geometry against two tabs 84.8s at
+load ~6.3 (totals 428.0 and 262.1s); the old runner 77.3s / 212.4s at load
+2.6 against two tabs 62.6s / 199.3s at 3.5.
+
+**Two tabs take 20–30s off the geometry passes here, not the ~40s
+estimated**: each pass is 1.2–1.4× slower while the other tab measures
+(pair a: the passes' busy time 96.1s on two tabs against 73.9s on one), since
+this machine has two performance cores and Chrome's own processes share them.
+The canary costs ~4s of tab time (the two reads 3.8s, mostly in the tail
+where a tab would wait) and the two prints ~1s each, about 2–3s of the walk's
+wall. A two-tab run at load ~3 is 190.8s, against the old runner's 230.8s at
+load ~3.5.
+
+**`wall-offsize`'s four passes, projected.** Its four sizes (1024x768,
+1366x768, 800x1280, 680x1000, every wall screen) run as passes on this branch
+by a scratch hook (not kept; this branch's code has none of that branch's
+fixes, so they paint 1,136 and 79 failures, and the two portrait sizes stop
+at the landscape check, after measuring): 17 passes in 100.0s at load 3.5,
+the four 13.5–21.2s each on two tabs, against 54.2s for the 13 passes at load
+3.0 — about **+46s on two tabs**. So a two-tab run with `wall-offsize`
+would be about 237s at load ~3 (190.8 + 46) and about 290s at load ~5
+(234.1 + 55); the old runner with it, 274–292s at load ~3.5 (230.8 + 43–61)
+and 323–352s under the load the dress rule was measured at. Under 300s on two
+tabs at ordinary load, past the 240s sharding line under load, and with
+little margin left for the three wall sizes still open.
+
+**Not measured, stated**: the Linux box and CI (ci.yml's manual `layout` job
+sets `LAYOUT_CONTRAST_TABS: '1'` and runs the geometry passes on one tab, as
+before); three tabs; whether starting the contrast pass on a tab that leaves
+the geometry walk early would save its tail (a second or two); `wall-offsize`
+itself (its passes were run here on code they fail on, so their time is a
+proxy); and the one-tab off-size run (152.6s of geometry) was at load ~10, no
+pair for it.
