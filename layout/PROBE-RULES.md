@@ -7455,3 +7455,297 @@ the call, a scratch build): 0.5–1.1s a pass, 6.2s over the eight — part 2
 0.05–0.17s, part 3 0.07–0.30s, the held and unfreed longhands 0.08–0.12s,
 the piling 0.03–0.06s a pass. **The margin is thin**: 257–268s of the 300s
 ceiling under this load, against a measured parent of 230–249s.
+
+### Round 4: what the dress rule did not read (CRITIC-MONEY-GUARDS, re-review of rounds 2 and 3)
+
+The critic found D-2026-10-19-01 not delivered: a whole figure was still
+hidden by an inset `box-shadow`, a `border-image` or a border the text ran
+onto, all in the ink's colour; by an ink at 6% alpha; and piled by a
+`line-height` of 0.3 — each with the whole runner green. Its P2s and P3s
+named a break inside a digit group, columns that reordered a figure, a fade
+on a box above the card, a ring of sharp shadows, a neighbour's shadow, two
+shapes read square, a polygon's reference box, two restores through the
+style attribute and coverage owed per look alone. Each item below replaces
+the round-3 paragraph it names; those stay above as the record.
+
+**A ground in the ink's colour is read from every paint under the glyphs**
+(P1-1; `groundFault`, `groundAboveFault`). Round 3 read the subject's
+background alone, and freed three properties that paint in the same place.
+Now, for the subject and every element under it with text:
+
+- **its own paints**: the background colour and every layer of its image,
+  over their clip box; every `box-shadow` layer, an inset one over the
+  padding box outside its hole (the padding box moved by its offset and
+  shrunk by its spread), an outer one outside the border box; every border
+  side with a width; a `border-image`, over the padding box with `fill`,
+  over its border bands and outset otherwise;
+- **the paints of every box above it**, up to and with the stall: the
+  background colour, box shadows, borders and border image of each, against
+  the element's ink, over its glyphs as painted — cut by every box between
+  that clips what it holds (the first build read Rural's 35-line wall
+  payment, whose lines scrolled out of their list stand under the plate's
+  bottom border at rest, as a ground: 14 a wall pass) — until the nearest
+  box with an opaque background colour, which hides every paint above it
+  (read, then the walk stops); an element with an opaque background colour
+  of its own stands on its own ground and the walk does not start.
+
+Each paint, where it meets the ink, at least half opaque and under 3:1
+against the ink, fails; a picture there (the element's own background or
+border image, or a box above's border image) fails, a ground this rule
+cannot read. A shadow's blur is not added to where it paints: the blur's
+half-opaque line is the unblurred edge, and a paint fainter than half is
+the contrast pass's. A box that clips its content paints no glyph outside
+its padding box, so its own borders and outer shadows are not under its
+text (Rural's dashed record hex, whose scrolled lines run under its bottom
+border at rest, was the false alarm that taught it). **A box above's
+background image is not read**: a box paints its decoration in those layers
+— the rain's tiles (a picture, on every stall that wears it), the aurora's
+washes, Neo's brackets and scanlines — each placed and sized by a position
+and a size this read does not resolve, and what they paint under a figure
+is the contrast pass's, read at the rain's worst. A `backdrop-filter` but a
+blur is held on the figure and on every box above it: any other function
+repaints the ground behind the glyphs from whatever is behind them (Modern's
+sign and its dock blur theirs, and pass). A box's geometry is read only
+once a paint's colour fails.
+
+**The ink is held opaque** (P1-2). `color` is held at alpha 1 on every
+subject and every element under it with text: a faded ink is a faded
+figure, as `opacity` is. `-webkit-text-fill-color` is held to `color`, and
+a text stroke to no width, so their alphas are held with it. **Not built**:
+the contrast box read still drops the ink's alpha (`scripts/layout-check.mjs`
+reads a computed ink's red, green and blue alone). On a money subject the
+dress rule refuses that ink on every geometry pass before the contrast pass
+samples it; compositing the alpha there changes what every non-money target
+reads, outside this decision, and wants its own measurement.
+
+**The figure's lines** (P1-3, P2-1; `lineFault`), where its text is one
+inline flow (every text node of it set in the same block — a list's rows,
+or a button's words in their own box, are not one flow and are not read
+here):
+
+- in order: its fragments (one per text node and line) taken line by line —
+  lines are fragments on one baseline, within 0.15em of the smaller face,
+  never by their boxes' overlap, which a `line-height` piling two lines
+  makes complete — from the top, and left to right along a line, are the
+  text's own order; columns, a reversed flow, an `order` or a moved part
+  fail;
+- no line break between two digits, or a digit and a point (every money
+  node but an address and a record's bytes, `NOT_FIGURE_TEXT`, which wrap
+  anywhere by design): `word-break: break-all`, `line-break: anywhere` fail
+  where they split a group;
+- lines apart: two lines whose ink boxes meet are drawn on a canvas where
+  they stand, and a pixel both cover at least half fails.
+
+The reads run in each figure's own frame: one hold of every transform from
+every subject up to its stall a measurement (`withTransformsHeldOff`), since
+Rural's tag sways and its rows tilt and a line at rest stands on no one
+baseline (the first build read Rural's broken figures out of order, 6–38 a
+pass, for exactly that). `text-overflow` but `clip` and any `line-clamp` are
+held: an ellipsis printed in place of digits, or of a broken figure's later
+lines, is not in the text the reads see. Not read: a single line set so
+tight that the line above or below stands on its glyphs (the coverage and
+spill rules').
+
+**The boxes above, to the stall** (P2-2). Read 3. of round 3 walked to the
+surface; it now walks every box from the figure up to and with its stall
+(`boxFaults`, cached per box a measurement). A screen hung sideways turns
+the whole stall a quarter turn (`.stall[data-turn]`, window.css), and is
+the one quarter turn passed: the figure stands upright on the screen it is
+painted for (either way; no pass paints a turned wall). The stale plate
+stays the one opacity passed.
+
+**Sharp shadows are judged as a set** (P2-3; `shadowFault`). The sharp
+layers (blurred less than they stand off) and the glyph itself stand within
+0.12em of each other, two by two: the set's spread, so eight copies each
+0.12em off in a ring no longer pass. The rain's outline — one opaque colour,
+unblurred, exactly one of the two sets (`outlineSet`) — is set apart
+whole; the floor round 3 gave every layer (the outline's 2.24px reach) is
+gone, so an ink-coloured copy at a small size is held to 0.12em.
+
+**A neighbour's shadow, and an outline above** (P2-4;
+`neighbourShadowFault`, `outlineAboveFault`). Every element with text of
+its own under the figure's grandparent (its parent where the grandparent is
+the stall: its unit, its "from", the words of its line) but the figure, its
+own boxes and the boxes it stands in: a sharp `text-shadow` layer's copy of
+that element's line boxes (moved by its offset, grown by its blur) that
+meets the figure's ink fails — painted over the glyphs where the element
+follows the figure, and as a ground where it comes before and is in the
+ink's colour; a neighbour's shadow this rule cannot parse fails. The rain's
+outline and every glow are not read. Read once per scope a measurement
+(`shadowersUnder`: the rows of a list share their grandparent). The halo
+rule (`a-halo-never-reaches-a-neighbours-text`) still reads box shadows
+alone. And the ring of a box above's outline (between its inner edge, the
+border box moved by `outline-offset`, and that edge grown by its width),
+from the figure's parent up to and with the stall, meets none of its ink —
+a negative offset draws an outline through what the box holds.
+
+**Rounded shapes and a polygon's reference box** (P3).
+
+- A clip-path `inset(… round …)` is read with its corners' curves
+  (`insetRounded`, radii fitted as CSS fits them; round 3 read them
+  square), and a polygon in the reference box it names (`polygonIn`).
+  `parsePolygon` now refuses a reference box, so every other caller fails
+  closed ("a clip-path this check cannot read") rather than reading the
+  polygon against the border box.
+- `a-money-figure-never-clips-itself` reads a box that cuts with rounded
+  corners along their inner curve (`roundedCut`: each radius less its
+  borders, the line boxes read first and the ink's corners only where one
+  leaves the curve). A corner shape under `superellipse(1)` (`bevel`,
+  `scoop`, `notch`) cuts inside the round curve, a corner this read cannot
+  resolve, and fails; `superellipse(1)` is `round`, every card's computed
+  default, and a larger exponent bulges outside the round curve, which is
+  read for it and errs inward.
+- Round 2's two `setAttribute('style', …)` restores (`moneySelfClipFaults`,
+  `cycleFigureFaults`) go through `withTransformsHeldOff`, which also holds
+  `scale` and `translate`; no `setAttribute('style'` is left in the probe.
+
+**Owed per surface** (P3). `dressByClass` counts per look and per surface
+(`dressSurface`: `sign`, `row` — the row's foot included —, `face`,
+`sheet`, `strip`, `tag`, `activity`, `studio`, `card`, `wall`, `plate`,
+`cycle`, `stream`, `ticker`, `door`), and the runner owes every surface each
+pass paints on every look (`DRESS_SURFACES_OWED`): the phone the nine page
+surfaces, the desk those and `wall` and `cycle`, the narrow phone its seven,
+the canvas the three wall surfaces and the stream's two, the other wall
+passes `wall`, `plate` and `cycle`. The door is Modern's alone and owed
+nowhere. Measured 2026-10-19 (Modern, the phone): sign 185, row 541, face
+119, sheet 187, strip 24, tag 4, activity 10, studio 2, card 2 (and the
+door 1); the canvas: wall 474, plate 455, cycle 69, stream 11, ticker 21.
+`the-dress-rule-is-owed-on-every-look-and-under-rurals-tag` is red with one
+surface's read taken out on any pass.
+
+**The README** (D-2026-10-19-02, the owner's words verbatim): the piece
+paragraph gives a look "the box around it" where it said "shadow and
+everything around it", and a new paragraph after it says what
+`workshop:probe` holds the whole price to.
+`a-look-may-not-dress-a-figures-pieces` pins both texts and their
+positions (red on the old text, and with the new paragraph moved after the
+QR paragraph).
+
+**Unplanted, every shipped look, the skeleton and the tracked fixture read 0
+on the rule at every geometry pass.**
+
+**Red proofs** (2026-10-19, at `e04cb0c`; one whole runner a set, the
+plants appended to the three look sheets of a scratch clone and taken out
+after; counts are failing figures per pass — the phone, the desk, the
+canvas, the tall wall, the tablet, `desk-wall`, `short-wall`, the narrow
+phone and the reduced-motion pass, a pass the plant's screens are not on
+left out). Sets A, B and C — the critic's plants, which its runs at
+`f7ca686` read 0 on under this rule, and three of the round-4 builder's
+(`line-break: anywhere`, the polygon's reference box, the rounded overflow
+box), which `f7ca686` had no read for — each fail by their own words:
+
+- `.t-modern .item-x { box-shadow: inset 0 0 0 3em currentColor }` (A1):
+  "an inset box-shadow its own ink reads at 1.00:1" — 439, 512, 300, 372,
+  169, 101, 177, 262, 64;
+- `.t-neo .x { border-image: linear-gradient(currentColor, currentColor)
+  fill 1 / 0 / 0 }` (A5): "a border image" — 32, 32, narrow 26;
+- `.t-neo .pay-x-n { display: inline-block; width: 0; border-right: 4.6em
+  solid currentColor }` (G2): "a right border" — 30, 30, narrow 30,
+  reduced 6;
+- `.t-rural .pay-x-n { color: rgb(60 40 20 / 0.06) }` (plant 3): "an ink
+  at alpha 0.06" — 31 a page pass, reduced 7;
+- `.t-modern .sel-total, .t-modern .pay-total { line-height: 0.3 }` (plant
+  4): "its lines pile on each other" — 4, 2, narrow 8;
+- `.t-rural .sel-total { word-break: break-all }` (plant 5): "a line break
+  inside a digit group" — 2, narrow 2; `.t-modern .item-x { line-break:
+  anywhere }`: the same, on the walls where the figure wraps — desk 1, tall
+  2, tablet 10, `desk-wall` 4, `short-wall` 2;
+- `.t-neo .sel-total { display: block; columns: 3 }` (E1): "its text is
+  drawn out of its order" — 4, 4, narrow 4;
+- eight `currentColor` copies 0.12em off in a ring on `.t-modern .pay-x-n`
+  (plant 7): "8 sharp text-shadow layer(s) whose copies, with the glyph
+  itself, stand up to …px apart" — 29 a page pass, reduced 5;
+- 25 sharp `var(--s-surface)` copies of `.t-neo .item-u` (plant 6): "span.item-u
+  beside it lays a sharp text-shadow … over its glyphs" — 438, 502, 68,
+  134, 118, 54, 124, 246, 78 (the wall plate's unit, inside its money node,
+  fails as a copy);
+- `.t-neo .pay-total { -webkit-line-clamp: 1 }` (E3): "-webkit-line-clamp
+  1" — 8, 8, narrow 8;
+- `.t-rural .items { opacity: 0.15 }` (plant 8): "div.items above it:
+  opacity 0.15" — 603, 707, 671, 775, 229, 125, 229, 364, 96; and
+  `.t-neo .stall-body { opacity: 0.12 }` (G3): "main.stall-body above it" —
+  736, 830, 1,134, 1,228, 760, 666, 760, 502, 84;
+- `.t-neo .pay-x { clip-path: inset(0 round 0 100% 100% 0 / 0 50% 50% 0) }`
+  (B3, an inset of nothing whose round corners alone cut): "cut by
+  div.pay-x's clip-path inset(…)" — 22, 16, narrow 26, reduced 6;
+- `.t-rural .item-p { clip-path: polygon(…) content-box }`: "cut by
+  span.item-p's clip-path polygon(…) content-box" — 127, 123, narrow 100,
+  reduced 18 — and every other polygon reader fails closed ("a clip-path
+  this check cannot read", 4,512 lines in the run);
+- `.t-modern .pay-x-n { display: inline-block; overflow: hidden;
+  border-radius: 50% }`: `a-money-figure-never-clips-itself`, "cut by the
+  rounded corner of itself" — 6 a page pass, where the padding rectangle
+  passed them (23 more fail as cut from above or below, the rectangle's
+  read).
+
+Round 4's own plants (sets D, E, F), each by its own words:
+
+- a box above's paint, the one read 19106f1 did not have (a probe-page
+  run of the same set at `19106f1` read 0 on each): `.t-rural .item-a {
+  background-color: var(--s-text) }` — "span.item-a above it: a ground the
+  figure's ink reads at 1.00:1" — 501, 591, 384, 474, 201, 111, 201, 286,
+  88; `.t-neo .face-x { box-shadow: inset 0 0 0 4em currentColor }` —
+  "div.face-x above it: an inset box-shadow" — 32, 32, narrow 26; `.t-rural
+  .pay-x { border-image: linear-gradient(var(--s-text), var(--s-text))
+  fill 1 / 0 / 0 }` — "div.pay-x above it: a border image" — 31 a page
+  pass, reduced 7; `.t-neo .item-a { outline: 2px solid #f0f;
+  outline-offset: -6px }` — "span.item-a above it draws an outline … across
+  its glyphs" — 470, 538, 322, 374, 150, 96, 164, 274, 76;
+- `.t-modern .pay-x-n { display: inline-block; width: 0; box-shadow: 2.3em
+  0 0 2.3em currentColor }`: "a box-shadow its own ink reads at …" (an
+  outer one under text that overflows its box) — 29 a page pass, reduced 5;
+- `.t-modern .item-from { text-shadow: 2.4em 0 0 rgb(20 23 26), … }` (the
+  figure's ink, three copies of "from" laid before the figure): "span.item-from
+  beside it lays a sharp text-shadow in its ink's own colour … under its
+  glyphs" — 181, 207, 24, 51, 42, 16, 42, 92, 30;
+- `backdrop-filter: invert(1)` on `.t-modern .face-x` (a box above) and on
+  `.t-neo .sel-total` (the figure): "a backdrop-filter (invert(1)): it
+  repaints the ground behind the glyphs" — 30, 30, narrow 25; 12 a page
+  pass;
+- `.t-neo .pay-x-n { -webkit-text-fill-color: rgb(255 255 255 / 0.06) }`:
+  "glyphs filled rgba(…) where its ink is …" — 30 a page pass, reduced 6;
+  `.t-rural .pay-x-n { -webkit-text-stroke: 3px rgb(0 0 0 / 0.5) }`: "a text
+  stroke 3px wide" — 31, reduced 7;
+- `.t-rural .sel-total { display: inline-block; overflow: hidden;
+  border-radius: 6px; corner-shape: bevel }`: `a-money-figure-never-clips-itself`,
+  "a corner of itself shaped superellipse(…), a corner this read cannot
+  resolve" — 12 a page pass.
+
+The owed counts: `the-dress-rule-is-owed-on-every-look-and-under-rurals-tag`
+is red with one surface's read taken out on any pass. The CSSOM restores
+are proved by the runner's own `the-probe-page-meets-no-csp-refusal` on
+every clean and planted run, and by code (no `setAttribute('style'` is
+left); no run here put a cut inside a turned frame with an inline style of
+the app's own, the critic's latent path.
+
+**The private look at 0x04** (`fc874044`, not the pinned pair; its files
+not opened), the branch and main `c17ae5a` with the same selection back to
+back: the branch fails 181 lines, main 189. The one line only the branch
+fails is round 2's `row-17` at 360 (`a-money-figure-never-clips-itself`,
+"99,999,999,999.99" cut 9.9px sideways by its row card: real ink, the
+critic's crop, 8g2's to fix in the look); the nine only main fails are
+`text-spills` lines naming the sign's address behind a face card, which
+round 2's spill read no longer names. This rule reads 0 on `t-inkwash`,
+the box-above read included — painted bare only, so its worn dress is not
+read.
+
+**Cost** (2026-10-19, on this Mac with another builder's `looks:diff`
+running beside every run — load 4 to 7). The whole runner, main `c17ae5a`
+and the branch at `e04cb0c` back to back in scratch clones, twice, the
+order swapped: main 249.7s (geometry 74.8s), the branch 279.7s (101.2s);
+the branch 291.2s (107.1s), main 255.7s (75.8s) — **+26.4s and +31.3s of
+geometry, the branch 8.8s from the 300s ceiling at its slowest**; the
+contrast pass moved 2.1 and 3.5s with the load. One earlier branch run at
+load 8.7, before the read of the boxes above was cached, ran past the
+ceiling in the contrast pass. Timed in the page (`performance.now()`
+around the per-screen loop, scratch builds, all eight geometry passes, one
+pair at load 2.7): main 54.7s, the branch 67.8s — the three money rules
+15.0s of it, every other check of the loop within its noise; the rest of
+the runner's +26–31s is not attributed (the loads differed, and the page
+timing is one pair). Round 4's own share, against `19106f1` in the page twice:
+the read of the boxes above as first built +2.3–3.3s over the eight
+passes; read by colour first and near the text (`abovePaints`, the line
+boxes grown by the text's size) +0.7–1.1s. **The margin is gone**: the
+critic's recommendation stands — run the geometry passes on the contrast
+pass's two tabs before `wall-offsize` merges on top; raising the ceiling is
+the owner's last choice.
