@@ -151,11 +151,58 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         expect(head.hasAttribute('data-wall-wrap')).toBe(false);
     });
 
-    it('breaks a figure after its commas at the smallest one-line size where no one-line shape stands there', () => {
+    it('breaks a figure after its commas, where no one-line shape stands at the one-line size, at the largest size its pieces stand at', () => {
+        // D-2026-10-19-03 (3): the largest size at which the broken figure
+        // stands at any number of lines, capped by its design size — not the
+        // one-line size and no larger, as until 2026-10-20. The widest piece
+        // is 6px a px of size in a 221px column: 36.8px stands, at three lines.
         const { root, head, figure } = wall('184,467,440,737,095,516.15 XEC', { breaks: true });
         setWallFigureGauge(modelGauge({ room: 221, design: 65.5, perPx: 18, piecePerPx: 6 }));
         fitWallFigures(root);
         expect(head.getAttribute('data-wall-wrap')).toBe('break');
+        expect(sizeOf(figure)).toBeLessThanOrEqual(221 / 6);
+        expect(sizeOf(figure)).toBeGreaterThan(221 / 6 - 0.6);
+        expect(sizeOf(figure)).toBeGreaterThan(WALL_FIGURE_MIN_PX);
+    });
+
+    it('caps a broken figure at its design size, and takes more lines over a smaller figure (the critic\'s 32 → 56px)', () => {
+        // Neo's `12,345,678,901.23` at 1280x900 as the critic read it: one
+        // line nowhere near, two lines at 32px, three standing at 56px.
+        const { root, head, figure } = wall('12,345,678,901.23', { breaks: true });
+        setWallFigureGauge(modelGauge({ room: 230, design: 70, perPx: 10.4, piecePerPx: 230 / 56 }));
+        fitWallFigures(root);
+        expect(head.getAttribute('data-wall-wrap')).toBe('break');
+        expect(sizeOf(figure)).toBeGreaterThan(55.4);
+        expect(sizeOf(figure)).toBeLessThanOrEqual(56);
+        // Where every piece stands at the design size, the design size: never larger.
+        setWallFigureGauge(modelGauge({ room: 230, design: 70, perPx: 10.4, piecePerPx: 2 }));
+        fitWallFigures(root);
+        expect(sizeOf(figure)).toBe(70);
+    });
+
+    it('holds a broken figure\'s card clear of the status line at the largest size that clears, and never under the one-line size for it', () => {
+        const { root, head, figure } = wall('12,345,678,901.23', { breaks: true });
+        // The card's height is the figure's lines: past the status line at
+        // 56px on three lines, clear at 45px on two lines and under.
+        const room = 230;
+        const piecePerPx = room / 56;
+        const over = (px: number): number => {
+            const lines = Math.max(1, Math.ceil((10.4 * px) / room));
+            return 1.1 * px * lines - 110;
+        };
+        setWallFigureGauge(modelGauge({ room, design: 70, perPx: 10.4, piecePerPx, over }));
+        fitWallFigures(root);
+        expect(head.getAttribute('data-wall-wrap')).toBe('break');
+        expect(over(sizeOf(figure))).toBeLessThanOrEqual(0.5);
+        expect(over(sizeOf(figure) + 0.6)).toBeGreaterThan(0.5);
+        expect(sizeOf(figure)).toBeGreaterThan(WALL_FIGURE_MIN_PX);
+        // A card held down by something else keeps its figure's size.
+        setWallFigureGauge(modelGauge({ room, design: 70, perPx: 10.4, piecePerPx, over: () => 40 }));
+        fitWallFigures(root);
+        expect(sizeOf(figure)).toBeGreaterThan(55.4);
+        // And where even the one-line size runs past it, that size if giving moved the card.
+        setWallFigureGauge(modelGauge({ room, design: 70, perPx: 10.4, piecePerPx, over: (px) => px * 2 }));
+        fitWallFigures(root);
         expect(sizeOf(figure)).toBe(WALL_FIGURE_MIN_PX);
     });
 
@@ -267,22 +314,82 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
             setWallFigureGauge(modelGauge({ room: 221, design: 65.5, perPx: 4.2 }, reads));
             watches[0]!.callback();
             expect(reads).toEqual([]);
-            // The frame narrows with no paint (a window resized, a tablet turned): fitted again, to the new column.
+            // The frame narrows with no paint (a window resized, a tablet
+            // turned): fitted again, to the new column, with what the paint
+            // measures around the fit run again around it — the name ladder
+            // before, the marquees after (the wall-offsize critic's item 9).
             size(1024, 768);
             watches[0]!.callback();
             expect(reads.length).toBeGreaterThan(0);
             expect(sizeOf(figure)).toBeLessThanOrEqual(221 / 4.2);
             expect(sizeOf(figure)).toBeGreaterThan(221 / 4.2 - 1);
+            const order: string[] = [];
+            const around = modelGauge({ room: 300, design: 65.5, perPx: 4.2 });
+            setWallFigureGauge((h, f) => {
+                order.push('fit');
+                return around(h, f);
+            });
+            fitWallFigures(root, { before: (at) => order.push(at === root ? 'ladder' : 'ladder, elsewhere'), after: (at) => order.push(at === root ? 'marquees' : 'marquees, elsewhere') });
+            order.length = 0;
+            const refitted = watches.at(-1)!;
+            size(800, 1280);
+            refitted.callback();
+            expect(order[0]).toBe('ladder');
+            expect(order.at(-1)).toBe('marquees');
+            expect(order.slice(1, -1).every((step) => step === 'fit') && order.length > 2).toBe(true);
             // A second fit of the same root watches anew and lets the first watch go.
             fitWallFigures(root);
-            expect(watches.map((w) => w.live)).toEqual([false, true]);
+            expect(watches.map((w) => w.live)).toEqual([false, false, true]);
             // The paint about to run throws the frame away, and its watch with it.
             forgetWallFit(root);
-            expect(watches.map((w) => w.live)).toEqual([false, false]);
+            expect(watches.map((w) => w.live)).toEqual([false, false, false]);
         } finally {
             globalThis.ResizeObserver = real;
             root.remove();
         }
+    });
+
+    it('holds every transition on the card off while it reads, finished first, and puts them back after the size is settled', () => {
+        // D-2026-10-19-03 (1): a running transition out-ranks the fit's
+        // inline size, so a look's `transition: all` on the figure read a
+        // size halfway to the last one (the critic's plant on Neo).
+        const { root, figure } = wall('$999.99');
+        const cell = root.querySelector<HTMLElement>('.item-p')!;
+        figure.style.setProperty('transition', 'all 0.4s');
+        cell.style.setProperty('transition', 'font-size 1s');
+        figure.style.setProperty('font-size', '50px');
+        const finished: string[] = [];
+        const real = (globalThis as { CSSTransition?: unknown }).CSSTransition;
+        class FakeTransition {
+            finish(): void {
+                finished.push('finished');
+            }
+        }
+        (globalThis as { CSSTransition?: unknown }).CSSTransition = FakeTransition;
+        (figure as unknown as { getAnimations: () => unknown[] }).getAnimations = () => [new FakeTransition()];
+        // The last fit's size is taken off with the transitions already held.
+        const taken: string[] = [];
+        const remove = figure.style.removeProperty.bind(figure.style);
+        figure.style.removeProperty = (prop: string): string => {
+            if (prop === 'font-size') taken.push(`${figure.style.getPropertyValue('transition')} ${finished.length}`);
+            return remove(prop);
+        };
+        const seen = new Set<string>();
+        try {
+            setWallFigureGauge((h, f) => {
+                seen.add(`${f.style.getPropertyValue('transition')} ${f.style.getPropertyPriority('transition')} / ${cell.style.getPropertyValue('transition')}`);
+                return modelGauge({ room: 221, design: 65.5, perPx: 4.2 })(h, f);
+            });
+            fitWallFigures(root);
+        } finally {
+            (globalThis as { CSSTransition?: unknown }).CSSTransition = real;
+        }
+        expect(taken).toEqual(['none 1']);
+        expect([...seen]).toEqual(['none important / none']);
+        expect(figure.style.getPropertyValue('transition')).toBe('all 0.4s');
+        expect(figure.style.getPropertyPriority('transition')).toBe('');
+        expect(cell.style.getPropertyValue('transition')).toBe('font-size 1s');
+        expect(sizeOf(figure)).toBeLessThanOrEqual(221 / 4.2);
     });
 
     it('puts the card\'s own style back after it reads it', () => {

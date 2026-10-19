@@ -8853,6 +8853,51 @@ describe('boot-returns-a-teardown-that-stops-the-app', () => {
         }
     });
 
+    it("lets go of the wall's frame watch: the Cycle figure's refit outlives no app (the wall-offsize critic's item 9)", async () => {
+        window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=listings&mode=cycle`);
+        const state: State = {
+            ...stallEmpty({
+                fetch: { kind: 'offers', offers: [OFFER] },
+                tokens: new Map([[TOKEN, TOKEN_META]]),
+                window: { show: 'listings', mode: 'cycle', payCode: true, turn: 'none', touch: false },
+            } as Partial<State['view']>),
+            offers: [OFFER],
+        };
+        type Watch = { watched: Element[]; live: boolean };
+        const watches: Watch[] = [];
+        const real = globalThis.ResizeObserver;
+        globalThis.ResizeObserver = class {
+            private readonly watch: Watch = { watched: [], live: true };
+            constructor() {
+                watches.push(this.watch);
+            }
+            observe(el: Element): void {
+                this.watch.watched.push(el);
+            }
+            unobserve(): void {}
+            disconnect(): void {
+                this.watch.live = false;
+            }
+        } as unknown as typeof ResizeObserver;
+        const root = document.createElement('div');
+        document.body.append(root);
+        let stop: () => void = () => undefined;
+        try {
+            stop = bootApp(root, async () => state);
+            await flush();
+            const frame = root.querySelector(".shop-window[data-mode='cycle']");
+            expect(frame, 'a Cycle wall').not.toBeNull();
+            const watching = watches.filter((watch) => watch.live);
+            expect(watching.map((watch) => watch.watched), 'one live watch, on the painted frame').toEqual([[frame]]);
+            stop();
+            expect(watches.filter((watch) => watch.live), 'the teardown lets it go').toEqual([]);
+        } finally {
+            globalThis.ResizeObserver = real;
+            stop();
+            root.remove();
+        }
+    });
+
     it("a heartbeat in flight at the teardown arms no beat when its refresh ends", async () => {
         window.history.replaceState(null, '', `${stallPath(ADDR)}?view=window&show=listings&mode=cycle`);
         const state: State = {

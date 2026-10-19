@@ -34,20 +34,31 @@
  * 2. a listing's `from` on a line of its own above the figure, ` XEC` beside
  *    it (`data-wall-wrap="stack"`) — the stream card's tier-3 shape;
  * 3. the figure broken after its commas (`data-wall-wrap="break"`, only a
- *    figure `moneyFigure` built with breaks) at `WALL_FIGURE_MIN_PX`, and
- *    smaller only while a piece still does not stand, down to
- *    `WALL_FIGURE_FLOOR_PX`. No group is split: the pieces break only at
- *    their `<wbr>`s and the last group rides with its unit (`.fig-end`).
+ *    figure `moneyFigure` built with breaks) at the largest size at which it
+ *    stands at any number of lines, capped by its design size, down to
+ *    `WALL_FIGURE_FLOOR_PX` (D-2026-10-19-03 (3); it was
+ *    `WALL_FIGURE_MIN_PX` and no larger until 2026-10-20), its card then
+ *    held clear of the status line (`settleBreak`). No group is split: the
+ *    pieces break only at their `<wbr>`s and the last group rides with its
+ *    unit (`.fig-end`).
  *
  * A figure that has no break and does not stand at `WALL_FIGURE_MIN_PX` in
  * its last one-line shape is made smaller than it, to the floor: a smaller
- * figure is a figure, a cut one is a different number.
+ * figure is a figure, a cut one is a different number (a figure under 12
+ * characters, as `wallFigureTier` counts, is built with no break).
  *
  * **The digits stay in one node**: the size is the money node's own inline
- * `font-size`, which no look sheet can out-rank (the look lint refuses
- * `!important`), so a look that sizes the Cycle figure gives the size the
- * fit starts from and never a size the fit cannot take down. The money
- * node's text is untouched; `moneyFigure`'s one `role="img"` name stands.
+ * `font-size`, which no rule in a look sheet out-ranks (the look lint
+ * refuses `!important`), so a look that sizes the Cycle figure gives the
+ * size the fit starts from and never a size the fit cannot take down. **An
+ * animation and a transition do out-rank it** — a keyframe's value beats an
+ * inline one, and a running transition beats every declaration (the
+ * wall-offsize critic's item 3; until 2026-10-20 this said "no look sheet
+ * can out-rank", which was false) — so the fit holds every transition on the
+ * card off while it reads (`holdStill`), and the look lint refuses a
+ * transition of a size on a box that may be a money node and a size in any
+ * keyframe (`a-look-never-animates-a-money-nodes-size`). The money node's
+ * text is untouched; `moneyFigure`'s one `role="img"` name stands.
  *
  * **When it runs**: after every wall paint (the tree is new), again when the
  * fonts land (a face that lands late changes every width), and when the
@@ -64,7 +75,11 @@
  * passes (0.3–0.8s a pass, 2026-10-19), 43 at most, on the Cycle card alone.
  */
 
-/** The smallest size the Cycle card prints its figure on one line; past it the figure breaks after its commas. */
+/**
+ * The smallest size the Cycle card prints its figure on one line or stacked;
+ * past it a figure built with breaks breaks after its commas, at the largest
+ * size it stands at. And the floor a card past the status line gives down to.
+ */
 export const WALL_FIGURE_MIN_PX = 32;
 /** The smallest size the fit goes to. A figure that does not stand even here is the probe's to fail. */
 export const WALL_FIGURE_FLOOR_PX = 16;
@@ -311,25 +326,55 @@ function relieve(head: HTMLElement, figure: HTMLElement, shape: Shape, start: nu
 }
 
 /**
- * Take a turn and a sway off `nodes` for a read — `transform` and `rotate`
- * set to none, important, so an animation cannot out-rank them — and hand
- * back what puts them on again. Through the CSSOM and never the `style`
- * attribute: the page's policy refuses an inline style written as an
- * attribute (`style-src 'self'`), and a refused restore would leave the
- * read's own `none` on the card. Shared with the probe's Cycle rule, which
- * reads the card the same way.
+ * Hold `nodes` still for a read, and hand back what lets them move again.
+ *
+ * - **Every transition finished and off** (D-2026-10-19-03 (1), the owner's
+ *   "as recommended"; the wall-offsize critic's item 3): a running
+ *   transition out-ranks every declaration, the fit's inline size among
+ *   them, so a look's `transition: all` on the figure read a size halfway to
+ *   the one the read before set — measured on a planted Neo, 22 of 35 cards
+ *   moved after a resize, two left at 79.92px past their 65.5px design.
+ *   Each running transition is finished, then `transition: none !important`
+ *   holds the next ones off while the fit sets and reads sizes. On release
+ *   the style the reads left is settled (a computed read) before the
+ *   transitions come back, so the size the fit took is the style a
+ *   transition starts from, and none runs from the last size read to it.
+ * - **The turn and the sway off** (`turn`, the default): `transform` and
+ *   `rotate` set to none, important, so an animation cannot out-rank them.
+ *   Rural tilts every third card and sways its tag, and an axis-aligned box
+ *   of a swaying tag changes with the moment.
+ *
+ * Through the CSSOM and never the `style` attribute: the page's policy
+ * refuses an inline style written as an attribute (`style-src 'self'`), and a
+ * refused restore would leave the read's own `none` on the card. An
+ * animation's keyframe out-ranks the fit's size too, and is not held here
+ * (holding `animation` would restart every look's motion on every fit): the
+ * look lint refuses a keyframe that names a size
+ * (`a-look-never-animates-a-money-nodes-size`).
  */
-export function holdStill(nodes: readonly HTMLElement[]): () => void {
-    const kept = nodes.map((node) =>
-        (['transform', 'rotate'] as const).map((prop) => [prop, node.style.getPropertyValue(prop), node.style.getPropertyPriority(prop)] as const),
-    );
+export function holdStill(nodes: readonly HTMLElement[], { turn = true }: { turn?: boolean } = {}): () => void {
+    const held = turn ? (['transform', 'rotate', 'transition'] as const) : (['transition'] as const);
+    const kept = nodes.map((node) => held.map((prop) => [prop, node.style.getPropertyValue(prop), node.style.getPropertyPriority(prop)] as const));
     for (const node of nodes) {
-        node.style.setProperty('transform', 'none', 'important');
-        node.style.setProperty('rotate', 'none', 'important');
+        for (const running of node.getAnimations?.() ?? []) {
+            if (typeof CSSTransition === 'function' && running instanceof CSSTransition) running.finish();
+        }
+        for (const prop of held) node.style.setProperty(prop, 'none', 'important');
     }
     return () => {
+        // The turn back first, with no transition to run it, and the style
+        // settled; then the transitions, which find nothing to move.
         nodes.forEach((node, i) => {
             for (const [prop, value, priority] of kept[i]!) {
+                if (prop === 'transition') continue;
+                if (value === '') node.style.removeProperty(prop);
+                else node.style.setProperty(prop, value, priority);
+            }
+        });
+        for (const node of nodes) void getComputedStyle(node).fontSize;
+        nodes.forEach((node, i) => {
+            for (const [prop, value, priority] of kept[i]!) {
+                if (prop !== 'transition') continue;
                 if (value === '') node.style.removeProperty(prop);
                 else node.style.setProperty(prop, value, priority);
             }
@@ -342,15 +387,27 @@ export function holdStill(nodes: readonly HTMLElement[]): () => void {
 function fitCard(head: HTMLElement): void {
     const figure = head.querySelector<HTMLElement>('.item-p > .item-a > .item-x');
     if (figure === null) return;
-    dress(head, figure, 'line', undefined);
-    const still = [head.parentElement, head, figure.closest<HTMLElement>('.item-p'), figure.parentElement].filter(
+    const still = [head.parentElement, head, figure.closest<HTMLElement>('.item-p'), figure.parentElement, figure].filter(
         (node): node is HTMLElement => node !== null,
     );
-    // The card as painted: a look that tilts it (Rural, every third card)
-    // reaches lower than its box, and the status line is read as painted.
-    const card = head.parentElement ?? head;
-    const turn = head.closest('.shop-window')?.getAttribute('data-turn') ?? null;
-    const painted = across(card.getBoundingClientRect(), turn).hi;
+    // Transitions off before the first size is taken off: with one on the
+    // figure, taking the last fit's size off would run back to the design.
+    const calm = holdStill(still, { turn: false });
+    try {
+        dress(head, figure, 'line', undefined);
+        // The card as painted: a look that tilts it (Rural, every third card)
+        // reaches lower than its box, and the status line is read as painted.
+        const card = head.parentElement ?? head;
+        const turn = head.closest('.shop-window')?.getAttribute('data-turn') ?? null;
+        const painted = across(card.getBoundingClientRect(), turn).hi;
+        fitStill(head, figure, still, card, turn, painted);
+    } finally {
+        calm();
+    }
+}
+
+/** `fitCard` with the card's transitions held off: the turn and the sway off too, then the shapes. */
+function fitStill(head: HTMLElement, figure: HTMLElement, still: readonly HTMLElement[], card: HTMLElement, turn: string | null, painted: number): void {
     const release = holdStill(still);
     try {
         const first = gauge(head, figure);
@@ -376,23 +433,95 @@ function fitCard(head: HTMLElement): void {
             relieve(head, figure, 'line', line, tilt);
             return;
         }
-        const last: Shape = figure.querySelector('.fig-say') !== null ? 'break' : stacks ? 'stack' : 'line';
-        settle(head, figure, last, Math.min(design, WALL_FIGURE_MIN_PX), WALL_FIGURE_FLOOR_PX);
+        if (figure.querySelector('.fig-say') !== null) {
+            settleBreak(head, figure, design, tilt);
+            return;
+        }
+        settle(head, figure, stacks ? 'stack' : 'line', Math.min(design, WALL_FIGURE_MIN_PX), WALL_FIGURE_FLOOR_PX);
     } finally {
         release();
     }
+}
+
+/**
+ * The broken shape's size (D-2026-10-19-03 (3), the owner's "as
+ * recommended"; the wall-offsize critic's item 7): **the largest size at
+ * which the broken figure stands, at any number of lines, capped by its
+ * design size** — where it was `WALL_FIGURE_MIN_PX` and no larger. The
+ * critic measured what that left on the table: none of 332 broken cards
+ * stood on one line at 32px, but a break could be larger by a median of
+ * 27–56px with the card clear of the status line (Neo's
+ * `12,345,678,901.23` at 1280x900: 32px on two lines, standing at 56px on
+ * three). Standing in the broken shape is one fact that grows with the
+ * size — the widest piece, a comma group or the last group with its unit,
+ * inside the figure's own box and the column — so `settle` finds it from the
+ * design size down, to `WALL_FIGURE_FLOOR_PX`.
+ *
+ * More lines are more height, so the card is then held clear of the status
+ * line as the other shapes are: where it runs past it at that size, the
+ * largest size from `WALL_FIGURE_MIN_PX` up at which it clears (halved to
+ * `FIT_PRECISION_PX`); where even that does not clear, the smaller of the
+ * two only if giving moved the card's edge — a card held down by its code or
+ * its sign keeps its figure's size, and the probe's status-line rule says
+ * so. A figure whose pieces stand only under `WALL_FIGURE_MIN_PX` keeps the
+ * size it stood at, as before.
+ */
+function settleBreak(head: HTMLElement, figure: HTMLElement, design: number, tilt: number): void {
+    const stood = settle(head, figure, 'break', design, WALL_FIGURE_FLOOR_PX);
+    if (stood === undefined || stood <= WALL_FIGURE_MIN_PX) return;
+    const overAt = (px: number): number | undefined => {
+        dress(head, figure, 'break', px);
+        const read = gauge(head, figure);
+        return read === undefined || !stands(read, 'break') ? undefined : read.over + tilt;
+    };
+    const high = overAt(stood);
+    if (high === undefined || high <= 0.5) {
+        dress(head, figure, 'break', stood);
+        return;
+    }
+    const low = overAt(WALL_FIGURE_MIN_PX);
+    if (low === undefined || low > 0.5) {
+        dress(head, figure, 'break', low !== undefined && low < high - 0.5 ? WALL_FIGURE_MIN_PX : stood);
+        return;
+    }
+    // Clear at the one-line size, past the line at the size that stands:
+    // the largest size between them that clears.
+    let clear = WALL_FIGURE_MIN_PX;
+    let past = stood;
+    for (let tries = 0; tries < 12 && past - clear > FIT_PRECISION_PX; tries += 1) {
+        const mid = Math.floor(((clear + past) / 2) * 10) / 10;
+        if (mid <= clear) break;
+        const over = overAt(mid);
+        if (over !== undefined && over <= 0.5) clear = mid;
+        else past = mid;
+    }
+    dress(head, figure, 'break', clear);
 }
 
 /** The frame each root's observer watches, and the size it was last fitted at. */
 const watching = new WeakMap<ParentNode, ResizeObserver>();
 
 /**
+ * What a paint measures beside the figure, run again when the frame changes
+ * size with no paint (the wall-offsize critic's item 9): `before` the fit —
+ * the sign's name ladder (`applyNameTiers`), whose rung moves the column the
+ * card stands in — and `after` it, the marquees, whose runs are measured on
+ * the lines the column leaves. Without them a turned tablet kept the name's
+ * rung and the runs of the size it was painted at.
+ */
+export type WallRefit = {
+    before?: (root: ParentNode) => void;
+    after?: (root: ParentNode) => void;
+};
+
+/**
  * Fit every Cycle card's figure under `root`, after the tree is laid out, and
- * watch the wall's frame for a size change no paint follows. Inert where no
+ * watch the wall's frame for a size change no paint follows, measuring
+ * `refit`'s `before` and `after` again with the fit there. Inert where no
  * Cycle card is painted, and where nothing lays out (happy-dom). Test:
  * `the-cycle-figure-is-fitted-to-its-column`.
  */
-export function fitWallFigures(root: ParentNode): void {
+export function fitWallFigures(root: ParentNode, refit: WallRefit = {}): void {
     for (const head of root.querySelectorAll<HTMLElement>(".shop-window[data-mode='cycle'] .sw-strip .item-head")) {
         fitCard(head);
     }
@@ -405,9 +534,11 @@ export function fitWallFigures(root: ParentNode): void {
         const now = `${frame.clientWidth}x${frame.clientHeight}`;
         if (now === fittedAt || !frame.isConnected) return;
         fittedAt = now;
+        refit.before?.(root);
         for (const head of frame.querySelectorAll<HTMLElement>('.sw-strip .item-head')) {
             fitCard(head);
         }
+        refit.after?.(root);
     });
     observer.observe(frame);
     watching.set(root, observer);

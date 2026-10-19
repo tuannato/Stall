@@ -749,9 +749,13 @@
 
     /* The code is the column's: at the tall portrait wall's 26cqh it is
        333px on a 1280-tall frame, wider than this layout's code column at
-       720 wide (295px), and it ran out of the card. Never past the column
+       720 wide (295px), and it ran out of the card. Capped by the column
        (the frame less the body's and the card's padding, the picture and
-       the gap), and never below its floor. */
+       the gap) — and never below its 280px floor, which wins where the
+       column is narrower: under a 720px frame the code stands past the
+       column into the card's padding (269px of column and a 280px code at
+       680 wide; the wall-offsize critic read it 2–13px past across the wall
+       screens). A smaller code is one a room cannot read. */
     .stall.shop-window .sw-qr svg {
         width: clamp(280px, min(26cqh, 100cqw - 180px - min(260px, 34cqw)), 360px);
         height: clamp(280px, min(26cqh, 100cqw - 180px - min(260px, 34cqw)), 360px);

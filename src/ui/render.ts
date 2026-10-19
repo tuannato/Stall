@@ -921,12 +921,16 @@ export function renderStall(
         // column the rows stand beside. Inert on a look that names no rungs.
         // Then the Cycle card's figure, fitted to its column (`wallFit.ts`),
         // and both again when the faces land: a late face moves every width.
+        // A frame that changes size with no paint (a window resized, a
+        // tablet turned) is fitted again with the ladder and the marquees
+        // around it (`WallRefit`).
+        const refit = { before: applyNameTiers, after: (laid: ParentNode) => applyMarquees(laid, WINDOW_MARQUEE) };
         applyNameTiers(root);
-        fitWallFigures(root);
+        fitWallFigures(root, refit);
         applyMarquees(root, WINDOW_MARQUEE);
         remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE, sayHiddenPayLines, (laid) => {
             applyNameTiers(laid);
-            fitWallFigures(laid);
+            fitWallFigures(laid, refit);
         });
         // A touch wall has controls, so it has focus to keep: every socket
         // tick and the sixty-second heartbeat rebuild this tree, and without

@@ -444,6 +444,9 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
             /\[data-wall-wrap\] \.item-from \{\s*grid-area: from;/,
             /\[data-wall-wrap\] \.item-a > \.item-u \{\s*grid-area: u;/,
             /\[data-wall-wrap='break'\] \.item-x \{\s*white-space: normal;\s*\}/,
+            // Stacked, the figure's track never shrinks under it (the
+            // wall-offsize critic's item 1: ` XEC` over the last digit).
+            /\[data-wall-wrap='stack'\] \.item-a:has\(> \.item-u\) \{\s*grid-template-columns: max-content auto;\s*\}/,
         ]) {
             expect(top, String(rule)).toMatch(rule);
         }
