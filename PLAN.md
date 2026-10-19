@@ -906,9 +906,11 @@ money path this app can have, because nothing on it is derived.
      fragmented box's positioning area; the RTL false red in
      `dl.pay-lines`; dashed, dotted, double and 3D borders read as their
      colour.
-  The quiet-zone flake and the coverage table's text match ride the
-  probe-shard branch; wall-offsize's four passes must be named in the
-  coverage tables before it lands.
+  The quiet-zone flake's read-again and the coverage table's text match
+  landed with probe-shard (merged 2026-10-20 at `2f1d639`): every pass is a
+  value in `scripts/probe-passes.mjs`, so wall-offsize's four passes are one
+  module entry each plus their table rows and shot viewports, and a test
+  fails until all are named. The flake's cause is still unknown.
 
 - **A screen shorter than the wall's floor stopped being a wall, and that
   is a behaviour change.** The floor asks the short painted axis now
