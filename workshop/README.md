@@ -84,11 +84,16 @@ does not read: `-webkit-text-fill-color`, `-webkit-text-stroke`,
 **A price is dressed as one piece.** When a long price is too wide for its
 box, the app breaks it after its commas (`184,467,` / `440,737,` /
 `095,516.15 XEC`). Style the price as a whole — its colour, face, size,
-weight, shadow and everything around it are yours — but never one part of
-it apart from the rest: every part keeps the price's own colour, opacity,
-face, size and spacing, with no mask, clip, filter or transform of its own.
-A part styled on its own could hide a digit while every other check stays
-green. *(The kit — `workshop:probe`.)*
+weight and the box around it are yours — but never one part of it apart
+from the rest: every part keeps the price's own colour, opacity, face, size
+and spacing, with no mask, clip, filter or transform of its own. A part
+styled on its own could hide a digit while every other check stays green.
+*(The kit — `workshop:probe`.)*
+
+**The whole price is never dressed to misread:** no clip, mask, filter,
+fade, shrink, turn, line through it, far shadow, ground in its own colour or
+spacing that makes its digits touch, and a box around it may tilt up to 10°
+and take any shape only clear of its digits. *(The kit — `workshop:probe`.)*
 
 **QR codes stay black on white, with their quiet margin.** Only the box
 around a code may take your look. *(The kit checks that nothing covers a

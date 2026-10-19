@@ -450,18 +450,28 @@ describe('a-look-may-not-dress-a-figures-pieces', () => {
         }
     });
 
-    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06)', () => {
+    it('is stated in the workshop README, in the words the owner approved (D-2026-10-14-06, D-2026-10-19-02)', () => {
         const readme = read('workshop/README.md').replace(/\s+/g, ' ');
-        assert.ok(
-            readme.includes(
-                "**A price is dressed as one piece.** When a long price is too wide for its box, the app breaks it after its commas (`184,467,` / `440,737,` / `095,516.15 XEC`). Style the price as a whole — its colour, face, size, weight, shadow and everything around it are yours — but never one part of it apart from the rest: every part keeps the price's own colour, opacity, face, size and spacing, with no mask, clip, filter or transform of its own. A part styled on its own could hide a digit while every other check stays green. *(The kit — `workshop:probe`.)*",
-            ),
-            'the workshop README does not carry the line',
-        );
+        // D-2026-10-14-06, its "shadow and everything around it" narrowed to
+        // "the box around it" by D-2026-10-19-02: the probe holds a far
+        // shadow and every box around the figure since D-2026-10-19-01.
+        const piece =
+            "**A price is dressed as one piece.** When a long price is too wide for its box, the app breaks it after its commas (`184,467,` / `440,737,` / `095,516.15 XEC`). Style the price as a whole — its colour, face, size, weight and the box around it are yours — but never one part of it apart from the rest: every part keeps the price's own colour, opacity, face, size and spacing, with no mask, clip, filter or transform of its own. A part styled on its own could hide a digit while every other check stays green. *(The kit — `workshop:probe`.)*";
+        // D-2026-10-19-02: what `a-money-figure-is-never-misdressed` holds
+        // the whole figure to, in the kit's words.
+        const whole =
+            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe`.)*';
+        assert.ok(readme.includes(piece), 'the workshop README does not carry the piece line');
+        assert.ok(readme.includes(whole), 'the workshop README does not carry the whole-price line');
+        assert.ok(!readme.includes('shadow and everything around it are yours'), 'the README still says a shadow and everything around the price are a look\'s');
         const money = readme.indexOf('**Money is never covered, cut or faded.**');
-        const piece = readme.indexOf('**A price is dressed as one piece.**');
+        const at = readme.indexOf(piece);
+        const after = readme.indexOf(whole);
         const next = readme.indexOf('**QR codes stay black on white');
-        assert.ok(money >= 0 && money < piece && piece < next, 'the line stands after the money paragraph and before the next');
+        assert.ok(money >= 0 && money < at, 'the piece line stands after the money paragraph');
+        // The whole-price line follows the piece line directly, then the QR paragraph.
+        assert.equal(after, at + piece.length + 1, 'the whole-price line stands right after the piece line');
+        assert.equal(next, after + whole.length + 1, 'the QR paragraph stands right after the whole-price line');
     });
 });
 
