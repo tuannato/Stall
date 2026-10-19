@@ -8906,7 +8906,28 @@ type QuietZone = {
     corner: number;
     clip: { x0: number; y0: number; x1: number; y1: number };
     turned: boolean;
+    /**
+     * Every box above the code that scrolls or is scrolled, with its offset
+     * when the zones were read, and the document's own — said when a read
+     * fails, to find why (`quietReadingLine`, `quiet-zone.mjs`).
+     */
+    scrolled: { at: string; top: number; left: number }[];
 };
+
+/** The boxes above `el` that scroll or are scrolled, and the document's offset, for a quiet-zone reading. */
+function scrolledAbove(el: Element): { at: string; top: number; left: number }[] {
+    const out: { at: string; top: number; left: number }[] = [];
+    for (let at = el.parentElement; at !== null && at !== document.documentElement; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        const scrolls =
+            (/(auto|scroll)/.test(cs.overflowY) && at.scrollHeight > at.clientHeight) ||
+            (/(auto|scroll)/.test(cs.overflowX) && at.scrollWidth > at.clientWidth);
+        if (scrolls || at.scrollTop !== 0 || at.scrollLeft !== 0) out.push({ at: describe(at), top: at.scrollTop, left: at.scrollLeft });
+    }
+    const page = document.scrollingElement;
+    if (page !== null && (page.scrollTop !== 0 || page.scrollLeft !== 0)) out.push({ at: 'the document', top: page.scrollTop, left: page.scrollLeft });
+    return out;
+}
 
 window.__quietZones = () =>
     [...(preparedScope ?? document).querySelectorAll<SVGSVGElement>('svg.qr')]
@@ -8952,6 +8973,7 @@ window.__quietZones = () =>
                 // which read every unclipped code as wholly clipped away.
                 clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
                 turned: angleOf(svg) !== 0,
+                scrolled: scrolledAbove(svg),
             };
         })
         .filter((z): z is QuietZone => z !== undefined);

@@ -5,7 +5,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { QUIET_MODULES, QUIET_ZONE_FLOOR, quietZonePixels, readQuietZone } from './quiet-zone.mjs';
+import { QUIET_MODULES, QUIET_ZONE_FLOOR, STILL_PX, quietReadingLine, quietZonePixels, readQuietZone, readQuietZones } from './quiet-zone.mjs';
 
 const OPEN = { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity };
 
@@ -94,3 +94,205 @@ describe('a-code-keeps-its-quiet-zone-white', () => {
         assert.match(quietZonePixels({ ...CODE, module: 0.4 }, 400, 400).fault, /no quiet zone/);
     });
 });
+
+/** A zone as `__quietZones` reports it. */
+const named = (z, name = 'pay-qr') => ({ ...z, name, turned: false });
+const white = shot(400, 400);
+/** A band of the page over the top of the ring: the flake's shape. */
+const banded = shot(400, 400, (x, y) => (y >= 10 && y < 26 ? [18, 21, 26] : undefined));
+/** A fresh pair that answers `answer`, counting how often it was asked. */
+const counted = (answer) => {
+    const calls = { n: 0 };
+    return { calls, again: async () => ((calls.n += 1), answer) };
+};
+
+describe('a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair', () => {
+    /**
+     * The money-guards round-7 critic's P2-3: a pay screen's code read part
+     * of its quiet zone non-white and white on a rerun, four times, once on
+     * main. A code that reads dark is read again on a fresh pair — a new
+     * capture and the zones read beside it — and the fresh pair's reading
+     * is the verdict; a real defect is steady state and reads dark there
+     * too. Never a weaker read: a fresh pair that cannot read the code
+     * leaves the first reading standing, and (the probe-shard critic's B2)
+     * so does one whose code moved during it or whose ring it read shorter.
+     */
+    it('reads a clean code once and asks for no fresh pair', async () => {
+        const { calls, again } = counted({ why: ['never asked'] });
+        const reads = await readQuietZones({ img: white, zones: [named(CODE)], at: { shot: [400, 400] } }, again);
+        assert.equal(calls.n, 0);
+        assert.equal(reads[0].r.bad, 0);
+        assert.equal(reads[0].retry, undefined);
+    });
+
+    it('believes the fresh pair when the first capture read dark and the second white, the code standing still, and keeps both readings', async () => {
+        // The builder's red proof: a band on the first capture only, nothing moved.
+        const { calls, again } = counted({ img: white, zones: [named(CODE)], at: { pair: 'fresh' }, before: [named({ ...CODE, y: CODE.y + STILL_PX })] });
+        const reads = await readQuietZones({ img: banded, zones: [named(CODE)], at: { pair: 'first' } }, again);
+        assert.equal(calls.n, 1);
+        assert.equal(reads[0].r.bad, 0);
+        assert.ok(reads[0].retry.first.r.bad > 0);
+        assert.deepEqual(reads[0].retry.first.r.dark, [11, 11, 233, 25]);
+        assert.deepEqual(reads[0].retry.first.at, { pair: 'first' });
+        assert.deepEqual(reads[0].retry.again.at, { pair: 'fresh' });
+        assert.equal(reads[0].retry.again.before.y, CODE.y + STILL_PX);
+        assert.equal(reads[0].retry.why, undefined);
+    });
+
+    it('lets the first reading stand when the code moved during the fresh pair', async () => {
+        // The pair's own code moved 2px between the zones read before its
+        // capture and after it: the reading was taken where it no longer was.
+        const reads = await readQuietZones(
+            { img: banded, zones: [named(CODE)], at: {} },
+            async () => ({ img: white, zones: [named({ ...CODE, y: 12 })], at: {}, before: [named({ ...CODE, y: 10 })] }),
+        );
+        assert.ok(reads[0].r.bad > 0);
+        assert.equal(reads[0].retry.again, undefined);
+        assert.match(reads[0].retry.why.join(' '), /moved during the fresh pair \(y 10 → 12\)/);
+        assert.equal(reads[0].retry.unbelieved.r.bad, 0);
+        // Any move at all is a move (`STILL_PX` is 0); a clip, a module, a
+        // corner or a turn that moved is one too.
+        assert.equal(STILL_PX, 0);
+        for (const [before, said] of [
+            [named({ ...CODE, y: CODE.y + 0.01 }), /y 10 → 10\.01/],
+            [named({ ...CODE, module: 5.6 }), /module 5 → 5\.6/],
+            [named({ ...CODE, corner: 1 }), /corner 0 → 1/],
+            [named({ ...CODE, clip: { ...OPEN, y0: 35 } }), /clip y0 -Infinity → 35/],
+            [{ ...named(CODE), turned: true }, /turned false → true/],
+            [named(CODE, 'share-qr'), /another code stood there between the job's capture and the fresh pair \(pay-qr → share-qr\)/],
+        ]) {
+            const moved = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, async () => ({ img: white, zones: [named(CODE)], at: {}, before: [before] }));
+            assert.ok(moved[0].r.bad > 0, String(said));
+            assert.match(moved[0].retry.why.join(' '), said);
+        }
+        // A pair that says nothing of where the code stood before its capture shows no stillness.
+        const blind = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, async () => ({ img: white, zones: [named(CODE)], at: {} }));
+        assert.ok(blind[0].r.bad > 0);
+        assert.match(blind[0].retry.why.join(' '), /says nothing of where it stood just before its capture/);
+    });
+
+    it('fails a steady defect the fresh pair reads on a shorter ring, or where the code moved (the critic’s two cases)', async () => {
+        // The probe-shard critic's B2 (`critps/plants/qz-weaker.mjs`): the
+        // same steady band over the top of the ring read dark on the first
+        // capture; the fresh pair read it white.
+        const first = readQuietZone(banded, named(CODE));
+        assert.equal(first.bad, 3345);
+        // 1. Same code, same box, still through the pair, and a scroller now
+        //    clipping its top 25px: the band is cut away, the ring shorter.
+        const clipped = named({ ...CODE, clip: { ...OPEN, y0: 35 } });
+        const one = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, async () => ({ img: banded, zones: [clipped], at: {}, before: [clipped] }));
+        assert.equal(one[0].r.bad, 3345);
+        assert.equal(one[0].retry.unbelieved.r.bad, 0);
+        assert.equal(one[0].retry.unbelieved.r.px, 10530);
+        assert.match(one[0].retry.why.join(' '), /the fresh pair read 10530 of the 14760 ring pixels the first read/);
+        // 2. The code moved from y 30 (where the capture painted it, band
+        //    and all) to y 50 between the zones read before and after.
+        const moved = shot(400, 400, (x, y) => (y >= 30 && y < 46 ? [18, 21, 26] : undefined));
+        const two = await readQuietZones(
+            { img: banded, zones: [named(CODE)], at: {} },
+            async () => ({ img: moved, zones: [named({ ...CODE, y: 50 })], at: {}, before: [named({ ...CODE, y: 30 })] }),
+        );
+        assert.equal(two[0].r.bad, 3345);
+        assert.equal(two[0].retry.unbelieved.r.bad, 0);
+        assert.match(two[0].retry.why.join(' '), /moved between the job's capture and the fresh pair \(y 10 → 30\)/);
+    });
+
+    it('the first reading stands when the code moved before the fresh pair', async () => {
+        // The probe-shard critic's B2′: the zone read on the job's capture is
+        // where the first reading was taken, and a code that moved between it
+        // and the fresh pair, then stood still through the pair, reads another
+        // stretch of its ring there.
+        const dark = [18, 21, 26];
+        // d1: a steady 6-row band on the ring's top, the code in a scroller
+        // clipped at y 56..262, scrolled up 17px before the fresh pair.
+        const clip = { x0: -1e9, y0: 56, x1: 1e9, y1: 262 };
+        const painted = (cy) => shot(400, 400, (x, y) => (y >= cy + 1 && y < cy + 7 && x >= 10 && x < 235 ? dark : undefined));
+        const z0 = named({ ...CODE, y: 55, clip });
+        const z1 = named({ ...CODE, y: 38, clip });
+        const d1first = readQuietZone(painted(55), z0);
+        const d1fresh = readQuietZone(painted(38), z1);
+        assert.ok(d1first.bad > 0);
+        assert.equal(d1fresh.bad, 0);
+        assert.ok(d1fresh.px >= d1first.px, 'the plant reads at least as many ring pixels on the fresh pair');
+        const d1 = await readQuietZones({ img: painted(55), zones: [z0], at: {} }, async () => ({ img: painted(38), zones: [z1], before: [z1], at: {} }));
+        assert.equal(d1[0].r.bad, d1first.bad);
+        assert.equal(d1[0].retry.again, undefined);
+        assert.match(d1[0].retry.why.join(' '), /moved between the job's capture and the fresh pair \(y 55 → 38\)/);
+        // d2: a move under the old half-pixel tolerance, x 10.6 to 11.05,
+        // with a one-pixel dark column on the ring's outermost left edge.
+        const at = named({ ...CODE, x: 10.6 });
+        const after = named({ ...CODE, x: 11.05 });
+        const edge = shot(400, 400, (x, y) => (x === Math.ceil(10.6 + 1) && y >= 11 && y < 234 ? dark : undefined));
+        const d2 = await readQuietZones({ img: edge, zones: [at], at: {} }, async () => ({ img: edge, zones: [after], before: [at], at: {} }));
+        assert.ok(d2[0].r.bad > 0);
+        assert.equal(d2[0].retry.again, undefined);
+        assert.match(d2[0].retry.why.join(' '), /moved during the fresh pair \(x 10\.6 → 11\.05\)/);
+    });
+
+    it('still fails a quiet zone that is dark on both captures', async () => {
+        const { calls, again } = counted({ img: banded, zones: [named(CODE)], at: {}, before: [named(CODE)] });
+        const reads = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, again);
+        assert.equal(calls.n, 1);
+        assert.ok(reads[0].r.bad > 0);
+        assert.ok(reads[0].retry.again.r.bad > 0);
+    });
+
+    it('asks once for every dark code, and reads again only the codes that read dark', async () => {
+        const other = named({ ...CODE, x: 250, y: 250, side: 140, module: 4 }, 'share-qr');
+        const { calls, again } = counted({ img: white, zones: [named(CODE), other], at: {}, before: [named(CODE), other] });
+        const reads = await readQuietZones({ img: banded, zones: [named(CODE), other], at: {} }, again);
+        assert.equal(calls.n, 1);
+        assert.equal(reads[1].retry, undefined);
+        assert.equal(reads[1].r.bad, 0);
+        assert.equal(reads[0].r.bad, 0);
+    });
+
+    it('lets the first reading stand when the fresh pair cannot be had, paints other codes, or cannot read the code', async () => {
+        const cases = [
+            [{ why: ['the shot is 400x300 where the job is 400x400'] }, /the shot is 400x300/],
+            [{ img: white, zones: [named(CODE, 'share-qr')], at: {} }, /painted the codes share-qr where the first had pay-qr/],
+            [{ img: white, zones: [], at: {} }, /painted the codes none where the first had pay-qr/],
+            [{ img: white, zones: [named({ ...CODE, clip: { x0: 500, y0: -Infinity, x1: Infinity, y1: Infinity } })], at: {} }, /no pixel of its quiet zone is on screen/],
+            [{ img: white, zones: [{ ...named(CODE), turned: true }], at: {} }, /its frame is turned/],
+            [{ img: white, zones: [named({ ...CODE, corner: 6 })], at: {} }, /past one module/],
+        ];
+        for (const [answer, why] of cases) {
+            const reads = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, async () => answer);
+            assert.ok(reads[0].r.bad > 0, String(why));
+            assert.match(reads[0].retry.why.join(' '), why);
+            assert.equal(reads[0].retry.again, undefined);
+        }
+    });
+
+    it('asks for no fresh pair over a fault, a turned code or a code with nothing on screen', async () => {
+        const { calls, again } = counted({ why: ['never asked'] });
+        const reads = await readQuietZones(
+            {
+                img: banded,
+                zones: [
+                    named({ ...CODE, corner: 6 }),
+                    { ...named(CODE), turned: true },
+                    named({ ...CODE, clip: { x0: 500, y0: -Infinity, x1: Infinity, y1: Infinity } }),
+                ],
+                at: {},
+            },
+            again,
+        );
+        assert.equal(calls.n, 0);
+        assert.match(reads[0].r.fault, /past one module/);
+        assert.equal(reads[1].turned, true);
+        assert.equal(reads[2].r.px, 0);
+    });
+
+    it('says a reading with what a person needs to find the cause', () => {
+        const z = { ...named(CODE), scrolled: [{ at: 'div.sheet', top: 120, left: 0 }] };
+        const line = quietReadingLine({ z, r: readQuietZone(banded, z), at: { shot: [400, 400], page: { dpr: 1 } } }, { ...z, y: 14 });
+        assert.match(line, /^\d+ of \d+ dark \(the first at 11,11 rgb\(18,21,26\), spanning 11,11,233,25\)/);
+        assert.match(line, /the code at 10\.0,10\.0 side 225\.0 module 5\.00, clip/);
+        assert.match(line, /at 10\.0,14\.0 side 225\.0 module 5\.00 just before its capture/);
+        assert.match(line, /scrolled div\.sheet 120,0/);
+        assert.match(line, /\{"shot":\[400,400\],"page":\{"dpr":1\}\}$/);
+        assert.match(quietReadingLine({ z: named(CODE), r: readQuietZone(white, CODE), at: undefined }), /^0 of \d+ dark — .* — nothing above it scrolled$/);
+    });
+});
+

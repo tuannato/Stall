@@ -8428,3 +8428,467 @@ passes summed 75.3s against 78.0s, the contrast pass 120.9s against 121.1s,
 its prepare phase (where `markLookPseudos` runs) 25.5s against 25.3s over
 802 calls. The planted runs (ceiling 1200s): 227.6s (PSc, PSci, FX) and
 239.2s (with round 6's six).
+
+## The geometry passes walk on two tabs (2026-10-19, D-2026-10-19-02 (3))
+
+The owner's decision: the 300s ceiling stays, and the geometry passes run on
+the contrast pass's tabs instead. With the money rules a run was 280–291s
+under load (the dress rule's cost, above), and `wall-offsize` adds four wall
+passes, +43–61s by its own measure.
+
+**What changed** (`scripts/layout-check.mjs`, `scripts/plan-walk.mjs`). The
+tabs are made before the geometry passes, by the contrast pass's own rule and
+count (`CONTRAST_TABS`, `LAYOUT_CONTRAST_TABS`), and every tab's page is
+asked to be focused by emulation (`Emulation.setFocusEmulationEnabled`,
+which the contrast pass already set on every tab), so a pass cannot read one
+way on one tab and another on the next. (This said a second window is not
+focused otherwise. It did not reproduce: measured by the critic and again in
+the fix round, Chrome reports every target visible and focused with and
+without the emulation — a second window, a background tab in the first's
+window, the first tab — so it is kept as a belt; the fix round, below.) Each geometry pass is a function of the tab it runs on and the answers
+it reads, and hands back its record (`geometryRecord`): the lines it says,
+whether it failed, the page's report, and what it adds to the totals the
+contrast pass and the coverage read later (the worn classes, the outlines,
+the marks, the codes, a page pass's sticky looks, a carried look's clip
+points). Nothing in a pass writes a total. `walkPlan` hands the passes out in
+plan order to whichever tab is free and commits each record in plan order as
+soon as it and every record before it are in (`commitGeometryPass`), so the
+lines come out in the order they always did, on the stream each names, while
+the walk runs. A short pass reads the page pass it names (`after`) and waits
+for it; a reduced-motion pass sets the media feature on its own tab and takes
+it off in a `finally`. A pass that throws stops the hand-out: the other tabs
+finish what they hold, the earliest pass in the plan that threw is the run's
+error, and only the passes before it are said (and how many after it ran and
+are not reported). A pass that comes back with no record of its own fails the
+run naming it. The output gains three lines after the passes: `geometry:` (the
+walk's wall time, and each tab's passes, busy time and reads again),
+`geometry passes:` (each pass's own time and the tab it ran on, in plan
+order) and the canary's line. A pass's printed time is now its own, from the
+moment its tab took it (the old `took()` counted from the previous stamp, so
+the portrait line carried the worn-only job's time).
+
+**Found on the way, both fixed.** (1) The ask for a verdict (`readVerdict`)
+waits out the page's one synchronous pass, under the run's 30s command bound:
+read again under two tabs at load ~14, the phone pass took 30.3s and the
+desk pass 30.2s, and both "read no report" (the bound fired); a phone pass on
+one tab under a 2× CPU throttle took 38.1s. The old runner would have failed
+such a pass as a page that hung, at one tab, on a slow enough machine. The
+ask has its own bound now, `VERDICT_TIMEOUT_MS` (120s); the watchdog still
+holds the run. (2) A belt: every verdict read checks the page is visible and
+focused (`unshownFailures`), a failure of the pass if not. No real run has
+tripped it; its red proof is a tab whose `document.hasFocus` answers false
+(the fix round, below).
+
+**`the-geometry-passes-read-the-same-on-every-tab`**, in the spirit of the
+contrast pass's canary, two parts, on every run with more than one tab:
+
+- **Two passes read again** (`GEOMETRY_CANARY`): the reduced-motion pass on
+  the canvas and the short pass at the desk where a sticky sign gave it
+  something to measure — and, since the fix round, the reduced-motion pass at
+  the phone in its place where no look has a sticky desk sign, so a run reads
+  two whatever it carries (until then such a run read one). Each
+  is read by a tab other than the one that ran it, once that tab's hand-out
+  has run out, so the reads fill the time it would stand waiting; each must
+  hand back the walk's answer byte for byte — the page's whole report, the
+  lines it says less their clocks, and every total it adds
+  (`geometryRecordDiffers`). The report's one clock, `faces.waitedMs`, and
+  the faces line's "asked, N ms" are set aside.
+- **The page print** (`TAB_PRINT`): the probe page at the desk's size with
+  no screen, read on the first tab before the walk and on every tab after
+  its reads — size and density, the screen, nineteen media features, visible
+  and focused, every sheet and its rule count, every adopted sheet, the
+  window's own property names, the source text of the natives a probe reads
+  time and layout through, locale, and every face's status. Every print after
+  must equal the one before (`tabPrintDiffers` names what moved).
+
+Why two parts. Before the picks were chosen, every pass was read again on the
+other tab (a scratch hook, not kept), at load ~15: the first run found the
+two clocks and the 30s bound above; after them, **11 of 11 passes the same,
+byte for byte**. The others cost 4–35s each to read again, so the standing
+canary reads the two cheapest — and a sample of passes only sees a tab state
+that moves its own verdicts: a rule adopted onto tab 1's pages
+(`.stall-head { margin-top: 2px }`) moved the desk pass's clip count from
+2530/26204 to 2644/26519 and neither picked pass. The print sees it whatever
+pass it would move.
+
+**Proved red**, each a temporary plant, reverted:
+
+- **A rule on one tab's pages** (that adopted sheet, through
+  `Page.addScriptToEvaluateOnNewDocument` on tab 1): "tab 1's page after the
+  walk is not the page before it — adopted (only after: 1)"; both passes
+  read again the same, as above.
+- **The media feature left on** (the reduced-motion pass's `finally` emptied,
+  so each tab that ran one keeps `prefers-reduced-motion: reduce`): both
+  prints differ at `media` ("(prefers-reduced-motion: reduce) false" before,
+  "true" after), and "short-desk ran on tab 0 and read again on tab 1: its
+  report differs at 1 key(s): reducedMotion (false → true)". The print alone
+  would not have caught it had both tabs leaked and been compared only with
+  each other, which is why it is compared with the page before the walk.
+- **A pass answering another's record** (the narrow pass handing back the
+  tablet's key): "1 geometry pass(es) handed to a tab came back with no record
+  of their own: narrow", `layout-check: FAILED`, exit 1, and the narrow line
+  not said.
+- **A throw on the second tab** (tab 1 throwing on the portrait pass): the
+  four passes before it said, "layout-check: PLANT D: tab 1 threw on the
+  portrait pass", exit 1.
+- **The walk itself** (`plan-walk.test.mjs`, seven cases over passes whose
+  durations the test chooses): five mutations of `walkPlan` — commit on
+  arrival, a fault not stopping the hand-out, a pick read on its own tab, a
+  foreign record committed, a dependency not awaited — each turn one to three
+  cases red.
+
+**The same output, and where it is not.** The geometry lines, times and the
+font wait masked, are the same in the old runner (one geometry tab), this
+branch at one tab and this branch at two: identical over all five final runs
+below. Over the day's 30 runs two lines moved, and neither is a verdict:
+
+- the canvas pass's clip count, 311/7760 or 313/7762, **on one tab and on
+  two alike** — 313 on one tab at load ~6.2 and under a 2× CPU throttle, 311
+  on two tabs in six runs at load 1.3–6.5 — because `marquee.ts` and
+  `broadcast.ts` continue a running line by `Date.now()` across repaints, so
+  where a run stands when a variant is measured depends on the time between
+  paints: the pace, not the tab (the ledger's "257/259 … varies by itself"
+  is the same);
+- the worn-only job's art list, "200, 200" or "200" (the resource entries
+  seen two animation frames after its sheet lands): "200" in 6 of 23 runs
+  with the job on tab 1, never in the 8 with it on tab 0 (one tab, and the
+  old runner), and "200, 200" in three one-tab runs with the job moved right
+  after the desk pass. Not proven either way whether that is the tab or the
+  pace; `wornSheetJobFaults` passes it both ways. The contrast
+dumps: two tabs and one tab on this branch against the old runner's
+(5612189 at the same tree), 15,016 boxes identical, 0 moved; one later old
+run moved one box (`desktop/item-listing` worn, `button.item-back`, 3.73 →
+6.15), read 3.73 by every other run old or new — the old runner's own flake.
+
+**Measured** on this Mac (Apple A18 Pro: 2 performance and 4 efficiency
+cores, 8 GiB), shared with other agents' runs, so the load is given; loads are
+the 1-minute average sampled every 15s, median (min–max). The old runner is
+`money-guards` at 5612189 in a scratch clone, its ceiling raised in the clone
+for the measurement; "one tab" is this branch with `LAYOUT_CONTRAST_TABS=1`,
+which puts the contrast pass on one tab too.
+
+| run | load | geometry | contrast | total |
+|---|---|---|---|---|
+| this branch, one tab (a) | 2.3 (2.0–2.8) | 73.9s | 177.7s | 260.9s |
+| this branch, two tabs (a) | 3.0 (2.2–4.3) | 54.2s | 118.1s | 190.8s |
+| old runner (geometry one tab, contrast two) | 3.5 (3.3–4.8) | ~79.3s | 131.1s | 230.8s |
+| this branch, two tabs (b) | 5.0 (4.2–6.6) | 76.4s | 139.9s | 234.1s |
+| this branch, one tab (b) | 4.2 (2.9–5.1) | 106.6s | 190.2s | 308.5s |
+
+(The old runner prints no geometry total; ~79.3s is its passes' printed
+times summed.) Earlier pairs on near-final code (three picks, the print
+compared tab to tab): one tab 148.0s of geometry against two tabs 84.8s at
+load ~6.3 (totals 428.0 and 262.1s); the old runner 77.3s / 212.4s at load
+2.6 against two tabs 62.6s / 199.3s at 3.5.
+
+**Two tabs take 20–30s off the geometry passes here, not the ~40s
+estimated**: each pass is 1.2–1.4× slower while the other tab measures
+(pair a: the passes' busy time 96.1s on two tabs against 73.9s on one), since
+this machine has two performance cores and Chrome's own processes share them.
+The canary costs ~4s of tab time (the two reads 3.8s, mostly in the tail
+where a tab would wait) and the two prints ~1s each, about 2–3s of the walk's
+wall. A two-tab run at load ~3 is 190.8s, against the old runner's 230.8s at
+load ~3.5.
+
+**`wall-offsize`'s four passes, projected.** Its four sizes (1024x768,
+1366x768, 800x1280, 680x1000, every wall screen) run as passes on this branch
+by a scratch hook (not kept; this branch's code has none of that branch's
+fixes, so they paint 1,136 and 79 failures, and the two portrait sizes stop
+at the landscape check, after measuring): 17 passes in 100.0s at load 3.5,
+the four 13.5–21.2s each on two tabs, against 54.2s for the 13 passes at load
+3.0 — about **+46s on two tabs**. So a two-tab run with `wall-offsize`
+would be about 237s at load ~3 (190.8 + 46) and about 290s at load ~5
+(234.1 + 55); the old runner with it, 274–292s at load ~3.5 (230.8 + 43–61)
+and 323–352s under the load the dress rule was measured at. Under 300s on two
+tabs at ordinary load, past the 240s sharding line under load, and with
+little margin left for the three wall sizes still open.
+
+**Not measured, stated**: the Linux box and CI (ci.yml's manual `layout` job
+sets `LAYOUT_CONTRAST_TABS: '1'` and runs the geometry passes on one tab, as
+before); three tabs; whether starting the contrast pass on a tab that leaves
+the geometry walk early would save its tail (a second or two); `wall-offsize`
+itself (its passes were run here on code they fail on, so their time is a
+proxy); and the one-tab off-size run (152.6s of geometry) was at load ~10, no
+pair for it.
+
+### After the rebase onto money-guards (2026-10-20)
+
+Rebased onto `0b73b9a` (money-guards merged, rounds 5–8 of the dress rule).
+The one conflict was this file, both sides appending at its end; both
+sections are kept, this one last. Two items the window asked of this round,
+each its own commit.
+
+**Every pass the runner runs is a value** (`scripts/probe-passes.mjs`; the
+money-guards round-5 critic's P3). Round 5's
+`every-pass-the-runner-runs-is-in-a-coverage-table` read the runner's
+viewports out of its text with one pattern, `{ name: '…', width: N`, and
+stayed green over a viewport written width first, height before width,
+after a spread, as a template literal or in double quotes. The viewports,
+the screen lists, the kinds the runner runs (`PASS_KINDS`), the geometry
+plan `walkPlan` walks (`geometryPlan`: each pass's key, kind, coverage
+name, viewport, screens, window block and what it reads first), the
+geometry canary and the contrast and transparency passes
+(`runnerPasses`) now live there, side-effect free, and both the runner and
+the tests import it. (The runner built from `geometryPlan`, `CONTRAST_PASS`
+and `TRANSPARENCY_PASS` and never read `runnerPasses`, the list the tests
+held the tables to; the fix round, below, holds the two together.) The runner builds every geometry pass from the plan
+by its kind, and stops before it builds on a kind it has no runner for, a
+wall block that is not one the page echoes (`WALL_BLOCKS`), or a canary key
+the plan lacks; the tall wall, the counter tablet and the two desk walls are
+one `wall` runner reading its block, with their lines and verdicts as they
+were. **Adding a pass is one entry in the module and its rows in the
+coverage tables**: a wall pass of `wall-offsize` is `{ key, kind: 'wall',
+coverage, vp, screens, block }`, plus `GEOMETRY_PASSES`, both surface
+tables and `WALL_PASSES`. The test compares the module's passes with
+`GEOMETRY_PASSES` and `PASSES_OWING_NO_GEOMETRY` by value, both ways and by
+kind (a page, wall or narrow pass in `GEOMETRY_PASSES`, any other kind in
+the other table with its reason), every wall pass in `WALL_PASSES`, every
+`WALL_PASSES` row a pass the runner runs, every `PAGE_PASSES` row a page
+pass; the runner's own text names no viewport in any of the five shapes
+(planted in the test); and the shot plan's test holds every wall pass of
+the plan to shots at its size. The worn-only road and the transparent wire,
+passes the round-5 pattern never read, join `PASSES_OWING_NO_GEOMETRY` with
+their reasons.
+
+**Proved red**: a wall pass added to the module and named in no table
+("the runner's side-tablet pass is in no coverage table", and "WALL_PASSES
+does not name it"), a row dropped from the tables ("the runner's
+transparency pass is in no coverage table"), a viewport written width first
+in the runner, each a temporary edit of the real file; the same and five
+more as cases of the test (`passTableFaults`, `runnerViewportLiterals`); a
+plan entry of an unknown kind and a misspelt block, refused by the runner
+before it built ("probe-passes.mjs plans a pass this run cannot make", exit
+1); a wall pass with no shots, red in `shotPlan.test.ts`.
+
+**A dark quiet zone is read again on a fresh pair** (`readQuietZones`,
+`scripts/quiet-zone.mjs`; the money-guards round-7 critic's P2-3). Four
+sightings, one on main: a pay screen's code read part of its quiet zone
+non-white and passed on a rerun (`pay` @mobile, Neo worn, 4,572 of 21,420
+pixels; `pay-several` @mobile, Modern worn, 4,500 of 21,312,
+`rgb(18,21,26)`). The cause is not known. A code that reads dark is read
+again once on a fresh pair — a new capture after 250ms, the zones read just
+before and just after it — and the fresh pair's reading decides (since the
+fix round, only over a code that stood still from the job's capture through
+the pair and a ring at least as long as the first; below), the ring
+read's rule; a real defect is steady state and reads dark there too. A
+fresh pair that cannot be had, paints another set of codes, or cannot read
+the code leaves the first reading standing. The job's capture, its retry
+flag and its dump are untouched. Both readings are said, on a failure and,
+when the second is white, on a new line under the pass (`quiet zone, read
+again on a fresh pair and white there`): the dark pixels and the box they
+span, the code's box, module and clip, where it stood just before the fresh
+capture if it moved, the boxes above it that scroll and their offsets
+(`__quietZones`' `scrolled`), and the capture (its size, no clip, scale 1,
+how long after it the zones were read, the page's device pixel ratio, size,
+scroll, visual viewport and focus). The line said "none" on the green runs
+below; the next sighting will say which of the suspects it was.
+
+**Proved red** on a full run (ceiling raised in the plant, reverted): a 6px
+dark outline inset 14px into every Rural pay code (`.t-rural .pay-qr
+svg.qr`) still fails all 24 of its jobs after the read again, "3330 of 20160
+… on the fresh pair too", with both readings; and a 16px band painted over
+the top of every code's ring on the first capture only is read again white
+on 232 codes (every code read, every look) and fails nothing more. That
+run's contrast pass took 160.6s against 124.4s, the cost of 256 reads
+again; a run that reads none pays one page read per job that paints a code.
+The read-again's own cases (`a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair`)
+fail under five mutations: no read again, the fresh reading ignored, a fresh
+pair with nothing on screen believed, one with other codes believed, every
+code read again.
+
+**Measured** on this Mac (shared; the 1-minute load sampled every 15s,
+median (min–max)), back to back, `main` at `0b73b9a` in a clean clone:
+
+| run | load | geometry | contrast | total |
+|---|---|---|---|---|
+| this branch, two tabs | 4.0 (3.5–4.2) | 52.5s | 124.4s | 184.6s |
+| `main` (geometry one tab, contrast two) | 3.1 (2.4–4.1) | ~78.0s | 120.9s | 206.2s |
+
+(`main` prints no geometry total; ~78.0s is its pass lines summed, the
+worn-only job's time inside the portrait line.) Two tabs took 21.6s off the
+run at a higher load, the geometry walk 25.5s; the contrast pass 3.5s
+slower, within this machine's run-to-run spread. One tab
+(`LAYOUT_CONTRAST_TABS=1`, once, not a pair) fitted: 261.8s at load 2.2
+(1.6–2.8), the geometry 75.6s and the contrast pass 179.4s — 38s under the
+ceiling, so ci.yml's one-tab job is still at risk under load. The contrast
+dumps, two tabs and one, against `main`'s: 15,016 boxes identical, 0 moved,
+0 added, 0 removed.
+
+### The fix round (2026-10-20, the probe-shard critic)
+
+The critic's verdict on the two sections above found two merge blockers and
+seven smaller items. Each fix below has its red proof; the plants were run
+on a scratch clone of the fixed branch, reverted, never committed.
+
+**B1. A pass in the module list and never run.** The coverage tables were
+held to `runnerPasses`, and the runner never read it: it builds the
+geometry walk from `geometryPlan` and the two pixel passes from
+`CONTRAST_PASS` and `TRANSPARENCY_PASS`. The critic appended a `lap-wall`
+wall pass (1024x768) to `runnerPasses` and named it in every table, and
+separately a second contrast pass at the tablet (`contrast-tablet`) with a
+`PASSES_OWING_NO_GEOMETRY` row: the coverage tests passed 46 of 46 and the
+runner would have measured neither. Now `passesNotRun`
+(`scripts/probe-passes.mjs`, pure) compares the list with what the runner
+builds, by value and in order: an entry the runner will not run (a
+geometry entry the plan does not hold, a second pixel pass, a kind with no
+runner), an entry it runs otherwise (same key, another value), a pass it
+runs that the list does not name, and another order. The runner asks it
+before it builds and exits 1 on any sentence. Test:
+`the-runner-runs-every-pass-the-module-lists` — the pure cases, and the
+real runner started with each plant handed in through a module hook
+(`register` over `./probe-passes.mjs`, the real module re-exported with
+`runnerPasses` extended), which must exit 1 naming it before it builds.
+
+**Proved red**: the critic's two plants applied to the scratch clone.
+`lap-wall` (its diff, coverage tables included): the coverage test 49 of
+51, the two cases of `the-runner-runs-every-pass-the-module-lists` that
+read the module red; the runner "probe-passes.mjs plans a pass this run
+cannot make — the module lists lap-wall, a wall pass, and the runner's
+geometry walk has no such pass: it would never run", exit 1, no build.
+`contrast-tablet`: the same two cases red; the runner "the module lists a
+contrast pass, contrast-tablet, the runner will not run: it runs one
+contrast pass, contrast (…)", exit 1. And the runner with its call to
+`passesNotRun` taken out: the module-hook case red (the runner went on to
+its build).
+
+**N1. A size the text check cannot see.** `runnerViewportLiterals` reads
+five shapes in the runner's text: a `width` or `height` key whose value
+starts with a digit or a quote; an object literal with no brace inside
+holding a `name` key and a `width` or `height` key, either order; one
+holding a `name` key and a spread, either order. It misses a size from
+constants or arithmetic with no `name` beside it, a spread with no
+`name` (`{ ...TABLET, height: TABLET.height - 256 }`), and an object with
+a brace inside; the test now names two of these as misses. The run-time
+half: `readVerdict` takes the plan entry it reads a verdict for
+(`viewportOffPlan`), refuses one that is not the plan's own object before
+it navigates, and fails the pass when the page's measured
+`[innerWidth, innerHeight]` is not that entry's viewport
+(`every-viewport-the-runner-measures-is-a-module-pass`). **Proved red**,
+a plant after the walk on a full geometry run: the tablet entry read at
+the critic's `SIDE_W`×`SIDE_H` — "the page measured 1024x768 where the
+plan's tablet pass names 768x1024"; at a spread of `TABLET` — "the page
+measured 768x768 where …"; a fresh entry of its own at 1024x768 — "a
+verdict was read for side-tablet (…), which is not an entry of the plan
+probe-passes.mjs lays out", before it navigated. **What it does not see,
+stated**: a pass that never asks `readVerdict` (its own `Page.navigate`
+and evaluate), and one that reuses a plan entry at that entry's own size
+with another screen list or URL.
+
+**B2. A weaker fresh read believed.** `readQuietZones` believed the fresh
+pair's reading whenever it read one ring pixel, and logged where the code
+stood just before the fresh capture without comparing it. The critic's two
+cases, both over a steady band that read 3345 of 14760 dark on the first
+capture: the fresh pair's ring clipped by a scroller at its top 25px (0 of
+10530 dark), and its code moved from y 30 to y 50 during the pair — both
+green. Now the first reading stands, `retry.why` saying which condition
+failed and the fresh reading said beside it, "fresh pair, not believed",
+unless both hold: the code's box, module, corner, clip and turn agree
+before and after the fresh capture within `STILL_PX` (0.5px in the fix
+round, 0 since the critic's B2′ below; a pair with no `before` shows no
+stillness), and the fresh read covers at least the
+ring pixels the first did. The branch's own case that believed a code
+moving from y 12 to y 10 now keeps the first reading. **Proved red**: the
+critic's script over the fixed module reads both cases red (3345 kept); the
+same over the unfixed one, green, as he found. Four mutations of the fix
+each turn the read-again cases red (the movement check dropped: 2; the
+ring check dropped: 1; the tolerance at 5px: 1; a pair with no `before`
+taken as still: 1). And a full run with the two plants above: the Rural
+outline still fails all 24 jobs "3330 of 20160 … on the fresh pair too";
+the band on the first capture only is believed white on 232 codes, none
+"not believed", and fails nothing more (its contrast pass 196.6s, the run
+260.8s under the plant's 900s ceiling). **Not measured, stated**: a code
+that really moves or is re-clipped between the two reads of a fresh pair
+on a probe page — the pass freezes animations and grows the shot to the
+page, and none was produced; the cases are the pure function's. The cost,
+chosen: a flake whose code moves during the fresh pair now fails where it
+passed, with both readings said.
+
+**N2. The page print and one tab's root style.** The critic's P2 set
+`letter-spacing: -0.3px` on tab 1's `<html>` by script: the print read
+the same, and only the canary's short pass moved. `TAB_PRINT` now reads
+the root's and the body's own `style` attribute and what text on them
+computes to (letter and word spacing, size, line height, face, kerning,
+ligatures, rendering, zoom, writing mode, direction). **Proved red** with
+P2, geometry only: "tab 1's page after the walk is not the page before it
+— root (only before: "background-color: rgb(242, 242, 239);"; only after:
+"letter-spacing: -0.3px; background-color: rgb(242, 242, 239);",
+"-0.3px"), body (only after: "-0.3px")". (P2 also failed desktop 47 and
+narrow 36 on their own, as the critic found.) An allow-list of the CDP
+methods sent to each tab was not built.
+
+**N3. The focus belt.** The critic's P1 (no focus emulation on tab 1), P1b
+(tab 1 a background tab in tab 0's window) and P1c (none on tab 0) read
+every pass green and the print unchanged; P1 re-run here on the fixed
+branch: the same, every pass green, the print the same. So the sentence
+above that a second window is not focused otherwise is corrected, the
+emulation kept as a belt. **Its red proof**, P1d (tab 1's
+`Document.prototype.hasFocus` answering false), re-run here: desktop,
+portrait, desk-wall, narrow and reduced-motion @canvas — every pass tab 1
+ran — failed "the page is visible and unfocused", the print differed at
+`shown`, and both canary reads differed.
+
+**N4. Two canary passes whatever a run carries.** Where no look has a
+sticky desk sign the short pass at the desk measures nothing, and the
+canary read one pass again (`pnpm workshop:probe`: "1 of 1"). A pick is
+now a list of keys tried in order (`walkPlan`'s `picks`, with `measured`):
+the first whose walk measured something is read again, the short pass at
+the desk falling back on the reduced-motion pass at the phone. The
+workshop's probe now reads "2 of 2 … reduced-motion @mobile (tab 1 → 0),
+reduced-motion @canvas (tab 0 → 1)"; the ordinary probe reads short-desk
+and reduced-motion @canvas as before. `plan-walk.test.mjs` gains a case,
+and four mutations of the choice (`measured` ignored, the first key only,
+two picks reading one pass twice, a pick read on its own tab) each turn
+it, or more, red.
+
+**N6. The canary's quiet-zone sightings.** The contrast canary's reads
+again call the same read, and their dark-then-white sightings were neither
+folded nor printed. They are said on the "read again" line after the
+walk's, and the dump's `meta.quietReadAgain` counts both, with each
+sighting's first line. **Seen** on the band plant's run: 232 on the walk
+and 1 on the canary's reads (`shop-window-touch-quotes-pay` @canvas), meta
+`{ walk: 232, canary: 1 }` with 233 sightings.
+
+**Not done, stated**: N5 (a hung page now fails at the 120s bound rather
+than 30s; no change), N7 (the worn-only art list, "200" or "200, 200";
+cause unknown), N9 (Linux and CI: ci.yml's `layout` job runs one tab, so
+the walk, the canaries and the page print never run there).
+
+**Measured** on this Mac, back to back, no selection (the tracked fixture
+carried), two tabs, `main` at `c8f3379` in a clean clone (the 1-minute
+load sampled every 15s, median (min–max)):
+
+| run | load | geometry | contrast | total |
+|---|---|---|---|---|
+| this branch, fixed | 2.65 (1.44–4.12) | 53.7s walk | 155.0s | 217.9s |
+| `main` | 2.80 (2.34–3.09) | ~75.9s summed | 152.4s | 238.4s |
+
+The contrast dumps: 15,016 boxes identical, 0 moved, 0 added, 0 removed.
+Both runs green; the quiet-zone line "none" on both the walk and the
+canary's reads.
+
+**B2′, the code must stand still from the job's capture, not only through
+the pair** (the probe-shard critic's re-review of the fix round). The fix
+round compared where the code stood just before and just after the fresh
+capture, never with where it stood on the job's own capture, and its
+tolerance was half a pixel. Two cases went green on the pure function:
+d1, a code in a scroller clipped at y 56..262 scrolled up 17px between the
+job's zone read and the fresh pair, then stood still through it, so its
+top band (and a steady dark band painted with it) was clipped away and its
+bottom band revealed — 1338 of 10969 dark first, 0 of 10969 fresh, as many
+pixels; and d2, a code that moved 0.45px (x 10.6 → 11.05) during the pair,
+inside the tolerance, losing its outermost left column (a one-pixel dark
+edge) and gaining one on the right, 14350 pixels both times. Now the
+fresh reading is believed only when the job's zone, `before` and the zone
+after the capture agree exactly on the code's name, box, module, corner,
+clip and turn: `STILL_PX` is 0, and `movedBy` is asked first between the
+job's zone and `before` ("it moved between the job's capture and the
+fresh pair"), then through the pair. **Why 0**: on a full two-tab run with
+a band planted on the job's capture alone, all 257 codes read again had
+their zones before and after the fresh capture exactly equal, and exactly
+equal to the job's own zone read (the critic's `band.jsonl`); a tolerance
+bought nothing a real page needs. **Proved red**: the test
+`the first reading stands when the code moved before the fresh pair` (d1
+and d2) and the move cases of `lets the first reading stand when the code
+moved during the fresh pair` (a 0.01px move, another code's name) fail on
+the fix round's `quiet-zone.mjs` (3 of 19 cases red) and pass on this one.
+The band on the first capture only, nothing moved, is still believed white.
