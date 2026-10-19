@@ -125,9 +125,36 @@ export function readQuietZone(img, z) {
  * too — and `retry` holds `{ first, again }`, each `{ z, r, at }`. The first
  * reading stands, with `retry.why`, when the fresh pair could not be had,
  * painted another set of codes (their names, in order), or could not read
- * that code at all (turned, a fault, or no pixel on screen): a code that
+ * that code at all (turned, a fault, or no pixel on screen) — and, since the
+ * probe-shard critic's B2, unless both of these hold: the code stood still
+ * through the fresh pair (`before`, read just before its capture, and the
+ * zone read after it agree on its box, module, corner and clip within
+ * `STILL_PX`; a pair with no `before` cannot show that), and the fresh read
+ * covers at least the ring pixels the first one did. A code that moved
+ * during the fresh pair was read where it no longer was, and a ring cut
+ * shorter (a scroller now clipping its top) reads less of the defect; the
+ * critic's two cases, a steady band read white on each, are
+ * `a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair`'s. A code that
  * read dark is never let off by a weaker read.
  */
+/** How far, in CSS px, a code's box, module, corner or clip may move through the fresh pair and still be read as standing still. */
+export const STILL_PX = 0.5;
+
+/** Why a code did not stand still between two readings of its zone (`a`, `b`), or undefined. */
+function movedBy(a, b) {
+    if (a === undefined || b === undefined) return 'the fresh pair says nothing of where it stood just before its capture';
+    const near = (x, y) => x === y || (typeof x === 'number' && typeof y === 'number' && Math.abs(x - y) <= STILL_PX);
+    const moved = [];
+    for (const key of ['x', 'y', 'side', 'module', 'corner']) {
+        if (!near(a[key], b[key])) moved.push(`${key} ${a[key]} → ${b[key]}`);
+    }
+    for (const key of ['x0', 'y0', 'x1', 'y1']) {
+        if (!near(a.clip?.[key], b.clip?.[key])) moved.push(`clip ${key} ${a.clip?.[key]} → ${b.clip?.[key]}`);
+    }
+    if (a.turned !== b.turned) moved.push(`turned ${a.turned} → ${b.turned}`);
+    return moved.length === 0 ? undefined : `it moved during the fresh pair (${moved.join(', ')})`;
+}
+
 export async function readQuietZones(first, again) {
     const reads = first.zones.map((z) => (z.turned ? { z, turned: true } : { z, r: readQuietZone(first.img, z) }));
     const dark = reads.flatMap((read, i) => (read.r !== undefined && read.r.fault === undefined && read.r.px > 0 && read.r.bad > 0 ? [i] : []));
@@ -149,6 +176,22 @@ export async function readQuietZones(first, again) {
         if (r === undefined || r.fault !== undefined || r.px === 0) {
             const said = r === undefined ? 'its frame is turned' : r.fault ?? 'no pixel of its quiet zone is on screen';
             reads[i] = { ...reads[i], retry: { first: firstRead, why: [`the fresh pair could not read it: ${said}`] } };
+            continue;
+        }
+        const moved = movedBy(pair.before?.[i], z);
+        if (moved !== undefined || r.px < firstRead.r.px) {
+            reads[i] = {
+                ...reads[i],
+                retry: {
+                    first: firstRead,
+                    why: [
+                        ...(moved === undefined ? [] : [`the fresh pair cannot be believed: ${moved}`]),
+                        ...(r.px < firstRead.r.px ? [`the fresh pair read ${r.px} of the ${firstRead.r.px} ring pixels the first read`] : []),
+                    ],
+                    // What the fresh pair read, said and never believed.
+                    unbelieved: { z, r, at: pair.at, ...(pair.before === undefined ? {} : { before: pair.before[i] }) },
+                },
+            };
             continue;
         }
         reads[i] = {

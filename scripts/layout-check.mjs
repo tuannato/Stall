@@ -1673,7 +1673,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      * before it is believed, the ring read's own rule
                      * (`readQuietZones`): a new capture, the zones read just
                      * before and just after it. The reading that decides is
-                     * the fresh pair's, and both readings are said — on the
+                     * the fresh pair's — when the code stood still through it
+                     * and it read at least the ring the first did, or the
+                     * first stands — and both readings are said — on the
                      * failure, and on the pass's `quiet zone, read again`
                      * line when the second is white — with the code's box,
                      * what above it was scrolled, and the page and capture
@@ -1714,9 +1716,11 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             retry === undefined
                                 ? ''
                                 : `\n        first capture: ${quietReadingLine(retry.first)}` +
-                                  (retry.again === undefined
-                                      ? `\n        not read again: ${retry.why.join('; ')}`
-                                      : `\n        fresh pair: ${quietReadingLine(retry.again, retry.again.before)}`);
+                                  (retry.again !== undefined
+                                      ? `\n        fresh pair: ${quietReadingLine(retry.again, retry.again.before)}`
+                                      : retry.unbelieved !== undefined
+                                        ? `\n        fresh pair, not believed (${retry.why.join('; ')}): ${quietReadingLine(retry.unbelieved, retry.unbelieved.before)}`
+                                        : `\n        not read again: ${retry.why.join('; ')}`);
                         if (r.bad > 0) {
                             dim.push(
                                 `${at} has ${r.bad} of ${r.px} quiet-zone pixel(s) under ${QUIET_ZONE_FLOOR} on a channel ` +
