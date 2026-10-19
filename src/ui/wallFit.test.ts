@@ -82,6 +82,13 @@ const sizeOf = (figure: HTMLElement): number => Number.parseFloat(figure.style.f
 describe('the-cycle-figure-is-fitted-to-its-column', () => {
     afterEach(() => setWallFigureGauge(undefined));
 
+    it('pins the one-line floor and the fit\'s floor by value', () => {
+        // Every other case here derives its expectation from these symbols,
+        // so a smaller floor (a figure a room cannot read) would stay green.
+        expect(WALL_FIGURE_MIN_PX).toBe(32);
+        expect(WALL_FIGURE_FLOOR_PX).toBe(16);
+    });
+
     it('leaves a figure that stands at its design size at it, on one line', () => {
         const { root, head, figure } = wall('875', { from: true });
         setWallFigureGauge(modelGauge({ room: 400, design: 80, perPx: 1.8, fixed: 140 }));
