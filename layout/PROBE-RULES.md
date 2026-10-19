@@ -8966,7 +8966,12 @@ matches it). Tests: `the-cycle-figure-is-fitted-to-its-column`
 (`wallFit.test.ts`, over a gauge modelling the card: the shapes, the floor,
 a browser-broken line refused, the relief, the restore; and
 `window.test.ts`, the paint and the fonts' refit, red with the refit's
-call taken out).
+call taken out). The frame's resize refit had no test until 2026-10-19:
+`wallFit.test.ts` now drives a stubbed `ResizeObserver` — no fit on the
+callback an unchanged size delivers, a fit to the new column when the
+frame narrows, the old watch let go by a second fit and by
+`forgetWallFit` — red with the observer never made, with the size check
+taken out, and with `forgetWallFit` emptied.
 
 **The ladder's thin margins are gone with it** (2026-10-19): the 0.7% at
 1080x1920 above was the table's, measured in this Mac's fallback `₩`. The

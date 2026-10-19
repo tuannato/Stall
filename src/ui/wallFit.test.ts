@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
-import { WALL_FIGURE_FLOOR_PX, WALL_FIGURE_MIN_PX, fitWallFigures, setWallFigureGauge, type WallFigureRead } from './wallFit';
+import { WALL_FIGURE_FLOOR_PX, WALL_FIGURE_MIN_PX, fitWallFigures, forgetWallFit, setWallFigureGauge, type WallFigureRead } from './wallFit';
 
 /**
  * A card as the wall builds it: the money node inside its price cell, a
@@ -229,6 +229,60 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         setWallFigureGauge(modelGauge({ room: 10, design: 80, perPx: 3 }, reads));
         fitWallFigures(browse.root);
         expect(reads).toEqual([]);
+    });
+
+    it('fits the card again when its frame changes size with no paint, and lets go of a frame the next paint throws away', () => {
+        const { root, figure } = wall('$999.99');
+        document.body.append(root);
+        const frame = root.querySelector<HTMLElement>('.shop-window')!;
+        const size = (w: number, h: number): void => {
+            Object.defineProperty(frame, 'clientWidth', { value: w, configurable: true });
+            Object.defineProperty(frame, 'clientHeight', { value: h, configurable: true });
+        };
+        type Watch = { callback: () => void; watched: Element[]; live: boolean };
+        const watches: Watch[] = [];
+        const real = globalThis.ResizeObserver;
+        globalThis.ResizeObserver = class {
+            private readonly watch: Watch;
+            constructor(callback: () => void) {
+                this.watch = { callback, watched: [], live: true };
+                watches.push(this.watch);
+            }
+            observe(el: Element): void {
+                this.watch.watched.push(el);
+            }
+            unobserve(): void {}
+            disconnect(): void {
+                this.watch.live = false;
+            }
+        } as unknown as typeof ResizeObserver;
+        try {
+            size(1280, 800);
+            setWallFigureGauge(modelGauge({ room: 600, design: 65.5, perPx: 4.2 }));
+            fitWallFigures(root);
+            expect(sizeOf(figure)).toBe(65.5);
+            expect(watches.map((w) => w.watched)).toEqual([[frame]]);
+            // The callback an observer delivers on `observe`, the size unchanged: nothing is fitted.
+            const reads: string[] = [];
+            setWallFigureGauge(modelGauge({ room: 221, design: 65.5, perPx: 4.2 }, reads));
+            watches[0]!.callback();
+            expect(reads).toEqual([]);
+            // The frame narrows with no paint (a window resized, a tablet turned): fitted again, to the new column.
+            size(1024, 768);
+            watches[0]!.callback();
+            expect(reads.length).toBeGreaterThan(0);
+            expect(sizeOf(figure)).toBeLessThanOrEqual(221 / 4.2);
+            expect(sizeOf(figure)).toBeGreaterThan(221 / 4.2 - 1);
+            // A second fit of the same root watches anew and lets the first watch go.
+            fitWallFigures(root);
+            expect(watches.map((w) => w.live)).toEqual([false, true]);
+            // The paint about to run throws the frame away, and its watch with it.
+            forgetWallFit(root);
+            expect(watches.map((w) => w.live)).toEqual([false, false]);
+        } finally {
+            globalThis.ResizeObserver = real;
+            root.remove();
+        }
     });
 
     it('puts the card\'s own style back after it reads it', () => {
