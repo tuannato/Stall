@@ -8211,7 +8211,10 @@ and `contain` the area's own extent, a length, a percentage of the area; a
 
 - an axis that **repeats** (`repeat`, `round`) covers the whole clip area —
   when its tile is at least `MIN_TILE_PX`, one pixel, far above Chrome's
-  1/64px (a `round` tile is rescaled by at most a third);
+  1/64px (a `round` tile no larger than its area shrinks by at most a third,
+  and one larger becomes the area itself, never under 1/64px for a box with
+  an extent; corrected in round 8, where this line said every `round` tile
+  is rescaled by at most a third);
 - an axis that **does not** (`no-repeat`, `space`, the other axis of
   `repeat-x` and `repeat-y`) covers the positioning area's span when one tile
   at least that long, and at least `MIN_TILE_PX`, is placed over all of it by
@@ -8304,3 +8307,124 @@ against 78.5s, the contrast pass 126.8s against 122.6s, its prepare phase
 (where the blanking keeps each element's fill, marks, SVG paints and
 pseudo-elements) 27.1s against 26.8s over 802 calls. The planted runs (ceiling
 1200s): 247.6s (round 7) and 240.4s (`537b8a2`) with set A, 218.7s with SZ.
+
+### Round 8: a look pseudo read by its class anywhere, a `fixed` layer's lone tile unproved (CRITIC-MONEY-GUARDS, re-review of round 7)
+
+The critic found the branch behind main on one lint-admitted plant (PSc) and
+behind its parent on another (FX). Each paragraph below replaces the round-7
+paragraph it names, which stays above as the record.
+
+**A look pseudo is read by its class anywhere in its selector** (the critic's
+P1-1 on round 7; `lookPseudoOf`, `LOOK_RULE`, `selectorList`,
+`layout/lookRule.ts`). Round 7 kept every look pseudo's glyphs, but took a
+rule as a look's only when its `t-…` or `att-…` class followed the start, a
+space, a combinator, a comma or `(`. A look pseudo spelt with its class in a
+compound, which both look lints admit (`.stall.t-x`, `div.t-x`, `*.t-x`), was
+then the app's chrome to the contrast pass: in its host's ink it went blank
+with its host in both look-pseudo frames. The critic's PSc (PS spelt
+`.stall.t-modern .stall-tagline::after`, a 40px diamond over the address)
+passed the whole runner at `707f105` and failed on main, which blanked by
+`color`; PSci (PSi spelt `div.t-rural …`) passed both. Now a class anywhere in
+the selector makes the rule a look's: the dot is the boundary, and the class
+is read as a whole token of `LOOK_CLASS`'s or `ATT_CLASS`'s shape, derived from
+the two rules. The critic's suggested `/\.(?:t-[a-z0-9]+|att-[a-z0-9-]+)(?![\w-])/`
+reads no hyphenated look class (`t-fixture-private`, `t-fixture-worn`), and
+would have dropped the tracked fixture's own `.t-fixture-private
+.stall-headings::before`. Every class the app writes that starts `t-` or
+`att-` is a look's or a decoration's (grep over `src/`, `layout/` and
+`workshop/`: the three looks, the skeleton, the kit, the two fixture looks,
+the decorations and the beetle's `att-beetle-bug`; `t-rural-tag` and
+`att-hum-gutter-outlined` are keyframes), and over every tracked sheet the five
+pseudo selectors read as a look's before are the five read now. The selector
+list is split at its top-level commas (`markLookPseudos` split at every comma,
+so `:is(.t-x, .a) .b::after` left the class and the pseudo-element in two
+chunks; `markFileArt`'s splitter was already top-level, and both share
+`selectorList` now). Unit-held in `layout/lookRule.test.ts`, red with round
+7's expression (three of its five cases).
+
+**A `fixed` layer's lone tile proves nothing** (the critic's P1-2 on round 7;
+`layerCovers`' `attachment`, `tileArea`, `layout/groundStack.ts`). Round 7 gave
+a `fixed` layer the viewport as its positioning area, and a lone tile at least
+that area long, placed over it, covered the figure. Under a transformed
+ancestor Chrome paints `fixed` as `scroll` (CSS Transforms; the critic measured
+a viewport tile at `150% 150%` land off a 102 × 37 box), and Rural sways its
+tag and tilts every third card: FX, a white viewport-sized `no-repeat` tile at
+`150% 150%` over a ground in the ink's colour on the Cycle card's step-3
+figure, painted the figure out and read as a white ground on every pass at
+`707f105` (red, 6 a wall pass, at `537b8a2`). Now a tile that does not repeat
+is placed by its position on a `scroll` layer alone; a `fixed` or `local`
+layer's lone tile proves nothing (`local`'s did not before either), and their
+tiles that repeat still cover. A `fixed` layer's tiles are resolved against the
+smaller of its origin box and the viewport on each axis, so a percentage tile
+is never read larger than the engine may paint it. No served sheet sets a
+`fixed` or `local` attachment. Unit-held in `layout/groundStack.test.ts`, red
+with round 7's `attachment !== 'local'`.
+
+**Corrected, stated:**
+
+- round 7's "a `round` tile is rescaled by at most a third" (the critic's P3-4):
+  a tile no larger than its area shrinks by at most a third, one larger becomes
+  the area, never under 1/64px for a box with an extent; corrected above and in
+  `layerCovers`' docblock;
+- the positioning area is the element's bounding box (P3-1): for an inline
+  split over lines or a block split over columns Chrome places a tile in
+  another box (the fragments end to end), so a lone tile can leave a fragment
+  bare and be read as covering it. No money glyph owner a look can tile wraps
+  so today but a broken figure's pieces, whose every longhand
+  `a-broken-figure-wears-the-figures-own-ink` holds; stated in the probe's
+  docblock, not built;
+- the probe's docblocks (the critic's four corrections to (d)): the contrast
+  pass blanks every target's glyphs at once; a look pseudo is read at the
+  frozen instant alone, so one animated invisible at 400ms is not read (PSa2);
+  and a box moved over a figure by a relative offset, a transform or a
+  negative margin, or a target's glyph scaled over it, is read by no geometry
+  rule and by the contrast pass only as the figure's ground (PC2, SVs, PW).
+
+**The kit README's labels** (D-2026-10-20-02): "Money is never covered, cut or
+faded" and "The whole price is never dressed to misread" say that
+`workshop:probe` catches most of this on the screens and states it paints, and
+that Stall checks the rest at intake; "A price is dressed as one piece" keeps
+its label. The pin, `a-look-may-not-dress-a-figures-pieces`, holds the money
+paragraph's label too since this round (the critic's P3-2), red with either
+label reverted to `707f105`'s.
+
+**Not this round, stated:** the critic's P2-1 (a box moved over a money
+figure, or a scaled glyph: PC2, SVs, PW), P2-3 (the quiet-zone read's retry,
+which waits for the branch that owns `scripts/layout-check.mjs`), round 4's
+P2s, PSa2, and a grep of the private look at 0x04's sheet for compound
+spellings, `fixed` attachments and relative offsets near money — all for the
+step before 8g2.
+
+**Unplanted, every shipped look, the skeleton and the tracked fixture read 0
+on every rule at every pass** (the whole runner in the worktree, 2026-10-20,
+204.0s of 300; no quiet-zone red this time). **The dump is unchanged**:
+`scripts/contrast-dump.mjs` against the critic's clean run at `707f105` reads
+all 15,016 boxes identical, and all 823 job records are identical field by
+field; so does the run of a clean `707f105` clone made right after. The
+contrast pass found 186 jobs with look pseudos, the same count as at
+`707f105`: the wider reading marked nothing the shipped looks, the skeleton or
+the fixture paint.
+
+**Red proofs** (2026-10-20; the critic's plants appended before each look
+sheet's reduce block, FP before `stall.css`'s, in clones of this round with
+their ceiling raised to 1200s; the `707f105` column is the critic's set B to E
+runs; the counts are failures a pass — the phone, the desk, the canvas, the
+tall wall, the tablet, `desk-wall`, `short-wall`, the narrow phone, the
+reduced-motion pass — and the contrast pass's failures by target):
+
+| plant | `707f105` | round 8 |
+|---|---|---|
+| PSc (Modern, PS spelt `.stall.t-modern .stall-tagline::after`) | 0 (red on main, 36) | contrast 104: "`button.addr` changes 839 px when the look's pseudo-elements are hidden" 68 (34 at the phone, 34 at the desk, over 17 screens), and `.addr-short` / `.addr-full` read at 1.23–1.57:1, 36 |
+| PSci (Rural, PSi spelt `div.t-rural .stall-tagline::after`) | 0 | contrast 72: `button.addr` in the look-pseudo frames, 36 and 36 |
+| FX (Rural, a `fixed` viewport tile at `150% 150%` over a `currentColor` ground, Cycle step 3) | 0 on every pass (red on `537b8a2`, 6 a wall pass) | the canvas, the tall wall, the tablet, `desk-wall` and `short-wall` 6 each (`shop-window-cycle-listing-9`, `-quote-10`, `-usd-11`, bare and worn: "its gradient, where its tiles fall over its ground … 1.00:1"); the contrast pass samples no Cycle step-3 figure |
+| PSc, PSci and FX with round 6's six (PS, SV, SZt-tier, SZt, PSi, FP), one run | — | 501, 591, 390, 480, 207, 117, 207, 286, 88; contrast 377 (Modern 146: `button.addr` 68, `.addr-*` 36, `button.step` 32, the selection lines 10; Rural 231: `button.addr` 72, `span.item-x` 159). These are round 7's set A counts exactly: PSc and PS paint one diamond, as PSci and PSi do, and FX takes SZt's place on Rural's step-3 figure, so the three add no failure here; their own proofs are the three rows above. FP 0 |
+
+Every failure in the planted runs names a plant's target.
+
+**Cost** (2026-10-20, this Mac, back to back, the ceiling at 300s in both):
+this round in the worktree 204.0s (load 3.0 → 3.2), `707f105` in a clean
+clone 208.1s (3.2 → 3.4), **−4.1s, inside the noise**; the eleven geometry
+passes summed 75.3s against 78.0s, the contrast pass 120.9s against 121.1s,
+its prepare phase (where `markLookPseudos` runs) 25.5s against 25.3s over
+802 calls. The planted runs (ceiling 1200s): 227.6s (PSc, PSci, FX) and
+239.2s (with round 6's six).

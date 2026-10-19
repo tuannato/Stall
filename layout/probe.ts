@@ -8675,8 +8675,9 @@ function ringLines(
  * **The contrast pass blanks the glyphs and nothing else** (round 6, the
  * critic's shared root of BL2, SZ and G2 on round 5, and of N9a on round 4),
  * **every target's at once**: so a target's glyphs moved over another
- * target's money are blank in both captures, and read by nothing (the
- * critic's SVs on round 7, stated). Every target and every element under it
+ * target's money are blank in both captures, and the money under them is
+ * read as if they were not there (the critic's SVs on round 7, stated).
+ * Every target and every element under it
  * had its `color` set transparent,
  * and `color` is not only the glyphs' ink: it is `currentColor`, so every
  * background, border, box shadow and gradient stop a look wrote from it went
