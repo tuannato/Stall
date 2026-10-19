@@ -126,10 +126,11 @@ export function readQuietZone(img, z) {
  * reading stands, with `retry.why`, when the fresh pair could not be had,
  * painted another set of codes (their names, in order), or could not read
  * that code at all (turned, a fault, or no pixel on screen) — and, since the
- * probe-shard critic's B2, unless both of these hold: the code stood still
- * through the fresh pair (`before`, read just before its capture, and the
- * zone read after it agree on its box, module, corner and clip within
- * `STILL_PX`; a pair with no `before` cannot show that), and the fresh read
+ * probe-shard critic's B2 and B2′, unless both of these hold: the code stood
+ * still from the job's own zone read through the fresh pair (that zone,
+ * `before`, read just before the fresh capture, and the zone read after it
+ * agree on its name, box, module, corner, clip and turn, exactly —
+ * `STILL_PX` is 0; a pair with no `before` cannot show that), and the fresh read
  * covers at least the ring pixels the first one did. A code that moved
  * during the fresh pair was read where it no longer was, and a ring cut
  * shorter (a scroller now clipping its top) reads less of the defect; the
@@ -137,12 +138,20 @@ export function readQuietZone(img, z) {
  * `a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair`'s. A code that
  * read dark is never let off by a weaker read.
  */
-/** How far, in CSS px, a code's box, module, corner or clip may move through the fresh pair and still be read as standing still. */
-export const STILL_PX = 0.5;
+/**
+ * How far, in CSS px, a code's box, module, corner or clip may move and still
+ * be read as standing still: none. Measured on a full two-tab run with a band
+ * planted on the job's capture alone, all 257 codes read again had their
+ * zones before and after the fresh capture exactly equal, and exactly equal
+ * to the job's own zone read; a tolerance buys nothing a real page needs and
+ * let a steady one-pixel defect go green (the probe-shard critic's d2).
+ */
+export const STILL_PX = 0;
 
 /** Why a code did not stand still between two readings of its zone (`a`, `b`), or undefined. */
-function movedBy(a, b) {
+function movedBy(a, b, when = 'during the fresh pair') {
     if (a === undefined || b === undefined) return 'the fresh pair says nothing of where it stood just before its capture';
+    if (a.name !== b.name) return `another code stood there ${when} (${a.name} → ${b.name})`;
     const near = (x, y) => x === y || (typeof x === 'number' && typeof y === 'number' && Math.abs(x - y) <= STILL_PX);
     const moved = [];
     for (const key of ['x', 'y', 'side', 'module', 'corner']) {
@@ -152,7 +161,7 @@ function movedBy(a, b) {
         if (!near(a.clip?.[key], b.clip?.[key])) moved.push(`clip ${key} ${a.clip?.[key]} → ${b.clip?.[key]}`);
     }
     if (a.turned !== b.turned) moved.push(`turned ${a.turned} → ${b.turned}`);
-    return moved.length === 0 ? undefined : `it moved during the fresh pair (${moved.join(', ')})`;
+    return moved.length === 0 ? undefined : `it moved ${when} (${moved.join(', ')})`;
 }
 
 export async function readQuietZones(first, again) {
@@ -178,7 +187,10 @@ export async function readQuietZones(first, again) {
             reads[i] = { ...reads[i], retry: { first: firstRead, why: [`the fresh pair could not read it: ${said}`] } };
             continue;
         }
-        const moved = movedBy(pair.before?.[i], z);
+        // Still from the job's own zone read through the fresh pair: a code
+        // that scrolled between the two captures and then stood still read
+        // another stretch of its ring (the probe-shard critic's d1).
+        const moved = movedBy(firstRead.z, pair.before?.[i], "between the job's capture and the fresh pair") ?? movedBy(pair.before?.[i], z);
         if (moved !== undefined || r.px < firstRead.r.px) {
             reads[i] = {
                 ...reads[i],

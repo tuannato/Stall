@@ -144,19 +144,22 @@ describe('a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair', () => {
         // capture and after it: the reading was taken where it no longer was.
         const reads = await readQuietZones(
             { img: banded, zones: [named(CODE)], at: {} },
-            async () => ({ img: white, zones: [named({ ...CODE, y: 10 })], at: {}, before: [named({ ...CODE, y: 12 })] }),
+            async () => ({ img: white, zones: [named({ ...CODE, y: 12 })], at: {}, before: [named({ ...CODE, y: 10 })] }),
         );
         assert.ok(reads[0].r.bad > 0);
         assert.equal(reads[0].retry.again, undefined);
-        assert.match(reads[0].retry.why.join(' '), /moved during the fresh pair \(y 12 → 10\)/);
+        assert.match(reads[0].retry.why.join(' '), /moved during the fresh pair \(y 10 → 12\)/);
         assert.equal(reads[0].retry.unbelieved.r.bad, 0);
-        // A move under the floor is standing still; a clip or a module that moved is not.
+        // Any move at all is a move (`STILL_PX` is 0); a clip, a module, a
+        // corner or a turn that moved is one too.
+        assert.equal(STILL_PX, 0);
         for (const [before, said] of [
-            [named({ ...CODE, y: CODE.y + STILL_PX + 0.01 }), /y 10\.51 → 10/],
-            [named({ ...CODE, module: 5.6 }), /module 5\.6 → 5/],
-            [named({ ...CODE, corner: 1 }), /corner 1 → 0/],
-            [named({ ...CODE, clip: { ...OPEN, y0: 35 } }), /clip y0 35 → -Infinity/],
-            [{ ...named(CODE), turned: true }, /turned true → false/],
+            [named({ ...CODE, y: CODE.y + 0.01 }), /y 10 → 10\.01/],
+            [named({ ...CODE, module: 5.6 }), /module 5 → 5\.6/],
+            [named({ ...CODE, corner: 1 }), /corner 0 → 1/],
+            [named({ ...CODE, clip: { ...OPEN, y0: 35 } }), /clip y0 -Infinity → 35/],
+            [{ ...named(CODE), turned: true }, /turned false → true/],
+            [named(CODE, 'share-qr'), /another code stood there between the job's capture and the fresh pair \(pay-qr → share-qr\)/],
         ]) {
             const moved = await readQuietZones({ img: banded, zones: [named(CODE)], at: {} }, async () => ({ img: white, zones: [named(CODE)], at: {}, before: [before] }));
             assert.ok(moved[0].r.bad > 0, String(said));
@@ -191,7 +194,39 @@ describe('a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair', () => {
         );
         assert.equal(two[0].r.bad, 3345);
         assert.equal(two[0].retry.unbelieved.r.bad, 0);
-        assert.match(two[0].retry.why.join(' '), /moved during the fresh pair \(y 30 → 50\)/);
+        assert.match(two[0].retry.why.join(' '), /moved between the job's capture and the fresh pair \(y 10 → 30\)/);
+    });
+
+    it('the first reading stands when the code moved before the fresh pair', async () => {
+        // The probe-shard critic's B2′: the zone read on the job's capture is
+        // where the first reading was taken, and a code that moved between it
+        // and the fresh pair, then stood still through the pair, reads another
+        // stretch of its ring there.
+        const dark = [18, 21, 26];
+        // d1: a steady 6-row band on the ring's top, the code in a scroller
+        // clipped at y 56..262, scrolled up 17px before the fresh pair.
+        const clip = { x0: -1e9, y0: 56, x1: 1e9, y1: 262 };
+        const painted = (cy) => shot(400, 400, (x, y) => (y >= cy + 1 && y < cy + 7 && x >= 10 && x < 235 ? dark : undefined));
+        const z0 = named({ ...CODE, y: 55, clip });
+        const z1 = named({ ...CODE, y: 38, clip });
+        const d1first = readQuietZone(painted(55), z0);
+        const d1fresh = readQuietZone(painted(38), z1);
+        assert.ok(d1first.bad > 0);
+        assert.equal(d1fresh.bad, 0);
+        assert.ok(d1fresh.px >= d1first.px, 'the plant reads at least as many ring pixels on the fresh pair');
+        const d1 = await readQuietZones({ img: painted(55), zones: [z0], at: {} }, async () => ({ img: painted(38), zones: [z1], before: [z1], at: {} }));
+        assert.equal(d1[0].r.bad, d1first.bad);
+        assert.equal(d1[0].retry.again, undefined);
+        assert.match(d1[0].retry.why.join(' '), /moved between the job's capture and the fresh pair \(y 55 → 38\)/);
+        // d2: a move under the old half-pixel tolerance, x 10.6 to 11.05,
+        // with a one-pixel dark column on the ring's outermost left edge.
+        const at = named({ ...CODE, x: 10.6 });
+        const after = named({ ...CODE, x: 11.05 });
+        const edge = shot(400, 400, (x, y) => (x === Math.ceil(10.6 + 1) && y >= 11 && y < 234 ? dark : undefined));
+        const d2 = await readQuietZones({ img: edge, zones: [at], at: {} }, async () => ({ img: edge, zones: [after], before: [at], at: {} }));
+        assert.ok(d2[0].r.bad > 0);
+        assert.equal(d2[0].retry.again, undefined);
+        assert.match(d2[0].retry.why.join(' '), /moved during the fresh pair \(x 10\.6 → 11\.05\)/);
     });
 
     it('still fails a quiet zone that is dark on both captures', async () => {

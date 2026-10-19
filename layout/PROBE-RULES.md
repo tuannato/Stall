@@ -8668,8 +8668,8 @@ pixels; `pay-several` @mobile, Modern worn, 4,500 of 21,312,
 `rgb(18,21,26)`). The cause is not known. A code that reads dark is read
 again once on a fresh pair — a new capture after 250ms, the zones read just
 before and just after it — and the fresh pair's reading decides (since the
-fix round, only over a code that stood still through the pair and a ring at
-least as long as the first; below), the ring
+fix round, only over a code that stood still from the job's capture through
+the pair and a ring at least as long as the first; below), the ring
 read's rule; a real defect is steady state and reads dark there too. A
 fresh pair that cannot be had, paints another set of codes, or cannot read
 the code leaves the first reading standing. The job's capture, its retry
@@ -8783,8 +8783,9 @@ capture: the fresh pair's ring clipped by a scroller at its top 25px (0 of
 green. Now the first reading stands, `retry.why` saying which condition
 failed and the fresh reading said beside it, "fresh pair, not believed",
 unless both hold: the code's box, module, corner, clip and turn agree
-before and after the fresh capture within `STILL_PX` (0.5px; a pair with
-no `before` shows no stillness), and the fresh read covers at least the
+before and after the fresh capture within `STILL_PX` (0.5px in the fix
+round, 0 since the critic's B2′ below; a pair with no `before` shows no
+stillness), and the fresh read covers at least the
 ring pixels the first did. The branch's own case that believed a code
 moving from y 12 to y 10 now keeps the first reading. **Proved red**: the
 critic's script over the fixed module reads both cases red (3345 kept); the
@@ -8864,3 +8865,30 @@ load sampled every 15s, median (min–max)):
 The contrast dumps: 15,016 boxes identical, 0 moved, 0 added, 0 removed.
 Both runs green; the quiet-zone line "none" on both the walk and the
 canary's reads.
+
+**B2′, the code must stand still from the job's capture, not only through
+the pair** (the probe-shard critic's re-review of the fix round). The fix
+round compared where the code stood just before and just after the fresh
+capture, never with where it stood on the job's own capture, and its
+tolerance was half a pixel. Two cases went green on the pure function:
+d1, a code in a scroller clipped at y 56..262 scrolled up 17px between the
+job's zone read and the fresh pair, then stood still through it, so its
+top band (and a steady dark band painted with it) was clipped away and its
+bottom band revealed — 1338 of 10969 dark first, 0 of 10969 fresh, as many
+pixels; and d2, a code that moved 0.45px (x 10.6 → 11.05) during the pair,
+inside the tolerance, losing its outermost left column (a one-pixel dark
+edge) and gaining one on the right, 14350 pixels both times. Now the
+fresh reading is believed only when the job's zone, `before` and the zone
+after the capture agree exactly on the code's name, box, module, corner,
+clip and turn: `STILL_PX` is 0, and `movedBy` is asked first between the
+job's zone and `before` ("it moved between the job's capture and the
+fresh pair"), then through the pair. **Why 0**: on a full two-tab run with
+a band planted on the job's capture alone, all 257 codes read again had
+their zones before and after the fresh capture exactly equal, and exactly
+equal to the job's own zone read (the critic's `band.jsonl`); a tolerance
+bought nothing a real page needs. **Proved red**: the test
+`the first reading stands when the code moved before the fresh pair` (d1
+and d2) and the move cases of `lets the first reading stand when the code
+moved during the fresh pair` (a 0.01px move, another code's name) fail on
+the fix round's `quiet-zone.mjs` (3 of 19 cases red) and pass on this one.
+The band on the first capture only, nothing moved, is still believed white.

@@ -1676,8 +1676,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      * before it is believed, the ring read's own rule
                      * (`readQuietZones`): a new capture, the zones read just
                      * before and just after it. The reading that decides is
-                     * the fresh pair's — when the code stood still through it
-                     * and it read at least the ring the first did, or the
+                     * the fresh pair's — when the code stood still from the
+                     * job's capture through it and it read at least the ring
+                     * the first did, or the
                      * first stands — and both readings are said — on the
                      * failure, and on the pass's `quiet zone, read again`
                      * line when the second is white — with the code's box,
