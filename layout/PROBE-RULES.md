@@ -8603,3 +8603,102 @@ the geometry walk early would save its tail (a second or two); `wall-offsize`
 itself (its passes were run here on code they fail on, so their time is a
 proxy); and the one-tab off-size run (152.6s of geometry) was at load ~10, no
 pair for it.
+
+### After the rebase onto money-guards (2026-10-20)
+
+Rebased onto `0b73b9a` (money-guards merged, rounds 5–8 of the dress rule).
+The one conflict was this file, both sides appending at its end; both
+sections are kept, this one last. Two items the window asked of this round,
+each its own commit.
+
+**Every pass the runner runs is a value** (`scripts/probe-passes.mjs`; the
+money-guards round-5 critic's P3). Round 5's
+`every-pass-the-runner-runs-is-in-a-coverage-table` read the runner's
+viewports out of its text with one pattern, `{ name: '…', width: N`, and
+stayed green over a viewport written width first, height before width,
+after a spread, as a template literal or in double quotes. The viewports,
+the screen lists, the kinds the runner runs (`PASS_KINDS`), the geometry
+plan `walkPlan` walks (`geometryPlan`: each pass's key, kind, coverage
+name, viewport, screens, window block and what it reads first), the
+geometry canary and the contrast and transparency passes
+(`runnerPasses`) now live there, side-effect free, and both the runner and
+the tests import it. The runner builds every geometry pass from the plan
+by its kind, and stops before it builds on a kind it has no runner for, a
+wall block that is not one the page echoes (`WALL_BLOCKS`), or a canary key
+the plan lacks; the tall wall, the counter tablet and the two desk walls are
+one `wall` runner reading its block, with their lines and verdicts as they
+were. **Adding a pass is one entry in the module and its rows in the
+coverage tables**: a wall pass of `wall-offsize` is `{ key, kind: 'wall',
+coverage, vp, screens, block }`, plus `GEOMETRY_PASSES`, both surface
+tables and `WALL_PASSES`. The test compares the module's passes with
+`GEOMETRY_PASSES` and `PASSES_OWING_NO_GEOMETRY` by value, both ways and by
+kind (a page, wall or narrow pass in `GEOMETRY_PASSES`, any other kind in
+the other table with its reason), every wall pass in `WALL_PASSES`, every
+`WALL_PASSES` row a pass the runner runs, every `PAGE_PASSES` row a page
+pass; the runner's own text names no viewport in any of the five shapes
+(planted in the test); and the shot plan's test holds every wall pass of
+the plan to shots at its size. The worn-only road and the transparent wire,
+passes the round-5 pattern never read, join `PASSES_OWING_NO_GEOMETRY` with
+their reasons.
+
+**Proved red**: a wall pass added to the module and named in no table
+("the runner's side-tablet pass is in no coverage table", and "WALL_PASSES
+does not name it"), a row dropped from the tables ("the runner's
+transparency pass is in no coverage table"), a viewport written width first
+in the runner, each a temporary edit of the real file; the same and five
+more as cases of the test (`passTableFaults`, `runnerViewportLiterals`); a
+plan entry of an unknown kind and a misspelt block, refused by the runner
+before it built ("probe-passes.mjs plans a pass this run cannot make", exit
+1); a wall pass with no shots, red in `shotPlan.test.ts`.
+
+**A dark quiet zone is read again on a fresh pair** (`readQuietZones`,
+`scripts/quiet-zone.mjs`; the money-guards round-7 critic's P2-3). Four
+sightings, one on main: a pay screen's code read part of its quiet zone
+non-white and passed on a rerun (`pay` @mobile, Neo worn, 4,572 of 21,420
+pixels; `pay-several` @mobile, Modern worn, 4,500 of 21,312,
+`rgb(18,21,26)`). The cause is not known. A code that reads dark is read
+again once on a fresh pair — a new capture after 250ms, the zones read just
+before and just after it — and the fresh pair's reading decides, the ring
+read's rule; a real defect is steady state and reads dark there too. A
+fresh pair that cannot be had, paints another set of codes, or cannot read
+the code leaves the first reading standing. The job's capture, its retry
+flag and its dump are untouched. Both readings are said, on a failure and,
+when the second is white, on a new line under the pass (`quiet zone, read
+again on a fresh pair and white there`): the dark pixels and the box they
+span, the code's box, module and clip, where it stood just before the fresh
+capture if it moved, the boxes above it that scroll and their offsets
+(`__quietZones`' `scrolled`), and the capture (its size, no clip, scale 1,
+how long after it the zones were read, the page's device pixel ratio, size,
+scroll, visual viewport and focus). The line said "none" on the green runs
+below; the next sighting will say which of the suspects it was.
+
+**Proved red** on a full run (ceiling raised in the plant, reverted): a 6px
+dark outline inset 14px into every Rural pay code (`.t-rural .pay-qr
+svg.qr`) still fails all 24 of its jobs after the read again, "3330 of 20160
+… on the fresh pair too", with both readings; and a 16px band painted over
+the top of every code's ring on the first capture only is read again white
+on 232 codes (every code read, every look) and fails nothing more. That
+run's contrast pass took 160.6s against 124.4s, the cost of 256 reads
+again; a run that reads none pays one page read per job that paints a code.
+The read-again's own cases (`a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair`)
+fail under five mutations: no read again, the fresh reading ignored, a fresh
+pair with nothing on screen believed, one with other codes believed, every
+code read again.
+
+**Measured** on this Mac (shared; the 1-minute load sampled every 15s,
+median (min–max)), back to back, `main` at `0b73b9a` in a clean clone:
+
+| run | load | geometry | contrast | total |
+|---|---|---|---|---|
+| this branch, two tabs | 4.0 (3.5–4.2) | 52.5s | 124.4s | 184.6s |
+| `main` (geometry one tab, contrast two) | 3.1 (2.4–4.1) | ~78.0s | 120.9s | 206.2s |
+
+(`main` prints no geometry total; ~78.0s is its pass lines summed, the
+worn-only job's time inside the portrait line.) Two tabs took 21.6s off the
+run at a higher load, the geometry walk 25.5s; the contrast pass 3.5s
+slower, within this machine's run-to-run spread. One tab
+(`LAYOUT_CONTRAST_TABS=1`, once, not a pair) fitted: 261.8s at load 2.2
+(1.6–2.8), the geometry 75.6s and the contrast pass 179.4s — 38s under the
+ceiling, so ci.yml's one-tab job is still at risk under load. The contrast
+dumps, two tabs and one, against `main`'s: 15,016 boxes identical, 0 moved,
+0 added, 0 removed.
