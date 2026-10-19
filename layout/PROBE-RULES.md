@@ -8270,9 +8270,10 @@ The worktree's run moved one box against the critic's `537b8a2` dump, and it
 is not this round's: Neo's `pay-qr-lede` line (`p.fine`) on
 `pay-several-longest-figure` at 1280, bare, read 7.03:1 where it reads 6.80:1
 — the same box, the same two line rects and 4,228 pixels, the same job record.
-The clone of this round's code read 6.80:1, and of the 50 dumps of this
-branch in the worktree and the scratch clones the box read 7.03:1 twice: this
-run and one on `b39776e` (round 3), whichever tab ran the job. Both far above
+The clone of this round's code read 6.80:1, and of the 43 dumps of this
+job kept in the worktree and this session's scratch clones (rounds 3 to 7,
+planted and not) the box read 7.03:1 twice: this run and one on `b39776e`
+(round 3), whichever tab ran the job. Both far above
 3:1; the cause, a pixel of the capture that varies between runs, not found.
 
 **Red proofs** (2026-10-19; the critic's plants appended before each look
