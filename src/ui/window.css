@@ -899,6 +899,17 @@
     justify-content: start;
 }
 
+/* Stacked, the figure stays on one line, so its track never shrinks under
+   it (the wall-offsize critic's item 1): with the `break` shape's
+   `minmax(0, max-content)` a cell narrower than the figure shrank the track,
+   and the unwrapped digits ran on under ` XEC` — "XEC" over the last "7" of
+   Neo's `from 1,234,567 XEC` at 1280x900. At `max-content` the whole amount
+   runs past the cell instead, which the fit reads and takes down. Only the
+   broken shape may give its track up: its pieces wrap inside it. */
+[data-wall-wrap='stack'] .item-a:has(> .item-u) {
+    grid-template-columns: max-content auto;
+}
+
 [data-wall-wrap] .item-from {
     grid-area: from;
     justify-self: start;

@@ -21,7 +21,11 @@
  * every line of its figure — `from`, the money node, ` XEC`, a look's tag
  * chrome — inside the price area's grid column, read from the head's
  * resolved tracks. Columns do not overlap, so a figure inside its own is
- * under neither the code nor the picture.
+ * under neither the code nor the picture. **And the money node's own text
+ * inside the money node's box, clear of its `from` and its unit**
+ * (`a-cycle-figure-never-runs-under-its-own-unit`, the wall-offsize critic's
+ * item 1): the column holds the amount as one span, and a figure whose
+ * track shrank under it ran on under ` XEC` inside that span.
  *
  * **The shapes, in order**, each at the largest size up to the design size
  * at which it stands, and taken only at `WALL_FIGURE_MIN_PX` or more:
@@ -85,7 +89,7 @@ export type WallFigureRead = {
     block: number;
     /** How far the card runs past the status line's top (zero or less: clear of it). */
     over: number;
-    /** The cell and every line inside the column. */
+    /** The cell and every line inside the column, and the money node's text inside its own box, clear of its `from` and its unit. */
     fits: boolean;
 };
 
@@ -123,6 +127,30 @@ function lineRects(node: Node): DOMRect[] {
     const range = document.createRange();
     range.selectNodeContents(node);
     return [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+}
+
+/**
+ * Whether two runs of text meet: they overlap along the line, and their
+ * middle three fifths overlap across it. A content area runs past its ink
+ * above and below, so a `from` on the row above the figure meets the
+ * figure's content area with no ink there; the middle of a run is where
+ * its digits are.
+ */
+function textsMeet(a: readonly DOMRect[], b: readonly DOMRect[], turn: string | null): boolean {
+    const middle = (r: DOMRect): Span => {
+        const s = across(r, turn);
+        const fifth = (s.hi - s.lo) / 5;
+        return { lo: s.lo + fifth, hi: s.hi - fifth };
+    };
+    return a.some((ra) =>
+        b.some((rb) => {
+            const la = along(ra, turn);
+            const lb = along(rb, turn);
+            const ma = middle(ra);
+            const mb = middle(rb);
+            return Math.min(la.hi, lb.hi) - Math.max(la.lo, lb.lo) > 0.5 && Math.min(ma.hi, mb.hi) - Math.max(ma.lo, mb.lo) > 0.5;
+        }),
+    );
 }
 
 const realGauge: WallFigureGauge = (head, figure) => {
@@ -164,7 +192,21 @@ const realGauge: WallFigureGauge = (head, figure) => {
     const status = head.closest('.stall-scroll')?.querySelector<HTMLElement>('.sw-status');
     const card = head.parentElement ?? head;
     const statusTop = status === null || status === undefined ? Number.POSITIVE_INFINITY : across(status.getBoundingClientRect(), turn).lo;
-    const fits = need.lo >= lo - 0.5 && need.hi <= lo + room + 0.5;
+    // The money node's own text inside its own box, and clear of its
+    // `from` and its unit (the wall-offsize critic's item 1): in the stacked
+    // shape the figure's track once shrank under its unwrapped digits, so
+    // they ran on under ` XEC` — inside the column, which the span above
+    // reads as one, and the fit took a size at which "XEC" printed over the
+    // last digit. Held here by the fit's own reading; the probe holds it
+    // apart (`a-cycle-figure-never-runs-under-its-own-unit`).
+    const inks = lineRects(figure);
+    const own = along(figure.getBoundingClientRect(), turn);
+    const inside = inks.every((r) => {
+        const s = along(r, turn);
+        return s.lo >= own.lo - 0.5 && s.hi <= own.hi + 0.5;
+    });
+    const clear = [...amount.querySelectorAll(':scope > .item-from, :scope > .item-u')].every((other) => !textsMeet(inks, lineRects(other), turn));
+    const fits = need.lo >= lo - 0.5 && need.hi <= lo + room + 0.5 && inside && clear;
     return {
         size: Number.parseFloat(getComputedStyle(figure).fontSize),
         room,

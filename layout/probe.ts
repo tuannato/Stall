@@ -2387,6 +2387,26 @@ function cardLadderFaults(): Failure[] {
  * runner owes every band on every look on each wall pass.
  */
 const CYCLE_FIGURE_CHECK = 'a-cycle-card-shows-every-digit-at-every-wall-size';
+/*
+ * **A Cycle figure never runs under its own unit** (the wall-offsize
+ * critic's item 1, 2026-10-20). The fit's stacked shape (`from` on a line
+ * above, ` XEC` beside the figure) gave the money node a
+ * `minmax(0, max-content)` track and kept it on one line, so where the price
+ * cell was narrower than the figure the track shrank under it and the
+ * unwrapped digits ran on under ` XEC`: Neo's `from 1,234,567 XEC` at
+ * 1280x900 printed "XEC" over its last "7", and the rule above, which reads
+ * the cell and every line of the figure as one span inside the column, held
+ * it green — the overlap was inside the column. Read here on its own terms,
+ * apart from the fit's own check (`wallFit.ts`'s gauge holds the same
+ * thing by its own code): every rect of the money node's text stands inside
+ * the money node's own box along the line, and none meets a rect of the
+ * figure's `from` or its unit (`.item-from`, `.item-u`) where the two
+ * overlap along the line and their middle three fifths overlap across it
+ * (a content area runs past its ink, and a `from` on the row above meets
+ * the figure's content area with no ink there). Counted with the rule
+ * above (`cycleFigureByClass`).
+ */
+const CYCLE_UNIT_CHECK = 'a-cycle-figure-never-runs-under-its-own-unit';
 /** Per look class, per length band (`wallFigureTier`), how many Cycle figures were read. */
 const cycleFigureByClass: Record<string, Record<string, number>> = {};
 
@@ -2475,6 +2495,50 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
                 });
                 if (crossed !== undefined) {
                     say(`has a line over ${what} (${Math.round(crossed.left)}–${Math.round(crossed.right)} × ${Math.round(crossed.top)}–${Math.round(crossed.bottom)})`);
+                }
+            }
+            // The figure's own text, inside its own box and clear of its
+            // `from` and its unit (`CYCLE_UNIT_CHECK`).
+            const own = figure.getBoundingClientRect();
+            const textOf = (node: Element): DOMRect[] => {
+                const r = document.createRange();
+                r.selectNodeContents(node);
+                return [...r.getClientRects()].filter((q) => q.width > 0 && q.height > 0);
+            };
+            const ink = textOf(figure);
+            const loose = ink.find((r) => r.left < own.left - 0.5 || r.right > own.right + 0.5);
+            if (loose !== undefined) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: CYCLE_UNIT_CHECK,
+                    detail:
+                        `the Cycle figure "${(figure.textContent ?? '').slice(0, 40)}" (${getComputedStyle(figure).fontSize}) runs ` +
+                        `${(loose.right > own.right + 0.5 ? loose.right - own.right : own.left - loose.left).toFixed(1)}px out of its own box ` +
+                        `(text ${Math.round(loose.left)}–${Math.round(loose.right)}, box ${Math.round(own.left)}–${Math.round(own.right)}) at ${window.innerWidth}x${window.innerHeight}`,
+                });
+            }
+            const middle = (r: DOMRect): [number, number] => [r.top + r.height * 0.2, r.bottom - r.height * 0.2];
+            for (const [what, sel] of [
+                ['its from', ':scope > .item-from'],
+                ['its unit', ':scope > .item-u'],
+            ] as const) {
+                const other = amount.querySelector(sel);
+                if (other === null) continue;
+                const met = ink.flatMap((a) => textOf(other).map((b) => [a, b] as const)).find(([a, b]) => {
+                    const [at, ab] = middle(a);
+                    const [bt, bb] = middle(b);
+                    return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(ab, bb) - Math.max(at, bt) > 0.5;
+                });
+                if (met !== undefined) {
+                    out.push({
+                        screen,
+                        theme: label,
+                        check: CYCLE_UNIT_CHECK,
+                        detail:
+                            `the Cycle figure "${(figure.textContent ?? '').slice(0, 40)}" (${getComputedStyle(figure).fontSize}) runs under ${what} "${other.textContent ?? ''}" ` +
+                            `by ${(Math.min(met[0].right, met[1].right) - Math.max(met[0].left, met[1].left)).toFixed(1)}px at ${window.innerWidth}x${window.innerHeight}`,
+                    });
                 }
             }
             // A broken figure splits no group: every piece on one line.
