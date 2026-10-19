@@ -3217,11 +3217,13 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   round 5), and what lies under it is not read (P2-1);
  * - a paint a box outside the walk lays under the glyphs: a sibling's
  *   background or shadow run under them, a positioned box (the coverage
- *   rules'), an in-flow `::before` or `::after` of a box above it (the
- *   contrast pass's look-pseudo frames read their paint inside a protected
- *   box, on the screens it samples), a blend such a box composes with what
- *   lies under it, and what a `backdrop-filter` blur on the figure or a box
- *   above spreads from beside the box under it;
+ *   rules'), an in-flow `::before` or `::after` of any element (a look's is
+ *   the contrast pass's look-pseudo frames', which read its paint — its
+ *   glyphs whatever their colour since round 7, its ground and its border —
+ *   inside a protected box, on the screens it samples; one the app's own
+ *   sheets generate is chrome), a blend such a box composes with what lies
+ *   under it, and what a `backdrop-filter` blur on the figure or a box above
+ *   spreads from beside the box under it;
  * - a paint's geometry beyond its rect: the paints are composited as plain
  *   stacking (source-over, in paint order — every blend from the figure up
  *   to the stall is held to `normal`, and `isolation`, which only keeps
@@ -3253,10 +3255,11 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   reads a computed ink's red, green and blue alone): on a money subject
  *   this rule refuses an ink under alpha 1 first; every other target reads
  *   as before; and what the contrast pass blanks with the glyphs (round 6,
- *   `blankGlyphs`): an SVG glyph through its `color`, and a decoration
- *   line, an emphasis mark or a text stroke whose colour is the element's
- *   `color` — so one a look writes in the ink's colour by name is blanked
- *   too, and not read as ground;
+ *   `blankGlyphs`): an SVG element's fill, stroke, gradient stop, flood and
+ *   light whose colour is its `color` (its `color` kept, round 7), and a
+ *   decoration line, an emphasis mark or a text stroke whose colour is the
+ *   element's `color` — so one a look writes in the ink's colour by name is
+ *   blanked too, and not read as ground;
  * - a shrink by a font feature (`font-variant-position`, `sups`, `dnom`),
  *   which keeps the computed size the type floor reads — none shrank a
  *   digit in the served subsets (the critic's A3, D5); the glyphs a look's
@@ -3783,11 +3786,11 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
         const sizes = splitLayers(cs.backgroundSize);
         const origins = splitLayers(cs.backgroundOrigin);
         const attachments = splitLayers(cs.backgroundAttachment);
+        const positionsX = splitLayers(cs.backgroundPositionX);
+        const positionsY = splitLayers(cs.backgroundPositionY);
         for (let i = layers.length - 1; i >= 0; i -= 1) {
             const layer = layers[i]!;
             const clip = clips[i % clips.length] ?? 'border-box';
-        const positionsX = splitLayers(cs.backgroundPositionX);
-        const positionsY = splitLayers(cs.backgroundPositionY);
             if (layer === 'none') continue;
             if (picture(layer)) {
                 paints.push({ what: 'a picture', candidates: [], picture: layer, rects: () => clipRects(clip) });
@@ -8645,19 +8648,44 @@ function ringLines(
  * HTML element's glyphs go through `-webkit-text-fill-color: transparent`
  * and its `color` stays: every `currentColor` paint stands in the capture as
  * it stands on the screen. What `color` painted as part of the glyphs goes
- * with them, as it went before: an SVG element (a drawn glyph, stroked and
- * filled in `currentColor`) keeps the old blanking, and a decoration line, an
- * emphasis mark or a text stroke whose colour is the element's `color` — its
- * `currentColor` — is set transparent beside the fill (`GLYPH_MARKS`). A
- * `::before` or `::after` inherits the transparent fill, as it inherited the
- * transparent colour; one that sets a colour of its own kept its glyphs
- * then, and keeps them now (`data-probe-pf-*`, its fill put back to its own
- * `currentColor` while its host is blanked), so the look-pseudo frames
- * (D6(i)) still see a glyph a look pseudo prints in a colour of its own.
+ * with them, as it went before: a decoration line, an emphasis mark or a
+ * text stroke whose colour is the element's `color` — its `currentColor` —
+ * is set transparent beside the fill (`GLYPH_MARKS`), and so are an SVG
+ * element's paints that follow its `color` (`SVG_GLYPH_PAINTS`: its fill and
+ * stroke, a gradient stop's, a filter's flood or light, round 7, the
+ * critic's P2-1 on round 6) — an SVG element keeps its `color` too, so a
+ * background, border or shadow it wears in `currentColor` stands in the
+ * capture as an HTML element's does, where the old blanking (its `color`
+ * transparent) dropped it.
+ *
+ * **Every look pseudo keeps its glyphs** (round 7, the critic's P1-1 on
+ * round 6). A `::before` or `::after` inherits the transparent fill, as it
+ * inherited the transparent colour. A pseudo of the app's own sheets that
+ * inherits its host's ink goes blank with it, as before; one that sets a
+ * colour of its own keeps its glyphs, as it did; and **every look pseudo**
+ * (`markLookPseudos`' `data-probe-lp-*`, a `::before`/`::after` a look or a
+ * decoration rule generates) keeps its glyphs whatever its colour — round 6
+ * kept only those whose colour differed from the host's, so a look pseudo in
+ * its host's ink, written by name or inherited, was blank in both of the
+ * look-pseudo frames (D6(i)) and painted over the address with every pass
+ * green (the critic's PS and PSi). A pseudo that keeps its glyphs is marked
+ * `data-probe-pf-*`, and its fill is put back to the fill it painted before
+ * its host was blanked (read off the pseudo, carried on its host as
+ * `--probe-pf-before` / `-after`): what it paints over or beside the text is
+ * ground, D6(ii)'s reading.
  */
 const GLYPH_FILL = '-webkit-text-fill-color';
 /** The marks drawn with the glyphs in their own `color` when a look names no other. */
 const GLYPH_MARKS = ['text-decoration-color', 'text-emphasis-color', '-webkit-text-stroke-color'] as const;
+/**
+ * An SVG element's paints, blanked where they follow its `color` (round 7):
+ * a drawn glyph is stroked and filled in `currentColor` (`.ic`), a gradient
+ * stop, a flood or a light may be too. Each is compared, computed, with the
+ * element's computed `color` — the old blanking's reach, the element's
+ * `color` set transparent, without the background, border and shadows that
+ * `color` also paints.
+ */
+const SVG_GLYPH_PAINTS = ['fill', 'stroke', 'stop-color', 'flood-color', 'lighting-color'] as const;
 /** What a prepared element had inline before its glyphs were blanked, for showing them again. */
 const glyphKept = new WeakMap<Element, { fill: readonly [string, string]; marks: readonly (readonly [string, string, string])[] }>();
 
@@ -8665,61 +8693,63 @@ const glyphKept = new WeakMap<Element, { fill: readonly [string, string]; marks:
 function keepGlyphs(el: HTMLElement): void {
     if (glyphKept.has(el)) return;
     const cs = getComputedStyle(el);
+    const marks: readonly string[] = el instanceof SVGElement ? [...SVG_GLYPH_PAINTS, ...GLYPH_MARKS] : GLYPH_MARKS;
     glyphKept.set(el, {
         fill: [el.style.getPropertyValue(GLYPH_FILL), el.style.getPropertyPriority(GLYPH_FILL)],
-        marks: GLYPH_MARKS.filter((p) => cs.getPropertyValue(p) === cs.color).map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const),
+        marks: marks.filter((p) => cs.getPropertyValue(p) === cs.color).map((p) => [p, el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const),
     });
     if (el instanceof SVGElement) return;
     for (const which of ['before', 'after'] as const) {
         const ps = getComputedStyle(el, `::${which}`);
-        if (ps.content !== 'none' && ps.content !== 'normal' && ps.color !== cs.color) el.setAttribute(`data-probe-pf-${which}`, '');
+        if (ps.content === 'none' || ps.content === 'normal') continue;
+        // Its own colour, or a look's pseudo whatever its colour (round 7).
+        if (ps.color === cs.color && !el.hasAttribute(`data-probe-lp-${which}`)) continue;
+        el.setAttribute(`data-probe-pf-${which}`, '');
+        el.style.setProperty(`--probe-pf-${which}`, ps.getPropertyValue(GLYPH_FILL));
     }
 }
 
 let pseudoFillSheetAdopted = false;
-/** The pseudo-elements with a colour of their own keep their glyphs while their host is blanked; the marks of an earlier prepare cleared. */
+/** The pseudo-elements that keep their glyphs while their host is blanked (a colour of their own, or a look's); the marks of an earlier prepare cleared. */
 function adoptPseudoFillSheet(): void {
-    for (const el of document.querySelectorAll('[data-probe-pf-before], [data-probe-pf-after]')) {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-probe-pf-before], [data-probe-pf-after]')) {
         el.removeAttribute('data-probe-pf-before');
         el.removeAttribute('data-probe-pf-after');
+        el.style.removeProperty('--probe-pf-before');
+        el.style.removeProperty('--probe-pf-after');
     }
     if (pseudoFillSheetAdopted) return;
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(
-        `[data-probe-pf-before]::before,[data-probe-pf-after]::after{${GLYPH_FILL}:currentcolor!important}`,
+        `[data-probe-pf-before]::before{${GLYPH_FILL}:var(--probe-pf-before)!important}` +
+            `[data-probe-pf-after]::after{${GLYPH_FILL}:var(--probe-pf-after)!important}`,
     );
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     pseudoFillSheetAdopted = true;
 }
 
-/** Blank an element's glyphs: its fill and the marks its `color` paints, or an SVG element's `color`. */
+/** Blank an element's glyphs: its fill and the marks its `color` paints, or an SVG element's paints that follow its `color`. */
 function blankGlyphs(el: HTMLElement): void {
-    if (el instanceof SVGElement) {
-        el.style.setProperty('color', 'transparent', 'important');
-        return;
-    }
-    el.style.setProperty(GLYPH_FILL, 'transparent', 'important');
+    if (!(el instanceof SVGElement)) el.style.setProperty(GLYPH_FILL, 'transparent', 'important');
     for (const [p] of glyphKept.get(el)?.marks ?? []) el.style.setProperty(p, 'transparent', 'important');
 }
 
 /** Show an element's glyphs again: what it wore inline put back. */
 function showGlyphs(el: HTMLElement): void {
-    if (el instanceof SVGElement) {
-        el.style.color = el.dataset['probeColor'] ?? '';
-        return;
-    }
     const kept = glyphKept.get(el);
     const put = (p: string, value: string, priority: string): void => {
         if (value === '') el.style.removeProperty(p);
         else el.style.setProperty(p, value, priority);
     };
-    put(GLYPH_FILL, kept?.fill[0] ?? '', kept?.fill[1] ?? '');
+    if (!(el instanceof SVGElement)) put(GLYPH_FILL, kept?.fill[0] ?? '', kept?.fill[1] ?? '');
     for (const [p, value, priority] of kept?.marks ?? []) put(p, value, priority);
 }
 
 /** Whether the prepare blanked an element's glyphs, so its own computed ink is the backup's. */
-const glyphsBlanked = (el: Element): boolean =>
-    el instanceof HTMLElement || el instanceof SVGElement ? el.style.getPropertyValue(GLYPH_FILL) === 'transparent' || el.style.color === 'transparent' : false;
+const glyphsBlanked = (el: Element): boolean => {
+    if (el instanceof SVGElement) return (glyphKept.get(el)?.marks ?? []).some(([p]) => el.style.getPropertyValue(p) === 'transparent');
+    return el instanceof HTMLElement ? el.style.getPropertyValue(GLYPH_FILL) === 'transparent' || el.style.color === 'transparent' : false;
+};
 
 /**
  * The ring read's second capture: every prepared target that wears the
