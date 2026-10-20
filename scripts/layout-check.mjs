@@ -542,8 +542,9 @@ const LEGACY = process.env.LAYOUT_LEGACY === '1';
  * over its box — the rain
  * between its strokes is in the box, and what a reader needs is the ground
  * right against every stroke. So the job is captured once more with the
- * outlined glyphs shown (`__contrastGlyphs`), and for each line of each
- * outlined target:
+ * outlined glyphs shown (`__contrastGlyphs`, the job's one shown frame,
+ * which the broken-figure read shares), and for each line of each outlined
+ * target:
  *
  * - the **glyph mask** is every pixel inside the line's rect (its text
  *   node's characters on one line box, clipped like the box) where the
@@ -945,8 +946,9 @@ function legacyBand(img, target) {
  * pieces paint, so a look that hid a piece, or made one transparent or
  * faint, would show no digit while the money box's own read — the node's
  * computed ink against the blanked ground — stayed green. Read on a capture
- * with the broken figures' glyphs shown (`__contrastFigureGlyphs`) against
- * the blanked capture, which is the painted ground: for every line of every
+ * with the broken figures' glyphs shown (`__contrastGlyphs`, the job's one
+ * shown frame, which the ring read shares) against the blanked capture (the
+ * job's own), which is the painted ground: for every line of every
  * piece, the glyph pixels (those that moved at least halfway from the
  * ground toward the FIGURE's own ink, never the piece's), each read for its
  * contrast against its own ground pixel the way the line read reads a
@@ -1744,43 +1746,74 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     }
                 }
                 /*
-                 * The ring read (`ringRead`): every outlined target, on a
-                 * second capture with its glyphs shown. A failing ring is
-                 * read again on a fresh pair before it is believed — the
-                 * box read's own rule, and it shares that rule's one
-                 * re-shot per job.
+                 * **The job's one "shown" frame** (before 8g2, commit 2):
+                 * the ring read and the broken-figure read are both read
+                 * against the job's own capture (`img`), which is the
+                 * blank, on one capture with their glyphs shown
+                 * (`__contrastGlyphs`: the outlined targets' and the broken
+                 * figures' alike). It was two frames until then — the ring
+                 * read's shown capture, and the broken-figure read's own
+                 * blank and shown pair — on the same blanked, frozen paint.
+                 * Each read keeps its own retry: a failing ring is read
+                 * again on a fresh blank and a fresh shown frame, sharing
+                 * the box read's one re-shot per job (the job's capture is
+                 * replaced, so the broken-figure read after it reads the
+                 * fresh pair); a failing broken figure on a fresh blank and
+                 * a fresh shown frame of its own, as it always was.
                  */
-                if (retryWhy.length === 0 && targets.some((t) => t.ring > 0)) {
+                const glyphs = async (show) => {
+                    const r = await cdp.send(
+                        'Runtime.evaluate',
+                        { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
+                        sessionId,
+                    );
+                    if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                    return r.result.value;
+                };
+                const outlinedOf = () => targets.filter((t) => t.ring > 0);
+                const brokenOf = () => targets.filter((t) => (t.digitsOwed ?? 0) > 0);
+                /** The glyphs shown, one capture, the boxes re-read, the glyphs blanked again: `{ shot, why }`. */
+                const shownFrame = async () => {
+                    const shownStart = performance.now();
+                    const n = await glyphs(true);
+                    const shownCap = await capture();
+                    const shownRead = await reread();
+                    await glyphs(false);
+                    const why = [...shownCap.why, ...shownRead.why];
+                    if (shownRead.live.boxes.length !== targets.length) {
+                        why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
+                    }
+                    if (n.outlined !== outlinedOf().length) {
+                        why.push(`${n.outlined} outlined targets shown where the read has ${outlinedOf().length}`);
+                    }
+                    if (n.figures !== brokenOf().length) {
+                        why.push(`${n.figures} broken figures shown where the read has ${brokenOf().length}`);
+                    }
+                    const entry = phases.get('shown frame') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - shownStart;
+                    phases.set('shown frame', entry);
+                    return { shot: shownCap.shot, why };
+                };
+                let shown;
+                if (retryWhy.length === 0 && (outlinedOf().length > 0 || brokenOf().length > 0)) {
+                    shown = await shownFrame();
+                    if (shown.why.length > 0) {
+                        retryWhy = shown.why.map((w) => `with the glyphs shown, ${w}`);
+                    }
+                }
+                /*
+                 * The ring read (`ringRead`): every outlined target, on the
+                 * shown frame. A failing ring is read again on a fresh pair
+                 * before it is believed — the box read's own rule, and it
+                 * shares that rule's one re-shot per job.
+                 */
+                if (retryWhy.length === 0 && outlinedOf().length > 0) {
                     const ringStart = performance.now();
-                    const glyphs = async (show) => {
-                        const r = await cdp.send(
-                            'Runtime.evaluate',
-                            { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
-                            sessionId,
-                        );
-                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                        return r.result.value;
-                    };
-                    const shownPair = async () => {
-                        const n = await glyphs(true);
-                        const shownCap = await capture();
-                        const shownRead = await reread();
-                        await glyphs(false);
-                        const why = [...shownCap.why, ...shownRead.why];
-                        if (shownRead.live.boxes.length !== targets.length) {
-                            why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
-                        }
-                        if (n !== targets.filter((t) => t.ring > 0).length) {
-                            why.push(`${n} outlined targets shown where the read has ${targets.filter((t) => t.ring > 0).length}`);
-                        }
-                        return { shot: shownCap.shot, why };
-                    };
-                    const readAll = (shown) =>
-                        targets.filter((t) => t.ring > 0).map((t) => ({ t, r: ringRead(img, shown, t) }));
+                    const readAll = (shot) => outlinedOf().map((t) => ({ t, r: ringRead(img, shot, t) }));
                     const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0 || r.bare.length > 0;
-                    let pair = await shownPair();
-                    let results = pair.why.length === 0 ? readAll(pair.shot) : [];
-                    if (pair.why.length === 0 && results.some(bad) && !retried) {
+                    let results = readAll(shown.shot);
+                    if (results.some(bad) && !retried) {
                         await sleep(250);
                         const again = await capture();
                         const againRead = await reread();
@@ -1790,14 +1823,14 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             imgAt = again.capturedAt;
                             targets = againRead.live.boxes;
                             retried = true;
-                            pair = await shownPair();
-                            results = pair.why.length === 0 ? readAll(pair.shot) : [];
+                            shown = await shownFrame();
+                            results = shown.why.length === 0 ? readAll(shown.shot) : [];
                         } else {
-                            pair = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
+                            shown = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
                         }
                     }
-                    if (pair.why.length > 0) {
-                        retryWhy = pair.why.map((w) => `with the glyphs shown, ${w}`);
+                    if (shown.why.length > 0) {
+                        retryWhy = shown.why.map((w) => `with the glyphs shown, ${w}`);
                     }
                     sampled += results.length;
                     for (const { t, r } of results) {
@@ -1882,41 +1915,43 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                 }
                 /*
                  * A broken figure paints every digit (`digitRead`, round 3):
-                 * the figures broken after a comma, on a capture with their
-                 * glyphs shown, each piece's glyphs read in the figure's
-                 * own ink. A failing read is taken again on a fresh pair
+                 * the figures broken after a comma, on the shown frame
+                 * against the job's own capture, each piece's glyphs read
+                 * in the figure's own ink. A failing read is taken again on
+                 * a fresh pair — a fresh blank and a fresh shown frame —
                  * before it is believed, like a failing box.
                  */
-                const broken = targets.filter((t) => (t.digitsOwed ?? 0) > 0);
+                const broken = brokenOf();
                 if (retryWhy.length === 0 && broken.length > 0) {
                     const brokenStart = performance.now();
-                    const figureGlyphs = async (show) => {
-                        const r = await cdp.send(
-                            'Runtime.evaluate',
-                            { expression: `window.__contrastFigureGlyphs(${show})`, awaitPromise: true, returnByValue: true },
-                            sessionId,
-                        );
-                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                        return r.result.value;
-                    };
-                    const readBroken = async () => {
+                    const readOn = (blank, shot) => broken.map((t) => ({ t, r: digitRead(blank, shot, t) }));
+                    const readFresh = async () => {
                         const blankCap = await capture();
-                        const n = await figureGlyphs(true);
-                        const shownCap = await capture();
-                        await figureGlyphs(false);
-                        const why = [...blankCap.why, ...shownCap.why];
-                        if (n !== broken.length) why.push(`${n} broken figures shown where the read has ${broken.length}`);
-                        return { why, results: why.length > 0 ? [] : broken.map((t) => ({ t, r: digitRead(blankCap.shot, shownCap.shot, t) })) };
+                        const fresh = await shownFrame();
+                        const why = [...blankCap.why, ...fresh.why];
+                        return { why, results: why.length > 0 ? [] : readOn(blankCap.shot, fresh.shot) };
                     };
                     const bad = ({ t, r }) => r.thin.length > 0 || r.found < t.digitsOwed;
-                    let pass = await readBroken();
-                    if (pass.why.length === 0 && pass.results.some(bad)) {
+                    let pass = { why: [], results: readOn(img, shown.shot) };
+                    if (pass.results.some(bad)) {
                         await sleep(250);
-                        pass = await readBroken();
+                        pass = await readFresh();
                     }
                     if (pass.why.length > 0) {
                         retryWhy = pass.why.map((w) => `for the broken figures, ${w}`);
                     } else {
+                        // The readings themselves, in the dump: a change to
+                        // how they are taken is compared reading by reading
+                        // (`contrast-dump.mjs` holds the boxes; these ride
+                        // the job's record).
+                        record.broken = pass.results.map(({ t, r }) => ({
+                            i: t.i,
+                            sel: t.sel,
+                            found: r.found,
+                            maskPx: r.maskPx,
+                            least: dumpValue(r.least),
+                            thin: r.thin.length,
+                        }));
                         brokenKeys.add(plannedJob.key);
                         for (const { t, r } of pass.results) {
                             brokenFigures += 1;
@@ -1998,6 +2033,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             byJob.set(plannedJob.key, Math.min(byJob.get(plannedJob.key) ?? Infinity, least));
                             horizonWorst.set(part, byJob);
                         }
+                        // This job's least per sign line, in the dump beside
+                        // the boxes (the run prints only the least of all).
+                        record.horizonWorst = Object.fromEntries([...horizonWorst].map(([part, byJob]) => [part, dumpValue(byJob.get(plannedJob.key))]));
                     }
                     const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
                     entry.calls += 1;

@@ -8157,10 +8157,10 @@ declare global {
         __protectedBoxes: () => { x: number; y: number; w: number; h: number; sel: string }[];
         /**
          * Show (or blank again) the glyphs of every prepared target that
-         * wears the outline, for the ring read's second capture.
+         * wears the outline and every broken figure, for the job's one
+         * "shown" frame; how many of each.
          */
-        __contrastGlyphs: (show: boolean) => Promise<number>;
-        __contrastFigureGlyphs: (show: boolean) => Promise<number>;
+        __contrastGlyphs: (show: boolean) => Promise<{ outlined: number; figures: number }>;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -8866,18 +8866,31 @@ const glyphsBlanked = (el: Element): boolean => {
 };
 
 /**
- * The ring read's second capture: every prepared target that wears the
- * outline, and each descendant, has its glyphs shown again (the fill the
- * prepare blanked, put back) or blanked once more. A pseudo-element with an
- * ink of its own paints in both captures and one inheriting the line's
- * follows it; the mask is read inside the text nodes' own line boxes either
- * way (D6(ii), step 5b).
+ * **The job's one "shown" frame** (before 8g2, commit 2): every prepared
+ * target the ring read or the broken-figure read reads, and each
+ * descendant, has its glyphs shown again (the fill the prepare blanked, each
+ * element its own, put back) or blanked once more — the targets that wear
+ * the outline (the ring read) and the money nodes holding a `.fig-say` (the
+ * broken-figure read, round 3, the critic's P2-1). The runner captures the
+ * frame once, between a show and a blank, and reads both against the job's
+ * own capture, which is the blank. A pseudo-element with an ink of its own
+ * paints in both captures and one inheriting the line's follows it; the
+ * mask is read inside the text nodes' own line boxes either way (D6(ii),
+ * step 5b). A piece a look made transparent is put back transparent, and
+ * one it hid stays hidden: what the read then finds is what the look paints.
+ * The horizon's worst read and the art-off read show the same set on their
+ * own frames; they read the outlined lines alone, so a figure shown beside
+ * them is read by nothing there.
  */
 window.__contrastGlyphs = async (show: boolean) => {
-    let n = 0;
+    let outlined = 0;
+    let figures = 0;
     for (const node of preparedNodes) {
-        if (outlineOf(node) <= 0) continue;
-        n += 1;
+        const ring = outlineOf(node) > 0;
+        const figure = node.matches(MONEY) && node.querySelector('.fig-say') !== null;
+        if (!ring && !figure) continue;
+        if (ring) outlined += 1;
+        if (figure) figures += 1;
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
             if (show) {
@@ -8888,33 +8901,7 @@ window.__contrastGlyphs = async (show: boolean) => {
         }
     }
     await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
-    return n;
-};
-
-/**
- * The broken-figure read's second capture (round 3, the critic's P2-1):
- * every prepared money node holding a `.fig-say` has its glyphs shown again
- * (the fill the prepare blanked, each element its own, put back) or
- * blanked once more. A piece a look made transparent is put back
- * transparent, and one it hid stays hidden: what the read then finds is what
- * the look paints.
- */
-window.__contrastFigureGlyphs = async (show: boolean) => {
-    let n = 0;
-    for (const node of preparedNodes) {
-        if (!node.matches(MONEY) || node.querySelector('.fig-say') === null) continue;
-        n += 1;
-        for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
-            if (el.dataset['probeColor'] === undefined) continue;
-            if (show) {
-                showGlyphs(el);
-            } else {
-                blankGlyphs(el);
-            }
-        }
-    }
-    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
-    return n;
+    return { outlined, figures };
 };
 
 /**
