@@ -56,7 +56,8 @@ import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from '.
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
-import { PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
+import { charCentre, columnExcuses, fittedRadii, framePoints, gridPoints, insideRounded, movedBy, radiusOf, SQUARE, type CoverPoint, type Frame, type Radii } from './coverPoints';
+import { LOOK_RULE, PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
@@ -481,6 +482,347 @@ function coveredBy(node: Element): string | undefined {
     }
     return undefined;
 }
+
+/*
+ * **Nothing covers money or a protected box** (before 8g2, 1a; report-only
+ * until it binds, and `coveredBy` above binds under its own check names until
+ * then). `coveredBy` asks five points of the price, "You pay" and the
+ * unbuyable label alone, with `pointer-events` as the page has it, so a box a
+ * look moved over any other money node — the no-escrow note over the pay
+ * sheet's figure, a face's line over a quote's, a code's own fold summary
+ * over its modules — was read by no geometry rule, and one carrying
+ * `pointer-events: none` by none at all (the critic's PC2, PC3, PC3′, SVs,
+ * PQ). This asks every money node (`MONEY_FIGURES`) and every protected box
+ * (`PROTECTED`) in the open surface, with `pointer-events` and
+ * `interactivity` forced on everywhere by one sheet adopted once a page and
+ * switched on for the read alone (`coverPointers`): a box's centre and its
+ * corners inside its rounded shape, every character's centre, and a grid
+ * over a code (`layout/coverPoints.ts`), each in the node's own frame. A
+ * paint with no hit area — a shadow, an outline, a neighbour's underline —
+ * is not hit-testable whatever the forcing, and is 1b's (C-1).
+ *
+ * **At rest, once a paint, on every geometry pass, and once a contrast job
+ * at its full height** (`window.__coverFaults`), where nothing stands below
+ * the first screen. Not at `checkOverTime`'s six instants: measured over the
+ * phone pass's whole screen set, they take the reads from 886 to 4,600 and
+ * the rule's own time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s), for
+ * covers that move into place between frames — which the six instants never
+ * closed (the critic's P3-1); `coveredBy` and the decoration sweep still read
+ * them. Stated.
+ *
+ * Fails closed (as would-be failures while it reports): an element still
+ * computing `pointer-events` or `interactivity` other than `auto` (only a
+ * declaration that outranks the forcing can, an inline `!important`), an
+ * inert subtree or a modal dialog, which no sheet makes hit-testable, a point
+ * inside the viewport with nothing under it, a node turned past 45° with no
+ * box of its own, and a node with no box that a look's rule hides
+ * (`lookHides`). One the app hides itself — the address twin a width does not
+ * paint, a desk-only fold on a phone, the wall's list while a payment stands
+ * — is skipped and counted. A point below the first screen or past a side
+ * edge is counted and not asked (D3); one behind a clip, the node's own
+ * scroller's included for the text inside it, is counted beside the points
+ * asked, the ratio `CLIP_SKIP_CEILING` holds `coveredBy`'s to.
+ *
+ * The column is excused as `columnExcuses` says: never a hit on `.item-p`
+ * itself (a pseudo of the column moved over the figure reports as the column,
+ * the critic's P1-1), a sibling inside it at a corner point alone, and never
+ * a sibling an offset, a transform or a negative margin moved.
+ */
+const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
+/**
+ * A code's grid pitch, CSS pixels. Measured on the rule's own time: at rest
+ * over the phone pass's screens and nine wall screens at 768x1024, 24 costs
+ * 3% and 17% more than 32; over six desk screens read at every instant, 16
+ * cost 39% more than 24. The critic's PQ cover is a fold summary 80px in
+ * from each side with 30px of padding, which either pitch meets. A cover
+ * smaller than the pitch can stand between its points, stated:
+ * `a-code-keeps-its-quiet-zone-white` reads the ring around a code by its
+ * pixels, and 1d (not built) is to read its modules.
+ */
+const QR_PITCH = 24;
+/** How many would-be failures a look keeps word for word on one pass; every one is counted. */
+const COVER_KEPT = 400;
+type CoverScan = {
+    nodes: number;
+    points: number;
+    checked: number;
+    below: number;
+    offSide: number;
+    clipSkips: number;
+    appHidden: number;
+    would: string[];
+};
+type CoverTally = Omit<CoverScan, 'would'> & { paints: number; wouldCount: number; would: string[] };
+/** The rule's own tallies and would-be failures per look on this pass; `coverMs` its own time. */
+const coverByClass: Record<string, CoverTally> = {};
+let coverMs = 0;
+let coverSheet: CSSStyleSheet | undefined;
+
+/** Force (or stop forcing) every element and pseudo-element to take a hit. */
+function coverPointers(on: boolean): void {
+    if (coverSheet === undefined) {
+        coverSheet = new CSSStyleSheet();
+        coverSheet.replaceSync(
+            'html[data-probe-cover] *,html[data-probe-cover] *::before,html[data-probe-cover] *::after{pointer-events:auto!important;interactivity:auto!important}',
+        );
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, coverSheet];
+    }
+    document.documentElement.toggleAttribute('data-probe-cover', on);
+}
+
+/** A node in a sentence: its tag and classes, and its role. */
+function named(node: Element): string {
+    const role = node.getAttribute('data-role');
+    return `${describe(node)}${role === null ? '' : `[${role}]`}`;
+}
+
+/**
+ * The look's rules that take a box away — `display: none` or
+ * `content-visibility: hidden` in a rule naming a look's or a decoration's
+ * class (`LOOK_RULE`, the look-pseudo reading's own) — read once a page and
+ * again when a sheet joins it; each with the media conditions above it. A
+ * rule under any other condition (a container query) counts as in force,
+ * which errs toward failing.
+ */
+let lookHideRules: { selector: string; media: string[] }[] | undefined;
+let lookHideSheets = -1;
+function lookHideRulesNow(): { selector: string; media: string[] }[] {
+    if (lookHideRules !== undefined && lookHideSheets === document.styleSheets.length) return lookHideRules;
+    lookHideRules = [];
+    lookHideSheets = document.styleSheets.length;
+    for (const rule of styleRules()) {
+        const hides = rule.style.display === 'none' || rule.style.getPropertyValue('content-visibility') === 'hidden';
+        if (!hides) continue;
+        const media: string[] = [];
+        for (let up = rule.parentRule; up !== null; up = up.parentRule) {
+            if (up instanceof CSSMediaRule) media.push(up.media.mediaText);
+        }
+        for (const one of selectorList(rule.selectorText)) {
+            if (LOOK_RULE.test(one) && !PSEUDO_AT.test(one)) lookHideRules.push({ selector: one, media });
+        }
+    }
+    return lookHideRules;
+}
+
+/**
+ * Whether a look's rule takes `node`'s box away: on the node or a box above
+ * it that computes `display: none` (or, above it, `content-visibility:
+ * hidden`), a look's hiding rule in force matches. Undefined when nothing
+ * above it takes its box away at all (a node with nothing in it).
+ */
+function lookHides(node: Element): boolean | undefined {
+    const hidden: Element[] = [];
+    for (let at: Element | null = node; at !== null; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        if (cs.display === 'none' || (at !== node && cs.getPropertyValue('content-visibility') === 'hidden')) hidden.push(at);
+    }
+    if (hidden.length === 0) return undefined;
+    const rules = lookHideRulesNow().filter((r) => r.media.every((m) => matchMedia(m).matches));
+    return hidden.some((el) => rules.some((r) => el.matches(r.selector)));
+}
+
+/** A node's corner radii, as computed, against a box `w` by `h`. */
+function radiiOf(node: Element, w: number, h: number): Radii {
+    const cs = getComputedStyle(node);
+    return {
+        tl: radiusOf(cs.borderTopLeftRadius, w, h),
+        tr: radiusOf(cs.borderTopRightRadius, w, h),
+        br: radiusOf(cs.borderBottomRightRadius, w, h),
+        bl: radiusOf(cs.borderBottomLeftRadius, w, h),
+    };
+}
+
+/** The first move found on `hit` or a box above it below `column` (`movedBy`), or undefined. */
+function movedBelow(hit: Element, column: Element): string | undefined {
+    for (let at: Element | null = hit; at !== null && at !== column; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        const moved = movedBy({
+            position: cs.position,
+            top: cs.top,
+            right: cs.right,
+            bottom: cs.bottom,
+            left: cs.left,
+            transform: cs.transform,
+            translate: cs.translate,
+            rotate: cs.rotate,
+            scale: cs.scale,
+            marginTop: cs.marginTop,
+            marginRight: cs.marginRight,
+            marginBottom: cs.marginBottom,
+            marginLeft: cs.marginLeft,
+        });
+        if (moved !== undefined) return `${named(at)} ${moved}`;
+    }
+    return undefined;
+}
+
+/**
+ * The node's own frames: one for a box, one a line for an inline node broken
+ * over lines (a sliver under a pixel, a `<wbr>`'s, holds no glyph and is
+ * left out); undefined where a turn hides it.
+ */
+function coverFrames(node: Element, rects: readonly DOMRect[]): { frames: Frame[]; whole: boolean } | undefined {
+    const angle = angleOf(node);
+    const lineRects = rects.filter((r) => r.width >= 1 && r.height >= 1);
+    if (lineRects.length > 1) {
+        const lines = lineRects.map((r) => (angle === 0 ? { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: r.width, h: r.height } : turnedBox(r, angle)));
+        if (lines.every((f) => f !== undefined)) return { frames: lines.map((f) => ({ ...f!, angle })), whole: false };
+    }
+    const box = node.getBoundingClientRect();
+    if (angle === 0) return { frames: [{ cx: box.left + box.width / 2, cy: box.top + box.height / 2, w: box.width, h: box.height, angle }], whole: true };
+    const own =
+        ownFrame(node, box, angle) ??
+        (node.clientWidth > 0 && node.clientHeight > 0 ? { cx: box.x + box.width / 2, cy: box.y + box.height / 2, w: node.clientWidth, h: node.clientHeight } : undefined);
+    return own === undefined ? undefined : { frames: [{ ...own, angle }], whole: true };
+}
+
+/** `el`'s clips, and `el` itself where it clips its content (a scroller holding the text read). */
+function clipsWithin(el: Element): Clip[] {
+    const cs = getComputedStyle(el);
+    const self = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' ? [{ rect: el.getBoundingClientRect(), el, cutsX: false, scrollsX: false }] : [];
+    return [...self, ...clipsOf(el)];
+}
+
+/** Why `node` is covered (or the read cannot say), as a sentence, or undefined; the points counted into `scan`. */
+function coverOf(node: Element, scan: CoverScan): string | undefined {
+    const rects = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    if (rects.length === 0) {
+        const look = lookHides(node);
+        if (look === false) {
+            scan.appHidden += 1;
+            return undefined;
+        }
+        return look === true ? 'has no box: a rule of the look takes it away' : 'has no box at all, and nothing above it is hidden';
+    }
+    const framed = coverFrames(node, rects);
+    if (framed === undefined) {
+        return `stands in a frame turned ${degrees(angleOf(node))} and has no layout box of its own, which the read cannot take apart past 45°`;
+    }
+    const nodeClips = clipsOf(node);
+    const points: { p: CoverPoint; clips: Clip[] }[] = [];
+    for (const f of framed.frames) {
+        const radii = framed.whole ? radiiOf(node, f.w, f.h) : SQUARE;
+        for (const p of framePoints(f, radii)) points.push({ p, clips: nodeClips });
+        if (framed.whole && node.matches('.qr')) for (const p of gridPoints(f, QR_PITCH, radii)) points.push({ p, clips: nodeClips });
+    }
+    // Every character's centre, inside every clip above it — its own
+    // element's included: a record's bytes scroll inside their own box, and
+    // a line scrolled out of it stands under whatever follows.
+    const range = document.createRange();
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const clipsOfParent = new Map<Element, Clip[]>();
+    for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+        const text = t as Text;
+        const parent = text.parentElement;
+        if (parent === null) continue;
+        let clips = clipsOfParent.get(parent);
+        if (clips === undefined) {
+            clips = clipsWithin(parent);
+            clipsOfParent.set(parent, clips);
+        }
+        let at = 0;
+        for (const ch of text.data) {
+            const start = at;
+            at += ch.length;
+            if (/\s/.test(ch)) continue;
+            range.setStart(text, start);
+            range.setEnd(text, at);
+            const r = range.getBoundingClientRect();
+            if (r.width > 0 || r.height > 0) points.push({ p: charCentre(r), clips });
+        }
+    }
+    const column = node.closest('.item-p');
+    const covered = new Map<string, number>();
+    let first: string | undefined;
+    let firstChar: string | undefined;
+    for (const { p, clips } of points) {
+        scan.points += 1;
+        if (p.x < 0 || p.x >= window.innerWidth) {
+            scan.offSide += 1;
+            continue;
+        }
+        if (p.y < 0 || p.y >= window.innerHeight) {
+            scan.below += 1;
+            continue;
+        }
+        if (clips.some(({ rect: c }) => p.y < c.top + 1 || p.y > c.bottom - 1 || p.x < c.left || p.x > c.right)) {
+            scan.clipSkips += 1;
+            continue;
+        }
+        scan.checked += 1;
+        const hit = document.elementFromPoint(p.x, p.y);
+        const where = `${Math.round(p.x)},${Math.round(p.y)} (${p.kind})`;
+        if (hit === null) return `has nothing under ${where}, inside the viewport`;
+        if (hit === node || node.contains(hit)) continue;
+        const inColumn = column === null || !column.contains(hit) ? 'outside' : hit === column ? 'column' : 'inside';
+        const moved = inColumn === 'inside' ? movedBelow(hit, column!) : undefined;
+        if (columnExcuses(p.kind, inColumn, moved)) continue;
+        covered.set(p.kind, (covered.get(p.kind) ?? 0) + 1);
+        const sentence =
+            `is covered at ${where} by ${named(hit)}` +
+            (inColumn === 'column' ? ' — its own price column, a pseudo of which reports as the column' : '') +
+            (moved !== undefined ? ` — inside its price column, moved: ${moved}` : '');
+        first ??= sentence;
+        if (p.kind === 'char') firstChar ??= sentence;
+    }
+    if (first === undefined) return undefined;
+    // The most telling hit first — over a glyph — and how many of each kind.
+    return `${firstChar ?? first} (${[...covered].map(([kind, n]) => `${n} ${kind}`).join(', ')} point(s) covered)`;
+}
+
+/**
+ * The read over the open surface, the forcing on for its length alone. It
+ * also asks that the forcing took: every element of the app computes
+ * `pointer-events` and `interactivity` `auto`, and no inert subtree or modal
+ * dialog stands anywhere.
+ */
+function coverScan(): CoverScan {
+    const root = document.getElementById('app')!;
+    const scrim = root.querySelector('[data-role="sheet-scrim"], [data-role="poster"], [data-role="zoom"]');
+    const surface: ParentNode = scrim ?? root;
+    const nodes = [...new Set([...surface.querySelectorAll(MONEY_FIGURES), ...surface.querySelectorAll(PROTECTED)])].filter(
+        (n) => n.closest('.deck-stall') === null,
+    );
+    const scan: CoverScan = { nodes: nodes.length, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, would: [] };
+    coverPointers(true);
+    try {
+        const interactivity = CSS.supports('interactivity', 'auto');
+        for (const el of [root, ...root.querySelectorAll('*')]) {
+            const cs = getComputedStyle(el);
+            const i = cs.getPropertyValue('interactivity');
+            if (cs.pointerEvents !== 'auto' || (interactivity && i !== 'auto')) {
+                scan.would.push(`${named(el)} computes pointer-events ${cs.pointerEvents}${interactivity ? `, interactivity ${i}` : ''} with both forced auto — a hit test reads through it`);
+            }
+        }
+        for (const el of document.querySelectorAll('[inert], dialog:modal')) {
+            scan.would.push(`${named(el)} is ${el.matches('[inert]') ? 'inert' : 'a modal dialog'}, which no sheet makes hit-testable`);
+        }
+        for (const node of nodes) {
+            const why = coverOf(node, scan);
+            if (why !== undefined) scan.would.push(`${named(node)} ${why}`);
+        }
+    } finally {
+        coverPointers(false);
+    }
+    return scan;
+}
+
+/** The read on a geometry pass's paint at rest, into the measuring look's tally. */
+function coverRead(screen: string, label: string): void {
+    const t0 = performance.now();
+    const scan = coverScan();
+    const tally = (coverByClass[measuringClass] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, wouldCount: 0, would: [] });
+    tally.paints += 1;
+    for (const key of ['nodes', 'points', 'checked', 'below', 'offSide', 'clipSkips', 'appHidden'] as const) tally[key] += scan[key];
+    tally.wouldCount += scan.would.length;
+    for (const why of scan.would) {
+        if (tally.would.length < COVER_KEPT) tally.would.push(`${screen} / ${label}: ${why}`);
+    }
+    coverMs += performance.now() - t0;
+}
+
+/** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
+window.__coverFaults = () => coverScan();
 
 /**
  * Resolve a computed `polygon(...)` into pixel vertices for one box. Handles
@@ -1570,6 +1912,7 @@ function checkOverTime(
 ): Failure[] {
     paint(screen, look, worn);
     const out = measure(screen, themeLabel);
+    coverRead(screen, themeLabel);
     out.push(...reducedMotionLeaks(screen, themeLabel));
     // Queried after the paint, so these are the animations on the tree that is
     // about to be measured — and it must stay that way. Repainting between the
@@ -2800,46 +3143,6 @@ const SELF_CLIP_SURFACE = '.item, .card, .sheet, .zoom-card, .poster-page';
 const SELF_CLIP_ABOVE = '.stall-scroll, .stall, #app';
 
 /** The text of `node` cut by a box from it up to its surface, as a sentence, or undefined. */
-/** A corner's two radii, horizontal then vertical. */
-type Radii = { tl: [number, number]; tr: [number, number]; br: [number, number]; bl: [number, number] };
-
-/**
- * `radii` scaled the way CSS scales corner radii that overrun a side (one
- * factor for all, the least side's), for a box `w` wide and `h` tall.
- */
-function fittedRadii(radii: Radii, w: number, h: number): Radii {
-    const f = Math.min(
-        1,
-        w / Math.max(1e-6, radii.tl[0] + radii.tr[0]),
-        w / Math.max(1e-6, radii.bl[0] + radii.br[0]),
-        h / Math.max(1e-6, radii.tl[1] + radii.bl[1]),
-        h / Math.max(1e-6, radii.tr[1] + radii.br[1]),
-    );
-    const k = (r: [number, number]): [number, number] => [r[0] * f, r[1] * f];
-    return { tl: k(radii.tl), tr: k(radii.tr), br: k(radii.br), bl: k(radii.bl) };
-}
-
-/** Whether point (x, y) stands inside `box` with rounded corners `radii` (already fitted), `tol` px of rounding allowed. */
-function insideRounded(box: Box, radii: Radii, x: number, y: number, tol = 1): boolean {
-    if (x < box.left - tol || x > box.right + tol || y < box.top - tol || y > box.bottom + tol) return false;
-    const corner = (cx: number, cy: number, [rx, ry]: [number, number]): boolean =>
-        rx <= 0 || ry <= 0 || ((x - cx) / (rx + tol)) ** 2 + ((y - cy) / (ry + tol)) ** 2 <= 1;
-    if (x < box.left + radii.tl[0] && y < box.top + radii.tl[1]) return corner(box.left + radii.tl[0], box.top + radii.tl[1], radii.tl);
-    if (x > box.right - radii.tr[0] && y < box.top + radii.tr[1]) return corner(box.right - radii.tr[0], box.top + radii.tr[1], radii.tr);
-    if (x > box.right - radii.br[0] && y > box.bottom - radii.br[1]) return corner(box.right - radii.br[0], box.bottom - radii.br[1], radii.br);
-    if (x < box.left + radii.bl[0] && y > box.bottom - radii.bl[1]) return corner(box.left + radii.bl[0], box.bottom - radii.bl[1], radii.bl);
-    return true;
-}
-
-/** A computed corner radius (`10px`, `10px 4px`, `50%`) against a box `w` by `h`. */
-function radiusOf(value: string, w: number, h: number): [number, number] {
-    const parts = value.trim().split(/\s+/);
-    const at = (v: string | undefined, basis: number): number => (v === undefined ? Number.NaN : v.endsWith('%') ? (Number.parseFloat(v) / 100) * basis : Number.parseFloat(v) || 0);
-    const rx = at(parts[0], w);
-    const ry = parts.length > 1 ? at(parts[1], h) : at(parts[0], h);
-    return [Number.isFinite(rx) ? Math.max(0, rx) : 0, Number.isFinite(ry) ? Math.max(0, ry) : 0];
-}
-
 /**
  * Why a box that clips with rounded corners cuts `node`'s ink, or
  * undefined (the re-review's P3): an `overflow` clip follows the inner
@@ -8161,6 +8464,8 @@ declare global {
          * "shown" frame; how many of each.
          */
         __contrastGlyphs: (show: boolean) => Promise<{ outlined: number; figures: number }>;
+        /** 1a once on a contrast job's prepared paint (`coverScan`). */
+        __coverFaults: () => CoverScan;
         /**
          * The boxes allowed to be opaque on a transparent overlay: the two
          * plates and the QR, which are the text grounds the contrast rule
@@ -10087,6 +10392,10 @@ const verdict = {
     clipChecks,
     /* The same per look (8e2): what the runner holds a carried look to on its own points. */
     clipByClass,
+    /* 1a, report-only (before 8g2): its tallies and would-be failures per look, and its own time (a clock the runner's tab check leaves out). */
+    coverCheck: COVER_CHECK,
+    coverByClass,
+    coverMs,
     screensWithQuote: [...withQuote],
     codesPainted: [...codesPainted].sort(),
     /*

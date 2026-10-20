@@ -1341,6 +1341,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     let lookPseudoJobs = 0;
     let lookMarkJobs = 0;
     const lookMarkJobsByClass = {};
+    let cover;
     const artOffFrames = {};
     let artOffTargets = 0;
     let artOffJobs = 0;
@@ -2237,6 +2238,19 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     entry.ms += performance.now() - artStart;
                     phases.set('art off', entry);
                 }
+                /*
+                 * 1a, report-only (before 8g2; `coverScan` in the probe):
+                 * the hit test with `pointer-events` forced on, once on the
+                 * job's paint at its full height — every frame above put
+                 * back what it changed — where nothing stands below the
+                 * first screen. Folded per look; it moves no verdict yet.
+                 */
+                const scan = await timed('cover (1a)', () => evalJson(cdp, sessionId, 'window.__coverFaults()'));
+                cover = {
+                    cls: plannedJob.sheetClass,
+                    ...scan,
+                    would: scan.would.map((w) => `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${w}`),
+                };
                 record.sampled = sampled;
                 record.dropped = dropped;
                 record.retried = retried;
@@ -2332,6 +2346,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             honestUnrendered,
             honestReads,
             honestJobs,
+            cover,
         });
     }
 }
@@ -2471,8 +2486,12 @@ function geometryRecordDiffers(walked, again) {
     }
     // The page's report as a verdict: everything it says but how long its
     // font wait took (`faces.waitedMs`), which is a clock, not a reading.
-    const verdictOf = (report) =>
-        report?.faces === undefined || report.faces === null ? report : { ...report, faces: { ...report.faces, waitedMs: undefined } };
+    const verdictOf = (report) => {
+        if (report === undefined || report === null) return report;
+        // 1a's own time is a clock too (before 8g2).
+        const untimed = { ...report, coverMs: undefined };
+        return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
+    };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
     if (reportOf(walked) !== reportOf(again)) {
         const a = verdictOf(walked.report) ?? {};
@@ -2660,6 +2679,50 @@ function phaseTable(passMs, tabs = 1) {
  */
 const runDumpJobs = [];
 const runDumpBoxes = [];
+/*
+ * **1a, report-only** (before 8g2; `coverScan` in the probe): the hit test
+ * with `pointer-events` and `interactivity` forced on, over every money node
+ * and protected box, on every geometry pass (each paint, at rest) and once a
+ * contrast job at its full height. What it would fail is printed
+ * per pass and per look, beside what it read and its own time; nothing here
+ * moves a verdict — `coveredBy` binds the price, "You pay" and the
+ * unbuyable label under their own check names until 1a binds.
+ */
+const coverGeometry = [];
+const coverContrast = {};
+/** How many grouped would-be failures a pass prints word for word. */
+const COVER_PRINTED = 200;
+function coverLines(label, byClass, ms) {
+    const classes = Object.keys(byClass).sort();
+    const sum = (key) => classes.reduce((n, cls) => n + (byClass[cls][key] ?? 0), 0);
+    const behind = sum('clipSkips');
+    const checked = sum('checked');
+    const ratio = behind + checked === 0 ? 0 : behind / (behind + checked);
+    const lines = [
+        `    ${label}: ${sum('wouldCount')} would-be failure(s) (${classes.map((cls) => `${cls} ${byClass[cls].wouldCount}`).join(', ') || 'no look'}) · ` +
+            `${sum('paints')} read(s) over ${sum('nodes')} node(s), ${sum('points')} point(s): ${checked} hit-tested, ` +
+            `${sum('below')} off the first screen, ${sum('offSide')} past a side edge, ${behind} behind a clip ` +
+            `(${(ratio * 100).toFixed(0)}%${ratio > CLIP_SKIP_CEILING ? `, over the ${(CLIP_SKIP_CEILING * 100).toFixed(0)}% ceiling` : ''}), ` +
+            `${sum('appHidden')} node(s) the app hides skipped · ${(ms / 1000).toFixed(2)}s`,
+    ];
+    // A sentence said twice on one pass is printed once, with how many.
+    const grouped = new Map();
+    for (const cls of classes) {
+        for (const w of byClass[cls].would) grouped.set(w, (grouped.get(w) ?? 0) + 1);
+    }
+    let printed = 0;
+    for (const [w, n] of grouped) {
+        if (printed === COVER_PRINTED) {
+            lines.push(`      … and ${grouped.size - printed} more`);
+            break;
+        }
+        lines.push(`      ${w}${n > 1 ? ` (×${n})` : ''}`);
+        printed += 1;
+    }
+    const kept = classes.reduce((n, cls) => n + byClass[cls].would.length, 0);
+    if (kept < sum('wouldCount')) lines.push(`      (${sum('wouldCount') - kept} more counted and not kept word for word)`);
+    return lines;
+}
 /*
  * How the contrast pass was walked, for the dump's `meta` and never its
  * `jobs` or `boxes` (which stay comparable byte for byte at any tab count):
@@ -3354,6 +3417,7 @@ try {
      * named.
      */
     const commitGeometryPass = (g) => {
+        if (g.report?.coverByClass !== undefined) coverGeometry.push({ pass: g.key, byClass: g.report.coverByClass, ms: g.report.coverMs ?? 0 });
         for (const { err, text } of g.lines) (err ? console.error : console.log)(text);
         if (g.failed) failed = true;
         for (const kind of g.outlined) outlinedTargetsSeen.add(kind);
@@ -3537,6 +3601,8 @@ try {
                       ? `; every tab's page after the walk the page before it (${Object.keys(printBefore ?? {}).join(', ')})`
                       : `; ${tabPrintFaults.length} of ${tabs.length} tab(s) on a page that is not the page before the walk`)),
     );
+    console.log(`  1a, report-only (nothing-covers-money-or-a-protected-box; coveredBy still binds): what it would fail on each geometry pass`);
+    for (const { pass, byClass, ms } of coverGeometry) for (const line of coverLines(pass, byClass, ms)) console.log(line);
     took();
 
     /*
@@ -3871,6 +3937,13 @@ try {
             horizonUnread.push(...out.horizonUnread);
             lookPseudoPixels += out.lookPseudoPixels;
             lookPseudoJobs += out.lookPseudoJobs;
+            if (out.cover !== undefined) {
+                const into = (coverContrast[out.cover.cls] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, wouldCount: 0, would: [] });
+                into.paints += 1;
+                for (const key of ['nodes', 'points', 'checked', 'below', 'offSide', 'clipSkips', 'appHidden']) into[key] += out.cover[key];
+                into.wouldCount += out.cover.would.length;
+                into.would.push(...out.cover.would);
+            }
             lookMarkJobs += out.lookMarkJobs;
             sumInto(lookMarkJobsByClass, out.lookMarkJobsByClass);
             for (const [state, byClass] of Object.entries(out.artOffFrames)) sumInto((artOffFrames[state] ??= {}), byClass);
@@ -4399,6 +4472,10 @@ try {
         failed = true;
         console.error(`✗ contrast: ${refused.length} job(s) refused — what the page answered is not the job:`);
         for (const line of refused) console.error(`    ${line}`);
+    }
+    if (Object.keys(coverContrast).length > 0) {
+        console.log(`  1a, report-only (nothing-covers-money-or-a-protected-box): what it would fail once a contrast job, at its full height`);
+        for (const line of coverLines('contrast (its time summed over the tabs)', coverContrast, phases.get('cover (1a)')?.ms ?? 0)) console.log(line);
     }
     // The least ring read per kind of outlined line, whatever the verdict:
     // what the outline buys each kind at the rain's worst, and
