@@ -626,12 +626,24 @@ function blankAttributes(selector) {
 /** Pseudo-elements written with one colon, as CSS 2 did: still pseudo-elements. */
 const LEGACY_PSEUDO_ELEMENTS = new Set(['before', 'after', 'first-letter', 'first-line']);
 
-/** Every pseudo-class and pseudo-element a selector names, in order, lower case. */
+/**
+ * Every pseudo-class and pseudo-element a selector names, in order, lower
+ * case. **Whitespace is allowed after each colon** (the lint-belts critic's
+ * B1): `blankComments` turns a comment into spaces, and a browser reads the
+ * name through the comment, so a colon, an empty comment and `hover` are
+ * `:hover`, and a double colon, a comment and `marker` are `::marker`. A
+ * selector with a real space after the colon is no selector in
+ * a browser; reading it as the pseudo is the fail-closed side. **The kit lint
+ * reaches this**, through the older pseudo-element refusals (`::first-letter`,
+ * `::first-line`, `::marker`, the engine-gated names and the rest, and the
+ * pseudo-element `content` is written on), which a comment between the colon
+ * and the name used to get past on main as well: a fix of a hole on main.
+ */
 function pseudoTokens(selector) {
     const out = [];
-    for (const m of blankAttributes(selector).matchAll(/(::?)(-?[a-z_][\w-]*)/gi)) {
+    for (const m of blankAttributes(selector).matchAll(/:(\s*:)?\s*(-?[a-z_][\w-]*)/gi)) {
         const name = m[2].toLowerCase();
-        out.push({ name, element: m[1] === '::' || LEGACY_PSEUDO_ELEMENTS.has(name) });
+        out.push({ name, element: m[1] !== undefined || LEGACY_PSEUDO_ELEMENTS.has(name) });
     }
     return out;
 }
@@ -731,8 +743,15 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * a known leaf, and is the owner's call. `font-stretch`, `font-size-adjust`,
  * `font-variation-settings`, `text-indent`, `font-weight`, `font-family` and
  * `font-feature-settings` move a width too and are not named (the last three
- * were left off D-07's own list; the lint-belts critic's P3). A keyframe is
- * refused wherever a rule runs it, so a `scale`, a `letter-spacing` or a
+ * were left off D-07's own list; the lint-belts critic's P3), and neither are
+ * `width`, `min-width`, `max-width`, `padding*`, `margin*` and `border-width`,
+ * which move the box a figure stands in (a transition or a keyframe of any of
+ * them is accepted: the third review's plants `n6`, stated), nor `opacity` or
+ * `clip-path` in a keyframe, which the probe reads at one frozen instant
+ * (CLAUDE.md §10, "moving inks"). **`display` and `content-visibility` in a
+ * keyframe are refused** (D-2026-10-20-10, `declarationProblems`): a keyframe
+ * that sets either takes a box out of the layout for part of a cycle. A
+ * keyframe is refused wherever a rule runs it, so a `scale`, a `letter-spacing` or a
  * `zoom` keyframe that only a pseudo-element runs is refused too: wider than
  * D-07's "of money nodes", kept (the lint-belts critic's P2, stated).
  * **No shipped look transitions or animates any of them, but one turn:**
@@ -751,19 +770,24 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * A role is matched by `[data-role`, wherever it stands. Held by
  * `the-money-node-classes-are-the-classes-of-the-money-nodes`, which reads
  * `MONEY_SET`'s own class selectors and every node `src/ui/*.ts` gives a
- * money role (`el('tag', 'classes')` then `setAttribute('data-role', …)`),
- * and fails on a class missing here; `fine`, `mini` and `pay-sub` are the
- * classes such a node shares with boxes that are not money, and are not
- * listed. Pinned by value.
+ * money role (`el('tag', 'classes')` then `setAttribute('data-role', …)`, a
+ * class chosen by a conditional, and the class a call hands
+ * `quoteSurchargeNode` as its argument), and fails on a class missing here.
+ * `another`, `fine`, `in`, `mini` and `pay-sub` are the classes such a node
+ * shares with boxes that are not money, and are not listed (the lint-belts
+ * critic's P3: `another` was listed and `mini` was not, though the one money
+ * control that wears either, the pay sheets' second road `pay-wallet`, is a
+ * `mini another` button and wears both: a hand-off control whose words are no
+ * figure the fit reads). Pinned by value.
  */
 export const MONEY_NODE_CLASSES = Object.freeze([
     'addr-full',
     'addr-short',
-    'another',
     'bc-q',
     'bc-sur',
     'buy',
     'event-dd',
+    'face-surcharge',
     'fig-end',
     'fig-say',
     'item-fiat',
@@ -772,6 +796,7 @@ export const MONEY_NODE_CLASSES = Object.freeze([
     'listing-x',
     'pay-btn',
     'pay-eq',
+    'pay-line-s',
     'pay-lines',
     'pay-q',
     'pay-rate',
@@ -780,6 +805,7 @@ export const MONEY_NODE_CLASSES = Object.freeze([
     'pay-x-n',
     'publish-hex',
     'quote-surcharge',
+    'sel-sub',
     'sel-total',
     'sp',
     'sw-pay-fig',
@@ -1118,95 +1144,107 @@ function keyframeSizeMotion(decls) {
  * D-2026-10-20-06 had built first: the lint-belts critic found a new hole in
  * it on each of three rounds, a faded colour carried by a theme token,
  * `all: inherit`, and a border, an outline or an underline written at rest
- * and switched on by a state). The probe measures every screen at rest and
- * paints no hover, no focus, no press and no turned wall, so a declaration
- * that arrives with a state is read by no pass.
+ * and switched on by a state; narrowed after the third review by
+ * D-2026-10-20-10 and D-2026-10-20-11). The probe measures every screen at
+ * rest and paints no hover, no focus, no press and no turned wall, so a
+ * declaration that arrives with a state is read by no pass.
  *
- * A first-party look sheet's rule whose selector names a state — `:hover`,
- * `:focus`, `:focus-visible`, `:focus-within`, `:active`, `:target`,
- * `:user-invalid`, `:autofill`, `:modal` or the attribute `[data-turn]`,
- * anywhere in the selector (an ancestor's state reaches a figure inside it;
- * the state inside `:is()`, `:where()`, `:has()` or `:not()` is read as the
- * state it names, so `:not(:hover)` is a state rule too: fail closed) — may
- * set the properties below and **nothing else**. Every other declaration is
- * refused with one sentence that names the property (`STATE_ALLOWED` lists
- * the properties; `a-look-state-rule-sets-only-what-a-state-may` holds it).
+ * **What names a state fails closed** (D-2026-10-20-11). A first-party look
+ * sheet's selector names a state when it names *any* pseudo-class that is
+ * not one of the sixteen structural ones (`STRUCTURAL_PSEUDO_CLASSES`), or
+ * the attribute `[open]`, `[hidden]` or `[data-turn]`, in any form or case,
+ * anywhere in the selector: an ancestor's state reaches a figure inside it,
+ * and a state inside `:is()`, `:where()`, `:has()` or `:not()` is read as the
+ * state it names, so `:not(:hover)` is a state rule too. The first version
+ * named nine pseudo-classes and `[data-turn]`, and the critic found the
+ * states it did not name: the probe opens every `<details>`, so a fold's
+ * closed default is a state no pass paints
+ * (`.sheet:has(details:not([open])) .pay-x`), and the same goes for a field
+ * with a placeholder showing (`:placeholder-shown`) and a box with `hidden`.
+ * A comment between the colon and the name is read through
+ * (`pseudoTokens`). Such a rule sets the properties below and **nothing
+ * else**. Every other declaration is refused with one sentence that names
+ * the property (`STATE_ALLOWED` lists the properties;
+ * `a-look-state-rule-sets-only-what-a-state-may` holds it).
+ *
  * **A pseudo-element under a state is held to a shorter list**
- * (`STATE_PSEUDO_ALLOWED`): `color` (read as on an element), `cursor`,
- * `transition` and its longhands, and the exact identity transforms below.
- * The probe measures a pseudo-element only by its paint at rest, so a ground,
- * a border, a shadow or an outline that a state gives one, when it was moved
- * over a figure at rest with its own ground clear, is read by no pass. Every
+ * (`STATE_PSEUDO_ALLOWED`): `cursor`, `transition` and its longhands, and the
+ * exact identity transforms below. **Not `color`**: a generated glyph at a
+ * large size would appear over a figure when its colour changed. The probe
+ * measures a pseudo-element only by its paint at rest, so a ground, a border,
+ * a shadow, an outline or an ink that a state gives one, when it was moved
+ * over a figure at rest with its own paint clear, is read by no pass. Every
  * other declaration on one is refused with one sentence that names the
  * property and says so. A selector is a pseudo-element under a state when it
  * names both (`.item:hover .item-p::after`; `:before` and `:after` written
  * with one colon count, and so does any other pseudo-element, which the
  * selector rules refuse on their own); in a list, `.item:hover, .item-p::after`
- * is not (the pseudo-element there stands at rest, where the probe measures it).
+ * is not (the pseudo-element there stands at rest, where the probe measures
+ * it). What a pseudo-element may take from its host at rest, which a state
+ * changes, is `pseudoHostPaintProblems`'s.
  *
  * **Allowed under a state:**
  * - `color`: a literal colour at alpha 1 (a name, `#rgb`/`#rrggbb`, or a
  *   colour function with no alpha or an alpha of exactly 1, no `var()`, no
- *   relative colour, no `color-mix()`), `currentColor`, `inherit`, or
- *   `var(--s-…)` of a palette role in `STATE_OPAQUE_ROLES` with no fallback.
- *   The roles are the theme table's colours (`themeVars` writes each as
- *   `rgb(r, g, b)`); a test proves them opaque under every shipped look and
- *   every mood (`the-state-opaque-roles-are-the-opaque-colours-the-theme-table-emits`),
+ *   relative colour, no `color-mix()`), or `var(--s-…)` of a palette role in
+ *   `STATE_OPAQUE_ROLES` with no fallback. **Not `inherit`, not
+ *   `currentColor`** (D-2026-10-20-08's B2): either hands the ink to whatever
+ *   the parent paints, and a parent a rule at rest drew clear fades the
+ *   figure. The roles are the theme table's colours (`themeVars` writes each
+ *   as `rgb(r, g, b)`); a test proves them opaque under every shipped look
+ *   and every mood
+ *   (`the-state-opaque-roles-are-the-opaque-colours-the-theme-table-emits`),
+ *   and another that a private look's palette, built from RGB triples,
+ *   cannot make one anything else (`a-private-look-palette-role-is-opaque-by-construction`),
  *   and a first-party sheet may not re-declare one (`declarationProblems`),
  *   which is what keeps the proof about the value a rule reads. `--s-addr-bg`
  *   (5% on Neo), `--s-tab-active-bg` and the shape tokens are not on the
  *   list. An ink at alpha 1 can still equal its ground: contrast is not read.
  * - `background-color`, `background-image` and `background`: colours of any
  *   alpha (a tint is a ground, not a faded ink: the shipped state rules
- *   write `rgba(37, 99, 235, 0.1)`), `transparent`, `inherit`,
- *   `var(--s-…)` and a `color-mix()` of those; **not `currentColor`** (a
- *   ground the colour of the ink it holds). Gradients only for a picture
- *   (`linear-gradient`, `radial-gradient`, `conic-gradient` and their
- *   `repeating-` forms): never `url()`, `image-set()`, `cross-fade()`,
- *   `element()` or `paint()`; the shorthand adds position, size, repeat and
- *   box keywords and numbers. A gradient's colours are not weighed (the
- *   probe reads the ground).
- * - `border-color` and each `border-*-color`; `border-style` and each
- *   `border-*-style`, **only to turn a border off** (`none`, `hidden`): a
- *   style longhand shows a border at the width a rule at rest wrote, so
- *   `border: 40px none` at rest and `border-style: solid` under a state would
- *   put a 40px frame on a figure; the `border` shorthand (and `border-top`,
- *   `-right`, `-bottom`, `-left`) resets the width to `medium` and so shows a
- *   3px border at most — it is allowed **without a width** (a width token is
- *   refused: the owner's "refuse a width in the shorthand"), with a style, a
- *   colour (a palette role only for a `var()`: a role can carry no width) or
- *   both. No `border-image`, no `border-width`, no radius.
- * - `box-shadow`, bounded: an inset shadow stands (it paints inside its own
- *   box, under its own text); an outer shadow has **no spread** (a negative
- *   one stands) and an offset of at most `STATE_SHADOW_MAX_PX` (8px) each
- *   way, in px or zero, and the blur is free (a glow). The owner said "any
- *   shadow"; a spread or an offset that is a box's own size is a fill, not a
- *   shadow, and `0 0 0 4000px #000` on a row paints over the rows beside it
- *   when rows are grid or flex items (they paint as atomic units, in tree
- *   order, their shadows with them): this reads "shadow" so. A `var()` here
- *   is refused (it could carry the lengths) unless it is a palette role
- *   standing as the colour.
- * - `cursor`, any value.
+ *   write `rgba(37, 99, 235, 0.1)`), `transparent`, `initial`, `unset`,
+ *   `var(--s-…)` and a `color-mix()` of those; **not `currentColor` and not
+ *   `inherit`** (a ground the colour of the ink it holds hides the figure;
+ *   `background-image: inherit` brings back a picture a rule at rest sized to
+ *   nothing). Gradients only for a picture (`linear-gradient`,
+ *   `radial-gradient`, `conic-gradient` and their `repeating-` forms): never
+ *   `url()`, `image-set()`, `cross-fade()`, `element()` or `paint()`; the
+ *   shorthand adds position, size, repeat and box keywords and numbers. A
+ *   gradient's colours are not weighed (the probe reads the ground), but
+ *   `currentColor` in one is refused like any ground the ink's colour.
+ * - `border-color`, each `border-*-color` and `outline-color`, **colour
+ *   only**, and not `currentColor`, `inherit`, `initial` or `unset` (the
+ *   initial colour of an edge is `currentcolor`). **No `border`, no
+ *   `border-style`, no `border-width`, no `outline`, `outline-style`,
+ *   `outline-width` or `outline-offset`** (D-2026-10-20-11). The earlier
+ *   rule allowed an outline whose width and offset were written in the same
+ *   rule, and its sentence was false: the cascade defeats it. A later, more
+ *   specific rule at rest sets `outline-width: 200px; outline-offset: -100px`
+ *   and the state's rule has no say in what it draws. A border works the same
+ *   way (`border-style: solid` over `border: 40px none`), and the shorthand
+ *   under a state adds up to 3px of padding by another name.
+ * - `box-shadow`, bounded: **each layer names one colour** (not
+ *   `currentColor`; a layer that names none is drawn in the ink), **at most
+ *   two outer layers, every blur at most `STATE_SHADOW_BLUR_MAX_PX` (16px)**
+ *   (inset ones too), and an outer layer has **no spread** (a negative one
+ *   stands) and an offset of at most `STATE_SHADOW_MAX_PX` (8px) each way, in
+ *   px or zero. An inset shadow stands (it paints inside its own box, under
+ *   its own text). The owner said "any shadow"; a spread or an offset that is
+ *   a box's own size is a fill, not a shadow, and `0 0 0 4000px #000` on a
+ *   row paints over the rows beside it when rows are grid or flex items (they
+ *   paint as atomic units, in tree order, their shadows with them). **A blur
+ *   is not a fade that dies with distance**: layers add, and twenty layers of
+ *   `0 -8px 120px #000` come to about 99.8% black over a width of 240px (the
+ *   arithmetic, not an observation), so the layer count and the blur are
+ *   capped. A `var()` is refused unless it is a palette role standing as the
+ *   colour.
  * - **The no-transform values**: `transform`, `rotate`, `scale` and
  *   `translate` as `none`, `initial`, `unset` or an identity (`rotate: 0deg`,
  *   `scale: 1`, `translate: 0`, `transform: translateZ(0)`) — Rural's
  *   straightening of a tilted row under a hand is `rotate: 0deg`.
- * - `outline`, `outline-color`, `outline-style`, `outline-width` and
- *   `outline-offset`, **only when the rule itself writes a width and an
- *   offset, both read** (px, or a width keyword; the offset in px, zero or
- *   more), their sum at most `STATE_OUTLINE_MAX_PX` (8px): a ring is a
- *   style at rest armed by a state (`outline-width: 200px; outline-offset:
- *   -100px` at rest, `outline-style: solid` under a state), so a rule that
- *   turns an outline on, or moves or sizes one, states both numbers itself.
- *   The `outline` shorthand does not set the offset; it is written beside it.
- *   `outline-style: none` alone stands (it switches a ring off and sets
- *   nothing else); `outline: none` and `outline-color` alone do not, the
- *   shorthand resetting a width the rule does not state and a colour changing
- *   a ring a rule at rest drew transparent. A `var()` as a width or an offset
- *   is unreadable and refused; in the shorthand or as a style it may carry a style, so it
- *   is read as one that paints, and the rule then writes both numbers.
  * - `transition` and its longhands (the size lint reads them on a money
  *   node: `moneySizeMotionProblems`).
+ * - `cursor` (a keyword, here and at rest: see `cursorProblem`).
  * - `-webkit-tap-highlight-color` (its own rule below: `transparent` only).
  *
  * **Refused under a state, and named so their tests stay:** `all`; any custom
@@ -1214,25 +1252,39 @@ function keyframeSizeMotion(decls) {
  * state starts no animation, so no keyframe is read as a state's);
  * `content`, `position`, `z-index`, `display`; every text and spacing
  * property; `font*`; padding, margin, sizes, `opacity`, `visibility`,
- * `filter`, `backdrop-filter`, `clip*`, `mask*`; `text-decoration*`; every
- * non-identity transform.
+ * `filter`, `backdrop-filter`, `clip*`, `mask*`; `text-decoration*`; the
+ * `border` shorthands and `border-style`; every `outline` property but its
+ * colour; every non-identity transform.
  *
  * **Not read, stated** (each is a gap in `a-look-state-rule-sets-only-what-a-state-may`):
  * - the contrast of an ink, a ground or a border against what it stands on:
  *   a literal `#fff` ink over a white card passes, so does a ground the
  *   colour of the ink. The probe reads contrast at rest only;
- * - the reach of an outline (8px beyond the box, over a neighbour within
- *   8px) and of a blurred shadow (a blur fades with distance; none is
- *   capped);
- * - a ground a state paints on an element, not a pseudo-element, that a rule
- *   at rest moved over a figure by an offset (`position: relative` with a
- *   negative `left`) with its ground clear. The pseudo-element half is
- *   refused above (`STATE_PSEUDO_ALLOWED`). An element's ground is on the
- *   list, so a state may give one;
+ * - **a ring or a frame a rule at rest wrote in a clear colour, shown by a
+ *   colour under a state**: `outline: 200px solid transparent` at rest and
+ *   `outline-color: #000` under `:hover`. The owner's rule is colour only
+ *   (D-2026-10-20-11), which leaves it. A border's band lies inside the box
+ *   and reaches no neighbour. An outline's ring does, and the probe reads an
+ *   outline at rest only across the glyphs of its own box and of the boxes
+ *   above a figure (`outlineFault`, `outlineAboveFault`), never one on a box
+ *   beside it. Closing it would take an at-rest cap on an outline's width and
+ *   offset, which is not built;
+ * - the reach of an outer shadow: at most 8px of offset and 16px of blur
+ *   (24px), in two layers, and an inset one stays inside its box;
+ * - **a ground a state paints on an element, not a pseudo-element, that a
+ *   rule at rest moved over a figure by an offset with its ground clear**:
+ *   `position: relative` with a negative `left` and `background:
+ *   transparent`, then a ground under `:hover`. The pseudo-element half is
+ *   refused above; an element's ground is on the list, so this half stands;
+ * - **a ground, an edge or a shadow colour read through a `--s-…` custom
+ *   property** that a rule at rest set to `currentColor`: `var(--s-…)` with
+ *   no fallback is accepted as a colour for a ground and an edge, and this
+ *   lint does not read what a sheet's own custom property holds;
+ * - a state written another way: a class a script toggles, an attribute but
+ *   the three above (`[aria-pressed]`, `[disabled]`, `[aria-current]`, and the
+ *   others the fixtures paint, are read as a rule at rest, which the probe
+ *   measures), and a structural pseudo-class, which is the tree at rest;
  * - a transition (read only by the size lint, on a money node);
- * - a state the list does not name: `:checked`, `:disabled`, `:visited`,
- *   `:open`, `:popover-open`, `:fullscreen`, and the attributes the fixtures
- *   paint (`[aria-pressed]`, `[disabled]`);
  * - a state rule in the kit: the kit lint carries none of it.
  *
  * **First party only** (D5, D-2026-10-20-06, as read in D-2026-10-20-08; the
@@ -1243,14 +1295,17 @@ function keyframeSizeMotion(decls) {
  * (Modern 5, Neo 5, Rural 6) set colour, ground, border colour, shadow and
  * Rural's `rotate: 0deg`, and nothing else. Test: `a-look-state-rule-sets-only-what-a-state-may`.
  */
-export const STATE_OUTLINE_MAX_PX = 8;
 export const STATE_SHADOW_MAX_PX = 8;
+export const STATE_SHADOW_BLUR_MAX_PX = 16;
+export const STATE_SHADOW_OUTER_LAYERS_MAX = 2;
 
 /**
  * The palette roles a state rule may read in an ink: the colours `themeVars`
  * writes as `rgb(r, g, b)`, opaque by construction, held by
  * `the-state-opaque-roles-are-the-opaque-colours-the-theme-table-emits`
- * (every shipped look, bare and under every mood). Pinned by value.
+ * (every shipped look, bare and under every mood) and, for a private look's
+ * own palette, `a-private-look-palette-role-is-opaque-by-construction`.
+ * Pinned by value.
  */
 export const STATE_OPAQUE_ROLES = Object.freeze([
     '--s-bg',
@@ -1276,26 +1331,15 @@ export const STATE_ALLOWED = Object.freeze([
     'background',
     'background-color',
     'background-image',
-    'border',
-    'border-top',
-    'border-right',
-    'border-bottom',
-    'border-left',
     'border-color',
     ...BORDER_SIDES.map((side) => `border-${side}-color`),
-    'border-style',
-    ...BORDER_SIDES.map((side) => `border-${side}-style`),
     'box-shadow',
     'cursor',
     'transform',
     'rotate',
     'scale',
     'translate',
-    'outline',
     'outline-color',
-    'outline-style',
-    'outline-width',
-    'outline-offset',
     'transition',
     'transition-property',
     'transition-duration',
@@ -1307,12 +1351,13 @@ export const STATE_ALLOWED = Object.freeze([
 
 /**
  * The properties a pseudo-element under a state may set: a short list, because
- * the probe measures a pseudo-element only by its paint at rest. Each is read
- * as `STATE_ALLOWED` reads it (an ink at alpha 1, the identity transforms).
- * Pinned by value in `a-look-state-rule-sets-only-what-a-state-may`.
+ * the probe measures a pseudo-element only by its paint at rest. **Not
+ * `color`** (D-2026-10-20-08's B3): a generated glyph such as `◆` at a large
+ * size would appear over a figure when its colour changed. Each is read as
+ * `STATE_ALLOWED` reads it (the identity transforms). Pinned by value in
+ * `a-look-state-rule-sets-only-what-a-state-may`.
  */
 export const STATE_PSEUDO_ALLOWED = Object.freeze([
-    'color',
     'cursor',
     'transform',
     'rotate',
@@ -1326,12 +1371,49 @@ export const STATE_PSEUDO_ALLOWED = Object.freeze([
     'transition-behavior',
 ]);
 
-const STATE_PSEUDO_CLASS = /:(?:hover|focus|focus-visible|focus-within|active|target|user-invalid|autofill|modal)(?![\w-])/i;
+/**
+ * The pseudo-classes that are **not** states (D-2026-10-20-11): every other
+ * pseudo-class, a name this list has not met included, is a state the probe
+ * never paints. Sixteen, each a fact of the tree at rest, which the probe
+ * does paint. Pinned by value in `a-look-state-rule-sets-only-what-a-state-may`.
+ */
+export const STRUCTURAL_PSEUDO_CLASSES = Object.freeze([
+    'not', // holds other selectors, and a state named inside still counts (`:not(:hover)`)
+    'is', // the same: a list of selectors, read as the states it names
+    'where', // the same, at no weight
+    'has', // the same: `:has(details:not([open]))` names `[open]`
+    'nth-child', // a box's place among its siblings: the tree at rest
+    'nth-last-child', // the same, counted from the end
+    'nth-of-type', // the same, among siblings of its type
+    'nth-last-of-type', // the same, counted from the end
+    'first-child', // the first of its siblings: the tree at rest
+    'last-child', // the last of its siblings
+    'only-child', // the only one
+    'first-of-type', // the first of its type
+    'last-of-type', // the last of its type
+    'only-of-type', // the only one of its type
+    'empty', // whether a box holds children or text at all: the tree at rest
+    'root', // the document's root element: one box, at rest
+]);
+
+/** The attributes a first-party selector names that make it a state (in any form or case): the turned wall, a fold, a hidden box. */
+const STATE_ATTRIBUTE_NAMES = new Set(['data-turn', 'open', 'hidden']);
+
+const STRUCTURAL = new Set(STRUCTURAL_PSEUDO_CLASSES);
 const BELT_TAIL = '; the probe measures every screen at rest and paints no hover, focus, press or turned wall, so what arrives with a state is read by no pass';
 
-/** Whether a selector names a state the probe never paints (see above). */
-function namesAState(selector) {
-    return STATE_PSEUDO_CLASS.test(blankAttributes(selector)) || attributeBlocks(selector).some((inner) => /^\s*data-turn(?![\w-])/i.test(inner));
+/** The name of an attribute selector (the text between its brackets): lower case, escapes decoded, a namespace prefix dropped. */
+function attributeNameOf(inner) {
+    const m = /^\s*(?:(?:[^\s|=~^$*"'\]]*|\*)\|(?!=))?\s*([^\s~|^$*="'\]]+)/.exec(decodeEscapes(inner));
+    return m === null ? '' : m[1].toLowerCase();
+}
+
+/** Whether a selector names a state the probe never paints (see above): fail closed. */
+export function namesAState(selector) {
+    return (
+        pseudoTokens(selector).some((token) => !token.element && !STRUCTURAL.has(token.name)) ||
+        attributeBlocks(selector).some((inner) => STATE_ATTRIBUTE_NAMES.has(attributeNameOf(inner)))
+    );
 }
 
 /**
@@ -1409,14 +1491,23 @@ function literalColour(token) {
 const VAR_TOKEN = /^var\(\s*(--s-[a-z0-9-]+)\s*\)$/;
 
 /**
- * Why a value is not a colour a state may paint a ground, a border, an
- * outline or a shadow with, or undefined: a colour of any alpha, `transparent`,
- * `inherit` and its kin, a `var(--s-…)` and a `color-mix()` of those.
- * `current: false` refuses `currentcolor`, as a ground (the ink's own colour).
+ * Why a value is not a colour a state may paint a ground, an edge or a shadow
+ * with, or undefined: a colour of any alpha, `transparent`, a `var(--s-…)`
+ * and a `color-mix()` of those. `kind` says what stands where the colour
+ * does: `ground` (a background colour: `initial` and `unset` are
+ * `transparent` there), `edge` (a border or an outline: its initial colour is
+ * `currentcolor`, so `initial` and `unset` are refused) or `shadow`.
+ * **`inherit` and `currentcolor` are refused for all three** (D-2026-10-20-08's
+ * B2): `inherit` takes the parent's, `currentcolor` the box's own ink, and
+ * both move with an ink a state changes.
  */
-function groundColourProblem(value, { current = true } = {}) {
+function groundColourProblem(value, kind = 'ground') {
     const v = value.trim();
-    if (/^(?:inherit|initial|unset)$/i.test(v) || VAR_TOKEN.test(v)) return undefined;
+    if (/^inherit$/i.test(v)) return "inherit takes the colour the parent paints, which a rule at rest may have drawn clear and a state may change";
+    if (/^(?:initial|unset)$/i.test(v)) {
+        return kind === 'ground' ? undefined : `${v.toLowerCase()} is currentcolor on an edge or a shadow: the ink of the box`;
+    }
+    if (VAR_TOKEN.test(v)) return undefined;
     const mix = /^color-mix\(([\s\S]*)\)$/i.exec(v);
     if (mix !== null) {
         const parts = splitTopLevel(mix[1], ',');
@@ -1426,7 +1517,7 @@ function groundColourProblem(value, { current = true } = {}) {
         for (const operand of parts.slice(1)) {
             const tokens = splitTopLevel(operand, ' ').filter((token) => !/^[\d.]+%$/.test(token));
             if (tokens.length !== 1) return `${echo(v, 32)} is a color-mix() this lint cannot take apart`;
-            const why = groundColourProblem(tokens[0], { current });
+            const why = groundColourProblem(tokens[0], kind);
             if (why !== undefined) return why;
         }
         return undefined;
@@ -1435,14 +1526,20 @@ function groundColourProblem(value, { current = true } = {}) {
     if (colour === undefined) {
         return `${echo(v, 32)} is not a colour this lint reads (a name, #hex, a colour function, a color-mix() of those, or a var(--s-…) with no fallback)`;
     }
-    if (colour.current && !current) return "currentcolor as a ground is the colour of the ink it holds: it hides the figure";
+    if (colour.current) {
+        return kind === 'ground'
+            ? 'currentcolor as a ground is the colour of the ink it holds: it hides the figure'
+            : 'currentcolor is the ink of the box, which a state may change: a shadow or an edge in it follows the ink';
+    }
     return undefined;
 }
 
 /** Why a value is not an ink a state may set (see `color` above), or undefined. */
 function inkProblem(value) {
     const v = value.trim();
-    if (/^(?:inherit|currentcolor)$/i.test(v)) return undefined;
+    if (/^(?:inherit|currentcolor)$/i.test(v)) {
+        return `${v.toLowerCase() === 'inherit' ? 'inherit' : 'currentColor'} hands the ink to whatever the parent paints, and a parent a rule at rest drew clear fades the figure`;
+    }
     const role = VAR_TOKEN.exec(v);
     if (role !== null) {
         return STATE_OPAQUE_ROLES.includes(role[1])
@@ -1453,7 +1550,7 @@ function inkProblem(value) {
     if (/(?<![\w-])var\s*\(/i.test(withoutStrings(v))) return 'a var() with a fallback, or inside another value, may carry a faded ink';
     const colour = literalColour(v);
     if (colour === undefined) {
-        return `${echo(v, 32)} is not an ink this lint reads (a literal colour at alpha 1: a name, #rgb or #rrggbb, a colour function with no alpha or alpha 1; currentColor, inherit, or a palette role)`;
+        return `${echo(v, 32)} is not an ink this lint reads (a literal colour at alpha 1: a name, #rgb or #rrggbb, a colour function with no alpha or alpha 1; or a palette role)`;
     }
     return colour.alpha < 1 ? 'an ink under alpha 1 is a faded figure (the probe holds an ink at full alpha)' : undefined;
 }
@@ -1463,33 +1560,38 @@ const PICTURE = /(?<![\w-])(?:url|image|image-set|-webkit-image-set|cross-fade|-
 const GRADIENT = /^(?:-webkit-)?(?:repeating-)?(?:linear|radial|conic)-gradient$/i;
 const NUMERIC_FUNCTIONS = new Set(['calc', 'min', 'max', 'clamp']);
 const NO_PICTURE = "a state's background is a colour or a gradient: a picture (url(), image-set(), cross-fade(), element(), paint()) is a ground the probe cannot read";
+const NO_INHERIT = "inherit takes the background the parent paints, a picture a rule at rest sized to nothing included, and a state may change it";
 
 /** Why a value is not a `background-color`, `background-image` or `background` a state may set (`kind`), or undefined. */
 function backgroundProblem(value, kind) {
     const v = value.trim();
-    if (/^(?:inherit|initial|unset)$/i.test(v)) return undefined;
-    if (kind === 'color') return groundColourProblem(v, { current: false });
+    if (/^inherit$/i.test(v)) return NO_INHERIT;
+    if (/^(?:initial|unset)$/i.test(v)) return undefined;
+    if (kind === 'color') return groundColourProblem(v, 'ground');
     for (const layer of splitTopLevel(v, ',')) {
         const tokens = splitTopLevel(layer, ' ');
         if (kind === 'image' && tokens.length !== 1) return 'a background-image layer is `none`, a gradient or a var(--s-…)';
         for (const token of tokens) {
+            if (/^inherit$/i.test(token)) return NO_INHERIT;
             const fn = /^([a-z-]+)\(/i.exec(token);
             if (fn === null) {
                 if (/^none$/i.test(token) && kind === 'image') continue;
                 if (kind === 'image') return 'a background-image layer is `none`, a gradient or a var(--s-…)';
                 if (!/^[#a-z0-9.%+\-/]+$/i.test(token)) return `${echo(token, 24)} is not a part of a background this lint reads`;
-                if (/^currentcolor$/i.test(token)) return groundColourProblem(token, { current: false });
+                if (/^currentcolor$/i.test(token)) return groundColourProblem(token, 'ground');
                 if (token.startsWith('#') && literalColour(token) === undefined) return `${echo(token, 24)} is not a colour this lint reads`;
                 continue;
             }
             const name = fn[1].toLowerCase();
             if (GRADIENT.test(name)) {
                 if (PICTURE.test(withoutStrings(token))) return NO_PICTURE;
+                // A gradient of the ink's own colour is a ground the colour of the ink it holds (B2); its other colours are not weighed.
+                if (/(?<![\w-])currentcolor(?![\w-])/i.test(token)) return groundColourProblem('currentcolor', 'ground');
             } else if (name === 'var') {
                 if (!VAR_TOKEN.test(token)) return 'a var() here is read only as var(--s-…) with no fallback: a fallback could carry a picture';
             } else if (COLOUR_FUNCTIONS.has(name) || name === 'color-mix') {
                 if (kind === 'image') return 'a background-image layer is `none`, a gradient or a var(--s-…)';
-                const why = groundColourProblem(token, { current: false });
+                const why = groundColourProblem(token, 'ground');
                 if (why !== undefined) return why;
             } else if (NUMERIC_FUNCTIONS.has(name) && kind === 'shorthand') {
                 if (PICTURE.test(withoutStrings(token))) return NO_PICTURE;
@@ -1506,38 +1608,7 @@ function borderColourProblem(value) {
     const tokens = splitTopLevel(value.trim(), ' ');
     if (tokens.length < 1 || tokens.length > 4) return 'a border colour is one to four colours';
     for (const token of tokens) {
-        const why = groundColourProblem(token);
-        if (why !== undefined) return why;
-    }
-    return undefined;
-}
-
-const BORDER_STYLE_KEYWORDS = /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/i;
-
-/** `border-style` and `border-*-style`: only to turn a border off. */
-function borderStyleProblem(value) {
-    const tokens = splitTopLevel(value.trim(), ' ');
-    return tokens.length >= 1 && tokens.length <= 4 && tokens.every((token) => /^(?:none|hidden|initial|unset)$/i.test(token))
-        ? undefined
-        : 'a border style longhand shows a border at the width a rule at rest wrote (border-style: solid over border: 40px none is a 40px frame); a state sets it only to none or hidden, and writes the border shorthand, which resets the width, to show one';
-}
-
-/** `border` and `border-top|right|bottom|left`: a style and a colour, and no width (the shorthand resets it to medium). */
-function borderShorthandProblem(value) {
-    const v = value.trim();
-    if (/^(?:inherit|initial|unset)$/i.test(v)) return undefined;
-    for (const token of splitTopLevel(v, ' ')) {
-        if (BORDER_STYLE_KEYWORDS.test(token)) continue;
-        if (/^(?:thin|medium|thick)$/i.test(token) || lengthToken(token) !== undefined || /^(?:calc|min|max|clamp)\(/i.test(token)) {
-            return `a width in the border shorthand (${echo(token, 16)}) changes how much room the border takes; a state writes a style and a colour, and border-style: none removes one`;
-        }
-        const role = VAR_TOKEN.exec(token);
-        if (role !== null) {
-            if (STATE_OPAQUE_ROLES.includes(role[1])) continue;
-            return `${role[1]} is not a palette role (${STATE_OPAQUE_ROLES.join(', ')}): in the border shorthand a var() could carry a width`;
-        }
-        if (/(?<![\w-])var\s*\(/i.test(token)) return 'a var() with a fallback in the border shorthand could carry a width';
-        const why = groundColourProblem(token);
+        const why = groundColourProblem(token, 'edge');
         if (why !== undefined) return why;
     }
     return undefined;
@@ -1547,7 +1618,8 @@ function borderShorthandProblem(value) {
 function shadowProblem(value) {
     const v = value.trim();
     if (/^(?:none|initial|unset)$/i.test(v)) return undefined;
-    const reads = 'a box-shadow this lint cannot size (px or zero lengths, a colour it reads, inset) may fill the boxes beside it';
+    const reads = 'a box-shadow this lint cannot size (px or zero lengths, one colour it reads on every layer, inset) may fill the boxes beside it';
+    let outer = 0;
     for (const layer of splitTopLevel(v, ',')) {
         let inset = false;
         let colours = 0;
@@ -1564,16 +1636,26 @@ function shadowProblem(value) {
                 continue;
             }
             const role = VAR_TOKEN.exec(token);
-            const colourOk = role !== null ? STATE_OPAQUE_ROLES.includes(role[1]) : !/(?<![\w-])var\s*\(/i.test(token) && groundColourProblem(token) === undefined;
+            const colourOk = role !== null ? STATE_OPAQUE_ROLES.includes(role[1]) : !/(?<![\w-])var\s*\(/i.test(token) && groundColourProblem(token, 'shadow') === undefined;
             if (!colourOk) return reads;
             colours += 1;
         }
         if (lengths.length < 2 || lengths.length > 4 || colours > 1) return reads;
+        if (colours === 0) return 'a shadow layer that names no colour is drawn in the ink of the box, which a state may change; an inset one fills the box with it';
         const [x, y, blur = 0, spread = 0] = lengths;
         if (blur < 0) return reads;
-        if (!inset && (spread > 0 || Math.abs(x) > STATE_SHADOW_MAX_PX || Math.abs(y) > STATE_SHADOW_MAX_PX)) {
-            return `an outer shadow with a spread, or an offset past ${STATE_SHADOW_MAX_PX}px, is a fill the size of a box and not a shadow: it paints over the rows beside it`;
+        if (blur > STATE_SHADOW_BLUR_MAX_PX) {
+            return `a shadow blur past ${STATE_SHADOW_BLUR_MAX_PX}px is a haze the size of a box, and layers add: twenty of 0 -8px 120px #000 come to about 99.8% black`;
         }
+        if (!inset) {
+            outer += 1;
+            if (spread > 0 || Math.abs(x) > STATE_SHADOW_MAX_PX || Math.abs(y) > STATE_SHADOW_MAX_PX) {
+                return `an outer shadow with a spread, or an offset past ${STATE_SHADOW_MAX_PX}px, is a fill the size of a box and not a shadow: it paints over the rows beside it`;
+            }
+        }
+    }
+    if (outer > STATE_SHADOW_OUTER_LAYERS_MAX) {
+        return `more than ${STATE_SHADOW_OUTER_LAYERS_MAX} outer shadow layers: they add, and a stack of them is a fill the size of a box`;
     }
     return undefined;
 }
@@ -1595,129 +1677,19 @@ function identityProblem(name, value) {
     return undefined;
 }
 
-/** The width keywords of `outline-width`, in pixels. */
-const OUTLINE_WIDTH_KEYWORDS = Object.freeze({ thin: 1, medium: 3, thick: 5 });
-const OUTLINE_STYLES = /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i;
-
-/** An outline width in px, or undefined where this lint cannot size it (px, zero and the three keywords are read). */
-function outlineWidthPx(token) {
-    const keyword = OUTLINE_WIDTH_KEYWORDS[token.toLowerCase()];
-    if (keyword !== undefined) return keyword;
-    const len = lengthToken(token);
-    if (len === undefined || (len.unit !== 'px' && !(len.unit === '' && len.n === 0))) return undefined;
-    return len.n;
-}
-
-/** An outline offset in px, or undefined where this lint cannot size it (px and zero are read). */
-function outlineOffsetPx(token) {
-    const len = lengthToken(token);
-    if (len === undefined || (len.unit !== 'px' && !(len.unit === '' && len.n === 0))) return undefined;
-    return len.n;
-}
-
-/**
- * The outline half of the allow-list, read over the whole rule: the order of
- * its declarations decides what the shorthand left (it resets the width and
- * the style, not the offset). `undefined`, or `{ prop, value, why }` for the
- * declaration to blame. Nothing that paints a ring stands unless the rule
- * itself writes its width and its offset.
- */
-function outlineProblem(decls) {
-    let touched;
-    let width;
-    let offset;
-    let style;
-    let onlyOff = true;
-    const blame = (decl, why) => ({ prop: decl.prop, value: decl.value, why });
-    const unreadable = (what) => `an outline ${what} this lint cannot size (px, zero or thin, medium and thick for a width; px or zero for an offset) may paint over a neighbour`;
-    for (const decl of decls) {
-        const name = decl.prop.replace(VENDOR_PREFIX, '');
-        const clean = decl.value.replace(/\s*!\s*important\s*$/i, '').trim();
-        if (name === 'outline') {
-            touched ??= decl;
-            onlyOff = false;
-            width = undefined;
-            style = 'none';
-            if (/^(?:initial|unset)$/i.test(clean)) continue;
-            let sawVar = false;
-            let sawStyle = false;
-            for (const token of splitTopLevel(clean, ' ')) {
-                if (OUTLINE_STYLES.test(token)) {
-                    style = token.toLowerCase();
-                    sawStyle = true;
-                } else if (Object.hasOwn(OUTLINE_WIDTH_KEYWORDS, token.toLowerCase()) || lengthToken(token) !== undefined || /^(?:calc|min|max|clamp)\(/i.test(token)) {
-                    width = outlineWidthPx(token);
-                    if (width === undefined) return blame(decl, unreadable('width'));
-                } else if (VAR_TOKEN.test(token)) {
-                    sawVar = true;
-                } else {
-                    const why = groundColourProblem(token);
-                    if (why !== undefined) return blame(decl, why);
-                }
-            }
-            // A var() could expand to a style the shorthand does not write.
-            if (sawVar && !sawStyle) style = 'unknown';
-        } else if (name === 'outline-style') {
-            touched ??= decl;
-            style = OUTLINE_STYLES.test(clean) ? clean.toLowerCase() : /^(?:initial|unset)$/i.test(clean) ? 'none' : 'unknown';
-            if (style !== 'none') onlyOff = false;
-        } else if (name === 'outline-width') {
-            touched ??= decl;
-            onlyOff = false;
-            width = /^(?:initial|unset)$/i.test(clean) ? undefined : outlineWidthPx(clean);
-            if (width === undefined && !/^(?:initial|unset)$/i.test(clean)) return blame(decl, unreadable('width'));
-        } else if (name === 'outline-offset') {
-            touched ??= decl;
-            onlyOff = false;
-            offset = /^(?:initial|unset)$/i.test(clean) ? undefined : outlineOffsetPx(clean);
-            if (offset === undefined && !/^(?:initial|unset)$/i.test(clean)) return blame(decl, unreadable('offset'));
-        } else if (name === 'outline-color') {
-            // A colour alone leaves the ring whatever a rule at rest wrote, transparent and wide included: armed all the same.
-            touched ??= decl;
-            onlyOff = false;
-            const why = borderColourProblem(clean);
-            if (why !== undefined) return blame(decl, why);
-        }
-    }
-    // The one outline declaration that needs nothing beside it: the style off, and nothing else of the outline in the rule.
-    if (touched === undefined || (onlyOff && style === 'none')) return undefined;
-    const last = decls.filter((decl) => /^(?:-\w+-)?outline(?:-(?:style|width|offset|color))?$/.test(decl.prop)).pop() ?? touched;
-    if (width === undefined || offset === undefined) {
-        return blame(
-            last,
-            "an outline declaration under a state states its own width and its own offset in the same rule (outline-width or the shorthand's width in px or thin, medium, thick; outline-offset in px; outline-style: none alone stands): a ring is a style, a colour or a size written at rest and armed by a state, and a rule that writes neither number leaves the other to whatever a rule at rest wrote",
-        );
-    }
-    if (width < 0 || offset < 0) return blame(last, 'a negative outline width or offset draws the ring inside the box, over the ink where the padding is thinner than the ring');
-    if (width + offset > STATE_OUTLINE_MAX_PX) {
-        return blame(
-            last,
-            `an outline ${width}px wide at ${offset}px paints ${width + offset}px beyond the box, over a neighbour's figure when it stands that close (the width and the offset together are at most ${STATE_OUTLINE_MAX_PX}px)`,
-        );
-    }
-    return undefined;
-}
-
 /** The readers of the allow-list, by property name (a vendor prefix read as plain). */
 const STATE_READERS = new Map([
     ['color', inkProblem],
     ['background-color', (value) => backgroundProblem(value, 'color')],
     ['background-image', (value) => backgroundProblem(value, 'image')],
     ['background', (value) => backgroundProblem(value, 'shorthand')],
-    ['border', borderShorthandProblem],
-    ['border-top', borderShorthandProblem],
-    ['border-right', borderShorthandProblem],
-    ['border-bottom', borderShorthandProblem],
-    ['border-left', borderShorthandProblem],
     ['border-color', borderColourProblem],
     ...BORDER_SIDES.map((side) => [`border-${side}-color`, borderColourProblem]),
-    ['border-style', borderStyleProblem],
-    ...BORDER_SIDES.map((side) => [`border-${side}-style`, borderStyleProblem]),
+    ['outline-color', borderColourProblem],
     ['box-shadow', shadowProblem],
+    // A cursor is read wherever it is written, a state or not: `cursorProblem`, in `declarationProblems`.
     ['cursor', () => undefined],
     ...['transform', 'rotate', 'scale', 'translate'].map((name) => [name, (value) => identityProblem(name, value)]),
-    // The outline's reader is the whole rule's (`outlineProblem`); a declaration alone has nothing to say.
-    ...['outline', 'outline-color', 'outline-style', 'outline-width', 'outline-offset'].map((name) => [name, () => undefined]),
     ...['transition', 'transition-property', 'transition-duration', 'transition-delay', 'transition-timing-function', 'transition-behavior'].map((name) => [name, () => undefined]),
 ]);
 
@@ -1739,6 +1711,10 @@ const STATE_REFUSED_WHY = [
         /^(?:margin(?:-.+)?|padding(?:-.+)?|width|height|min-.+|max-.+|aspect-ratio|flex(?:-.+)?|grid(?:-.+)?|gap|row-gap|column-gap|order|align-.+|justify-.+|place-.+|object-.+|box-sizing|border-(?:.*width|.*radius|image(?:-.+)?|collapse|spacing))$/,
         'it moves or squeezes a figure, or gives it a picture',
     ],
+    [
+        /^(?:border(?:-(?:top|right|bottom|left|block|inline|block-start|block-end|inline-start|inline-end))?(?:-style)?|outline(?:-style|-width|-offset)?)$/,
+        "a state sets an edge's colour and nothing else: a style, a width or an offset written at rest is defeated by the cascade, and the shorthand adds the padding it resets",
+    ],
 ];
 
 /** Why one declaration under a state may not stand, or undefined. */
@@ -1752,7 +1728,7 @@ function stateDeclarationProblem(prop, value) {
     const read = STATE_READERS.get(name);
     if (read === undefined) {
         const family = STATE_REFUSED_WHY.find(([pattern]) => pattern.test(name));
-        return `${name} is not a property a state rule may set${family === undefined ? '' : ` (${family[1]})`} — a state sets colour, ground, border colour and style, shadow, cursor, outline, transitions and the no-transform values`;
+        return `${name} is not a property a state rule may set${family === undefined ? '' : ` (${family[1]})`} — a state sets colour, ground, border and outline colour, shadow, cursor, transitions and the no-transform values`;
     }
     return read(clean, name);
 }
@@ -1765,7 +1741,7 @@ function stateDeclarationProblem(prop, value) {
 function pseudoStateDeclarationProblem(prop, value) {
     const name = prop.replace(VENDOR_PREFIX, '');
     if (!prop.startsWith('--') && !STATE_PSEUDO_ALLOWED.includes(name)) {
-        return `${name} is not a property a state rule may set on a pseudo-element (colour, cursor, transitions and the no-transform values only: the probe measures a pseudo-element only by its paint at rest)`;
+        return `${name} is not a property a state rule may set on a pseudo-element (cursor, transitions and the no-transform values only: the probe measures a pseudo-element only by its paint at rest)`;
     }
     return stateDeclarationProblem(prop, value);
 }
@@ -1785,9 +1761,153 @@ function stateBeltProblems(decls, selectors) {
         const why = pseudo === undefined ? stateDeclarationProblem(prop, value) : pseudoStateDeclarationProblem(prop, value);
         if (why !== undefined) out.push(`${prop}: ${echo(value, 48)} under "${state}" — ${why}${BELT_TAIL}`);
     }
-    // Every outline declaration of a pseudo-element's rule is refused above already.
-    const ring = pseudo === undefined ? outlineProblem(decls) : undefined;
-    if (ring !== undefined) out.push(`${ring.prop}: ${echo(ring.value, 48)} under "${state}" — ${ring.why}${BELT_TAIL}`);
+    return out;
+}
+
+/**
+ * **A cursor is a keyword** (D-2026-10-20-11, in a first-party sheet, at rest
+ * and under a state alike): `cursor: url(…)` and `image-set(…)` stand a
+ * picture of up to 128px at the pointer, over whatever the pointer is over, a
+ * figure among them, where no pass paints it. Every part of the list is one
+ * keyword (`pointer`, `not-allowed`, `grab`, …); a `var()` is not one.
+ * `a-cursor-is-a-keyword`.
+ */
+function cursorProblem(value) {
+    const parts = splitTopLevel(value.trim(), ',');
+    if (parts.length > 0 && parts.every((part) => /^[a-z-]+$/i.test(part))) return undefined;
+    return 'a cursor that is not a keyword stands a picture of up to 128px at the pointer, over whatever the pointer is over, where no pass paints it; a cursor is a keyword (pointer, not-allowed, grab, …)';
+}
+
+/*
+ * **A pseudo-element's paint is its own at rest** (D-2026-10-20-08's B3, the
+ * lint-belts critic's third review). The probe measures a pseudo-element by
+ * its paint at rest. A pseudo-element a rule at rest moved over a figure
+ * (`position: relative; left: -80px`) and whose paint is its host's — a
+ * ground through `inherit`, an edge, a shadow or an underline through
+ * `currentColor`, which is also what a shadow, a border or an outline that
+ * names no colour is drawn in — is clear while its host is clear, and
+ * covers the figure the moment a state gives the host a ground or an ink:
+ * the host is an element, and an element may change both under a state. So a
+ * first-party rule whose selector list holds a pseudo-element (the rule, as
+ * with the state belt: the declarations reach every selector of it) may not:
+ *
+ * - write `inherit` or `currentColor` in a `background*`, `border*`,
+ *   `outline*`, `column-rule*`, `text-decoration*`, `box-shadow`,
+ *   `text-shadow` or `filter` value, nor `initial` or `unset` for an edge's
+ *   colour (the initial colour of an edge is `currentcolor`), nor `inherit`,
+ *   `unset` or `currentColor` for its own `color` (which is the host's by
+ *   default);
+ * - draw a `box-shadow` or `text-shadow` layer, a `drop-shadow()`, or (in
+ *   the same rule) a border, an outline, a column rule or a text decoration
+ *   that names no colour;
+ * - print text (a `content` that is not empty) without a `color` of its own in
+ *   the same rule that is a literal colour or a palette role: a glyph takes
+ *   its host's ink otherwise, and its host's ink is what a state changes.
+ *
+ * Under a state the pseudo-element may not set `color` at all
+ * (`STATE_PSEUDO_ALLOWED`). Not read, stated: a style in one rule and its
+ * colour in another (the check is per rule), and a colour-bearing property
+ * not named above.
+ */
+const EDGE_SIDE = '(?:-(?:top|right|bottom|left|block|inline|block-start|block-end|inline-start|inline-end))?';
+/** The properties whose value is read for `inherit` and `currentColor`: the ones that carry a colour or a picture. */
+const HOST_PAINT_PROPS = new RegExp(
+    `^(?:background(?:-color|-image)?|border${EDGE_SIDE}(?:-color)?|border-image(?:-source)?|outline(?:-color)?|column-rule(?:-color)?|text-decoration(?:-color)?|box-shadow|text-shadow|filter)$`,
+);
+const EDGE_COLOUR_PROPS = new RegExp(`^(?:border${EDGE_SIDE}|outline|column-rule|text-decoration)-color$`);
+const EDGE_STYLE_PROPS = new RegExp(`^(?:border${EDGE_SIDE}|outline|column-rule)-style$`);
+const EDGE_SHORTHANDS = new RegExp(`^(?:border${EDGE_SIDE}|outline|column-rule)$`);
+const HOST_KEYWORD = /(?<![\w-])(?:inherit|currentcolor)(?![\w-])/i;
+const LINE_STYLE = /^(?:dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i;
+const DECORATION_LINE = /^(?:underline|overline|line-through|blink)$/i;
+const NOT_A_COLOUR = /^(?:inset|none|hidden|auto|thin|medium|thick|dotted|dashed|solid|double|groove|ridge|outset|underline|overline|line-through|blink|wavy|from-font|spelling-error|grammar-error)$/i;
+
+/** Whether a value (a layer, a shorthand) holds a token that names a colour: not a length, a number, a keyword of a style or a line. */
+function namesAColour(value) {
+    return splitTopLevel(value, ' ').some(
+        (token) => !NOT_A_COLOUR.test(token) && lengthToken(token) === undefined && !/^(?:calc|min|max|clamp)\(/i.test(token),
+    );
+}
+
+/** The `drop-shadow(…)` calls of a filter value that name no colour. */
+function colourlessDropShadows(value) {
+    const out = [];
+    for (const m of value.matchAll(/drop-shadow\(/gi)) {
+        const open = m.index + m[0].length - 1;
+        const close = closingParen(value, open);
+        const inner = value.slice(open + 1, close < 0 ? value.length : close);
+        if (!namesAColour(inner)) out.push(inner);
+    }
+    return out;
+}
+
+/** Whether a `color` a pseudo-element states is its own: a literal colour, or a palette role with no fallback. */
+function ownInk(value) {
+    const v = value.trim();
+    const role = VAR_TOKEN.exec(v);
+    if (role !== null) return STATE_OPAQUE_ROLES.includes(role[1]);
+    const colour = literalColour(v);
+    return colour !== undefined && colour.current !== true;
+}
+
+const HOST_WHY = "takes its paint from its host, which is an element and may change its ground or its ink under a state: the pseudo-element is clear while its host is, and covers a figure it was moved over once the host is not";
+const NO_COLOUR_WHY = 'names no colour, and is drawn in currentColor, the ink of its host, which a state may change';
+const HOST_INK_WHY = "is its host's ink, which a state may change: a glyph or an underline in it is clear while the host's ink is clear";
+
+/** Why a rule of a first-party sheet whose selector holds a pseudo-element takes its paint from its host (see above). */
+function pseudoHostPaintProblems(decls, selectors) {
+    const pseudo = selectors.find((selector) => pseudoTokens(selector).some((token) => token.element));
+    if (pseudo === undefined) return [];
+    const out = [];
+    const say = (decl, why) => out.push(`${decl.prop}: ${echo(decl.value, 48)} on "${echo(pseudo)}" — ${why}`);
+    let drawing;
+    let coloured = false;
+    for (const decl of decls) {
+        const name = decl.prop.replace(VENDOR_PREFIX, '');
+        const clean = decl.value.replace(/\s*!\s*important\s*$/i, '').trim();
+        const bare = withoutStrings(clean);
+        if (name === 'color') {
+            if (/^(?:inherit|unset|currentcolor)$/i.test(clean)) say(decl, HOST_INK_WHY);
+            continue;
+        }
+        if (HOST_PAINT_PROPS.test(name) && HOST_KEYWORD.test(bare)) {
+            say(decl, HOST_WHY);
+            continue;
+        }
+        if (EDGE_COLOUR_PROPS.test(name)) {
+            if (/^(?:initial|unset)$/i.test(clean)) say(decl, `${clean.toLowerCase()} is currentcolor on an edge, and it ${HOST_WHY}`);
+            coloured = true;
+        } else if (name === 'box-shadow' || name === 'text-shadow') {
+            if (!/^(?:none|initial|unset)$/i.test(clean) && splitTopLevel(clean, ',').some((layer) => !namesAColour(layer))) say(decl, `a layer ${NO_COLOUR_WHY}`);
+        } else if (name === 'filter') {
+            if (colourlessDropShadows(bare).length > 0) say(decl, `a drop-shadow() ${NO_COLOUR_WHY}`);
+        } else if (EDGE_SHORTHANDS.test(name)) {
+            const tokens = splitTopLevel(clean, ' ');
+            // A width of zero draws nothing, whatever the style says.
+            const nothing = tokens.some((token) => lengthToken(token)?.n === 0);
+            if (!nothing && tokens.some((token) => LINE_STYLE.test(token))) drawing ??= decl;
+            if (namesAColour(clean)) coloured = true;
+        } else if (EDGE_STYLE_PROPS.test(name)) {
+            if (splitTopLevel(clean, ' ').some((token) => LINE_STYLE.test(token))) drawing ??= decl;
+        } else if (name === 'text-decoration') {
+            if (splitTopLevel(clean, ' ').some((token) => DECORATION_LINE.test(token))) drawing ??= decl;
+            if (namesAColour(clean)) coloured = true;
+        } else if (name === 'text-decoration-line') {
+            if (splitTopLevel(clean, ' ').some((token) => DECORATION_LINE.test(token))) drawing ??= decl;
+        }
+    }
+    if (drawing !== undefined && !coloured) say(drawing, `draws an edge or a line that ${NO_COLOUR_WHY}`);
+    const content = decls.find((decl) => decl.prop === 'content');
+    if (content !== undefined) {
+        const v = content.value.replace(/\s*!\s*important\s*$/i, '').trim();
+        const prints = /^["']/.test(v) && skipString(v, 0) === v.length && decodeEscapes(v.slice(1, -1)) !== '';
+        if (prints) {
+            const ink = decls.filter((decl) => decl.prop === 'color').pop();
+            if (ink === undefined || !ownInk(ink.value.replace(/\s*!\s*important\s*$/i, ''))) {
+                say(content, "prints text and states no colour of its own in this rule (a literal colour or a palette role): a glyph is its host's ink otherwise, and a state may change that ink");
+            }
+        }
+    }
     return out;
 }
 
@@ -2173,9 +2293,15 @@ export function sheetMasksWithAFile(css) {
 /**
  * Pseudo-classes and attributes a box reaches only after the page is used:
  * the probe measures every screen at rest, so a rule gated on one of these
- * paints on a screen no pass measured.
+ * paints on a screen no pass measured. **This is the older, explicit list**
+ * that the file-mask refusal and the sticky-sign test read, in the kit as in
+ * a first-party sheet; it stays as it was, bar the whitespace after the colon
+ * (the lint-belts critic's B1, a fix of a hole on main). **The state belt
+ * does not read it**: the belt fails closed (`namesAState`, every
+ * pseudo-class but `STRUCTURAL_PSEUDO_CLASSES`), and in a first-party sheet
+ * the belt refuses a mask and a `position` under any state it names.
  */
-const STATE_PSEUDO = /:(?:hover|focus|focus-visible|focus-within|active|checked|target|open|popover-open|disabled|enabled|placeholder-shown|invalid|valid|indeterminate|visited|link|any-link)(?![\w-])/i;
+const STATE_PSEUDO = /:\s*(?:hover|focus|focus-visible|focus-within|active|checked|target|open|popover-open|disabled|enabled|placeholder-shown|invalid|valid|indeterminate|visited|link|any-link)(?![\w-])/i;
 
 /** True when a selector reaches its box only in a state (`STATE_PSEUDO`, or any attribute but `data-role`). */
 function isStateSelector(selector) {
@@ -2253,6 +2379,21 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && STATE_OPAQUE_ROLES.includes(prop)) {
             out.push(`${shown} — ${prop} is a palette role the theme table writes on the stall; a state rule reads it as an opaque colour, which holds only while no sheet re-declares it`);
         }
+        /*
+         * `display` and `content-visibility` in a keyframe (D-2026-10-20-10,
+         * the lint-belts critic's T2c): a keyframe that sets either takes a
+         * box out of the layout for part of a cycle, or leaves it unrendered,
+         * and the probe reads one frozen instant of an animation, so a figure
+         * (or the card that holds it) a keyframe removes for most of its time
+         * is measured while it is there. `@keyframes x { 0%, 100% { display:
+         * none } }` run on a quote's `.item-a` is the plant. First party only:
+         * the kit keeps the rules its README states.
+         */
+        if (firstParty && selectors === undefined && (prop === 'display' || prop === 'content-visibility')) {
+            out.push(
+                `${shown} — ${prop} in a keyframe takes a box (a money node, or the card that holds one) out of the layout, or leaves it unrendered, for part of a cycle, and the probe reads one frozen instant of it`,
+            );
+        }
         if (firstParty && prop.startsWith('--') && /(?:url|image-set)\(/i.test(decodeEscapes(value))) {
             out.push(
                 `${shown} — a file named in a custom property: write each url() and image-set() in the property that paints it, where the file-art checks read it`,
@@ -2265,6 +2406,10 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         }
         const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
         const keywords = keywordsOf(clean);
+        if (firstParty && prop === 'cursor') {
+            const why = cursorProblem(clean);
+            if (why !== undefined) out.push(`${shown} — ${why}`);
+        }
         if (prop === 'content') {
             out.push(...contentProblems(clean, selectors));
         }
@@ -2626,6 +2771,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
                 if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors, { scales: sheetScales })) at(node.start, why);
                 if (!kit) for (const why of stateBeltProblems(declarationsOf(node.body), selectors)) at(node.start, why);
+                if (!kit) for (const why of pseudoHostPaintProblems(declarationsOf(node.body), selectors)) at(node.start, why);
                 continue;
             }
             if (node.name === 'keyframes') {
@@ -2757,13 +2903,15 @@ export function lintSheet(css, { art = [] } = {}) {
  * letter or word spacing, a zoom or a scale on a money node, nor a keyframe
  * of any of them or of a transform that scales anywhere
  * (`a-look-never-animates-a-money-nodes-size`); and a rule under a state the
- * probe never paints (`:hover`, `:focus`, `:focus-visible`, `:focus-within`,
- * `:active`, `:target`, `:user-invalid`, `:autofill`, `:modal`, `[data-turn]`)
- * sets only colour, ground, border colour (and its style, to off), shadow,
- * cursor, an outline whose width and offset it writes, transitions and the
- * no-transform values — every other declaration is refused by name, and a
- * palette role may not be re-declared
- * (`a-look-state-rule-sets-only-what-a-state-may`); and no tap highlight but
+ * probe never paints (any pseudo-class but the sixteen structural ones, which
+ * is `:hover`, `:focus`, `:placeholder-shown` and every other; `[open]`,
+ * `[hidden]` and `[data-turn]`) sets only colour, ground, border and outline
+ * colour, a bounded shadow, a keyword cursor, transitions and the no-transform
+ * values — every other declaration is refused by name, and a palette role may
+ * not be re-declared (`a-look-state-rule-sets-only-what-a-state-may`); a
+ * pseudo-element takes no paint from its host at rest
+ * (`a-pseudo-element-paints-its-own-ground-and-ink`); no cursor but a keyword;
+ * no `display` or `content-visibility` in a keyframe; and no tap highlight but
  * transparent anywhere. First party only: the kit lint carries none of these.
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {

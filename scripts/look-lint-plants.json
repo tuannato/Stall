@@ -72,7 +72,7 @@
       "rule": ".$C .item:hover { outline: 4000px solid #000; outline-offset: -2000px; }",
       "expect": "refused",
       "by": [
-        "state:outline"
+        "state:property"
       ]
     },
     {
@@ -364,7 +364,8 @@
       "rule": ".$C [|data-turn] .item-x { opacity: 0.2; }",
       "expect": "refused",
       "by": [
-        "selector"
+        "selector",
+        "state:property"
       ]
     },
     {
@@ -407,7 +408,8 @@
       "rule": ".$C .item-x:h\\6fver { opacity: 0.2; }",
       "expect": "refused",
       "by": [
-        "escape"
+        "escape",
+        "state:property"
       ]
     },
     {
@@ -426,18 +428,24 @@
     },
     {
       "rule": ".$C .item-x:checked { opacity: 0.2; }",
-      "expect": "accepted",
-      "why": ":checked is a state outside D-2026-10-20-08's list; it matches form controls, and no money node is one"
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
     },
     {
       "rule": ".$C .item-x:open { opacity: 0.2; }",
-      "expect": "accepted",
-      "why": ":open is a state outside the list; it matches details, dialog and select, and the probe opens every fold before it measures"
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
     },
     {
       "rule": ".$C .item-x:popover-open { opacity: 0.2; }",
-      "expect": "accepted",
-      "why": ":popover-open is a state outside the list; the app has no popover"
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
     },
     {
       "rule": ".$C .item-x:focus-visible { opacity: 0.2; }",
@@ -448,13 +456,17 @@
     },
     {
       "rule": ".$C .item-x:visited { opacity: 0.2; }",
-      "expect": "accepted",
-      "why": ":visited is a state outside the list; a browser lets it change a colour and nothing else"
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
     },
     {
       "rule": ".$C .item-x:any-link { opacity: 0.2; }",
-      "expect": "accepted",
-      "why": ":any-link is every link at all times: a rule at rest, which the probe measures"
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
     },
     {
       "rule": ".$C .item-x:user-invalid { opacity: 0.2; }",
@@ -896,7 +908,7 @@
       "rule": ".$C .buy:focus-visible { outline: 3000px solid #000; }",
       "expect": "refused",
       "by": [
-        "state:outline"
+        "state:property"
       ]
     }
   ],
@@ -1056,7 +1068,7 @@
       "rule": ".$C .item:hover .item-a { border-left: 9999px solid transparent; }",
       "expect": "refused",
       "by": [
-        "state:border"
+        "state:property"
       ]
     },
     {
@@ -1261,8 +1273,10 @@
     },
     {
       "rule": ".$C .item-x:fullscreen { opacity: 0; }",
-      "expect": "accepted",
-      "why": ":fullscreen is a state outside the list; the app never calls requestFullscreen, so nothing matches it"
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
     },
     {
       "rule": ".$C .item:hover::after { content: ''; position: absolute; inset: 0; background: #000; }",
@@ -1322,8 +1336,10 @@
     },
     {
       "rule": ".$C .item:hover .item-x { color: inherit; }",
-      "expect": "accepted",
-      "why": "inherit is one of the three forms of ink"
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
     },
     {
       "rule": "@starting-style { .$C .item-x { opacity: 0; } }",
@@ -1336,7 +1352,7 @@
       "rule": ".$C .buy:focus-visible { outline: 8px solid #000; outline-offset: 8px; }",
       "expect": "refused",
       "by": [
-        "state:outline"
+        "state:property"
       ]
     }
   ],
@@ -1662,14 +1678,14 @@
       "rule": ".$C .item-x { outline-width: 200px; outline-offset: -100px; outline-color: #000; }\n.$C .item:hover .item-x { outline-style: solid; }",
       "expect": "refused",
       "by": [
-        "state:outline"
+        "state:property"
       ]
     },
     {
       "rule": ".$C .buy { outline: 300px none #000; outline-offset: -150px; }\n.$C .buy:focus-visible { outline-style: solid; }",
       "expect": "refused",
       "by": [
-        "state:outline"
+        "state:property"
       ]
     },
     {
@@ -1701,6 +1717,1569 @@
       ]
     }
   ],
+  "n1": [
+    {
+      "rule": ".$C .item-a { color: transparent; }\n.$C .item-x, .$C .item-from, .$C .item-u { color: #fff; }\n.$C .item:hover .item-x { color: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item-a { color: transparent; }\n.$C .item-x, .$C .item-from, .$C .item-u { color: #fff; }\n.$C .item:hover .item-x { color: currentColor; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgba(0,0,0,0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: #0000; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: #00000001; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: hsl(0 0% 0% / 0%); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: color(srgb 0 0 0 / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: oklch(0 0 0 / 0.5); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 1); }",
+      "expect": "accepted",
+      "why": "alpha 1 is an opaque ink, the form color stands in"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 0); }",
+      "expect": "accepted",
+      "why": "not a colour in CSS (a fourth number needs a slash): a browser drops the declaration, so it sets nothing"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0,0,0,0%); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: var(--s-text); }",
+      "expect": "accepted",
+      "why": "a palette role proved opaque (STATE_OPAQUE_ROLES) is an ink that cannot fade"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: var(--s-text, transparent); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: var(--s-addr-bg); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: color-mix(in srgb, red, transparent); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: light-dark(red, transparent); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: Canvas; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(from red r g b / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / calc(0)); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 1e-9); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / -1); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: hwb(0 0% 100% / .0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: lab(0 0 0 / 50%); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 /* x */ / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: RGB(0 0 0 / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: unset; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: initial; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: revert; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 0.9999999999999999999); }",
+      "expect": "accepted",
+      "why": "a double rounds this alpha to 1: an opaque ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 100%); }",
+      "expect": "accepted",
+      "why": "alpha 100% is alpha 1: an opaque ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 1) !important; }",
+      "expect": "refused",
+      "by": [
+        "important"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: -webkit-link; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 1.5); }",
+      "expect": "accepted",
+      "why": "an alpha over 1 is clamped to 1: an opaque ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: hsl(0, 0%, 0%, .5); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: color(display-p3 0 0 0 / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgba(0 0 0 / 0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / 0 ); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0/0); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(var(--x)); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / attr(x)); }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / sin(0)); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / e); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: rgb(0 0 0 / pi); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    }
+  ],
+  "n2": [
+    {
+      "rule": ".$C .item-a { background: url(decor/rain-near.svg) no-repeat 0 0 / 0 0; }\n.$C .item:hover .item-x { background: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background-image: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(red, red), url(x.svg); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background-image: linear-gradient(red, url(x.svg)); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: -webkit-image-set(url(x.svg) 1x); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: cross-fade(red, blue); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: element(#a); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: paint(x); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: image(red); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: -webkit-canvas(x); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: -webkit-gradient(linear, 0 0, 0 100%, from(red), to(blue)); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(currentColor, currentColor); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: currentColor; }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: var(--s-card-sheen); }",
+      "expect": "accepted",
+      "why": "a ground read through a --s- custom property: this lint does not read what a sheet's own property holds (a stated gap), and a ground paints under the ink, so it hides nothing unless it is the ink's own colour"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: var(--s-anything-at-all); }",
+      "expect": "accepted",
+      "why": "a ground read through a --s- custom property that nothing sets is an invalid value at computed time, and the ground stays clear; a stated gap beside n2:13"
+    },
+    {
+      "rule": ".$C .item { --s-pic: radial-gradient(#000 99%, #000); }\n.$C .item:hover .item-x { background: var(--s-pic); }",
+      "expect": "accepted",
+      "why": "a ground read through a --s- custom property a rule at rest set to a gradient: a stated gap, and a ground paints under the ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(red,red) text; }",
+      "expect": "refused",
+      "by": [
+        "other"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(red,red) border-area; }",
+      "expect": "accepted",
+      "why": "a gradient ground with a box keyword: a ground paints under the ink, and the probe reads the ground at rest"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(red,red) 0 0 / calc(100% + 9999px) 100% no-repeat; }",
+      "expect": "accepted",
+      "why": "a gradient ground with a size past the box: a ground paints under the ink, and a size cannot lift it over the ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: url(x.svg) /* */ ; }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: u\\72l(x.svg); }",
+      "expect": "refused",
+      "by": [
+        "escape",
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(red, red) fixed; }",
+      "expect": "accepted",
+      "why": "a gradient ground fixed to the viewport: a ground paints under the ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: red url(\"x.svg\"); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: conic-gradient(from 0deg, red, blue); }",
+      "expect": "accepted",
+      "why": "a conic gradient is a gradient ground: it paints under the ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: linear-gradient(red, red) 0 0 / 1px 1px repeat; }",
+      "expect": "accepted",
+      "why": "a gradient ground tiled at 1px: it paints under the ink"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: image-set(linear-gradient(red,red) 1x); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background-color: var(--s-addr-bg); }",
+      "expect": "accepted",
+      "why": "a ground of any alpha stands (a tint is a ground, not a faded ink)"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background-color: light-dark(red, blue); }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: none; }",
+      "expect": "accepted",
+      "why": "background: none paints no ground at all"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { background: initial; }",
+      "expect": "accepted",
+      "why": "initial is transparent for a ground"
+    }
+  ],
+  "n3": [
+    {
+      "rule": ".$C .item-a { background-image: url(decor/rain-near.svg); background-size: 0 0; }\n.$C .item:hover .item-x { background-image: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:background"
+      ]
+    },
+    {
+      "rule": ".$C .item-a { border: 40px solid transparent; }\n.$C .item:hover .item-x { border: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border-top: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: solid; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: solid transparent; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: medium solid; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: solid var(--s-text); }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: solid var(--s-addr-bg); }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border-style: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border-block: solid red; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border-color: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:edge"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: double; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:not(:hover) { border-width: 40px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item .item-a .item-x { border-width: 40px; border-color: #000; }\n.$C .item:hover .item-x { border: solid; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border: solid; }\n.$C .item .item-a .item-x { border-width: 40px; border-color: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: solid 2px; outline-offset: 0; }\n.$C .item .item-a .item-x { outline-width: 200px; outline-offset: -100px; outline-color: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C.$C .item .item-x { outline-width: 200px; outline-offset: -100px; outline-color: #000; }\n.$C .item:hover .item-x { outline: solid 2px; outline-offset: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: 4px solid #000; outline-offset: 4px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: 4px solid #000; outline-offset: 5px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: inherit; outline-width: 2px; outline-offset: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline-color: red; outline-width: 1px; outline-offset: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline-style: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: auto 8px; outline-offset: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline: 2px solid; outline-offset: 0; outline: 50px solid; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline-offset: 0; outline-width: 2px; outline-style: solid; outline-width: thick; outline-offset: 3px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "n4": [
+    {
+      "rule": ".$C .item:hover { cursor: url(decor/rain-near.svg) 0 64, pointer; }",
+      "expect": "refused",
+      "by": [
+        "cursor"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { cursor: image-set(url(decor/rain-near.svg) 1x) 0 0, pointer; }",
+      "expect": "refused",
+      "by": [
+        "cursor"
+      ]
+    },
+    {
+      "rule": ".$C .item { cursor: url(decor/rain-near.svg) 0 64, pointer; }",
+      "expect": "refused",
+      "by": [
+        "cursor"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000, 0 -8px 120px #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 4000px #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 2em #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 calc(2px) #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 1vw 0 #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: -8px -8px 0 -4000px #000; }",
+      "expect": "accepted",
+      "why": "a negative spread shrinks the shadow: nothing paints outside the box beyond the 8px offset"
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: inset 0 0 0 4000px #000; }",
+      "expect": "accepted",
+      "why": "an inset shadow paints inside its own box, under its own text"
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 0 0 #000 inset, 8px 8px #000; }",
+      "expect": "accepted",
+      "why": "one inset layer and one outer layer at the 8px offset, a blur of 0: inside every bound"
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 8px 8px 0 #000 #fff; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 #000 0 4000px; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 0 4000px; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 1e1px 0 #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 8.0px 8px 0 0px #000; }",
+      "expect": "accepted",
+      "why": "an offset of 8px is the cap, not past it"
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 0 0.0001px #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 0 -0px #000; }",
+      "expect": "accepted",
+      "why": "a spread of zero (-0px) is no spread"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: translateZ(0); }",
+      "expect": "accepted",
+      "why": "translateZ(0) is an identity transform"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 360deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: -0deg; }",
+      "expect": "accepted",
+      "why": "rotate: -0deg is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 0rad; }",
+      "expect": "accepted",
+      "why": "rotate: 0rad is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: x 0deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 0 0 1 0deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { scale: 1 1 1; }",
+      "expect": "accepted",
+      "why": "scale: 1 1 1 is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { scale: 100% 100%; }",
+      "expect": "accepted",
+      "why": "scale: 100% 100% is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { scale: 1 1 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { translate: 0 0 0; }",
+      "expect": "accepted",
+      "why": "translate: 0 0 0 is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { translate: 0 0 1px; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: matrix(1, 0, 0, 1, 0, 0); }",
+      "expect": "accepted",
+      "why": "matrix(1, 0, 0, 1, 0, 0) is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: matrix(1, 0, 0, -1, 0, 0); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: scale(1) rotate(0) translate(0, 0%) translateX(-0em); }",
+      "expect": "accepted",
+      "why": "a chain of identities is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: rotate(0deg) rotate(0deg); }",
+      "expect": "accepted",
+      "why": "two zero turns are an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: perspective(1000px); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: initial; }",
+      "expect": "accepted",
+      "why": "transform: initial is none"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: scale(1.0000); }",
+      "expect": "accepted",
+      "why": "scale(1.0000) is an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: translate(0px, 0px) scale(1, 1); }",
+      "expect": "accepted",
+      "why": "translate(0px, 0px) and scale(1, 1) are an identity"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: rotate(0turn) scaleX(1) scaleY(1); }",
+      "expect": "accepted",
+      "why": "a chain of identities is an identity"
+    },
+    {
+      "rule": ".$C.stall:focus-within { translate: 0; }",
+      "expect": "accepted",
+      "why": "translate: 0 is an identity under a state on the stall itself"
+    },
+    {
+      "rule": ".$C .stall-scroll:focus-within { transform: translateZ(0); }",
+      "expect": "accepted",
+      "why": "translateZ(0) is an identity under a state on the scroller"
+    }
+  ],
+  "n5": [
+    {
+      "rule": ".$C .item:/**/hover .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:/* x */hover .item-x { clip-path: inset(0 100% 0 0); }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .buy:/**/focus-visible { outline: 200px solid #000; outline-offset: -100px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:/**/hover::after { position: relative; background: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C:has(.shop-find:not(:placeholder-shown)) .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .sheet:has(details:not([open])) .pay-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .sheet:has(details:not(:open)) .pay-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .stall:has(details:not([open])) .item-x { visibility: hidden; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:HOVER .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:not(:is(:hover)) .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C [DATA-TURN] .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C[data-turn='cw'] .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C:has([data-turn]) .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C [ data-turn ] .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover:AFTER { background: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p:before { background: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::AFTER { background: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::marker { color: red; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::placeholder { color: red; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::after { color: inherit; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::after { color: currentColor; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::after { -webkit-tap-highlight-color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::after { cursor: url(decor/rain-near.svg) 0 0, auto; }",
+      "expect": "refused",
+      "by": [
+        "cursor"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::after { transform: translateZ(0); }",
+      "expect": "accepted",
+      "why": "an identity transform stands on a pseudo-element's list: it moves nothing"
+    },
+    {
+      "rule": ".$C .item:hover, .$C .item-p::after { background: #000; }",
+      "expect": "accepted",
+      "why": "a pseudo-element beside a state selector in a list stands at rest, where the probe measures it; the state selector names an element, which may take a ground"
+    },
+    {
+      "rule": ".$C .item:hover .x, .$C .y::after { background: #000; }",
+      "expect": "accepted",
+      "why": "a pseudo-element beside a state selector in a list stands at rest, where the probe measures it; the state selector names an element, which may take a ground"
+    },
+    {
+      "rule": ".$C .item-x:user-valid { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:in-range { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C:has(.pay-qty-in:focus) .pay-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C:has(.pay-qty-in:not([hidden])) .pay-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .addr[data-copied='true'] .addr-full { opacity: 0; }",
+      "expect": "accepted",
+      "why": "[data-copied] is an attribute state the fixtures paint (the staged addr-shown screen), read at rest by the probe: not one of the three attribute states"
+    },
+    {
+      "rule": ".$C .item:target-current .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:focus-visible .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:is(:hover, .open) .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "n6": [
+    {
+      "rule": ".$C .item-x { transition: --x 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition-property: --x; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: color 1s, --X 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s --x; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .pay-line-s { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .face-surcharge { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .sel-sub { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .pay-sub { transition: letter-spacing 1s; }",
+      "expect": "accepted",
+      "why": "pay-sub is a class the money line shares with boxes that are not money (SHARED_WITH_OTHER_BOXES), so it names no money node alone"
+    },
+    {
+      "rule": ".$C .fine { transition: font-size 1s; }",
+      "expect": "accepted",
+      "why": "fine is a class a money line shares with boxes that are not money, so it names no money node alone"
+    },
+    {
+      "rule": ".$C .mini { transition: font-size 1s; }",
+      "expect": "accepted",
+      "why": "mini is a class the pay sheets' hand-off control shares with every small button, so it names no money node alone; another is listed with it"
+    },
+    {
+      "rule": ".$C .item-a > :not(.item-from) { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-a > .item-from + * { transition: zoom 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { -webkit-transition: letter-spacing 1s; transition: color 1s; }",
+      "expect": "refused",
+      "by": [
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: letter-spacing 1s allow-discrete; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: font-stretch 1s; }",
+      "expect": "accepted",
+      "why": "font-stretch moves a width and is not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": ".$C .item-x { transition: text-indent 1s; }",
+      "expect": "accepted",
+      "why": "text-indent moves a width and is not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": ".$C .item-x { transition: padding 1s; }",
+      "expect": "accepted",
+      "why": "padding moves the box a figure stands in and is not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": ".$C .item-x { transition: width 1s; }",
+      "expect": "accepted",
+      "why": "width moves the box a figure stands in and is not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": ".$C .item-x { transition: font-size-adjust 1s; }",
+      "expect": "accepted",
+      "why": "font-size-adjust moves a width and is not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { font-stretch: 50%; } }",
+      "expect": "accepted",
+      "why": "font-stretch in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { text-indent: -2em; } }",
+      "expect": "accepted",
+      "why": "text-indent in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { padding-left: 200px; } }",
+      "expect": "accepted",
+      "why": "padding in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { width: 0; } }",
+      "expect": "accepted",
+      "why": "width in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { font-size-adjust: 0.01; } }",
+      "expect": "accepted",
+      "why": "font-size-adjust in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { transform: scale(0.999); } }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-s { to { transform: scale(1.0009); } }",
+      "expect": "accepted",
+      "why": "a factor within 0.001 of 1 is no scale (the probe's own tolerance for a box that holds a figure)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { transform: matrix(1.0009, 0, 0, 1, 0, 0); } }",
+      "expect": "accepted",
+      "why": "a matrix within 0.001 of an identity is no scale (the probe's own tolerance)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { transform: rotate(3600deg); } }",
+      "expect": "accepted",
+      "why": "ten turns is the cap, and a turn only turns"
+    },
+    {
+      "rule": "@keyframes $C-s { to { transform: rotate(3601deg); } }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-s { to { transform: translate(100vw, 100vh); } }",
+      "expect": "accepted",
+      "why": "a keyframe that only shifts is not a size (D-2026-10-20-07)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { translate: -9999px 0; } }",
+      "expect": "accepted",
+      "why": "a keyframe that only shifts is not a size (D-2026-10-20-07)"
+    },
+    {
+      "rule": "@keyframes $C-s { to { --g: 1em; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:custom-property"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-s { to { opacity: 0; } }",
+      "expect": "accepted",
+      "why": "opacity in a keyframe: a moving ink, read at one frozen instant (CLAUDE.md §10); D-2026-10-20-07 names size and width"
+    },
+    {
+      "rule": "@keyframes $C-s { to { clip-path: inset(0 100% 0 0); } }",
+      "expect": "accepted",
+      "why": "clip-path in a keyframe: a moving ink, read at one frozen instant (CLAUDE.md §10); D-2026-10-20-07 names size and width"
+    }
+  ],
+  "n7": [
+    {
+      "rule": ".$C .item-b::after { content: ''; display: block; position: relative; left: 160px; top: -24px; width: 120px; height: 40px; background: inherit; }\n.$C .item:hover .item-b { background: #000; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-b { color: transparent; }\n.$C .item-n { color: #fff; }\n.$C .item-b::after { content: ''; display: block; position: relative; left: 160px; top: -24px; width: 120px; height: 40px; background: currentColor; }\n.$C .item:hover .item-b { color: #000; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-b::after { content: ''; display: block; position: relative; left: 160px; top: -24px; width: 120px; height: 40px; box-shadow: inset 0 0 0 60px currentColor; }\n.$C .item-b { color: transparent; }\n.$C .item-n { color: #fff; }\n.$C .item:hover .item-b { color: #000; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-b { position: relative; left: 160px; }\n.$C .item:hover .item-b { background: #000; }",
+      "expect": "accepted",
+      "why": "a ground a state paints on an element, not a pseudo-element, that a rule at rest moved over a figure by an offset: the stated gap of the belt (an element's ground is on the list)"
+    }
+  ],
+  "n8": [
+    {
+      "rule": ".$C .item-x { transition: +.4s letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1e3ms letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1E3MS LETTER-SPACING; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: .4s .1s letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: letter-spacing 1s steps(2); }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s cubic-bezier(0,0,1,1) letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s linear(0, 1) letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s ease-in-out 0s letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: none; }",
+      "expect": "accepted",
+      "why": "transition: none names no property"
+    },
+    {
+      "rule": ".$C .item-x { transition: -1s letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s normal letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s allow-discrete letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s step-end letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s jump-both letter-spacing; }",
+      "expect": "accepted",
+      "why": "jump-both is a step position, valid only inside steps(): a bare token makes the declaration invalid, and a browser drops it"
+    },
+    {
+      "rule": ".$C .item-x { transition: 1s initial; }",
+      "expect": "accepted",
+      "why": "initial is no transition property name: the declaration is invalid, and a browser drops it"
+    }
+  ],
+  "n9": [
+    {
+      "rule": ".$C .face-x::first-letter { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element"
+      ]
+    },
+    {
+      "rule": ".$C .face-x::/**/first-letter { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element"
+      ]
+    },
+    {
+      "rule": ".$C .face-x:/**/:first-letter { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element"
+      ]
+    },
+    {
+      "rule": ".$C .face-x::/**/marker { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element"
+      ]
+    },
+    {
+      "rule": ".$C .item-x::/**/selection { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "pseudo-element"
+      ]
+    },
+    {
+      "rule": ".$C .item-x::/**/after { content: '9'; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:/**/:after { content: '9'; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "pseudo:host-paint"
+      ]
+    }
+  ],
   "w1": [
     {
       "rule": ".$C .item-p::after { content: ''; position: relative; left: -80px; background: transparent; }\n.$C .item:hover .item-p::after { background: #000; }",
@@ -1708,6 +3287,88 @@
       "by": [
         "state:property"
       ]
+    }
+  ],
+  "w2": [
+    {
+      "rule": "@keyframes $C-gone { 0%, 100% { display: none; } }\n.$C .item-a { animation: $C-gone 2s infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:display"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-gone { 50% { content-visibility: hidden; } }\n.$C .item-a { animation: $C-gone 2s infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:display"
+      ]
+    },
+    {
+      "rule": ".$C .wearing-x::before { content: '\\25c6'; font-size: 200px; position: relative; left: -80px; }\n.$C .item:hover .wearing-x { color: #000; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-b::after { content: ''; position: relative; left: 160px; top: -24px; width: 120px; height: 40px; box-shadow: 0 0 0 60px; }\n.$C .item:hover .item-b { color: #000; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-p::after { color: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: inset 0 0 0 4000px; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 8px red, 0 0 8px blue, 0 0 8px green; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { cursor: url(decor/rain-near.svg) 0 0, pointer; }",
+      "expect": "refused",
+      "by": [
+        "cursor"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: currentColor; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { border-color: currentColor; }",
+      "expect": "refused",
+      "by": [
+        "state:edge"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { outline-color: #000; }",
+      "expect": "accepted",
+      "why": "outline-color alone sets no ring: a ring a rule at rest never drew shows nothing (the owner's rule is colour only)"
+    },
+    {
+      "rule": ".$C .item-x { outline: 200px solid transparent; outline-offset: -100px; }\n.$C .item:hover .item-x { outline-color: #000; }",
+      "expect": "accepted",
+      "why": "a ring a rule at rest wrote in a clear colour, shown by a colour under a state: the stated gap of the colour-only rule (D-2026-10-20-11); the probe reads an outline at rest only across the glyphs of its own box and of the boxes above a figure"
     }
   ]
 }
