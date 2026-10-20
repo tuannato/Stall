@@ -3384,8 +3384,9 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   (`a-look-state-rule-sets-only-what-a-state-may`, D-2026-10-20-08 and
  *   -10 and -11, `scripts/workshop-css.mjs`): a rule whose selector names a
  *   state — **any pseudo-class but sixteen structural ones, so `:placeholder-shown`
- *   and `:checked` and a name the lint has never met, and `[open]`, `[hidden]`
- *   and `[data-turn]`** — sets colour, ground, border and outline colour (colour
+ *   and `:checked` and a name the lint has never met (`:--open` among them),
+ *   and `[open]`, `[hidden]`, `[data-turn]`, `[data-state]`, `[aria-disabled]`
+ *   and `[data-over]`** — sets colour, ground, border and outline colour (colour
  *   only: no style, no width, no offset, no shorthand), a shadow of at most two
  *   outer layers and 16px of blur, a keyword cursor, transitions and the
  *   no-transform values, and nothing else, and the tap highlight is
@@ -3399,14 +3400,20 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   kit's twin rule. A pseudo-element under a state may set only a cursor,
  *   transitions and the identity transforms (no colour), because a
  *   pseudo-element is measured only by its paint at rest, and at rest a
- *   first-party pseudo-element takes no paint from its host. Still unread
+ *   first-party pseudo-element takes its paint from neither its host nor the
+ *   cascade (a colour for each family and side, no `revert`, `revert-layer`
+ *   or `all`, masks read, a `var()` only as a palette role). At rest, in
+ *   a media block and in a keyframe, an outer shadow, a text shadow, a drop
+ *   shadow, an outline and a border image name their own colour, and an
+ *   outline is at most 4px wide and sits from -8px to 4px, per declaration
+ *   (the fourth review's B2 and ranked item 1), so a colour under a state
+ *   cannot reveal a ring or a shadow written in `currentColor`. Still unread
  *   under a state, in the first-party lint too: an ink's or a ground's
- *   contrast against what it stands on; a ring a rule at rest wrote in a
- *   clear colour, shown by `outline-color` (this pass reads an outline across
- *   the glyphs of its own box and of the boxes above a figure, never one on a
- *   box beside it); and a ground a state paints on an element (not a
- *   pseudo-element) that a rule at rest moved over a figure with its ground
- *   clear;
+ *   contrast against what it stands on; the small ring the cap leaves (this
+ *   pass reads an outline across the glyphs of its own box and of the boxes
+ *   above a figure, never one on a box beside it); and a colour a state
+ *   gives an element (not a pseudo-element) that a rule at rest moved over a
+ *   figure with an offset, a negative margin or a transform and left clear;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
