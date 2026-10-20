@@ -684,27 +684,50 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * past the design 65.5), and a keyframe at 64px out-ranked the fit on 56 of
  * 70 cards at 1024x768. The fit holds every transition on the card off while
  * it reads and puts them back only once the size it took is settled
- * (`holdStill`); this is the sheet's half. A first-party look sheet may not:
+ * (`holdStill`); this is the sheet's half.
  *
- * - transition `font-size`, `font` or `all` (a `transition` naming no
- *   property, or one the lint cannot read — a `var()`, a CSS-wide keyword —
- *   is `all`) on a rule whose subject may be a money node: a subject naming
- *   a money node's class or role (`MONEY_NODE`, `.row.big dd` by its `dd`),
- *   or naming no class, id or attribute of its own at all (`span`, `*`, a
- *   bare `:is(…)`), which may match one; a subject that is a pseudo-element
- *   (`::before`, `::after`) is not the node;
- * - name `font-size` or `font` in any keyframe: which elements run a
- *   keyframe is a selector's to say, and a size animated on any box, a money
- *   node among them, is a size the fit cannot hold.
+ * **Widened by D-2026-10-20-07** (the owner; the wall-offsize critic's
+ * re-review, item 5, found that a keyframe on `letter-spacing` or `zoom` of
+ * a money node passed the font-size-only rule and moved the figure 44–97px
+ * past its column): the width the fit reads moves by more than the font's
+ * size. A first-party look sheet may not:
+ *
+ * - transition `font-size`, `font`, `letter-spacing`, `word-spacing`, `zoom`,
+ *   `scale` or `all` (a `transition` naming no property, or one the lint
+ *   cannot read — a `var()`, a CSS-wide keyword — is `all`; a vendor prefix
+ *   is read as its unprefixed name), or `transform` **when it scales** (a
+ *   transition names a property and not its end value, so `transform` is
+ *   refused when some rule of the sheet whose subject may be a money node
+ *   sets a `transform` that scales or that this lint cannot read:
+ *   `scale()`, `matrix()` that is not a pure turn and shift, a 3D function,
+ *   a `var()`), on a rule whose subject may be a money node: a subject
+ *   naming a money node's class or role (`MONEY_NODE`, `.row.big dd` by its
+ *   `dd`), or naming no class, id or attribute of its own at all (`span`,
+ *   `*`, a bare `:is(…)`), which may match one; a subject that is a
+ *   pseudo-element (`::before`, `::after`) is not the node;
+ * - name `font-size`, `font`, `letter-spacing`, `word-spacing` or `zoom` in
+ *   any keyframe, nor a `scale`, a `transform` or a non-flat `rotate` that
+ *   scales (the same reading as above, here on the stop's own value): which
+ *   elements run a keyframe is a selector's to say — a money node or an
+ *   ancestor of one, which is any box that is not known to hold none — and
+ *   a size animated on any box, a money node among them, is a size the fit
+ *   cannot hold. A keyframe that only turns or shifts (`rotate`,
+ *   `translate`, Rural's swing and tag) is not refused.
  *
  * Duration is not read: a `transition-property` here and its duration in
- * another rule meet only in the cascade. No shipped look transitions or
- * animates a size. The kit lint is not changed: a rule there is a line of
- * the workshop README, the owner's. Test:
- * `a-look-never-animates-a-money-nodes-size`.
+ * another rule meet only in the cascade. **Not read, stated**: a transition
+ * of `letter-spacing`, `word-spacing`, `zoom`, `scale` or `transform` on a box
+ * that holds a money node and may not be one itself (`.item-p`, `.item-head`):
+ * those names reach their descendants, so the gap is wider than font-size's
+ * was; the same rule for ancestors would refuse them on every box that is not
+ * a known leaf, and is the owner's call. `font-stretch`, `font-size-adjust`,
+ * `font-variation-settings` and `text-indent` move a width too and are not
+ * named. No shipped look transitions or animates any of them. The kit lint is
+ * not changed: a rule there is a line of the workshop README, the owner's.
+ * Test: `a-look-never-animates-a-money-nodes-size`.
  */
 const MONEY_NODE = /\.(?:item-x|x|pay-x-n|buy|addr-short|addr-full|sw-pay-v|sw-pay-s|fig-say|fig-end)(?![\w-])|\[\s*data-role(?![\w-])/i;
-const SIZE_MOTION = new Set(['all', 'font', 'font-size']);
+const SIZE_MOTION = new Set(['all', 'font', 'font-size', 'letter-spacing', 'word-spacing', 'zoom', 'scale']);
 const CSS_WIDE = new Set(['initial', 'inherit', 'unset', 'revert', 'revert-layer']);
 const EASING = /^(?:ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)$/i;
 
@@ -730,19 +753,227 @@ function transitioned(prop, value) {
     });
 }
 
-/** Why a rule of a first-party look sheet animates a money node's size, one sentence a declaration. */
-function moneySizeMotionProblems(decls, selectors) {
+/**
+ * Why a rule of a first-party look sheet animates a money node's size, one
+ * sentence a declaration. `scales` is whether some rule of the sheet sets a
+ * `transform` that scales or that cannot be read (`sheetSetsAScalingTransform`):
+ * only then is a transition of `transform` one of a size.
+ */
+function moneySizeMotionProblems(decls, selectors, { scales = false } = {}) {
     const out = [];
     const reaching = selectors.filter(mayBeMoneyNode);
     if (reaching.length === 0) return out;
     for (const { prop, value } of decls) {
         if (prop !== 'transition' && prop !== 'transition-property') continue;
-        const moving = transitioned(prop, value).filter((name) => SIZE_MOTION.has(name));
+        const moving = transitioned(prop, value)
+            .map((name) => name.replace(VENDOR_PREFIX, ''))
+            .filter((name) => SIZE_MOTION.has(name) || (name === 'transform' && scales));
         if (moving.length > 0) {
             out.push(
                 `${prop}: ${echo(value, 48)} transitions ${moving.join(', ')} on "${echo(reaching[0])}", which may be a money node — ` +
-                    'the wall fits its figure by its size, and a running transition out-ranks the size it sets',
+                    'the wall fits its figure by its size, and a running transition out-ranks the size it sets ' +
+                    '(a size, a letter or word spacing, a zoom, a scale and a transform that scales each move the width it reads)',
             );
+        }
+    }
+    return out;
+}
+
+/* ---------- transform values: what a value turns, shifts, scales or skews ---------- */
+
+/** A plain `<number>` token, or undefined. */
+function numberToken(token) {
+    return /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(token) ? Number(token) : undefined;
+}
+
+/** The factor a `<number>` or `<percentage>` token stands for (`1.2`, `120%`), or undefined. */
+function factorToken(token) {
+    if (token.endsWith('%')) {
+        const n = numberToken(token.slice(0, -1));
+        return n === undefined ? undefined : n / 100;
+    }
+    return numberToken(token);
+}
+
+/** An `<angle>` token in degrees (a bare 0 is an angle), or undefined for a `calc()`, a `var()`, a keyword. */
+function angleToken(token) {
+    const m = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(deg|grad|rad|turn)?$/i.exec(token);
+    if (m === null) return undefined;
+    const n = Number(m[1]);
+    const unit = (m[2] ?? '').toLowerCase();
+    if (unit === '') return n === 0 ? 0 : undefined;
+    if (unit === 'deg') return n;
+    if (unit === 'grad') return n * 0.9;
+    if (unit === 'rad') return (n * 180) / Math.PI;
+    return n * 360;
+}
+
+/** The CSS-wide keywords that read as `none` on a property that does not inherit (`transform`, `rotate`, `scale`, `translate`). */
+const INITIAL_KEYWORD = /^(?:initial|unset)$/i;
+
+/**
+ * A `transform` value as the list of what it does — `{ kind: 'rotate', deg }`,
+ * `'translate'`, `'skew'`, `{ kind: 'scale', x, y }`, `{ kind: 'matrix', a, b,
+ * c, d }` and `'3d'` (a function that foreshortens or scales by depth) — or
+ * undefined for a value this lint cannot take apart: a `var()`, a CSS-wide
+ * keyword that reads another box's transform, a function it does not know.
+ * **Fail closed**: every reader below treats undefined as the worst case.
+ */
+function transformOps(value) {
+    let rest = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    if (/^none$/i.test(rest) || INITIAL_KEYWORD.test(rest)) return [];
+    const ops = [];
+    while (rest !== '') {
+        const m = /^([a-z][a-z0-9-]*)\(/i.exec(rest);
+        if (m === null) return undefined;
+        let depth = 0;
+        let end = -1;
+        for (let i = m[0].length - 1; i < rest.length; i += 1) {
+            const c = rest[i];
+            if (c === '"' || c === "'") {
+                i = skipString(rest, i) - 1;
+            } else if (c === '(') {
+                depth += 1;
+            } else if (c === ')') {
+                depth -= 1;
+                if (depth === 0) {
+                    end = i;
+                    break;
+                }
+            }
+        }
+        if (end < 0) return undefined;
+        const name = m[1].toLowerCase();
+        const args = splitTopLevel(rest.slice(m[0].length, end), ',');
+        rest = rest.slice(end + 1).trim();
+        if (name === 'rotate' || name === 'rotatez') {
+            const deg = args.length === 1 ? angleToken(args[0]) : undefined;
+            if (deg === undefined) return undefined;
+            ops.push({ kind: 'rotate', deg });
+        } else if (name === 'translate' || name === 'translatex' || name === 'translatey') {
+            if (args.length < 1 || args.length > (name === 'translate' ? 2 : 1)) return undefined;
+            ops.push({ kind: 'translate' });
+        } else if (name === 'scale') {
+            const x = args.length >= 1 && args.length <= 2 ? factorToken(args[0]) : undefined;
+            const y = args.length === 2 ? factorToken(args[1]) : x;
+            if (x === undefined || y === undefined) return undefined;
+            ops.push({ kind: 'scale', x, y });
+        } else if (name === 'scalex' || name === 'scaley') {
+            const f = args.length === 1 ? factorToken(args[0]) : undefined;
+            if (f === undefined) return undefined;
+            ops.push(name === 'scalex' ? { kind: 'scale', x: f, y: 1 } : { kind: 'scale', x: 1, y: f });
+        } else if (name === 'skew' || name === 'skewx' || name === 'skewy') {
+            if (args.length < 1 || args.length > (name === 'skew' ? 2 : 1) || !args.every((a) => angleToken(a) !== undefined)) return undefined;
+            ops.push({ kind: 'skew' });
+        } else if (name === 'matrix') {
+            const n = args.map(numberToken);
+            if (n.length !== 6 || n.some((v) => v === undefined)) return undefined;
+            ops.push({ kind: 'matrix', a: n[0], b: n[1], c: n[2], d: n[3] });
+        } else if (['translatez', 'translate3d', 'rotatex', 'rotatey', 'rotate3d', 'scalez', 'scale3d', 'perspective', 'matrix3d'].includes(name)) {
+            ops.push({ kind: '3d' });
+        } else {
+            return undefined;
+        }
+    }
+    return ops;
+}
+
+/** The individual `rotate` property as ops: `none`, an angle, or `z <angle>` is flat; any other axis is 3D. */
+function rotatePropertyOps(value) {
+    const v = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    if (/^none$/i.test(v) || INITIAL_KEYWORD.test(v)) return [];
+    const tokens = splitTopLevel(v, ' ');
+    const angles = tokens.filter((t) => angleToken(t) !== undefined);
+    const others = tokens.filter((t) => angleToken(t) === undefined);
+    if (angles.length === 1 && others.length === 0) return [{ kind: 'rotate', deg: angleToken(angles[0]) }];
+    if (angles.length === 1 && others.length === 1 && /^z$/i.test(others[0])) return [{ kind: 'rotate', deg: angleToken(angles[0]) }];
+    if (angles.length === 1 && (others.length === 1 || others.length === 3) && others.every((t) => /^(?:x|y|z)$/i.test(t) || numberToken(t) !== undefined)) {
+        return [{ kind: '3d' }];
+    }
+    return undefined;
+}
+
+/** The individual `scale` property as ops: `none` or one to three numbers or percentages. */
+function scalePropertyOps(value) {
+    const v = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    if (/^none$/i.test(v) || INITIAL_KEYWORD.test(v)) return [];
+    const factors = splitTopLevel(v, ' ').map(factorToken);
+    if (factors.length < 1 || factors.length > 3 || factors.some((f) => f === undefined)) return undefined;
+    const [x, y = x, z = 1] = factors;
+    const ops = [{ kind: 'scale', x, y }];
+    if (z !== 1) ops.push({ kind: '3d' });
+    return ops;
+}
+
+/** The individual `translate` property as ops: `none`, or one or two lengths; a third (depth) is 3D. */
+function translatePropertyOps(value) {
+    const v = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    if (/^none$/i.test(v) || INITIAL_KEYWORD.test(v)) return [];
+    const tokens = splitTopLevel(v, ' ');
+    if (tokens.length < 1 || tokens.length > 3) return undefined;
+    return tokens.length === 3 ? [{ kind: '3d' }] : [{ kind: 'translate' }];
+}
+
+/** A transform-family declaration as ops: `transform`, `rotate`, `scale` or `translate` (vendor prefix read as plain), else undefined. */
+function transformFamilyOps(name, value) {
+    if (name === 'transform') return transformOps(value);
+    if (name === 'rotate') return rotatePropertyOps(value);
+    if (name === 'scale') return scalePropertyOps(value);
+    if (name === 'translate') return translatePropertyOps(value);
+    return undefined;
+}
+
+/** A factor within this of 1 is no scale (the probe's own tolerance for a box that holds a figure, `boxTransformFault`). */
+const SCALE_EPSILON = 1e-3;
+
+/** Why ops scale a box — a factor other than 1, a matrix that is not a turn and a shift, a 3D function — or undefined. */
+function scalingOf(ops) {
+    for (const op of ops) {
+        if (op.kind === '3d') return 'a 3D function foreshortens it';
+        if (op.kind === 'scale' && (Math.abs(op.x - 1) > SCALE_EPSILON || Math.abs(op.y - 1) > SCALE_EPSILON)) {
+            return `scale ${op.x === op.y ? op.x : `${op.x}, ${op.y}`} scales it`;
+        }
+        if (op.kind === 'matrix') {
+            if (Math.abs(Math.hypot(op.a, op.b) - 1) > SCALE_EPSILON || Math.abs(Math.hypot(op.c, op.d) - 1) > SCALE_EPSILON) {
+                return 'a matrix scales it';
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Whether some rule of a sheet whose subject may be a money node sets a
+ * `transform` that scales or that this lint cannot read (at rest, under a
+ * state or in a media block). A decoration's own perspective floor (Neo's
+ * `.sm-floor`) is no money node's transform, so it does not make every
+ * `transform` transition of a money node one of a size.
+ */
+function sheetSetsAScalingTransform(nodes) {
+    return nodes.some((node) => {
+        if (node.kind === 'rule') {
+            if (!splitTopLevel(node.prelude, ',').some(mayBeMoneyNode)) return false;
+            return declarationsOf(node.body).some(({ prop, value }) => {
+                if (prop.replace(VENDOR_PREFIX, '') !== 'transform') return false;
+                const ops = transformOps(value);
+                return ops === undefined || scalingOf(ops) !== undefined;
+            });
+        }
+        return node.name !== 'keyframes' && node.children !== undefined && sheetSetsAScalingTransform(node.children);
+    });
+}
+
+/** The width-moving declarations of one keyframe stop, as `{ prop, why }` (`why` empty for a property that moves a width by name). */
+function keyframeSizeMotion(decls) {
+    const out = [];
+    for (const { prop, value } of decls) {
+        const name = prop.replace(VENDOR_PREFIX, '');
+        if (name === 'font-size' || name === 'font' || name === 'letter-spacing' || name === 'word-spacing' || name === 'zoom') {
+            out.push({ prop, why: '' });
+        } else if (name === 'transform' || name === 'scale' || name === 'rotate') {
+            const ops = transformFamilyOps(name, value);
+            const why = ops === undefined ? 'a value this lint cannot read, which may scale it' : scalingOf(ops);
+            if (why !== undefined) out.push({ prop, why });
         }
     }
     return out;
@@ -1516,6 +1747,8 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
     const at = (index, message) => problems.push(`line ${lineOf(text, index)}: ${message}`);
     // A worn-only sheet may name its own face (`fontFaceProblems`); no other sheet declares one.
     const ownFamilies = load === 'worn' ? declaredNames(css).families : [];
+    // Whether a transition of `transform` is one of a size: some rule of this sheet scales (money-size motion).
+    const sheetScales = !kit && sheetSetsAScalingTransform(nodes);
 
     const walk = (list) => {
         for (const node of list) {
@@ -1531,7 +1764,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 }
                 for (const why of declarationProblems(declarationsOf(node.body), selectors, { firstParty: !kit })) at(node.start, why);
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
-                if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors)) at(node.start, why);
+                if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors, { scales: sheetScales })) at(node.start, why);
                 continue;
             }
             if (node.name === 'keyframes') {
@@ -1540,17 +1773,21 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                     at(node.start, `@keyframes "${echo(name)}" must be named wk-… (keyframes are global)`);
                 }
                 const stopErrors = [];
+                const sizeMotionSaid = new Set();
                 for (const stop of parseList(node.body ?? '', 0, (node.body ?? '').length, stopErrors)) {
                     if (stop.kind === 'rule') {
                         for (const why of declarationProblems(declarationsOf(stop.body), undefined, { firstParty: !kit })) at(node.start, why);
                         for (const why of fontProblems(declarationsOf(stop.body), ownFamilies)) at(node.start, why);
-                        const sized = declarationsOf(stop.body).find(({ prop }) => prop === 'font-size' || prop === 'font');
-                        if (!kit && sized !== undefined) {
-                            at(
-                                node.start,
-                                `@keyframes "${echo(name)}" animates ${sized.prop} — any box a rule runs it on, a money node among them, ` +
-                                    'is a size the wall\'s fit cannot hold (a keyframe out-ranks the size it sets)',
-                            );
+                        if (!kit) {
+                            for (const { prop, why } of keyframeSizeMotion(declarationsOf(stop.body))) {
+                                const message =
+                                    `@keyframes "${echo(name)}" animates ${prop}${why === '' ? '' : ` (${why})`} — any box a rule runs it on, a money node among them, ` +
+                                    'is a size or width the wall\'s fit cannot hold (a keyframe out-ranks the size it sets)';
+                                if (!sizeMotionSaid.has(message)) {
+                                    sizeMotionSaid.add(message);
+                                    at(node.start, message);
+                                }
+                            }
                         }
                     }
                 }
@@ -1655,8 +1892,9 @@ export function lintSheet(css, { art = [] } = {}) {
  * (`a-look-names-no-container-of-its-own`); and no selector naming a piece
  * of a money figure the app breaks after its commas (`.fig-say`, `.fig-end`),
  * since a look dresses a figure only as a whole
- * (`a-look-may-not-dress-a-figures-pieces`); and no transition of a size on
- * a money node, nor a keyframe of a size anywhere
+ * (`a-look-may-not-dress-a-figures-pieces`); and no transition of a size, a
+ * letter or word spacing, a zoom or a scale on a money node, nor a keyframe
+ * of any of them or of a transform that scales anywhere
  * (`a-look-never-animates-a-money-nodes-size`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {

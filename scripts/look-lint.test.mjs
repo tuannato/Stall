@@ -426,9 +426,24 @@ describe('a-look-never-animates-a-money-nodes-size', () => {
      * (a role, a bare type, `:is()`, a `transition` naming no property, a
      * `var()`); green: a size transitioned on a box that is not one, a
      * pseudo-element, and every shipped sheet.
+     *
+     * **Widened by D-2026-10-20-07** (the wall-offsize critic's re-review,
+     * item 5): the same rule refuses `letter-spacing`, `word-spacing`,
+     * `zoom` and `scale` by name, and `transform` when it scales — a keyframe
+     * on `letter-spacing` (0 to 0.12em) or `zoom` (1 to 1.25) of
+     * `.t-neo.shop-window .item-x` passed the font-size-only rule and moved
+     * the figure 44–97px past its column. Each case below is red on the old
+     * rule (the rule at b6a9e91, run by hand: a keyframe naming only
+     * `font-size` or `font`, a transition naming only `font-size`, `font` or
+     * `all`), green on the new one.
      */
     const MOVES = /may be a money node — the wall fits its figure by its size/;
     const KEYFRAME = /animates font(?:-size)? — any box a rule runs it on, a money node among them/;
+    const KEYFRAME_OF = (what) => new RegExp(`animates ${what} — any box a rule runs it on, a money node among them`);
+    const refusesPlant = (rule, pattern) => {
+        const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        assert.ok(shipped.some((p) => pattern.test(p)), `${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`);
+    };
     it('refuses the critic\'s two plants', () => {
         for (const [rule, pattern] of [
             ['.t-neo.shop-window .item-x { transition: all .4s; }', MOVES],
@@ -458,10 +473,98 @@ describe('a-look-never-animates-a-money-nodes-size', () => {
         assert.ok(shipped.some((p) => KEYFRAME.test(p)), shipped.join('\n'));
     });
 
+    it('refuses the critic\'s two plants of D-2026-10-20-07: a letter-spacing and a zoom keyframe on the money node', () => {
+        refusesPlant(
+            '@keyframes t-neo-track { from { letter-spacing: 0; } to { letter-spacing: 0.12em; } }\n.t-neo.shop-window .item-x { animation: t-neo-track 2s infinite; }',
+            KEYFRAME_OF('letter-spacing'),
+        );
+        refusesPlant(
+            '@keyframes t-neo-zoom { from { zoom: 1; } to { zoom: 1.25; } }\n.t-neo.shop-window .item-x { animation: t-neo-zoom 2s infinite; }',
+            KEYFRAME_OF('zoom'),
+        );
+    });
+
+    it('refuses word-spacing and scale in a keyframe, and a transform that scales however it is written', () => {
+        refusesPlant('@keyframes t-neo-gap { from { word-spacing: 0; } to { word-spacing: 0.5em; } }', KEYFRAME_OF('word-spacing'));
+        refusesPlant('@keyframes t-neo-grow { from { scale: 1; } to { scale: 1.2; } }', KEYFRAME_OF('scale \\(scale 1.2 scales it\\)'));
+        refusesPlant('@keyframes t-neo-grow { from { scale: 100%; } to { scale: 125% 125%; } }', KEYFRAME_OF('scale \\(scale 1.25 scales it\\)'));
+        for (const stop of [
+            'transform: scale(1.25)',
+            'transform: scale(1.2, 0.8)',
+            'transform: translateY(2px) scaleX(1.1)',
+            'transform: scale(-1)',
+            'transform: matrix(1.2, 0, 0, 1.2, 0, 0)',
+            'transform: rotateY(80deg)',
+            'transform: perspective(300px) translateZ(40px)',
+            'transform: var(--pop)',
+            'transform: inherit',
+            'transform: pop(2)',
+            'rotate: y 80deg',
+            'rotate: var(--r)',
+            'scale: var(--s)',
+        ]) {
+            refusesPlant(`@keyframes t-neo-pop { from { transform: none; } to { ${stop}; } }`, KEYFRAME_OF('(?:transform|rotate|scale) \\(.*\\)'));
+        }
+        // The vendor alias is the same property: the twin rule asks for both, the size rule reads either.
+        refusesPlant(
+            '@keyframes t-neo-pop { to { -webkit-transform: scale(1.3); transform: scale(1.3); } }',
+            KEYFRAME_OF('-webkit-transform \\(scale 1.3 scales it\\)'),
+        );
+    });
+
+    it('refuses a transition of letter-spacing, word-spacing, zoom or scale on every shape a money node is reached by', () => {
+        for (const name of ['letter-spacing', 'word-spacing', 'zoom', 'scale']) {
+            for (const rule of [
+                `.t-neo .item-x { transition: ${name} 0.4s ease; }`,
+                `.t-neo [data-role="seller-price"] { transition-property: ${name}; }`,
+                `.t-neo .row.big dd { transition: color 0.2s, ${name} 0.2s linear; }`,
+                `.t-neo .buy { transition: ${name} 0.2s cubic-bezier(0.2, 0, 0, 1) 0.1s; }`,
+                `.t-neo :is(.item-x, .bc-p) { transition-property: opacity, ${name}; }`,
+            ]) {
+                refusesPlant(rule, MOVES);
+            }
+        }
+        // A property the lint cannot read is `all`, which covers every name above.
+        refusesPlant('.t-neo .item-x { transition-property: var(--moves); }', MOVES);
+        refusesPlant('.t-neo .item-x { transition: letter-spacing 0.2s, var(--more); }', MOVES);
+    });
+
+    it('refuses a transition of transform only where the sheet scales (a transition names a property, not its end value)', () => {
+        const SCALING = [
+            '.t-neo .item-x[data-price-tier="2"] { transform: scale(0.8); }',
+            '@media (min-width: 680px) { .t-neo .item-x { transform: matrix(1.1, 0, 0, 1.1, 0, 0); } }',
+            '.t-neo .item-x:hover { transform: var(--lift); }',
+            '.t-neo .item-x { -webkit-transform: rotateY(60deg); transform: rotateY(60deg); }',
+        ];
+        for (const scaling of SCALING) {
+            refusesPlant(`.t-neo .item-x { transition: transform 0.3s; }\n${scaling}`, MOVES);
+            refusesPlant(`.t-neo .item-x { -webkit-transition: -webkit-transform 0.3s; transition: transform 0.3s; }\n${scaling}`, MOVES);
+        }
+        // Turning or shifting is not a size: with no scaling anywhere in the sheet the same transition stands.
+        accepts('.t-neo .item-x { transition: transform 0.3s; }');
+        accepts('.t-neo .item-x { transition: transform 0.3s; }\n.t-neo .item-x:hover { transform: rotate(3deg) translateY(-1px); }');
+        accepts('.t-neo .buy { transition: transform 0.3s; }\n.t-neo .buy:hover { transform: skewX(4deg); }');
+        // A scaling transform on a box that transitions nothing of the kind is not a money node's size moving.
+        accepts('.t-neo .tool { transition: transform 0.3s; }\n.t-neo .tool:hover { transform: scale(1.1); }');
+        accepts('.t-neo .item-x { transition: color 0.3s; }\n.t-neo .item-x:hover { transform: scale(1.1); }');
+    });
+
+    it('leaves a keyframe that only turns or shifts, and an identity, alone', () => {
+        accepts('@keyframes t-neo-swing { 0%, 100% { transform: rotate(-0.6deg); } 50% { transform: rotate(0.6deg); } }\n.t-neo .stall-head { animation: t-neo-swing 7s infinite; }');
+        accepts('@keyframes t-neo-lift { from { transform: translateY(0); } to { transform: translate(2px, -3px) rotate(4deg) skewX(2deg); } }');
+        accepts('@keyframes t-neo-turn { from { rotate: 0deg; } to { rotate: z 8deg; } }');
+        accepts('@keyframes t-neo-slide { from { translate: 0 0; } to { translate: 4px -2px; } }');
+        accepts('@keyframes t-neo-still { from { transform: none; scale: 1; } to { transform: scale(1) matrix(1, 0, 0, 1, 4, 0); scale: 100%; } }');
+        accepts('@keyframes t-neo-spin { to { transform: matrix(0.5, 0.866, -0.866, 0.5, 0, 0); } }');
+    });
+
     it('leaves a size moving on a box that is not a money node, and every other transition, alone', () => {
         accepts('.t-neo .tool { transition: all 0.2s; }');
         accepts('.t-neo .stall-name { transition: font-size 0.2s; }');
         accepts('.t-neo .item-x::after { transition: all 0.2s; }');
+        accepts('.t-neo .tool { transition: letter-spacing 0.2s, word-spacing 0.2s, zoom 0.2s, scale 0.2s; }');
+        accepts('.t-neo .item-x::after { transition: letter-spacing 0.2s, zoom 0.2s; }');
+        accepts('.t-neo .item-x { transition: translate 0.2s, rotate 0.2s, opacity 0.2s; }');
         accepts('.t-neo .item-x { transition: color 0.2s, background 0.2s; }');
         accepts('.t-neo .buy { transition: none; }');
         accepts('@keyframes t-neo-glow { from { opacity: 0.5; } to { opacity: 1; } }');
@@ -470,6 +573,15 @@ describe('a-look-never-animates-a-money-nodes-size', () => {
     it('leaves the kit lint as it was: a kit rule is a line of the workshop README', () => {
         const kit = lintSheet(plantedKit('.t-neo.shop-window .item-x { transition: all .4s; }'));
         assert.ok(!kit.some((p) => MOVES.test(p)), kit.join('\n'));
+        for (const rule of [
+            '.t-neo.shop-window .item-x { transition: letter-spacing .4s, zoom .4s, scale .4s; }',
+            '@keyframes wk-track { from { letter-spacing: 0; } to { letter-spacing: 0.12em; } }\n.t-neo.shop-window .item-x { animation: wk-track 2s infinite; }',
+            '@keyframes wk-zoom { from { zoom: 1; } to { zoom: 1.25; } }',
+            '@keyframes wk-grow { to { transform: scale(1.2); scale: 1.2; } }',
+        ]) {
+            const widened = lintSheet(plantedKit(rule));
+            assert.ok(!widened.some((p) => MOVES.test(p) || /animates (?:letter-spacing|zoom|transform|scale)/.test(p)), `kit, ${rule}:\n  ${widened.join('\n  ')}`);
+        }
     });
 });
 
