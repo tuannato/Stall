@@ -56,7 +56,7 @@ import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from '.
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
-import { columnExcuses, columnPlace, fittedRadii, framePoints, gridPoints, inkPoints, insideRounded, movedBy, radiusOf, SQUARE, type CoverPoint, type Frame, type Radii } from './coverPoints';
+import { columnExcuses, columnPlace, eachInkPoint, fittedRadii, framePoints, gridPoints, insideRounded, movedBy, radiusOf, SQUARE, type Frame, type PointKind, type Radii } from './coverPoints';
 import { LOOK_RULE, PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
@@ -609,33 +609,65 @@ const coverByClass: Record<string, CoverTally> = {};
 let coverMs = 0;
 let coverSheet: CSSStyleSheet | undefined;
 
-/** Force (or stop forcing) every element and pseudo-element to take a hit. */
+/**
+ * Force (or stop forcing) every element and pseudo-element of the painted
+ * tree to take a hit: the attribute goes on each element the app's root
+ * holds (`#app`'s children, which `renderStall` replaces on every paint),
+ * and the sheet forces them, everything under them and their pseudos.
+ */
 function coverPointers(on: boolean): void {
     if (coverSheet === undefined) {
         coverSheet = new CSSStyleSheet();
         coverSheet.replaceSync(
-            'html[data-probe-cover] *,html[data-probe-cover] *::before,html[data-probe-cover] *::after{pointer-events:auto!important;interactivity:auto!important}',
+            '[data-probe-cover],[data-probe-cover] *,[data-probe-cover]::before,[data-probe-cover]::after,[data-probe-cover] *::before,[data-probe-cover] *::after{pointer-events:auto!important;interactivity:auto!important}',
         );
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, coverSheet];
     }
-    document.documentElement.toggleAttribute('data-probe-cover', on);
-    coverForced = on;
+    for (const el of coverForced) el.removeAttribute('data-probe-cover');
+    coverForced = on ? [...document.getElementById('app')!.children] : [];
+    for (const el of coverForced) el.setAttribute('data-probe-cover', '');
 }
-let coverForced = false;
+/** The elements the forcing is on (`coverPointers`); empty when it is off. */
+let coverForced: Element[] = [];
 
 /**
- * **The forcing is left on after a read, and taken off by what comes next**
- * (before 8g2, cost): turning it on restyles every element, and turning it
- * off again restyles every element a second time. The read is the last
- * thing done to a paint, so taking it off just before the next paint
- * (`paint`, and every other `renderStall` here) lets that restyle ride the
- * paint's own, which styles the whole new tree anyway. `pointer-events`
- * and `interactivity` change no layout and no pixel; what they change is a
+ * **The forcing is left on after a read, and goes with the tree it is on**
+ * (before 8g2, cost; the owner's D-2026-10-20-13 item 7): turning it on
+ * restyles the painted tree, and turning it off again restyles it a second
+ * time. The read is the last thing done to a paint, and the next paint
+ * throws that tree away (`renderStall` replaces `#app`'s children), so the
+ * forcing is on the tree's own root elements, not on `<html>`, and a paint
+ * takes it off by discarding them (`dropCoverForPaint`): no element is
+ * restyled for it. When it was on `<html>`, taking it off before the paint
+ * restyled the whole old tree anyway — `renderStall` reads the old
+ * scroller's offset before it replaces it, which lays the old tree out —
+ * and that restyle, about 0.6–1.0s a phone pass, was paid outside the
+ * rule's own timer (measured with a CPU profile, `renderStall` inclusive,
+ * cba463b against main). `pointer-events` and `interactivity` change no
+ * layout, and no pixel here only because nothing on this page moves the
+ * mouse: a pointer over an element the forcing made hit-testable would put
+ * it in `:hover`, and its hover rules would paint. What they change is a
  * hit test, and the one other hit test here (`coveredBy`) takes the forcing
- * off before it asks.
+ * off before it asks (`releaseCover`, which restyles, since its tree stays).
  */
 function releaseCover(): void {
-    if (coverForced) coverPointers(false);
+    if (coverForced.length > 0) coverPointers(false);
+}
+
+/**
+ * Before a paint: forget the forced elements, which the paint discards.
+ * After it (`coverGoneAfterPaint`), any of them still on the page — a paint
+ * that kept a root element, which `renderStall` never does — is released
+ * the costly way, so the forcing never outlives its tree.
+ */
+let coverDropped: Element[] = [];
+function dropCoverForPaint(): void {
+    coverDropped = coverForced;
+    coverForced = [];
+}
+function coverGoneAfterPaint(): void {
+    for (const el of coverDropped) if (el.isConnected) el.removeAttribute('data-probe-cover');
+    coverDropped = [];
 }
 
 /** A node in a sentence: its tag and classes, and its role. */
@@ -822,6 +854,37 @@ function clipsWithin(el: Element): Clip[] {
     return [...self, ...clipsOf(el)];
 }
 
+/**
+ * One node's points, flat and reused node to node (before 8g2, the owner's
+ * D-2026-10-20-13): a pass asks about a million points, and an object a
+ * point — two, with its clips — was garbage the collector paid for outside
+ * the rule's own timer. Grown, never shrunk; `ptN` is the count.
+ */
+const KIND_NAMES: readonly PointKind[] = ['centre', 'corner', 'ink', 'grid'];
+const KIND_OF: Record<PointKind, number> = { centre: 0, corner: 1, ink: 2, grid: 3 };
+const KIND_INK = KIND_OF.ink;
+let ptX = new Float64Array(4096);
+let ptY = new Float64Array(4096);
+let ptKind = new Uint8Array(4096);
+let ptClips = new Int32Array(4096);
+let ptN = 0;
+function pushPoint(x: number, y: number, kind: number, clips: number): void {
+    if (ptN === ptX.length) {
+        const n = ptX.length * 2;
+        const [nx, ny, nk, nc] = [new Float64Array(n), new Float64Array(n), new Uint8Array(n), new Int32Array(n)];
+        nx.set(ptX);
+        ny.set(ptY);
+        nk.set(ptKind);
+        nc.set(ptClips);
+        [ptX, ptY, ptKind, ptClips] = [nx, ny, nk, nc];
+    }
+    ptX[ptN] = x;
+    ptY[ptN] = y;
+    ptKind[ptN] = kind;
+    ptClips[ptN] = clips;
+    ptN += 1;
+}
+
 /** Why `node` is covered (or the read cannot say), as a sentence, or undefined; the points counted into `scan`. */
 function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, reaches: Map<Element, Reach>): string | undefined {
     const rects = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
@@ -839,17 +902,21 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
     if (framed === undefined) {
         return `stands in a frame turned ${degrees(angleOf(node))} and has no layout box of its own, which the read cannot take apart past 45°`;
     }
-    const points: { p: CoverPoint; clips: Clip[] }[] = [];
-    // Every character's glyph, over its ink (`inkPoints`), inside every clip
-    // above it — its own element's included: a record's bytes scroll inside
-    // their own box, and a line scrolled out of it stands under whatever
-    // follows. A character inside another node this read asks (the
+    // The points, flat (`pushPoint`), each with its clips by index.
+    ptN = 0;
+    const clipLists: Clip[][] = [];
+    let clipIdx = -1;
+    const emitInk = (x: number, y: number): void => pushPoint(x, y, KIND_INK, clipIdx);
+    // Every character's glyph, over its ink (`eachInkPoint`), inside every
+    // clip above it — its own element's included: a record's bytes scroll
+    // inside their own box, and a line scrolled out of it stands under
+    // whatever follows. A character inside another node this read asks (the
     // address's two spans inside its box, a line's figure inside Pay
     // several's lines) is asked once, by the innermost: a hit on the outer
     // node or on anything else inside it fails there and is excused here.
     const range = document.createRange();
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    const ofParent = new Map<Element, { clips: Clip[]; cs: CSSStyleDeclaration; face: string; angle: number; vertical: boolean } | null>();
+    const ofParent = new Map<Element, { clips: number; cs: CSSStyleDeclaration; face: string; angle: number; vertical: boolean } | null>();
     let innerText = false;
     for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
         const text = t as Text;
@@ -875,9 +942,11 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
         }
         if (own === undefined) {
             const cs = getComputedStyle(parent);
-            own = { clips: clipsWithin(parent), cs, face: faceKey(cs), angle: angleOf(parent), vertical: !cs.writingMode.startsWith('horizontal') };
+            clipLists.push(clipsWithin(parent));
+            own = { clips: clipLists.length - 1, cs, face: faceKey(cs), angle: angleOf(parent), vertical: !cs.writingMode.startsWith('horizontal') };
             ofParent.set(parent, own);
         }
+        clipIdx = own.clips;
         let at = 0;
         for (const ch of text.data) {
             const start = at;
@@ -887,38 +956,46 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
             range.setEnd(text, at);
             const r = range.getBoundingClientRect();
             if (r.width < 0.5 || r.height < 0.5) continue;
-            const f = own.angle === 0 ? { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: r.width, h: r.height } : turnedBox(r, own.angle);
+            const f = own.angle === 0 ? { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: r.width, h: r.height, angle: 0 } : turnedBox(r, own.angle);
             if (f === undefined) {
                 // A glyph turned past 45° has no frame to solve: its centre.
-                points.push({ p: { x: r.left + r.width / 2, y: r.top + r.height / 2, kind: 'ink' }, clips: own.clips });
+                pushPoint(r.left + r.width / 2, r.top + r.height / 2, KIND_INK, clipIdx);
                 continue;
             }
+            const frame = own.angle === 0 ? (f as Frame) : { ...f, angle: own.angle };
             const ink = own.vertical ? undefined : glyphInk(ch, own.cs, own.face);
-            for (const p of inkPoints({ ...f, angle: own.angle }, ink ?? { left: 0, top: 0, right: f.w, bottom: f.h })) points.push({ p, clips: own.clips });
+            eachInkPoint(frame, ink ?? { left: 0, top: 0, right: frame.w, bottom: frame.h }, emitInk);
         }
     }
     // A box with no text — a code — is read by its own points: its centre,
     // its corners inside its rounded shape, and a code's grid.
-    if (points.length === 0 && !innerText) {
-        const nodeClips = clipsOf(node);
+    if (ptN === 0 && !innerText) {
+        clipLists.push(clipsOf(node));
+        const nodeClips = clipLists.length - 1;
         for (const f of framed.frames) {
             const radii = framed.whole ? radiiOf(node, f.w, f.h) : SQUARE;
-            for (const p of framePoints(f, radii)) points.push({ p, clips: nodeClips });
-            if (framed.whole && node.matches('.qr')) for (const p of gridPoints(f, QR_PITCH, radii)) points.push({ p, clips: nodeClips });
+            for (const p of framePoints(f, radii)) pushPoint(p.x, p.y, KIND_OF[p.kind], nodeClips);
+            if (framed.whole && node.matches('.qr')) for (const p of gridPoints(f, QR_PITCH, radii)) pushPoint(p.x, p.y, KIND_OF[p.kind], nodeClips);
         }
     }
     const column = node.closest('.item-p');
-    const covered = new Map<string, number>();
+    const covered = new Map<PointKind, number>();
     let first: string | undefined;
     let firstInk: string | undefined;
     let outOfReach: string | undefined;
-    for (const { p, clips } of points) {
+    const [vw, vh] = [window.innerWidth, window.innerHeight];
+    const where = (x: number, y: number, kind: PointKind): string => `${Math.round(x)},${Math.round(y)} (${kind})`;
+    for (let i = 0; i < ptN; i += 1) {
+        const x = ptX[i]!;
+        const y = ptY[i]!;
+        const kind = KIND_NAMES[ptKind[i]!]!;
+        const clips = clipLists[ptClips[i]!]!;
         scan.points += 1;
-        if (p.x < 0 || p.x >= window.innerWidth) {
+        if (x < 0 || x >= vw) {
             scan.offSide += 1;
             continue;
         }
-        if (p.y < 0 || p.y >= window.innerHeight) {
+        if (y < 0 || y >= vh) {
             scan.below += 1;
             continue;
         }
@@ -929,8 +1006,8 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
         let unreached: string | undefined;
         for (const clip of clips) {
             const c = clip.rect;
-            const pastX = p.x < c.left || p.x > c.right;
-            const pastY = p.y < c.top + 1 || p.y > c.bottom - 1;
+            const pastX = x < c.left || x > c.right;
+            const pastY = y < c.top + 1 || y > c.bottom - 1;
             if (!pastX && !pastY) continue;
             behind = true;
             if ((pastX && scrollsOn(clip.overflowX)) || (pastY && scrollsOn(clip.overflowY))) {
@@ -940,8 +1017,8 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
                     reaches.set(clip.el, reach);
                 }
                 if (
-                    (pastX && scrollsOn(clip.overflowX) && (p.x < reach.x0 - 1 || p.x > reach.x1 + 1)) ||
-                    (pastY && scrollsOn(clip.overflowY) && (p.y < reach.y0 - 1 || p.y > reach.y1 + 1))
+                    (pastX && scrollsOn(clip.overflowX) && (x < reach.x0 - 1 || x > reach.x1 + 1)) ||
+                    (pastY && scrollsOn(clip.overflowY) && (y < reach.y0 - 1 || y > reach.y1 + 1))
                 ) {
                     unreached = `${named(clip.el)} (overflow ${clip.overflowX} ${clip.overflowY}, which scrolls from ${Math.round(reach.x0)},${Math.round(reach.y0)} to ${Math.round(reach.x1)},${Math.round(reach.y1)})`;
                     break;
@@ -949,7 +1026,7 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
             }
         }
         if (unreached !== undefined) {
-            outOfReach ??= `stands at ${Math.round(p.x)},${Math.round(p.y)} (${p.kind}) out of reach of ${unreached}: no scroll position shows it`;
+            outOfReach ??= `stands at ${where(x, y, kind)} out of reach of ${unreached}: no scroll position shows it`;
             continue;
         }
         if (behind) {
@@ -957,20 +1034,21 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
             continue;
         }
         scan.checked += 1;
-        const hit = document.elementFromPoint(p.x, p.y);
-        const where = `${Math.round(p.x)},${Math.round(p.y)} (${p.kind})`;
-        if (hit === null) return `has nothing under ${where}, inside the viewport`;
+        const hit = document.elementFromPoint(x, y);
+        if (hit === null) return `has nothing under ${where(x, y, kind)}, inside the viewport`;
         if (hit === node || node.contains(hit)) continue;
         const inColumn = columnPlace(column !== null && column.contains(hit), hit.contains(node));
         const moved = inColumn === 'inside' ? movedBelow(hit, column!) : undefined;
-        if (columnExcuses(p.kind, inColumn, moved)) continue;
-        covered.set(p.kind, (covered.get(p.kind) ?? 0) + 1);
-        const sentence =
-            `is covered at ${where} by ${named(hit)}` +
-            (inColumn === 'column' ? ' — a box of its own price column that holds it, a pseudo of which reports as that box' : '') +
-            (moved !== undefined ? ` — inside its price column, moved: ${moved}` : '');
-        first ??= sentence;
-        if (p.kind === 'ink') firstInk ??= sentence;
+        if (columnExcuses(kind, inColumn, moved)) continue;
+        covered.set(kind, (covered.get(kind) ?? 0) + 1);
+        if (first === undefined || (kind === 'ink' && firstInk === undefined)) {
+            const sentence =
+                `is covered at ${where(x, y, kind)} by ${named(hit)}` +
+                (inColumn === 'column' ? ' — a box of its own price column that holds it, a pseudo of which reports as that box' : '') +
+                (moved !== undefined ? ` — inside its price column, moved: ${moved}` : '');
+            first ??= sentence;
+            if (kind === 'ink') firstInk ??= sentence;
+        }
     }
     if (outOfReach !== undefined) return outOfReach;
     if (first === undefined) return undefined;
@@ -1237,8 +1315,9 @@ const stagedByClass: Record<string, Record<string, number>> = {};
 function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
     const view = paintView(SCREENS[screen]!, look, worn);
-    releaseCover();
+    dropCoverForPaint();
     renderStall(root, view, handlers);
+    coverGoneAfterPaint();
     // A state only a press reaches (`STAGED`), on the tree just painted,
     // counted per look so a staged screen that found nothing to press is
     // refused (`probe-coverage.mjs`).
@@ -8230,8 +8309,9 @@ if (STICKY_ONLY === undefined && measured.includes('publish-name')) {
         measuringClass = look.theme.sheetClass;
         for (const [what, name] of [['the 32-byte name', LONGEST_NAME], ['the CJK name', CJK_NAME], ['the stacked-mark name', STACKED_NAME]] as const) {
             const label = `${look.label}, tried on over ${behind.label} with ${what}`;
-            releaseCover();
+            dropCoverForPaint();
             renderStall(root, paintView({ ...SCREENS['publish-name']!, stallName: name }, behind, []), handlers);
+            coverGoneAfterPaint();
             const button = root.querySelector<HTMLButtonElement>(`[data-role="look-${look.id}"]`);
             if (button === null) {
                 failures.push({ screen: 'publish-name', theme: label, check: NAME_WHOLE_CHECK, detail: `the name sheet offers no button for ${look.theme.sheetClass}` });
@@ -8291,8 +8371,9 @@ if (STICKY_ONLY === undefined && measured.includes('offers')) {
         // The record's view as the app writes it, through the gate
         // (`recordView`): a gate that leaked the locked look's rows would
         // put them on the stall, and the rows half below would fail.
-        releaseCover();
+        dropCoverForPaint();
         renderStall(root, recordView(SCREENS['offers']!, look, 0xffff), handlers);
+        coverGoneAfterPaint();
         const stall = root.querySelector('.stall:not(.deck-stall)');
         const classes = stall === null ? [] : [...stall.classList];
         const looks = classes.filter((cls) => cls.startsWith('t-'));
@@ -10529,8 +10610,9 @@ window.__cspRefusals = () => cspRefusals();
  */
 window.__wornSheetJob = async (missing: string) => {
     const root = document.getElementById('app')!;
-    releaseCover();
+    dropCoverForPaint();
     renderStall(root, paintView(SCREENS[NEUTRAL_SCREEN]!, FIXTURE_LOOK, []), handlers);
+    coverGoneAfterPaint();
     const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
     const named = (): string =>
         stall === null ? '(no stall)' : getComputedStyle(stall).getPropertyValue(LOOK_SHEET_PROPERTY).trim();
