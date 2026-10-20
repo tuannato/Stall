@@ -258,6 +258,104 @@ describe('a-wall-row-keeps-its-leading-digits', () => {
     });
 });
 
+describe('a-touch-quote-row-stands-its-figure-clear-of-its-stepper', () => {
+    /**
+     * D-2026-10-20-09. On a touch wall a quote row's stepper stood on its
+     * figure at 768x1024, 1024x768 and 800x1280: the stepper was a column
+     * of 218–317px spanning both lines of the row, so the figure had the row
+     * less the picture, the gaps and that column, and a 16-character quote
+     * ran under the controls (Rural's tag over them). happy-dom lays
+     * nothing out, so this reads `window.css`; the geometry is what the
+     * wall passes measure and what a scratch sweep over every wall width
+     * measured (no rect of the stepper meets the figure's characters, the
+     * name's or the tag's). What the file must say: below 1920 landscape and
+     * below 1080 portrait the row's grid is `ic name step` over a full-width
+     * `price price price`, and under 1080 landscape the stepper stands under
+     * the name, where beside it the name's column is under its 8ch floor; and
+     * no other touch rule stands the price beside the stepper in those
+     * bands (the allow-list below is the rules that do, each with the band
+     * its own condition leaves it).
+     */
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'window.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    type Rule = { condition: string; selector: string; body: string };
+    const rules: Rule[] = [];
+    const walk = (text: string, condition: string): void => {
+        let at = 0;
+        while (at < text.length) {
+            const open = text.indexOf('{', at);
+            if (open < 0) break;
+            const head = text.slice(at, open).trim();
+            let depth = 1;
+            let close = open + 1;
+            while (depth > 0 && close < text.length) {
+                if (text[close] === '{') depth += 1;
+                if (text[close] === '}') depth -= 1;
+                close += 1;
+            }
+            const inner = text.slice(open + 1, close - 1);
+            if (head.startsWith('@container sw ')) {
+                walk(inner, head.slice('@container sw '.length).trim());
+            } else if (head.startsWith('@')) {
+                walk(inner, condition);
+            } else {
+                rules.push({ condition, selector: head.replace(/\s+/g, ' '), body: inner.replace(/\s+/g, ' ').trim() });
+            }
+            at = close;
+        }
+    };
+    walk(css, '');
+    const areasOf = (body: string): string[] | undefined => {
+        const m = /grid-template-areas:\s*((?:'[^']*'\s*)+);/.exec(body);
+        return m === null ? undefined : [...m[1]!.matchAll(/'([^']*)'/g)].map((row) => row[1]!);
+    };
+    const touchGrids = rules.flatMap((rule) => {
+        const areas = areasOf(rule.body);
+        return areas !== undefined && rule.selector.includes("[data-touch='on']") ? [{ ...rule, areas }] : [];
+    });
+    const OWN_ROW = ".stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row";
+
+    it('stands the figure on a full row under the picture, the name and the stepper below 1920 landscape and below 1080 portrait', () => {
+        const ownRow = touchGrids.filter((rule) => rule.selector === OWN_ROW && rule.areas.join('|') === 'ic name step|price price price');
+        expect(ownRow.map((rule) => rule.condition)).toEqual([
+            '(orientation: landscape) and (max-width: 1919.98px)',
+            '(orientation: portrait) and (max-width: 1079.98px)',
+        ]);
+    });
+
+    it('stands the stepper under the name below 1080 landscape, where its column would leave the name under its floor', () => {
+        const narrow = touchGrids.filter((rule) => rule.selector === OWN_ROW && rule.areas.join('|') === 'ic name|ic step|price price');
+        expect(narrow.map((rule) => rule.condition)).toEqual(['(orientation: landscape) and (max-width: 1079.98px)']);
+        const step = rules.filter((rule) => rule.condition === '(orientation: landscape) and (max-width: 1079.98px)' && rule.selector.endsWith('.sw-step'));
+        expect(step.map((rule) => rule.body)).toEqual(['justify-self: start; margin-left: 0;']);
+    });
+
+    it('lets the narrow landscape rule win the tie with the own-row rule above it, and both win the re-flowed row’s', () => {
+        const at = (condition: string, selector: string) => rules.findIndex((rule) => rule.condition === condition && rule.selector === selector);
+        const reflowed = at('(orientation: landscape)', ".stall.shop-window[data-touch='on'][data-mode='browse'] .item-head-q:has(> .item-p > .item-a.fig-wraps)");
+        const below1920 = at('(orientation: landscape) and (max-width: 1919.98px)', OWN_ROW);
+        const below1080 = at('(orientation: landscape) and (max-width: 1079.98px)', OWN_ROW);
+        expect(reflowed, 'the 1920 wall’s re-flowed touch row').toBeGreaterThan(-1);
+        expect(below1920).toBeGreaterThan(reflowed);
+        expect(below1080).toBeGreaterThan(below1920);
+    });
+
+    it('has no other touch rule that stands the price beside the stepper, but the walls it is measured clear on', () => {
+        const beside = touchGrids
+            .filter((rule) => rule.areas.some((row) => row.split(' ').includes('price') && row.split(' ').includes('step')))
+            .map((rule) => `${rule.condition || 'always'} | ${rule.selector.replace(/^\.stall\.shop-window\[data-touch='on'\]\[data-mode='browse'\] /, '')} | ${rule.areas.join(' / ')}`);
+        expect(beside).toEqual([
+            // 1920 and over: a re-flowed quote stands beside the picture. Below 1920 the own-row rules take it.
+            "(orientation: landscape) | .item-head-q:has(> .item-p > .item-a.fig-wraps) | ic name step / ic price step",
+            // Portrait up to 1500 tall: a re-flowed quote under the picture. Under 1080 wide the own-row rule takes it.
+            "(orientation: portrait) and (max-height: 1500px) | .item-head-q:has(> .item-p > .item-a:is(.fig-wraps, .fig-narrow)) | ic name step / price price step",
+            // The base row, one line: 1920 and over (every rule above and below is stronger or later).
+            "always | .item-head.item-head-q | ic name price step",
+            // Portrait: the tall wall's row. Under 1080 wide the own-row rule takes it.
+            "(orientation: portrait) | .item-head.item-head-q | ic name step / ic price step",
+        ]);
+    });
+});
+
 describe('a-cycle-card-keeps-its-grid-at-the-cut', () => {
     /**
      * The Cycle card is not a row (round 4, the critic's P1-1 on round 3).

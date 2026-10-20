@@ -6520,6 +6520,35 @@ its row to the band and the band takes the counter tablet's text steps
 0–106px, and at 1280x800 the band's code, total and "+1 more" were cut
 from below under the Awning.
 
+**The touch wall's stepper stands clear of the figure** (2026-10-20,
+D-2026-10-20-09; window.css, "The figure's row stands clear of the stepper"
+and the two blocks after it). The stepper was a column of 218–317px that
+spanned both lines of a touch quote row, so the figure had the row less the
+picture, the gaps and that column, and the − and + controls and the figure
+stood on each other at 768x1024, 1024x768 and 800x1280 on every look: a
+16-character quote is 280–315px at 1024x768 in a 154px area, and 406–456px at
+768x1024 in the column beside the picture. **No rule read it.** The hit test
+(`coveredBy`) is asked of the `price` role, and a quote's figure is
+`seller-price`; the stepper is in flow, so the box sweep over decorations
+never meets it. Now the stepper stands in the picture's line and the figure
+takes the line under it (below 1920 landscape and below 1080 portrait), and
+under 1080 landscape the stepper stands under the name, where beside it the
+name's column was 41–47px at 1024. The proof is a scratch measurement, not a
+rule: on every touch screen (`shop-window-touch-quotes`, `-16`,
+`-long-figures`, `-pay`, `-pay-3`, `-pay-35`), every look bare and worn, no
+rect of the stepper's controls or count met a character of the figure, of
+the name (clipped to its cell) or of its label, nor the tag's box, nor the
+name's cell or the picture. 48 of 726 rows with a visible list were red at
+the nine wall sizes (24 of 324 cells; 768x1024, 1024x768 and 800x1280); 0
+after. Over 223 sizes (landscape 800–2560 wide, portrait 680–1440 wide up to
+2560 tall) 2,138 of 22,004 rows were red on 99 sizes; 44 are after, every one
+a figure past its row on a landscape wall of 800 or 840 wide, where the
+list is 266–306px beside the code's 400px column. The cost, measured at
+1024x768, 768x1024 and 800x1280: a row became 214px from 169, and 256 from 200
+(274 on Rural). From 1080 to 1919 wide no row changes height but one with a
+re-flowed figure. `a-touch-quote-row-stands-its-figure-clear-of-its-stepper`
+pins the rules.
+
 ### The passes
 
 - **`desk-wall`**, 1280x900: every wall screen the canvas split keeps off
