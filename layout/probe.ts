@@ -297,7 +297,40 @@ type Clip = {
     cutsX: boolean;
     /** A sideways scroller with something to scroll: what lies past its edge is reachable. */
     scrollsX: boolean;
+    /** Its `overflow-x` and `overflow-y`, as computed (1a reads a scroller's reach on each axis). */
+    overflowX: string;
+    overflowY: string;
 };
+
+/**
+ * **Where a scroller can show its content** (before 8g2, item 3): its padding
+ * box widened on each axis by how far it scrolls each way from where it
+ * stands, in page px — so content a scroll position brings into view lies
+ * inside, and content past the scroll origin, which no position shows,
+ * outside. Measured by scrolling the box to each end and back, instantly,
+ * so no `scroll-behavior` defers it and no snapping is assumed away: where
+ * the range starts is the engine's, and depends on the box's direction,
+ * writing mode and flex reversal (Chrome sets a `row-reverse` box's origin
+ * at its right, a `column-reverse` box's at its bottom), while a box that
+ * end-aligns content wider than itself (`justify-content: flex-end`, the
+ * critic's T1c) overflows past its origin, a range of nothing to scroll.
+ * The scroll is put back where it stood; the scroll event it queues fires
+ * after the read, on a tree the probe's handlers do nothing with.
+ */
+type Reach = { x0: number; x1: number; y0: number; y1: number };
+function scrollReach(el: Element): Reach {
+    const pad = paddingBox(el);
+    const [sx, sy] = [el.scrollLeft, el.scrollTop];
+    el.scrollTo({ left: -1e9, top: -1e9, behavior: 'instant' });
+    const [minX, minY] = [el.scrollLeft, el.scrollTop];
+    el.scrollTo({ left: 1e9, top: 1e9, behavior: 'instant' });
+    const [maxX, maxY] = [el.scrollLeft, el.scrollTop];
+    el.scrollTo({ left: sx, top: sy, behavior: 'instant' });
+    return { x0: pad.left - (sx - minX), x1: pad.right + (maxX - sx), y0: pad.top - (sy - minY), y1: pad.bottom + (maxY - sy) };
+}
+
+/** Whether an `overflow` value scrolls. */
+const scrollsOn = (mode: string): boolean => mode === 'auto' || mode === 'scroll';
 
 function clipsOf(node: Element): Clip[] {
     const clips: Clip[] = [];
@@ -316,6 +349,8 @@ function clipsOf(node: Element): Clip[] {
                 scrollsX:
                     (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
                     at.scrollWidth > at.clientWidth + 1,
+                overflowX: style.overflowX,
+                overflowY: style.overflowY,
             });
         }
         at = at.parentElement;
@@ -715,12 +750,15 @@ function glyphInk(ch: string, cs: CSSStyleDeclaration, face: string): Box | unde
 /** `el`'s clips, and `el` itself where it clips its content (a scroller holding the text read). */
 function clipsWithin(el: Element): Clip[] {
     const cs = getComputedStyle(el);
-    const self = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' ? [{ rect: el.getBoundingClientRect(), el, cutsX: false, scrollsX: false }] : [];
+    const self =
+        cs.overflowX !== 'visible' || cs.overflowY !== 'visible'
+            ? [{ rect: el.getBoundingClientRect(), el, cutsX: false, scrollsX: false, overflowX: cs.overflowX, overflowY: cs.overflowY }]
+            : [];
     return [...self, ...clipsOf(el)];
 }
 
 /** Why `node` is covered (or the read cannot say), as a sentence, or undefined; the points counted into `scan`. */
-function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>): string | undefined {
+function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, reaches: Map<Element, Reach>): string | undefined {
     const rects = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
     if (rects.length === 0) {
         const look = lookHides(node);
@@ -806,6 +844,7 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>): s
     const covered = new Map<string, number>();
     let first: string | undefined;
     let firstInk: string | undefined;
+    let outOfReach: string | undefined;
     for (const { p, clips } of points) {
         scan.points += 1;
         if (p.x < 0 || p.x >= window.innerWidth) {
@@ -816,7 +855,37 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>): s
             scan.below += 1;
             continue;
         }
-        if (clips.some(({ rect: c }) => p.y < c.top + 1 || p.y > c.bottom - 1 || p.x < c.left || p.x > c.right)) {
+        // Behind a clip — reached by scrolling it, or cut, which is the
+        // self-clip rule's — unless a scroller it lies past cannot scroll it
+        // into view (`scrollReach`): then it is money no position shows.
+        let behind = false;
+        let unreached: string | undefined;
+        for (const clip of clips) {
+            const c = clip.rect;
+            const pastX = p.x < c.left || p.x > c.right;
+            const pastY = p.y < c.top + 1 || p.y > c.bottom - 1;
+            if (!pastX && !pastY) continue;
+            behind = true;
+            if ((pastX && scrollsOn(clip.overflowX)) || (pastY && scrollsOn(clip.overflowY))) {
+                let reach = reaches.get(clip.el);
+                if (reach === undefined) {
+                    reach = scrollReach(clip.el);
+                    reaches.set(clip.el, reach);
+                }
+                if (
+                    (pastX && scrollsOn(clip.overflowX) && (p.x < reach.x0 - 1 || p.x > reach.x1 + 1)) ||
+                    (pastY && scrollsOn(clip.overflowY) && (p.y < reach.y0 - 1 || p.y > reach.y1 + 1))
+                ) {
+                    unreached = `${named(clip.el)} (overflow ${clip.overflowX} ${clip.overflowY}, which scrolls from ${Math.round(reach.x0)},${Math.round(reach.y0)} to ${Math.round(reach.x1)},${Math.round(reach.y1)})`;
+                    break;
+                }
+            }
+        }
+        if (unreached !== undefined) {
+            outOfReach ??= `stands at ${Math.round(p.x)},${Math.round(p.y)} (${p.kind}) out of reach of ${unreached}: no scroll position shows it`;
+            continue;
+        }
+        if (behind) {
             scan.clipSkips += 1;
             continue;
         }
@@ -836,6 +905,7 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>): s
         first ??= sentence;
         if (p.kind === 'ink') firstInk ??= sentence;
     }
+    if (outOfReach !== undefined) return outOfReach;
     if (first === undefined) return undefined;
     // The most telling hit first — over a glyph — and how many of each kind.
     return `${firstInk ?? first} (${[...covered].map(([kind, n]) => `${n} ${kind}`).join(', ')} point(s) covered)`;
@@ -869,8 +939,9 @@ function coverScan(): CoverScan {
             scan.would.push(`${named(el)} is ${el.matches('[inert]') ? 'inert' : 'a modal dialog'}, which no sheet makes hit-testable`);
         }
         const asked = new Set(nodes);
+        const reaches = new Map<Element, Reach>();
         for (const node of nodes) {
-            const why = coverOf(node, scan, asked);
+            const why = coverOf(node, scan, asked, reaches);
             if (why !== undefined) scan.would.push(`${named(node)} ${why}`);
         }
     } finally {
@@ -3179,9 +3250,13 @@ function figureInkFaults(screen: string, label: string): Failure[] {
  *   is held, axis by axis, to the node and every ancestor up to the surface
  *   it stands on (`SELF_CLIP_SURFACE`: the card, row card, sheet or plate,
  *   inclusive; else the shell's scroll region, which is not asked). An
- *   `overflow` of `auto` or `scroll` on an axis is reachable: the text it
- *   hides is scrolled to, so above it the text is held to that box's own
- *   edges. `hidden` or `clip`, or a `contain` that paints, is a cut: text
+ *   `overflow` of `auto` or `scroll` on an axis is reachable as far as the
+ *   box scrolls (`scrollReach`, before 8g2 item 3): text past its scroll
+ *   origin or its range — a figure that end-aligns itself wider than its
+ *   own scroller, the critic's T1c — fails, naming the box, whether the
+ *   scroller is the node itself or a box above it; the text it scrolls to
+ *   is held, above it, to that box's own edges. `hidden` or `clip`, or a
+ *   `contain` that paints, is a cut: text
  *   more than a pixel past that box's padding box on that axis fails,
  *   naming the box; a box that cuts with rounded corners cuts along their
  *   inner curve (`roundedCut`, round 4: each radius less its borders, the
@@ -3300,6 +3375,7 @@ function cutFromItsSurface(node: HTMLElement): string | undefined {
             };
             const paints = /\b(?:paint|strict|content)\b/.test(cs.contain);
             const where = at === node ? 'itself' : describe(at);
+            let reach: Reach | undefined;
             for (const [axis, mode] of [
                 ['x', cs.overflowX],
                 ['y', cs.overflowY],
@@ -3316,6 +3392,22 @@ function cutFromItsSurface(node: HTMLElement): string | undefined {
                         `(overflow ${cs.overflowX} ${cs.overflowY}${paints ? `, contain ${cs.contain}` : ''}; ` +
                         `width ${cs.width}, max-width ${cs.maxWidth}, height ${cs.height}, max-height ${cs.maxHeight})`
                     );
+                }
+                // A scroller shows what it scrolls to, and nothing past its
+                // scroll origin (`scrollReach`, before 8g2 item 3): text
+                // there is cut as surely as by `hidden`, whether the
+                // scroller is the node itself or a box above it.
+                if (scrolls && past > 1) {
+                    reach ??= scrollReach(at);
+                    const [reachLo, reachHi] = axis === 'x' ? [reach.x0, reach.x1] : [reach.y0, reach.y1];
+                    const unreached = Math.max(reachLo - lo, hi - reachHi);
+                    if (unreached > 1) {
+                        return (
+                            `has ${unreached.toFixed(1)}px of its text out of reach ${axis === 'x' ? 'sideways' : 'above or below'} of ${where}, ` +
+                            `which scrolls from ${Math.round(reachLo)} to ${Math.round(reachHi)} (overflow ${cs.overflowX} ${cs.overflowY}; ` +
+                            `width ${cs.width}, max-width ${cs.maxWidth}, height ${cs.height}, max-height ${cs.maxHeight}): no scroll position shows it`
+                        );
+                    }
                 }
                 // Above this box the text is what this box shows, or scrolls to.
                 if (axis === 'x') {
