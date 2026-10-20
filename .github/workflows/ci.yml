@@ -72,19 +72,21 @@ jobs:
     timeout-minutes: 20
     # The geometry passes and the contrast pass walk on this many tabs of one
     # Chrome. Two here, set rather than left to the machine rule in
-    # layout-check.mjs. One tab measured 261.8-264.1s on the owner's Mac
-    # before the four off-size wall passes landed, against the probe's 300s
-    # ceiling; those passes add time (about 40s on two tabs by the same
-    # measure, more on one), so one tab no longer fits and two tabs do
-    # (248.1s once with them, at a load of 3 to 5). A standard ubuntu-latest
-    # runner of a public repository has 4 vCPU and 16 GB, which meets the
-    # runner's own two-tab default (4 cores, 8 GiB), so this is what the
-    # machine rule would pick; it is written out so the count does not move
-    # with the image (a runner with fewer cores would take one tab by that
-    # rule, and this line would override it). Not measured on a runner: the
-    # first manual dispatch is the measurement (layout/PROBE-RULES.md, "The
-    # contrast pass walks on two tabs" and "The geometry passes walk on two
-    # tabs").
+    # layout-check.mjs. Measured on the owner's Mac, each figure from its own
+    # run: one tab 261.8-264.1s before the four off-size wall passes landed,
+    # against the probe's 300s ceiling; those four passes' own times sum to
+    # 64.8s in one geometry walk; a quiet two-tab pair read 230.2s for the
+    # branch against 208.8s for main (+21.4s), a loaded one 248.1s against
+    # 208.4s (+39.7s). One tab would likely cross the ceiling with the passes
+    # (one tab with them was not measured); two tabs fit. A standard
+    # ubuntu-latest runner of a public repository has 4 vCPU and 16 GB, which
+    # meets the runner's own two-tab default (4 cores, 8 GiB), so this is what
+    # the machine rule would pick; it is written out so the count does not
+    # move with the image (a runner with fewer cores would take one tab by
+    # that rule, and this line would override it). Not measured on a runner:
+    # the first manual dispatch is the measurement (layout/PROBE-RULES.md,
+    # "CI's layout job on two tabs", "The contrast pass walks on two tabs" and
+    # "The geometry passes walk on two tabs").
     env:
       LAYOUT_CONTRAST_TABS: '2'
     steps:

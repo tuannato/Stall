@@ -9472,9 +9472,29 @@ air than 0.5px is the owner's, and not asked.
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
 
-Why: on this Mac one tab took 261.8–264.1s before the four off-size wall passes landed, and those passes added about +21s on a quiet machine (+40s under load). One tab would cross the 300s ceiling, and two tabs fit (230–248s here). `ubuntu-latest` meets the runner's own two-tab default (at least 4 cores and 8 GiB) on a public repository.
+Why, with the figures that were measured (each from its own run, none mixed
+with another's load):
 
-The earlier entries above that say the job "sets `LAYOUT_CONTRAST_TABS: '1'`" are history. Not measured: the job itself on a runner, until the owner dispatches it. On that first dispatch, the two-tab walk, its canaries and the page print run in CI for the first time.
+- **One tab, before the four off-size wall passes: 261.8s at load 2.2** (the
+  probe-shard section above) **and 264.1s at load 2.0** (the probe-shard
+  critic's run), against the probe's 300s ceiling.
+- **The four off-size passes' own times sum to 64.8s** (15.7 / 16.4 / 16.7 /
+  16.0s on their tabs) in the geometry walk of the back-to-back run above
+  ("Back to back on this Mac, 2026-10-20", two tabs, under XProtect's load:
+  248.1s against main's 208.4s, +39.7s). On one tab they would walk one
+  after the other.
+- **A quiet two-tab pair: the branch 230.2s against main 208.8s, +21.4s**
+  (the wall-offsize critic's, item 8).
+
+So one tab would likely cross the 300s ceiling (261.8–264.1s plus passes whose
+own times sum to 64.8s; **not measured**: one tab with the passes), and two
+tabs fit (230.2s quiet, 248.1s loaded). `ubuntu-latest` meets the runner's own
+two-tab default (at least 4 cores and 8 GiB) on a public repository.
+
+The earlier entries above that say the job "sets `LAYOUT_CONTRAST_TABS: '1'`" are
+history. Not measured: the job itself on a runner, until the owner dispatches
+it. On that first dispatch, the two-tab walk, its canaries and the page print
+run in CI for the first time.
 
 ## The state belt (2026-10-20, the lint-belts fix round)
 
