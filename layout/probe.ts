@@ -56,7 +56,7 @@ import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from '.
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
-import { columnExcuses, fittedRadii, framePoints, gridPoints, inkPoints, insideRounded, movedBy, radiusOf, SQUARE, type CoverPoint, type Frame, type Radii } from './coverPoints';
+import { columnExcuses, columnPlace, fittedRadii, framePoints, gridPoints, inkPoints, insideRounded, movedBy, radiusOf, SQUARE, type CoverPoint, type Frame, type Radii } from './coverPoints';
 import { LOOK_RULE, PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
@@ -525,9 +525,11 @@ function coveredBy(node: Element): string | undefined {
  * scroller's included for the text inside it, is counted beside the points
  * asked, the ratio `CLIP_SKIP_CEILING` holds `coveredBy`'s to.
  *
- * The column is excused as `columnExcuses` says: never a hit on `.item-p`
- * itself (a pseudo of the column moved over the figure reports as the column,
- * the critic's P1-1), a sibling inside it at a corner point alone, and never
+ * The column is excused as `columnExcuses` says: never a hit on a box of
+ * the column that holds the figure — `.item-p` itself, `.item-a`, or any box
+ * between them (`columnPlace`; a pseudo of any of them moved over the figure
+ * reports as that box, the critic's P1-1 and item 7) — a true sibling inside
+ * it at a corner point alone, which only a node with no text has, and never
  * a sibling an offset, a transform or a negative margin moved.
  */
 const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
@@ -823,13 +825,13 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>): s
         const where = `${Math.round(p.x)},${Math.round(p.y)} (${p.kind})`;
         if (hit === null) return `has nothing under ${where}, inside the viewport`;
         if (hit === node || node.contains(hit)) continue;
-        const inColumn = column === null || !column.contains(hit) ? 'outside' : hit === column ? 'column' : 'inside';
+        const inColumn = columnPlace(column !== null && column.contains(hit), hit.contains(node));
         const moved = inColumn === 'inside' ? movedBelow(hit, column!) : undefined;
         if (columnExcuses(p.kind, inColumn, moved)) continue;
         covered.set(p.kind, (covered.get(p.kind) ?? 0) + 1);
         const sentence =
             `is covered at ${where} by ${named(hit)}` +
-            (inColumn === 'column' ? ' — its own price column, a pseudo of which reports as the column' : '') +
+            (inColumn === 'column' ? ' — a box of its own price column that holds it, a pseudo of which reports as that box' : '') +
             (moved !== undefined ? ` — inside its price column, moved: ${moved}` : '');
         first ??= sentence;
         if (p.kind === 'ink') firstInk ??= sentence;

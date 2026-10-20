@@ -27,11 +27,14 @@
  * - **Frames.** Every point is taken in the box's own frame — before the turn
  *   of every ancestor — and turned back (`framePoints`), so a point of a
  *   swaying tag's figure is a point of the figure.
- * - **The column.** The price column is one composed figure: a sibling inside
- *   the same `.item-p` a pixel into a corner is the label's own typography.
- *   Excused only there (`columnExcuses`): never a hit on the column itself — a
- *   pseudo of the column moved over the figure reports as the column — never
- *   at a character's centre or a box's centre, and never a sibling moved by an
+ * - **The column.** The price column is one composed figure: a sibling
+ *   inside the same `.item-p` a pixel into a box's corner is the label's own
+ *   typography. Excused only there (`columnExcuses`): only a true sibling —
+ *   never a box that holds the figure (`columnPlace`): the column itself,
+ *   `.item-a`, or any box between them, since a pseudo of any of them moved
+ *   over the figure reports as that box (the critic's P1-1, and before 8g2
+ *   item 7) — only at a corner point, which only a node with no text has
+ *   (a glyph's points are never excused), and never a sibling moved by an
  *   offset, a transform or a negative margin (`movedBy`).
  *
  * Pure: no DOM, no browser. Tested in `coverPoints.test.ts`.
@@ -257,11 +260,24 @@ export function movedBy(p: Placement): string | undefined {
 }
 
 /**
+ * Where a hit on something other than the figure stands against the figure's
+ * own price column (`.item-p`): `outside` it; `column` — a box of the column
+ * that holds the figure, the column itself and `.item-a` included, whose
+ * pseudo moved over the figure reports as that box; or `inside`, a true
+ * sibling of the figure in the column. `inColumn`: the column holds the
+ * hit; `holdsNode`: the hit holds the figure.
+ */
+export function columnPlace(inColumn: boolean, holdsNode: boolean): 'column' | 'inside' | 'outside' {
+    return !inColumn ? 'outside' : holdsNode ? 'column' : 'inside';
+}
+
+/**
  * Whether a hit on something other than the figure is excused because it
- * stands inside the figure's own price column (`.item-p`): only a sibling,
- * only at a corner point, and only one that no box between it and the column
- * moved (`moved`: the first move found on the hit or its ancestors below the
- * column, or undefined). A hit on the column itself is never excused.
+ * stands inside the figure's own price column (`columnPlace`): only a true
+ * sibling, only at a corner point, and only one that no box between it and
+ * the column moved (`moved`: the first move found on the hit or its
+ * ancestors below the column, or undefined). A hit on a box that holds the
+ * figure is never excused.
  */
 export function columnExcuses(kind: PointKind, hit: 'column' | 'inside' | 'outside', moved: string | undefined): boolean {
     return hit === 'inside' && kind === 'corner' && moved === undefined;

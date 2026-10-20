@@ -8,6 +8,7 @@ import {
     INK_ROW_PITCH,
     SQUARE,
     columnExcuses,
+    columnPlace,
     cornerInset,
     fittedRadii,
     framePoints,
@@ -203,6 +204,26 @@ describe('nothing-covers-money-or-a-protected-box: the price column', () => {
         for (const kind of ['centre', 'corner', 'ink', 'grid'] as const) {
             expect(columnExcuses(kind, 'column', undefined)).toBe(false);
         }
+    });
+
+    /*
+     * The critic's item 7 (before 8g2): `.item-a` is the figure's parent,
+     * and a pseudo of it moved over the figure reports as `.item-a` — a box
+     * inside the column that is not the column, which the rule read as a
+     * sibling and excused at a corner. Red with the place read as it was
+     * (`hit === column` alone): `.item-a` answers 'inside'.
+     */
+    it('reads every box that holds the figure as the column, and never excuses it', () => {
+        // .item-p, .item-a and any box between them hold the figure.
+        expect(columnPlace(true, true)).toBe('column');
+        for (const kind of ['centre', 'corner', 'ink', 'grid'] as const) {
+            expect(columnExcuses(kind, columnPlace(true, true), undefined)).toBe(false);
+        }
+        // A true sibling in the column, and anything outside it.
+        expect(columnPlace(true, false)).toBe('inside');
+        expect(columnPlace(false, false)).toBe('outside');
+        // An ancestor outside the column (the stall, whose pseudo was T6) is outside, and covers.
+        expect(columnPlace(false, true)).toBe('outside');
     });
 
     it('excuses a sibling inside the column at a corner point alone, and never one that was moved', () => {
