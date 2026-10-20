@@ -97,6 +97,7 @@ import {
 } from '../domain/lookTable';
 import { askForLookSheet, lookSheetState, waitForLookSheet } from './lookSheets';
 import { applyNameTiers, lookMark } from './lookHooks';
+import { fitWallFigures, forgetWallFit } from './wallFit';
 import type {
     SelectionAsk,
     RememberedSurcharge,
@@ -728,6 +729,8 @@ export function renderStall(
     // record check likewise: only the sheet this paint builds answers it.
     clearPayQrTimer(root);
     payRecordChecks.delete(root);
+    // The wall's figure watch belongs to the frame this paint throws away.
+    forgetWallFit(root);
     const keptFocus = focusKeyOf(root.ownerDocument.activeElement);
     // Snapshot the opener on the idle→open edge only: a live repaint while
     // the sheet is up finds focus *inside* the sheet, and overwriting the
@@ -916,9 +919,19 @@ export function renderStall(
         }
         // The sign's name ladder first (`lookHooks.ts`): a rung can move the
         // column the rows stand beside. Inert on a look that names no rungs.
+        // Then the Cycle card's figure, fitted to its column (`wallFit.ts`),
+        // and both again when the faces land: a late face moves every width.
+        // A frame that changes size with no paint (a window resized, a
+        // tablet turned) is fitted again with the ladder and the marquees
+        // around it (`WallRefit`).
+        const refit = { before: applyNameTiers, after: (laid: ParentNode) => applyMarquees(laid, WINDOW_MARQUEE) };
         applyNameTiers(root);
+        fitWallFigures(root, refit);
         applyMarquees(root, WINDOW_MARQUEE);
-        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE, sayHiddenPayLines, applyNameTiers);
+        remeasureWhenFontsReady(root, () => paintSerial === serial, WINDOW_MARQUEE, sayHiddenPayLines, (laid) => {
+            applyNameTiers(laid);
+            fitWallFigures(laid, refit);
+        });
         // A touch wall has controls, so it has focus to keep: every socket
         // tick and the sixty-second heartbeat rebuild this tree, and without
         // the restore a customer counting on the stepper lost the control

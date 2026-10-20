@@ -15,6 +15,7 @@ import {
     PAGE_PASSES,
     PASSES_OWING_NO_GEOMETRY,
     WALL_PASSES,
+    WALL_PASS_NAMES,
     owedFaults,
     probeCoverageGaps,
     probeCoverageLine,
@@ -23,6 +24,7 @@ import {
 import {
     CONTRAST_PASS,
     GEOMETRY_CANARY,
+    OFF_SIZE_WALLS,
     PASS_KINDS,
     TABLET,
     TRANSPARENCY_PASS,
@@ -676,8 +678,8 @@ describe('the-narrow-pass-owes-the-long-card-figures', () => {
     });
 });
 
-/** The five wall passes, and every look they may paint (the Cycle card's ladder, 2026-10-13). */
-const WALLS = ['canvas', 'desk-wall', 'short-wall', 'portrait', 'tablet'];
+/** The nine wall passes, and every look they may paint (the Cycle card's ladder, 2026-10-13; the off-size walls, 2026-10-14). */
+const WALLS = ['canvas', 'desk-wall', 'short-wall', 'portrait', 'tablet', 'side-tablet', 'hd-wall', 'tall-tablet', 'narrow-wall'];
 const painted = { sheetClasses: CARD_LOOKS };
 
 describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
@@ -719,8 +721,8 @@ describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
         }
     });
 
-    it('owes the touch wall\'s controls of the two desk walls too', () => {
-        for (const pass of ['desk-wall', 'short-wall']) {
+    it('owes the touch wall\'s controls of the desk and off-size walls too', () => {
+        for (const pass of ['desk-wall', 'short-wall', 'side-tablet', 'hd-wall', 'tall-tablet', 'narrow-wall']) {
             assert.deepEqual(
                 probeCoverageGaps(pass, { ...full, wallControlRoles: { ...full.wallControlRoles, 'window-back': 0 } }),
                 ['nothing-on-the-wall-is-cut-from-below read no window-back on a wall'],
@@ -736,6 +738,34 @@ describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
         );
     });
 
+    it('owes every wall pass the plan runs, and no other', () => {
+        // The wall passes of the runner's own plan (`probe-passes.mjs`): the
+        // canvas, a page pass that paints the wall beside the stream, and
+        // every `wall` entry — the tall wall, the tablet, the two desk walls
+        // and the four off-size walls.
+        const walls = geometryPlan({ looks: 'shipped' })
+            .filter((pass) => pass.kind === 'wall' || pass.coverage === 'canvas')
+            .map((pass) => pass.coverage);
+        assert.deepEqual([...WALL_PASS_NAMES].sort(), [...walls].sort());
+        assert.deepEqual([...WALL_PASS_NAMES].sort(), [...WALLS].sort());
+        assert.deepEqual(
+            OFF_SIZE_WALLS.map((vp) => [vp.name, vp.width, vp.height, vp.block]),
+            [
+                ['side-tablet', 1024, 768, 'landscapeShort'],
+                ['hd-wall', 1366, 768, 'landscapeShort'],
+                ['tall-tablet', 800, 1280, 'portraitShort'],
+                ['narrow-wall', 680, 1000, 'portraitShort'],
+            ],
+        );
+        for (const vp of OFF_SIZE_WALLS) {
+            const pass = geometryPlan({ looks: 'shipped' }).find((at) => at.key === vp.name);
+            assert.ok(pass, vp.name);
+            assert.equal(pass.kind, 'wall');
+            assert.equal(pass.block, vp.block);
+            assert.equal(pass.screens, WINDOW_SCREENS);
+        }
+    });
+
     it('owes the ladder\'s own steps: one more than window.ts\'s ceilings', () => {
         const source = readFileSync(new URL('../src/ui/window.ts', import.meta.url), 'utf8');
         const ceilings = source.match(/export const WALL_FIGURE_CEILINGS = \[([^\]]*)\] as const;/);
@@ -745,7 +775,7 @@ describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
 });
 
 /** Every geometry pass the runner names (D-2026-10-14-02's two money rules are owed on each). */
-const GEOMETRY = ['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow'];
+const GEOMETRY = ['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'side-tablet', 'hd-wall', 'tall-tablet', 'narrow-wall', 'narrow'];
 const MONEY_RULE = /^a-(?:broken-figure-wears-the-figures-own-ink|money-figure-never-clips-itself) /;
 
 describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => {
@@ -757,6 +787,18 @@ describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => 
      * being read and stay green); the self-clip rule some money figures a
      * look. The contrast and reduced-motion passes owe neither.
      */
+    it('owes the money rules on every wall pass, the four off-size walls among them (the wall-offsize critic\'s item 2)', () => {
+        // Written out, the three tables named eight passes and auto-merged
+        // without the four the off-size work added; derived from
+        // `WALL_PASS_NAMES` now, and pinned here by value.
+        assert.deepEqual([...GEOMETRY_PASSES], GEOMETRY);
+        for (const pass of WALL_PASS_NAMES) {
+            assert.ok(GEOMETRY_PASSES.has(pass), pass);
+            assert.deepEqual(FIGURE_SURFACES_OWED[pass], ['wall', 'cycle'], pass);
+            for (const surface of ['cycle', 'plate', 'wall']) assert.ok(DRESS_SURFACES_OWED[pass].includes(surface), `${pass} ${surface}`);
+        }
+    });
+
     it('owes the surfaces each geometry pass paints, by name', () => {
         const page = ['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row'];
         assert.deepEqual(FIGURE_SURFACES_OWED, {
@@ -768,6 +810,10 @@ describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => 
             tablet: ['wall', 'cycle'],
             'desk-wall': ['wall', 'cycle'],
             'short-wall': ['wall', 'cycle'],
+            'side-tablet': ['wall', 'cycle'],
+            'hd-wall': ['wall', 'cycle'],
+            'tall-tablet': ['wall', 'cycle'],
+            'narrow-wall': ['wall', 'cycle'],
         });
         assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY].sort());
     });
@@ -834,6 +880,10 @@ describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {
             tablet: wall,
             'desk-wall': wall,
             'short-wall': wall,
+            'side-tablet': wall,
+            'hd-wall': wall,
+            'tall-tablet': wall,
+            'narrow-wall': wall,
         });
         assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY].sort());
     });
@@ -1016,25 +1066,26 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
 
     it('fails a pass the module gains before the tables name it, and a table row the module dropped', () => {
         const passes = runnerPasses({ looks: 'shipped' });
-        // wall-offsize's four, planted as entries of the module.
+        // Two more wall sizes, planted as entries of the module (until
+        // wall-offsize merged, its four were the plants here).
         const planted = [
-            { key: 'side-tablet', kind: 'wall', coverage: 'side-tablet', vp: { name: 'side-tablet', width: 1024, height: 768 }, screens: 'a', block: 'landscapeShort' },
-            { key: 'hd-wall', kind: 'wall', coverage: 'hd-wall', vp: { name: 'hd-wall', width: 1366, height: 768 }, screens: 'a', block: 'landscapeShort' },
+            { key: 'lap-wall', kind: 'wall', coverage: 'lap-wall', vp: { name: 'lap-wall', width: 1152, height: 864 }, screens: 'a', block: 'landscapeShort' },
+            { key: 'kiosk-wall', kind: 'wall', coverage: 'kiosk-wall', vp: { name: 'kiosk-wall', width: 1280, height: 720 }, screens: 'a', block: 'landscapeShort' },
         ];
         assert.deepEqual(passTableFaults([...passes, planted[0]]), [
-            "the runner's side-tablet pass is in no coverage table",
-            'side-tablet is a wall pass and WALL_PASSES does not name it, so it owes no wall control',
+            "the runner's lap-wall pass is in no coverage table",
+            'lap-wall is a wall pass and WALL_PASSES does not name it, so it owes no wall control',
         ]);
         // Named as a geometry pass and not as a wall: still a fault.
-        assert.deepEqual(passTableFaults([...passes, planted[1]], { geometry: new Set([...GEOMETRY_PASSES, 'hd-wall']) }), [
-            'hd-wall is a wall pass and WALL_PASSES does not name it, so it owes no wall control',
+        assert.deepEqual(passTableFaults([...passes, planted[1]], { geometry: new Set([...GEOMETRY_PASSES, 'kiosk-wall']) }), [
+            'kiosk-wall is a wall pass and WALL_PASSES does not name it, so it owes no wall control',
         ]);
         // Named where its kind owes no geometry: a fault.
-        assert.deepEqual(passTableFaults([...passes, planted[1]], { none: { ...PASSES_OWING_NO_GEOMETRY, 'hd-wall': 'planted, with a reason long enough' }, wall: new Set([...WALL_PASSES, 'hd-wall']) }), [
-            'hd-wall is a wall pass, which owes the geometry rules, and GEOMETRY_PASSES does not name it',
+        assert.deepEqual(passTableFaults([...passes, planted[1]], { none: { ...PASSES_OWING_NO_GEOMETRY, 'kiosk-wall': 'planted, with a reason long enough' }, wall: new Set([...WALL_PASSES, 'kiosk-wall']) }), [
+            'kiosk-wall is a wall pass, which owes the geometry rules, and GEOMETRY_PASSES does not name it',
         ]);
         // Named in every table it owes: clean.
-        assert.deepEqual(passTableFaults([...passes, planted[1]], { geometry: new Set([...GEOMETRY_PASSES, 'hd-wall']), wall: new Set([...WALL_PASSES, 'hd-wall']) }), []);
+        assert.deepEqual(passTableFaults([...passes, planted[1]], { geometry: new Set([...GEOMETRY_PASSES, 'kiosk-wall']), wall: new Set([...WALL_PASSES, 'kiosk-wall']) }), []);
         // A row dropped from the tables, and a pass dropped from the module.
         const without = (set, name) => new Set([...set].filter((n) => n !== name));
         assert.deepEqual(passTableFaults(passes, { geometry: without(GEOMETRY_PASSES, 'narrow') }), ["the runner's narrow pass is in no coverage table"]);
@@ -1081,8 +1132,8 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
     });
 
     it('names a pass in no table as a gap at run time, and only such a pass', () => {
-        assert.deepEqual(probeCoverageGaps('side-tablet', {}), [
-            'the side-tablet pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why',
+        assert.deepEqual(probeCoverageGaps('lap-wall', {}), [
+            'the lap-wall pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why',
         ]);
         for (const pass of [...GEOMETRY_PASSES, ...Object.keys(PASSES_OWING_NO_GEOMETRY)]) {
             assert.ok(!probeCoverageGaps(pass, {}).some((gap) => gap.includes('in no coverage table')), pass);

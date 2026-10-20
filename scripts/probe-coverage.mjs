@@ -24,9 +24,11 @@
  *   deck mini with that look's own shop, at both widths.
  * - **`nothing-on-the-wall-is-cut-from-below`** reads the touch wall's
  *   controls — on the public looks, and on each carried private look's own
- *   walls (8e2: `wallControlRolesByClass`) — on the five passes that paint it: the canvas (1920x1080),
- *   the portrait wall (1080x1920), the counter tablet (768x1024) and the two
- *   desk walls (1280x900, 1280x800; 2026-10-13) — every one
+ *   walls (8e2: `wallControlRolesByClass`) — on every pass that paints it
+ *   (`WALL_PASS_NAMES`): the canvas (1920x1080), the portrait wall
+ *   (1080x1920), the counter tablet (768x1024), the two desk walls (1280x900,
+ *   1280x800; 2026-10-13) and the four off-size walls (1024x768, 1366x768,
+ *   800x1280, 680x1000; 2026-10-14) — every one
  *   of its five controls on each, and the payment's two lines outside its
  *   scroller, "+N more" and the borrowed-token sentence (`WALL_ROLES`), each
  *   read WHOLE: a stepper cut to a sliver is printed on the pass's line and
@@ -45,12 +47,12 @@
  *   measured or any look wore the rain: the rain is set aside there by
  *   name, or no root was read.
  * - **`nothing-in-the-body-reaches-the-status-line`** asks the wall's body
- *   on the five wall passes.
+ *   on every wall pass.
  * - **`a-cycle-card-shows-every-digit-at-every-wall-size`** (2026-10-13)
  *   reads the Cycle card's figure at every step of its ladder
  *   (`CYCLE_STEPS_OWED`) on every look each wall pass painted: the canvas
  *   (1920x1080), the two desk walls (1280x900, 1280x800), the tall wall
- *   (1080x1920) and the counter tablet (768x1024).
+ *   (1080x1920), the counter tablet (768x1024) and the four off-size walls.
  * - **`the-bunting-never-swings-into-the-ornament-label`** sweeps Rural's
  *   bunting on the phone and desk passes wherever Rural is measured or any
  *   look wore the bunting.
@@ -116,12 +118,12 @@
  *   ladders compared (`CARD_LADDERS_OWED`, `cardLadderByClass`).
  *
  * The phone and desk passes owe the page rules, the canvas the overlay's
- * places and the wall's controls and Cycle steps, the portrait, tablet and
- * two desk wall passes the wall's controls and Cycle steps, and the narrow
- * pass the card figures (the phone pass owes them too); the reduced-motion
- * and contrast passes owe nothing here (`mobile`, `desktop`, `canvas`,
- * `portrait`, `tablet`, `desk-wall`, `short-wall` and `narrow` are the
- * runner's pass names).
+ * places and the wall's controls and Cycle steps, the portrait, tablet, two
+ * desk wall and four off-size wall passes the wall's controls and Cycle
+ * steps, and the narrow pass the card figures (the phone pass owes them
+ * too); the reduced-motion and contrast passes owe nothing here (`mobile`,
+ * `desktop`, `canvas`, `narrow` and `WALL_PASS_NAMES` are the runner's pass
+ * names).
  */
 
 import { FIXTURE_PRIVATE_LOOK_CLASS } from './private-looks.mjs';
@@ -151,17 +153,38 @@ const SKIP_SURFACES = {
 export const PAGE_PASSES = new Set(['mobile', 'desktop']);
 /**
  * The passes that paint the touch wall, whose controls the wall rule reads:
- * the canvas, the tall wall, the counter tablet, and since the Cycle card's
- * ladder the two desk wall passes (1280x900, 1280x800).
+ * the canvas, the tall wall, the counter tablet, since the Cycle card's
+ * ladder the two desk wall passes (1280x900, 1280x800), and since the fit
+ * the four off-size walls (`OFF_SIZE_WALLS` in probe-passes.mjs: 1024x768,
+ * 1366x768, 800x1280, 680x1000). Held to the plan's wall passes by
+ * `the-wall-passes-owe-the-cycle-cards-every-step`.
  */
-export const WALL_PASSES = new Set(['canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall']);
+export const WALL_PASS_NAMES = Object.freeze([
+    'canvas',
+    'portrait',
+    'tablet',
+    'desk-wall',
+    'short-wall',
+    'side-tablet',
+    'hd-wall',
+    'tall-tablet',
+    'narrow-wall',
+]);
+export const WALL_PASSES = new Set(WALL_PASS_NAMES);
+/** The wall passes but the canvas, which paints the stream beside the wall and owes its places too. */
+const WALLS_BUT_CANVAS = WALL_PASS_NAMES.filter((pass) => pass !== 'canvas');
 /**
- * Every geometry pass: the two page passes, the canvas, the four wall passes
- * and the narrow phone. Each paints a broken money figure on every look
+ * Every geometry pass: the two page passes, every wall pass
+ * (`WALL_PASS_NAMES`: the canvas and the eight others) and the narrow
+ * phone. Each paints a broken money figure on every look
  * (`a-broken-figure-wears-the-figures-own-ink`) and money figures
- * (`a-money-figure-never-clips-itself`).
+ * (`a-money-figure-never-clips-itself`). Derived from `WALL_PASS_NAMES`, as
+ * the two surface tables below are, so a wall pass named there is owed the
+ * money rules here (the wall-offsize critic's item 2: written out, the four
+ * off-size walls auto-merged out of all three); pinned by value in
+ * `the-money-rules-are-owed-on-every-look-of-every-geometry-pass`.
  */
-export const GEOMETRY_PASSES = new Set(['mobile', 'desktop', 'canvas', 'portrait', 'tablet', 'desk-wall', 'short-wall', 'narrow']);
+export const GEOMETRY_PASSES = new Set(['mobile', 'desktop', ...WALL_PASS_NAMES, 'narrow']);
 /**
  * The runner's other passes, each with why it owes nothing these tables
  * name (round 5, the critic's P3 on round 4: a pass the tables do not name
@@ -188,7 +211,7 @@ export const PASSES_OWING_NO_GEOMETRY = Object.freeze({
  * sheet (`pay`), Pay several's line and total (`line`, `total`), the
  * selection strip's total and chosen line (`strip`, `chosen`) and a shop row
  * (`row`); the desk also the wall's Browse row (`wall`) and Cycle card
- * (`cycle`), which the canvas and the four wall passes paint alone.
+ * (`cycle`), which every wall pass (`WALL_PASS_NAMES`) paints alone.
  */
 const PAGE_SURFACES = Object.freeze(['face', 'paid', 'pay', 'line', 'total', 'strip', 'chosen', 'row']);
 const WALL_SURFACES = Object.freeze(['wall', 'cycle']);
@@ -196,11 +219,7 @@ export const FIGURE_SURFACES_OWED = Object.freeze({
     mobile: PAGE_SURFACES,
     narrow: PAGE_SURFACES,
     desktop: Object.freeze([...PAGE_SURFACES, ...WALL_SURFACES]),
-    canvas: WALL_SURFACES,
-    portrait: WALL_SURFACES,
-    tablet: WALL_SURFACES,
-    'desk-wall': WALL_SURFACES,
-    'short-wall': WALL_SURFACES,
+    ...Object.fromEntries(WALL_PASS_NAMES.map((pass) => [pass, WALL_SURFACES])),
 });
 /**
  * The surfaces each geometry pass paints a money figure on, every look
@@ -209,9 +228,10 @@ export const FIGURE_SURFACES_OWED = Object.freeze({
  * printed tag, an Activity receipt, the Studio and a card (the first
  * stall's); the desk also the wall's rows and Cycle card; the narrow phone
  * its money screens' seven; the canvas the wall, its payment plate, its
- * Cycle card and the stream's card and ticker; the other wall passes the
- * wall, the plate and the Cycle card. The door's open control is Modern's
- * alone (the door wears the default look) and is owed nowhere.
+ * Cycle card and the stream's card and ticker; every other wall pass
+ * (`WALL_PASS_NAMES`) the wall, the plate and the Cycle card. The door's
+ * open control is Modern's alone (the door wears the default look) and is
+ * owed nowhere.
  */
 const DRESS_PAGE_SURFACES = Object.freeze(['activity', 'card', 'face', 'row', 'sheet', 'sign', 'strip', 'studio', 'tag']);
 const DRESS_WALL_SURFACES = Object.freeze(['cycle', 'plate', 'wall']);
@@ -220,10 +240,7 @@ export const DRESS_SURFACES_OWED = Object.freeze({
     desktop: Object.freeze([...DRESS_PAGE_SURFACES, 'cycle', 'wall']),
     narrow: Object.freeze(['activity', 'face', 'row', 'sheet', 'sign', 'strip', 'tag']),
     canvas: Object.freeze([...DRESS_WALL_SURFACES, 'stream', 'ticker']),
-    portrait: DRESS_WALL_SURFACES,
-    tablet: DRESS_WALL_SURFACES,
-    'desk-wall': DRESS_WALL_SURFACES,
-    'short-wall': DRESS_WALL_SURFACES,
+    ...Object.fromEntries(WALLS_BUT_CANVAS.map((pass) => [pass, DRESS_WALL_SURFACES])),
 });
 /**
  * The Cycle card's steps each wall pass owes read on every look it painted

@@ -36,6 +36,8 @@ export declare const SHORT_VIEWPORTS: readonly Viewport[];
 export declare const WINDOW_SCREENS: string;
 export declare const DESK_WALL: Viewport;
 export declare const SHORT_WALL: Viewport;
+/** The four off-size walls, each a `wall` pass over every wall screen in the block it names. */
+export declare const OFF_SIZE_WALLS: readonly (Viewport & { readonly block: WallBlock })[];
 export declare const DESK_WALL_SCREENS: string;
 export declare const ALL_VIEWPORTS: readonly Viewport[];
 export declare const REDUCED: readonly { readonly vp: Viewport; readonly screens: string }[];

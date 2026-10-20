@@ -197,6 +197,7 @@ import { SECOND_FEED } from './net/hosts';
 import { withDeadline } from './domain/deadline';
 import { nextCard, tokensAtBlock } from './domain/window';
 import { wallListings, windowRail, windowTurns } from './ui/window';
+import { forgetWallFit } from './ui/wallFit';
 
 /**
  * Retry `refresh` while a resolved stall's fetch failed. Waiting screens
@@ -450,7 +451,8 @@ export type AppState = {
 /**
  * Paints the app into `root` and keeps it live. Returns its teardown
  * (CRITIC-CARRYOVER-9 item 5): the listeners `boot` put on the window and
- * the document come off, the socket closes, every timer is cleared, a load
+ * the document come off, the socket closes, every timer is cleared, the
+ * wall's frame watch is let go, a load
  * or a tail still in flight is dropped, and nothing paints or refreshes
  * again. The page never calls it — one app lives as long as the document —
  * so it exists for a test file that boots many apps in one document, where
@@ -4951,6 +4953,10 @@ export function boot(
             document.removeEventListener(kind, onWindowTouch, { capture: true });
         }
         document.removeEventListener('visibilitychange', onVisibilityChange);
+        // The wall's Cycle figure watches its frame for a size change no
+        // paint follows (`fitWallFigures`); the app is gone, and so is that
+        // watch (the wall-offsize critic's item 9).
+        forgetWallFit(root);
     };
 }
 

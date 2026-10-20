@@ -15,6 +15,7 @@
 // First: it listens for the policy's refusals from the page's first module statement.
 import { cspRefusals, type CspRefusal } from './cspWatch';
 import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
+import { wallFigureTier } from '../src/ui/window';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
 import type { StallView } from '../src/domain/state';
@@ -2359,11 +2360,12 @@ function cardLadderFaults(): Failure[] {
  * read "123,45" on Rural — a thousand times low to a reader who writes the
  * decimal with a comma — and at 1280x900 Neo's `.78 XEC` painted under the
  * code; no pass painted a Cycle figure longer than three characters at any
- * size but 1920x1080. The card now steps its figure down a ladder
- * (`WALL_FIGURE_CEILINGS`, `data-wall-tier` on the head) and, where a wall
- * is narrow, wraps it after a comma; this is what holds that true on every
- * wall pass. For every Cycle card's figure — the money node with its `from`
- * and ` XEC` — and its price cell (a look's tag chrome included):
+ * size but 1920x1080. The card's figure is fitted to its column after the
+ * paint now (`fitWallFigures`, `src/ui/wallFit.ts`, which reads it the way
+ * this rule does), stacked or broken after a comma where one line no longer
+ * stands; this is what holds that true on every wall pass. For every Cycle
+ * card's figure — the money node with its `from` and ` XEC` — and its price
+ * cell (a look's tag chrome included):
  *
  * - every line and the cell stand inside the price's own grid column, so
  *   the figure is never past the card's grid and never under the code or
@@ -2381,11 +2383,31 @@ function cardLadderFaults(): Failure[] {
  * (Rural tilts every third card half a degree and sways its tag 0.8°, so an
  * axis-aligned box of a 160px-tall tag is 2–4px wider than the tag; the
  * transforms are put back before the next rule reads the tree). Counted per
- * look and per step (`cycleFigureByClass`): the runner owes every step on
- * every look on each of the five wall passes.
+ * look and per length band (`cycleFigureByClass`, `wallFigureTier`): the
+ * runner owes every band on every look on each wall pass.
  */
 const CYCLE_FIGURE_CHECK = 'a-cycle-card-shows-every-digit-at-every-wall-size';
-/** Per look class, per `data-wall-tier` (`'0'` for none), how many Cycle figures were read. */
+/*
+ * **A Cycle figure never runs under its own unit** (the wall-offsize
+ * critic's item 1, 2026-10-20). The fit's stacked shape (`from` on a line
+ * above, ` XEC` beside the figure) gave the money node a
+ * `minmax(0, max-content)` track and kept it on one line, so where the price
+ * cell was narrower than the figure the track shrank under it and the
+ * unwrapped digits ran on under ` XEC`: Neo's `from 1,234,567 XEC` at
+ * 1280x900 printed "XEC" over its last "7", and the rule above, which reads
+ * the cell and every line of the figure as one span inside the column, held
+ * it green — the overlap was inside the column. Read here on its own terms,
+ * apart from the fit's own check (`wallFit.ts`'s gauge holds the same
+ * thing by its own code): every rect of the money node's text stands inside
+ * the money node's own box along the line, and none meets a rect of the
+ * figure's `from` or its unit (`.item-from`, `.item-u`) where the two
+ * overlap along the line and their middle three fifths overlap across it
+ * (a content area runs past its ink, and a `from` on the row above meets
+ * the figure's content area with no ink there). Counted with the rule
+ * above (`cycleFigureByClass`).
+ */
+const CYCLE_UNIT_CHECK = 'a-cycle-figure-never-runs-under-its-own-unit';
+/** Per look class, per length band (`wallFigureTier`), how many Cycle figures were read. */
 const cycleFigureByClass: Record<string, Record<string, number>> = {};
 
 function cycleFigureFaults(screen: string, label: string): Failure[] {
@@ -2402,7 +2424,9 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
         // the policy refuses an inline `style` attribute, and the app writes
         // inline declarations on a card's boxes (`--sel-i` on a chosen line).
         withTransformsHeldOff([card, head, cell, amount, figure], () => {
-            const tier = head.getAttribute('data-wall-tier') ?? '0';
+            // The figure's length band (`wallFigureTier`): the fit sizes the
+            // figure, the bands say which fixtures every pass owes.
+            const tier = String(wallFigureTier(figure.textContent ?? '', amount.querySelector(':scope > .item-from') !== null));
             const byLook = (cycleFigureByClass[measuringClass] ??= {});
             byLook[tier] = (byLook[tier] ?? 0) + 1;
             const say = (detail: string): void => {
@@ -2471,6 +2495,50 @@ function cycleFigureFaults(screen: string, label: string): Failure[] {
                 });
                 if (crossed !== undefined) {
                     say(`has a line over ${what} (${Math.round(crossed.left)}–${Math.round(crossed.right)} × ${Math.round(crossed.top)}–${Math.round(crossed.bottom)})`);
+                }
+            }
+            // The figure's own text, inside its own box and clear of its
+            // `from` and its unit (`CYCLE_UNIT_CHECK`).
+            const own = figure.getBoundingClientRect();
+            const textOf = (node: Element): DOMRect[] => {
+                const r = document.createRange();
+                r.selectNodeContents(node);
+                return [...r.getClientRects()].filter((q) => q.width > 0 && q.height > 0);
+            };
+            const ink = textOf(figure);
+            const loose = ink.find((r) => r.left < own.left - 0.5 || r.right > own.right + 0.5);
+            if (loose !== undefined) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: CYCLE_UNIT_CHECK,
+                    detail:
+                        `the Cycle figure "${(figure.textContent ?? '').slice(0, 40)}" (${getComputedStyle(figure).fontSize}) runs ` +
+                        `${(loose.right > own.right + 0.5 ? loose.right - own.right : own.left - loose.left).toFixed(1)}px out of its own box ` +
+                        `(text ${Math.round(loose.left)}–${Math.round(loose.right)}, box ${Math.round(own.left)}–${Math.round(own.right)}) at ${window.innerWidth}x${window.innerHeight}`,
+                });
+            }
+            const middle = (r: DOMRect): [number, number] => [r.top + r.height * 0.2, r.bottom - r.height * 0.2];
+            for (const [what, sel] of [
+                ['its from', ':scope > .item-from'],
+                ['its unit', ':scope > .item-u'],
+            ] as const) {
+                const other = amount.querySelector(sel);
+                if (other === null) continue;
+                const met = ink.flatMap((a) => textOf(other).map((b) => [a, b] as const)).find(([a, b]) => {
+                    const [at, ab] = middle(a);
+                    const [bt, bb] = middle(b);
+                    return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(ab, bb) - Math.max(at, bt) > 0.5;
+                });
+                if (met !== undefined) {
+                    out.push({
+                        screen,
+                        theme: label,
+                        check: CYCLE_UNIT_CHECK,
+                        detail:
+                            `the Cycle figure "${(figure.textContent ?? '').slice(0, 40)}" (${getComputedStyle(figure).fontSize}) runs under ${what} "${other.textContent ?? ''}" ` +
+                            `by ${(Math.min(met[0].right, met[1].right) - Math.max(met[0].left, met[1].left)).toFixed(1)}px at ${window.innerWidth}x${window.innerHeight}`,
+                    });
                 }
             }
             // A broken figure splits no group: every piece on one line.
@@ -3220,9 +3288,9 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   brackets): what it paints under a figure is the contrast pass's, and
  *   only on the screens it samples (390, 1280 and 1920 wide, less the
  *   geometry-only screens) — a look can scope such a paint to a state the
- *   look rules let it read (`data-wall-tier`, `data-paying`, `data-touch`,
- *   `data-turn`) or to a screen the contrast pass does not sample, and no
- *   rule reads it there (the critic's P2-1, round 4);
+ *   look rules let it read (`data-paying`, `data-touch`, `data-turn`) or to
+ *   a screen the contrast pass does not sample, and no rule reads it there
+ *   (the critic's P2-1, round 4);
  * - what lies above the nearest box with an opaque background colour: the
  *   walk stops at that box whether or not its colour is under the glyphs —
  *   its `background-clip`, its rounded corners, ink that runs past it — and
@@ -9941,16 +10009,18 @@ const verdict = {
      * The tall-portrait half of `window.css`, echoed back so the runner
      * can refuse a pass the media feature never reached — the same guard
      * `reducedMotion` gives that pass. It is `portrait` with the
-     * `max-height: 1200px` block NOT matching: a phone and a counter
+     * `max-height: 1500px` block NOT matching (1200 until 2026-10-14,
+     * when a 1280-tall tablet joined the short block): a phone and a counter
      * tablet are portrait too and take the short variant, so the stacked
      * column a wall-mounted screen paints is a third state, and asking
      * only for `portrait` would have certified it from a 390px phone.
      */
-    portraitTall: matchMedia('(orientation: portrait) and (min-height: 1201px)')
+    portraitTall: matchMedia('(orientation: portrait) and (min-height: 1501px)')
         .matches,
     /*
      * The other portrait block — `(orientation: portrait) and
-     * (max-height: 1200px)` — echoed back for its own pass's guard.
+     * (max-height: 1500px)` — echoed back for its own passes' guard (the
+     * counter tablet, and since 2026-10-14 the 800x1280 and 680x1000 walls).
      *
      * It was reached only by the 390x844 mobile pass, and only because
      * the wall fixtures ran there. Taking them out of that pass was
@@ -9962,13 +10032,13 @@ const verdict = {
      * the wall's floor, so the screen is real and the pass is now its
      * own.
      */
-    portraitShort: matchMedia('(orientation: portrait) and (max-height: 1200px)')
+    portraitShort: matchMedia('(orientation: portrait) and (max-height: 1500px)')
         .matches,
     /*
      * The short landscape block — `(orientation: landscape) and (max-height:
-     * 900px)` — echoed for the two desk wall passes' guard (1280x900 and
-     * 1280x800, since the Cycle card's ladder): the card's code stands beside
-     * its figure there, and its ladder's wrap is that block's.
+     * 900px)` — echoed for the desk and off-size wall passes' guard
+     * (1280x900, 1280x800, 1024x768, 1366x768): the card's code stands
+     * beside its figure there.
      */
     landscapeShort: matchMedia('(orientation: landscape) and (max-height: 900px)').matches,
     screensMeasured: measured,

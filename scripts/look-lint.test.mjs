@@ -225,11 +225,13 @@ describe('a-look-cannot-target-one-seller', () => {
         assert.match(read('src/domain/theme.ts'), /narrowTag\?: 'own-row';/);
         assert.ok(read('src/ui/render.ts').includes("node.setAttribute('data-narrow-tag', 'own-row')"), 'render.ts writes data-narrow-tag');
         assert.deepEqual(STATE_ATTRIBUTES['data-narrow-tag'], ['own-row']);
-        // The Cycle card's steps (2026-10-13), held to the table that writes
-        // them: one value per step past 0, as many as window.ts has ceilings.
-        const ceilings = /export const WALL_FIGURE_CEILINGS = \[([^\]]*)\] as const;/.exec(read('src/ui/window.ts'));
-        assert.ok(ceilings !== null && read('src/ui/window.ts').includes("head.setAttribute('data-wall-tier', String(tier))"), 'window.ts writes data-wall-tier');
-        assert.deepEqual(STATE_ATTRIBUTES['data-wall-tier'], Array.from({ length: ceilings[1].split(',').length }, (_, i) => String(i + 1)));
+        // The Cycle card's figure is fitted after the paint (2026-10-14,
+        // `wallFit.ts`): its shape (`data-wall-wrap`) is the fit's, its size
+        // the money node's inline font-size, and neither is a look's to read.
+        // The step a table once wrote is gone, and is no state a look reads.
+        assert.equal(STATE_ATTRIBUTES['data-wall-tier'], undefined);
+        assert.equal(STATE_ATTRIBUTES['data-wall-wrap'], undefined);
+        assert.ok(!PRESENCE_ATTRIBUTES.includes('data-wall-wrap'));
         for (const [name, values] of Object.entries(LOOK_HOOK_ATTRIBUTES)) {
             assert.deepEqual(STATE_ATTRIBUTES[name], values, `${name} is a state attribute`);
             assert.ok(!app.valued.has(name), `${name} is read by a served sheet now: list it as an ordinary state attribute`);
@@ -411,6 +413,65 @@ const FIGURE_PIECE_RULES = [
     '.t-neo .fig-say { color: #ff00aa; }',
     '.t-neo .x .fig-say > span { font-weight: 300; }',
 ];
+
+describe('a-look-never-animates-a-money-nodes-size', () => {
+    /**
+     * D-2026-10-19-03 (1), the owner's "as recommended" (the wall-offsize
+     * critic's item 3): the wall's Cycle figure is sized by the fit's inline
+     * `font-size`, which a running transition and an animation's keyframe
+     * both out-rank. The fit holds transitions off while it reads
+     * (`holdStill`); a first-party look sheet may not transition a size on a
+     * box that may be a money node, nor name a size in any keyframe. Red: the
+     * critic's two plants, and the shapes a subject reaches a money node by
+     * (a role, a bare type, `:is()`, a `transition` naming no property, a
+     * `var()`); green: a size transitioned on a box that is not one, a
+     * pseudo-element, and every shipped sheet.
+     */
+    const MOVES = /may be a money node — the wall fits its figure by its size/;
+    const KEYFRAME = /animates font(?:-size)? — any box a rule runs it on, a money node among them/;
+    it('refuses the critic\'s two plants', () => {
+        for (const [rule, pattern] of [
+            ['.t-neo.shop-window .item-x { transition: all .4s; }', MOVES],
+            ['@keyframes t-neo-grow { from { font-size: 40px; } to { font-size: 64px; } }\n.t-neo.shop-window .item-x { animation: t-neo-grow 2s infinite; }', KEYFRAME],
+        ]) {
+            const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(shipped.some((p) => pattern.test(p)), `${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('refuses every shape a size transition reaches a money node by, and a size in any keyframe', () => {
+        for (const rule of [
+            '.t-neo .item-x { transition: font-size 0.4s ease; }',
+            '.t-neo [data-role="seller-price"] { transition-property: font-size; }',
+            '.t-neo .row.big dd { transition: font 0.2s; }',
+            '.t-neo .item-a span { transition: all 0.2s; }',
+            '.t-neo .item-a > * { transition: 0.3s; }',
+            '.t-neo :is(.item-x, .bc-p) { transition: all 0.2s; }',
+            '.t-neo .x { transition-property: var(--moves); }',
+            '.t-neo .buy { transition: background 0.2s, font-size 0.2s; }',
+            '.t-neo .item-x { transition-property: inherit; }',
+        ]) {
+            const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(shipped.some((p) => MOVES.test(p)), `${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`);
+        }
+        const shipped = lintLookSheet(plantedNeo('@keyframes t-neo-pop { 50% { font: 700 30px Inter; } }'), { lookClass: 't-neo' });
+        assert.ok(shipped.some((p) => KEYFRAME.test(p)), shipped.join('\n'));
+    });
+
+    it('leaves a size moving on a box that is not a money node, and every other transition, alone', () => {
+        accepts('.t-neo .tool { transition: all 0.2s; }');
+        accepts('.t-neo .stall-name { transition: font-size 0.2s; }');
+        accepts('.t-neo .item-x::after { transition: all 0.2s; }');
+        accepts('.t-neo .item-x { transition: color 0.2s, background 0.2s; }');
+        accepts('.t-neo .buy { transition: none; }');
+        accepts('@keyframes t-neo-glow { from { opacity: 0.5; } to { opacity: 1; } }');
+    });
+
+    it('leaves the kit lint as it was: a kit rule is a line of the workshop README', () => {
+        const kit = lintSheet(plantedKit('.t-neo.shop-window .item-x { transition: all .4s; }'));
+        assert.ok(!kit.some((p) => MOVES.test(p)), kit.join('\n'));
+    });
+});
 
 describe('a-look-may-not-dress-a-figures-pieces', () => {
     /**

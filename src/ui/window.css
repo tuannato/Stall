@@ -333,7 +333,7 @@
 }
 
 .stall.shop-window[data-mode='cycle'] .item-x {
-    font-size: min(var(--sw-fig, 112px), clamp(40px, min(10.4cqh, 6.4cqw), 112px));
+    font-size: clamp(40px, min(10.4cqh, 6.4cqw), 112px);
 }
 
 .stall.shop-window[data-mode='cycle'] .item-from,
@@ -453,23 +453,7 @@
         text-align: center;
     }
 
-    /* The Cycle card's figure ladder (below): steps 1-3 and the break, and a quote's foot under Rural's yard. */
-    [data-wall-tier='1'] {
-        --sw-fig: 72px;
-    }
-
-    [data-wall-tier='2'] {
-        --sw-fig: 50px;
-    }
-
-    [data-wall-tier='3'] {
-        --sw-fig: 40px;
-    }
-
-    [data-wall-break] {
-        --sw-fig: 38px;
-    }
-
+    /* A quote's foot under Rural's yard. */
     .stall-scroll:has(> .att-beetle) {
         --sw-foot: 12px;
     }
@@ -508,20 +492,7 @@
     }
 
     .stall.shop-window[data-mode='cycle'] .item-x {
-        font-size: calc(clamp(40px, min(7.4cqh, 6.4cqw), 80px) * var(--sw-k, 1));
-    }
-
-    /* The Cycle card's figure ladder (below): steps 7-9, a factor of the design size. */
-    [data-wall-tier='7'] {
-        --sw-k: 0.85;
-    }
-
-    [data-wall-tier='8'] {
-        --sw-k: 0.71;
-    }
-
-    [data-wall-tier='9'] {
-        --sw-k: 0.65;
+        font-size: clamp(40px, min(7.4cqh, 6.4cqw), 80px);
     }
 }
 
@@ -662,7 +633,7 @@
     }
 
     .stall.shop-window[data-mode='cycle'] .item-x {
-        font-size: min(var(--sw-fig, 124px), 124px, 11.5cqw);
+        font-size: min(124px, 11.5cqw);
     }
 
     .stall.shop-window[data-mode='cycle'] .sw-qr {
@@ -726,30 +697,6 @@
         text-align: left;
     }
 
-    /* The Cycle card's figure ladder (below): steps 4-9. */
-    [data-wall-tier='4'] {
-        --sw-fig: 9.6cqw;
-    }
-
-    [data-wall-tier='5'] {
-        --sw-fig: 7.85cqw;
-    }
-
-    [data-wall-tier='6'] {
-        --sw-fig: 6.5cqw;
-    }
-
-    [data-wall-tier='7'] {
-        --sw-fig: 5.5cqw;
-    }
-
-    [data-wall-tier='8'] {
-        --sw-fig: 4.58cqw;
-    }
-
-    [data-wall-tier='9'] {
-        --sw-fig: 4.2cqw;
-    }
 }
 
 /*
@@ -762,10 +709,15 @@
  * for the picture beside the words, which is 400px shorter.
  *
  * Stated as a height rule rather than a device: what decides is how much
- * vertical room there is, and 1200 is above every tablet and below every
- * portrait television.
+ * vertical room there is. 1500 since 2026-10-14: the line stood at 1200,
+ * which a portrait Android tablet (800x1280) and the large iPad (1024x1366)
+ * are both over, and at 800x1280 the stacked card ran 112–190px past the
+ * status line on every look and cut Rural's code from below. A 1080x1920
+ * portrait television is the stacked column's screen; 768x1366 (a 1366x768
+ * panel hung the tall way), 800x1280 and 1024x1366 take this arrangement,
+ * which the counter tablet already proved at 1024 of height, with more room.
  */
-@container sw (orientation: portrait) and (max-height: 1200px) {
+@container sw (orientation: portrait) and (max-height: 1500px) {
     /* The touch wall's payment band at this size has its own block, after
        the band's base rules (below): stated here, those rules out-ranked it. */
     .stall.shop-window[data-mode='cycle'] .item-head {
@@ -795,13 +747,27 @@
         text-align: left;
     }
 
+    /* The code is the column's: at the tall portrait wall's 26cqh it is
+       333px on a 1280-tall frame, wider than this layout's code column at
+       720 wide (295px), and it ran out of the card. Capped by the column
+       (the frame less the body's and the card's padding, the picture and
+       the gap) — and never below its 280px floor, which wins where the
+       column is narrower: under a 720px frame the code stands past the
+       column into the card's padding (269px of column and a 280px code at
+       680 wide; the wall-offsize critic read it 2–13px past across the wall
+       screens). A smaller code is one a room cannot read. */
+    .stall.shop-window .sw-qr svg {
+        width: clamp(280px, min(26cqh, 100cqw - 180px - min(260px, 34cqw)), 360px);
+        height: clamp(280px, min(26cqh, 100cqw - 180px - min(260px, 34cqw)), 360px);
+    }
+
     /* The price column here is what the icon leaves: 320px at 768x1024.
        At the tall wall's 11.5cqw figure and 28px words a Rural tag in Stall Serif
        was 369px and spilled out of the card (2026-09-26, measured once the
        face was self-hosted), and a longer figure did the same on every look.
        The figure steps to 10cqw (77px at 768) and the words to 20px. */
     .stall.shop-window[data-mode='cycle'] .item-x {
-        font-size: min(var(--sw-fig, 10cqw), 10cqw);
+        font-size: 10cqw;
     }
 
     .stall.shop-window[data-mode='cycle'] .item-from,
@@ -824,22 +790,6 @@
         row-gap: 8px;
     }
 
-    /* The Cycle card's figure ladder (below): steps 1-3 and the break. */
-    [data-wall-tier='1'] {
-        --sw-fig: 7.4cqw;
-    }
-
-    [data-wall-tier='2'] {
-        --sw-fig: 5.1cqw;
-    }
-
-    [data-wall-tier='3'] {
-        --sw-fig: 4.2cqw;
-    }
-
-    [data-wall-break] {
-        --sw-fig: 32px;
-    }
 }
 
 /*
@@ -858,8 +808,9 @@
  * under the cut is the row it always was. **The Cycle card is not a row and
  * takes none of this** (round 4, the critic's P1-1 on round 3): round 3 gave
  * its figure `fig-wraps` too, and stall.css's desk own-row rule took its
- * grid from the cut. That rule is the shop's alone, and the card has a
- * ladder of its own (`wallFigure`; "The Cycle card's figure ladder" below).
+ * grid from the cut. That rule is the shop's alone, and the card's figure
+ * is fitted to its own column (`wallFit.ts`; "The Cycle card's figure,
+ * fitted to its column" below).
  */
 .stall.shop-window[data-mode='browse'] .item-a.fig-wraps {
     display: block;
@@ -890,7 +841,7 @@
     }
 }
 
-@container sw (orientation: portrait) and (max-height: 1200px) {
+@container sw (orientation: portrait) and (max-height: 1500px) {
     .stall.shop-window[data-mode='browse'] .item-head:has(> .item-p > .item-a:is(.fig-wraps, .fig-narrow)) {
         grid-template-areas:
             'ic name'
@@ -912,71 +863,68 @@
     }
 }
 
-/* ---------- the Cycle card's figure ladder ---------- */
+/* ---------- the Cycle card's figure, fitted to its column ---------- */
 
 /*
- * The card's figure steps down by its length (`wallFigureTier` in window.ts
- * writes the step on the head as `data-wall-tier`, none at tier 0, the
- * card's design size, and `data-wall-break` from the break step on). It had
- * one size at every length, nowrap, so the counter tablet cut a 6-character
- * listing and an 8-character XEC quote on every look, and 1280x900 put a
- * 10-character figure's tail under the code (the critic's P1 on
- * narrow-phone round 4, pre-existing).
+ * The card's figure is fitted after the paint (`fitWallFigures`,
+ * `wallFit.ts`): tried at the size its layout and look give it above, and
+ * made smaller only where it does not stand inside the price area's grid
+ * column — an inline `font-size` on the money node. It replaced a table of
+ * sizes by length, one per layout, which was right only at the five sizes
+ * the probe paints (PLAN § Open's first P1, 2026-10-14).
  *
- * Each layout below gives the steps it needs a size in `--sw-fig` (on the
- * 1080-tall landscape wall a factor of its design size, `--sw-k`), and no
- * others; the card's own `.item-x` rule in each layout reads it under a
- * `min()` with its design size, so a step never paints a figure larger than
- * the card did. A custom property on an attribute selector rather than a
- * font-size under the card's full selector: every visitor downloads these
- * rules, and the wall's selector is 50 bytes a step. The sizes were measured in Chrome on the
- * shipped looks and the skeleton at the wall sizes the probe paints —
- * 1920x1080, 1280x900, 1280x800, 1080x1920, 768x1024 — against the widest
- * figure each step holds in every unit `QUOTE_UNITS` writes (`元`, drawn by
- * the machine's fallback, is the widest sign; tabular digits make every
- * figure of a length one width), with 2–6% to spare inside the price's own
- * grid column. The probe's `a-cycle-card-shows-every-digit-at-every-wall-size`
- * is the judge, over Cycle fixtures at the widest figure of each step on
- * every wall pass.
- *
- * Where a wall is narrow — the short landscape walls and the counter tablet
- * — a figure from the break step on (`WALL_BREAK_TIER`, 12 characters)
- * wraps after a comma at a size a room can still read instead of shrinking
- * to one line under it: one line of an eight-byte listing is 12px on the
- * tablet. A quote's unit is inside its figure, and `.fig-end` keeps it with
- * the last group; a listing's price cell becomes a grid of its own — `from`
- * on a line above, the figure's lines, and ` XEC` beside the last of them
- * (`last baseline`) — the stream card's tier-3 shape, so `from`, the unit
- * and a look's mark stand outside the money node's own box, which the
- * contrast pass reads whole. No group is split. Measured at most three
- * lines — the longest listings (24 characters and up) on Neo and Rural —
- * and two for every quote. The 1920 wall and the tall wall keep every
- * figure on one line at the sizes the probe paints.
+ * Where one line no longer stands at `WALL_FIGURE_MIN_PX`, the fit changes
+ * the figure's shape, through the one attribute below: `stack` stands a
+ * listing's `from` on a line of its own above the figure and ` XEC` beside
+ * the figure's last line (`last baseline`) — the stream card's tier-3
+ * shape, so `from`, the unit and a look's mark stand outside the money
+ * node's own box, which the contrast pass reads whole — and `break` lets a
+ * figure `moneyFigure` built with breaks wrap after its commas, the last
+ * group with its unit (`.fig-end`, nowrap). No group is split. Any layout,
+ * any wall size: the fit, not the layout, decides.
  */
-@container sw (orientation: landscape) and (min-height: 1201px) {
-    [data-wall-tier='5'] {
-        --sw-fig: 97px;
-    }
-
-    [data-wall-tier='6'] {
-        --sw-fig: 82px;
-    }
-
-    [data-wall-tier='7'] {
-        --sw-fig: 69px;
-    }
-
-    [data-wall-tier='8'] {
-        --sw-fig: 57px;
-    }
-
-    [data-wall-tier='9'] {
-        --sw-fig: 53px;
-    }
+[data-wall-wrap] .item-x {
+    grid-area: x;
+    line-height: 1.1;
+    text-align: start;
 }
 
-/* The wrap itself, on the two narrow walls (one block for both). */
-@container sw ((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1200px)) {
+[data-wall-wrap='break'] .item-x {
+    white-space: normal;
+}
+
+[data-wall-wrap] .item-a:has(> .item-u) {
+    display: grid;
+    grid-template:
+        'from from'
+        'x u' / minmax(0, max-content) auto;
+    column-gap: var(--s-price-inner-gap);
+    align-items: last baseline;
+    justify-content: start;
+}
+
+/* Stacked, the figure stays on one line, so its track never shrinks under
+   it (the wall-offsize critic's item 1): with the `break` shape's
+   `minmax(0, max-content)` a cell narrower than the figure shrank the track,
+   and the unwrapped digits ran on under ` XEC` — "XEC" over the last "7" of
+   Neo's `from 1,234,567 XEC` at 1280x900. At `max-content` the whole amount
+   runs past the cell instead, which the fit reads and takes down. Only the
+   broken shape may give its track up: its pieces wrap inside it. */
+[data-wall-wrap='stack'] .item-a:has(> .item-u) {
+    grid-template-columns: max-content auto;
+}
+
+[data-wall-wrap] .item-from {
+    grid-area: from;
+    justify-self: start;
+}
+
+[data-wall-wrap] .item-a > .item-u {
+    grid-area: u;
+}
+
+/* The touch wall's payment on the two narrow walls (one block for both). */
+@container sw ((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1500px)) {
     /* The touch wall's payment steps down on both narrow walls: one line of
        the payment at 18px (52.5px, measured) and "+N more" under it — two
        lines, a borrowed-token sentence and the count ran the tablet's band
@@ -992,32 +940,6 @@
         --sw-pay-cap: 18px;
         --sw-pay-back-h: 64px;
         --sw-pay-back-w: 160px;
-    }
-
-    [data-wall-break] .item-x {
-        grid-area: x;
-        white-space: normal;
-        line-height: 1.1;
-        text-align: start;
-    }
-
-    [data-wall-break] .item-a:has(> .item-u) {
-        display: grid;
-        grid-template:
-            'from from'
-            'x u' / minmax(0, max-content) auto;
-        column-gap: var(--s-price-inner-gap);
-        align-items: last baseline;
-        justify-content: start;
-    }
-
-    [data-wall-break] .item-from {
-        grid-area: from;
-        justify-self: start;
-    }
-
-    [data-wall-break] .item-a > .item-u {
-        grid-area: u;
     }
 }
 
@@ -1046,10 +968,35 @@
  * The code is at its floor already and is not what gives; nothing changes
  * on a 1280x900 wall but a Cycle quote's foot, under the yard and under the
  * Awning (whose canopy leaves 768px of frame there).
+ *
+ * 2026-10-14, off the probed sizes: under 790px of frame the Cycle card's
+ * air steps down on every look (its padding, gap and caption), and with it
+ * the sign's padding and the status line — at 1024x768 and 1366x768 the
+ * shipped card ran 7–41px over the status line on Rural bare, under the
+ * Awning and with the yard, and Browse's list 11–36px. This is a frame
+ * height, so the Awning's 1280x900 wall (768px of frame) takes it too. And
+ * the yard's air reaches a frame of 870px, where 1152x864 put Rural's card
+ * 13–22px over (no probed frame is between 821 and 870).
  */
 @container sw (orientation: landscape) and (max-height: 790px) {
     .stall-scroll {
         --sw-foot: 12px;
+        --sw-pad: 12px;
+        --sw-gap: 6px;
+        --sw-cap: 6px;
+    }
+
+    .stall.shop-window .stall-head {
+        padding-block: 12px 8px;
+    }
+
+    .stall.shop-window .sw-status {
+        padding-block: 8px;
+        font-size: 16px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .sw-cap {
+        font-size: 22px;
     }
 }
 
@@ -1065,7 +1012,7 @@
     }
 }
 
-@container sw (orientation: landscape) and (max-height: 820px) {
+@container sw (orientation: landscape) and (max-height: 870px) {
     .stall-scroll:has(> .att-beetle) {
         --sw-air: 4px;
         --sw-pad: 10px;
@@ -1530,19 +1477,82 @@
 }
 
 /*
+ * A portrait wall narrower than the counter tablet (2026-10-14; 680x1000,
+ * the wall's floor, is the case measured). A Browse row lays its price
+ * beside a 160px picture, which at 680 leaves the price 356px of a 544px
+ * row: `from 100,000,000 XEC` ran 32–76px past the row on every look and
+ * Rural's tag was cut, and a touch row's 16-character quote, beside the
+ * stepper's column, ran up to 81px past it. So below 768 every Browse row
+ * stands its price under the picture and the name, across the row, and a
+ * touch row puts its price under the stepper too.
+ */
+@container sw (orientation: portrait) and (max-width: 767.98px) {
+    .stall.shop-window[data-mode='browse'] .item-head {
+        grid-template-areas:
+            'ic name'
+            'price price';
+    }
+
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row {
+        grid-template-areas:
+            'ic name step'
+            'price price price';
+    }
+
+    /* And the Cycle card's air, the short landscape wall's answer: at 680
+       its code's caption takes two lines, and with Rural's yard the card
+       ran 40px over the status line. */
+    .stall.shop-window[data-mode='cycle'] .stall-body {
+        padding-block: 4px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .item-head {
+        padding-block: 8px;
+        row-gap: 6px;
+    }
+
+    .stall.shop-window[data-mode='cycle'] .sw-cap {
+        font-size: 22px;
+    }
+
+    .stall.shop-window .sw-status {
+        padding-block: 8px;
+        font-size: 16px;
+    }
+
+    .stall.shop-window .stall-head {
+        padding-block: 12px 8px;
+    }
+
+    /* The touch wall's payment band one step further down than the
+       tablet's: at 680 its lines ran 48px taller than at 768, and Back
+       showed 23 of its 64px under the Awning. */
+    .shop-window .stall-scroll {
+        --sw-pay-lines: 16px;
+        --sw-pay-lines-h: 50px;
+        --sw-pay-tot: 17px;
+        --sw-pay-small: 13px;
+        --sw-pay-fig: 30px;
+        --sw-pay-cap: 16px;
+        --sw-pay-back-h: 56px;
+        --sw-pay-back-w: 140px;
+    }
+}
+
+/*
  * The counter tablet's payment band (the short portrait block): AFTER the
  * band's base rules, which it restates at the same specificity. It sat in
  * the block above until 2026-09-24, where every rule but the caption's lost
  * to the base ones below it in the file — so the step-down it describes
  * never painted, and nothing measured the result (below).
  */
-@container sw (orientation: portrait) and (max-height: 1200px) {
+@container sw (orientation: portrait) and (max-height: 1500px) {
     /*
      * A counter tablet is 768 × 1024, and a 280px code with its lines and
      * both truths is most of that screen: measured, the band came to 553px
      * of a ~600px body and the shelf behind it had nothing left. The text
      * steps down (custom properties the band's base rules read, set with the
-     * short landscape wall's in the Cycle ladder's narrow-wall block above).
+     * short landscape wall's in the narrow walls' payment block above).
      *
      * **And the list yields its row to the band while a payment stands**
      * (2026-09-24, round 3). A wall row is 321–364px tall at this size and
@@ -1650,6 +1660,44 @@
 
     .stall.shop-window[data-touch='on'] .item-head-q :is(.fig-wraps, .fig-narrow) .item-x {
         font-size: min(3.1cqw, 30px);
+    }
+}
+
+/*
+ * A landscape wall narrower than the desk wall's 1280 (2026-10-14; 1024x768,
+ * the counter tablet on its side, is the case measured). Browse gives its
+ * code a 400px column, so the list is what is left: 490px at 1024, against
+ * 748 at 1280. Beside a name, a 13-character listing (`from 100,000,000
+ * XEC`) left the name 50px, its rail label ran over the figure, and a
+ * 14-character one spilled left over the picture (`asked amount is
+ * covered`, main and the fit alike). So below 1280 every Browse row stands
+ * its price under its name and picture, across the whole row, as a figure at
+ * the wall's narrow cut does at the counter tablet; the touch rows already
+ * do (the block above). And the touch wall's
+ * selection strip keeps its names a column: its "incl. surcharge" line was
+ * one nowrap line of 421px on Neo, which left the names 48px and spilled
+ * them under the total.
+ */
+@container sw (orientation: landscape) and (max-width: 1279.98px) {
+    .stall.shop-window[data-mode='browse'] .item-head,
+    .stall.shop-window[data-mode='browse'] .item-head:has(> .item-p > .item-a.fig-wraps) {
+        grid-template-areas:
+            'ic name'
+            'price price';
+        grid-template-columns: clamp(72px, 9cqw, 140px) minmax(0, 1fr);
+        row-gap: 6px;
+    }
+
+    .stall.shop-window[data-mode='browse'] .item-p {
+        justify-self: start;
+    }
+
+    .stall.shop-window[data-touch='on'] .sw-sel {
+        grid-template-columns: minmax(min(11ch, 30%), 1fr) auto auto;
+    }
+
+    .stall.shop-window[data-touch='on'] .sw-sel-s {
+        white-space: normal;
     }
 }
 

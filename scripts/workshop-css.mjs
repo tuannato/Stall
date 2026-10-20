@@ -472,12 +472,6 @@ export const STATE_ATTRIBUTES = Object.freeze({
     'data-tier': Object.freeze(['1', '2', '3']),
     'data-touch': Object.freeze(['on']),
     'data-turn': Object.freeze(['ccw', 'cw']),
-    // The wall's Cycle card's step on its figure ladder (2026-10-13): written
-    // on the card's head by `wallFigure` (window.ts, `WALL_FIGURE_CEILINGS`,
-    // nine ceilings, steps 1 to 9; none at step 0) and read by window.css; a
-    // look that sizes the card's figure sizes every step
-    // (`every-look-that-sizes-its-figure-sizes-every-price-tier`).
-    'data-wall-tier': Object.freeze(['1', '2', '3', '4', '5', '6', '7', '8', '9']),
     ...LOOK_HOOK_ATTRIBUTES,
 });
 
@@ -676,6 +670,83 @@ const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[
  * checks it. Test: `a-look-may-not-dress-a-figures-pieces`.
  */
 const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
+
+/*
+ * **A money node's size never moves** (D-2026-10-19-03 (1), the owner's "as
+ * recommended"; the wall-offsize critic's item 3). The wall's Cycle card is
+ * fitted after the paint (`fitWallFigures`, `src/ui/wallFit.ts`): the
+ * figure's size is the money node's own inline `font-size`, which no rule in
+ * a look sheet out-ranks — the look lint refuses `!important` — but an
+ * animation and a transition do: a keyframe's value beats an inline one, and
+ * a running transition beats every declaration. The critic's plants, on Neo:
+ * `.t-neo.shop-window .item-x { transition: all .4s }` read the figure
+ * mid-transition after a resize (22 of 35 cards moved, two left at 79.92px,
+ * past the design 65.5), and a keyframe at 64px out-ranked the fit on 56 of
+ * 70 cards at 1024x768. The fit holds every transition on the card off while
+ * it reads and puts them back only once the size it took is settled
+ * (`holdStill`); this is the sheet's half. A first-party look sheet may not:
+ *
+ * - transition `font-size`, `font` or `all` (a `transition` naming no
+ *   property, or one the lint cannot read — a `var()`, a CSS-wide keyword —
+ *   is `all`) on a rule whose subject may be a money node: a subject naming
+ *   a money node's class or role (`MONEY_NODE`, `.row.big dd` by its `dd`),
+ *   or naming no class, id or attribute of its own at all (`span`, `*`, a
+ *   bare `:is(…)`), which may match one; a subject that is a pseudo-element
+ *   (`::before`, `::after`) is not the node;
+ * - name `font-size` or `font` in any keyframe: which elements run a
+ *   keyframe is a selector's to say, and a size animated on any box, a money
+ *   node among them, is a size the fit cannot hold.
+ *
+ * Duration is not read: a `transition-property` here and its duration in
+ * another rule meet only in the cascade. No shipped look transitions or
+ * animates a size. The kit lint is not changed: a rule there is a line of
+ * the workshop README, the owner's. Test:
+ * `a-look-never-animates-a-money-nodes-size`.
+ */
+const MONEY_NODE = /\.(?:item-x|x|pay-x-n|buy|addr-short|addr-full|sw-pay-v|sw-pay-s|fig-say|fig-end)(?![\w-])|\[\s*data-role(?![\w-])/i;
+const SIZE_MOTION = new Set(['all', 'font', 'font-size']);
+const CSS_WIDE = new Set(['initial', 'inherit', 'unset', 'revert', 'revert-layer']);
+const EASING = /^(?:ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)$/i;
+
+/** Whether a selector's subject may be a money node (see above). */
+function mayBeMoneyNode(selector) {
+    const subject = subjectOf(selector);
+    if (/::?(?:before|after)(?![\w-])/i.test(subject)) return false;
+    if (MONEY_NODE.test(subject) || /^dd(?![\w-])/i.test(subject)) return true;
+    return !/[.#[]/.test(flatten(subject));
+}
+
+/** The properties a `transition` or `transition-property` declaration transitions, lower case; `all` where it cannot be read. */
+function transitioned(prop, value) {
+    const v = value.trim().toLowerCase();
+    if (/var\(/.test(v) || CSS_WIDE.has(v)) return ['all'];
+    if (v === 'none') return [];
+    if (prop === 'transition-property') return splitTopLevel(v, ',');
+    return splitTopLevel(v, ',').map((one) => {
+        const named = splitTopLevel(one, ' ').find(
+            (token) => !/^-?[\d.]+m?s$/.test(token) && !EASING.test(token) && !token.includes('(') && token !== 'allow-discrete' && token !== 'normal',
+        );
+        return named ?? 'all';
+    });
+}
+
+/** Why a rule of a first-party look sheet animates a money node's size, one sentence a declaration. */
+function moneySizeMotionProblems(decls, selectors) {
+    const out = [];
+    const reaching = selectors.filter(mayBeMoneyNode);
+    if (reaching.length === 0) return out;
+    for (const { prop, value } of decls) {
+        if (prop !== 'transition' && prop !== 'transition-property') continue;
+        const moving = transitioned(prop, value).filter((name) => SIZE_MOTION.has(name));
+        if (moving.length > 0) {
+            out.push(
+                `${prop}: ${echo(value, 48)} transitions ${moving.join(', ')} on "${echo(reaching[0])}", which may be a money node — ` +
+                    'the wall fits its figure by its size, and a running transition out-ranks the size it sets',
+            );
+        }
+    }
+    return out;
+}
 
 function selectorProblems(selector, { kit = false } = {}) {
     const out = [];
@@ -1460,6 +1531,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 }
                 for (const why of declarationProblems(declarationsOf(node.body), selectors, { firstParty: !kit })) at(node.start, why);
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
+                if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors)) at(node.start, why);
                 continue;
             }
             if (node.name === 'keyframes') {
@@ -1472,6 +1544,14 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                     if (stop.kind === 'rule') {
                         for (const why of declarationProblems(declarationsOf(stop.body), undefined, { firstParty: !kit })) at(node.start, why);
                         for (const why of fontProblems(declarationsOf(stop.body), ownFamilies)) at(node.start, why);
+                        const sized = declarationsOf(stop.body).find(({ prop }) => prop === 'font-size' || prop === 'font');
+                        if (!kit && sized !== undefined) {
+                            at(
+                                node.start,
+                                `@keyframes "${echo(name)}" animates ${sized.prop} — any box a rule runs it on, a money node among them, ` +
+                                    'is a size the wall\'s fit cannot hold (a keyframe out-ranks the size it sets)',
+                            );
+                        }
                     }
                 }
             } else if (node.name === 'font-face' && load === 'worn' && !node.statement) {
@@ -1575,7 +1655,9 @@ export function lintSheet(css, { art = [] } = {}) {
  * (`a-look-names-no-container-of-its-own`); and no selector naming a piece
  * of a money figure the app breaks after its commas (`.fig-say`, `.fig-end`),
  * since a look dresses a figure only as a whole
- * (`a-look-may-not-dress-a-figures-pieces`).
+ * (`a-look-may-not-dress-a-figures-pieces`); and no transition of a size on
+ * a money node, nor a keyframe of a size anywhere
+ * (`a-look-never-animates-a-money-nodes-size`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });

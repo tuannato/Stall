@@ -42,9 +42,11 @@ export function screensAt(width: number, canvas: boolean): string[] {
 
 /**
  * The shop-window screens the wall passes measure: every fixture carrying
- * `window`, on the tall wall (1080x1920), the counter tablet (768x1024) and
- * the short desk wall (1280x800). Since the Cycle card has its own ladder
- * (`WALL_FIGURE_CEILINGS`), its long-figure screens are measured at every
+ * `window`, on the tall wall (1080x1920), the counter tablet (768x1024), the
+ * short desk wall (1280x800) and the four off-size walls (`OFF_SIZE_WALLS`
+ * in the runner). Since the Cycle card has a figure of its own to hold — a
+ * ladder by length (`WALL_FIGURE_CEILINGS`) on 2026-10-13, fitted to its
+ * column since 2026-10-14 — its long-figure screens are measured at every
  * wall size like the rest; until then the canvas pass alone measured those at
  * the rows' cuts.
  */
@@ -55,7 +57,7 @@ export function wallScreens(): string[] {
 /**
  * The wall screens the desk pass (1280x900) does not reach by the canvas
  * split: every canvas screen carrying `window` — the touch wall, the Cycle
- * card's ladder, and the four canvas twins of desk screens. The runner's
+ * card's length bands, and the four canvas twins of desk screens. The runner's
  * desk wall pass measures them at the desk's own size, so every wall screen
  * is measured at 1280x900 too.
  */
