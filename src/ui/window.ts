@@ -327,12 +327,14 @@ export const WALL_FIGURE_CEILINGS = [5, 7, 9, 11, 13, 16, 19, 22, 26] as const;
  * From this band on (12 characters, as counted above) the Cycle figure is
  * built with a soft break after each comma (`moneyFigure`: `<wbr>`s, its
  * pieces `aria-hidden` under one `role="img"` named by the whole figure),
- * so the fit may break it there (`data-wall-wrap="break"`) where one line no
- * longer stands at `WALL_FIGURE_MIN_PX`. Below it the figure is plain text,
- * which a reader hears as text rather than an image, and which the fit makes
- * smaller where one line does not stand at that size: measured, an
- * 11-character quote at 31.6px in Neo's 1024x768 column, the narrowest a
- * probed wall paints.
+ * so the fit may break it there (`data-wall-wrap="break"`) where neither
+ * one line nor a stacked `from` stands at `WALL_FIGURE_MIN_PX`, at the
+ * largest size it stands at. Below it the figure is plain text, which a
+ * reader hears as text rather than an image, and which the fit makes
+ * smaller where no one-line shape stands at that size: measured at
+ * 1024x768, the narrowest column a probed wall paints (2026-10-20), Rural's
+ * `$123,456.78` at 31.6px on one line and `from 1,234,567 XEC` stacked at
+ * 26.4px on Rural and 29.3px on Neo.
  */
 export const WALL_BREAK_TIER = 4;
 

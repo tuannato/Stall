@@ -260,10 +260,11 @@ const FIT_PRECISION_PX = 0.5;
 /**
  * The largest size from `start` down to `floor` at which the card stands in
  * a one-line shape, `shape` — the size left set — or undefined, the floor
- * left set, when none does (the broken shape is `largestBreak`'s). Until a size stands, each try scales by what the last read says the
- * figure needs on one line (the money node scales with its size, `from`,
- * ` XEC` and a tag's chrome do not), and at least 1% down, so a read that
- * does not move cannot loop. **That scale is an estimate, and it can land
+ * left set, when none does (the broken shape is `largestBreak`'s). Until a
+ * size stands, each try scales by what the last read says the figure needs
+ * on one line (the money node scales with its size, `from`, ` XEC` and a
+ * tag's chrome do not), and at least 1% down, so a read that does not move
+ * cannot loop. **That scale is an estimate, and it can land
  * far under the answer**: a figure Chrome broke at a `<wbr>` reads its
  * price cell stretched across the column, so what stands beside the figure
  * reads larger than it is — measured, Neo's `$1,234,567.89` on the tall wall
