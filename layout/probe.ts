@@ -56,7 +56,7 @@ import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from '.
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
-import { charCentre, columnExcuses, fittedRadii, framePoints, gridPoints, insideRounded, movedBy, radiusOf, SQUARE, type CoverPoint, type Frame, type Radii } from './coverPoints';
+import { columnExcuses, fittedRadii, framePoints, gridPoints, inkPoints, insideRounded, movedBy, radiusOf, SQUARE, type CoverPoint, type Frame, type Radii } from './coverPoints';
 import { LOOK_RULE, PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
@@ -69,7 +69,7 @@ import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
 import { reachesAnything, spillReach } from './spillReach';
 import { CARD_LADDER_LAST_STEP } from './cardLadder';
-import { inkLines, paddingBox, paintClips, type Box } from '../src/ui/signInk';
+import { inkLines, measurePainted, paddingBox, painted, paintClips, type Box } from '../src/ui/signInk';
 import {
     OBS_RAIL_STICKER_HEIGHT,
     OBS_STICKER_HEIGHT,
@@ -495,11 +495,13 @@ function coveredBy(node: Element): string | undefined {
  * PQ). This asks every money node (`MONEY_FIGURES`) and every protected box
  * (`PROTECTED`) in the open surface, with `pointer-events` and
  * `interactivity` forced on everywhere by one sheet adopted once a page and
- * switched on for the read alone (`coverPointers`): a box's centre and its
- * corners inside its rounded shape, every character's centre, and a grid
- * over a code (`layout/coverPoints.ts`), each in the node's own frame. A
- * paint with no hit area — a shadow, an outline, a neighbour's underline —
- * is not hit-testable whatever the forcing, and is 1b's (C-1).
+ * switched on for the read alone (`coverPointers`): points over every
+ * glyph's ink, at several heights and across a wide glyph (`inkPoints`),
+ * for a node with text, and for one with none — a code — the box's centre,
+ * its corners inside its rounded shape and a grid over the code
+ * (`layout/coverPoints.ts`), each in its own frame. A paint with no hit
+ * area — a shadow, an outline, a neighbour's underline — is not
+ * hit-testable whatever the forcing, and is 1b's (C-1).
  *
  * **At rest, once a paint, on every geometry pass, and once a contrast job
  * at its full height** (`window.__coverFaults`), where nothing stands below
@@ -676,6 +678,38 @@ function coverFrames(node: Element, rects: readonly DOMRect[]): { frames: Frame[
     return own === undefined ? undefined : { frames: [{ ...own, angle }], whole: true };
 }
 
+/**
+ * Where a character's glyph inks, from the top-left of its own box (its
+ * range rect, before any turn): the ink model's own measure
+ * (`measurePainted`, `src/ui/signInk.ts`) of the character as painted, about
+ * the baseline the box's content area sets — the box's top plus the face's
+ * ascent, as `inkLines` reads a line. One measure per face and character a
+ * page (`glyphInks`). Undefined where nothing measures.
+ */
+const glyphInks = new Map<string, Box | null>();
+/** The key a face's measures are kept under (`glyphInk`). */
+function faceKey(cs: CSSStyleDeclaration): string {
+    return `${cs.fontStyle}|${cs.fontWeight}|${cs.fontSize}|${cs.fontFamily}|${cs.fontVariantCaps}|${cs.fontStretch}|${cs.textTransform}|`;
+}
+function glyphInk(ch: string, cs: CSSStyleDeclaration, face: string): Box | undefined {
+    const key = face + ch;
+    let ink = glyphInks.get(key);
+    if (ink === undefined) {
+        const m = measurePainted(painted(ch, cs.textTransform), cs);
+        ink =
+            m === undefined || !(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent > 0)
+                ? null
+                : {
+                      left: -m.actualBoundingBoxLeft,
+                      right: m.actualBoundingBoxRight,
+                      top: m.fontBoundingBoxAscent - m.actualBoundingBoxAscent,
+                      bottom: m.fontBoundingBoxAscent + m.actualBoundingBoxDescent,
+                  };
+        glyphInks.set(key, ink);
+    }
+    return ink ?? undefined;
+}
+
 /** `el`'s clips, and `el` itself where it clips its content (a scroller holding the text read). */
 function clipsWithin(el: Element): Clip[] {
     const cs = getComputedStyle(el);
@@ -684,7 +718,7 @@ function clipsWithin(el: Element): Clip[] {
 }
 
 /** Why `node` is covered (or the read cannot say), as a sentence, or undefined; the points counted into `scan`. */
-function coverOf(node: Element, scan: CoverScan): string | undefined {
+function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>): string | undefined {
     const rects = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
     if (rects.length === 0) {
         const look = lookHides(node);
@@ -698,27 +732,44 @@ function coverOf(node: Element, scan: CoverScan): string | undefined {
     if (framed === undefined) {
         return `stands in a frame turned ${degrees(angleOf(node))} and has no layout box of its own, which the read cannot take apart past 45°`;
     }
-    const nodeClips = clipsOf(node);
     const points: { p: CoverPoint; clips: Clip[] }[] = [];
-    for (const f of framed.frames) {
-        const radii = framed.whole ? radiiOf(node, f.w, f.h) : SQUARE;
-        for (const p of framePoints(f, radii)) points.push({ p, clips: nodeClips });
-        if (framed.whole && node.matches('.qr')) for (const p of gridPoints(f, QR_PITCH, radii)) points.push({ p, clips: nodeClips });
-    }
-    // Every character's centre, inside every clip above it — its own
-    // element's included: a record's bytes scroll inside their own box, and
-    // a line scrolled out of it stands under whatever follows.
+    // Every character's glyph, over its ink (`inkPoints`), inside every clip
+    // above it — its own element's included: a record's bytes scroll inside
+    // their own box, and a line scrolled out of it stands under whatever
+    // follows. A character inside another node this read asks (the
+    // address's two spans inside its box, a line's figure inside Pay
+    // several's lines) is asked once, by the innermost: a hit on the outer
+    // node or on anything else inside it fails there and is excused here.
     const range = document.createRange();
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    const clipsOfParent = new Map<Element, Clip[]>();
+    const ofParent = new Map<Element, { clips: Clip[]; cs: CSSStyleDeclaration; face: string; angle: number; vertical: boolean } | null>();
+    let innerText = false;
     for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
         const text = t as Text;
         const parent = text.parentElement;
         if (parent === null) continue;
-        let clips = clipsOfParent.get(parent);
-        if (clips === undefined) {
-            clips = clipsWithin(parent);
-            clipsOfParent.set(parent, clips);
+        let own = ofParent.get(parent);
+        if (own === undefined) {
+            let inner = false;
+            for (let at: Element | null = parent; at !== null && at !== node; at = at.parentElement) {
+                if (asked.has(at)) {
+                    inner = true;
+                    break;
+                }
+            }
+            if (inner) {
+                ofParent.set(parent, null);
+                own = null;
+            }
+        }
+        if (own === null) {
+            innerText ||= text.data.trim() !== '';
+            continue;
+        }
+        if (own === undefined) {
+            const cs = getComputedStyle(parent);
+            own = { clips: clipsWithin(parent), cs, face: faceKey(cs), angle: angleOf(parent), vertical: !cs.writingMode.startsWith('horizontal') };
+            ofParent.set(parent, own);
         }
         let at = 0;
         for (const ch of text.data) {
@@ -728,13 +779,31 @@ function coverOf(node: Element, scan: CoverScan): string | undefined {
             range.setStart(text, start);
             range.setEnd(text, at);
             const r = range.getBoundingClientRect();
-            if (r.width > 0 || r.height > 0) points.push({ p: charCentre(r), clips });
+            if (r.width < 0.5 || r.height < 0.5) continue;
+            const f = own.angle === 0 ? { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: r.width, h: r.height } : turnedBox(r, own.angle);
+            if (f === undefined) {
+                // A glyph turned past 45° has no frame to solve: its centre.
+                points.push({ p: { x: r.left + r.width / 2, y: r.top + r.height / 2, kind: 'ink' }, clips: own.clips });
+                continue;
+            }
+            const ink = own.vertical ? undefined : glyphInk(ch, own.cs, own.face);
+            for (const p of inkPoints({ ...f, angle: own.angle }, ink ?? { left: 0, top: 0, right: f.w, bottom: f.h })) points.push({ p, clips: own.clips });
+        }
+    }
+    // A box with no text — a code — is read by its own points: its centre,
+    // its corners inside its rounded shape, and a code's grid.
+    if (points.length === 0 && !innerText) {
+        const nodeClips = clipsOf(node);
+        for (const f of framed.frames) {
+            const radii = framed.whole ? radiiOf(node, f.w, f.h) : SQUARE;
+            for (const p of framePoints(f, radii)) points.push({ p, clips: nodeClips });
+            if (framed.whole && node.matches('.qr')) for (const p of gridPoints(f, QR_PITCH, radii)) points.push({ p, clips: nodeClips });
         }
     }
     const column = node.closest('.item-p');
     const covered = new Map<string, number>();
     let first: string | undefined;
-    let firstChar: string | undefined;
+    let firstInk: string | undefined;
     for (const { p, clips } of points) {
         scan.points += 1;
         if (p.x < 0 || p.x >= window.innerWidth) {
@@ -763,11 +832,11 @@ function coverOf(node: Element, scan: CoverScan): string | undefined {
             (inColumn === 'column' ? ' — its own price column, a pseudo of which reports as the column' : '') +
             (moved !== undefined ? ` — inside its price column, moved: ${moved}` : '');
         first ??= sentence;
-        if (p.kind === 'char') firstChar ??= sentence;
+        if (p.kind === 'ink') firstInk ??= sentence;
     }
     if (first === undefined) return undefined;
     // The most telling hit first — over a glyph — and how many of each kind.
-    return `${firstChar ?? first} (${[...covered].map(([kind, n]) => `${n} ${kind}`).join(', ')} point(s) covered)`;
+    return `${firstInk ?? first} (${[...covered].map(([kind, n]) => `${n} ${kind}`).join(', ')} point(s) covered)`;
 }
 
 /**
@@ -797,8 +866,9 @@ function coverScan(): CoverScan {
         for (const el of document.querySelectorAll('[inert], dialog:modal')) {
             scan.would.push(`${named(el)} is ${el.matches('[inert]') ? 'inert' : 'a modal dialog'}, which no sheet makes hit-testable`);
         }
+        const asked = new Set(nodes);
         for (const node of nodes) {
-            const why = coverOf(node, scan);
+            const why = coverOf(node, scan, asked);
             if (why !== undefined) scan.would.push(`${named(node)} ${why}`);
         }
     } finally {

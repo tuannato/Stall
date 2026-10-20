@@ -7,14 +7,23 @@
  * price column are excused. A paint with no hit area (a shadow, an outline, a
  * neighbour's underline) is not here: 1b's.
  *
- * - **Points.** A box's centre and its four corners, each corner taken
- *   **inside the box's rounded shape** (`cornerInset`): a corner point two
- *   pixels in from a pill's edges stands outside the pill, hit testing honours
- *   `border-radius`, and the hit falls to the parent — 262 false reds over 72
- *   paints of the shipped looks in the critic's census, every one a corner of a
- *   rounded control and none on Neo, whose radius is 0. Every character's
- *   centre is asked beside them (the caller reads the rects). A code gets a
- *   grid (`gridPoints`) at a pitch the caller sets.
+ * - **Points over the ink** (`inkPoints`, before 8g2 item 2). A node with
+ *   text is asked over every glyph's ink, at several heights and, on a wide
+ *   glyph, across it: one centre a character left a band over half of every
+ *   digit unasked (the critic's T5, a band of the look's ground over the
+ *   lower half of the Cycle card's figure), and a box's corners asked its
+ *   line box rather than its glyphs (20 of the 44 would-be failures of the
+ *   first clean run were a stepper's box meeting a figure's line box where
+ *   no glyph stood). The caller measures each glyph (`measurePainted`, the
+ *   ink model's own).
+ * - **A box's points.** A node with no text — a code — is asked at its
+ *   centre and its four corners, each corner taken **inside the box's
+ *   rounded shape** (`cornerInset`): a corner point two pixels in from a
+ *   pill's edges stands outside the pill, hit testing honours
+ *   `border-radius`, and the hit falls to the parent — 262 false reds over
+ *   72 paints of the shipped looks in the critic's census, every one a
+ *   corner of a rounded control and none on Neo, whose radius is 0. A code
+ *   gets a grid (`gridPoints`) at a pitch the caller sets.
  * - **Frames.** Every point is taken in the box's own frame — before the turn
  *   of every ancestor — and turned back (`framePoints`), so a point of a
  *   swaying tag's figure is a point of the figure.
@@ -90,7 +99,7 @@ export function cornerInset([rx, ry]: [number, number]): [number, number] {
 /** A box in its own frame: its centre on the page, its size before the turn, and the turn (radians). */
 export type Frame = { cx: number; cy: number; w: number; h: number; angle: number };
 
-export type PointKind = 'centre' | 'corner' | 'char' | 'grid';
+export type PointKind = 'centre' | 'corner' | 'ink' | 'grid';
 export type CoverPoint = { x: number; y: number; kind: PointKind };
 
 /** A point given in the frame's own coordinates (from its centre, before the turn), on the page. */
@@ -151,9 +160,59 @@ export function gridPoints(f: Frame, pitch: number, radii: Radii = SQUARE): Cove
     return out;
 }
 
-/** A character's centre on the page, from its range rect: a turned glyph's bounds share its centre. */
-export function charCentre(r: { left: number; top: number; width: number; height: number }): CoverPoint {
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, kind: 'char' };
+/**
+ * How far apart the points over a glyph's ink stand, CSS px, down the glyph
+ * and across it. Set on cost (before 8g2, item 2): most of the app's money
+ * is set at 11–16px, two rows and one column a glyph, and the phone pass
+ * asks 174,213 points (106,455 hit-tested) where one centre a character
+ * and every box's corners asked 118,437 (76,263); a 6px lattice would ask
+ * about twice that again. A cover thinner than the pitch can stand between
+ * two rows or columns, stated: a stroke of a digit is thinner than any pitch
+ * a hit test can afford, and what a cover does to a glyph's own pixels is the
+ * paint reads'.
+ */
+export const INK_ROW_PITCH = 6;
+export const INK_COLUMN_PITCH = 12;
+/** At least two rows over every glyph, so no half of it — above or below its middle — goes unasked. */
+export const INK_MIN_ROWS = 2;
+/**
+ * At most this many rows and columns over one glyph: a wall's 60–80px figure
+ * would otherwise take 50 points a digit, its rows then standing up to a
+ * tenth of its height apart.
+ */
+export const INK_MAX_ROWS = 6;
+export const INK_MAX_COLUMNS = 3;
+
+/**
+ * Points over a glyph's ink, in its character's own frame and turned back:
+ * `ink` is where the glyph's ink reaches, from the character box's top-left
+ * before its turn (`measurePainted`'s actual bounding box about the
+ * baseline), cut to the box itself — a hit outside the character's own box
+ * answers whatever stands beside it, the node's own parent included, which
+ * is no cover. Rows every `INK_ROW_PITCH` down the ink, at least
+ * `INK_MIN_ROWS`, and columns every `INK_COLUMN_PITCH` across it, at least
+ * one, each at the middle of its band. An ink the box cuts to nothing (a
+ * mark set wholly above its line's box, a metric that did not resolve) is
+ * read as the box.
+ */
+export function inkPoints(f: Frame, ink: Box): CoverPoint[] {
+    let left = Math.max(0, ink.left);
+    let right = Math.min(f.w, ink.right);
+    let top = Math.max(0, ink.top);
+    let bottom = Math.min(f.h, ink.bottom);
+    if (!(right - left >= 0.5 && bottom - top >= 0.5)) [left, right, top, bottom] = [0, f.w, 0, f.h];
+    const w = right - left;
+    const h = bottom - top;
+    const rows = Math.min(INK_MAX_ROWS, Math.max(INK_MIN_ROWS, Math.ceil(h / INK_ROW_PITCH)));
+    const columns = Math.min(INK_MAX_COLUMNS, Math.max(1, Math.ceil(w / INK_COLUMN_PITCH)));
+    const out: CoverPoint[] = [];
+    for (let i = 0; i < rows; i += 1) {
+        for (let j = 0; j < columns; j += 1) {
+            const [x, y] = onPage(f, left + ((j + 0.5) * w) / columns - f.w / 2, top + ((i + 0.5) * h) / rows - f.h / 2);
+            out.push({ x, y, kind: 'ink' });
+        }
+    }
+    return out;
 }
 
 /** The computed longhands that say whether a box was moved off its place in the flow. */

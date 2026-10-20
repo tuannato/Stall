@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
     EDGE_INSET,
+    INK_COLUMN_PITCH,
+    INK_MAX_COLUMNS,
+    INK_MAX_ROWS,
+    INK_MIN_ROWS,
+    INK_ROW_PITCH,
     SQUARE,
-    charCentre,
     columnExcuses,
     cornerInset,
     fittedRadii,
     framePoints,
     gridPoints,
+    inkPoints,
     insideRounded,
     movedBy,
     radiusOf,
@@ -91,8 +96,65 @@ describe('nothing-covers-money-or-a-protected-box: where it is hit-tested', () =
         expect(() => gridPoints(code, 0)).toThrow(/positive pitch/);
     });
 
-    it('takes a character at the centre of its rect', () => {
-        expect(charCentre({ left: 10, top: 20, width: 8, height: 14 })).toEqual({ x: 14, y: 27, kind: 'char' });
+    /*
+     * The critic's T5 (before 8g2, item 2): a band of the look's ground laid
+     * over the lower half of the Cycle card's digits, between the row of
+     * character centres and the box's bottom corners, hid "875" and "XEC"
+     * and met no point. Red with one centre point a glyph (the rule as it
+     * was): nothing stands in the band.
+     */
+    it('asks every glyph at several heights, so a band over half of it meets a point', () => {
+        // A 60px figure's digit: its box 36 by 73, its ink 4–32 across and
+        // 15–59 down (the baseline at 59, the cap height 44).
+        const f = { cx: 118, cy: 336.5, w: 36, h: 73, angle: 0 };
+        const ink = { left: 4, right: 32, top: 15, bottom: 59 };
+        const points = inkPoints(f, ink);
+        const top = f.cy - f.h / 2;
+        // The lower half of the ink, and a band 12px tall anywhere in it.
+        for (let from = 15; from + 12 <= 59; from += 1) {
+            expect(points.some((p) => p.y >= top + from && p.y <= top + from + 12)).toBe(true);
+        }
+        const rows = new Set(points.map((p) => p.y)).size;
+        const columns = new Set(points.map((p) => p.x)).size;
+        expect(rows).toBe(Math.min(INK_MAX_ROWS, Math.ceil(44 / INK_ROW_PITCH)));
+        expect(columns).toBe(Math.min(INK_MAX_COLUMNS, Math.ceil(28 / INK_COLUMN_PITCH)));
+        expect(points.every((p) => p.kind === 'ink')).toBe(true);
+    });
+
+    it('asks a small glyph at two heights at least, and at its middle across', () => {
+        // An 11px digit: its ink 6 by 8.
+        const points = inkPoints({ cx: 3.5, cy: 7, w: 7, h: 14, angle: 0 }, { left: 0.5, right: 6.5, top: 3, bottom: 11 });
+        expect(points).toHaveLength(INK_MIN_ROWS);
+        expect(points.map((p) => [p.x, p.y])).toEqual([
+            [3.5, 5],
+            [3.5, 9],
+        ]);
+    });
+
+    it('cuts the ink to the character’s own box, and reads the box where nothing is left', () => {
+        const f = { cx: 50, cy: 50, w: 20, h: 30, angle: 0 };
+        // An italic overhang and a mark above the box: cut to it.
+        for (const p of inkPoints(f, { left: -6, right: 26, top: -10, bottom: 25 })) {
+            expect(p.x).toBeGreaterThanOrEqual(40);
+            expect(p.x).toBeLessThanOrEqual(60);
+            expect(p.y).toBeGreaterThanOrEqual(35);
+            expect(p.y).toBeLessThanOrEqual(60);
+        }
+        // An ink wholly above the box: the box.
+        const above = inkPoints(f, { left: 2, right: 18, top: -20, bottom: -5 });
+        expect(Math.min(...above.map((p) => p.y))).toBeGreaterThan(35);
+        expect(Math.max(...above.map((p) => p.y))).toBeLessThan(65);
+    });
+
+    it('takes a turned glyph’s points in its own frame and turns them back', () => {
+        const angle = (0.8 * Math.PI) / 180;
+        const f = { cx: 200, cy: 100, w: 20, h: 30, angle };
+        const [first] = inkPoints(f, { left: 0, right: 20, top: 0, bottom: 30 });
+        // The first row and the first column, each at the middle of its band, from the centre.
+        const dx = 20 / Math.ceil(20 / INK_COLUMN_PITCH) / 2 - 10;
+        const dy = 30 / Math.ceil(30 / INK_ROW_PITCH) / 2 - 15;
+        expect(first!.x).toBeCloseTo(200 + dx * Math.cos(angle) - dy * Math.sin(angle), 9);
+        expect(first!.y).toBeCloseTo(100 + dx * Math.sin(angle) + dy * Math.cos(angle), 9);
     });
 });
 
@@ -138,14 +200,14 @@ describe('nothing-covers-money-or-a-protected-box: the price column', () => {
      * answering 'inside': the first expectation fails.
      */
     it('never excuses a hit on the column itself', () => {
-        for (const kind of ['centre', 'corner', 'char', 'grid'] as const) {
+        for (const kind of ['centre', 'corner', 'ink', 'grid'] as const) {
             expect(columnExcuses(kind, 'column', undefined)).toBe(false);
         }
     });
 
     it('excuses a sibling inside the column at a corner point alone, and never one that was moved', () => {
         expect(columnExcuses('corner', 'inside', undefined)).toBe(true);
-        expect(columnExcuses('char', 'inside', undefined)).toBe(false);
+        expect(columnExcuses('ink', 'inside', undefined)).toBe(false);
         expect(columnExcuses('centre', 'inside', undefined)).toBe(false);
         expect(columnExcuses('grid', 'inside', undefined)).toBe(false);
         expect(columnExcuses('corner', 'inside', 'top -60px (position relative)')).toBe(false);
