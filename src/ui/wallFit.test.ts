@@ -37,6 +37,8 @@ type Model = {
     cellFills?: boolean;
     /** How far the card runs past the status line at a size, in a shape. */
     over?: (px: number, shape: string) => number;
+    /** Broken, the price cell reads its whole column at every size, as the real one does: only a piece past its box says it does not stand. */
+    breakCellFills?: boolean;
 };
 
 /** A gauge over a model of the card, reading the dress the fit put on it. */
@@ -64,6 +66,11 @@ function modelGauge(model: Model, reads: string[] = []) {
             widest = Math.max(piece, Math.min(fig, avail));
             lines = Math.max(1, Math.ceil(fig / Math.max(avail, piece)));
             need = (model.stackFixed ?? 0) + widest;
+            if (model.breakCellFills === true) {
+                const fits = piece <= avail + 0.5;
+                reads.push(`${shape} ${px}`);
+                return { size: px, room: model.room, need: model.room, figure: fig, widest: Math.min(widest, avail), lines, block: 1.1 * px * lines, over: model.over?.(px, shape) ?? -10, fits };
+            }
         }
         reads.push(`${shape} ${px}`);
         return {
@@ -163,6 +170,20 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         expect(sizeOf(figure)).toBeLessThanOrEqual(221 / 6);
         expect(sizeOf(figure)).toBeGreaterThan(221 / 6 - 0.6);
         expect(sizeOf(figure)).toBeGreaterThan(WALL_FIGURE_MIN_PX);
+    });
+
+    it('finds the largest broken size where the price cell reads its whole column at every size', () => {
+        // Measured in Chrome on the first cut of the break's new size: the
+        // cell spans its column whatever the size, so the one-line estimate
+        // took 1% off a try, ran out of tries and left the floor (16px) on
+        // Modern's `from 1,234,567,890.12 XEC` at 1024x768, which stands at
+        // 40px. The last group with its unit is 3.7px a px in a 149px track.
+        const { root, head, figure } = wall('1,234,567,890.12', { from: true, breaks: true });
+        setWallFigureGauge(modelGauge({ room: 235, design: 65.5, perPx: 10, fixed: 160, stackFixed: 86, piecePerPx: 149 / 40, breakCellFills: true }));
+        fitWallFigures(root);
+        expect(head.getAttribute('data-wall-wrap')).toBe('break');
+        expect(sizeOf(figure)).toBeGreaterThan(39.4);
+        expect(sizeOf(figure)).toBeLessThanOrEqual(40);
     });
 
     it('caps a broken figure at its design size, and takes more lines over a smaller figure (the critic\'s 32 → 56px)', () => {
