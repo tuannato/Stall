@@ -644,6 +644,42 @@ function lookHideRulesNow(): { selector: string; media: string[] }[] {
 }
 
 /**
+ * **An animation that takes a box away is the look's doing** (before 8g2,
+ * item 4): the running animation on `node` or a box above it, up to its
+ * stall, whose keyframes name `display` or `content-visibility` — the
+ * one, with the box running it and the value, as a sentence — or
+ * undefined. A keyframe `display: none` is a look's (no served sheet's
+ * keyframes name either property, and the app runs no script animation),
+ * and the rule reading style rules alone (`lookHides`), like a skip of
+ * every node with no box, took it for the app hiding the node: the
+ * critic's T2c hid every quote row's figure behind a keyframe and left Pay
+ * standing, and the whole runner passed. Only an animation that names one
+ * of the two: Modern's sign animates around the address twin the app hides
+ * at each width, and Rural's tag sways around its own lines, so any
+ * running animation above a node with no box would be a false red. A
+ * keyframe naming either property is read as able to take the box away,
+ * whatever its value (a `var()` resolves where it is used).
+ */
+function animatedAway(node: Element): string | undefined {
+    for (let at: Element | null = node; at !== null && at.id !== 'app'; at = at.parentElement) {
+        for (const anim of at.getAnimations()) {
+            const effect = anim.effect;
+            if (!(effect instanceof KeyframeEffect)) continue;
+            for (const frame of effect.getKeyframes()) {
+                for (const key of ['display', 'contentVisibility'] as const) {
+                    const value = (frame as Record<string, unknown>)[key];
+                    if (typeof value !== 'string') continue;
+                    const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'an animation';
+                    return `${at === node ? 'it runs' : `${named(at)} runs`} ${name}, whose keyframes set ${key === 'display' ? 'display' : 'content-visibility'} ${value}`;
+                }
+            }
+        }
+        if (at.matches('.stall')) break;
+    }
+    return undefined;
+}
+
+/**
  * Whether a look's rule takes `node`'s box away: on the node or a box above
  * it that computes `display: none` (or, above it, `content-visibility:
  * hidden`), a look's hiding rule in force matches. Undefined when nothing
@@ -761,6 +797,8 @@ function clipsWithin(el: Element): Clip[] {
 function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, reaches: Map<Element, Reach>): string | undefined {
     const rects = [...node.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
     if (rects.length === 0) {
+        const animated = animatedAway(node);
+        if (animated !== undefined) return `has no box: ${animated} — a look's animation takes it away`;
         const look = lookHides(node);
         if (look === false) {
             scan.appHidden += 1;
@@ -3714,12 +3752,16 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *
  * Not read, stated (round 6: the list says what the code reads, the
  * critic's corrections on round 5):
- * - a figure a look hides whole: a money node not rendered (`display: none`
- *   on it or above it, `content-visibility: hidden`) is skipped, as the ink
- *   rule skips it, since the app hides figures too (a sheet with no rate,
- *   the address's two spans by width, both by `hidden` or a width rule); of
+ * - a figure a look hides whole by a rule: a money node not rendered
+ *   (`display: none` on it or above it, `content-visibility: hidden`) is
+ *   skipped, as the ink rule skips it, since the app hides figures too (a
+ *   sheet with no rate, the address's two spans by width, both by `hidden`
+ *   or a width rule) — unless an animation on it or a box above it, up to
+ *   the stall, names `display` or `content-visibility` in its keyframes,
+ *   which fails (`animatedAway`, before 8g2 item 4: the critic's T2c); of
  *   the money set only the price role and "You pay" are held to having a
- *   box at all (`coveredBy`); an element under the subject that is not
+ *   box at all (`coveredBy`), and 1a (report-only) fails one a look's rule
+ *   hides (`lookHides`); an element under the subject that is not
  *   rendered;
  * - where the figure's box stands (`DRESS_FREE`'s placement: a figure moved
  *   is the coverage, spill and clip rules'), and a single line set so tight
@@ -5606,7 +5648,23 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
         if (say.parentElement !== null) subjects.add(say.parentElement);
     }
     for (const node of subjects) {
-        if (node.closest('.deck-stall') !== null || !rendersAt(node)) continue;
+        if (node.closest('.deck-stall') !== null) continue;
+        if (!rendersAt(node)) {
+            // A money node not rendered is skipped — the app hides one twin
+            // of the address at each width — unless a look's animation took
+            // its box away (`animatedAway`, before 8g2 item 4). The ink and
+            // self-clip rules skip it either way: this rule owns it.
+            const animated = animatedAway(node);
+            if (animated !== undefined) {
+                out.push({
+                    screen,
+                    theme: label,
+                    check: DRESS_CHECK,
+                    detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}": has no box: ${animated} — a look may not take a money figure away`,
+                });
+            }
+            continue;
+        }
         const stall = node.closest('.stall');
         if (stall === null) continue;
         const byLook = (dressByClass[measuringClass] ??= {});
