@@ -413,6 +413,50 @@ describe('the-cycle-figure-is-fitted-to-its-column', () => {
         expect(sizeOf(figure)).toBeLessThanOrEqual(221 / 4.2);
     });
 
+    it('holds the transitions of the whole card off, not only of the boxes the fit sets and reads', () => {
+        // The wall-offsize critic's re-review, item 1: the hold covered the
+        // card, its head, the price cell, the amount and the money node, and
+        // a transition of a size on `.item-u` (the unit beside the figure)
+        // ran on after a turn to another frame, so 7 of 39 Neo Cycle cards
+        // read a figure 9-16px past its column. Every element under the
+        // card is held, whatever a look transitions.
+        const { root, head } = wall('$999.99', { from: true });
+        const unit = root.querySelector<HTMLElement>('.item-u')!;
+        const from = root.querySelector<HTMLElement>('.item-from')!;
+        const mark = document.createElement('i');
+        mark.className = 'look-mark mark-figure';
+        const deep = document.createElement('span');
+        deep.className = 'item-b';
+        deep.appendChild(mark);
+        head.appendChild(deep);
+        unit.style.setProperty('transition', 'font-size 2s');
+        from.style.setProperty('transition', 'letter-spacing 1s', 'important');
+        mark.style.setProperty('transition', 'width 1s');
+        const own = new Map<HTMLElement, string>([
+            [unit, 'font-size 2s'],
+            [from, 'letter-spacing 1s'],
+            [mark, 'width 1s'],
+        ]);
+        const seen = new Set<string>();
+        setWallFigureGauge((h, f) => {
+            for (const node of own.keys()) {
+                seen.add(`${node.className}: ${node.style.getPropertyValue('transition')} ${node.style.getPropertyPriority('transition')}`);
+            }
+            return modelGauge({ room: 221, design: 65.5, perPx: 4.2, fixed: 160, stackFixed: 70 })(h, f);
+        });
+        fitWallFigures(root);
+        // While it reads, every one of them is held off, important.
+        expect([...seen].sort()).toEqual(['item-from: none important', 'item-u: none important', 'look-mark mark-figure: none important']);
+        // And after, each has the transition it had, at the priority it had.
+        for (const [node, value] of own) expect(node.style.getPropertyValue('transition')).toBe(value);
+        expect(unit.style.getPropertyPriority('transition')).toBe('');
+        expect(from.style.getPropertyPriority('transition')).toBe('important');
+        // A box the fit put no style on is left with no style attribute.
+        expect(head.parentElement!.hasAttribute('style')).toBe(false);
+        expect(head.hasAttribute('style')).toBe(false);
+        expect(deep.hasAttribute('style')).toBe(false);
+    });
+
     it('puts the card\'s own style back after it reads it', () => {
         const { root, head } = wall('875', { from: true });
         const cell = root.querySelector<HTMLElement>('.item-p')!;

@@ -391,14 +391,21 @@ function fitCard(head: HTMLElement): void {
     const still = [head.parentElement, head, figure.closest<HTMLElement>('.item-p'), figure.parentElement, figure].filter(
         (node): node is HTMLElement => node !== null,
     );
+    const card = head.parentElement ?? head;
     // Transitions off before the first size is taken off: with one on the
     // figure, taking the last fit's size off would run back to the design.
-    const calm = holdStill(still, { turn: false });
+    // **The whole card's subtree, not only the five boxes the fit sets and
+    // reads** (the wall-offsize critic's re-review, item 1): a look's
+    // transition of a size on `.item-u` or `.item-from` moves the width the
+    // figure is read against, and the plant `transition: font-size 2s` on
+    // `.item-u` left 7 of 39 Neo cards 9-16px past their column after a turn
+    // with no paint. The turn and the sway stay off the five boxes alone
+    // (`fitStill`): they are read and set only on those.
+    const calm = holdStill([card, ...card.querySelectorAll<HTMLElement>('*')], { turn: false });
     try {
         dress(head, figure, 'line', undefined);
         // The card as painted: a look that tilts it (Rural, every third card)
         // reaches lower than its box, and the status line is read as painted.
-        const card = head.parentElement ?? head;
         const turn = head.closest('.shop-window')?.getAttribute('data-turn') ?? null;
         const painted = across(card.getBoundingClientRect(), turn).hi;
         fitStill(head, figure, still, card, turn, painted);
