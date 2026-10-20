@@ -979,6 +979,148 @@ function keyframeSizeMotion(decls) {
     return out;
 }
 
+/* ---------- a state rule hides no money ---------- */
+
+/*
+ * **A state rule hides no money** (D5 (a), the owner's, on the plan before
+ * step 8g2; the plan's critic, P2-4). The probe measures every screen at
+ * rest and paints no hover, no focus, no press and no turned wall's
+ * rotation, so a rule that arrives with one is read by no pass — the one
+ * thing the file-mask rule above (`a-file-mask-arrives-at-rest`) already
+ * says of a mask. A first-party look sheet's rule whose selector names a
+ * state — `:hover`, `:focus`, `:focus-visible`, `:focus-within`, `:active`
+ * or the attribute `[data-turn]`, anywhere in the selector (an ancestor's
+ * state reaches a figure inside it, and `:is()` and `:not()` are read as the
+ * state they name: fail closed) — may not set, to anything but its harmless
+ * value, one of the families that can hide or misstate a figure:
+ *
+ * - a clip or a mask: `clip-path`, `clip`, every `mask` and `mask-*`
+ *   property (the border and the legacy box image among them), only `none`;
+ * - `filter` and `backdrop-filter`, only `none`;
+ * - `mix-blend-mode` and `background-blend-mode`, only `normal`;
+ * - `opacity` under 1, and `visibility` but `visible`;
+ * - `transform`, `rotate`, `translate` and `scale` that turn the box more
+ *   than a tilt (`STATE_TILT_DEG`, the probe's `DRESS_TILT_DEG`, 10°) or
+ *   shrink, stretch, mirror, skew or foreshorten it. A shift of any length
+ *   and a growth stand, as the probe reads a box that holds a figure
+ *   (`boxTransformFault`): `rotate: 0deg`, `transform: none` and
+ *   `scale: 1` are the "no transform" values Rural's straightening needs.
+ *
+ * **A `var()` in any of these fails closed**, whatever it would substitute.
+ * Colour, ground, border and shadow changes stand — all 16 state rules the
+ * shipped looks have set nothing else but Rural's `rotate: 0deg` — so a
+ * hover that changes a money control's colour to a low contrast is still
+ * read by no pass (the plan's D5 (a), its stated cost). **Not read,
+ * stated**: a custom property set under a state and read by one of these
+ * families at rest; `display`, `content-visibility`, `overflow` with a
+ * size, `zoom`, `font-size`, `letter-spacing`, a position or a margin under
+ * a state; `all`; an `animation` a state starts; a state this list does not
+ * name (`:checked`, `:disabled`, `[aria-pressed]`, which the fixtures paint);
+ * and the net of a rotation across two declarations, which a computed
+ * transform would add up. First party only: the workshop README says a
+ * pointer's hover is Stall's at intake, not the kit's, so the kit lint is
+ * unchanged. Test: `a-look-state-rule-never-hides-money`.
+ */
+export const STATE_TILT_DEG = 10;
+const STATE_PSEUDO_CLASS = /:(?:hover|focus|focus-visible|focus-within|active)(?![\w-])/i;
+
+/** Whether a selector names a state the probe never paints (see above). */
+function namesABeltState(selector) {
+    return STATE_PSEUDO_CLASS.test(blankAttributes(selector)) || attributeBlocks(selector).some((inner) => /^\s*data-turn(?![\w-])/i.test(inner));
+}
+
+/** The families the belt reads: which property names, the one list of values each may take, and why. */
+const STATE_BELT = Object.freeze([
+    {
+        name: /^(?:clip-path|clip|mask(?:-.*)?)$/,
+        harmless: /^(?:none|auto|initial|unset)$/i,
+        why: 'a clip or a mask cuts a figure away',
+    },
+    {
+        name: /^(?:backdrop-)?filter$/,
+        harmless: /^(?:none|initial|unset)$/i,
+        why: 'a filter blurs a figure out of sight',
+    },
+    {
+        name: /^(?:mix-blend-mode|background-blend-mode)$/,
+        harmless: /^(?:normal|initial|unset)$/i,
+        why: 'a blend mode loses a figure into what is behind it',
+    },
+    {
+        name: /^visibility$/,
+        harmless: /^(?:visible|initial)$/i,
+        why: 'hiding a box hides the figure in it',
+    },
+]);
+
+/** Why a transform-family value, taken apart, is more than a tilt on a box that holds a figure, or undefined. */
+function boxTransformProblem(ops) {
+    let turn = 0;
+    for (const op of ops) {
+        if (op.kind === '3d') return 'a 3D function foreshortens it';
+        if (op.kind === 'skew') return 'a skew shears it';
+        if (op.kind === 'scale') {
+            const widest = Math.max(Math.abs(op.x), Math.abs(op.y));
+            if (Math.abs(op.x - op.y) > SCALE_EPSILON * widest) return 'a scale that is not the same both ways stretches it';
+            if (op.x < 1 - SCALE_EPSILON) return 'a scale under 1 shrinks or mirrors it';
+        } else if (op.kind === 'matrix') {
+            const sx = Math.hypot(op.a, op.b);
+            const sy = Math.hypot(op.c, op.d);
+            if (sx === 0 || sy === 0) return 'a matrix collapses it';
+            if (Math.abs(sx - sy) > SCALE_EPSILON * Math.max(sx, sy)) return 'a matrix stretches it';
+            if (sx < 1 - SCALE_EPSILON) return 'a matrix shrinks it';
+            if (Math.abs((op.a * op.c + op.b * op.d) / (sx * sy)) >= SCALE_EPSILON) return 'a matrix skews it';
+            if (op.a * op.d - op.b * op.c <= 0) return 'a matrix mirrors it';
+            turn += (Math.atan2(op.b, op.a) * 180) / Math.PI;
+        } else if (op.kind === 'rotate') {
+            turn += op.deg;
+        }
+    }
+    const net = ((turn % 360) + 360) % 360;
+    const tilt = net > 180 ? net - 360 : net;
+    return Math.abs(tilt) > STATE_TILT_DEG + 1e-9 ? `a turn of ${Number(tilt.toFixed(1))}° is more than a ${STATE_TILT_DEG}° tilt` : undefined;
+}
+
+/** Why one declaration under a state may not stand, or undefined. */
+function stateBeltReason(prop, value) {
+    const name = prop.replace(VENDOR_PREFIX, '');
+    const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    const family = STATE_BELT.find((f) => f.name.test(name));
+    const transform = name === 'transform' || name === 'rotate' || name === 'translate' || name === 'scale';
+    if (family === undefined && !transform && name !== 'opacity') return undefined;
+    if (/(?<![\w-])var\s*\(/i.test(withoutStrings(clean))) {
+        return 'a var() here carries a value past this check, so it is read as the worst it could be';
+    }
+    if (family !== undefined) {
+        return splitTopLevel(clean, ',').every((one) => family.harmless.test(one)) ? undefined : family.why;
+    }
+    if (name === 'opacity') {
+        if (INITIAL_KEYWORD.test(clean)) return undefined;
+        const factor = factorToken(clean);
+        if (factor === undefined) return 'an opacity this lint cannot read may fade a figure';
+        return factor >= 1 ? undefined : `an opacity of ${clean} fades a figure`;
+    }
+    const ops = transformFamilyOps(name, clean);
+    return ops === undefined ? 'a value this lint cannot take apart may do more than tilt the box' : boxTransformProblem(ops);
+}
+
+/** Why the declarations of a rule whose selector names a state may not stand (see above); a rule of no state has none. */
+function stateBeltProblems(decls, selectors) {
+    const state = selectors.find(namesABeltState);
+    if (state === undefined) return [];
+    const out = [];
+    for (const { prop, value } of decls) {
+        const why = stateBeltReason(prop, value);
+        if (why !== undefined) {
+            out.push(
+                `${prop}: ${echo(value, 48)} under "${echo(state)}" — ${why}; the probe measures every screen at rest and paints no hover, ` +
+                    'focus, press or turned wall, so what arrives with a state is read by no pass',
+            );
+        }
+    }
+    return out;
+}
+
 function selectorProblems(selector, { kit = false } = {}) {
     const out = [];
     if (kit && FIRST_PARTY_HOOK.test(selector)) {
@@ -1188,6 +1330,9 @@ const VENDOR_PREFIX = /^-(webkit|moz|ms|o)-/;
  * prefixes, and this one is not.
  */
 const PREFIXED_EVERYWHERE = new Set(['-webkit-line-clamp', '-webkit-box-orient']);
+
+/** The one prefixed property with no unprefixed twin that a first-party sheet may write, and only as `transparent`. */
+const TAP_HIGHLIGHT = '-webkit-tap-highlight-color';
 
 /**
  * `-webkit-mask-composite` takes the legacy compositing keywords, the
@@ -1540,7 +1685,18 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
                 );
             }
         }
-        const prefixed = PREFIXED_EVERYWHERE.has(prop) ? null : VENDOR_PREFIX.exec(prop);
+        /*
+         * `-webkit-tap-highlight-color` (D5 (a)): the flash a touch screen
+         * paints over whatever is tapped, a money control among them, in a
+         * colour no pass reads. In a first-party sheet only `transparent`
+         * stands, at rest, under a state and in a keyframe alike. It has no
+         * unprefixed twin, so the twin rule below does not apply to it here;
+         * the kit keeps that rule, which refuses it in any value.
+         */
+        if (firstParty && prop === TAP_HIGHLIGHT && !/^transparent$/i.test(clean)) {
+            out.push(`${shown} — a tap highlight paints a colour over whatever is tapped, a money control among them, where no pass looks; only transparent stands`);
+        }
+        const prefixed = PREFIXED_EVERYWHERE.has(prop) || (firstParty && prop === TAP_HIGHLIGHT) ? null : VENDOR_PREFIX.exec(prop);
         if (prefixed !== null) {
             const twin = prop.slice(prefixed[0].length);
             const same = decls.some((d) => {
@@ -1765,6 +1921,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const why of declarationProblems(declarationsOf(node.body), selectors, { firstParty: !kit })) at(node.start, why);
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
                 if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors, { scales: sheetScales })) at(node.start, why);
+                if (!kit) for (const why of stateBeltProblems(declarationsOf(node.body), selectors)) at(node.start, why);
                 continue;
             }
             if (node.name === 'keyframes') {
@@ -1895,7 +2052,11 @@ export function lintSheet(css, { art = [] } = {}) {
  * (`a-look-may-not-dress-a-figures-pieces`); and no transition of a size, a
  * letter or word spacing, a zoom or a scale on a money node, nor a keyframe
  * of any of them or of a transform that scales anywhere
- * (`a-look-never-animates-a-money-nodes-size`).
+ * (`a-look-never-animates-a-money-nodes-size`); and, under a state the probe
+ * never paints (`:hover`, `:focus`, `:focus-visible`, `:focus-within`,
+ * `:active`, `[data-turn]`), no clip, mask, filter, blend mode, opacity
+ * under 1, hidden box or transform past a tilt, and no tap highlight but
+ * transparent anywhere (`a-look-state-rule-never-hides-money`).
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });
