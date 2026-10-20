@@ -3380,19 +3380,23 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   `:focus-within` and `:active`, a transition until it runs, and the tap
  *   highlight (`-webkit-tap-highlight-color`, a colour painted over a
  *   control on a tap; the critic's P3-5, not measured). **The first-party
- *   look lint refuses what these would hide** (`a-look-state-rule-never-hides-money`,
- *   `scripts/workshop-css.mjs`): a state rule is held to every longhand in
- *   `DRESS_HELD` and `BOX_HELD` below (`STATE_BELT_ACCOUNT` lists each and
- *   the test `the-state-belt-accounts-for-every-longhand-the-probe-holds`
- *   fails on a member it does not), and the tap highlight to `transparent`,
- *   so a figure clipped, faded or struck out under the pointer is refused
- *   in a shipped or private look's sheet. **The kit lint carries none of it**
- *   (the workshop README says a pointer's hover is Stall's at intake, not
- *   the kit's): a kit look's `:hover` is read by a person, and
+ *   look lint refuses what a state would hide, as an allow-list**
+ *   (`a-look-state-rule-sets-only-what-a-state-may`, D-2026-10-20-08,
+ *   `scripts/workshop-css.mjs`): a rule whose selector names a state (also
+ *   `:target`, `:user-invalid`, `:autofill`, `:modal` and `[data-turn]`) sets
+ *   colour, ground, border colour, shadow, cursor, outline with its width and
+ *   offset, transitions and the no-transform values, and nothing else, and
+ *   the tap highlight is `transparent` only. The longhands of `DRESS_HELD`
+ *   below that a state may set are read by their own readers; the others are
+ *   refused by name (`the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it`
+ *   parses the set out of this file, strictly). **The kit lint carries none
+ *   of it** (the workshop README says a pointer's hover is Stall's at intake,
+ *   not the kit's): a kit look's `:hover` is read by a person, and
  *   `-webkit-tap-highlight-color: red; tap-highlight-color: red` passes the
- *   kit's twin rule. Still unread under a state, in either lint: a
- *   background's or an ink's contrast against its ground, and a box a
- *   state moves over a neighbour's figure;
+ *   kit's twin rule. Still unread under a state, in the first-party lint too: an
+ *   ink's or a ground's contrast against what it stands on, and a ground a
+ *   state paints on a box that already stands over a figure with its ground
+ *   clear;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
