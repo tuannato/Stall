@@ -1700,5 +1700,14 @@
         "state:property"
       ]
     }
+  ],
+  "w1": [
+    {
+      "rule": ".$C .item-p::after { content: ''; position: relative; left: -80px; background: transparent; }\n.$C .item:hover .item-p::after { background: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
   ]
 }

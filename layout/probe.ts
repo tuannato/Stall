@@ -3393,10 +3393,12 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   of it** (the workshop README says a pointer's hover is Stall's at intake,
  *   not the kit's): a kit look's `:hover` is read by a person, and
  *   `-webkit-tap-highlight-color: red; tap-highlight-color: red` passes the
- *   kit's twin rule. Still unread under a state, in the first-party lint too: an
- *   ink's or a ground's contrast against what it stands on, and a ground a
- *   state paints on a box that already stands over a figure with its ground
- *   clear;
+ *   kit's twin rule. A pseudo-element under a state may set only colour,
+ *   cursor, transitions and the identity transforms, because a pseudo-element
+ *   is measured only by its paint at rest. Still unread under a state, in the
+ *   first-party lint too: an ink's or a ground's contrast against what it
+ *   stands on, and a ground a state paints on an element (not a pseudo-element)
+ *   that a rule at rest moved over a figure with its ground clear;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a

@@ -1131,8 +1131,18 @@ function keyframeSizeMotion(decls) {
  * set the properties below and **nothing else**. Every other declaration is
  * refused with one sentence that names the property (`STATE_ALLOWED` lists
  * the properties; `a-look-state-rule-sets-only-what-a-state-may` holds it).
- * A `::before` or `::after` under a state is held to the same list, and its
- * `content`, `position` and `display` are not on it.
+ * **A pseudo-element under a state is held to a shorter list**
+ * (`STATE_PSEUDO_ALLOWED`): `color` (read as on an element), `cursor`,
+ * `transition` and its longhands, and the exact identity transforms below.
+ * The probe measures a pseudo-element only by its paint at rest, so a ground,
+ * a border, a shadow or an outline that a state gives one, when it was moved
+ * over a figure at rest with its own ground clear, is read by no pass. Every
+ * other declaration on one is refused with one sentence that names the
+ * property and says so. A selector is a pseudo-element under a state when it
+ * names both (`.item:hover .item-p::after`; `:before` and `:after` written
+ * with one colon count, and so does any other pseudo-element, which the
+ * selector rules refuse on their own); in a list, `.item:hover, .item-p::after`
+ * is not (the pseudo-element there stands at rest, where the probe measures it).
  *
  * **Allowed under a state:**
  * - `color`: a literal colour at alpha 1 (a name, `#rgb`/`#rrggbb`, or a
@@ -1214,10 +1224,11 @@ function keyframeSizeMotion(decls) {
  * - the reach of an outline (8px beyond the box, over a neighbour within
  *   8px) and of a blurred shadow (a blur fades with distance; none is
  *   capped);
- * - a ground a state paints on a box that already stands over a figure at
- *   rest with its ground clear — a `position: relative` pseudo-element with
- *   a negative offset, say: the probe measures a pseudo-element only by its
- *   paint at rest;
+ * - a ground a state paints on an element, not a pseudo-element, that a rule
+ *   at rest moved over a figure by an offset (`position: relative` with a
+ *   negative `left`) with its ground clear. The pseudo-element half is
+ *   refused above (`STATE_PSEUDO_ALLOWED`). An element's ground is on the
+ *   list, so a state may give one;
  * - a transition (read only by the size lint, on a money node);
  * - a state the list does not name: `:checked`, `:disabled`, `:visited`,
  *   `:open`, `:popover-open`, `:fullscreen`, and the attributes the fixtures
@@ -1294,12 +1305,43 @@ export const STATE_ALLOWED = Object.freeze([
     '-webkit-tap-highlight-color',
 ]);
 
+/**
+ * The properties a pseudo-element under a state may set: a short list, because
+ * the probe measures a pseudo-element only by its paint at rest. Each is read
+ * as `STATE_ALLOWED` reads it (an ink at alpha 1, the identity transforms).
+ * Pinned by value in `a-look-state-rule-sets-only-what-a-state-may`.
+ */
+export const STATE_PSEUDO_ALLOWED = Object.freeze([
+    'color',
+    'cursor',
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+    'transition',
+    'transition-property',
+    'transition-duration',
+    'transition-delay',
+    'transition-timing-function',
+    'transition-behavior',
+]);
+
 const STATE_PSEUDO_CLASS = /:(?:hover|focus|focus-visible|focus-within|active|target|user-invalid|autofill|modal)(?![\w-])/i;
 const BELT_TAIL = '; the probe measures every screen at rest and paints no hover, focus, press or turned wall, so what arrives with a state is read by no pass';
 
 /** Whether a selector names a state the probe never paints (see above). */
 function namesAState(selector) {
     return STATE_PSEUDO_CLASS.test(blankAttributes(selector)) || attributeBlocks(selector).some((inner) => /^\s*data-turn(?![\w-])/i.test(inner));
+}
+
+/**
+ * Whether one selector names a pseudo-element and a state together: a box the
+ * probe measures only by its paint at rest, given a paint by a state (see
+ * above). Any pseudo-element counts, `:before` and `:after` with one colon
+ * too; the selector rules refuse all but two of them on their own.
+ */
+export function isPseudoUnderState(selector) {
+    return namesAState(selector) && pseudoTokens(selector).some((token) => token.element);
 }
 
 /** A `<length>` or `<percentage>` token as `{ n, unit }` (unit lower case, `''` for a bare number), or undefined. */
@@ -1716,19 +1758,35 @@ function stateDeclarationProblem(prop, value) {
 }
 
 /**
+ * Why one declaration may not stand on a pseudo-element under a state, or
+ * undefined: only `STATE_PSEUDO_ALLOWED` may, each read as an element's is. A
+ * custom property keeps its own sentence, which is the same on both.
+ */
+function pseudoStateDeclarationProblem(prop, value) {
+    const name = prop.replace(VENDOR_PREFIX, '');
+    if (!prop.startsWith('--') && !STATE_PSEUDO_ALLOWED.includes(name)) {
+        return `${name} is not a property a state rule may set on a pseudo-element (colour, cursor, transitions and the no-transform values only: the probe measures a pseudo-element only by its paint at rest)`;
+    }
+    return stateDeclarationProblem(prop, value);
+}
+
+/**
  * Why the declarations of a rule whose selector names a state may not stand
  * (see above); a rule of no state has none.
  */
 function stateBeltProblems(decls, selectors) {
     const states = selectors.filter(namesAState);
     if (states.length === 0) return [];
-    const state = echo(states[0]);
+    // A pseudo-element under a state holds the whole rule to the shorter list: the declarations reach it.
+    const pseudo = selectors.find(isPseudoUnderState);
+    const state = echo(pseudo ?? states[0]);
     const out = [];
     for (const { prop, value } of decls) {
-        const why = stateDeclarationProblem(prop, value);
+        const why = pseudo === undefined ? stateDeclarationProblem(prop, value) : pseudoStateDeclarationProblem(prop, value);
         if (why !== undefined) out.push(`${prop}: ${echo(value, 48)} under "${state}" — ${why}${BELT_TAIL}`);
     }
-    const ring = outlineProblem(decls);
+    // Every outline declaration of a pseudo-element's rule is refused above already.
+    const ring = pseudo === undefined ? outlineProblem(decls) : undefined;
     if (ring !== undefined) out.push(`${ring.prop}: ${echo(ring.value, 48)} under "${state}" — ${ring.why}${BELT_TAIL}`);
     return out;
 }

@@ -9582,9 +9582,24 @@ declaration is refused with one sentence naming the property.
 none is read as a state's; `content`, `position`, `z-index`, `display`, the
 offsets; every text and spacing property; `font*`; padding, margin, sizes,
 `opacity`, `visibility`, `filter`, `backdrop-filter`, `clip*`, `mask*`,
-`offset*`, `overflow`; `text-decoration*`; every non-identity transform. A
-`::before` or `::after` under a state carries the same list, and its `content`,
-`position` and `display` are not on it.
+`offset*`, `overflow`; `text-decoration*`; every non-identity transform.
+
+**A pseudo-element under a state is held to a shorter list**
+(`STATE_PSEUDO_ALLOWED`, pinned by value): `color` (read as on an element),
+`cursor`, `transition` and its longhands, and the exact identity transforms.
+A selector that names a state and a pseudo-element together
+(`.item:hover .item-p::after`; `:before` and `:after` with one colon too) holds
+the whole rule to it, and every other declaration is refused with a sentence
+that names the property and says the probe measures a pseudo-element only by
+its paint at rest. That closes the open candidate of the allow-list round: a
+pseudo-element a rule at rest moves over a figure (`position: relative; left:
+-80px`) with its ground clear, given a ground by `:hover` (plant `w1`). It costs
+the tree nothing: no shipped look, starter, fixture or the canary has a
+pseudo-element under a state
+(`no-sheet-a-run-serves-has-a-pseudo-element-under-a-state`). In a list, a
+state selector with no pseudo-element in it beside a pseudo-element with no
+state (`.item:hover, .item-p::after`) is not one: the pseudo-element stands at
+rest, where the probe measures it.
 
 **The probe's sets, kept as a drift test.** `the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it`
 parses `DRESS_HELD` and `BOX_HELD` out of `layout/probe.ts` — strictly: a list
@@ -9596,10 +9611,11 @@ members a state may set are exactly ten (`background-color`,
 other member is refused under a state. `STATE_BELT_ACCOUNT` is gone.
 
 **The plants.** `scripts/look-lint-plants.json` holds the 242 rules the critic
-planted on a copy of Neo over three rounds (`p1`–`p10`, `q1`–`q7`), each with
-its outcome pinned: `refused`, and by which kind of sentence, or `accepted`,
-with the reason that it hides no figure
-(`the-lint-belts-critics-plants-are-pinned`). Of the 242, 23 are accepted:
+planted on a copy of Neo over three rounds (`p1`–`p10`, `q1`–`q7`) and the
+window's one (`w1`, the pseudo-element above), each with its outcome pinned:
+`refused`, and by which kind of sentence, or `accepted`, with the reason that it
+hides no figure (`the-lint-belts-critics-plants-are-pinned`). Of the 243, 23 are
+accepted:
 the empty control; width-moving properties outside D-2026-10-20-07's list
 (`font-weight`, `font-variation-settings`, `font-feature-settings`, and a
 `letter-spacing` transition on `.item-p`, a box that holds a money node and is
@@ -9617,10 +9633,11 @@ three forms of ink (`color: inherit`); a transition under a state; a rest
   probe reads contrast at rest only.
 - **Reach.** An outline reaches 8px past the box and a blurred shadow fades with
   distance; either can land on a neighbour closer than that. The blur is not capped.
-- **A ground painted on a box that already stands over a figure at rest with its
-  ground clear.** A `position: relative` pseudo-element with a negative offset and
-  `background: transparent`, given a ground by a state, is measured by the probe
-  only by its paint at rest. A pseudo-element carries the same list as any box.
+- **A ground painted on an element, not a pseudo-element, that a rule at rest
+  moved over a figure by an offset with its ground clear** (`position: relative`
+  with a negative `left`, `background: transparent`, then a ground under
+  `:hover`). The pseudo-element half is refused above; an element's ground is on
+  the list, so this half stands.
 - **A state the list does not name:** `:checked`, `:disabled`, `:visited`,
   `:open`, `:popover-open`, `:fullscreen`, and the attribute states the fixtures
   paint (`[aria-pressed]`, `[disabled]`). A rule on one is read as a rule at rest,

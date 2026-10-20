@@ -21,10 +21,12 @@ import {
     STATE_ATTRIBUTES,
     STATE_OPAQUE_ROLES,
     STATE_OUTLINE_MAX_PX,
+    STATE_PSEUDO_ALLOWED,
     STATE_SHADOW_MAX_PX,
     decodeEscapes,
     declarationsOf,
     flashReport,
+    isPseudoUnderState,
     keyframeFlashes,
     lintLookSheet,
     lintSheet,
@@ -36,6 +38,7 @@ import {
     parseSheet,
     foreignNamingProblems,
     rescopeSheet,
+    splitTopLevel,
     wornSheetProblems,
 } from './workshop-css.mjs';
 
@@ -758,6 +761,16 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
      * the kit lint is unchanged. Red: the belt taken out of lintLook (every
      * refusal below fails, and the sixteen pass), and each refusal on its own
      * by the plants.
+     *
+     * A pseudo-element under a state is held to a shorter list
+     * (`STATE_PSEUDO_ALLOWED`: colour, cursor, transitions, the identity
+     * transforms), because the probe measures one only by its paint at rest:
+     * a pseudo-element moved over a figure at rest with a clear ground, and
+     * given a ground by `:hover`, was the open candidate for a hidden figure.
+     * None of the sheets a run serves has one under a state, so the shorter
+     * list costs the tree nothing (the last tests below). Red: the pseudo
+     * list taken out of `stateBeltProblems` (the plant `w1` and the two
+     * pseudo-element tests below fail, and nothing else).
      */
     const BELT = /under ".+" — .+; the probe measures every screen at rest and paints no hover, focus, press or turned wall/;
     const sheetOf = (cls) => LOOKS.find((s) => s.lookClass === cls);
@@ -860,6 +873,41 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
         for (const prop of ['border-width', 'font-size', 'opacity', 'caret-color', 'border-image', 'text-decoration-color']) {
             assert.ok(!STATE_ALLOWED.includes(prop), prop);
             refusedProperty(`.t-neo .item:hover { ${prop}: inherit; }`, prop);
+        }
+    });
+
+    const PSEUDO_ALLOWED_PINNED = [
+        'color',
+        'cursor',
+        'transform',
+        'rotate',
+        'scale',
+        'translate',
+        'transition',
+        'transition-property',
+        'transition-duration',
+        'transition-delay',
+        'transition-timing-function',
+        'transition-behavior',
+    ];
+    const ON_A_PSEUDO = /is not a property a state rule may set on a pseudo-element \(colour, cursor, transitions and the no-transform values only: the probe measures a pseudo-element only by its paint at rest\)/;
+
+    it('pins what a pseudo-element under a state may set by value, inside the element list, and refuses every other property of that list on one', () => {
+        assert.deepEqual([...STATE_PSEUDO_ALLOWED], PSEUDO_ALLOWED_PINNED);
+        assert.equal(new Set(STATE_PSEUDO_ALLOWED).size, STATE_PSEUDO_ALLOWED.length, 'no property twice');
+        for (const prop of STATE_PSEUDO_ALLOWED) assert.ok(STATE_ALLOWED.includes(prop), `${prop} is on the element list too`);
+        // Each listed property has a reader, as on an element: none is refused as a property a pseudo-element may not set.
+        for (const prop of STATE_PSEUDO_ALLOWED) {
+            const problems = problemsOf(`.t-neo .item:hover::after { ${written(prop, 'inherit')}; }`);
+            assert.ok(!problems.some((p) => /is not a property a state rule may set/.test(p)), `${prop}:\n  ${problems.join('\n  ')}`);
+        }
+        // Every other property an element may set is refused on a pseudo-element, by name and by the reason.
+        for (const prop of STATE_ALLOWED.filter((name) => !STATE_PSEUDO_ALLOWED.includes(name))) {
+            const decl = prop === '-webkit-tap-highlight-color' ? `${prop}: transparent` : written(prop, 'inherit');
+            const problems = problemsOf(`.t-neo .item:hover::after { ${decl}; }`);
+            const name = prop.replace(/^-webkit-/, '');
+            const sentence = problems.map((p) => p.replace(/^line \d+: /, '')).find((p) => p.startsWith(`${prop}: `));
+            assert.ok(sentence !== undefined && sentence.includes(` — ${name} is not a property`) && ON_A_PSEUDO.test(sentence), `${prop}:\n  ${problems.join('\n  ') || '(no problem)'}`);
         }
     });
 
@@ -1056,6 +1104,8 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
         'pointer-events: none',
         'will-change: transform',
     ];
+    // Written out, both: a describe body registers and never computes (`no-node-test-computes-in-a-describe-body`).
+    const ELEMENT_SUBJECTS = ['.t-neo .item-x:hover', '.t-neo .buy:focus-visible', '.t-neo .item:hover', '.t-neo [data-turn] .item-p', '.t-neo .mini:active'];
     const SUBJECTS = ['.t-neo .item-x:hover', '.t-neo .buy:focus-visible', '.t-neo .item:hover', '.t-neo [data-turn] .item-p', '.t-neo .mini:active', '.t-neo .item-x:hover::after'];
 
     it('refuses everything else a state could set, by name: all, custom properties, animation, content, position, display, text and spacing, font, boxes, opacity, filters, clips, masks, decoration', () => {
@@ -1321,7 +1371,7 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
             'unset',
             '0 2px 0 0 rgb(0 0 0 / 0.35)',
         ]) {
-            for (const subject of SUBJECTS) accepted(`${subject} { box-shadow: ${value}; }`);
+            for (const subject of ELEMENT_SUBJECTS) accepted(`${subject} { box-shadow: ${value}; }`);
         }
         const FILL = /an outer shadow with a spread, or an offset past 8px, is a fill the size of a box and not a shadow/;
         // The critic's plant: a 4000px spread paints over the rows beside it.
@@ -1425,16 +1475,82 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
         accepted('.t-neo .tool { transition: --au-tide 1s; }');
     });
 
-    it('holds a pseudo-element under a state to the same list, and gives it no content, position or display', () => {
-        accepted('.t-neo .item:hover::after { background: #000; }');
-        accepted('.t-neo .item:hover::before { border-color: red; box-shadow: 0 0 8px red; }');
+    it('holds a pseudo-element under a state to colour, cursor, transitions and the identity transforms: no ground, border, shadow or outline, in any form it is written', () => {
+        // The open candidate: a pseudo-element a rule at rest moved over a figure, its ground clear, given a ground by a state.
+        const AT_REST = ".t-neo .item-p::after { content: ''; position: relative; left: -80px; background: transparent; }";
+        accepted(AT_REST);
+        for (const state of ['.item:hover', '.item:focus-within', '.buy:active', '[data-turn] .item', '.item:not(:hover)', '.item:is(:focus-visible, .open)']) {
+            for (const pseudo of ['::after', '::before', ':after', ':before']) {
+                for (const decl of [
+                    'background: #000',
+                    'background: transparent',
+                    'background-color: red',
+                    'background-image: linear-gradient(red, blue)',
+                    'border-color: red',
+                    'border: solid red',
+                    'border-style: none',
+                    'box-shadow: 0 0 8px red',
+                    'box-shadow: inset 0 0 0 4000px red',
+                    'outline: 2px solid red; outline-offset: 2px',
+                    'outline-style: none',
+                ]) {
+                    refused(`${AT_REST}\n.t-neo ${state} .item-p${pseudo} { ${decl}; }`, ON_A_PSEUDO);
+                }
+            }
+        }
+        // The plant's own sentence names the property and says why, and the belt's tail follows it.
+        const sentence = problemsOf(`${AT_REST}\n.t-neo .item:hover .item-p::after { background: #000; }`);
+        assert.equal(sentence.length, 1, sentence.join('\n'));
+        assert.match(sentence[0], /^line \d+: background: #000 under "\.t-neo \.item:hover \.item-p::after" — background is not a property a state rule may set on a pseudo-element \(/);
+        assert.match(sentence[0], BELT);
+        // One property in a rule of other, allowed ones is refused alone, and the allowed ones stand.
+        const mixed = problemsOf('.t-neo .item:hover::after { color: red; background: #000; cursor: pointer; transition: color 0.2s; }');
+        assert.equal(mixed.length, 1, mixed.join('\n'));
+        assert.match(mixed[0], /background: #000 under/);
+        // A list that holds a pseudo-element under a state holds the whole rule, the element's selector too: the declarations reach both.
+        refused('.t-neo .buy:hover, .t-neo .item:hover .item-p::after { background: #000; }', ON_A_PSEUDO);
+        // What stands on a pseudo-element under a state: an ink read as on an element, a cursor, transitions and the identity transforms.
+        for (const decl of ['color: #dff6ff', 'color: currentColor', 'color: var(--s-accent)', 'cursor: pointer', 'transition: color 0.2s ease', '-webkit-transition: color 0.2s; transition: color 0.2s', 'transition-property: color', 'rotate: 0deg', 'scale: 1', 'translate: 0', 'transform: none', 'transform: translateZ(0)']) {
+            accepted(`${AT_REST}\n.t-neo .item:hover .item-p::after { ${decl}; }`);
+            accepted(`.t-neo .item:hover::before { ${decl}; }`);
+        }
+        refused('.t-neo .item:hover .item-p::after { color: rgba(0, 0, 0, 0.1); }', /an ink under alpha 1 is a faded figure/);
+        // The same declarations on the same pseudo-element at rest, which the probe measures, stand — and so do they on an element under a state.
+        accepted(".t-neo .item-p::after { content: ''; background: #000; border: 1px solid red; box-shadow: 0 0 0 4px red; outline: 2px solid red; }");
+        accepted('.t-neo .item:hover .item-p { background: #000; border-color: red; box-shadow: 0 0 8px red; }');
+        // A pseudo-element at rest in a list beside a state selector with no pseudo-element in it is the pseudo-element at rest: measured.
+        accepted('.t-neo .item:hover, .t-neo .item-p::after { background: #000; }');
+        // The old critic's plant: a positioned pseudo-element over the figure, with a ground.
+        const problems = problemsOf(".t-neo .item:hover::after { content: ''; position: absolute; inset: 0; background: #000; }");
+        for (const prop of ['content', 'position', 'inset', 'background']) {
+            assert.ok(problems.some((p) => new RegExp(`^line \\d+: ${prop}: .* — ${prop} is not a property a state rule may set`).test(p)), problems.join('\n'));
+        }
         for (const decl of ["content: ''", 'position: absolute', 'inset: 0', 'display: block', 'opacity: 0.5', 'backdrop-filter: blur(30px)', 'width: 100%', 'height: 100%', 'transform: scale(2)', 'z-index: 1']) {
             refused(`.t-neo .item:hover::after { ${decl}; }`);
         }
-        // The critic's plant: a positioned pseudo-element over the figure, with a ground.
-        const problems = problemsOf(".t-neo .item:hover::after { content: ''; position: absolute; inset: 0; background: #000; }");
-        for (const prop of ['content', 'position', 'inset']) {
-            assert.ok(problems.some((p) => new RegExp(`^line \\d+: ${prop}: .* — ${prop} is not a property a state rule may set`).test(p)), problems.join('\n'));
+        // An outline is refused by the property, not by the ring's own reader (which an element's rule is held to, and would say it twice).
+        const ring = problemsOf('.t-neo .item:hover::after { outline: 2px solid red; outline-offset: 2px; }');
+        assert.deepEqual(ring.map((p) => p.replace(/^line \d+: /, '').split(' under ')[0]), ['outline: 2px solid red', 'outline-offset: 2px']);
+    });
+
+    it('reads a pseudo-element under a state in the selector, whatever its colon, its state or its place in the list', () => {
+        for (const selector of [
+            '.t-neo .item:hover::after',
+            '.t-neo .item:hover .item-p::before',
+            '.t-neo .item:hover .item-p:after',
+            '.t-neo .item:HOVER::AFTER',
+            '.t-neo .item-p::after:hover',
+            '.t-neo .item:has(:focus-visible) .item-p::before',
+            '.t-neo [data-turn] .item::after',
+            ".t-neo [data-turn='cw'] .item::after",
+            '.t-neo .item:not(:hover)::after',
+            '.t-neo .item:hover::first-line',
+            '.t-neo .item:hover::selection',
+        ]) {
+            assert.ok(isPseudoUnderState(selector), selector);
+        }
+        for (const selector of ['.t-neo .item:hover', '.t-neo .item-p::after', '.t-neo .item-p:after', '.t-neo .item:first-child::before', '.t-neo .item:hover .item-p', '.t-neo [data-turn] .item', ".t-neo .item[aria-label='::after:hover']"]) {
+            assert.ok(!isPseudoUnderState(selector), selector);
         }
     });
 
@@ -1560,6 +1676,7 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
             '.t-neo .item-x:hover { color: rgba(0, 0, 0, 0.05); text-shadow: 490px 0 0 #000; }',
             '.t-neo .item:hover { box-shadow: 0 0 0 4000px #000; }',
             '.t-neo .item:hover { border-style: solid; }',
+            ".t-neo .item-p::after { content: ''; position: relative; left: -80px; background: transparent; }\n.t-neo .item:hover .item-p::after { background: #000; box-shadow: 0 0 0 4000px #000; border: solid red; outline: 3000px solid #000; }",
             '@keyframes t-neo-fade { to { opacity: 0; } }\n.t-neo .item:hover .item-x { animation-name: t-neo-fade; }',
             '@keyframes t-neo-g { 0% { --g: 0em; } 100% { --g: .3em; } }',
         ]) {
@@ -1595,6 +1712,48 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
         assert.deepEqual(lintLookSheet(files['canary/sheet.css'], { lookClass: 't-canary', load: 'worn', ownArt }), [], 'the canary');
     });
 
+    it('no-sheet-a-run-serves-has-a-pseudo-element-under-a-state: the shorter list costs the shipped looks, the starters, the fixtures and the canary nothing', () => {
+        const rulesOf = (css) => {
+            const out = [];
+            const walk = (nodes) => {
+                for (const node of nodes) {
+                    if (node.kind === 'rule') out.push(node.prelude);
+                    else if (node.children !== undefined) walk(node.children);
+                }
+            };
+            walk(parseSheet(css).nodes);
+            return out;
+        };
+        const stateWords = /:(?:hover|focus|focus-visible|focus-within|active|target|user-invalid|autofill|modal)(?![\w-])|\[\s*data-turn/i;
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({ name: `${row.role}: ${row.path}`, css: row.css }));
+        const roles = new Set(lookRows(SERVED).filter((row) => row.role !== 'kit').map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        // The three kit starters, as `workshop:start` writes them.
+        for (const cls of ['t-modern', 't-neo', 't-rural']) sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(sheetOf(cls).path), cls.slice(2), carried) });
+        // The canary, rebuilt from public bytes.
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'] });
+        assert.ok(sheets.length >= 9, `${sheets.length} sheets read`);
+        let stateRules = 0;
+        for (const { name, css } of sheets) {
+            const rules = rulesOf(css);
+            assert.ok(rules.length > 0, `${name}: the walk read rules`);
+            for (const prelude of rules) {
+                const selectors = splitTopLevel(prelude, ',');
+                stateRules += selectors.some((selector) => stateWords.test(selector)) ? 1 : 0;
+                assert.deepEqual(selectors.filter(isPseudoUnderState), [], `${name}: a pseudo-element under a state in "${prelude.replace(/\s+/g, ' ')}"`);
+            }
+        }
+        // The walk sees state rules and pseudo-elements, so the zero is a reading and not a blind walk: 16 state rules in the three looks, 16 more in their starters.
+        assert.ok(stateRules >= 32, `${stateRules} state rules read`);
+        const pseudoRules = sheets.flatMap(({ css }) => rulesOf(css)).filter((prelude) => /::?(?:before|after)(?![\w-])/i.test(prelude));
+        assert.ok(pseudoRules.length >= 4, `${pseudoRules.length} rules naming a pseudo-element read (Neo's four at the least)`);
+        // Positive control: the reading finds one in a sheet that has it.
+        const planted = rulesOf(plantedNeo('.t-neo .item:hover .item-p::after { color: red; }'));
+        assert.equal(planted.flatMap((prelude) => splitTopLevel(prelude, ',')).filter(isPseudoUnderState).length, 1);
+    });
+
     it('the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin: the kit refuses it only when it stands without a twin of the same value (B1)', () => {
         const rule = '.t-neo .buy { -webkit-tap-highlight-color: red; tap-highlight-color: red; }';
         // The kit accepts it: a twin naming a property nothing reads satisfies the twin rule.
@@ -1615,10 +1774,12 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
     /**
      * Every rule the lint-belts critic planted on a copy of Neo (the three
      * rounds' plant files `p1`–`p10` and `q1`–`q7`, `$C` for the look's
-     * class), each with its outcome under the allow-list pinned: `refused`
-     * and by which kind of sentence (`by`), or `accepted` and why that is
-     * not a figure hidden. A plant whose outcome moves turns this red, so a
-     * relaxation of a reader, or a hole it closed, is a decision.
+     * class), and the window's one (`w1`: the pseudo-element the probe
+     * measures only at rest, given a ground by a state), each with its outcome
+     * under the allow-list pinned: `refused` and by which kind of sentence
+     * (`by`), or `accepted` and why that is not a figure hidden. A plant whose
+     * outcome moves turns this red, so a relaxation of a reader, or a hole it
+     * closed, is a decision.
      */
     const WAYS = [
         ['state:custom-property', /a custom property set under a state/],
@@ -1645,9 +1806,14 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s seventeen plant files, 242 plants, with an outcome each', () => {
-        assert.deepEqual(Object.keys(PLANTS), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7']);
-        assert.equal(Object.values(PLANTS).flat().length, 242);
+    it('holds the critic\'s seventeen plant files, 242 plants, and the window\'s one, with an outcome each', () => {
+        assert.deepEqual(Object.keys(PLANTS), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'w1']);
+        assert.equal(Object.values(PLANTS).flat().length, 243);
+        // w1: a pseudo-element a rule at rest moved over a figure with its ground clear, given a ground under :hover.
+        assert.equal(PLANTS.w1.length, 1);
+        assert.match(PLANTS.w1[0].rule, /::after \{ content: ''; position: relative; left: -80px; background: transparent;/);
+        assert.match(PLANTS.w1[0].rule, /:hover \.item-p::after \{ background: #000;/);
+        assert.deepEqual(PLANTS.w1[0].by, ['state:property']);
         for (const entry of Object.values(PLANTS).flat()) {
             assert.ok(entry.expect === 'refused' ? Array.isArray(entry.by) && entry.by.length > 0 : typeof entry.why === 'string' && entry.why.length > 20, JSON.stringify(entry.rule));
         }
@@ -1665,7 +1831,7 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 242, only the 23 whose reason is written beside them, and each hides no figure', () => {
+    it('accepts, of the 243, only the 23 whose reason is written beside them, and each hides no figure', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
         assert.equal(accepted.length, 23);
     });
