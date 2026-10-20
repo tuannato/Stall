@@ -7892,7 +7892,9 @@ beyond the grandparent** (the critic's N6: 121 sharp copies of
 `[data-role="pay-final"]` moved 490–530px up erase "You pay" — P2-3); **a
 state no pass paints** — `:hover`, `:focus`, `:focus-visible`,
 `:focus-within`, `:active` — **and a turned wall** (`[data-turn]`): both
-look lints admit a clip scoped to either (P2-2); a box above the stall.
+look lints admitted a clip scoped to either (P2-2); **the first-party look lint
+refuses it now** (`a-look-state-rule-never-hides-money`, "The state belt"
+below), the kit lint still admits it; a box above the stall.
 
 **Unplanted, every shipped look, the skeleton and the tracked fixture read 0
 on the rule at every geometry pass** (the whole runner, 2026-10-19, 291.0s
@@ -8085,9 +8087,10 @@ font feature; a look's own face; a stack of glows, **a neighbour's shadow from
 beyond the grandparent** (P2-3, not built), a neighbour's glow; **a state no
 pass paints** — `:hover`, `:focus`, `:focus-visible`, `:focus-within`,
 `:active`, a transition until it runs, and the tap highlight
-(`-webkit-tap-highlight-color`, a free colour; the critic's P3-5, not measured)
-— **and a turned wall** (P2-2, the static belt not built); a box above the
-stall; the canvas's proportional figures.
+(`-webkit-tap-highlight-color`, a colour; the critic's P3-5, not measured)
+— **and a turned wall** (P2-2; the static belt was not built then, **and is
+now, for first-party sheets only**: see "The state belt", below); a box above
+the stall; the canvas's proportional figures.
 
 **A gradient between its stops** (G2, the critic's P1-4). The dress rule tries
 each stop, not what a gradient paints between two of them: the critic's
@@ -9472,3 +9475,58 @@ ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
 Why: on this Mac one tab took 261.8–264.1s before the four off-size wall passes landed, and those passes added about +21s on a quiet machine (+40s under load). One tab would cross the 300s ceiling, and two tabs fit (230–248s here). `ubuntu-latest` meets the runner's own two-tab default (at least 4 cores and 8 GiB) on a public repository.
 
 The earlier entries above that say the job "sets `LAYOUT_CONTRAST_TABS: '1'`" are history. Not measured: the job itself on a runner, until the owner dispatches it. On that first dispatch, the two-tab walk, its canaries and the page print run in CI for the first time.
+
+## The state belt (2026-10-20, the lint-belts fix round)
+
+`a-look-state-rule-never-hides-money` (`scripts/workshop-css.mjs`,
+`scripts/look-lint.test.mjs`) is the static half of the "a state no pass
+paints" lines above. **It is first party only, and the kit lint is unchanged**
+(D-2026-10-20-01): the workshop README says a pointer's hover is Stall's at
+intake, so a creator's `:hover` is read by a person and not by `workshop:lint`,
+and the three starters pass the kit lint with or without it
+(`the-state-belt-is-first-party-only` holds the README's own words). A rule of a
+shipped look, the harness's fixture look or a private look whose selector names
+`:hover`, `:focus`, `:focus-visible`, `:focus-within`, `:active` or `[data-turn]`
+is held to **every longhand in this file's `DRESS_HELD` and `BOX_HELD` sets**
+(`STATE_BELT_ACCOUNT` lists each, and `the-state-belt-accounts-for-every-longhand-the-probe-holds`
+parses both sets out of `layout/probe.ts`): each refused value is one the probe
+refuses at rest and each allowed value one it allows, with these differences,
+stated:
+
+- **Stricter than the probe, by necessity.** A state has no ink to measure, so
+  a clip or a mask is `none` only (the probe lets a shape that encloses the
+  ink stand at rest); a negative `letter-spacing` and a negative
+  `outline-offset` are refused (the probe reads the piling and the ring
+  against the glyphs); a pixel `text-shadow` is read at the 11px type floor
+  (the size of the text is not known to a sheet).
+- **On top of the probe:** an `outline` or an `outline-offset` past 8px (a
+  number, not a measurement: "wider than its own box is wide" is not known to a
+  sheet), a `z-index` under zero, **any custom property** in a state rule
+  (`stall.css` reads `--s-price-clip`, `--s-icon-clip`, `--s-head-blur` and
+  `--s-tabs-blur` as a clip, a blur or an animation), a custom property in any
+  first-party keyframe, and **the keyframes a state rule starts**, through
+  `animation` or `animation-name`, read as if the state rule had set each
+  stop.
+- **A money node and the box that holds it are read apart.** Under a state a
+  subject that may be a money node takes the figure's own rule (no `rotate`,
+  `translate` or `scale` at all, `transform` only a uniform scale of at least
+  1, unturned and unmoved); any other box takes the holder's tilt rule (10°,
+  any shift, any growth). **A holder's shift and growth are uncapped, as the
+  probe leaves them at rest; capping them is the owner's call.**
+- `translate3d(x, y, 0)`, `translateZ(0)` and `translate: x y 0` are flat, as
+  Chrome computes them; any other depth is 3D. A non-finite number and an angle
+  past ten turns read as a value the lint cannot read (fail closed).
+
+**Not read, stated.** The contrast of a `background-color`, a gradient or an ink
+against its ground under a state (the probe's `groundStackFault` needs the
+browser's layout and colours; only an ink's alpha in a literal and a picture on
+a money node are read); an ink faded through a custom property the sheet itself
+declares; a positive `z-index`, a position, a margin or an `overflow` that
+moves a box over a neighbour's figure; paint that reaches a neighbour (a
+`box-shadow` spread, `border-image-outset`); a keyframe a state starts by a
+name the sheet does not declare; the net of a rotation across two declarations;
+a state the list does not name. A scaling, `letter-spacing` or `zoom` keyframe
+run only by a pseudo-element is refused by the size rule wherever a rule runs
+it, wider than D-2026-10-20-07's "of money nodes": kept, stated.
+`filter: drop-shadow()` is refused while `box-shadow` stands; the probe refuses
+a filter at rest, so the belt follows it.

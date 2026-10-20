@@ -3377,16 +3377,28 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   erases "You pay" with every pass green (the critic's P2-3, round 4) — a
  *   neighbour's glow, or the rain's outline on a neighbour;
  * - a state no pass paints: `:hover`, `:focus`, `:focus-visible`,
- *   `:focus-within` and `:active` (a figure clipped under the pointer
- *   passes; both look lints admit it, the critic's P2-2), a transition
- *   until it runs, and the tap highlight (`-webkit-tap-highlight-color`, a
- *   free colour, painted over a control on a tap; the critic's P3-5, not
- *   measured);
+ *   `:focus-within` and `:active`, a transition until it runs, and the tap
+ *   highlight (`-webkit-tap-highlight-color`, a colour painted over a
+ *   control on a tap; the critic's P3-5, not measured). **The first-party
+ *   look lint refuses what these would hide** (`a-look-state-rule-never-hides-money`,
+ *   `scripts/workshop-css.mjs`): a state rule is held to every longhand in
+ *   `DRESS_HELD` and `BOX_HELD` below (`STATE_BELT_ACCOUNT` lists each and
+ *   the test `the-state-belt-accounts-for-every-longhand-the-probe-holds`
+ *   fails on a member it does not), and the tap highlight to `transparent`,
+ *   so a figure clipped, faded or struck out under the pointer is refused
+ *   in a shipped or private look's sheet. **The kit lint carries none of it**
+ *   (the workshop README says a pointer's hover is Stall's at intake, not
+ *   the kit's): a kit look's `:hover` is read by a person, and
+ *   `-webkit-tap-highlight-color: red; tap-highlight-color: red` passes the
+ *   kit's twin rule. Still unread under a state, in either lint: a
+ *   background's or an ink's contrast against its ground, and a box a
+ *   state moves over a neighbour's figure;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
  *   turned wall (`[data-turn]`), so a rule a look scopes to one is read by
- *   nothing (P2-2).
+ *   no pass (P2-2) — the first-party look lint refuses what such a rule
+ *   hides, as above.
  *
  * Counted per look and per surface (`dressByClass`, `dressSurface`), and the
  * figures read under a box's `clip-path` or clip per look
