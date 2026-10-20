@@ -428,10 +428,15 @@ export function probeCoverageGaps(
             if (!(n > 0)) gaps.push(`${screen} staged nothing on a ${cls} stall — its state was never on the tree it measured`);
         }
     }
-    if ((report.screensMeasured ?? []).includes('addr-shown')) {
+    // The two address states (`addr-shown`, the 8g1 critic's P1-1;
+    // `addr-copied`, the fourth review's B3, so that a rule under
+    // `[data-copied='true']` is measured at rest) owe an address in their
+    // state on every look a pass painted.
+    for (const [screen, state] of Object.entries({ 'addr-shown': 'shown', 'addr-copied': 'copied' })) {
+        if (!(report.screensMeasured ?? []).includes(screen)) continue;
         for (const cls of report.sheetClasses ?? []) {
-            if (!((staged[cls]?.['addr-shown'] ?? 0) > 0)) {
-                gaps.push(`addr-shown put no address in its shown state on a ${cls} stall`);
+            if (!((staged[cls]?.[screen] ?? 0) > 0)) {
+                gaps.push(`${screen} put no address in its ${state} state on a ${cls} stall`);
             }
         }
     }

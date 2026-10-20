@@ -425,6 +425,22 @@ export const SCREENS: Record<string, StallView> = {
         descriptions: QUOTE_WORDS,
         genesis: GENESIS,
     }),
+    /*
+     * The address box in its third state (the lint-belts critic's fourth
+     * review, B3): a tap on it copied the address, so `addressLine` sets
+     * `data-copied="true"` for `ADDR_COPIED_MS` and the sign shows the word
+     * "Copied" in place of the address. A look may match `[data-copied='true']`
+     * (`STATE_ATTRIBUTES`) and no other fixture paints it, so a rule under it
+     * was a rule no pass measured. Staged like `addr-shown` (`STAGED`, below).
+     * The shop's book, so the rows the sign could crowd are on the screen.
+     * Geometry only.
+     */
+    'addr-copied': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+    }),
     'item-listing': base({
         fetch: {
             kind: 'offers',
@@ -2226,15 +2242,22 @@ export const SCREENS: Record<string, StallView> = {
  * - `addr-shown`: the clipboard refused a tap on the address, and
  *   `addressLine` set `data-copied="shown"` on it — the whole string at
  *   every width, until the next paint (the 8g1 critic's P1-1).
+ * - `addr-copied`: a tap copied the address, and `addressLine` set
+ *   `data-copied="true"` on it — the word "Copied" in place of the address,
+ *   for `ADDR_COPIED_MS` (the lint-belts critic's fourth review, B3).
  */
-export const STAGED: Readonly<Record<string, (root: ParentNode) => number>> = Object.freeze({
-    'addr-shown': (root: ParentNode) => {
+const stageAddress =
+    (state: string) =>
+    (root: ParentNode): number => {
         const boxes = root.querySelectorAll('[data-role="addr-copy"]');
         for (const addr of boxes) {
-            addr.setAttribute('data-copied', 'shown');
+            addr.setAttribute('data-copied', state);
         }
         return boxes.length;
-    },
+    };
+export const STAGED: Readonly<Record<string, (root: ParentNode) => number>> = Object.freeze({
+    'addr-shown': stageAddress('shown'),
+    'addr-copied': stageAddress('true'),
 });
 
 /**
@@ -2380,6 +2403,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // The address in its refused-copy state (the 8g1 critic's P1-1): the
     // decoration interactions it could stage are `offers`'.
     'addr-shown',
+    // The address in its copied state (the fourth review's B3): the same.
+    'addr-copied',
     // The empty stall a seller pasted (the 8g1 critic's P2-4): it exists
     // for the sign's cells, not for decoration interactions.
     'empty-pasted',
@@ -2585,6 +2610,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // `offers`' ground with the sign's other span on it, and `.addr-full`
     // is sampled at the desk. It is here for the sign's width.
     'addr-shown',
+    // The address saying "Copied" (the fourth review's B3): `offers`' ground
+    // with the sign's `.addr-said` span on it. Here for the sign's cells.
+    'addr-copied',
     // The empty stall a seller pasted (the 8g1 critic's P2-4): `empty`'s
     // ground with the invites on it (the notice invite's words sampled on
     // `sparse-pasted` under the rain). It is here for the sign's cells.

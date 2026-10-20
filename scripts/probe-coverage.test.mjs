@@ -558,8 +558,8 @@ describe('the-8g1-states-owe-their-subjects', () => {
             sheetClasses: STATES_8G1_CLASSES,
             rowSizeClasses: SHIPPED,
             markChecksByClass: Object.fromEntries(STATES_8G1_CLASSES.map((cls) => [cls, 40])),
-            screensMeasured: ['addr-shown', 'empty-pasted'],
-            stagedByClass: Object.fromEntries(STATES_8G1_CLASSES.map((cls) => [cls, { 'addr-shown': 2 }])),
+            screensMeasured: ['addr-shown', 'addr-copied', 'empty-pasted'],
+            stagedByClass: Object.fromEntries(STATES_8G1_CLASSES.map((cls) => [cls, { 'addr-shown': 2, 'addr-copied': 2 }])),
         };
     });
 
@@ -569,17 +569,26 @@ describe('the-8g1-states-owe-their-subjects', () => {
         }
     });
 
-    it('owes every staged screen a node it pressed, and addr-shown an address on every look', () => {
+    it('owes every staged screen a node it pressed, and addr-shown and addr-copied an address on every look', () => {
         assert.deepEqual(
-            probeCoverageGaps('mobile', { ...read, stagedByClass: { ...read.stagedByClass, 't-neo': { 'addr-shown': 0 } } }, STATES_8G1_OPTIONS),
+            probeCoverageGaps('mobile', { ...read, stagedByClass: { ...read.stagedByClass, 't-neo': { 'addr-shown': 0, 'addr-copied': 2 } } }, STATES_8G1_OPTIONS),
             [
                 'addr-shown staged nothing on a t-neo stall — its state was never on the tree it measured',
                 'addr-shown put no address in its shown state on a t-neo stall',
             ],
         );
+        // The fourth review's B3: the copied state is owed the same way, and its own sentence says which.
+        assert.deepEqual(
+            probeCoverageGaps('mobile', { ...read, stagedByClass: { ...read.stagedByClass, 't-neo': { 'addr-shown': 2, 'addr-copied': 0 } } }, STATES_8G1_OPTIONS),
+            [
+                'addr-copied staged nothing on a t-neo stall — its state was never on the tree it measured',
+                'addr-copied put no address in its copied state on a t-neo stall',
+            ],
+        );
         const { 't-rural': _gone, ...rest } = read.stagedByClass;
         assert.deepEqual(probeCoverageGaps('desktop', { ...read, stagedByClass: rest }, STATES_8G1_OPTIONS), [
             'addr-shown put no address in its shown state on a t-rural stall',
+            'addr-copied put no address in its copied state on a t-rural stall',
         ]);
         // A pass that did not measure the screen owes nothing of it.
         assert.deepEqual(probeCoverageGaps('desktop', { ...read, stagedByClass: rest, screensMeasured: [] }, STATES_8G1_OPTIONS), []);
