@@ -8685,7 +8685,7 @@ declare global {
          * wears the outline and every broken figure, for the job's one
          * "shown" frame; how many of each.
          */
-        __contrastGlyphs: (show: boolean) => Promise<{ outlined: number; figures: number }>;
+        __contrastGlyphs: (show: boolean, which?: 'both' | 'ring' | 'figures') => Promise<{ outlined: number; figures: number }>;
         /** 1a once on a contrast job's prepared paint (`coverScan`). */
         __coverFaults: () => CoverScan;
         /**
@@ -9405,16 +9405,18 @@ const glyphsBlanked = (el: Element): boolean => {
  * mask is read inside the text nodes' own line boxes either way (D6(ii),
  * step 5b). A piece a look made transparent is put back transparent, and
  * one it hid stays hidden: what the read then finds is what the look paints.
- * The horizon's worst read and the art-off read show the same set on their
- * own frames; they read the outlined lines alone, so a figure shown beside
- * them is read by nothing there.
+ * Where an outlined line's rect meets a piece of another target's broken
+ * figure, the runner asks for the two sets apart (`which`: `ring`, then
+ * `figures`; before 8g2 item 8), so neither read takes the other's glyph
+ * for its own. The horizon's worst read and the art-off read read the
+ * outlined lines alone, and show them alone on their own frames (`ring`).
  */
-window.__contrastGlyphs = async (show: boolean) => {
+window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figures' = 'both') => {
     let outlined = 0;
     let figures = 0;
     for (const node of preparedNodes) {
-        const ring = outlineOf(node) > 0;
-        const figure = node.matches(MONEY) && node.querySelector('.fig-say') !== null;
+        const ring = which !== 'figures' && outlineOf(node) > 0;
+        const figure = which !== 'ring' && node.matches(MONEY) && node.querySelector('.fig-say') !== null;
         if (!ring && !figure) continue;
         if (ring) outlined += 1;
         if (figure) figures += 1;

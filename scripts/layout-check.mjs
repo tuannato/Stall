@@ -1341,6 +1341,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     let lookPseudoJobs = 0;
     let lookMarkJobs = 0;
     const lookMarkJobsByClass = {};
+    let shownApartJobs = 0;
     let cover;
     const artOffFrames = {};
     let artOffTargets = 0;
@@ -1762,10 +1763,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * fresh pair); a failing broken figure on a fresh blank and
                  * a fresh shown frame of its own, as it always was.
                  */
-                const glyphs = async (show) => {
+                const glyphs = async (show, which) => {
                     const r = await cdp.send(
                         'Runtime.evaluate',
-                        { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
+                        { expression: `window.__contrastGlyphs(${show}, ${JSON.stringify(which)})`, awaitPromise: true, returnByValue: true },
                         sessionId,
                     );
                     if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
@@ -1773,22 +1774,47 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                 };
                 const outlinedOf = () => targets.filter((t) => t.ring > 0);
                 const brokenOf = () => targets.filter((t) => (t.digitsOwed ?? 0) > 0);
-                /** The glyphs shown, one capture, the boxes re-read, the glyphs blanked again: `{ shot, why }`. */
-                const shownFrame = async () => {
+                /*
+                 * **One frame, unless one read's glyphs could stand in the
+                 * other's** (before 8g2, item 8): the ring read takes every
+                 * glyph pixel inside an outlined line's rect for that line's,
+                 * and reads its ring up to its outline's width past it; the
+                 * broken-figure read takes every glyph pixel inside a piece's
+                 * rect for the figure's. Where an outlined line's rect, grown
+                 * by its ring and a pixel, meets a piece of another target's
+                 * broken figure, a glyph of one shown beside the other would be
+                 * read as the other's, so each read takes a shown frame of its
+                 * own: the outlined glyphs alone, then the figures' alone.
+                 */
+                const framesApart = () => {
+                    const pieces = brokenOf().flatMap((t) => (t.digits ?? []).map((d) => ({ t, d })));
+                    return outlinedOf().some((o) =>
+                        (o.lines ?? []).some((l) => {
+                            const grow = o.ring + 1;
+                            return pieces.some(
+                                ({ t, d }) => t !== o && l.x - grow < d.x + d.w && d.x < l.x + l.w + grow && l.y - grow < d.y + d.h && d.y < l.y + l.h + grow,
+                            );
+                        }),
+                    );
+                };
+                /** The glyphs shown (`which`: both reads', or one's), one capture, the boxes re-read, the glyphs blanked again: `{ shot, why }`. */
+                const shownFrame = async (which) => {
                     const shownStart = performance.now();
-                    const n = await glyphs(true);
+                    const n = await glyphs(true, which);
                     const shownCap = await capture();
                     const shownRead = await reread();
-                    await glyphs(false);
+                    await glyphs(false, which);
                     const why = [...shownCap.why, ...shownRead.why];
                     if (shownRead.live.boxes.length !== targets.length) {
                         why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
                     }
-                    if (n.outlined !== outlinedOf().length) {
-                        why.push(`${n.outlined} outlined targets shown where the read has ${outlinedOf().length}`);
+                    const wantOutlined = which === 'figures' ? 0 : outlinedOf().length;
+                    const wantFigures = which === 'ring' ? 0 : brokenOf().length;
+                    if (n.outlined !== wantOutlined) {
+                        why.push(`${n.outlined} outlined targets shown where the read has ${wantOutlined}`);
                     }
-                    if (n.figures !== brokenOf().length) {
-                        why.push(`${n.figures} broken figures shown where the read has ${brokenOf().length}`);
+                    if (n.figures !== wantFigures) {
+                        why.push(`${n.figures} broken figures shown where the read has ${wantFigures}`);
                     }
                     const entry = phases.get('shown frame') ?? { calls: 0, ms: 0 };
                     entry.calls += 1;
@@ -1796,9 +1822,16 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     phases.set('shown frame', entry);
                     return { shot: shownCap.shot, why };
                 };
+                const apart = framesApart();
+                if (apart) {
+                    // Said in the dump only where it happens, so a tree on
+                    // which no read meets the other dumps as it did.
+                    record.shownApart = true;
+                    shownApartJobs += 1;
+                }
                 let shown;
-                if (retryWhy.length === 0 && (outlinedOf().length > 0 || brokenOf().length > 0)) {
-                    shown = await shownFrame();
+                if (retryWhy.length === 0 && (apart ? outlinedOf().length > 0 : outlinedOf().length > 0 || brokenOf().length > 0)) {
+                    shown = await shownFrame(apart ? 'ring' : 'both');
                     if (shown.why.length > 0) {
                         retryWhy = shown.why.map((w) => `with the glyphs shown, ${w}`);
                     }
@@ -1824,7 +1857,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             imgAt = again.capturedAt;
                             targets = againRead.live.boxes;
                             retried = true;
-                            shown = await shownFrame();
+                            shown = await shownFrame(apart ? 'ring' : 'both');
                             results = shown.why.length === 0 ? readAll(shown.shot) : [];
                         } else {
                             shown = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
@@ -1928,12 +1961,14 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     const readOn = (blank, shot) => broken.map((t) => ({ t, r: digitRead(blank, shot, t) }));
                     const readFresh = async () => {
                         const blankCap = await capture();
-                        const fresh = await shownFrame();
+                        const fresh = await shownFrame(apart ? 'figures' : 'both');
                         const why = [...blankCap.why, ...fresh.why];
                         return { why, results: why.length > 0 ? [] : readOn(blankCap.shot, fresh.shot) };
                     };
                     const bad = ({ t, r }) => r.thin.length > 0 || r.found < t.digitsOwed;
-                    let pass = { why: [], results: readOn(img, shown.shot) };
+                    // The figures' own shown frame where the reads stand apart.
+                    const figuresShown = apart ? await shownFrame('figures') : shown;
+                    let pass = figuresShown.why.length > 0 ? { why: figuresShown.why, results: [] } : { why: [], results: readOn(img, figuresShown.shot) };
                     if (pass.results.some(bad)) {
                         await sleep(250);
                         pass = await readFresh();
@@ -2002,9 +2037,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     const flat = await page('window.__horizonAtItsWorst(true)');
                     const blankCap = await capture();
                     const flatRead = await reread();
-                    await page('window.__contrastGlyphs(true)');
+                    await page("window.__contrastGlyphs(true, 'ring')");
                     const shownCap = await capture();
-                    await page('window.__contrastGlyphs(false)');
+                    await page("window.__contrastGlyphs(false, 'ring')");
                     const back = await page('window.__horizonAtItsWorst(false)');
                     const why = [...blankCap.why, ...shownCap.why, ...flatRead.why];
                     if (flat.worn !== flat.flattened || flat.worn !== prep.horizon.worn || back.worn !== flat.worn) {
@@ -2184,9 +2219,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         const why = [...blank.why];
                         let shown;
                         if (why.length === 0 && targets.some((t) => t.ring > 0)) {
-                            await page('window.__contrastGlyphs(true)');
+                            await page("window.__contrastGlyphs(true, 'ring')");
                             shown = await capture();
-                            await page('window.__contrastGlyphs(false)');
+                            await page("window.__contrastGlyphs(false, 'ring')");
                             why.push(...shown.why);
                         }
                         await page("window.__artOff('off')");
@@ -2339,6 +2374,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             lookPseudoJobs,
             lookMarkJobs,
             lookMarkJobsByClass,
+            shownApartJobs,
             artOffFrames,
             artOffTargets,
             artOffJobs,
@@ -3815,6 +3851,7 @@ try {
         // D6(i): jobs whose look pseudos were hidden and compared, and the
         // protected-box pixels compared.
         let lookPseudoJobs = 0;
+        let shownApartJobs = 0;
         let lookPseudoPixels = 0;
         // 8f2: jobs whose shown marks were hidden and compared, and the jobs
         // read again with the look's file art failed, each per look class.
@@ -3937,6 +3974,7 @@ try {
             horizonUnread.push(...out.horizonUnread);
             lookPseudoPixels += out.lookPseudoPixels;
             lookPseudoJobs += out.lookPseudoJobs;
+            shownApartJobs += out.shownApartJobs;
             if (out.cover !== undefined) {
                 const into = (coverContrast[out.cover.cls] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, wouldCount: 0, would: [] });
                 into.paints += 1;
@@ -4439,6 +4477,7 @@ try {
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character), ` +
                         `${brokenFigures} broken figure(s) read digit by digit on ${brokenKeys.size} job(s) ` +
+                        `(the ring and the figures shown on frames of their own on ${shownApartJobs}, where an outlined line met a piece) ` +
                         `(the faintest piece ${Number.isFinite(brokenLeast) ? brokenLeast.toFixed(2) : '-'}:1; ${phases.get('broken figures')?.ms !== undefined ? `${(phases.get('broken figures').ms / 1000).toFixed(1)}s` : '-'}) — ${took()}` +
                         `\n    faces: every face loaded before the first job on all ${tabs.reduce((n, tab) => n + tab.faces.length, 0)} contrast pages` +
                         ` (the first: ${tabs[0].faces[0] ?? 'none'})` +
