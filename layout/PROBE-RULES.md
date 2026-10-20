@@ -5526,13 +5526,13 @@ as a rule at rest. **Owed, not trusted**: a pass that measured `addr-copied` owe
 address in its copied state on every look it painted (`probe-coverage.mjs`, test
 `the-8g1-states-owe-their-subjects`, which now owes both address states), and a
 staged screen that pressed nothing fails the pass. The screen is geometry only.
-**Measured** (2026-10-20, `pnpm test:layout`, three runs on a machine shared with
+**Measured** (2026-10-20, `pnpm test:layout`, four runs on a machine shared with
 other probe runs): every page, wall, narrow, short and reduced-motion pass was
 green each time, with `addr-copied` on the phone and desk passes (82 and 94
 screens); the contrast plan was the same 796 jobs and its pass was green once,
-in the run that stopped in the transparency pass at 300.2s; the other two stopped
-in the contrast pass at the 300s ceiling, the geometry walk alone having taken
-123s to 186s. So the whole runner has not passed with this screen.
+in the run that stopped in the transparency pass at 300.2s; the other three
+stopped in the contrast pass at the 300s ceiling, the geometry walk alone having
+taken 123s to 186s. So the whole runner has not passed with this screen.
 
 **The trace** (`layout/stateAttributes.test.ts`, a happy-dom paint of every probe
 screen on the default look with its staged state, held by value): every value of
