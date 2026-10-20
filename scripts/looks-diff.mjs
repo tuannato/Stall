@@ -128,6 +128,12 @@ import { GIT_LOCATION_VARS } from './private-looks.mjs';
  */
 const SELECTION = harnessSelection('looks:diff');
 
+// `npx` (and npm under it) asks the npm registry for a newer npm unless told
+// not to: the one network call a probe run made, found 2026-10-20. Every
+// child this command spawns inherits these.
+process.env.npm_config_update_notifier = 'false';
+process.env.NO_UPDATE_NOTIFIER = '1';
+
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 process.chdir(ROOT);
 

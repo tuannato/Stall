@@ -127,3 +127,34 @@ describe('a-harness-command-reads-a-selection-or-refuses-it', () => {
         }
     });
 });
+
+const SPAWNERS = ['scripts/layout-check.mjs', 'scripts/looks-diff.mjs', 'scripts/print-measure.mjs', 'scripts/workshop.mjs'];
+
+describe('a-harness-command-that-spawns-npx-turns-the-update-notifier-off', () => {
+    /**
+     * `npx` and npm under it ask the npm registry for a newer npm unless told
+     * not to (2026-10-20: the one network call a probe run made, stamped in
+     * `~/.npm/_update-notifier-last-checked`). Every script here that spawns
+     * `npx` sets both switches on its own process before it spawns anything,
+     * so every child inherits them.
+     */
+    it('sets both switches in every script that spawns npx, and names every such script', () => {
+        const spawning = [];
+        for (const file of ['layout-check', 'looks-diff', 'print-measure', 'workshop', 'workshop-lint', 'notices', 'contrast-dump']) {
+            const path = `scripts/${file}.mjs`;
+            let text;
+            try {
+                text = readFileSync(join(ROOT, path), 'utf8');
+            } catch {
+                continue;
+            }
+            if (/['"]npx['"]/.test(code(text))) spawning.push(path);
+        }
+        assert.deepEqual(spawning.sort(), [...SPAWNERS].sort());
+        for (const path of SPAWNERS) {
+            const text = code(readFileSync(join(ROOT, path), 'utf8'));
+            assert.match(text, /^process\.env\.npm_config_update_notifier = 'false';$/m, path);
+            assert.match(text, /^process\.env\.NO_UPDATE_NOTIFIER = '1';$/m, path);
+        }
+    });
+});

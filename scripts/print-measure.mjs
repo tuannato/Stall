@@ -37,6 +37,12 @@ import { refuseSelection } from './looks-selection.mjs';
 // build it measures and no page here would read it, so it is refused.
 refuseSelection('print-measure', 'the print measurement measures the public build only');
 
+// `npx` (and npm under it) asks the npm registry for a newer npm unless told
+// not to: the one network call a probe run made, found 2026-10-20. Every
+// child this command spawns inherits these.
+process.env.npm_config_update_notifier = 'false';
+process.env.NO_UPDATE_NOTIFIER = '1';
+
 const PORT = process.env.LAYOUT_PORT ?? '4321';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9341';
 const CHROMES = ['google-chrome', 'chromium', 'chromium-browser', 'google-chrome-stable'];
