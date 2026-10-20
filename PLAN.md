@@ -873,7 +873,8 @@ money path this app can have, because nothing on it is derived.
 
 - **P1, narrowed: off every pass, the wall still runs past its status line
   at 1280x720 and on tall narrow portraits, cuts an eight-byte figure's unit
-  at 864x1536, and cuts a code inside its quiet zone at 1280x720.** Since
+  and the figures of the 35-item payment's rows (from below) at 864x1536, and
+  cuts a code inside its quiet zone at 1280x720.** Since
   2026-10-14 the Cycle card's figure is fitted to its column after the paint
   (`src/ui/wallFit.ts`), where a table of sizes by length had been right only
   at the five probed sizes and printed `$999.99` as "$999.9" on Neo at
@@ -924,10 +925,16 @@ money path this app can have, because nothing on it is derived.
   portrait screens over 1500 tall and narrower than 1080 — at 900x1600
   Rural's card with the yard runs up to 36px past the line, and at 864x1536
   up to 79px, the eight-byte Browse figures on Neo and Rural lose their unit
-  ("EC", "XEC") to their card's clip, and the 35-item payment's rows show 28
-  of their 48–51px, figures cut from below. No digit is cut at any of the
-  three. Neither shape has a pass, and the fit's own work does not close
-  either.
+  ("EC", "XEC") to their card's clip, and **the figures in the 35-item
+  payment's rows are cut from below, digits among them**: on Rural with the
+  yard the payment's scroller shows 28px of each 48–51px row. That one is
+  older than the branch (the same screen fails on main, and no pass paints
+  864x1536). What is cut at the three sizes, exactly: at 864x1536 the unit of
+  the Browse figures and the payment rows' figures from below; at 1280x720
+  and 900x1600 the failures are the ones named above (a card past the status
+  line, a code inside its quiet zone, a sentence cut 1–6px from below), none
+  recorded as a cut digit. Neither shape has a pass, and the fit's own work
+  does not close either.
   **For the owner, behaviour changes this fix made:** a portrait screen up
   to 1500 tall (800x1280, 1024x1366, 768x1366) takes the counter tablet's
   side-by-side card rather than the stacked column; under 790px of frame
