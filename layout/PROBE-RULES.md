@@ -9464,3 +9464,11 @@ air than 0.5px is the owner's, and not asked.
   critic's item 2 named), and the fit with its own `holdStill`; the section
   above that says `holdStill` is shared with this rule is history. The
   probe's reads stay apart from the fit's, as the unit rule's do.
+
+## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
+
+ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
+
+Why: on this Mac one tab took 261.8–264.1s before the four off-size wall passes landed, and those passes added about +21s on a quiet machine (+40s under load). One tab would cross the 300s ceiling, and two tabs fit (230–248s here). `ubuntu-latest` meets the runner's own two-tab default (at least 4 cores and 8 GiB) on a public repository.
+
+The earlier entries above that say the job "sets `LAYOUT_CONTRAST_TABS: '1'`" are history. Not measured: the job itself on a runner, until the owner dispatches it. On that first dispatch, the two-tab walk, its canaries and the page print run in CI for the first time.
