@@ -9416,7 +9416,18 @@ function styleRules(): CSSStyleRule[] {
     return out;
 }
 
-/** The look pseudos generated in `scope`, marked; how many. */
+/**
+ * The look pseudos generated in `scope`, marked; how many.
+ *
+ * **The scope is a host too** (before 8g2, item 4): an open sheet's scope is
+ * its scrim, and `querySelectorAll` answers descendants alone, so a look's
+ * `::before` or `::after` of the scrim moved over the sheet's figure was
+ * never marked, never hidden in the look-paint frame, and
+ * `no-look-pseudo-paints-inside-a-protected-box` read it as nothing. The
+ * scope's ancestors (`.stall`, `.stall-scroll`) stay unmarked, stated: the
+ * look-paint frames do not read their pseudos, the geometry passes' cover
+ * read does (an ancestor counts as covering).
+ */
 function markLookPseudos(scope: ParentNode): number {
     for (const el of document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]')) {
         el.removeAttribute('data-probe-lp-before');
@@ -9428,9 +9439,9 @@ function markLookPseudos(scope: ParentNode): number {
             const look = lookPseudoOf(one);
             if (look === undefined) continue;
             const { which, host } = look;
-            let hosts: NodeListOf<Element>;
+            let hosts: Element[];
             try {
-                hosts = scope.querySelectorAll(host);
+                hosts = [...(scope instanceof Element && scope.matches(host) ? [scope] : []), ...scope.querySelectorAll(host)];
             } catch {
                 throw new Error(`a look pseudo's selector the probe cannot match: ${one}`);
             }
