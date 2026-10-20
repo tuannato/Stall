@@ -295,8 +295,6 @@ type Clip = {
     el: Element;
     /** `overflow-x: hidden | clip`: what lies past its side edge is gone, not scrolled to. */
     cutsX: boolean;
-    /** A sideways scroller with something to scroll: what lies past its edge is reachable. */
-    scrollsX: boolean;
     /** Its `overflow-x` and `overflow-y`, as computed (1a reads a scroller's reach on each axis). */
     overflowX: string;
     overflowY: string;
@@ -317,7 +315,7 @@ type Clip = {
  * The scroll is put back where it stood; the scroll event it queues fires
  * after the read, on a tree the probe's handlers do nothing with.
  */
-type Reach = { x0: number; x1: number; y0: number; y1: number };
+type Reach = { x0: number; x1: number; y0: number; y1: number; pad: Box };
 function scrollReach(el: Element): Reach {
     const pad = paddingBox(el);
     const [sx, sy] = [el.scrollLeft, el.scrollTop];
@@ -326,7 +324,20 @@ function scrollReach(el: Element): Reach {
     el.scrollTo({ left: 1e9, top: 1e9, behavior: 'instant' });
     const [maxX, maxY] = [el.scrollLeft, el.scrollTop];
     el.scrollTo({ left: sx, top: sy, behavior: 'instant' });
-    return { x0: pad.left - (sx - minX), x1: pad.right + (maxX - sx), y0: pad.top - (sy - minY), y1: pad.bottom + (maxY - sy) };
+    return { x0: pad.left - (sx - minX), x1: pad.right + (maxX - sx), y0: pad.top - (sy - minY), y1: pad.bottom + (maxY - sy), pad };
+}
+
+/**
+ * **Where a scroller can bring its content into a window** (before 8g2,
+ * the window's item 3): on one axis, the span of content positions that
+ * some scroll position of `reach`'s box puts inside both the box and the
+ * window `[lo, hi]` — the box's padding box cut to the window, widened by
+ * how far the box scrolls each way. Content inside it is shown at some
+ * scroll position; content outside it at none.
+ */
+function reachWithin(reach: Reach, axis: 'x' | 'y', lo: number, hi: number): [number, number] {
+    const [padLo, padHi, r0, r1] = axis === 'x' ? [reach.pad.left, reach.pad.right, reach.x0, reach.x1] : [reach.pad.top, reach.pad.bottom, reach.y0, reach.y1];
+    return [Math.max(padLo, lo) - (padLo - r0), Math.min(padHi, hi) + (r1 - padHi)];
 }
 
 /** Whether an `overflow` value scrolls. */
@@ -346,9 +357,6 @@ function clipsOf(node: Element): Clip[] {
                 rect: at.getBoundingClientRect(),
                 el: at,
                 cutsX: style.overflowX === 'hidden' || style.overflowX === 'clip',
-                scrollsX:
-                    (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
-                    at.scrollWidth > at.clientWidth + 1,
                 overflowX: style.overflowX,
                 overflowY: style.overflowY,
             });
@@ -362,8 +370,8 @@ function clipsOf(node: Element): Clip[] {
  * Sideways is not like down (2026-09-20). A box below the fold is reached by
  * scrolling; a box past the viewport's side edge, or past an ancestor whose
  * `overflow-x` is hidden or clip, is reached by nothing — unless some
- * ancestor actually scrolls sideways (the door's deck row), or the page
- * itself does, which the sideways-scroll rule already refuses. The incident:
+ * scroller below that edge brings it in, or the page itself scrolls
+ * sideways, which the sideways-scroll rule already refuses. The incident:
  * the door's body is a flex item with auto side margins, so its width is its
  * own max-content capped at 430px, and round 16 gave it a nowrap site bar
  * and a deck row whose max-content is past that — at 390px the body came out
@@ -372,6 +380,19 @@ function clipsOf(node: Element): Clip[] {
  * not scroll (the shell clips), and `coveredBy` skipped the points past the
  * edge as "off screen, the viewport check's failure", which was no check at
  * all. Every protected box is asked, in the geometry sweep.
+ *
+ * **A scroller reaches what it scrolls to, not everything** (before 8g2,
+ * the window's item 3; the critic's PC): any sideways scroller above the
+ * box used to excuse it whole, so a shelf made a centred, reversed
+ * sideways scroller put each row's price past the screen's right edge, past
+ * the scroll origin no position reaches, and every bound rule passed. Now
+ * every edge the box runs past — a box above it that cuts or scrolls
+ * sideways, then the viewport — is asked whether a scroller inside that
+ * edge brings every part of the box within it (`scrollReach`, measured,
+ * through `reachWithin`): the edge's own scroller for its own side, any
+ * scroller below it for a cutter or the viewport. One scroller at a time,
+ * stated: a box only two nested scrollers together could bring in is read
+ * as out of reach.
  */
 function cutSideways(node: Element, box: DOMRect): string | undefined {
     if (box.width === 0 || box.height === 0) {
@@ -389,22 +410,32 @@ function cutSideways(node: Element, box: DOMRect): string | undefined {
     if (ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still') {
         return undefined;
     }
-    const clips = clipsOf(node);
-    const reachable =
-        document.documentElement.scrollWidth > window.innerWidth + 1 ||
-        clips.some((clip) => clip.scrollsX);
-    if (reachable) {
+    // The page's own sideways scroll is the sideways-scroll rule's failure.
+    if (document.documentElement.scrollWidth > window.innerWidth + 1) {
         return undefined;
     }
+    const clips = clipsOf(node);
     const span = `${Math.round(box.left)}–${Math.round(box.right)}`;
-    if (box.left < -1 || box.right > window.innerWidth + 1) {
-        return `runs past the viewport's side edge (${span} of ${window.innerWidth}) with nothing to scroll`;
+    const reachedBy = (inner: readonly Clip[], lo: number, hi: number): boolean =>
+        inner.some((clip) => {
+            if (!scrollsOn(clip.overflowX)) return false;
+            const [from, to] = reachWithin(scrollReach(clip.el), 'x', lo, hi);
+            return box.left >= from - 1 && box.right <= to + 1;
+        });
+    for (let i = 0; i < clips.length; i += 1) {
+        const clip = clips[i]!;
+        const scrolls = scrollsOn(clip.overflowX);
+        if (!clip.cutsX && !scrolls) continue;
+        const c = clip.rect;
+        if (box.left >= c.left - 1 && box.right <= c.right + 1) continue;
+        // Below this edge — and the edge itself, where it scrolls.
+        if (reachedBy(clips.slice(0, scrolls ? i + 1 : i), c.left, c.right)) continue;
+        return scrolls
+            ? `runs past ${describe(clip.el)}'s side (${span} inside ${Math.round(c.left)}–${Math.round(c.right)}, overflow-x ${clip.overflowX}), where no scroll position brings it (scrollReach)`
+            : `is cut sideways by ${describe(clip.el)} (${span} inside ${Math.round(c.left)}–${Math.round(c.right)})`;
     }
-    const cutter = clips.find(
-        (clip) => clip.cutsX && (box.left < clip.rect.left - 1 || box.right > clip.rect.right + 1),
-    );
-    if (cutter !== undefined) {
-        return `is cut sideways by ${describe(cutter.el)} (${span} inside ${Math.round(cutter.rect.left)}–${Math.round(cutter.rect.right)})`;
+    if ((box.left < -1 || box.right > window.innerWidth + 1) && !reachedBy(clips, 0, window.innerWidth)) {
+        return `runs past the viewport's side edge (${span} of ${window.innerWidth}) with nothing that scrolls it into view`;
     }
     return undefined;
 }
@@ -566,10 +597,13 @@ function coveredBy(node: Element): string | undefined {
  * box of its own, and a node with no box that a look's rule hides
  * (`lookHides`). One the app hides itself — the address twin a width does not
  * paint, a desk-only fold on a phone, the wall's list while a payment stands
- * — is skipped and counted. A point below the first screen or past a side
- * edge is counted and not asked (D3); one behind a clip, the node's own
- * scroller's included for the text inside it, is counted beside the points
- * asked, the ratio `CLIP_SKIP_CEILING` holds `coveredBy`'s to.
+ * — is skipped and counted. A point below the first screen is counted and
+ * not asked (D3); one past a side edge or above the top is asked whether a
+ * scroller brings it into view (`offScreenReach`), counted where one does
+ * and failed where none does; one behind a clip, the node's own scroller's
+ * included for the text inside it, is counted beside the points asked, the
+ * ratio `CLIP_SKIP_CEILING` holds `coveredBy`'s to, unless it stands past
+ * the scroll origin no position shows (`scrollReach`), which fails.
  *
  * The column is excused as `columnExcuses` says: never a hit on a box of
  * the column that holds the figure — `.item-p` itself, `.item-a`, or any box
@@ -849,7 +883,7 @@ function clipsWithin(el: Element): Clip[] {
     const cs = getComputedStyle(el);
     const self =
         cs.overflowX !== 'visible' || cs.overflowY !== 'visible'
-            ? [{ rect: el.getBoundingClientRect(), el, cutsX: false, scrollsX: false, overflowX: cs.overflowX, overflowY: cs.overflowY }]
+            ? [{ rect: el.getBoundingClientRect(), el, cutsX: cs.overflowX === 'hidden' || cs.overflowX === 'clip', overflowX: cs.overflowX, overflowY: cs.overflowY }]
             : [];
     return [...self, ...clipsOf(el)];
 }
@@ -883,6 +917,42 @@ function pushPoint(x: number, y: number, kind: number, clips: number): void {
     ptKind[ptN] = kind;
     ptClips[ptN] = clips;
     ptN += 1;
+}
+
+/**
+ * Why a point past the viewport's side edge or above its top is shown at no
+ * scroll position, or undefined where one shows it (before 8g2, the
+ * window's item 3; the critic's PC put a shelf's prices past the right
+ * edge, past the scroll origin no position reaches, and 1a only counted
+ * them): on each axis it is out on, some scroller among `clips` that
+ * scrolls on that axis must bring it inside both its own box and the
+ * viewport (`reachWithin`), or the page must scroll there itself — sideways
+ * is the sideways-scroll rule's failure, and up is as far as the page is
+ * scrolled down. One scroller at a time, as `cutSideways` reads them. A
+ * point below the bottom is not asked: it is counted (D3).
+ */
+function offScreenReach(x: number, y: number, clips: readonly Clip[], reaches: Map<Element, Reach>, vw: number, vh: number): string | undefined {
+    const reachOf = (el: Element): Reach => {
+        let reach = reaches.get(el);
+        if (reach === undefined) {
+            reach = scrollReach(el);
+            reaches.set(el, reach);
+        }
+        return reach;
+    };
+    const brought = (axis: 'x' | 'y', at: number, hi: number): boolean =>
+        clips.some((clip) => {
+            if (!scrollsOn(axis === 'x' ? clip.overflowX : clip.overflowY)) return false;
+            const [from, to] = reachWithin(reachOf(clip.el), axis, 0, hi);
+            return at >= from - 1 && at <= to + 1;
+        });
+    if ((x < 0 || x >= vw) && document.documentElement.scrollWidth <= vw + 1 && !brought('x', x, vw)) {
+        return `past the viewport's ${x < 0 ? 'left' : 'right'} edge (of ${vw}), and no scroll position brings it in`;
+    }
+    if (y < 0 && -y > window.scrollY + 1 && !brought('y', y, vh)) {
+        return `above the viewport's top, and no scroll position brings it in`;
+    }
+    return undefined;
 }
 
 /** Why `node` is covered (or the read cannot say), as a sentence, or undefined; the points counted into `scan`. */
@@ -985,17 +1055,29 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
     let outOfReach: string | undefined;
     const [vw, vh] = [window.innerWidth, window.innerHeight];
     const where = (x: number, y: number, kind: PointKind): string => `${Math.round(x)},${Math.round(y)} (${kind})`;
+    // A figure in a moving or pinned ticker ribbon runs past the screen's
+    // sides by design (`cutSideways`'s one exception, by value).
+    const ribbon = node.closest('[data-ribbon]');
+    const runsPastSides = ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still';
     for (let i = 0; i < ptN; i += 1) {
         const x = ptX[i]!;
         const y = ptY[i]!;
         const kind = KIND_NAMES[ptKind[i]!]!;
         const clips = clipLists[ptClips[i]!]!;
         scan.points += 1;
-        if (x < 0 || x >= vw) {
+        if (x < 0 || x >= vw || y < 0) {
+            // Past a side edge or above the top: asked whether a scroller
+            // brings it into the viewport (`offScreenReach`), and counted
+            // where one does — no hit test answers outside the viewport.
+            const why = runsPastSides && y >= 0 && y < vh ? undefined : offScreenReach(x, y, clips, reaches, vw, vh);
+            if (why !== undefined) {
+                outOfReach ??= `stands at ${where(x, y, kind)}, ${why}`;
+                continue;
+            }
             scan.offSide += 1;
             continue;
         }
-        if (y < 0 || y >= vh) {
+        if (y >= vh) {
             scan.below += 1;
             continue;
         }
