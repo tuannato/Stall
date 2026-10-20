@@ -1200,14 +1200,28 @@ let coverRest: [Animation, CSSNumberish | null][] = [];
 
 /**
  * 1a on a geometry pass's paint, **last**, after every other read of it,
- * with every animation the instants moved put back where it stood at rest:
- * the read leaves the forcing on (`releaseCover`), and only the next paint
- * may take it off.
+ * with every animation on the page put back at rest, its delay zeroed as
+ * the instants and the contrast freeze zero it: one the instants moved
+ * where it stood before them, and one they never moved — armed after they
+ * queried the page, or on a screen they did not step — at its start. The
+ * delay matters at rest too: the ticker continues a pass across repaints
+ * through a negative delay as long as the wall-clock time since its pass
+ * began (`armTicker`), so read with it the ribbon stood a few pixels
+ * further on in one run than another, and four of its points flipped
+ * between past the screen's side and behind its cell from run to run (the
+ * critic's item 9). The read leaves the forcing on (`releaseCover`), and
+ * only the next paint may take it off.
  */
 function coverAtRest(screen: string, label: string): void {
-    for (const [anim, at] of coverRest) {
+    const rest = new Map(coverRest);
+    for (const anim of document.getAnimations()) {
         try {
-            anim.currentTime = at ?? 0;
+            anim.effect?.updateTiming({ delay: 0 });
+        } catch {
+            // Not ours to time.
+        }
+        try {
+            anim.currentTime = rest.get(anim) ?? 0;
         } catch {
             // A finished or unseekable animation stands where it stands.
         }
