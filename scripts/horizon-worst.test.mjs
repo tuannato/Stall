@@ -23,18 +23,29 @@ describe('horizon-worst-baselines-are-the-owners-numbers', () => {
         assert.equal(SAME, 0.01);
     });
 
-    it('passes a run that reads the numbers on their jobs, and higher elsewhere', () => {
-        assert.deepEqual(horizonWorstVerdict(reads([...AS_PINNED, ['name', 'mobile/offers/2/4', 8.9]])), []);
+    it('passes a run that reads the numbers on their jobs', () => {
+        assert.deepEqual(horizonWorstVerdict(reads(AS_PINNED)), []);
     });
 
-    it('fails an owed job unread, a fall, a rise and a new lowest elsewhere', () => {
+    /*
+     * D-2026-10-20-13 (D2(a)): the runner reads the horizon's worst on the
+     * three pinned jobs alone, so a read anywhere else — higher or lower —
+     * means the prune did not hold. What it gave up is the guard that no
+     * other job reads lower.
+     */
+    it('fails a read on any job no number was read on, higher or lower', () => {
+        for (const least of [8.9, 1.5]) {
+            const out = horizonWorstVerdict(reads([...AS_PINNED, ['name', 'mobile/offers/2/4', least]])).join('\n');
+            assert.match(out, /was read on mobile\/offers\/2\/4 .* the runner reads the pinned jobs alone/);
+        }
+    });
+
+    it('fails an owed job unread, a fall and a rise', () => {
         const without = AS_PINNED.filter(([part]) => part !== 'tagline');
         assert.match(horizonWorstVerdict(reads(without)).join('\n'), /tagline .* was not read on desktop\/shop-window-cycle/);
         const fell = AS_PINNED.map(([p, j, l]) => [p, j, p === 'name' ? l - 0.3 : l]);
         assert.match(horizonWorstVerdict(reads(fell)).join('\n'), /name .* a regression/);
         const rose = AS_PINNED.map(([p, j, l]) => [p, j, p === 'name' ? l + 0.3 : l]);
         assert.match(horizonWorstVerdict(reads(rose)).join('\n'), /update HORIZON_WORST/);
-        const lower = [...AS_PINNED, ['tagline', 'mobile/offers/2/65535', 1.5]];
-        assert.match(horizonWorstVerdict(reads(lower)).join('\n'), /1\.50:1 on mobile\/offers\/2\/65535, under the 1\.92/);
     });
 });

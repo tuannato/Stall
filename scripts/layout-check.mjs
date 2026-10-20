@@ -534,6 +534,20 @@ const LEGACY = process.env.LAYOUT_LEGACY === '1';
  */
 
 // Grid horizon at its worst: the owner's numbers and their verdict (`horizon-worst.mjs`).
+/*
+ * **Read on the three jobs the owner's numbers were read on, and no other**
+ * (D-2026-10-20-13, the owner's D2(a)): a shipped run reads the sign at the
+ * horizon's worst on `HORIZON_WORST`'s three jobs alone, where it read
+ * every job that wore the horizon (94 on the default plan) to hold that no
+ * other job read lower. What is lost, stated: that guard against a
+ * regression on the other jobs — a change that lowers the name, the tagline
+ * or the state line at the horizon's worst on a job that is not one of the
+ * three passes the run. The ring read over the horizon as painted, on every
+ * job that wears it, is the failing guard and is unchanged. A kit run pins
+ * nothing and still reads every job the page owes (`__contrastOwed`).
+ */
+const HORIZON_PINNED_JOBS = new Set(Object.values(HORIZON_WORST).map((at) => at.job));
+const readsHorizonWorst = (key) => LOOKS !== 'shipped' || HORIZON_PINNED_JOBS.has(key);
 
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
@@ -2027,7 +2041,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * regression guard and not a floor: the ring read on the
                  * horizon as painted, above, is the failing guard.
                  */
-                if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0) {
+                if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0 && readsHorizonWorst(plannedJob.key)) {
                     const worstStart = performance.now();
                     const page = async (expression) => {
                         const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
@@ -4262,9 +4276,10 @@ try {
             }
         }
         const RAIN_REQUIRED = Array.isArray(owed?.rain) ? owed.rain : [];
-        const HORIZON_REQUIRED = [
-            ...new Set([...(Array.isArray(owed?.horizon) ? owed.horizon : []), ...(LOOKS === 'shipped' ? Object.values(HORIZON_WORST).map((at) => at.job) : [])]),
-        ];
+        // A shipped run owes the horizon's worst on the owner's three jobs
+        // (`HORIZON_PINNED_JOBS`), which it reads alone; a kit run owes it on
+        // every job the page names.
+        const HORIZON_REQUIRED = LOOKS === 'shipped' ? [...HORIZON_PINNED_JOBS] : [...new Set(Array.isArray(owed?.horizon) ? owed.horizon : [])];
         if (LOOKS === 'shipped' && (RAIN_REQUIRED.length === 0 || (owed?.horizon ?? []).length === 0)) {
             verdicts.push(
                 `the page owes the rain on ${RAIN_REQUIRED.length} and the horizon on ${(owed?.horizon ?? []).length} job(s) — a shipped run measures Neo, which carries both (__contrastOwed)`,
@@ -4284,7 +4299,7 @@ try {
         if (LOOKS === 'shipped') {
             // At the horizon's worst, held to the owner's numbers
             // (`horizonWorstVerdict`): the job each was read on is owed and
-            // must read it again, and no job may read lower. They are Neo's
+            // must read it again, and no other job is read. They are Neo's
             // as shipped; a kit look's are printed and not pinned.
             for (const line of horizonWorstVerdict(horizonWorst)) verdicts.push(line);
         }

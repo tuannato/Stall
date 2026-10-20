@@ -1956,8 +1956,10 @@ horizon's worst.
   pinned by value in `horizon-worst-baselines-are-the-owners-numbers`)
   holds each number with the job it was read on: that job is owed, must
   read it again within 0.01 — lower is a regression, higher fails until the
-  constant is updated — and no other job may read lower. A line read at the
-  worst with no sample fails, named. The limit, stated: another seller's
+  constant is updated. Until 2026-10-20 no other job could read lower
+  either; since D-2026-10-20-13 (the owner's D2(a)) a shipped run reads the
+  horizon's worst on those three jobs alone, so that guard is gone. A line
+  read at the worst with no sample fails, named. The limit, stated: another seller's
   words can put a glyph beside a lit window or a star, where the ring reads
   as low as those numbers — and the flat layer is the brightest paint over
   the whole sky band, so it is a bound over every placement of a light. The rain
@@ -1966,7 +1968,9 @@ horizon's worst.
   ("every art paint half covered by the one-pixel ring clears 3:1") is not
   added: it fails by design — 2.71:1 for the tagline's pink over half the
   white star — which is the limit accepted. 77 jobs, 20.6 s (phase `horizon
-  worst`). The runner owes five jobs by name (`HORIZON_REQUIRED`). Before the lamp carried the outline its bare letter read
+  worst`). The runner owes five jobs by name (`HORIZON_REQUIRED`); since
+  D-2026-10-20-13 a shipped run owes, and reads, the three pinned jobs alone
+  (`HORIZON_PINNED_JOBS`), and a kit run every job the page names. Before the lamp carried the outline its bare letter read
   2.09–2.24:1 on the ring, and before the probe read `oklab()` — the colour
   an animation's interpolated shadow computes to — the lamp's outline was
   taken for none and blanked, 1.88:1: both fixed, both red proofs.
