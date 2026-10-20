@@ -3288,9 +3288,9 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   brackets): what it paints under a figure is the contrast pass's, and
  *   only on the screens it samples (390, 1280 and 1920 wide, less the
  *   geometry-only screens) — a look can scope such a paint to a state the
- *   look rules let it read (`data-wall-tier`, `data-paying`, `data-touch`,
- *   `data-turn`) or to a screen the contrast pass does not sample, and no
- *   rule reads it there (the critic's P2-1, round 4);
+ *   look rules let it read (`data-paying`, `data-touch`, `data-turn`) or to
+ *   a screen the contrast pass does not sample, and no rule reads it there
+ *   (the critic's P2-1, round 4);
  * - what lies above the nearest box with an opaque background colour: the
  *   walk stops at that box whether or not its colour is under the glyphs —
  *   its `background-clip`, its rounded corners, ink that runs past it — and

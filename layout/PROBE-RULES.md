@@ -6424,6 +6424,11 @@ at 390 the read would then judge it, at 360 nothing does.
 
 ## The Cycle card's figure ladder (2026-10-13; the critic's P1 on narrow-phone round 4, pre-existing)
 
+*Superseded 2026-10-14: the fit ("The Cycle card's figure, fitted to its
+column", below) replaced this table. `data-wall-tier`, `data-wall-break` and
+the length bands size nothing now, and no look may read them; what follows is
+the record of the table and of the rule that held it.*
+
 The wall's Cycle card printed its figure at one size at every length,
 nowrap, in the card's price column (the table under "Left for its own
 branch", above, is main's as measured then). On the counter tablet a
@@ -7869,9 +7874,9 @@ single line set so tight that the line above or below stands on its glyphs;
 across flows, a break inside a digit group and the order of a flow beginning
 beside another but lower; `hyphenate-character`; **a box above's background
 image** (its gradients and pictures — the contrast pass's, and only on the
-screens it samples: a look can scope such a paint to `data-wall-tier`,
-`data-paying`, `data-touch` or `data-turn`, or to a screen the contrast pass
-does not sample, and nothing reads it there — the critic's P2-1); **a paint
+screens it samples: a look can scope such a paint to `data-paying`,
+`data-touch` or `data-turn`, or to a screen the contrast pass does not
+sample, and nothing reads it there — the critic's P2-1); **a paint
 above the nearest box with an opaque background colour, whatever that
 colour covers** (its `background-clip`, its rounded corners, ink that runs
 past it — P2-1); a paint a box outside the walk lays under the glyphs (a
