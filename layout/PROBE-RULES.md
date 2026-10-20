@@ -9223,8 +9223,10 @@ stopped after the geometry passes), so a lone figure says little: the four
 passes cost 24–38s, the rest is noise and the older wall passes. **The
 fit's own share, timed in the page** (a scratch clone, every Cycle card's
 fit summed per pass): 0.28–0.81s per wall pass, over 312–381 cards and
-1,904–3,424 reads (five to nine a card) — the passes cost what 53 screens
-on every look cost, and making the fit cheaper would buy a second or two.
+1,904–3,424 reads (five to nine a card on that sample; **restated at 9.4 a
+card on average and 23 at most** by the critic's census of 2026-10-20, in
+"Cost and the contrast dump" below) — the passes cost what 53 screens on
+every look cost, and making the fit cheaper would buy a second or two.
 The ceiling stays (D-2026-10-19-02): the probe is split across two tabs on
 its own branch, which lands before this one merges.
 
@@ -9311,8 +9313,14 @@ alone, and both: 0 failures of any rule at all nine sizes.
 transition out-ranks the fit's inline `font-size`, and a keyframe beats an
 inline declaration; the fit's docblock said "no look sheet can out-rank",
 which was false (the critic's item 3). `holdStill` now finishes every running
-transition on the card's boxes, the money node among them, and holds
-`transition: none !important` from before the fit takes the last size off;
+transition on the card and on every element under it, the money node among
+them, and holds `transition: none !important` from before the fit takes the
+last size off (it held five boxes — the card, its head, the price cell, the
+amount and the money node — until the re-review's item 1: a look's
+`transition: font-size 2s` on `.item-u`, which the look lint passes, left 7 of
+39 Neo Cycle cards 9–16px past their column after a turn with no paint, and 0
+of 7 with the subtree held, the critic's scratch test; the turn and the sway
+stay off the five boxes, which are the only ones the fit sets and reads);
 on release the style is read (settled) before the transitions return, so
 none runs from the last size read to the one taken. The look lint refuses a
 transition of `font-size`, `font` or `all` on a rule whose subject may be a
@@ -9386,6 +9394,17 @@ and the 35-item payment's rows cut from below at 864x1536. No pass, and not
 counted as passes.
 
 ### Cost and the contrast dump
+
+**The fit's reads, restated** (the critic's re-review, 2026-10-20, every
+Cycle card at nine sizes; this section and `wallFit.ts`'s docblock said five
+to nine a card and 43 at most): **9.4 reads a card per fit on average** —
+5.1 at 1920x1080, about 11.2–11.5 at 768x1024, 1024x768 and 680x1000, 13.5 on
+a broken figure's card, 23 at most. That is a sample and not a bound: the
+loops are capped at 14 tries (`settle`), 12 (`largestBreak`) and 12
+(`settleBreak`'s halving), and `relieve` at 6 steps. Every paint fits twice,
+after the paint and when the faces land (`render.ts`), and a frame resized
+with no paint fits once more, so a Cycle card is read about twice that many
+times per paint. The fit's time over a wall pass is the 0.28–0.81s above.
 
 **Back to back on this Mac, 2026-10-20** (two tabs, the tracked fixture
 carried; XProtect's remediators held a core through both runs): the branch

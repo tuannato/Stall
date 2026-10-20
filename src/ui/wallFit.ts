@@ -55,10 +55,11 @@
  * inline one, and a running transition beats every declaration (the
  * wall-offsize critic's item 3; until 2026-10-20 this said "no look sheet
  * can out-rank", which was false) — so the fit holds every transition on the
- * card off while it reads (`holdStill`), and the look lint refuses a
- * transition of a size on a box that may be a money node and a size in any
- * keyframe (`a-look-never-animates-a-money-nodes-size`). The money node's
- * text is untouched; `moneyFigure`'s one `role="img"` name stands.
+ * card, and on every element under it, off while it reads (`holdStill`), and
+ * the look lint refuses a transition of a size on a box that may be a money
+ * node and a size in any keyframe (`a-look-never-animates-a-money-nodes-size`).
+ * The money node's text is untouched; `moneyFigure`'s one `role="img"` name
+ * stands.
  *
  * **When it runs**: after every wall paint (the tree is new), again when the
  * fonts land (a face that lands late changes every width), and when the
@@ -71,8 +72,16 @@
  * inline axis, so a screen turned by `data-turn` is measured as it reads.
  *
  * Cost, stated: a money figure's size depends on layout. Each read is a
- * layout of the card: five to nine a card on average over the probe's wall
- * passes (0.3–0.8s a pass, 2026-10-19), 43 at most, on the Cycle card alone.
+ * layout of the card, and measured (the wall-offsize critic's re-review,
+ * 2026-10-20, every Cycle card at nine wall sizes) a fit takes **9.4 reads a
+ * card on average**: 5.1 at 1920x1080, about 11.2–11.5 at 768x1024, 1024x768
+ * and 680x1000, 13.5 on a broken figure's card, and 23 at most. That is a
+ * sample, not a bound: the loops are capped (`settle` at 14 tries,
+ * `largestBreak` and `settleBreak`'s halving at 12 each, `relieve` at 6
+ * steps). **And every paint fits twice**, after the paint and when the faces
+ * land, and a frame resized with no paint fits once more. The fit's own time
+ * over the probe's wall passes was 0.3–0.8s a pass (2026-10-19), on the Cycle
+ * card alone.
  */
 
 /**
