@@ -74,6 +74,12 @@ import { sheetMasksWithAFile } from './workshop-css.mjs';
  */
 const SELECTION = harnessSelection('test:layout');
 
+// `npx` (and npm under it) asks the npm registry for a newer npm unless told
+// not to: the one network call a probe run made, found 2026-10-20. Every
+// child this command spawns inherits these.
+process.env.npm_config_update_notifier = 'false';
+process.env.NO_UPDATE_NOTIFIER = '1';
+
 /*
  * `--config <file>` names the build (default `vite.probe.config.ts`, the
  * ordinary probe) and `--looks workshop` measures the workshop kit's look
