@@ -2333,6 +2333,21 @@ function checkOverTime(
     // Where every animation stood at rest, for 1a, which reads the paint at
     // rest after every other read of it (`coverAtRest`).
     coverRest = running.map((a) => [a, a.currentTime]);
+    // **Every delay zeroed first** (before 8g2, the window's item 4), as the
+    // contrast freeze zeroes it (`freezeAnimations`): an instant is a time
+    // into each animation's active phase. With its delay a look's animation
+    // waiting two minutes stood before its first keyframe at every instant
+    // (the critic's PT, a keyframe `visibility: hidden` on the quote row's
+    // price column 120s after the paint), and a marquee's or the ticker's
+    // negative delay — the wall-clock time since its run began — made each
+    // instant a different one on every run.
+    for (const a of running) {
+        try {
+            a.effect?.updateTiming({ delay: 0 });
+        } catch {
+            // Not ours to time.
+        }
+    }
     for (let step = 1; step <= STEPS; step += 1) {
         const at = (longest * step) / (STEPS + 1);
         for (const a of running) {
@@ -5574,6 +5589,17 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return boxScaleFault(value);
         case 'backdrop-filter':
             return backdropFault(value);
+        case 'visibility':
+            // A box above the figure that is not visible paints no ground
+            // and hides the figure unless the figure sets itself visible
+            // again; held like opacity (before 8g2, the window's item 4,
+            // the critic's PT). The keyframes are what PT ran it through.
+            return value === 'visible' ? undefined : `visibility ${value}`;
+        case 'translate':
+            // A box moves where it stands, and the geometry reads at rest
+            // see where; a translate that moves between them is
+            // `keyframeHeld`'s.
+            return undefined;
         case 'clip-path':
             // Read at rest against the ink (3.); a clip that moves is read at no instant.
             return undefined;
@@ -5581,7 +5607,74 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return undefined;
     }
 }
-const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'backdrop-filter'] as const;
+const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'translate', 'visibility', 'backdrop-filter'] as const;
+
+/**
+ * The sizes a keyframe may not move on a box holding a figure (before 8g2,
+ * the window's item 4): a box that shrinks, or whose tracks close, between
+ * the instants can cut the figure where no reading at rest stood.
+ */
+const KEYFRAME_SIZES: ReadonlySet<string> = new Set([
+    'width',
+    'height',
+    'min-width',
+    'min-height',
+    'max-width',
+    'max-height',
+    'inline-size',
+    'block-size',
+    'min-inline-size',
+    'min-block-size',
+    'max-inline-size',
+    'max-block-size',
+    'flex-basis',
+    'grid-template-rows',
+    'grid-template-columns',
+]);
+
+/** A computed transform's translation, or undefined for one this read cannot take apart. */
+function shiftOf(value: string): [number, number] | undefined {
+    if (value === 'none') return [0, 0];
+    const m = /^matrix\(([^)]*)\)$/.exec(value.trim());
+    if (m === null) return undefined;
+    const parts = m[1]!.split(',').map((n) => Number(n));
+    return parts.length === 6 && parts.every(Number.isFinite) ? [parts[4]!, parts[5]!] : undefined;
+}
+
+/**
+ * **A keyframe on a box above a figure is held as the box is held at rest**
+ * (before 8g2, the window's item 4; the critic's PT): every property
+ * `BOX_HELD` holds is held at every keyframe (`boxHeldFault`) — a keyframe
+ * `visibility: hidden` among them — and what the geometry reads only at rest
+ * may not move between the instants: a clip-path, a translate, a
+ * transform's translation and a size (`KEYFRAME_SIZES`), each against the
+ * value the box computes at rest. The instants read an animation at six
+ * times through its active phase, its delay zeroed, so a look's keyframe
+ * that moves, cuts or hides the figure later, or between them, is read here
+ * by its values whenever it runs. A box inside a moving or pinned ticker
+ * ribbon moves by design (`cutSideways`'s one exception, by value).
+ */
+function keyframeHeld(prop: string, value: string, at: Element, cs: CSSStyleDeclaration): string | undefined {
+    const ribbon = at.closest('[data-ribbon]');
+    const runs = ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still';
+    switch (prop) {
+        case 'clip-path':
+            return value !== cs.clipPath ? `a clip-path that moves (${value.slice(0, 40)})` : undefined;
+        case 'translate':
+            return runs || value === cs.translate ? undefined : `a translate that moves it (${value.slice(0, 40)}, at rest ${cs.translate})`;
+        case 'transform': {
+            const held = boxHeldFault(prop, value, at);
+            if (held !== undefined || runs) return held;
+            const [now, rest] = [shiftOf(value), shiftOf(cs.transform)];
+            if (now === undefined || rest === undefined) return `a transform this read cannot take apart (${value.slice(0, 60)})`;
+            return Math.abs(now[0] - rest[0]) > 0.5 || Math.abs(now[1] - rest[1]) > 0.5
+                ? `a transform that moves it (${value.slice(0, 60)}, at rest ${cs.transform.slice(0, 40)})`
+                : undefined;
+        }
+        default:
+            return KEYFRAME_SIZES.has(prop) ? `a size that changes (${prop} ${value.slice(0, 40)})` : boxHeldFault(prop, value, at);
+    }
+}
 
 /**
  * An untouched element's every longhand outside `stall` (the docblock's
@@ -5845,8 +5938,8 @@ function boxFaults(at: HTMLElement): string[] {
     if (line !== undefined) out.push(`${describe(at)} above it draws ${line.replace(/^an? /, 'a ')}`);
     for (const why of animationFaults(
         at,
-        (prop) => prop === 'clip-path' || (BOX_HELD as readonly string[]).includes(prop),
-        (prop, value) => (prop === 'clip-path' && value !== cs.clipPath ? `a clip-path that moves (${value.slice(0, 40)})` : boxHeldFault(prop, value, at)),
+        (prop) => prop === 'clip-path' || KEYFRAME_SIZES.has(prop) || (BOX_HELD as readonly string[]).includes(prop),
+        (prop, value) => keyframeHeld(prop, value, at, cs),
     )) {
         out.push(`${describe(at)} above it: ${why}`);
     }
