@@ -410,6 +410,7 @@ function cutSideways(node: Element, box: DOMRect): string | undefined {
 }
 
 function coveredBy(node: Element): string | undefined {
+    releaseCover();
     const box = node.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) {
         return 'has no box at all';
@@ -529,8 +530,9 @@ function coveredBy(node: Element): string | undefined {
  * `pointer-events: none` by none at all (the critic's PC2, PC3, PC3′, SVs,
  * PQ). This asks every money node (`MONEY_FIGURES`) and every protected box
  * (`PROTECTED`) in the open surface, with `pointer-events` and
- * `interactivity` forced on everywhere by one sheet adopted once a page and
- * switched on for the read alone (`coverPointers`): points over every
+ * `interactivity` forced on everywhere by one sheet adopted once a page,
+ * switched on for the read and left on until the next paint
+ * (`coverPointers`, `releaseCover`): points over every
  * glyph's ink, at several heights and across a wide glyph (`inkPoints`),
  * for a node with text, and for one with none — a code — the box's centre,
  * its corners inside its rounded shape and a grid over the code
@@ -538,8 +540,10 @@ function coveredBy(node: Element): string | undefined {
  * area — a shadow, an outline, a neighbour's underline — is not
  * hit-testable whatever the forcing, and is 1b's (C-1).
  *
- * **At rest, once a paint, on every geometry pass, and once a contrast job
- * at its full height** (`window.__coverFaults`), where nothing stands below
+ * **At rest, once a paint, on every geometry pass — last, after every other
+ * read of the paint, with every animation its instants moved put back where
+ * it stood (`coverAtRest`) — and once a contrast job at its full height**
+ * (`window.__coverFaults`), where nothing stands below
  * the first screen. Not at `checkOverTime`'s six instants: measured over the
  * phone pass's whole screen set, they take the reads from 886 to 4,600 and
  * the rule's own time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s), for
@@ -569,16 +573,17 @@ function coveredBy(node: Element): string | undefined {
  */
 const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
 /**
- * A code's grid pitch, CSS pixels. Measured on the rule's own time: at rest
- * over the phone pass's screens and nine wall screens at 768x1024, 24 costs
- * 3% and 17% more than 32; over six desk screens read at every instant, 16
- * cost 39% more than 24. The critic's PQ cover is a fold summary 80px in
- * from each side with 30px of padding, which either pitch meets. A cover
- * smaller than the pitch can stand between its points, stated:
+ * A code's grid pitch, CSS pixels: 32 since before 8g2's cost round, where
+ * it was 24. Measured on the rule's own time: at rest over the phone pass's
+ * screens and nine wall screens at 768x1024, 24 cost 3% and 17% more than 32;
+ * over six desk screens read at every instant, 16 cost 39% more than 24. The
+ * critic's PQ cover is a fold summary 80px in from each side with 30px of
+ * padding, which either pitch meets (PQ reads red at 32). A cover smaller
+ * than the pitch can stand between its points, stated:
  * `a-code-keeps-its-quiet-zone-white` reads the ring around a code by its
  * pixels, and 1d (not built) is to read its modules.
  */
-const QR_PITCH = 24;
+const QR_PITCH = 32;
 /** How many would-be failures a look keeps word for word on one pass; every one is counted. */
 const COVER_KEPT = 400;
 type CoverScan = {
@@ -607,6 +612,23 @@ function coverPointers(on: boolean): void {
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, coverSheet];
     }
     document.documentElement.toggleAttribute('data-probe-cover', on);
+    coverForced = on;
+}
+let coverForced = false;
+
+/**
+ * **The forcing is left on after a read, and taken off by what comes next**
+ * (before 8g2, cost): turning it on restyles every element, and turning it
+ * off again restyles every element a second time. The read is the last
+ * thing done to a paint, so taking it off just before the next paint
+ * (`paint`, and every other `renderStall` here) lets that restyle ride the
+ * paint's own, which styles the whole new tree anyway. `pointer-events`
+ * and `interactivity` change no layout and no pixel; what they change is a
+ * hit test, and the one other hit test here (`coveredBy`) takes the forcing
+ * off before it asks.
+ */
+function releaseCover(): void {
+    if (coverForced) coverPointers(false);
 }
 
 /** A node in a sentence: its tag and classes, and its role. */
@@ -982,8 +1004,9 @@ function coverScan(): CoverScan {
             const why = coverOf(node, scan, asked, reaches);
             if (why !== undefined) scan.would.push(`${named(node)} ${why}`);
         }
-    } finally {
+    } catch (err) {
         coverPointers(false);
+        throw err;
     }
     return scan;
 }
@@ -1000,6 +1023,30 @@ function coverRead(screen: string, label: string): void {
         if (tally.would.length < COVER_KEPT) tally.would.push(`${screen} / ${label}: ${why}`);
     }
     coverMs += performance.now() - t0;
+}
+
+/**
+ * The animations a paint's instants moved, and where each stood at rest
+ * (`checkOverTime`); 1a puts them back before it reads.
+ */
+let coverRest: [Animation, CSSNumberish | null][] = [];
+
+/**
+ * 1a on a geometry pass's paint, **last**, after every other read of it,
+ * with every animation the instants moved put back where it stood at rest:
+ * the read leaves the forcing on (`releaseCover`), and only the next paint
+ * may take it off.
+ */
+function coverAtRest(screen: string, label: string): void {
+    for (const [anim, at] of coverRest) {
+        try {
+            anim.currentTime = at ?? 0;
+        } catch {
+            // A finished or unseekable animation stands where it stands.
+        }
+    }
+    coverRest = [];
+    coverRead(screen, label);
 }
 
 /** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
@@ -1183,6 +1230,7 @@ const stagedByClass: Record<string, Record<string, number>> = {};
 function paint(screen: string, look: Look, worn: readonly ShippedAttachment[]): void {
     const root = document.getElementById('app')!;
     const view = paintView(SCREENS[screen]!, look, worn);
+    releaseCover();
     renderStall(root, view, handlers);
     // A state only a press reaches (`STAGED`), on the tree just painted,
     // counted per look so a staged screen that found nothing to press is
@@ -2093,7 +2141,7 @@ function checkOverTime(
 ): Failure[] {
     paint(screen, look, worn);
     const out = measure(screen, themeLabel);
-    coverRead(screen, themeLabel);
+    coverRest = [];
     out.push(...reducedMotionLeaks(screen, themeLabel));
     // Queried after the paint, so these are the animations on the tree that is
     // about to be measured — and it must stay that way. Repainting between the
@@ -2114,6 +2162,9 @@ function checkOverTime(
     if (longest <= 0) {
         return out;
     }
+    // Where every animation stood at rest, for 1a, which reads the paint at
+    // rest after every other read of it (`coverAtRest`).
+    coverRest = running.map((a) => [a, a.currentTime]);
     for (let step = 1; step <= STEPS; step += 1) {
         const at = (longest * step) / (STEPS + 1);
         for (const a of running) {
@@ -8139,6 +8190,8 @@ for (const screen of measured) {
             // Last: it scrolls the region through its stops and puts it back
             // (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
             failures.push(...stickyScrollFaults(screen, label));
+            // And 1a, after every other read (`coverAtRest`).
+            coverAtRest(screen, label);
         }
     }
 }
@@ -8170,6 +8223,7 @@ if (STICKY_ONLY === undefined && measured.includes('publish-name')) {
         measuringClass = look.theme.sheetClass;
         for (const [what, name] of [['the 32-byte name', LONGEST_NAME], ['the CJK name', CJK_NAME], ['the stacked-mark name', STACKED_NAME]] as const) {
             const label = `${look.label}, tried on over ${behind.label} with ${what}`;
+            releaseCover();
             renderStall(root, paintView({ ...SCREENS['publish-name']!, stallName: name }, behind, []), handlers);
             const button = root.querySelector<HTMLButtonElement>(`[data-role="look-${look.id}"]`);
             if (button === null) {
@@ -8230,6 +8284,7 @@ if (STICKY_ONLY === undefined && measured.includes('offers')) {
         // The record's view as the app writes it, through the gate
         // (`recordView`): a gate that leaked the locked look's rows would
         // put them on the stall, and the rows half below would fail.
+        releaseCover();
         renderStall(root, recordView(SCREENS['offers']!, look, 0xffff), handlers);
         const stall = root.querySelector('.stall:not(.deck-stall)');
         const classes = stall === null ? [] : [...stall.classList];
@@ -10453,6 +10508,7 @@ window.__cspRefusals = () => cspRefusals();
  */
 window.__wornSheetJob = async (missing: string) => {
     const root = document.getElementById('app')!;
+    releaseCover();
     renderStall(root, paintView(SCREENS[NEUTRAL_SCREEN]!, FIXTURE_LOOK, []), handlers);
     const stall = root.querySelector(`.stall.${FIXTURE_SHEET_CLASS}`);
     const named = (): string =>
