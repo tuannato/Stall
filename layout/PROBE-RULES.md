@@ -7894,9 +7894,9 @@ state no pass paints** — `:hover`, `:focus`, `:focus-visible`,
 `:focus-within`, `:active` — **and a turned wall** (`[data-turn]`): both
 look lints admitted a clip scoped to either (P2-2); **the first-party look lint
 refuses it now** (`a-look-state-rule-sets-only-what-a-state-may`, "The state
-belt" below: a state rule sets colour, ground, border colour, shadow, cursor,
-outline, transitions and the no-transform values, and nothing else), the kit
-lint still admits it; a box above the stall.
+belt" below: a state rule sets colour, ground, border and outline colour, a
+bounded shadow, a keyword cursor, transitions and the no-transform values, and
+nothing else), the kit lint still admits it; a box above the stall.
 
 **Unplanted, every shipped look, the skeleton and the tracked fixture read 0
 on the rule at every geometry pass** (the whole runner, 2026-10-19, 291.0s
@@ -9498,7 +9498,7 @@ history. Not measured: the job itself on a runner, until the owner dispatches
 it. On that first dispatch, the two-tab walk, its canaries and the page print
 run in CI for the first time.
 
-## The state belt (2026-10-20; an allow-list since D-2026-10-20-08)
+## The state belt (2026-10-20; an allow-list since D-2026-10-20-08, narrowed by D-2026-10-20-10 and D-2026-10-20-11)
 
 `a-look-state-rule-sets-only-what-a-state-may` (`scripts/workshop-css.mjs`,
 `scripts/look-lint.test.mjs`) is the static half of the "a state no pass
@@ -9508,7 +9508,8 @@ workshop README says a pointer's hover is Stall's at intake, so a creator's
 `:hover` is read by a person and not by `workshop:lint`, and the three
 starters pass the kit lint with or without it (`the-state-belt-is-first-party-only`
 holds the README's own words; `the-three-starters-pass-the-belt` lints each
-starter first party too).
+starter first party too). The one kit-visible change of the third-review round
+is the older pseudo-element refusals reading through a comment (below).
 
 **It began as a blocklist and the owner replaced it** (D-2026-10-20-08, "Ok b").
 The first version read the probe's `DRESS_HELD` and `BOX_HELD` longhands under a
@@ -9517,61 +9518,89 @@ found a new hole in it on each of three rounds: a faded ink carried by a theme
 token (`color: var(--s-addr-bg)`, 5% on Neo), `all: inherit`, an animation
 keyword and a keyframe named after one, and a border, an outline or an
 underline written at rest and switched on by a state. Each fix was a new
-family to name. The allow-list inverts it: a rule of a shipped look, the
-harness's fixture look or a private look whose selector names `:hover`,
-`:focus`, `:focus-visible`, `:focus-within`, `:active`, `:target`,
-`:user-invalid`, `:autofill`, `:modal` or `[data-turn]` — anywhere in the
-selector, `:is()`, `:where()`, `:has()` and `:not()` included (`:not(:hover)`
-is a state rule: fail closed) — sets **only** what is below, and every other
+family to name. The allow-list inverts it.
+
+**What names a state fails closed** (D-2026-10-20-11). A rule of a shipped look,
+the harness's fixture look or a private look is a state rule when its selector
+names *any* pseudo-class that is not one of sixteen structural ones, or the
+attribute `[open]`, `[hidden]` or `[data-turn]`, in any form or case: anywhere
+in the selector, `:is()`, `:where()`, `:has()` and `:not()` included
+(`:not(:hover)` is a state rule). The sixteen
+(`STRUCTURAL_PSEUDO_CLASSES`, pinned by value, each with its reason beside it)
+are `:not`, `:is`, `:where`, `:has`, `:nth-child`, `:nth-last-child`,
+`:nth-of-type`, `:nth-last-of-type`, `:first-child`, `:last-child`,
+`:only-child`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:empty`
+and `:root`: the tree at rest, which the probe paints. Every other
+pseudo-class, a name this list has never met included, is a state. The first
+version named nine pseudo-classes and `[data-turn]` and called the rest "a rule
+at rest", which was false for a state the probe does not paint: the probe opens
+every `<details>`, so a fold's closed default
+(`.sheet:has(details:not([open])) .pay-x { opacity: 0 }`), a field with its
+placeholder showing (`:placeholder-shown`) and a box with `hidden` were states
+no pass paints and the belt did not see. A comment between a colon and the
+name is read through (`pseudoTokens`: a browser reads a colon, a comment and
+`hover` as `:hover`). Such a rule sets **only** what is below, and every other
 declaration is refused with one sentence naming the property.
 
 **Allowed under a state:**
 
 - `color`: a literal colour at alpha 1 (a name, `#rgb`, `#rrggbb`, a colour
   function with no alpha or exactly 1; no `var()`, no `color-mix()`, no relative
-  colour, no system colour), `currentColor`, `inherit`, or `var(--s-…)` of one of
-  eight palette roles with no fallback: `--s-bg`, `--s-surface`, `--s-text`,
-  `--s-shade`, `--s-muted`, `--s-accent`, `--s-danger`, `--s-accent-2`
-  (`STATE_OPAQUE_ROLES`, pinned by value). `themeVars` writes each as
+  colour, no system colour), or `var(--s-…)` of one of eight palette roles with
+  no fallback: `--s-bg`, `--s-surface`, `--s-text`, `--s-shade`, `--s-muted`,
+  `--s-accent`, `--s-danger`, `--s-accent-2` (`STATE_OPAQUE_ROLES`, pinned by
+  value). **Not `inherit` and not `currentColor`** (the third review's B2:
+  either hands the ink to whatever the parent paints, and a parent a rule at
+  rest drew clear fades the figure). `themeVars` writes each role as
   `rgb(r, g, b)`;
   `the-state-opaque-roles-are-the-opaque-colours-the-theme-table-emits` proves
   it under every shipped look bare and under both moods, and that the set of
-  vars that are an opaque colour under all of them is exactly this list. **A
-  first-party sheet may not re-declare one** (`.item { --s-accent: 300px }`
-  would re-point every reader below it), which no served sheet does.
+  vars that are an opaque colour under all of them is exactly this list;
+  `a-private-look-palette-role-is-opaque-by-construction` proves a private
+  look's palette, read as RGB triples of whole numbers 0 to 255 through
+  `lookFromData`, cannot make one anything else (the tracked fixture, with every
+  role at four extremes, and every colour shape the file may not carry
+  refused). **A first-party sheet may not re-declare one** (`.item {
+  --s-accent: 300px }` would re-point every reader below it), which no served
+  sheet does.
 - `background-color`, `background-image` and `background`: a colour of any
   alpha (the shipped state rules write `rgba(37, 99, 235, 0.1)`: a tint is a
-  ground, and the probe reads the ground), `transparent`, `inherit`,
-  `var(--s-…)`, `color-mix()` of those; **not `currentColor`** (a ground the
-  colour of the ink it holds hides the figure). A picture only as a gradient;
-  `url()`, `image-set()`, `cross-fade()`, `element()` and `paint()` are
-  refused for every subject.
-- `border-color` and `border-*-color`; `border-style` and `border-*-style`
-  **only to `none` or `hidden`**; `border` and `border-top|right|bottom|left`
-  with a style and a colour and **no width**. A style longhand shows a border at
-  the width a rule at rest wrote (`border: 40px none` at rest, `border-style:
-  solid` under a state: a 40px frame on a figure); the shorthand resets the width
-  to `medium`, so it shows 3px at most. No `border-width`, no `border-image`,
-  no radius.
-- `box-shadow`, **bounded** (a deviation from "any shadow", stated below):
-  an inset shadow stands; an outer one has no spread and an offset of at most
-  `STATE_SHADOW_MAX_PX` (8px); the blur is free; a `var()` is refused.
-- `cursor`.
+  ground, and the probe reads the ground), `transparent`, `initial`, `unset`,
+  `var(--s-…)`, `color-mix()` of those; **not `currentColor`, in a gradient too,
+  and not `inherit`** (a ground the colour of the ink it holds hides the figure,
+  and `background-image: inherit` brings back a picture a rule at rest sized to
+  nothing). A picture only as a gradient; `url()`, `image-set()`, `cross-fade()`,
+  `element()` and `paint()` are refused for every subject.
+- **`border-color`, each `border-*-color` and `outline-color`, colour only**
+  (D-2026-10-20-11), and not `currentColor`, `inherit`, `initial` or `unset`
+  (the initial colour of an edge is `currentcolor`). **No `border` shorthand, no
+  `border-style`, no `border-width`, no `outline`, `outline-style`,
+  `outline-width` or `outline-offset`.** The earlier rule allowed an outline
+  whose width and offset were written in the same rule, and its sentence was
+  false: the cascade defeats it. A later, more specific rule at rest sets
+  `outline-width: 200px; outline-offset: -100px`, and the state's rule has no say
+  in what it draws; a border works the same way (`border-style: solid` over
+  `border: 40px none`), and the shorthand under a state adds up to 3px of
+  padding by another name.
+- `box-shadow`, **bounded** (a deviation from "any shadow", stated below): each
+  layer names one colour (not `currentColor`; a layer that names none is drawn
+  in the ink); **at most two outer layers; every blur at most
+  `STATE_SHADOW_BLUR_MAX_PX` (16px)**, inset layers too; an outer layer has no
+  spread and an offset of at most `STATE_SHADOW_MAX_PX` (8px). An inset shadow
+  stands: it paints inside its own box, under its own text. A `var()` is refused
+  unless it is a palette role standing as the colour. **A blur is not a fade that
+  dies with distance**: layers add, and twenty layers of `0 -8px 120px #000`
+  come to about 99.8% black over a width of 240px (arithmetic, not an
+  observation), which is why the count and the blur are both capped.
+- `cursor`, **a keyword** (`pointer`, `not-allowed`, `grab`, …), here and at rest
+  (D-2026-10-20-11): `url(…)` and `image-set(…)` stand a picture of up to 128px
+  at the pointer, over whatever it is over, where no pass paints it. No first-party
+  sheet sets a cursor; Neo's `.invite-cursor` is a class name
+  (`a-cursor-is-a-keyword`).
 - The no-transform values: `transform`, `rotate`, `scale` and `translate` as
   `none`, `initial`, `unset` or an exact identity (`rotate: 0deg`, `scale: 1`,
   `translate: 0`, `transform: translateZ(0)`). Rural's straightening of a tilted
   row under a hand is `rotate: 0deg`.
-- `outline`, `outline-color`, `outline-style`, `outline-width` and
-  `outline-offset`, **only when the rule itself writes a width and an offset,
-  both read** (px, or `thin`, `medium`, `thick`; the offset in px), their sum at
-  most `STATE_OUTLINE_MAX_PX` (8px), neither negative. A ring is a style at rest
-  armed by a state (`outline-width: 200px; outline-offset: -100px` at rest,
-  `outline-style: solid` under a state), so a rule that turns one on or sizes one
-  states both numbers. Read in order: the shorthand resets the width and the
-  style, not the offset; a `var()` in the shorthand may carry the style.
-  `outline-style: none` alone stands; `outline: none` and `outline-color` alone
-  do not (the shorthand resets a width the rule does not state, and a colour
-  changes a ring a rule at rest drew transparent).
 - `transition` and its longhands (the size lint reads them on a money node), and
   `-webkit-tap-highlight-color` (`transparent` only, anywhere).
 
@@ -9582,78 +9611,139 @@ declaration is refused with one sentence naming the property.
 none is read as a state's; `content`, `position`, `z-index`, `display`, the
 offsets; every text and spacing property; `font*`; padding, margin, sizes,
 `opacity`, `visibility`, `filter`, `backdrop-filter`, `clip*`, `mask*`,
-`offset*`, `overflow`; `text-decoration*`; every non-identity transform.
+`offset*`, `overflow`; `text-decoration*`; the `border` shorthands,
+`border-style` and every `outline` property but its colour; every non-identity
+transform.
 
 **A pseudo-element under a state is held to a shorter list**
-(`STATE_PSEUDO_ALLOWED`, pinned by value): `color` (read as on an element),
-`cursor`, `transition` and its longhands, and the exact identity transforms.
-A selector that names a state and a pseudo-element together
-(`.item:hover .item-p::after`; `:before` and `:after` with one colon too) holds
-the whole rule to it, and every other declaration is refused with a sentence
-that names the property and says the probe measures a pseudo-element only by
-its paint at rest. That closes the open candidate of the allow-list round: a
-pseudo-element a rule at rest moves over a figure (`position: relative; left:
--80px`) with its ground clear, given a ground by `:hover` (plant `w1`). It costs
-the tree nothing: no shipped look, starter, fixture or the canary has a
-pseudo-element under a state
-(`no-sheet-a-run-serves-has-a-pseudo-element-under-a-state`). In a list, a
-state selector with no pseudo-element in it beside a pseudo-element with no
-state (`.item:hover, .item-p::after`) is not one: the pseudo-element stands at
-rest, where the probe measures it.
+(`STATE_PSEUDO_ALLOWED`, pinned by value): `cursor`, `transition` and its
+longhands, and the exact identity transforms. **Not `color`** (the third
+review's B3): a generated glyph such as `◆` at a large size would appear over a
+figure when its colour changed. A selector that names a state and a
+pseudo-element together (`.item:hover .item-p::after`; `:before` and `:after`
+with one colon too) holds the whole rule to it, and every other declaration is
+refused with a sentence that names the property and says the probe measures a
+pseudo-element only by its paint at rest. That closes the open candidate of the
+allow-list round: a pseudo-element a rule at rest moves over a figure
+(`position: relative; left: -80px`) with its ground clear, given a ground by
+`:hover` (plant `w1`). It costs the tree nothing: no shipped look, starter,
+fixture or the canary has a pseudo-element under a state
+(`no-sheet-a-run-serves-has-a-pseudo-element-under-a-state`). In a list, a state
+selector with no pseudo-element in it beside a pseudo-element with no state
+(`.item:hover, .item-p::after`) is not one: the pseudo-element stands at rest,
+where the probe measures it.
+
+**A pseudo-element's paint is its own at rest** (D-2026-10-20-08's B3,
+`a-pseudo-element-paints-its-own-ground-and-ink`, first party only). The other
+half of the same road: a pseudo-element a rule at rest moved over a figure whose
+paint is its host's — a ground through `inherit`, an edge, a shadow or an
+underline through `currentColor`, which is also what a shadow, a border, an
+outline or an underline that names no colour is drawn in — is clear while its
+host is, and covers the figure the moment a state gives the host a ground or an
+ink: the host is an element, and an element may change both. So a first-party
+rule whose selector list holds a pseudo-element may not write `inherit` or
+`currentColor` in a `background*`, `border*`, `outline*`, `column-rule*`,
+`text-decoration*`, `box-shadow`, `text-shadow` or `filter` value (nor `initial`
+or `unset` for an edge's colour, nor `inherit`, `unset` or `currentColor` for its
+own `color`); may not draw a shadow layer, a drop shadow, a border, an outline,
+a column rule or a text decoration that names no colour; and may not print text
+(a `content` that is not empty) without a `color` of its own in the same rule,
+a literal colour or a palette role. **Checked on the shipped sheets first**: Neo
+has four pseudo-element rules (two gradients, the Wearing line's `// ` in
+`#3df2ea`, and the activity tile's `box-shadow` in a literal colour); none is
+refused. The tracked private fixture has one (a colour-mix of two tokens, with an
+empty `content`), and the canary, the same sheet renamed, the same one; the
+harness fixture look has none. Not read, stated: a style in one rule and its colour in
+another (the check is per rule), and a colour-bearing property not named above.
 
 **The probe's sets, kept as a drift test.** `the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it`
 parses `DRESS_HELD` and `BOX_HELD` out of `layout/probe.ts` — strictly: a list
 body that is not single-quoted strings fails the parse (the critic's P3-7: a
 double-quoted or spread member was missed in silence) — and holds that the
-members a state may set are exactly ten (`background-color`,
-`background-image`, `color`, `outline-offset`, `outline-style`, `outline-width`,
-`rotate`, `scale`, `transform`, `translate`), each with a reader, and that every
-other member is refused under a state. `STATE_BELT_ACCOUNT` is gone.
+members a state may set are exactly seven (`background-color`,
+`background-image`, `color`, `rotate`, `scale`, `transform`, `translate`), each
+with a reader, and that every other member, the three `outline` longhands now
+among them, is refused under a state.
 
 **The plants.** `scripts/look-lint-plants.json` holds the 242 rules the critic
-planted on a copy of Neo over three rounds (`p1`–`p10`, `q1`–`q7`) and the
-window's one (`w1`, the pseudo-element above), each with its outcome pinned:
-`refused`, and by which kind of sentence, or `accepted`, with the reason that it
-hides no figure (`the-lint-belts-critics-plants-are-pinned`). Of the 243, 23 are
-accepted:
-the empty control; width-moving properties outside D-2026-10-20-07's list
-(`font-weight`, `font-variation-settings`, `font-feature-settings`, and a
-`letter-spacing` transition on `.item-p`, a box that holds a money node and is
-none); an `offset-distance` with no path; a rest `scale` on the figure (the
-probe's at rest); states outside D-2026-10-20-08's list (`:checked`, `:open`,
-`:popover-open`, `:visited`, `:any-link`, `:fullscreen`, `[aria-pressed]`);
-`transparent` as a tap highlight; a flat `translate3d(x, y, 0)` keyframe; the
-three forms of ink (`color: inherit`); a transition under a state; a rest
-`color`; and a perspective floor's scale.
+planted on a copy of Neo over three rounds (`p1`–`p10`, `q1`–`q7`), the 238 of
+the third review (`n1`–`n9`) and the window's 13 (`w1`, the pseudo-element
+above; `w2`, this round's keyframe, glyph, shadow, cursor and ring), each with
+its outcome pinned: `refused`, and by which kind of sentence, or `accepted`,
+with the reason (`the-lint-belts-critics-plants-are-pinned`). Of the 493, 83 are
+accepted: the empty control; forms that set nothing (an alpha of 1, a palette
+role, an identity transform in each of its spellings, a declaration CSS drops);
+grounds, which paint under the ink; the shadows inside every bound; width-moving
+properties outside D-2026-10-20-07's list (`font-weight`, `font-stretch`,
+`text-indent`, `padding`, `width`, … in a transition or a keyframe) and a
+keyframe's `opacity` or `clip-path` (a moving ink, §10); `mini`, `fine` and
+`pay-sub`, classes a money line shares with boxes that are not money; a
+pseudo-element beside a state selector in a list; an attribute state the
+fixtures paint (`[aria-pressed]`, `[data-copied]`); a ground a state paints on an
+element a rule at rest moved over a figure; and the ring a rule at rest wrote in
+a clear colour, shown by `outline-color` (below). The ones that were accepted
+before and are refused now: the states `:checked`, `:open`, `:popover-open`,
+`:visited`, `:any-link`, `:fullscreen` (fail closed), and `color: inherit`
+(B2).
 
 **Not read, stated** (each a gap in the belt):
 
 - **Contrast under a state.** An ink at alpha 1 can still equal its ground
   (`#fff` on a white card), and a ground can be the colour of the ink. The
   probe reads contrast at rest only.
-- **Reach.** An outline reaches 8px past the box and a blurred shadow fades with
-  distance; either can land on a neighbour closer than that. The blur is not capped.
+- **A ring or a frame a rule at rest wrote in a clear colour, shown by a colour
+  under a state**: `outline: 200px solid transparent; outline-offset: -100px` at
+  rest and `outline-color: #000` under `:hover`. The owner's rule is colour only
+  (D-2026-10-20-11), which leaves it (plant `w2`). A border's band lies inside
+  the box and reaches no neighbour. An outline's ring does, and the probe reads
+  an outline at rest only across the glyphs of its own box and of the boxes
+  above a figure (`outlineFault`, `outlineAboveFault`), never one on a box
+  beside it. Closing it would take an at-rest cap on an outline's width and
+  offset, which is not built.
+- **Reach.** An outer shadow reaches at most its 8px offset and its 16px blur
+  (24px), in two layers; an inset one stays inside its box.
 - **A ground painted on an element, not a pseudo-element, that a rule at rest
   moved over a figure by an offset with its ground clear** (`position: relative`
   with a negative `left`, `background: transparent`, then a ground under
-  `:hover`). The pseudo-element half is refused above; an element's ground is on
-  the list, so this half stands.
-- **A state the list does not name:** `:checked`, `:disabled`, `:visited`,
-  `:open`, `:popover-open`, `:fullscreen`, and the attribute states the fixtures
-  paint (`[aria-pressed]`, `[disabled]`). A rule on one is read as a rule at rest,
-  which the probe measures.
-- A transition (read only by the size lint, on a money node) and `cursor`.
+  `:hover`; plant `n7`'s fourth). The pseudo-element half is refused above; an
+  element's ground is on the list, so this half stands.
+- **A colour read through a custom property.** `var(--s-…)` with no fallback is
+  accepted as a ground, an edge or a shadow colour, and this lint does not read
+  what a sheet's own `--s-` property holds: one a rule at rest set to
+  `currentColor` is `currentColor` again.
+- **A state written another way**: a class a script toggles, an attribute but
+  the three above (`[aria-pressed]`, `[disabled]`, `[aria-current]` and the
+  others the fixtures paint are read as a rule at rest, which the probe
+  measures), and a structural pseudo-class, which is the tree at rest.
+- A transition (read only by the size lint, on a money node).
 - **The kit.** The kit lint carries none of it.
 
-**Two judgements the allow-list needed that D-2026-10-20-08 did not state**,
-for the owner to keep or veto: `box-shadow` is bounded where the decision said
-"any shadow" (a 4000px spread paints over the rows beside it when rows are grid
-or flex items, which paint as atomic units in tree order, their shadows with
-them), and a style longhand may only turn a border off. `currentColor` is
-refused as a ground, where the decision said a ground is "the same rules as
-color". The money classes the size lint reads are `MONEY_NODE_CLASSES`
+**What the kit sees of this round** (one change, a fix of a hole on main): the
+older pseudo-element refusals, and the `content` rule that reads which
+pseudo-element a `content` lands in, read through a comment between the colons
+and the name. `::/**/first-letter`, `::/**/marker` and `::/**/selection` got
+past them on main, in the kit as in a first-party sheet; each is refused now,
+as its plain spelling always was (`a-comment-inside-a-pseudo-class-is-still-the-pseudo-class`,
+`the-older-pseudo-element-refusals-read-through-a-comment-in-the-kit-too`). The
+older state list the file-mask refusal and the sticky-sign test read
+(`STATE_PSEUDO`) takes the same whitespace and no more. Everything else of the
+round is first party only.
+
+**Judgements the allow-list needed that the decisions did not state**, for the
+owner to keep or veto: `box-shadow` is bounded where D-2026-10-20-08 said "any
+shadow" (a 4000px spread paints over the rows beside it when rows are grid or
+flex items, which paint as atomic units in tree order, their shadows with them);
+`currentColor` is refused as a ground, where the decision said a ground is "the
+same rules as color", and as a shadow or an edge colour; a pseudo-element's
+`color` is refused under a state and its host paint at rest, which the decisions
+asked for in the pseudo-element's case. The money classes the size lint reads
+are `MONEY_NODE_CLASSES`
 (`the-money-node-classes-are-the-classes-of-the-money-nodes`), widened from the
-ten it began with to every class a money node wears.
+ten it began with to every class a money node wears, `pay-line-s`,
+`face-surcharge` and `sel-sub` among them since this round, and `another` out of
+it (the pay sheets' hand-off button is a `mini another` button, and `mini` was
+never listed). The scan reads the class a call hands `quoteSurchargeNode`, and
+one a conditional chooses.
 
 **The size lint, beside it** (D-2026-10-20-07). A keyframe named after an
 animation keyword (`@keyframes ease`, run by `animation: ease 1s ease`) was
@@ -9662,4 +9752,10 @@ and the name was skipped, so the flash rule never read a strobe so named
 (`parseSingleAnimation` now follows the shorthand's own rule: a keyword goes to
 the first property that can take it, the second is the name, a quoted string is
 always the name). A custom property in a `transition` list is read as `all` (a
-registered one, `@property --au-tide`, animates by its type).
+registered one, `@property --au-tide`, animates by its type). **That change is
+kit-visible in three ways, all in `workshop:lint`'s flash rule** (the third
+review's P3): a quoted name is read as the name; an invalid shorthand loses a
+false red it had; and `infinite 1s infinite` now names an animation (the second
+`infinite` is the name). **`display` and `content-visibility` in a first-party
+keyframe are refused** (D-2026-10-20-10, `a-keyframe-never-takes-a-box-out-of-the-layout`):
+a keyframe that sets either takes a box out of the layout for part of a cycle.

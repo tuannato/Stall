@@ -3381,24 +3381,32 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   highlight (`-webkit-tap-highlight-color`, a colour painted over a
  *   control on a tap; the critic's P3-5, not measured). **The first-party
  *   look lint refuses what a state would hide, as an allow-list**
- *   (`a-look-state-rule-sets-only-what-a-state-may`, D-2026-10-20-08,
- *   `scripts/workshop-css.mjs`): a rule whose selector names a state (also
- *   `:target`, `:user-invalid`, `:autofill`, `:modal` and `[data-turn]`) sets
- *   colour, ground, border colour, shadow, cursor, outline with its width and
- *   offset, transitions and the no-transform values, and nothing else, and
- *   the tap highlight is `transparent` only. The longhands of `DRESS_HELD`
- *   below that a state may set are read by their own readers; the others are
- *   refused by name (`the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it`
+ *   (`a-look-state-rule-sets-only-what-a-state-may`, D-2026-10-20-08 and
+ *   -10 and -11, `scripts/workshop-css.mjs`): a rule whose selector names a
+ *   state — **any pseudo-class but sixteen structural ones, so `:placeholder-shown`
+ *   and `:checked` and a name the lint has never met, and `[open]`, `[hidden]`
+ *   and `[data-turn]`** — sets colour, ground, border and outline colour (colour
+ *   only: no style, no width, no offset, no shorthand), a shadow of at most two
+ *   outer layers and 16px of blur, a keyword cursor, transitions and the
+ *   no-transform values, and nothing else, and the tap highlight is
+ *   `transparent` only. The longhands of `DRESS_HELD` below that a state may
+ *   set are read by their own readers; the others are refused by name
+ *   (`the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it`
  *   parses the set out of this file, strictly). **The kit lint carries none
  *   of it** (the workshop README says a pointer's hover is Stall's at intake,
  *   not the kit's): a kit look's `:hover` is read by a person, and
  *   `-webkit-tap-highlight-color: red; tap-highlight-color: red` passes the
- *   kit's twin rule. A pseudo-element under a state may set only colour,
- *   cursor, transitions and the identity transforms, because a pseudo-element
- *   is measured only by its paint at rest. Still unread under a state, in the
- *   first-party lint too: an ink's or a ground's contrast against what it
- *   stands on, and a ground a state paints on an element (not a pseudo-element)
- *   that a rule at rest moved over a figure with its ground clear;
+ *   kit's twin rule. A pseudo-element under a state may set only a cursor,
+ *   transitions and the identity transforms (no colour), because a
+ *   pseudo-element is measured only by its paint at rest, and at rest a
+ *   first-party pseudo-element takes no paint from its host. Still unread
+ *   under a state, in the first-party lint too: an ink's or a ground's
+ *   contrast against what it stands on; a ring a rule at rest wrote in a
+ *   clear colour, shown by `outline-color` (this pass reads an outline across
+ *   the glyphs of its own box and of the boxes above a figure, never one on a
+ *   box beside it); and a ground a state paints on an element (not a
+ *   pseudo-element) that a rule at rest moved over a figure with its ground
+ *   clear;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
