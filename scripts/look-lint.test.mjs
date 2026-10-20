@@ -66,6 +66,14 @@ const NEO = LOOKS.find((sheet) => sheet.lookClass === 't-neo');
 const NEO_CSS = read(NEO.path);
 const REDUCE_AT = NEO_CSS.lastIndexOf('@media (prefers-reduced-motion: reduce)');
 
+/**
+ * The critic's plants (`scripts/look-lint-plants.json`), read at the module's
+ * top: a describe body registers and never computes
+ * (`no-node-test-computes-in-a-describe-body`).
+ */
+const PLANTS = JSON.parse(read('scripts/look-lint-plants.json'));
+const PLANT_SETS = Object.entries(PLANTS);
+
 /** A copy of theme-neo.css with `rule` planted before its reduce block, as `.t-neo` wrote it. */
 const plantedNeo = (rule) => `${NEO_CSS.slice(0, REDUCE_AT)}${rule}\n\n${NEO_CSS.slice(REDUCE_AT)}`;
 
@@ -1574,6 +1582,19 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
         }
     });
 
+    it('the-fixtures-the-canary-and-every-first-party-sheet-a-run-serves-pass-the-belt: the shipped looks, the harness fixture look, the tracked private fixture, the canary from public bytes', () => {
+        const rows = lookRows(SERVED).filter((row) => row.role !== 'kit');
+        const roles = new Set(rows.map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        for (const sheet of rows) {
+            const options = sheet.role === 'private' ? { lookClass: sheet.lookClass, load: 'worn', ownArt: sheet.ownArt } : { lookClass: sheet.lookClass, load: sheet.load, ownArt: sheet.load === 'worn' ? ownArtOf(sheet) : undefined };
+            assert.deepEqual(lintLookSheet(sheet.css, options), [], sheet.path);
+        }
+        const files = canaryFiles();
+        const ownArt = { dir: 'art', files: Object.keys(files).filter((path) => path.startsWith('canary/art/') && !path.endsWith('.txt')).map((path) => path.slice('canary/art/'.length)) };
+        assert.deepEqual(lintLookSheet(files['canary/sheet.css'], { lookClass: 't-canary', load: 'worn', ownArt }), [], 'the canary');
+    });
+
     it('the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin: the kit refuses it only when it stands without a twin of the same value (B1)', () => {
         const rule = '.t-neo .buy { -webkit-tap-highlight-color: red; tap-highlight-color: red; }';
         // The kit accepts it: a twin naming a property nothing reads satisfies the twin rule.
@@ -1599,7 +1620,6 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
      * not a figure hidden. A plant whose outcome moves turns this red, so a
      * relaxation of a reader, or a hole it closed, is a decision.
      */
-    const PLANTS = JSON.parse(read('scripts/look-lint-plants.json'));
     const WAYS = [
         ['state:custom-property', /a custom property set under a state/],
         ['state:property', /is not a property a state rule may set/],
@@ -1633,7 +1653,7 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         }
     });
 
-    for (const [set, list] of Object.entries(PLANTS)) {
+    for (const [set, list] of PLANT_SETS) {
         it(`${set}: each plant is refused by the sentence kind it is pinned to, or accepted for the reason it is pinned with`, () => {
             list.forEach((entry, i) => {
                 const rule = entry.rule.replaceAll('$C', 't-neo');
