@@ -16,12 +16,14 @@ import {
     ANGLE_CAP_DEG,
     MASK_COMPOSITE_LEGACY,
     MAX_FLASHES_PER_SECOND,
+    MONEY_NODE_CLASSES,
+    STATE_ALLOWED,
     STATE_ATTRIBUTES,
-    STATE_BELT_ACCOUNT,
+    STATE_OPAQUE_ROLES,
     STATE_OUTLINE_MAX_PX,
-    STATE_SHADOW_EM,
-    STATE_TILT_DEG,
+    STATE_SHADOW_MAX_PX,
     decodeEscapes,
+    declarationsOf,
     flashReport,
     keyframeFlashes,
     lintLookSheet,
@@ -603,13 +605,13 @@ describe('a-look-never-animates-a-money-nodes-size', () => {
         }
         // Turning or shifting is not a size: with no scaling anywhere in the sheet the same transition stands.
         accepts('.t-neo .item-x { transition: transform 0.3s; }');
-        // (A state-free selector: under a state a money node takes the figure's own rule, which refuses a turn and a shift; that is the belt's, below.)
+        // (A state-free selector: a state may set no transform but the identity, which is the belt's, below.)
         accepts('.t-neo .item-x { transition: transform 0.3s; }\n.t-neo .item-x[data-price-tier="2"] { transform: rotate(3deg) translateY(-1px); }');
         accepts('.t-neo .buy { transition: transform 0.3s; }\n.t-neo .buy[disabled] { transform: translateX(2px) rotate(-4deg); }');
         accepts('.t-neo .buy { transition: transform 0.3s; }\n.t-neo .buy[disabled] { transform: translate3d(2px, 0, 0) rotate(-4deg); }');
         // A scaling transform on a box that transitions nothing of the kind is not a money node's size moving.
-        accepts('.t-neo .tool { transition: transform 0.3s; }\n.t-neo .tool:hover { transform: scale(1.1); }');
-        accepts('.t-neo .item-x { transition: color 0.3s; }\n.t-neo .item-x:hover { transform: scale(1.1); }');
+        accepts('.t-neo .tool { transition: transform 0.3s; }\n.t-neo .tool:first-child { transform: scale(1.1); }');
+        accepts('.t-neo .item-x { transition: color 0.3s; }\n.t-neo .item-x:first-child { transform: scale(1.1); }');
     });
 
     it('leaves a keyframe that only turns or shifts, and an identity, alone', () => {
@@ -633,6 +635,89 @@ describe('a-look-never-animates-a-money-nodes-size', () => {
         accepts('@keyframes t-neo-glow { from { opacity: 0.5; } to { opacity: 1; } }');
     });
 
+    it('reads a custom property in a transition list as all (P3-6): a registered one animates by its type and may drive any width', () => {
+        for (const rule of [
+            '.t-neo .item-x { transition: --au-tide 1s; }',
+            '.t-neo .item-x { transition: color 1s, --au-tide 1s ease; }',
+            '.t-neo .item-x { transition: 1s --g; }',
+            '.t-neo .item-x { transition-property: --au-tide; }',
+            '.t-neo .item-x { transition-property: color, --au-tide; }',
+            '.t-neo .item-x { -webkit-transition: --au-tide 1s; transition: --au-tide 1s; }',
+        ]) {
+            refusesPlant(rule, MOVES);
+        }
+        accepts('.t-neo .tool { transition: --au-tide 1s; }');
+    });
+
+    /**
+     * The classes a money node wears (P2-4): `MONEY_NODE_CLASSES` is read by
+     * the transition rule, so a class missing from it is a rule read as a
+     * box that is no money node. Two sources, both read from the tree: the
+     * class selectors `layout/moneySet.ts` names, and every node
+     * `src/ui/*.ts` gives a role of `MONEY_SET` (`el('tag', 'classes')`, then
+     * `.setAttribute('data-role', …)`). A node built another way — a class
+     * name passed in as an argument — is read by neither, and
+     * `quote-surcharge` (passed to `quoteSurchargeLine`'s node) is listed by
+     * hand. Shared with other boxes and so not listed: `fine`, `mini`,
+     * `pay-sub`.
+     */
+    const SHARED_WITH_OTHER_BOXES = ['fine', 'mini', 'pay-sub'];
+    const moneyRoles = () => [...read('layout/moneySet.ts').matchAll(/\[data-role="([^"]+)"\]/g)].map((m) => m[1]);
+    const moneyNodesInTheApp = () => {
+        const roles = moneyRoles();
+        const found = [];
+        for (const name of readdirSync(join(ROOT, 'src/ui')).filter((n) => n.endsWith('.ts') && !n.endsWith('.test.ts'))) {
+            const src = read(`src/ui/${name}`);
+            for (const m of src.matchAll(/(\w+)\.setAttribute\('data-role',\s*'([^']+)'\)/g)) {
+                if (!roles.includes(m[2])) continue;
+                const before = src.slice(0, m.index);
+                const decl = [...before.matchAll(new RegExp(`(?:const|let)\\s+${m[1]}\\s*=\\s*([^;]*?);`, 'gs'))].pop();
+                const made = decl === undefined ? null : /^el\(\s*(?:'[\w-]+'|\w+)\s*,\s*(?:'([^']*)'|undefined)/s.exec(decl[1].trim());
+                if (made !== null) found.push({ file: name, role: m[2], classes: (made[1] ?? '').split(/\s+/).filter(Boolean) });
+            }
+        }
+        return found;
+    };
+
+    it('the-money-node-classes-are-the-classes-of-the-money-nodes: MONEY_SET\'s own classes, and every class of a node the app gives a money role', () => {
+        // The critic's five, and by value.
+        for (const cls of ['listing-x', 'tk-x', 'pay-eq', 'pay-total', 'pay-btn']) assert.ok(MONEY_NODE_CLASSES.includes(cls), cls);
+        assert.equal(new Set(MONEY_NODE_CLASSES).size, MONEY_NODE_CLASSES.length);
+        assert.deepEqual([...MONEY_NODE_CLASSES], [...MONEY_NODE_CLASSES].sort(), 'listed in order');
+        // 1. The class selectors MONEY_SET names (its last compound); `.row.big dd` is a `dd`, read by its type.
+        const literals = [...read('layout/moneySet.ts').matchAll(/^\s*'([^']+)',\s*$/gm)].map((m) => m[1]);
+        assert.ok(literals.length >= 20, 'MONEY_SET parsed whole');
+        for (const literal of literals.filter((l) => !l.includes('[data-role'))) {
+            const subject = literal.split(' ').pop();
+            for (const [, cls] of subject.matchAll(/\.([\w-]+)/g)) {
+                if (subject === literal || literal.split(' ').length === 1) assert.ok(MONEY_NODE_CLASSES.includes(cls), `${literal}: ${cls}`);
+            }
+            if (/^[a-z]+$/.test(subject)) refusesPlant(`.t-neo ${literal} { transition: font-size 1s; }`, MOVES);
+        }
+        // 2. Every class of a node the sources give a money role.
+        const nodes = moneyNodesInTheApp();
+        assert.ok(nodes.length >= 30, `the scan reads ${nodes.length} money nodes: it has gone blind`);
+        assert.ok(new Set(nodes.map((n) => n.role)).size >= 12, 'the scan reads the roles of MONEY_SET');
+        for (const node of nodes) {
+            for (const cls of node.classes) {
+                assert.ok(MONEY_NODE_CLASSES.includes(cls) || SHARED_WITH_OTHER_BOXES.includes(cls), `${node.file}: a node of the role ${node.role} wears .${cls}, which MONEY_NODE_CLASSES lacks`);
+            }
+        }
+        // Every listed class is one the sources use (a typo here guards nothing).
+        const used = read('src/ui/render.ts') + read('src/ui/window.ts') + read('src/ui/broadcast.ts');
+        for (const cls of MONEY_NODE_CLASSES) assert.ok(new RegExp(`['" ]${cls}['" ]`).test(used), `${cls} is in none of render.ts, window.ts and broadcast.ts`);
+    });
+
+    it('reads a transition on every money class the app has, by its class alone (P2-4)', () => {
+        for (const cls of MONEY_NODE_CLASSES) {
+            refusesPlant(`.t-neo .${cls} { transition: letter-spacing 1s; }`, MOVES);
+            refusesPlant(`.t-neo .stall .${cls}:hover { transition: font-size 1s; }`, MOVES);
+        }
+        for (const cls of ['listing-x', 'tk-x', 'pay-eq', 'pay-total', 'pay-btn']) refusesPlant(`.t-neo .${cls} { transition: zoom 1s; }`, MOVES);
+        // The shared classes name no money node alone.
+        for (const cls of SHARED_WITH_OTHER_BOXES) accepts(`.t-neo .${cls} { transition: letter-spacing 1s; }`);
+    });
+
     it('leaves the kit lint as it was: a kit rule is a line of the workshop README', () => {
         const kit = lintSheet(plantedKit('.t-neo.shop-window .item-x { transition: all .4s; }'));
         assert.ok(!kit.some((p) => MOVES.test(p)), kit.join('\n'));
@@ -648,25 +733,23 @@ describe('a-look-never-animates-a-money-nodes-size', () => {
     });
 });
 
-describe('a-look-state-rule-never-hides-money', () => {
+describe('a-look-state-rule-sets-only-what-a-state-may', () => {
     /**
-     * D5 (a), the owner's, on the plan before step 8g2 (the plan's critic,
-     * P2-4): the probe measures every screen at rest and paints no hover, no
-     * focus, no press and no turned wall's rotation, so a first-party look
-     * sheet's rule whose selector names a state (:hover, :focus,
-     * :focus-visible, :focus-within, :active, [data-turn], anywhere in the
-     * selector) may not set a clip, a mask, a filter, a blend mode, an opacity
-     * under 1, a hidden box or a transform past a 10-degree tilt with no
-     * shrink, skew or flip; and -webkit-tap-highlight-color is transparent or
-     * nothing, anywhere. Colour, ground and shadow changes stand, and so do
-     * the "no transform" values: all 16 state rules the shipped looks have
-     * (Modern 5, Neo 5, Rural 6) set nothing else but Rural's rotate: 0deg.
-     * A selector-only lint cannot tell a .mini that is the pay control from
-     * one that is not, so the families are read on every state rule.
-     * First party only: the workshop README says a pointer's hover is Stall's
-     * at intake, not the kit's, so the kit lint is unchanged. Red: the belt
-     * taken out of lintLook (every refusal below fails, and the sixteen
-     * pass), and each refusal on its own by the plants.
+     * D-2026-10-20-08 (the owner, "Ok b"): the probe measures every screen at
+     * rest and paints no hover, no focus, no press and no turned wall, so a
+     * first-party look sheet's rule whose selector names a state (:hover,
+     * :focus, :focus-visible, :focus-within, :active, :target, :user-invalid,
+     * :autofill, :modal, [data-turn], anywhere in the selector) sets colour,
+     * ground, border colour and style, shadow, cursor, outline, transitions
+     * and the no-transform values, and nothing else. It replaced a blocklist
+     * (D5 (a) of D-2026-10-20-06) that the lint-belts critic found a hole in
+     * on each of three rounds. All 16 state rules the shipped looks have
+     * (Modern 5, Neo 5, Rural 6) are inside the list, and the list's every
+     * reader is proved by the plants below. First party only: the workshop
+     * README says a pointer's hover is Stall's at intake, not the kit's, so
+     * the kit lint is unchanged. Red: the belt taken out of lintLook (every
+     * refusal below fails, and the sixteen pass), and each refusal on its own
+     * by the plants.
      */
     const BELT = /under ".+" — .+; the probe measures every screen at rest and paints no hover, focus, press or turned wall/;
     const sheetOf = (cls) => LOOKS.find((s) => s.lookClass === cls);
@@ -675,33 +758,152 @@ describe('a-look-state-rule-never-hides-money', () => {
         const at = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
         return `${css.slice(0, at)}${rule}\n\n${css.slice(at)}`;
     };
+    const problemsOf = (rule) => lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+    /** The rule is refused, and by a sentence the pattern reads. */
+    const refused = (rule, pattern = BELT) => {
+        const problems = problemsOf(rule);
+        assert.ok(problems.some((p) => pattern.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        return problems;
+    };
     const refusedIn = (cls, rule, pattern = BELT) => {
         const problems = lintLookSheet(plantedIn(cls, rule), { lookClass: cls });
         assert.ok(problems.some((p) => pattern.test(p)), `${cls}: ${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
     };
-    const refused = (rule, pattern = BELT) => refusedIn('t-neo', rule, pattern);
+    /** Refused by the sentence that names this property as one a state may not set. */
+    const refusedProperty = (rule, prop) => {
+        const problems = problemsOf(rule);
+        const re = new RegExp(`^${prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: .* under ".+" — [\\w-]+ is not a property a state rule may set`);
+        assert.ok(problems.some((p) => re.test(p.replace(/^line \d+: /, ''))), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+    /** Refused by the belt, on a declaration of this property (a value one of its readers reads, not a property the list lacks). */
+    const refusedUnder = (rule, prop) => {
+        const problems = problemsOf(rule);
+        const re = new RegExp(`^line \\d+: ${prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: .* under ".+" — `);
+        assert.ok(problems.some((p) => re.test(p) && BELT.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+    const accepted = (rule) => assert.deepEqual(problemsOf(rule), [], rule);
 
-    it('takes all 16 shipped state rules, and reads each of them', () => {
-        // The critic's list: Modern 5, Neo 5, Rural 6.
-        const SIXTEEN = [];
-        for (const cls of ['t-modern', 't-neo', 't-rural']) {
-            for (const name of ['mini:hover', 'tab:hover', 'cta:hover', 'tagline-invite:hover', 'notice-invite:hover']) {
-                SIXTEEN.push([cls, `.${cls} .${name}`]);
-            }
+    const STATE_ALLOWED_PINNED = [
+        'color',
+        'background',
+        'background-color',
+        'background-image',
+        'border',
+        'border-top',
+        'border-right',
+        'border-bottom',
+        'border-left',
+        'border-color',
+        'border-top-color',
+        'border-right-color',
+        'border-bottom-color',
+        'border-left-color',
+        'border-block-color',
+        'border-inline-color',
+        'border-block-start-color',
+        'border-block-end-color',
+        'border-inline-start-color',
+        'border-inline-end-color',
+        'border-style',
+        'border-top-style',
+        'border-right-style',
+        'border-bottom-style',
+        'border-left-style',
+        'border-block-style',
+        'border-inline-style',
+        'border-block-start-style',
+        'border-block-end-style',
+        'border-inline-start-style',
+        'border-inline-end-style',
+        'box-shadow',
+        'cursor',
+        'transform',
+        'rotate',
+        'scale',
+        'translate',
+        'outline',
+        'outline-color',
+        'outline-style',
+        'outline-width',
+        'outline-offset',
+        'transition',
+        'transition-property',
+        'transition-duration',
+        'transition-delay',
+        'transition-timing-function',
+        'transition-behavior',
+        '-webkit-tap-highlight-color',
+    ];
+    const OPAQUE_PINNED = ['--s-bg', '--s-surface', '--s-text', '--s-shade', '--s-muted', '--s-accent', '--s-danger', '--s-accent-2'];
+
+    it('pins what a state may set, the opaque palette roles and the two reaches, by value', () => {
+        assert.deepEqual([...STATE_ALLOWED], STATE_ALLOWED_PINNED);
+        assert.deepEqual([...STATE_OPAQUE_ROLES], OPAQUE_PINNED);
+        assert.equal(STATE_OUTLINE_MAX_PX, 8);
+        assert.equal(STATE_SHADOW_MAX_PX, 8);
+        assert.equal(new Set(STATE_ALLOWED).size, STATE_ALLOWED.length, 'no property twice');
+        // Every listed property has a reader: none is refused as a property a state may not set.
+        for (const prop of STATE_ALLOWED) {
+            const decl = prop === '-webkit-tap-highlight-color' ? `${prop}: transparent` : written(prop, 'inherit');
+            const problems = problemsOf(`.t-neo .item:hover { ${decl}; }`);
+            assert.ok(!problems.some((p) => /is not a property a state rule may set/.test(p)), `${prop}:\n  ${problems.join('\n  ')}`);
         }
-        SIXTEEN.push(['t-rural', '.t-rural .items .item:hover, .t-rural .items .item.open']);
+        // And one that is not listed is: the list is the whole of it.
+        for (const prop of ['border-width', 'font-size', 'opacity', 'caret-color', 'border-image', 'text-decoration-color']) {
+            assert.ok(!STATE_ALLOWED.includes(prop), prop);
+            refusedProperty(`.t-neo .item:hover { ${prop}: inherit; }`, prop);
+        }
+    });
+
+    /** The 16 state rules the shipped looks have, each with the properties it sets: what it is to be inside the list. */
+    const SIXTEEN = [
+        ['t-modern', '.t-modern .tagline-invite:hover', ['background', 'border-color']],
+        ['t-modern', '.t-modern .notice-invite:hover', ['background', 'border-color']],
+        ['t-modern', '.t-modern .cta:hover', ['background']],
+        ['t-modern', '.t-modern .mini:hover', ['background', 'border-color', 'color']],
+        ['t-modern', '.t-modern .tab:hover', ['background']],
+        ['t-neo', '.t-neo .mini:hover', ['background', 'box-shadow']],
+        ['t-neo', '.t-neo .tab:hover', ['color']],
+        ['t-neo', '.t-neo .tagline-invite:hover', ['background', 'border-color']],
+        ['t-neo', '.t-neo .notice-invite:hover', ['background', 'border-color']],
+        ['t-neo', '.t-neo .cta:hover', ['box-shadow']],
+        ['t-rural', '.t-rural .mini:hover', ['background', 'color']],
+        ['t-rural', '.t-rural .tab:hover', ['color']],
+        ['t-rural', '.t-rural .tagline-invite:hover', ['background', 'border-color']],
+        ['t-rural', '.t-rural .notice-invite:hover', ['background', 'border-color']],
+        ['t-rural', '.t-rural .cta:hover', ['background']],
+        ['t-rural', '.t-rural .items .item:hover, .t-rural .items .item.open', ['rotate']],
+    ];
+
+    it('takes all 16 shipped state rules, shows each sets only what a state may, and reads each of them', () => {
         assert.equal(SIXTEEN.length, 16);
-        for (const [cls, selector] of SIXTEEN) {
+        // No seventeenth: every rule of the three sheets whose selector names a state is one of these.
+        const stateWords = /:(?:hover|focus|focus-visible|focus-within|active|target|user-invalid|autofill|modal)(?![\w-])|\[\s*data-turn/i;
+        let found = 0;
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            const walk = (nodes) => {
+                for (const node of nodes) {
+                    if (node.kind === 'rule' && stateWords.test(node.prelude)) found += 1;
+                    else if (node.children !== undefined) walk(node.children);
+                }
+            };
+            walk(parseSheet(read(sheetOf(cls).path)).nodes);
+        }
+        assert.equal(found, 16, 'a seventeenth state rule is in a shipped sheet: add it here, and say what it sets');
+        for (const [cls, selector, props] of SIXTEEN) {
             const css = read(sheetOf(cls).path);
             const { text, nodes } = parseSheet(css);
-            assert.equal(text.length, css.length, 'the parse keeps the sheet\'s offsets');
+            assert.equal(text.length, css.length, "the parse keeps the sheet's offsets");
             const rule = nodes.find((n) => n.kind === 'rule' && n.prelude.replace(/\s+/g, ' ') === selector);
             assert.ok(rule !== undefined, `${cls} has no rule ${selector}`);
+            const set = declarationsOf(rule.body).map((d) => d.prop);
+            assert.deepEqual(set, props, `${selector} sets exactly these`);
+            for (const prop of set) assert.ok(STATE_ALLOWED.includes(prop), `${selector}: ${prop} is on the list`);
             assert.deepEqual(lintLookSheet(css, { lookClass: cls }), [], `${cls}, as shipped`);
-            // The belt reads this very rule: the same rule with a fade added is refused.
+            // The belt reads this very rule: the same rule with one property more is refused, by name.
             const faded = `${css.slice(0, rule.end - 1)}\n    opacity: 0.2;\n${css.slice(rule.end - 1)}`;
             const problems = lintLookSheet(faded, { lookClass: cls });
-            assert.ok(problems.some((p) => BELT.test(p) && /opacity: 0\.2/.test(p)), `${cls}, ${selector}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+            assert.ok(problems.some((p) => /opacity: 0\.2 under .* — opacity is not a property a state rule may set/.test(p)), `${cls}, ${selector}:\n  ${problems.join('\n  ') || '(no problem)'}`);
         }
     });
 
@@ -711,183 +913,521 @@ describe('a-look-state-rule-never-hides-money', () => {
         refusedIn('t-rural', '.t-rural [data-turn] .item-p { filter: blur(4px); }');
     });
 
-    const HIDING = [
-        'clip-path: inset(0 50% 0 0)',
-        'clip-path: polygon(0 0, 50% 0, 50% 100%)',
-        'clip: rect(0 10px 10px 0)',
-        '-webkit-clip-path: inset(0 50% 0 0); clip-path: inset(0 50% 0 0)',
-        'mask-image: linear-gradient(#000, transparent)',
-        '-webkit-mask-image: linear-gradient(#000, transparent); mask-image: linear-gradient(#000, transparent)',
-        'mask: linear-gradient(#000, #0000)',
-        'mask-border-source: linear-gradient(#000, #0000)',
-        '-webkit-mask-box-image-source: linear-gradient(#000, #0000)',
-        'mask-size: 50%',
-        'filter: blur(4px)',
-        'filter: opacity(0.2)',
-        'filter: drop-shadow(0 0 4px #f00)',
-        'backdrop-filter: brightness(0)',
-        '-webkit-backdrop-filter: invert(1); backdrop-filter: invert(1)',
-        'backdrop-filter: blur(6px) brightness(0)',
-        'mix-blend-mode: difference',
-        'mix-blend-mode: multiply',
-        'background-blend-mode: multiply',
-        'opacity: 0.2',
-        'opacity: 0',
-        'opacity: 50%',
-        'opacity: calc(1 - 0.5)',
-        'opacity: inherit',
-        'visibility: hidden',
-        'visibility: collapse',
-        'visibility: inherit',
-        'transform: rotate(25deg)',
-        'transform: rotate(0.5turn)',
-        'transform: rotate(8deg) rotate(8deg)',
-        'transform: scale(0.8)',
-        'transform: scale(1, 1.4)',
-        'transform: scaleX(-1)',
-        'transform: skewX(4deg)',
-        'transform: matrix(0.8, 0, 0, 0.8, 0, 0)',
-        'transform: matrix(1, 0, 0, -1, 0, 0)',
-        'transform: rotateY(40deg)',
-        'transform: perspective(200px)',
-        'transform: pop(2)',
-        'transform: inherit',
-        'rotate: 25deg',
-        'rotate: y 40deg',
-        'rotate: 1 0 0 40deg',
-        'rotate: calc(5deg * 3)',
-        'scale: 0.9',
-        'scale: 1 2',
-        'scale: 1 1 2',
-        'translate: 0 0 40px',
-    ];
+    const NAMED_STATES = [':hover', ':focus', ':focus-visible', ':focus-within', ':active', ':target', ':user-invalid', ':autofill', ':modal'];
 
-    it('refuses each family a state rule can hide a figure with, at every state, wherever the state stands in the selector', () => {
-        for (const decl of HIDING) {
+    it('reads every state the owner named, anywhere in the selector: inside :is(), :where(), :has() and :not(), in a list, in capitals, in a media block', () => {
+        for (const state of [...NAMED_STATES, ...NAMED_STATES.map((s) => s.toUpperCase())]) {
             for (const subject of [
-                '.t-neo .item-x:hover',
-                '.t-neo .item-x:focus',
-                '.t-neo .buy:focus-visible',
-                '.t-neo .pay-x:focus-within',
-                '.t-neo .buy:active',
-                '.t-neo .item-p[data-turn="cw"]',
-                '.t-neo [data-turn] .item-p',
-                '.t-neo .item:hover .item-x',
-                '.t-neo .item:is(:hover, .open) .item-x',
-                '.t-neo .tool:not(:hover) .item-x',
-                '.t-neo .item-x:hover::after',
+                `.t-neo .item-x${state}`,
+                `.t-neo .item${state} .item-x`,
+                `.t-neo .item:is(${state}, .open) .item-x`,
+                `.t-neo .item:where(${state}) .item-x`,
+                `.t-neo .item:has(${state}) .item-x`,
+                `.t-neo .item:not(${state}) .item-x`,
+                `.t-neo .item-x:not(:is(${state}))`,
+                `.t-neo .item-x, .t-neo .item-x${state}`,
+                `.t-neo .item-x${state}::after`,
             ]) {
-                refused(`${subject} { ${decl}; }`);
+                refusedProperty(`${subject} { opacity: 0.2; }`, 'opacity');
+            }
+        }
+        for (const subject of [
+            '.t-neo [data-turn] .item-x',
+            '.t-neo .item-x[data-turn="cw"]',
+            ".t-neo [DATA-TURN='ccw'] .item-x",
+            '.t-neo[data-turn] .item-x',
+            '.t-neo:is([data-turn]) .item-x',
+            '.t-neo:not([data-turn]) .item-x',
+            '.t-neo :has([ data-turn ]) .item-x',
+        ]) {
+            refusedProperty(`${subject} { opacity: 0.2; }`, 'opacity');
+        }
+        refusedProperty('@media (min-width: 680px) { .t-neo .item-x:hover { filter: blur(2px); } }', 'filter');
+        refusedUnder('@media (max-width: 679.98px) { .t-neo .buy:active { transform: scale(0.9); } }', 'transform');
+        // A state this list does not name is the stated gap: it is read as a rule at rest, which the probe measures.
+        for (const state of [':checked', ':open', ':popover-open', ':visited', ':any-link', ':fullscreen', ':disabled', ':first-child', "[aria-pressed='true']"]) {
+            accepted(`.t-neo .item-x${state} { opacity: 0.2; }`);
+        }
+    });
+
+    /** What no state may set, named so their tests stay. Each is refused by name, at every state, on a figure, a holder and a pseudo-element. */
+    const REFUSED = [
+        'all: inherit',
+        'all: unset',
+        'all: initial',
+        '--s-price-clip: inset(0 100% 0 0)',
+        '--anything: 0',
+        'animation: t-neo-x 1s',
+        'animation-name: t-neo-x',
+        'animation-name: inherit',
+        'animation-name: none',
+        'animation: unset',
+        'animation-duration: 1s',
+        'animation-composition: add',
+        'animation-play-state: running',
+        'content: ""',
+        'position: relative',
+        'position: absolute',
+        'z-index: 0',
+        'z-index: 9',
+        'display: none',
+        'display: block',
+        'top: 1px',
+        'left: -9999px',
+        'inset: 0',
+        'font-size: 0',
+        'font-size: 12px',
+        'font: 700 30px Inter',
+        'font-weight: 700',
+        'font-family: inherit',
+        'line-height: 0',
+        'letter-spacing: 0',
+        'letter-spacing: -1em',
+        'word-spacing: 0',
+        'text-indent: 0',
+        'text-indent: -9999px',
+        'text-transform: uppercase',
+        'text-shadow: 0 0 1px red',
+        'text-align: center',
+        'white-space: nowrap',
+        'padding: 0',
+        'padding-left: 9999px',
+        'margin: 0',
+        'margin-left: -9999px',
+        'width: 0',
+        'height: 0',
+        'min-width: 0',
+        'max-width: 0',
+        'border-width: 40px',
+        'border-left-width: 1px',
+        'border-radius: 0',
+        'border-image: linear-gradient(red, blue) 1',
+        'border-image-outset: 9999px',
+        'opacity: 1',
+        'opacity: 0.2',
+        'visibility: visible',
+        'visibility: hidden',
+        'filter: none',
+        'filter: blur(4px)',
+        'backdrop-filter: blur(4px)',
+        'backdrop-filter: none',
+        'clip-path: none',
+        'clip-path: inset(0 50% 0 0)',
+        'clip: auto',
+        'mask: none',
+        'mask-image: none',
+        'mask-image: linear-gradient(#000, transparent)',
+        'mix-blend-mode: normal',
+        'mix-blend-mode: difference',
+        'background-blend-mode: normal',
+        'text-decoration: none',
+        'text-decoration: underline',
+        'text-decoration-line: underline',
+        'text-decoration-line: line-through',
+        'text-decoration-thickness: 1em',
+        'text-decoration-color: red',
+        'text-underline-offset: 2px',
+        'zoom: 1',
+        'zoom: 0.01',
+        'writing-mode: horizontal-tb',
+        'writing-mode: vertical-rl',
+        'font-size-adjust: none',
+        'font-size-adjust: 0.01',
+        'line-clamp: 2',
+        'offset-path: none',
+        "offset-path: path('M 0 0 L 1 0')",
+        'offset-rotate: 180deg',
+        "offset: path('M 0 0 L 1 0') 0 180deg",
+        'overflow: hidden',
+        'contain: paint',
+        'isolation: isolate',
+        'fill: red',
+        'stroke: red',
+        'caret-color: red',
+        'accent-color: red',
+        'pointer-events: none',
+        'will-change: transform',
+    ];
+    const SUBJECTS = ['.t-neo .item-x:hover', '.t-neo .buy:focus-visible', '.t-neo .item:hover', '.t-neo [data-turn] .item-p', '.t-neo .mini:active', '.t-neo .item-x:hover::after'];
+
+    it('refuses everything else a state could set, by name: all, custom properties, animation, content, position, display, text and spacing, font, boxes, opacity, filters, clips, masks, decoration', () => {
+        for (const decl of REFUSED) {
+            const prop = decl.slice(0, decl.indexOf(':'));
+            for (const subject of SUBJECTS) {
+                if (prop.startsWith('--')) refused(`${subject} { ${decl}; }`, /a custom property set under a state re-states, where no property here reads it/);
+                else refusedProperty(`${subject} { ${decl}; }`, prop);
             }
         }
     });
 
-    it('reads a state in a selector list, in a media block and at any width', () => {
-        refused('.t-neo .item-x, .t-neo .item-x:hover { opacity: 0.2; }');
-        refused('@media (min-width: 680px) { .t-neo .item-x:hover { filter: blur(2px); } }');
-        refused('@media (max-width: 679.98px) { .t-neo .buy:active { transform: scale(0.9); } }');
-    });
-
-    it('fails closed on a var() in any of these families', () => {
+    it('refuses a non-identity transform in every form, a value it cannot read, and a number or an angle past what a double holds', () => {
         for (const decl of [
-            'opacity: var(--o)',
-            'opacity: var(--o, 1)',
-            'filter: var(--f)',
-            'filter: none var(--f)',
-            'clip-path: var(--c, none)',
-            'mask-image: var(--m)',
-            'mix-blend-mode: var(--b)',
-            'visibility: var(--v)',
+            'transform: rotate(25deg)',
+            'transform: rotate(0.5turn)',
+            'transform: rotate(360deg)',
+            'transform: rotate(8deg) rotate(8deg)',
+            'transform: scale(0.8)',
+            'transform: scale(1.0005)',
+            'transform: scale(1.06)',
+            'transform: scale(1, 1.4)',
+            'transform: scaleX(-1)',
+            'transform: skewX(4deg)',
+            'transform: matrix(0.8, 0, 0, 0.8, 0, 0)',
+            'transform: matrix(1, 0, 0, -1, 0, 0)',
+            'transform: matrix(1, 0, 0, 1, 4, 0)',
+            'transform: translateY(-1px)',
+            'transform: translate3d(0, -1px, 0)',
+            'transform: translateZ(5px)',
+            'transform: rotateY(40deg)',
+            'transform: perspective(200px)',
+            'transform: pop(2)',
+            'transform: inherit',
             'transform: var(--t)',
             'transform: rotate(var(--a))',
+            'transform: rotate(1e400deg)',
+            'transform: rotate(1e300deg)',
+            'transform: scale(1e400)',
+            'transform: matrix(1e400, 0, 0, 1, 0, 0)',
+            'rotate: 25deg',
+            'rotate: 1deg',
+            'rotate: 360deg',
+            'rotate: y 40deg',
+            'rotate: 1 0 0 40deg',
+            'rotate: calc(5deg * 3)',
+            'rotate: inherit',
             'rotate: var(--r)',
+            'rotate: 11turn',
+            'scale: 0.9',
+            'scale: 1.05',
+            'scale: 1 2',
+            'scale: 1 1 2',
+            'scale: 50% 50%',
+            'scale: calc(0.5)',
+            'scale: 1e400',
             'scale: var(--s)',
+            'translate: 0 -2px',
+            'translate: -200vw 0',
+            'translate: 0 0 40px',
+            'translate: 1px 0',
             'translate: var(--x) 0',
         ]) {
-            refused(`.t-neo .item-x:hover { ${decl}; }`, /a var\(\) here carries a value past this check/);
+            for (const subject of SUBJECTS) refusedUnder(`${subject} { ${decl}; }`, decl.slice(0, decl.indexOf(':')));
+        }
+        // Rural's straightening of a tilted row under a hand, and the other identities.
+        for (const decl of [
+            'transform: none',
+            'transform: initial',
+            'transform: unset',
+            'transform: translateZ(0)',
+            'transform: translate3d(0, 0, 0)',
+            'transform: rotate(0deg) scale(1) translate(0, 0)',
+            'transform: matrix(1, 0, 0, 1, 0, 0)',
+            'rotate: 0deg',
+            'rotate: 0',
+            'rotate: -0deg',
+            'rotate: 0turn',
+            'rotate: none',
+            'rotate: z 0deg',
+            'scale: 1',
+            'scale: 100%',
+            'scale: 1 1',
+            'scale: none',
+            'translate: none',
+            'translate: 0',
+            'translate: 0 0',
+            'translate: 0px 0px 0',
+        ]) {
+            for (const subject of SUBJECTS) accepted(`${subject} { ${decl}; }`);
+        }
+        accepted('.t-neo .items .item:hover, .t-neo .items .item.open { rotate: 0deg; }');
+    });
+
+    it('reads an ink at alpha 1, and no other: a literal colour, currentColor, inherit, or an opaque palette role with no fallback', () => {
+        for (const value of [
+            '#dff6ff',
+            '#fff',
+            '#ffffff',
+            '#ffff',
+            '#ffffffff',
+            'white',
+            'RebeccaPurple',
+            'rgb(0 0 0)',
+            'rgb(0 0 0 / 100%)',
+            'rgb(0 0 0 / 1)',
+            'rgba(0, 0, 0, 1)',
+            'rgba(0, 0, 0, 100%)',
+            'hsl(200 50% 50%)',
+            'hsl(200, 50%, 50%)',
+            'oklch(0.5 0.1 200)',
+            'color(srgb 1 0 0)',
+            'currentColor',
+            'CURRENTCOLOR',
+            'inherit',
+            ...OPAQUE_PINNED.map((role) => `var(${role})`),
+            'var( --s-accent )',
+        ]) {
+            accepted(`.t-neo .item-x:hover { color: ${value}; }`);
+        }
+        for (const value of [
+            'transparent',
+            '#ffffff10',
+            '#fff1',
+            '#fff8',
+            'rgb(0 0 0 / 5%)',
+            'rgb(0 0 0 / 0.05)',
+            'rgba(0, 0, 0, 0.05)',
+            'rgba(0, 0, 0, 0)',
+            'hsl(200 50% 50% / 0)',
+            'oklch(0.5 0.1 200 / 0.3)',
+            'rgb(0 0 0 / var(--a))',
+            'rgb(0 0 0 / none)',
+            'rgb(calc(1) 0 0)',
+            'rgb(from red r g b / 0.2)',
+            'color-mix(in srgb, red, transparent)',
+            'color-mix(in srgb, red 100%, blue 0%)',
+            'color-mix(in srgb, currentcolor 2%, var(--s-bg))',
+            'light-dark(red, blue)',
+            // A theme token that is not a palette role can carry an alpha: --s-addr-bg is 5% on Neo, --s-tab-active-bg 14%, Modern's --s-head-bg 74%.
+            'var(--s-addr-bg)',
+            'var(--s-tab-active-bg)',
+            'var(--s-head-bg)',
+            'var(--s-sub-ink)',
+            'var(--wash)',
+            'var(--s-text, red)',
+            'var(--s-bg, rgba(0, 0, 0, 0))',
+            'var(--S-TEXT)',
+            // A colour this lint cannot read as a literal.
+            'Canvas',
+            'ButtonText',
+            'CanvasText',
+            'initial',
+            'unset',
+            'revert',
+            'notacolour',
+            '#ff',
+            '#fffff',
+        ]) {
+            refused(`.t-neo .item-x:hover { color: ${value}; }`);
+        }
+        // Same word for the ink wherever the state stands.
+        for (const subject of SUBJECTS) accepted(`${subject} { color: #dff6ff; }`);
+    });
+
+    it('reads a ground of any alpha, a gradient and nothing that is a picture, and never currentColor as a ground', () => {
+        for (const rule of [
+            '.t-neo .buy:hover { background: rgba(37, 99, 235, 0.1); }',
+            '.t-neo .buy:hover { background: transparent; }',
+            '.t-neo .buy:hover { background-color: rgba(44, 233, 224, 0.18); }',
+            '.t-neo .buy:hover { background-color: var(--s-addr-bg); }',
+            '.t-neo .buy:hover { background-color: color-mix(in srgb, var(--s-accent) 12%, transparent); }',
+            '.t-neo .buy:hover { background-color: color-mix(in oklch, red 30%, rgb(0 0 0 / 0.5) 70%); }',
+            '.t-neo .buy:hover { background-color: inherit; }',
+            '.t-neo .buy:hover { background: linear-gradient(90deg, red, rgba(0, 0, 0, 0.2) 50%, var(--s-accent)); }',
+            '.t-neo .buy:hover { background: radial-gradient(circle at 20% 0, #fff, transparent 60%), #000; }',
+            '.t-neo .buy:hover { background-image: repeating-linear-gradient(45deg, red 0 2px, blue 2px 4px); }',
+            '.t-neo .buy:hover { background-image: conic-gradient(red, blue), linear-gradient(red, blue); }',
+            '.t-neo .buy:hover { background-image: none; }',
+            '.t-neo .buy:hover { background-image: var(--s-card-sheen); }',
+            '.t-neo .buy:hover { background: var(--s-card-sheen); }',
+            '.t-neo .buy:hover { background: var(--s-surface) no-repeat center / cover; }',
+            '.t-neo .buy:hover { background: red 0 0 / calc(100% - 2px) 100% no-repeat; }',
+            '.t-neo .item:hover { background: #2563eb; }',
+        ]) {
+            accepted(rule);
+        }
+        const NOT_A_PICTURE = /a picture \(url\(\), image-set\(\), cross-fade\(\), element\(\), paint\(\)\) is a ground the probe cannot read/;
+        for (const value of ['url(./x.svg)', 'linear-gradient(red, blue), url(./x.svg)', 'image-set("./x.svg" 1x)', 'cross-fade(url(./x.svg), red, 50%)', 'element(#a)', 'paint(x)']) {
+            for (const prop of ['background-image', 'background']) {
+                for (const subject of ['.t-neo .buy:hover', '.t-neo .item:hover']) refused(`${subject} { ${prop}: ${value}; }`, NOT_A_PICTURE);
+            }
+        }
+        refused('.t-neo .buy:hover { background: url(./x.svg) no-repeat; }', NOT_A_PICTURE);
+        refused('.t-neo .buy:hover { background-image: var(--pic, url(./x.svg)); }', /background-image: .* under ".+" — a var\(\) here is read only as var\(--s-…\) with no fallback/);
+        refused('.t-neo .buy:hover { background-image: red; }', /background-image: red under ".+" — a background-image layer is `none`, a gradient or a var\(--s-…\)/);
+        refused('.t-neo .buy:hover { background-image: rgb(0 0 0); }', /a background-image layer is `none`, a gradient or a var/);
+        refused('.t-neo .buy:hover { background: var(--wash); }', /a var\(\) here is read only as var\(--s-…\)/);
+        refused('.t-neo .buy:hover { background: attr(x); }', /is a function this lint does not read in a state's background/);
+        // The ground the colour of the ink it holds hides the figure.
+        for (const rule of ['.t-neo .item-x:hover { background-color: currentColor; }', '.t-neo .item-x:hover { background: currentcolor; }', '.t-neo .item-x:hover { background: color-mix(in srgb, currentcolor 50%, red); }']) {
+            refused(rule, /currentcolor as a ground is the colour of the ink it holds/);
+        }
+        // Colours this lint cannot read as a ground: a function it does not know, a fallback, a system word it takes for a keyword stands.
+        refused('.t-neo .buy:hover { background-color: rgb(from red r g b); }', /is not a colour this lint reads/);
+        refused('.t-neo .buy:hover { background-color: var(--wash); }', /is not a colour this lint reads/);
+        refused('.t-neo .buy:hover { background-color: var(--s-bg, red); }', /is not a colour this lint reads/);
+    });
+
+    it('lets a border change colour, and its style only to off; the shorthand shows one and writes no width', () => {
+        for (const rule of [
+            '.t-neo .buy:hover { border-color: red; }',
+            '.t-neo .buy:hover { border-color: red blue; }',
+            '.t-neo .buy:hover { border-color: rgba(255, 77, 122, 0.85); }',
+            '.t-neo .buy:hover { border-color: var(--s-accent) transparent; }',
+            '.t-neo .buy:hover { border-color: color-mix(in srgb, var(--s-accent) 50%, transparent); }',
+            '.t-neo .buy:hover { border-color: currentColor; }',
+            '.t-neo .buy:hover { border-top-color: red; border-inline-end-color: blue; }',
+            '.t-neo .buy:hover { border-style: none; }',
+            '.t-neo .buy:hover { border-style: none hidden; }',
+            '.t-neo .buy:hover { border-left-style: none; border-block-end-style: hidden; }',
+            '.t-neo .buy:hover { border: solid red; }',
+            '.t-neo .buy:hover { border: dashed var(--s-accent); }',
+            '.t-neo .buy:hover { border: none; }',
+            '.t-neo .buy:hover { border-bottom: solid var(--s-muted); }',
+            '.t-neo .buy:hover { border: inherit; }',
+        ]) {
+            accepted(rule);
+        }
+        // border-style: solid shows a border at the width a rule at rest wrote — the armed border (critic, round 3).
+        const ARMED = /border style longhand shows a border at the width a rule at rest wrote/;
+        refused('.t-neo .item-x { border: 40px none; }\n.t-neo .item:hover .item-x { border-style: solid; }', ARMED);
+        for (const decl of ['border-style: solid', 'border-style: dashed', 'border-top-style: solid', 'border-inline-style: double', 'border-style: none solid']) {
+            refused(`.t-neo .buy:hover { ${decl}; }`, ARMED);
+        }
+        for (const decl of ['border: 1px solid red', 'border: thin solid red', 'border: 0', 'border-left: 9999px solid transparent', 'border: solid calc(1px) red']) {
+            refused(`.t-neo .buy:hover { ${decl}; }`, /a width in the border shorthand/);
+        }
+        refused('.t-neo .buy:hover { border: dashed var(--s-card-border); }', /--s-card-border is not a palette role/);
+        refused('.t-neo .buy:hover { border: dashed var(--s-accent, 300px); }', /a var\(\) with a fallback in the border shorthand/);
+        refused('.t-neo .buy:hover { border-color: var(--wash, red); }', /is not a colour this lint reads/);
+        refused('.t-neo .buy:hover { border-color: red blue red blue red; }', /a border colour is one to four colours/);
+        refusedProperty('.t-neo .buy:hover { border-width: 40px; }', 'border-width');
+        refusedProperty('.t-neo .buy:hover { border-image: linear-gradient(red, blue) 1; }', 'border-image');
+        refusedProperty('.t-neo .buy:hover { border-image-source: url(./x.svg); }', 'border-image-source');
+        refusedProperty('.t-neo .buy:hover { border-radius: 0; }', 'border-radius');
+    });
+
+    it('lets a shadow stand and not a fill: an inset one whole, an outer one with no spread and an offset of 8px at most; a glow is free', () => {
+        for (const value of [
+            '0 0 16px rgba(44, 233, 224, 0.35)',
+            '0 0 10px #2ce9e0, 0 0 20px #ff4d7a',
+            '0 8px 24px rgba(0, 0, 0, 0.2)',
+            '8px 8px 0 #000',
+            '-8px -8px 0 #000',
+            '0 0 0 -4px red',
+            '0 0 4000px red',
+            'inset 0 0 0 4000px red',
+            'inset 0 0 16px var(--s-accent)',
+            '0 0 8px var(--s-accent)',
+            'none',
+            'initial',
+            'unset',
+            '0 2px 0 0 rgb(0 0 0 / 0.35)',
+        ]) {
+            for (const subject of SUBJECTS) accepted(`${subject} { box-shadow: ${value}; }`);
+        }
+        const FILL = /an outer shadow with a spread, or an offset past 8px, is a fill the size of a box and not a shadow/;
+        // The critic's plant: a 4000px spread paints over the rows beside it.
+        refused('.t-neo .item:hover { box-shadow: 0 0 0 4000px #000; }', FILL);
+        for (const value of ['0 0 0 1px red', '0 0 0 2px var(--s-accent)', '9px 0 0 #000', '0 9px 0 #000', '0 4000px 0 #000', '-9px 0 8px red', '0 8px 24px rgba(0, 0, 0, 0.2), 0 0 0 1px red', '0 0 0 4000px var(--s-text)']) {
+            refused(`.t-neo .item:hover { box-shadow: ${value}; }`, FILL);
+        }
+        const READS = /a box-shadow this lint cannot size/;
+        for (const value of ['var(--s-card-shadow)', '0 0 1em red', '0 0 0 1rem red', '0 0 5% red', '1 1 red', '0 red', '0 0 0 0 0 red', '0 0 -4px red', '0 0 8px notacolour', '0 0 8px red red', 'inherit', '0 0 8px var(--wash)']) {
+            refused(`.t-neo .item:hover { box-shadow: ${value}; }`, READS);
         }
     });
 
-    /**
-     * What the probe allows on a figure itself and on a box that holds one,
-     * at rest, and so what stands under a state. A money node takes the
-     * figure's rule (no rotate, translate or scale property at all, and a
-     * `transform` only a uniform scale of at least 1, unturned and unmoved); a
-     * holder takes the tilt rule (any shift and growth, a turn up to 10
-     * degrees).
-     */
-    const HARMLESS = [
-        'background: #ffffff',
-        'background-color: rgba(44, 233, 224, 0.18)',
-        'color: #dff6ff',
-        'border-color: rgba(255, 77, 122, 0.85)',
-        'box-shadow: 0 0 16px rgba(44, 233, 224, 0.35)',
-        'outline: 2px solid #2ce9e0',
-        'outline: 2px solid var(--s-accent)',
-        'transform: none',
-        'rotate: 0deg',
-        'scale: 1',
-        'rotate: none',
-        'scale: none',
-        'translate: none',
-        'transform: rotate(360deg)',
-        'rotate: 360deg',
-        'scale: 100%',
-        'scale: 1 1',
-        'translate: 0 0',
-        'translate: 0px 0px 0',
-        'transform: translate3d(0, 0, 0)',
-        'transform: translateZ(0)',
-        'transform: scale(1.05)',
-        'transform: scale(1.25)',
-        'transform: matrix(1.2, 0, 0, 1.2, 0, 0)',
-        'transform: scale(1.2) rotate(360deg)',
-        'opacity: 1',
-        'opacity: 100%',
-        'opacity: 1.2',
-        'visibility: visible',
-        'filter: none',
-        'backdrop-filter: none',
-        'backdrop-filter: blur(4px)',
-        'clip-path: none',
-        'clip: auto',
-        'mask-image: none',
-        'mix-blend-mode: normal',
-        'background-blend-mode: normal',
-    ];
-    /** Stands on a box that holds a figure and not on the figure: a tilt, any shift, any growth. */
-    const HARMLESS_ON_A_HOLDER = [
-        'rotate: 8deg',
-        'rotate: -10deg',
-        'rotate: z 4deg',
-        'transform: rotate(-9deg) translateY(-2px) scale(1.05)',
-        'transform: translateY(-1px)',
-        'transform: matrix(1, 0, 0, 1, 4, 0)',
-        'transform: matrix(0.9848, 0.1736, -0.1736, 0.9848, 0, 0)',
-        'transform: translate3d(0, -1px, 0)',
-        'translate: 0 -2px',
-        'translate: 0 -2px 0',
-        'scale: 105%',
-        'scale: 1.1 1.1',
-    ];
-    const MONEY_SUBJECTS = ['.t-neo .item-x:hover', '.t-neo .buy:focus-visible', '.t-neo [data-role="price"]:focus-within', '.t-neo .item:hover .item-x', '.t-neo [data-role="price"]:active'];
-    // `.pay-x` is the box the pay sheet's figure stands in, not the figure: a holder.
-    const HOLDER_SUBJECTS = ['.t-neo .item-p:hover', '.t-neo [data-turn="cw"] .item-p', '.t-neo .item:hover', '.t-neo .mini:hover', '.t-neo .pay-x:focus-within'];
-
-    it('takes colour, ground and shadow, the no-transform values and a uniform growth on a figure, and a tilt, any shift and any growth on the box that holds it, at every state', () => {
-        for (const decl of HARMLESS) {
-            for (const subject of [...MONEY_SUBJECTS, ...HOLDER_SUBJECTS]) accepts(`${subject} { ${decl}; }`);
+    it('reads an outline only when the rule writes a width and an offset, both in px or a keyword, together at most 8px; outline-style: none alone stands', () => {
+        for (const rule of [
+            '.t-neo .buy:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }',
+            '.t-neo .buy:focus-visible { outline: thick solid red; outline-offset: 3px; }',
+            '.t-neo .buy:focus-visible { outline: medium auto; outline-offset: 5px; }',
+            '.t-neo .buy:focus-visible { outline: thin solid red; outline-offset: 0; }',
+            '.t-neo .buy:focus-visible { outline-offset: 2px; outline: 2px solid red; }',
+            '.t-neo .buy:focus-visible { outline-width: 2px; outline-offset: 2px; outline-style: solid; outline-color: red; }',
+            '.t-neo .buy:focus-visible { outline: 8px solid red; outline-offset: 0px; }',
+            '.t-neo .buy:focus-visible { outline: 0 solid red; outline-offset: 8px; }',
+            '.t-neo .buy:focus-visible { outline: 2px var(--s-x); outline-offset: 2px; }',
+            // The shorthand states both numbers even to switch the ring off; the style alone, off, needs nothing beside it.
+            '.t-neo .buy:focus-visible { outline: 0 none; outline-offset: 0; }',
+            '.t-neo .buy:focus-visible { outline-style: none; }',
+            '.t-neo .buy:focus-visible { outline-style: initial; }',
+            '.t-neo .buy:focus-visible { outline-color: red; outline-width: 2px; outline-offset: 2px; }',
+        ]) {
+            accepted(rule);
         }
-        for (const decl of HARMLESS_ON_A_HOLDER) {
-            for (const subject of HOLDER_SUBJECTS) accepts(`${subject} { ${decl}; }`);
+        const OWN = /an outline declaration under a state states its own width and its own offset in the same rule/;
+        for (const rule of [
+            // The critic's arming plant: a ring written at rest, switched on by a state.
+            '.t-neo .item-x { outline-width: 200px; outline-offset: -100px; outline-color: #000; }\n.t-neo .item:hover .item-x { outline-style: solid; }',
+            '.t-neo .buy { outline: 300px none #000; outline-offset: -150px; }\n.t-neo .buy:focus-visible { outline-style: solid; }',
+            '.t-neo .buy:focus-visible { outline: 2px solid red; }',
+            '.t-neo .buy:focus-visible { outline: 3000px solid #000; }',
+            '.t-neo .buy:focus-visible { outline: solid red; outline-offset: 2px; }',
+            '.t-neo .buy:focus-visible { outline-style: auto; }',
+            '.t-neo .buy:focus-visible { outline-width: 2px; }',
+            '.t-neo .buy:focus-visible { outline-offset: 2px; }',
+            '.t-neo .buy:focus-visible { outline: auto; outline-offset: 2px; }',
+            // The shorthand off, a colour alone, a width or an offset alone: a ring written at rest, armed (the colour) or sized (the others) by a state.
+            '.t-neo .buy:focus-visible { outline: none; }',
+            '.t-neo .buy:focus-visible { outline: 0 none; }',
+            '.t-neo .buy:focus-visible { outline: initial; }',
+            '.t-neo .buy:focus-visible { outline-color: red; }',
+            '.t-neo .buy:focus-visible { outline-color: var(--s-accent); }',
+            '.t-neo .buy:focus-visible { outline-style: none; outline-offset: 100px; }',
+            '.t-neo .buy:focus-visible { outline-style: none; outline-color: red; }',
+            // The critic's round-3 arming, by colour: a ring drawn transparent at rest, a colour under a state.
+            '.t-neo .item-x { outline: 200px solid transparent; outline-offset: 0; }\n.t-neo .item:hover .item-x { outline-color: #000; }',
+            // The shorthand resets the width the longhand wrote before it.
+            '.t-neo .buy:focus-visible { outline-width: 2px; outline: solid red; outline-offset: 2px; }',
+            // A var() could carry the style the shorthand does not write.
+            '.t-neo .buy:focus-visible { outline: solid var(--s-accent); }',
+            '.t-neo .buy:focus-visible { outline: var(--s-x) 2px; }',
+        ]) {
+            refused(rule, OWN);
         }
-        accepts('.t-neo .items .item:hover, .t-neo .items .item.open { rotate: 0deg; }');
+        const TOO_FAR = /paints \d+px beyond the box, over a neighbour's figure when it stands that close/;
+        for (const rule of [
+            '.t-neo .buy:focus-visible { outline: 8px solid #000; outline-offset: 8px; }',
+            '.t-neo .buy:focus-visible { outline: 9px solid red; outline-offset: 0; }',
+            '.t-neo .buy:focus-visible { outline: thick solid red; outline-offset: 4px; }',
+            '.t-neo .buy:focus-visible { outline: 2px solid red; outline-offset: 7px; }',
+            '.t-neo .buy:focus-visible { outline-width: 4000px; outline-offset: 0; outline-style: solid; }',
+        ]) {
+            refused(rule, TOO_FAR);
+        }
+        refused('.t-neo .buy:focus-visible { outline: var(--ring); outline-offset: 2px; }', /is not a colour this lint reads/);
+        refused('.t-neo .buy:focus-visible { outline: 2px solid red; outline-offset: -2px; }', /a negative outline width or offset draws the ring inside the box/);
+        refused('.t-neo .buy:focus-visible { outline-width: -1px; outline-offset: 0; outline-style: solid; }', /an outline width this lint cannot size|a negative outline width or offset/);
+        const UNSIZED = /an outline (?:width|offset) this lint cannot size/;
+        for (const rule of [
+            '.t-neo .buy:focus-visible { outline: 0.5em solid red; outline-offset: 2px; }',
+            '.t-neo .buy:focus-visible { outline: calc(100vw) solid red; outline-offset: 2px; }',
+            '.t-neo .buy:focus-visible { outline-width: var(--w); outline-offset: 2px; outline-style: solid; }',
+            '.t-neo .buy:focus-visible { outline: 2px solid red; outline-offset: 1em; }',
+            '.t-neo .buy:focus-visible { outline: 2px solid red; outline-offset: var(--o); }',
+            '.t-neo .buy:focus-visible { outline: 2px solid red; outline-offset: calc(1px); }',
+        ]) {
+            refused(rule, UNSIZED);
+        }
     });
 
-    it('reads a rule of no state as the probe\'s: a box at rest is measured, not belted', () => {
-        accepts('.t-neo .item-x { opacity: 0.5; filter: blur(1px); transform: scale(0.9); }');
-        accepts('.t-neo .item-x[aria-pressed="true"] { opacity: 0.5; }');
-        accepts('.t-neo .item-x:first-child { visibility: hidden; }');
+    it('lets a transition stand under a state, and reads a custom property in its list as all', () => {
+        accepted('.t-neo .buy:hover { transition: color 0.2s ease, background-color 0.2s; }');
+        accepted('.t-neo .buy:hover { transition-property: color; transition-duration: .2s; transition-delay: 0s; transition-timing-function: ease; transition-behavior: normal; }');
+        accepted('.t-neo .buy:hover { -webkit-transition: color 0.2s; transition: color 0.2s; }');
+        accepted('.t-neo .item:hover .item-x { transition: opacity 1s; }');
+        // The size lint reads them on a money node, a custom property for all (the lint-belts critic's P3: @property tokens animate).
+        const MOVES = /which may be a money node — the wall fits its figure by its size/;
+        refused('.t-neo .item-x:hover { transition: letter-spacing .2s; }', MOVES);
+        refused('.t-neo .item-x:hover { transition: --au-tide 1s; }', MOVES);
+        refused('.t-neo .item-x { transition: color 1s, --au-tide 1s; }', MOVES);
+        refused('.t-neo .item-x { transition-property: --au-tide; }', MOVES);
+        refused('.t-neo .item-x { transition: 1s --g; }', MOVES);
+        accepted('.t-neo .tool { transition: --au-tide 1s; }');
+    });
+
+    it('holds a pseudo-element under a state to the same list, and gives it no content, position or display', () => {
+        accepted('.t-neo .item:hover::after { background: #000; }');
+        accepted('.t-neo .item:hover::before { border-color: red; box-shadow: 0 0 8px red; }');
+        for (const decl of ["content: ''", 'position: absolute', 'inset: 0', 'display: block', 'opacity: 0.5', 'backdrop-filter: blur(30px)', 'width: 100%', 'height: 100%', 'transform: scale(2)', 'z-index: 1']) {
+            refused(`.t-neo .item:hover::after { ${decl}; }`);
+        }
+        // The critic's plant: a positioned pseudo-element over the figure, with a ground.
+        const problems = problemsOf(".t-neo .item:hover::after { content: ''; position: absolute; inset: 0; background: #000; }");
+        for (const prop of ['content', 'position', 'inset']) {
+            assert.ok(problems.some((p) => new RegExp(`^line \\d+: ${prop}: .* — ${prop} is not a property a state rule may set`).test(p)), problems.join('\n'));
+        }
     });
 
     it('refuses a tap highlight in any colour but transparent, at rest, under a state, in a media block and in a keyframe', () => {
@@ -898,387 +1438,110 @@ describe('a-look-state-rule-never-hides-money', () => {
             refused(`@media (min-width: 680px) { .t-neo .item-x { -webkit-tap-highlight-color: ${value}; } }`, TAP);
         }
         refused('@keyframes t-neo-tap { from { -webkit-tap-highlight-color: transparent; } to { -webkit-tap-highlight-color: red; } }', TAP);
-        accepts('.t-neo .buy { -webkit-tap-highlight-color: transparent; }');
-        accepts('.t-neo .buy:active { -webkit-tap-highlight-color: TRANSPARENT; }');
+        accepted('.t-neo .buy { -webkit-tap-highlight-color: transparent; }');
+        accepted('.t-neo .buy:active { -webkit-tap-highlight-color: TRANSPARENT; }');
         // It has no unprefixed twin, so the twin rule would refuse the one value that stands.
-        const problems = lintLookSheet(plantedNeo('.t-neo .buy { -webkit-tap-highlight-color: red; }'), { lookClass: 't-neo' });
+        const problems = problemsOf('.t-neo .buy { -webkit-tap-highlight-color: red; }');
         assert.ok(!problems.some((p) => /write tap-highlight-color/.test(p)), problems.join('\n'));
     });
 
-    it('leaves the kit lint as it was: a pointer\'s hover is Stall\'s at intake, the README says so', () => {
-        for (const rule of [
-            '.t-neo .item-x:hover { clip-path: inset(0 50% 0 0); }',
-            '.t-neo .pay-x:focus-within { opacity: .2; }',
-            '.t-neo [data-turn] .item-p { filter: blur(4px); }',
-            '.t-neo .buy:hover { transform: scale(0.8); mix-blend-mode: difference; visibility: hidden; }',
-        ]) {
-            const kit = lintSheet(plantedKit(rule));
-            assert.ok(!kit.some((p) => BELT.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
+    it('lets no first-party sheet re-declare a palette role: the proof that a role is opaque is about the value a rule reads', () => {
+        for (const role of OPAQUE_PINNED) {
+            refused(`.t-neo .item { ${role}: 300px solid red; }`, new RegExp(`${role} is a palette role the theme table writes on the stall`));
+            refused(`.t-neo { ${role}: red; }`, new RegExp(`${role} is a palette role the theme table writes on the stall`));
         }
-        // The kit's tap-highlight is the twin rule's, whatever the value written alone: the README states that rule.
-        // (Beside a twin of the same value it stands: `the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin`.)
-        for (const value of ['transparent', 'red']) {
-            const kit = lintSheet(plantedKit(`.t-neo .buy { -webkit-tap-highlight-color: ${value}; }`));
-            assert.ok(kit.some((p) => /a prefixed property paints only in the engines that read the prefix/.test(p)), `kit, ${value}:\n  ${kit.join('\n  ') || '(no problem)'}`);
-            assert.ok(!kit.some((p) => /only transparent stands/.test(p)), kit.join('\n'));
+        // The other custom properties stand at rest.
+        accepted('.t-neo .item { --s-price-clip: none; --wash: red; --s-addr-bg: red; }');
+        // The kit keeps the rules its README states.
+        assert.ok(!lintSheet(plantedKit('.t-neo .item { --s-text: red; }')).some((p) => /palette role/.test(p)));
+        // And no served first-party sheet does it.
+        for (const sheet of lookRows(SERVED).filter((row) => row.role !== 'kit')) {
+            for (const role of OPAQUE_PINNED) {
+                assert.ok(!new RegExp(`(?:^|[{;\\s])${role}\\s*:`).test(sheet.css), `${sheet.path} declares ${role}`);
+            }
         }
-        // The choice rests on the README's own words: when it states the rule for the kit, this fails and the kit belt follows.
-        const readme = read('workshop/README.md').replace(/\s+/g, ' ');
-        assert.ok(readme.includes("such as a pointer's hover"), 'the workshop README no longer says a pointer\'s hover is Stall\'s at intake');
-        assert.ok(!/(?::hover|:focus|:active|\[data-turn\])/.test(readme), 'the workshop README now names a state; decide whether the kit belt follows it');
+    });
+
+    it('the-state-opaque-roles-are-the-opaque-colours-the-theme-table-emits: under every shipped look, bare and under every mood', async () => {
+        const { runnerImport } = await import('vite');
+        const { module: attachments } = await runnerImport(join(ROOT, 'src/domain/attachments.ts'), { configFile: false, logLevel: 'silent' });
+        const theme = await import('../src/domain/theme.ts');
+        const OPAQUE = /^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/;
+        const seen = new Map();
+        let moods = 0;
+        let paints = 0;
+        for (const { id } of theme.SHIPPED_THEMES) {
+            const worn = [[], ...attachments.SHIPPED_ATTACHMENTS.filter((a) => a.themeId === id && a.slot === 'mood').map((a) => [a])];
+            moods += worn.length - 1;
+            for (const set of worn) {
+                paints += 1;
+                const vars = theme.themeVars(attachments.withMood(theme.decodeTheme(id), set));
+                for (const [name, value] of Object.entries(vars)) {
+                    const everyOpaque = (seen.get(name) ?? true) && OPAQUE.test(value);
+                    seen.set(name, everyOpaque);
+                }
+            }
+        }
+        assert.ok(moods >= 2, `the shipped moods were read (${moods})`);
+        assert.ok(paints >= 5, `${paints} paints read`);
+        // The pinned list is exactly the vars that are an opaque colour under every one of them: a new opaque role is a decision, a role that stops being one turns this red.
+        const opaque = [...seen].filter(([, all]) => all).map(([name]) => name);
+        assert.deepEqual([...opaque].sort(), [...OPAQUE_PINNED].sort());
+        for (const role of OPAQUE_PINNED) assert.ok(seen.get(role), `${role} is opaque under every look and mood`);
+        // And the tokens the critic named are not on it: --s-addr-bg (5% on Neo), --s-tab-active-bg (14%), --s-head-bg (74% on Modern).
+        for (const name of ['--s-addr-bg', '--s-tab-active-bg', '--s-head-bg', '--s-sub-bg', '--s-chip-bg']) assert.ok(!opaque.includes(name), name);
+        // A palette delta a mood hands is an Rgb, so a role stays rgb(r, g, b) however a mood moves it.
+        assert.ok(attachments.SHIPPED_ATTACHMENTS.filter((a) => a.slot === 'mood').every((a) => a.palette === undefined || Object.values(a.palette).every((c) => typeof c === 'object' && 'r' in c)));
     });
 
     /**
-     * The window's reading of D5 (a), after the lint-belts critic's B2: "refuse
-     * DRESS_HELD/BOX_HELD" means the whole of the probe's two sets, each
-     * refused value the one the probe refuses at rest and each allowed value
-     * the one it allows. The sets are parsed out of `layout/probe.ts`, so a
-     * member the probe gains turns this red until `STATE_BELT_ACCOUNT` names it.
+     * The lint reads what the probe holds: the longhands of its `DRESS_HELD`
+     * set are either on the allow-list (and read, above) or refused under a
+     * state. The set is parsed out of `layout/probe.ts` strictly — a list
+     * body that is anything but single-quoted strings fails the parse, so a
+     * double-quoted, spread or computed member cannot be missed in silence
+     * (the lint-belts critic's P3-7).
      */
     const probeSet = (name) => {
         const probe = read('layout/probe.ts');
         const m = new RegExp(`const ${name}\\b[^=]*=\\s*(?:new Set\\()?\\[([\\s\\S]*?)\\]`).exec(probe);
         assert.ok(m !== null, `layout/probe.ts no longer states ${name} as a list`);
-        return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+        const items = m[1].split(',').map((item) => item.trim()).filter((item) => item !== '');
+        for (const item of items) assert.match(item, /^'[^'\\\n]+'$/, `${name} holds ${item}, which is not a single-quoted string: this parse cannot read it`);
+        return items.map((item) => item.slice(1, -1));
     };
-    const MONEY = '.t-neo .item-x:hover';
-    const HOLDER = '.t-neo .item:hover';
     /** A declaration as a sheet writes it: a vendor-prefixed property beside its twin, as the twin rule asks (the line clamp stands alone). */
     const written = (prop, value) =>
         /^-webkit-/.test(prop) && prop !== '-webkit-line-clamp' ? `${prop}: ${value}; ${prop.replace(/^-webkit-/, '')}: ${value}` : `${prop}: ${value}`;
 
-    /** For each member read under a state: a value the probe refuses at rest, and one it allows. `moneyOnly`: refused only on a subject that may be a money node. */
-    const SAMPLES = {
-        'clip-path': { no: 'inset(0 50% 0 0)', yes: 'none' },
-        clip: { no: 'rect(0 10px 10px 0)', yes: 'auto' },
-        'mask-image': { no: 'linear-gradient(#000, transparent)', yes: 'none' },
-        '-webkit-mask-image': { no: 'linear-gradient(#000, transparent)', yes: 'none' },
-        'mask-border-source': { no: 'linear-gradient(#000, #0000)', yes: 'none' },
-        '-webkit-mask-box-image-source': { no: 'linear-gradient(#000, #0000)', yes: 'none' },
-        '-webkit-mask-box-image': { no: 'linear-gradient(#000, #0000)', yes: 'none' },
-        filter: { no: 'blur(4px)', yes: 'none' },
-        'backdrop-filter': { no: 'brightness(0)', yes: 'blur(4px)' },
-        'mix-blend-mode': { no: 'difference', yes: 'normal' },
-        'background-blend-mode': { no: 'multiply', yes: 'normal' },
-        'offset-path': { no: 'path("M 0 0 L 1 0")', yes: 'none' },
-        rotate: { no: '25deg', yes: 'none' },
-        scale: { no: '0.8', yes: 'none' },
-        translate: { no: '0 0 40px', yes: 'none' },
-        transform: { no: 'rotate(25deg)', yes: 'none' },
-        opacity: { no: '0.2', yes: '1' },
-        visibility: { no: 'hidden', yes: 'visible' },
-        'content-visibility': { no: 'hidden', yes: 'visible' },
-        zoom: { no: '0.15', yes: '1' },
-        'font-size-adjust': { no: '0.01', yes: 'none' },
-        'word-spacing': { no: '-2em', yes: '0.1em' },
-        'text-indent': { no: '-9999px', yes: '0' },
-        'letter-spacing': { no: '-0.1em', yes: '0.02em' },
-        'background-image': { no: 'url(./x.svg)', yes: 'linear-gradient(red, blue)', moneyOnly: true },
-        'outline-style': { yes: 'solid' },
-        'outline-width': { no: '3000px', yes: '2px' },
-        'outline-offset': { no: '-4px', yes: '2px' },
-        'text-decoration-line': { no: 'line-through', yes: 'underline' },
-        'text-decoration-thickness': { no: '1em', yes: 'from-font' },
-        'text-underline-offset': { no: '-0.2em', yes: '0.1em' },
-        'text-shadow': { no: '6px 0 0 #000', yes: '0 0 8px #2ce9e0' },
-        'writing-mode': { no: 'vertical-rl', yes: 'horizontal-tb' },
-        '-webkit-writing-mode': { no: 'vertical-rl', yes: 'horizontal-tb' },
-        color: { no: 'rgba(0, 0, 0, 0.05)', yes: '#dff6ff' },
-        // Read through the keyframes it names, in the test of that name below.
-        'animation-name': {},
-        'text-overflow': { no: 'ellipsis', yes: 'clip' },
-        'line-clamp': { no: '2', yes: 'none' },
-        '-webkit-line-clamp': { no: '2', yes: 'none' },
-    };
-    /** For each member refused wherever it stands: a value, and what the refusal says. */
-    const REFUSED_SAMPLES = {
-        '-webkit-box-reflect': { value: 'below 0', says: /mirrored copy/ },
-        '-webkit-text-fill-color': { value: 'red', says: /paints text in a colour the contrast pass never reads/ },
-        '-webkit-text-stroke-width': { value: '1px', says: /outlines text/ },
-        '-webkit-text-security': { value: 'disc', says: /draws a disc/ },
-        'background-clip': { value: 'text', says: /clipped to the text/ },
-        '-webkit-background-clip': { value: 'text', twin: 'background-clip', says: /clipped to the text/ },
-        'text-emphasis-style': { value: 'filled', says: /prints a glyph of its own/ },
-        direction: { value: 'rtl', says: /right-to-left/ },
-        'unicode-bidi': { value: 'bidi-override', says: /bidi order/ },
-        display: { value: 'list-item', says: /list item/ },
-        content: { value: '"x"', says: /only ::before and ::after may carry content/ },
-    };
-
-    it('the-state-belt-accounts-for-every-longhand-the-probe-holds, and for nothing it does not', () => {
+    it('the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it: DRESS_HELD, parsed strictly', () => {
         const held = probeSet('DRESS_HELD');
         const box = probeSet('BOX_HELD');
         assert.ok(held.length > 40, 'DRESS_HELD parsed whole');
         assert.ok(box.length > 8, 'BOX_HELD parsed whole');
         for (const prop of box) assert.ok(held.includes(prop), `BOX_HELD names ${prop}, which DRESS_HELD does not`);
-        assert.deepEqual(Object.keys(STATE_BELT_ACCOUNT).sort(), [...held].sort(), 'STATE_BELT_ACCOUNT lists the probe\'s DRESS_HELD, member for member');
-        for (const [prop, entry] of Object.entries(STATE_BELT_ACCOUNT)) {
-            assert.ok(['belt', 'refused', 'unread'].includes(entry.how), `${prop}: how`);
-            if (entry.how === 'unread') assert.ok(typeof entry.why === 'string' && entry.why.length > 20, `${prop} is unread and says why`);
-            if (entry.how === 'belt') assert.ok(Object.hasOwn(SAMPLES, prop), `${prop} is read under a state and has a sample`);
-            if (entry.how === 'refused') assert.ok(Object.hasOwn(REFUSED_SAMPLES, prop), `${prop} is refused wherever it stands and has a sample`);
-        }
-        for (const prop of Object.keys(SAMPLES)) assert.equal(STATE_BELT_ACCOUNT[prop]?.how, 'belt', `${prop} has a sample and the account says belt`);
-        for (const prop of Object.keys(REFUSED_SAMPLES)) assert.equal(STATE_BELT_ACCOUNT[prop]?.how, 'refused', `${prop} has a refused sample and the account says refused`);
-    });
-
-    it('refuses under a state the value the probe refuses at rest, and takes the value it allows, on a money node and on a box that holds one', () => {
-        for (const [prop, sample] of Object.entries(SAMPLES)) {
-            for (const subject of [MONEY, HOLDER]) {
-                if (sample.yes !== undefined) accepts(`${subject} { ${written(prop, sample.yes)}; }`);
-                if (sample.no === undefined) continue;
-                if (sample.moneyOnly === true && subject === HOLDER) {
-                    accepts(`${subject} { ${written(prop, sample.no)}; }`);
-                    continue;
-                }
-                // A turn of 25 degrees is a figure's refusal and a holder's too; the rest of the transform family is below.
-                refused(`${subject} { ${written(prop, sample.no)}; }`);
+        // The members the allow-list reads, by value: each has its reader and its plants above.
+        const read = held.filter((prop) => STATE_ALLOWED.includes(prop.replace(/^-(?:webkit|moz|ms|o)-/, '')));
+        assert.deepEqual(
+            [...read].sort(),
+            ['background-color', 'background-image', 'color', 'outline-offset', 'outline-style', 'outline-width', 'rotate', 'scale', 'transform', 'translate'],
+            'the probe holds these and a state may set them: each is read, not blanket-allowed',
+        );
+        // Every other member is refused under a state, by name, whatever the value.
+        for (const prop of held.filter((p) => !read.includes(p))) {
+            for (const subject of ['.t-neo .item-x:hover', '.t-neo .item:hover']) {
+                const problems = problemsOf(`${subject} { ${written(prop, 'initial')}; }`);
+                assert.ok(problems.some((p) => /is not a property a state rule may set/.test(p)), `${prop} under ${subject}:\n  ${problems.join('\n  ') || '(no problem)'}`);
             }
         }
     });
 
-    it('refuses wherever it stands, at rest and under a state, the member the look lint refuses outright', () => {
-        for (const [prop, sample] of Object.entries(REFUSED_SAMPLES)) {
-            const decl = sample.twin === undefined ? `${prop}: ${sample.value}` : `${prop}: ${sample.value}; ${sample.twin}: ${sample.value}`;
-            const target = prop === 'content' ? '.t-neo .item-x' : '.t-neo .buy';
-            for (const rule of [`${target} { ${decl}; }`, `${target}:hover { ${decl}; }`]) {
-                const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
-                assert.ok(problems.some((p) => sample.says.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
-            }
-        }
-    });
-
-    it('refuses the critic\'s B2 plants: a motion path with offset-rotate, the offset shorthand, a line through, a negative indent and spacing, a font-size-adjust, a vertical mode, a wide outline, a line clamp, a z-index under the card', () => {
+    it('the-state-belt-is-first-party-only: the kit lint carries none of these, because a pointer\'s hover is checked at intake', () => {
         for (const rule of [
-            '.t-neo .buy:hover { offset-path: path("M 0 0 L 1 0"); offset-rotate: 180deg; }',
-            '.t-neo .buy:hover { offset: path("M 0 0 L 1 0") auto 180deg; }',
-            '.t-neo .buy:hover { offset: ray(45deg closest-side); }',
-            '.t-neo .item-x:hover { text-decoration: line-through 1em; }',
-            '.t-neo .item-x:hover { text-decoration: overline; }',
-            '.t-neo .item-x:hover { text-decoration-line: line-through; }',
-            '.t-neo .item-x:hover { text-decoration-line: underline overline; }',
-            '.t-neo .item-x:hover { text-decoration: underline 1em; }',
-            '.t-neo .item-x:hover { text-decoration-thickness: 1em; }',
-            '.t-neo .item-x:hover { text-indent: -9999px; }',
-            '.t-neo .item-x:hover { word-spacing: -2em; }',
-            '.t-neo .item-x:hover { font-size-adjust: 0.01; }',
-            '.t-neo .item-x:hover { writing-mode: vertical-rl; }',
-            '.t-neo .buy:focus-visible { outline: 3000px solid #000; }',
-            '.t-neo .buy:focus-visible { outline-width: 3000px; }',
-            '.t-neo .item-x:hover { -webkit-line-clamp: 2; }',
-            '.t-neo .item-x:hover { z-index: -1; position: relative; }',
-        ]) {
-            refused(rule);
-        }
-        // What the probe leaves alone stands: a motion path's rotate with no path, an unset path, a ring, a raised card.
-        for (const rule of [
-            '.t-neo .buy:hover { offset-rotate: 180deg; }',
-            '.t-neo .buy:hover { offset-path: none; offset: none; }',
-            '.t-neo .item-x:hover { text-decoration: underline; }',
-            '.t-neo .item-x:hover { text-decoration: underline from-font; text-underline-offset: 2px; }',
-            '.t-neo .buy:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }',
-            '.t-neo .buy:focus-visible { outline: thin solid red; }',
-            '.t-neo .item:hover { z-index: 1; position: relative; }',
-            '.t-neo .item-x:hover { word-spacing: 0; text-indent: 0; letter-spacing: normal; }',
-        ]) {
-            accepts(rule);
-        }
-    });
-
-    it('reads a text-shadow as the probe does: a glow stands, and a sharp copy only within 0.12em of the glyph and of each other', () => {
-        for (const value of ['0 0 8px #2ce9e0', '0 0 10px #2ce9e0, 0 0 20px #ff4d7a', '0.05em 0.05em 0 #000', '1px 0 0 #000', '0 1px 0 rgba(0, 0, 0, 0.35)', 'none']) {
-            accepts(`${MONEY} { text-shadow: ${value}; }`);
-        }
-        for (const value of ['6px 0 0 #000', '0.2em 0 0 #000', '1px 0 0 #000, -1px 0 0 #000', '490px 0 0 #000', '2rem 0 0 #000', '0 0 0 0 #000']) {
-            refused(`${MONEY} { text-shadow: ${value}; }`);
-        }
-        // The cap is the probe's, held by value.
-        assert.equal(STATE_SHADOW_EM, Number(/const DRESS_SHADOW_EM = ([\d.]+);/.exec(read('layout/probe.ts'))?.[1]));
-    });
-
-    it('reads an ink\'s alpha as the probe does, in a literal, and lets a var() stand', () => {
-        for (const value of ['#dff6ff', '#fff', '#ffffffff', '#ffff', 'white', 'rgb(0 0 0)', 'rgb(0 0 0 / 100%)', 'rgba(0, 0, 0, 1)', 'hsl(200 50% 50%)', 'currentcolor', 'inherit', 'var(--s-accent)', 'color-mix(in srgb, var(--s-accent) 82%, var(--s-text))', 'color-mix(in srgb, red 60%, blue 40%)']) {
-            accepts(`${MONEY} { color: ${value}; }`);
-        }
-        for (const value of ['transparent', '#ffffff10', '#fff1', 'rgb(0 0 0 / 5%)', 'rgb(0 0 0 / 0.05)', 'rgba(0, 0, 0, 0.05)', 'hsl(200 50% 50% / 0)', 'oklch(0.5 0.1 200 / 0.3)', 'color-mix(in srgb, red, transparent)', 'color-mix(in srgb, red 10%, blue 10%)', 'rgb(from red r g b / 0.2)', 'rgb(0 0 0 / var(--a))']) {
-            refused(`${MONEY} { color: ${value}; }`);
-        }
-        // A var() stands: the theme table's tokens are opaque, and a custom property set under a state is refused.
-        accepts(`${HOLDER} { color: var(--s-accent); }`);
-    });
-
-    it('refuses a picture under a figure\'s glyphs on a subject that may be a money node, and leaves a box that holds one to the contrast pass', () => {
-        for (const value of ['url(./x.svg)', 'linear-gradient(red, blue), url(./x.svg)', 'image-set("./x.svg" 1x)', 'var(--pic, url(./x.svg))']) {
-            refused(`.t-neo .buy:hover { background-image: ${value}; }`);
-            refused(`.t-neo .buy:hover { background: ${value} no-repeat; }`);
-            accepts(`.t-neo .item:hover { background-image: ${value}; }`);
-        }
-        accepts('.t-neo .buy:hover { background: var(--s-accent); }');
-    });
-
-    it('reads an outline by its width and offset: a ring stands, a wide one and one drawn inside the box do not', () => {
-        assert.equal(STATE_OUTLINE_MAX_PX, 8);
-        for (const rule of [
-            '.t-neo .buy:focus-visible { outline: 8px solid red; }',
-            '.t-neo .buy:focus-visible { outline: medium auto; outline-offset: 8px; }',
-            '.t-neo .buy:focus-visible { outline-width: thick; }',
-            '.t-neo .buy:focus-visible { outline: none; }',
-            '.t-neo .buy:focus-visible { outline: 0; }',
-        ]) {
-            accepts(rule);
-        }
-        for (const rule of [
-            '.t-neo .buy:focus-visible { outline: 9px solid red; }',
-            '.t-neo .buy:focus-visible { outline: 0.5em solid red; }',
-            '.t-neo .buy:focus-visible { outline: 2px solid red; outline-offset: 9px; }',
-            '.t-neo .buy:focus-visible { outline-offset: -2px; }',
-            '.t-neo .buy:focus-visible { outline-width: var(--w); }',
-            '.t-neo .buy:focus-visible { outline: calc(100vw) solid red; }',
-            // A var() beside no width could carry it.
-            '.t-neo .buy:focus-visible { outline: var(--ring); }',
-            '.t-neo .buy:focus-visible { outline: solid var(--s-accent); }',
-        ]) {
-            refused(rule);
-        }
-    });
-
-    it('reads a z-index: auto and zero or more stand, and one under zero (or one it cannot read) does not', () => {
-        for (const value of ['auto', '0', '1', '+3', '99']) accepts(`${HOLDER} { z-index: ${value}; }`);
-        for (const value of ['-1', '-9999', 'calc(-1)', '1.5']) refused(`${HOLDER} { z-index: ${value}; }`);
-        refused(`${HOLDER} { z-index: var(--z); }`, /a var\(\) here carries a value past this check/);
-        // At rest it is the probe's coverage rules'.
-        accepts('.t-neo .item-x { z-index: -1; }');
-    });
-
-    it('refuses any custom property set in a state rule (P1.1), and leaves one at rest alone', () => {
-        // stall.css reads --s-price-clip as clip-path on .item-p, --s-icon-clip, --s-head-blur and --s-tabs-blur the same way.
-        for (const rule of [
-            '.t-neo .item:hover { --s-price-clip: inset(0 100% 0 0); }',
-            '.t-neo .item:hover { --s-icon-clip: inset(0 100% 0 0); }',
-            '.t-neo .stall-head:hover { --s-head-blur: 20px; }',
-            '.t-neo .tab:focus-visible { --s-tabs-blur: 20px; }',
-            '.t-neo [data-turn] .item-p { --s-price-anim: t-neo-fade 1s; }',
-            '.t-neo .item-x:hover { --anything: 0; }',
-            '@media (min-width: 680px) { .t-neo .item:hover { --x: 1; } }',
-            '.t-neo .item, .t-neo .item:hover { --x: 1; }',
-        ]) {
-            refused(rule, /a custom property set under a state re-states, where no family here reads it/);
-        }
-        accepts('.t-neo .item { --s-price-clip: none; }');
-        accepts('.t-neo .item:first-child { --x: 1; }');
-        // A state rule that reads a custom property it does not set stands.
-        accepts('.t-neo .item:hover { border-color: var(--s-accent); }');
-    });
-
-    it('takes the figure\'s own rule on a subject that may be a money node, and the holder\'s tilt on any other box (P1.3)', () => {
-        // The critic's plant: at rest the probe refuses any rotate, translate or scale on the figure.
-        refused('.t-neo .item-x:hover { rotate: 10deg; translate: -200vw 0 }');
-        for (const decl of [
-            'rotate: 1deg',
-            'translate: 0 -2px',
-            'translate: 1px 0',
-            'scale: 1.05',
-            'scale: 1.1 1.1',
-            'transform: translateY(-1px)',
-            'transform: translate3d(0, -1px, 0)',
-            'transform: rotate(3deg)',
-            'transform: scale(0.95)',
-            'transform: scale(1.05) rotate(2deg)',
-            'transform: matrix(1, 0, 0, 1, 4, 0)',
-            'transform: skewX(2deg)',
-        ]) {
-            for (const subject of MONEY_SUBJECTS) refused(`${subject} { ${decl}; }`);
-        }
-        // A holder keeps the tilt rule: a turn up to 10 degrees, any shift, any growth (a shift's cap is the owner's call).
-        for (const decl of ['rotate: 10deg', 'translate: -200vw 0', 'scale: 3', 'transform: translateY(-9999px) rotate(10deg) scale(4)']) {
-            for (const subject of HOLDER_SUBJECTS) accepts(`${subject} { ${decl}; }`);
-        }
-        // A subject that names no class may be a money node: the figure's rule.
-        refused('.t-neo span:hover { translate: 0 -2px }');
-        refused('.t-neo :hover { rotate: 5deg }');
-        // A pseudo-element is no money node.
-        accepts('.t-neo .item-x:hover::after { translate: 0 -2px; rotate: 5deg; }');
-        // The same state with the pulse the stream card runs: a uniform growth.
-        accepts('.t-neo .item-x:hover { transform: scale(1.06); }');
-        // The Rural row that is shipped.
-        accepts('.t-neo .items .item:hover, .t-neo .items .item.open { rotate: 0deg; }');
-    });
-
-    it('reads an angle or a number past what a double holds, or past ten turns, as a value it cannot read (P2.6)', () => {
-        for (const decl of ['rotate: 1e400deg', 'rotate: 1e300deg', 'rotate: 11turn', 'rotate: -3601deg', 'transform: rotate(1e300deg)', 'transform: rotate(1e400deg)', 'scale: 1e400', 'transform: scale(1e400)', 'transform: matrix(1e400, 0, 0, 1, 0, 0)', 'opacity: 1e400', 'translate: 0 0 1e400px']) {
-            for (const subject of [MONEY, HOLDER, '.t-neo .item-p:hover']) refused(`${subject} { ${decl}; }`);
-        }
-        // Ten turns is the cap; up to it a full turn is the identity it is.
-        for (const decl of ['rotate: 10turn', 'rotate: 3600deg', 'transform: rotate(360deg)', 'rotate: 720deg']) {
-            accepts(`.t-neo .item-p:hover { ${decl}; }`);
-            accepts(`${MONEY} { ${decl}; }`);
-        }
-        assert.equal(ANGLE_CAP_DEG, 3600);
-        // In a keyframe too.
-        for (const stop of ['rotate: 1e400deg', 'rotate: 1e300deg', 'scale: 1e400', 'transform: scale(1e400)']) {
-            const problems = lintLookSheet(plantedNeo(`@keyframes t-neo-pop { to { ${stop}; } }`), { lookClass: 't-neo' });
-            assert.ok(problems.some((p) => /animates (?:rotate|scale|transform)/.test(p)), `${stop}:\n  ${problems.join('\n  ') || '(no problem)'}`);
-        }
-    });
-
-    it('reads a shift in depth of zero as a flat shift (P2.7), and any other depth as 3D', () => {
-        // Red on the old rule: both were refused as a foreshortening.
-        accepts('@keyframes t-neo-rain { from { transform: translate3d(0, -100%, 0); } to { transform: translate3d(0, 100%, 0); } }');
-        accepts('.t-neo .mini:hover { transform: translate3d(0, -1px, 0); }');
-        accepts('.t-neo .mini:hover { transform: translateZ(0); }');
-        accepts('.t-neo .mini:hover { translate: 0 -1px 0; }');
-        accepts('@keyframes t-neo-rise { to { translate: 0 -4px 0; } }');
-        accepts('@keyframes t-neo-rise { to { transform: translateZ(0) translate3d(1px, 2px, 0); } }');
-        // Not flat: any depth but zero.
-        for (const decl of ['transform: translate3d(0, -1px, 5px)', 'transform: translateZ(5px)', 'translate: 0 0 5px', 'transform: translate3d(0, 0, 1px)', 'transform: translate3d(0, 0, calc(1px))']) {
-            refused(`.t-neo .mini:hover { ${decl}; }`);
-        }
-        for (const stop of ['transform: translate3d(0, -1px, 5px)', 'transform: translateZ(5px)', 'translate: 0 0 5px']) {
-            const problems = lintLookSheet(plantedNeo(`@keyframes t-neo-deep { to { ${stop}; } }`), { lookClass: 't-neo' });
-            assert.ok(problems.some((p) => /animates (?:transform|translate) \(a 3D function foreshortens it\)/.test(p)), `${stop}:\n  ${problems.join('\n  ') || '(no problem)'}`);
-        }
-        // Still 3D: a rotation about another axis, a scale in depth, a perspective.
-        refused('.t-neo .mini:hover { transform: rotateY(40deg); }');
-        refused('.t-neo .mini:hover { transform: scale3d(1, 1, 2); }');
-        refused('.t-neo .mini:hover { transform: perspective(200px); }');
-    });
-
-    it('reads the keyframes a state starts as if the state rule had set them (P2.5)', () => {
-        const FADE = '@keyframes t-neo-fade { from { opacity: 1; } to { opacity: 0; } }';
-        const KEYFRAME_BELT = /in @keyframes "t-neo-fade", which animation(?:-name)? starts under ".+" — an opacity of 0 fades a figure; the probe measures every screen at rest/;
-        // The critic's plant, and the shorthand, a list, a media block, a keyframe written after its rule, a focus state.
-        for (const rule of [
-            `${FADE}\n.t-neo .item:hover .item-x { animation-name: t-neo-fade; }`,
-            `${FADE}\n.t-neo .item:hover .item-x { animation: t-neo-fade 1s forwards; }`,
-            `${FADE}\n.t-neo .item:hover .item-x { animation: t-neo-nudge 1s, t-neo-fade 2s infinite; }`,
-            `${FADE}\n.t-neo .item:hover .item-x { animation-name: t-neo-nudge, t-neo-fade; }`,
-            `${FADE}\n@media (min-width: 680px) { .t-neo .buy:focus-visible { -webkit-animation: t-neo-fade 1s; animation: t-neo-fade 1s; } }`,
-            `.t-neo .tab:hover { animation: t-neo-fade 1s; }\n${FADE}`,
-            `@media (min-width: 680px) { ${FADE} }\n.t-neo .tab:active { animation-name: "t-neo-fade"; }`,
-        ]) {
-            refused(rule, KEYFRAME_BELT);
-        }
-        // What a state starts is read under the subject's own rule: a turn past a tilt on a holder, any turn on a figure.
-        const TURN = '@keyframes t-neo-tilt { to { transform: rotate(40deg); } }';
-        refused(`${TURN}\n.t-neo .item:hover { animation: t-neo-tilt 1s; }`, /in @keyframes "t-neo-tilt".*a turn of 40°/);
-        const SWAY = '@keyframes t-neo-sway { 0%, 100% { transform: rotate(-0.8deg); } 50% { transform: rotate(0.8deg); } }';
-        accepts(`${SWAY}\n.t-neo .item:hover { animation: t-neo-sway 5s infinite; }`);
-        refused(`${SWAY}\n.t-neo .item-x:hover { animation: t-neo-sway 5s infinite; }`, /in @keyframes "t-neo-sway".*a turn of/);
-        // A name a var() carries may be any keyframe.
-        refused(`${FADE}\n.t-neo .item:hover { animation: var(--a) 1s; }`, /an animation a state starts by a name this lint cannot read/);
-        refused('.t-neo .item:hover { animation-name: var(--a); }', /an animation a state starts by a name this lint cannot read/);
-        // Standing: a name the sheet does not declare, none, and a keyframe a rule at rest runs (the probe reads every keyframe of a running animation).
-        accepts('.t-neo .item:hover { animation: t-neo-elsewhere 1s; }');
-        accepts(`${FADE.replace('opacity: 0', 'opacity: 0.5')}\n.t-neo .item { animation: t-neo-fade 1s; }`.replace('opacity: 0.5', 'opacity: 1'));
-        accepts('.t-neo .item:hover { animation: none; animation-name: none; }');
-        accepts('@keyframes t-neo-glow { from { opacity: 1; } to { opacity: 1; } }\n.t-neo .item:hover { animation: t-neo-glow 1s; }');
-        // The keyframe a state starts is read once per message however many rules start it.
-        const twice = lintLookSheet(plantedNeo(`${FADE}\n.t-neo .item:hover { animation: t-neo-fade 1s; }\n.t-neo .tab:hover { animation: t-neo-fade 1s; }`), { lookClass: 't-neo' });
-        assert.equal(twice.filter((p) => KEYFRAME_BELT.test(p)).length, 2, twice.join('\n'));
-    });
-
-    it('the-state-belt-is-first-party-only: the kit lint carries none of these, because a pointer\'s hover is checked at intake (B3)', () => {
-        for (const rule of [
+            '.t-neo .item-x:hover { clip-path: inset(0 50% 0 0); }',
+            '.t-neo .pay-x:focus-within { opacity: .2; }',
+            '.t-neo [data-turn] .item-p { filter: blur(4px); }',
+            '.t-neo .buy:hover { transform: scale(0.8); mix-blend-mode: difference; visibility: hidden; }',
             '.t-neo .buy:hover { offset-path: path("M 0 0 L 1 0"); offset-rotate: 180deg; }',
             '.t-neo .item-x:hover { text-decoration: line-through 1em; }',
             '.t-neo .item-x:hover { text-indent: -9999px; word-spacing: -2em; font-size-adjust: 0.01; writing-mode: vertical-rl; }',
@@ -1287,14 +1550,28 @@ describe('a-look-state-rule-never-hides-money', () => {
             '.t-neo .item:hover { --s-price-clip: inset(0 100% 0 0); }',
             '.t-neo .item-x:hover { rotate: 10deg; translate: -200vw 0; }',
             '.t-neo .item-x:hover { color: rgba(0, 0, 0, 0.05); text-shadow: 490px 0 0 #000; }',
+            '.t-neo .item:hover { box-shadow: 0 0 0 4000px #000; }',
+            '.t-neo .item:hover { border-style: solid; }',
             '@keyframes t-neo-fade { to { opacity: 0; } }\n.t-neo .item:hover .item-x { animation-name: t-neo-fade; }',
             '@keyframes t-neo-g { 0% { --g: 0em; } 100% { --g: .3em; } }',
         ]) {
             const kit = lintSheet(plantedKit(rule));
-            assert.ok(!kit.some((p) => BELT.test(p) || /a custom property in a keyframe/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
+            assert.ok(!kit.some((p) => BELT.test(p) || /a custom property in a keyframe|palette role/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
         }
-        // The kit's own refusals stand (the first-party hook, the file mask) — and nothing is added to them.
+        // The kit's own refusals stand — and nothing is added to them.
         assert.deepEqual(lintSheet(plantedKit('.t-neo .buy:hover { outline: 3000px solid #000; }')), []);
+        // The choice rests on the README's own words: when it states the rule for the kit, this fails and the kit belt follows.
+        const readme = read('workshop/README.md').replace(/\s+/g, ' ');
+        assert.ok(readme.includes("such as a pointer's hover"), "the workshop README no longer says a pointer's hover is Stall's at intake");
+        assert.ok(!/(?::hover|:focus|:active|\[data-turn\])/.test(readme), 'the workshop README now names a state; decide whether the kit belt follows it');
+    });
+
+    it('the-three-starters-pass-the-belt: each shipped look re-scoped for the kit passes the first-party lint under .t-workshop', () => {
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            const starter = rescopeSheet(read(sheetOf(cls).path), cls.slice(2), carried);
+            assert.deepEqual(lintLookSheet(starter, { lookClass: 't-workshop' }), [], `${cls} starter, first-party`);
+            assert.deepEqual(lintSheet(starter), [], `${cls} starter, kit`);
+        }
     });
 
     it('the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin: the kit refuses it only when it stands without a twin of the same value (B1)', () => {
@@ -1302,15 +1579,87 @@ describe('a-look-state-rule-never-hides-money', () => {
         // The kit accepts it: a twin naming a property nothing reads satisfies the twin rule.
         assert.deepEqual(lintSheet(plantedKit(rule)), []);
         // The first-party lint refuses it, twin or no twin.
-        const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        const shipped = problemsOf(rule);
         assert.ok(shipped.some((p) => /only transparent stands/.test(p)), shipped.join('\n'));
+        // The kit's tap-highlight is the twin rule's, whatever the value written alone: the README states that rule.
+        for (const value of ['transparent', 'red']) {
+            const kit = lintSheet(plantedKit(`.t-neo .buy { -webkit-tap-highlight-color: ${value}; }`));
+            assert.ok(kit.some((p) => /a prefixed property paints only in the engines that read the prefix/.test(p)), `kit, ${value}:\n  ${kit.join('\n  ') || '(no problem)'}`);
+            assert.ok(!kit.some((p) => /only transparent stands/.test(p)), kit.join('\n'));
+        }
+    });
+});
+
+describe('the-lint-belts-critics-plants-are-pinned', () => {
+    /**
+     * Every rule the lint-belts critic planted on a copy of Neo (the three
+     * rounds' plant files `p1`–`p10` and `q1`–`q7`, `$C` for the look's
+     * class), each with its outcome under the allow-list pinned: `refused`
+     * and by which kind of sentence (`by`), or `accepted` and why that is
+     * not a figure hidden. A plant whose outcome moves turns this red, so a
+     * relaxation of a reader, or a hole it closed, is a decision.
+     */
+    const PLANTS = JSON.parse(read('scripts/look-lint-plants.json'));
+    const WAYS = [
+        ['state:custom-property', /a custom property set under a state/],
+        ['state:property', /is not a property a state rule may set/],
+        ['state:transform', /a state sets the no-transform values only|a value this lint cannot take apart may move, turn or scale the box/],
+        ['state:ink', /an ink under alpha 1|is not an ink this lint reads|not a palette role proved opaque|a mix of an ink|a var\(\) with a fallback, or inside another value/],
+        ['state:outline', /an outline declaration under a state|beyond the box|a negative outline width or offset|an outline (?:width|offset) this lint cannot size/],
+        ['state:shadow', /box-shadow this lint cannot size|an outer shadow with a spread/],
+        ['state:border', /border style longhand|a width in the border shorthand|in the border shorthand a var/],
+        ['state:background', /a state's background is a colour or a gradient|is not a part of a background|a background-image layer|currentcolor as a ground|in a state's background|a var\(\) here is read only as var/],
+        ['size:transition', /which may be a money node — the wall fits its figure by its size/],
+        ['size:keyframe', /animates .* — any box a rule runs it on, a money node among them/],
+        ['keyframe:custom-property', /a custom property in a keyframe/],
+        ['role-redeclared', /palette role the theme table writes on the stall/],
+        ['tap-highlight', /a tap highlight paints a colour/],
+        ['file-mask', /a file's mask or clip in a/],
+        ['selector', /an attribute selector this lint does not read|a partial match|is not one of the state attributes/],
+        ['important', /!important outranks/],
+        ['nested', /holds a nested rule/],
+        ['at-rule', /is not a condition the probe enters|is not allowed in a look sheet/],
+        ['escape', /a CSS escape outside a string/],
+        ['twin', /a prefixed property paints only in the engines/],
+        ['other', /./],
+    ];
+    const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
+
+    it('holds the critic\'s seventeen plant files, 242 plants, with an outcome each', () => {
+        assert.deepEqual(Object.keys(PLANTS), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7']);
+        assert.equal(Object.values(PLANTS).flat().length, 242);
+        for (const entry of Object.values(PLANTS).flat()) {
+            assert.ok(entry.expect === 'refused' ? Array.isArray(entry.by) && entry.by.length > 0 : typeof entry.why === 'string' && entry.why.length > 20, JSON.stringify(entry.rule));
+        }
     });
 
-    it('holds its tilt to the probe\'s', () => {
-        const probe = read('layout/probe.ts');
-        const m = /const DRESS_TILT_DEG = (\d+);/.exec(probe);
-        assert.ok(m !== null, 'layout/probe.ts no longer states DRESS_TILT_DEG');
-        assert.equal(STATE_TILT_DEG, Number(m[1]));
+    for (const [set, list] of Object.entries(PLANTS)) {
+        it(`${set}: each plant is refused by the sentence kind it is pinned to, or accepted for the reason it is pinned with`, () => {
+            list.forEach((entry, i) => {
+                const rule = entry.rule.replaceAll('$C', 't-neo');
+                const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+                const where = `${set}:${i} ${JSON.stringify(rule)}\n  ${problems.join('\n  ') || '(no problem)'}`;
+                if (entry.expect === 'accepted') assert.deepEqual(problems, [], where);
+                else assert.deepEqual(waysOf(problems), entry.by, where);
+            });
+        });
+    }
+
+    it('accepts, of the 242, only the 23 whose reason is written beside them, and each hides no figure', () => {
+        const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
+        assert.equal(accepted.length, 23);
+    });
+
+    it('leaves the kit lint as main had it for every plant that is not a first-party rule: the plants add no kit problem', () => {
+        for (const entry of Object.values(PLANTS).flat()) {
+            let kit;
+            try {
+                kit = lintSheet(plantedKit(entry.rule.replaceAll('$C', 't-neo')));
+            } catch {
+                continue; // a rule the re-scoping cannot take (nesting): there is no kit sheet to lint
+            }
+            assert.ok(!kit.some((p) => /is not a property a state rule may set|palette role the theme table|a custom property set under a state|may be a money node — the wall fits/.test(p)), `${JSON.stringify(entry.rule)}:\n  ${kit.join('\n  ')}`);
+        }
     });
 });
 
@@ -1618,6 +1967,33 @@ describe('no-shipped-keyframe-flashes-more-than-three-times-a-second', () => {
             // A shorthand naming another sheet's keyframe at its own pace.
             ['.t-neo .item-p { animation: om-flick 0.8s steps(1) infinite; }', /om-flick .* flashes \d+ times/],
             ['.t-neo .stall-name { animation: t-neo-cur var(--t-neo-nowhere) infinite; }', /t-neo-cur .* a time this reader cannot work out/],
+            // A keyframe named after an animation keyword (the lint-belts critic's P2-5): the keyword goes to the property that has no value yet, and the second one is the name.
+            [
+                '@keyframes ease { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+                    '.t-neo .stall-name { animation: ease 1s ease infinite; }',
+                /@keyframes ease .* flashes 5 times in one second/,
+            ],
+            [
+                '@keyframes forwards { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+                    '.t-neo .stall-name { animation: forwards 1s forwards infinite; }',
+                /@keyframes forwards .* flashes 5 times in one second/,
+            ],
+            [
+                '@keyframes infinite { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+                    '.t-neo .stall-name { animation: infinite 1s infinite; }',
+                /@keyframes infinite .* flashes 5 times in one second/,
+            ],
+            // A quoted name is the name, whatever word it is, and it is the same keyframes unquoted.
+            [
+                '@keyframes ease { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+                    '.t-neo .stall-name { animation: "ease" 1s infinite; }',
+                /@keyframes ease .* flashes 5 times in one second/,
+            ],
+            [
+                '@keyframes t-neo-q { 0%, 20%, 40%, 60%, 80% { opacity: 1; } 10%, 30%, 50%, 70%, 90% { opacity: 0; } }\n' +
+                    ".t-neo .stall-name { animation-name: 't-neo-q'; animation-duration: 1s; animation-iteration-count: infinite; }",
+                /@keyframes t-neo-q .* flashes 5 times in one second/,
+            ],
         ]) {
             const { problems } = flashReport(withNeo(plantedNeo(rule)), { vars });
             assert.ok(problems.some((p) => pattern.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
@@ -1945,18 +2321,19 @@ describe('a-file-mask-arrives-at-rest', () => {
     });
 
     it('accepts a file mask at rest, and leaves a mask with no file or a clip shape under a state to the state belt', () => {
-        // Accepted by this rule until D5 (a): a state rule that sets a clip or a
-        // mask of any kind is now `a-look-state-rule-never-hides-money`'s, in a
-        // first-party sheet; the kit lint, which these two accepts never asked
-        // (they name no file, so the file-mask refusal, which runs in the kit
-        // too, has nothing to say), is unchanged and still takes both.
+        // Accepted by this rule: a mask or a clip with no file names nothing for
+        // it to read. A state rule that sets a clip or a mask of any kind is
+        // `a-look-state-rule-sets-only-what-a-state-may`'s, in a first-party
+        // sheet (the property is not on its list); the kit lint, which the file-mask
+        // refusal runs in too and which these two (naming no file) give nothing
+        // to refuse, is unchanged and still takes both.
         for (const rule of [
             '.t-neo .item-n:hover { mask-image: linear-gradient(#000, transparent); }',
             '.t-neo .item-n:hover { clip-path: inset(0 2px); }',
         ]) {
             const shipped = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
             assert.ok(!shipped.some((p) => /a file's mask or clip/.test(p)), `${rule}:\n  ${shipped.join('\n  ')}`);
-            assert.ok(shipped.some((p) => /under "\.t-neo \.item-n:hover" — a clip or a mask cuts a figure away/.test(p)), `${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`);
+            assert.ok(shipped.some((p) => /under "\.t-neo \.item-n:hover" — (?:mask-image|clip-path) is not a property a state rule may set/.test(p)), `${rule}:\n  ${shipped.join('\n  ') || '(no problem)'}`);
             assert.deepEqual(lintSheet(plantedKit(rule)), [], `kit, ${rule}`);
         }
         accepts('.t-neo .item-n { mask-image: url(./x.svg); }');

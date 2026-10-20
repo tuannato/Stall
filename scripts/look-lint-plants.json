@@ -1,0 +1,1704 @@
+{
+  "p1": [
+    {
+      "rule": "",
+      "expect": "accepted",
+      "why": "the harness plants nothing: the control"
+    },
+    {
+      "rule": ".$C .buy:hover { offset-path: path('M 0 0 L 1 0'); offset-rotate: 180deg; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .buy:hover { offset: path('M 0 0 L 1 0') 0 180deg; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .buy:hover { text-indent: -9999px; overflow: hidden; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { writing-mode: vertical-rl; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { zoom: 0.01; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { font-size: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { display: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { content-visibility: hidden; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: transparent; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { outline: 4000px solid #000; outline-offset: -2000px; }",
+      "expect": "refused",
+      "by": [
+        "state:outline"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { box-shadow: 0 0 0 4000px #000; }",
+      "expect": "refused",
+      "by": [
+        "state:shadow"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { transform: scale(40); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .buy:hover { translate: -200vw 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .buy:hover { transform: translateX(-200vw); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { z-index: 9; position: relative; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .buy:hover { -webkit-line-clamp: 1; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { letter-spacing: -1em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { position: relative; left: -9999px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { all: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { opacity: var(--o, 1); }\n.$C .item:hover { --o: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:custom-property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s forwards; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s forwards; }\n@keyframes $C-fade { to { clip-path: inset(0 100% 0 0); } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "p2": [
+    {
+      "rule": ".$C .item:hover .item-x { text-decoration: line-through 1em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { text-decoration-line: line-through; text-decoration-thickness: 1em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { text-decoration: underline 1em; text-underline-offset: -0.9em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1e3ms letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: +.4s letter-spacing; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: +.4s font-size; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: 1E3MS font-size; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: letter-spacing 1s, +0s font-size; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: font-weight 1s; }",
+      "expect": "accepted",
+      "why": "font-weight moves a width and is not on D-2026-10-20-07's list (stated: it was left off that list)"
+    },
+    {
+      "rule": "@keyframes $C-w { to { font-weight: 900; } }",
+      "expect": "accepted",
+      "why": "font-weight in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-v { to { font-variation-settings: 'wght' 900; } }",
+      "expect": "accepted",
+      "why": "font-variation-settings in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-f { to { font-feature-settings: 'tnum'; } }",
+      "expect": "accepted",
+      "why": "font-feature-settings in a keyframe: not on D-2026-10-20-07's list (stated)"
+    },
+    {
+      "rule": "@keyframes $C-g { 0% { --g: 0em; } 100% { --g: 0.3em; } }\n.$C .item-x { letter-spacing: var(--g); animation: $C-g 2s infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:custom-property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { letter-spacing: var(--g); transition: --g 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-t { to { translate: 0 0 80px; } }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-o { to { offset-distance: 100%; offset-rotate: 180deg; } }",
+      "expect": "accepted",
+      "why": "offset-distance and offset-rotate move nothing without an offset-path, which the probe refuses at rest and a state may not set"
+    },
+    {
+      "rule": ".$C .item-p { transition: letter-spacing 1s; }",
+      "expect": "accepted",
+      "why": "a transition of letter-spacing on a box that holds a money node and is not one: D-2026-10-20-07's stated gap; no state may set letter-spacing"
+    },
+    {
+      "rule": ".$C .pay-btn { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-a > .item-x { transition: zoom 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-a > * { transition: zoom 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-a > :not(.item-u) { transition: zoom 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-a > :nth-child(1) { transition: zoom 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: transform 1s; }\n.$C .item-x:hover { transform: rotate(0.5deg) scale(1.0005); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: transform 1s; }\n.$C .item:hover > .item-a > span { transform: scale(2); }",
+      "expect": "refused",
+      "by": [
+        "size:transition",
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: transform 1s; }\n.$C .item:hover span { scale: 2; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: transform 1s; scale: 2; }",
+      "expect": "accepted",
+      "why": "a rest scale on the figure is the probe's to refuse at rest; nothing transitions it without a state, and no state may set scale"
+    },
+    {
+      "rule": ".$C .item-x { transition: scale 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: -webkit-transform 1s; }\n.$C .item-x { transform: scale(2); }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: rotate 1s; }\n.$C .item-x:hover { rotate: x 80deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    }
+  ],
+  "p3": [
+    {
+      "rule": ".$C [data-turn] .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C [|data-turn] .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "selector"
+      ]
+    },
+    {
+      "rule": ".$C [data-turn|=cw] .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "selector",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C [DATA-TURN='cw'] .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C:is([data-turn]) .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C:where(:HOVER) .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C :has(:focus) .item-x { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:h\\6fver { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "escape"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:focus-within { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:target { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:checked { opacity: 0.2; }",
+      "expect": "accepted",
+      "why": ":checked is a state outside D-2026-10-20-08's list; it matches form controls, and no money node is one"
+    },
+    {
+      "rule": ".$C .item-x:open { opacity: 0.2; }",
+      "expect": "accepted",
+      "why": ":open is a state outside the list; it matches details, dialog and select, and the probe opens every fold before it measures"
+    },
+    {
+      "rule": ".$C .item-x:popover-open { opacity: 0.2; }",
+      "expect": "accepted",
+      "why": ":popover-open is a state outside the list; the app has no popover"
+    },
+    {
+      "rule": ".$C .item-x:focus-visible { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:visited { opacity: 0.2; }",
+      "expect": "accepted",
+      "why": ":visited is a state outside the list; a browser lets it change a colour and nothing else"
+    },
+    {
+      "rule": ".$C .item-x:any-link { opacity: 0.2; }",
+      "expect": "accepted",
+      "why": ":any-link is every link at all times: a rule at rest, which the probe measures"
+    },
+    {
+      "rule": ".$C .item-x:user-invalid { opacity: 0.2; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x[aria-pressed='true'] { opacity: 0.2; }",
+      "expect": "accepted",
+      "why": "[aria-pressed] is an attribute state the fixtures paint (STATE_ATTRIBUTES), not a state the probe never paints"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { opacity: 0.2 !important; }",
+      "expect": "refused",
+      "by": [
+        "important",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { opacity: .99; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { opacity: 1e0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { opacity: 1.0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { opacity: unset; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { visibility: unset; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: matrix(1e400, 0, 1e400, 1e400, 0, 0); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: rotate(10deg) rotate(0.0000001deg); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: rotate(9deg); rotate: 9deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { -webkit-transform: rotate(180deg); transform: rotate(0deg); }",
+      "expect": "refused",
+      "by": [
+        "state:transform",
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { -webkit-transform: rotate(180deg); }",
+      "expect": "refused",
+      "by": [
+        "state:transform",
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: translate(1px) translate(1px, 1px, 1px); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: rotate( 180deg ); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: scale( 0.5 ); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: scale(1,1) scale(-1); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: scale(calc(0.5)); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { scale: calc(0.5); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { scale: 50% 50%; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { translate: 10px 10px 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 0 0 1 5deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { mask-position: 0 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { mask: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { -webkit-mask: none; mask: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { clip-path: none; clip: auto; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { -webkit-box-reflect: below; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { filter: NONE; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "p4": [
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 1e400deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: rotate(1e400deg); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 1e300deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { rotate: 1e30deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: skewX(1e400deg); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { scale: 1e400; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: matrix(1, 1e400, 0, 1, 0, 0); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: matrix(1e400, 1e400, 1e400, 1e400, 0, 0); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { opacity: 1e400; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-k { to { transform: matrix(1e400, 0, 0, 1e400, 0, 0); } }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-k { to { scale: 1e400; } }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    }
+  ],
+  "p5": [
+    {
+      "rule": ".$C .buy { -webkit-tap-highlight-color: red; tap-highlight-color: red; }",
+      "expect": "refused",
+      "by": [
+        "tap-highlight"
+      ]
+    },
+    {
+      "rule": ".$C .buy { -webkit-tap-highlight-color: transparent; tap-highlight-color: transparent; }",
+      "expect": "accepted",
+      "why": "transparent is the one tap highlight that stands"
+    },
+    {
+      "rule": ".$C .buy { -webkit-tap-highlight-color: transparent; }",
+      "expect": "accepted",
+      "why": "transparent is the one tap highlight that stands"
+    },
+    {
+      "rule": ".$C .buy { -WEBKIT-TAP-HIGHLIGHT-COLOR: red; }",
+      "expect": "refused",
+      "by": [
+        "tap-highlight"
+      ]
+    },
+    {
+      "rule": ".$C .buy { -webkit-tap-highlight-color: transparent !important; }",
+      "expect": "refused",
+      "by": [
+        "important"
+      ]
+    },
+    {
+      "rule": ".$C .buy { -webkit-tap-highlight-color: rgba(0,0,0,0); }",
+      "expect": "refused",
+      "by": [
+        "tap-highlight"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-tap { to { -webkit-tap-highlight-color: red; tap-highlight-color: red; } }",
+      "expect": "refused",
+      "by": [
+        "tap-highlight"
+      ]
+    },
+    {
+      "rule": ".$C .item-n:hover { mask-image: url(./x.svg); }",
+      "expect": "refused",
+      "by": [
+        "file-mask",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-n:hover { -webkit-mask-image: url(./x.svg); mask-image: url(./x.svg); }",
+      "expect": "refused",
+      "by": [
+        "file-mask",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-n:hover { clip-path: url(#c); }",
+      "expect": "refused",
+      "by": [
+        "file-mask",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-n:hover { mask-image: linear-gradient(#000, transparent); }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-n:hover { clip-path: inset(0 2px); }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-n[aria-pressed='true'] { mask-image: url(./x.svg); }",
+      "expect": "refused",
+      "by": [
+        "file-mask"
+      ]
+    }
+  ],
+  "p6": [
+    {
+      "rule": "@keyframes $C-pulse { from { transform: scale(1); } to { transform: scale(1.06); } }\n.$C .stall-head::after { animation: $C-pulse 3s ease-in-out infinite; }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-breathe { 50% { scale: 1.04; } }\n.$C .stall-sign::before { animation: $C-breathe 4s infinite; }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-gap { to { letter-spacing: 0.2em; } }\n.$C .stall-tagline::after { animation: $C-gap 4s infinite; }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { position: relative; z-index: -1; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: font-size 1s, letter-spacing 1s; }\n@media (prefers-reduced-motion: reduce) { .$C .item-x { transition: none; } }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    }
+  ],
+  "p7": [
+    {
+      "rule": ".$C .item:hover .item-x { word-spacing: -2em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { font-size-adjust: 0.01; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { rotate: 10deg; translate: -200vw 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { transform: translateX(-200vw); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .buy:focus-visible { outline: 3000px solid #000; }",
+      "expect": "refused",
+      "by": [
+        "state:outline"
+      ]
+    }
+  ],
+  "p8": [
+    {
+      "rule": ".$C .item:hover { --s-price-clip: inset(0 100% 0 0); }",
+      "expect": "refused",
+      "by": [
+        "state:custom-property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover { --s-price-anim: $C-gone 1ms forwards; }\n@keyframes $C-gone { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:custom-property"
+      ]
+    },
+    {
+      "rule": ".$C .stall-head:hover { --s-head-blur: blur(30px); }",
+      "expect": "refused",
+      "by": [
+        "state:custom-property"
+      ]
+    }
+  ],
+  "p9": [
+    {
+      "rule": "@keyframes $C-fall { from { transform: translate3d(0, -100%, 0); } to { transform: translate3d(0, 100%, 0); } }",
+      "expect": "accepted",
+      "why": "translate3d(x, y, 0) is a flat shift (the rain's own keyframe shape), and a keyframe that only shifts is not a size"
+    },
+    {
+      "rule": "@keyframes $C-gpu { to { transform: translateZ(0) rotate(2deg); } }",
+      "expect": "accepted",
+      "why": "translateZ(0) with a 2deg turn is flat and a tilt, not a size"
+    },
+    {
+      "rule": ".$C .mini:hover { transform: translate3d(0, -1px, 0); }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-skew { to { transform: matrix(0.6, 0.8, 0.8, 0.6, 0, 0); } }\n.$C .item-x { animation: $C-skew 2s infinite; }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-sk { to { transform: skewX(60deg); } }\n.$C .item-x { animation: $C-sk 2s infinite; }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    }
+  ],
+  "p10": [
+    {
+      "rule": ".$C .item { &:hover .item-x { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "nested"
+      ]
+    },
+    {
+      "rule": ".$C .item { :hover > & { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "nested"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { @media (max-width: 9999px) { .$C .item-x:hover { opacity: 0; } } }",
+      "expect": "refused",
+      "by": [
+        "at-rule",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:hover { opacity: 0; }\n@media (prefers-reduced-motion: reduce) { .$C .item-x:hover { opacity: 0.1 } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation-name: $C-fade; }\n.$C .item-x { animation-duration: 1s; animation-fill-mode: forwards; animation-play-state: running; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "q1": [
+    {
+      "rule": ".$C .item:hover .item-x { font-size: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { font: 0/0 a; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { font-size: 1px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { display: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { text-indent: 9999px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { letter-spacing: 40em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { word-spacing: 40em; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { padding-left: 9999px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { border-left: 9999px solid transparent; }",
+      "expect": "refused",
+      "by": [
+        "state:border"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { height: 0; overflow: hidden; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { all: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { all: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { clip-path: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { all: unset; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: sel-fade 1s reverse forwards; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: neo-flick 1s infinite; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: 1s infinite $C-fade; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: \"$C-fade\" 1s; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: 1s $C-fade, 2s ease none; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-a 1s, $C-b 1s, $C-c 1s, $C-fade 1s; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: infinite 1s alternate $C-fade; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: linear $C-fade 1s; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s steps(2, end); }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s cubic-bezier(0.1, 0.2, 0.3, 0.4) infinite; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s linear(0, 1) infinite; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; animation-timeline: auto; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation-name: $C-fade; }\n@-webkit-keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "at-rule",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: ease-in-out $C-fade; }\n@keyframes $C-fade { from { opacity: 1 } 50%, to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@media (min-width: 680px) { @keyframes $C-fade { to { opacity: 0; } } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@keyframes $C-fade { to { opacity: 1; } }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@keyframes $C-fade { to { --x: 1; opacity: 0.1 } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:custom-property",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { transition: --au-tide 1s; letter-spacing: calc(var(--au-tide) * 1em); }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:target { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": "#app:target .$C .item-x { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:user-invalid { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:autofill { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:modal { opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x:fullscreen { opacity: 0; }",
+      "expect": "accepted",
+      "why": ":fullscreen is a state outside the list; the app never calls requestFullscreen, so nothing matches it"
+    },
+    {
+      "rule": ".$C .item:hover::after { content: ''; position: absolute; inset: 0; background: #000; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover::after { content: ''; position: absolute; inset: 0; backdrop-filter: blur(30px); }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .pay-eq:hover { translate: -200vw 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x:focus-within { translate: -200vw 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C[data-turn] .item-p { translate: 0 -9999px; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C[data-turn] .item-p { scale: 40; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: Canvas; }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: color-mix(in srgb, currentcolor 2%, var(--s-bg)); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: inherit; }",
+      "expect": "accepted",
+      "why": "inherit is one of the three forms of ink"
+    },
+    {
+      "rule": "@starting-style { .$C .item-x { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "at-rule"
+      ]
+    },
+    {
+      "rule": ".$C .buy:focus-visible { outline: 8px solid #000; outline-offset: 8px; }",
+      "expect": "refused",
+      "by": [
+        "state:outline"
+      ]
+    }
+  ],
+  "q2": [
+    {
+      "rule": ".$C .item:hover .item-x { animation: ease 1s ease; }\n@keyframes ease { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation-name: ease; }\n@keyframes ease { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: forwards 1s forwards; }\n@keyframes forwards { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@KEYFRAMES $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation-name: none, $C-fade; }\n@keyframes $C-fade { to { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@keyframes $C-fade { 0%{opacity:1} TO { opacity: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@keyframes $C-fade { to { OPACITY: 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { OPACITY: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@keyframes $C-fade { to { opacity: 0 !important; } }",
+      "expect": "refused",
+      "by": [
+        "important",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-rot 1s; }\n@keyframes $C-rot { to { rotate: 90deg; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { animation: $C-rot 1s; }\n@keyframes $C-rot { to { rotate: 90deg; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { animation: $C-sh 1s forwards; }\n@keyframes $C-sh { to { translate: -9999px 0; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-a { rotate: 8deg; }\n.$C .item-a:hover { animation: $C-r8 1s infinite; animation-composition: add; }\n@keyframes $C-r8 { to { rotate: 8deg; } }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transition: opacity 1s; }",
+      "expect": "accepted",
+      "why": "transitions stand under a state, and a state may not set opacity, so nothing runs"
+    },
+    {
+      "rule": ".$C .item:hover .item-x { transform: scale(1.06); transition: transform 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition",
+        "state:transform"
+      ]
+    }
+  ],
+  "q3": [
+    {
+      "rule": ".$C .item:hover .item-a { all: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { clip-path: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { animation: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: $C-tag 1s infinite; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { animation-name: $C-swing; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { border-image: url(./x.svg) 30 fill; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "q4": [
+    {
+      "rule": ".$C .item:hover .item-x { text-emphasis: filled red; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { -webkit-text-stroke: 3px red; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { -webkit-text-emphasis: filled; text-emphasis: filled; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { all: unset; visibility: unset; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation-name: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation-name: initial; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { animation: unset; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ],
+  "q5": [
+    {
+      "rule": ".$C .item-a span span { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .item-a span span { color: red; }",
+      "expect": "accepted",
+      "why": "a rule at rest: the probe reads a figure's colour at rest"
+    },
+    {
+      "rule": ".$C .item:hover .item-a span span { rotate: 5deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-sc { to { transform: scale(2); } }\n.$C .sm-floor { animation: $C-sc 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": ".$C .sm-floor { transform: scale(2); }\n.$C .item-x { transition: transform 1s; }",
+      "expect": "accepted",
+      "why": "a scale on a perspective floor (Neo's .sm-floor) is no money node's, so a transition of transform on a money node stays a turn and a shift"
+    },
+    {
+      "rule": ".$C .tk-x:hover { translate: -200vw 0; rotate: 9deg; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .tk-x { transition: letter-spacing 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    },
+    {
+      "rule": ".$C .listing-x { transition: zoom 1s; }",
+      "expect": "refused",
+      "by": [
+        "size:transition"
+      ]
+    }
+  ],
+  "q6": [
+    {
+      "rule": ".$C .item:hover .item-x { color: var(--s-tab-active-bg); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: var(--s-addr-bg); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .buy:focus-visible { color: var(--s-head-bg); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-x { color: var(--s-tab-active-bg, #000); }",
+      "expect": "refused",
+      "by": [
+        "state:ink"
+      ]
+    },
+    {
+      "rule": ".$C .tk-x:hover { translate: -200vw 0; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    },
+    {
+      "rule": ".$C .item:hover .item-a { all: inherit; padding: 0; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-a { rotate: 8deg; }\n.$C .item:hover .item-x { all: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-a { rotate: 8deg; }\n.$C .item:hover .item-x { rotate: inherit; }",
+      "expect": "refused",
+      "by": [
+        "state:transform"
+      ]
+    }
+  ],
+  "q7": [
+    {
+      "rule": ".$C .item-x { outline-width: 200px; outline-offset: -100px; outline-color: #000; }\n.$C .item:hover .item-x { outline-style: solid; }",
+      "expect": "refused",
+      "by": [
+        "state:outline"
+      ]
+    },
+    {
+      "rule": ".$C .buy { outline: 300px none #000; outline-offset: -150px; }\n.$C .buy:focus-visible { outline-style: solid; }",
+      "expect": "refused",
+      "by": [
+        "state:outline"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { text-decoration-thickness: 1em; text-decoration-color: #000; }\n.$C .item:hover .item-x { text-decoration-line: underline; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { text-underline-offset: -0.5em; text-decoration-thickness: 0.6em; }\n.$C .item:hover .item-x { text-decoration: underline; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { offset-rotate: 180deg; }\n.$C .item:hover .item-x { offset-path: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { -webkit-line-clamp: 1; text-overflow: ellipsis; overflow: hidden; }\n.$C .item:hover .item-x { display: -webkit-box; -webkit-box-orient: vertical; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    }
+  ]
+}
