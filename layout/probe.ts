@@ -594,8 +594,8 @@ function coveredBy(node: Element): string | undefined {
  * declaration that outranks the forcing can, an inline `!important`), an
  * inert subtree or a modal dialog, which no sheet makes hit-testable, a point
  * inside the viewport with nothing under it, a node turned past 45° with no
- * box of its own, and a node with no box that a look's rule hides
- * (`lookHides`). One the app hides itself — the address twin a width does not
+ * box of its own, and a node with no box that a look takes away, or that
+ * nothing of the app's own explains (`hiddenBy`). One the app hides itself — the address twin a width does not
  * paint, a desk-only fold on a phone, the wall's list while a payment stands
  * — is skipped and counted. A point below the first screen is counted and
  * not asked (D3); one past a side edge or above the top is asked whether a
@@ -711,31 +711,84 @@ function named(node: Element): string {
 }
 
 /**
- * The look's rules that take a box away — `display: none` or
- * `content-visibility: hidden` in a rule naming a look's or a decoration's
- * class (`LOOK_RULE`, the look-pseudo reading's own) — read once a page and
- * again when a sheet joins it; each with the media conditions above it. A
- * rule under any other condition (a container query) counts as in force,
- * which errs toward failing.
+ * Every rule that declares `display` or `content-visibility`, the app's and
+ * the looks' (a look's names a look's or a decoration's class, `LOOK_RULE`,
+ * the look-pseudo reading's own), with the value it declares as written —
+ * a `var()` kept a `var()` — and the media conditions above it, indexed by
+ * the first class (or id) of the selector's last compound, `*` where it has
+ * none or carries a functional pseudo-class. Read once a page and again when
+ * a sheet joins it. A rule under any other condition (a container query)
+ * counts as in force.
  */
-let lookHideRules: { selector: string; media: string[] }[] | undefined;
-let lookHideSheets = -1;
-function lookHideRulesNow(): { selector: string; media: string[] }[] {
-    if (lookHideRules !== undefined && lookHideSheets === document.styleSheets.length) return lookHideRules;
-    lookHideRules = [];
-    lookHideSheets = document.styleSheets.length;
+type HideRule = { selector: string; media: string[]; look: boolean; prop: 'display' | 'content-visibility'; value: string };
+let hideRules: Map<string, HideRule[]> | undefined;
+let hideRulesSheets = -1;
+function hideRulesNow(): Map<string, HideRule[]> {
+    if (hideRules !== undefined && hideRulesSheets === document.styleSheets.length) return hideRules;
+    hideRules = new Map();
+    hideRulesSheets = document.styleSheets.length;
     for (const rule of styleRules()) {
-        const hides = rule.style.display === 'none' || rule.style.getPropertyValue('content-visibility') === 'hidden';
-        if (!hides) continue;
-        const media: string[] = [];
-        for (let up = rule.parentRule; up !== null; up = up.parentRule) {
-            if (up instanceof CSSMediaRule) media.push(up.media.mediaText);
-        }
-        for (const one of selectorList(rule.selectorText)) {
-            if (LOOK_RULE.test(one) && !PSEUDO_AT.test(one)) lookHideRules.push({ selector: one, media });
+        for (const prop of ['display', 'content-visibility'] as const) {
+            const value = rule.style.getPropertyValue(prop).trim();
+            if (value === '') continue;
+            const media: string[] = [];
+            for (let up = rule.parentRule; up !== null; up = up.parentRule) {
+                if (up instanceof CSSMediaRule) media.push(up.media.mediaText);
+            }
+            for (const one of selectorList(rule.selectorText)) {
+                if (PSEUDO_AT.test(one)) continue;
+                const last = one.split(/\s*[\s>+~]\s*(?![^(]*\))(?![^[]*\])/).pop() ?? '';
+                const key = last.includes('(') ? '*' : (/\.((?:\\.|[\w-])+)/.exec(last)?.[0] ?? /#((?:\\.|[\w-])+)/.exec(last)?.[0] ?? '*');
+                const list = hideRules.get(key) ?? [];
+                list.push({ selector: one, media, look: LOOK_RULE.test(one), prop, value });
+                hideRules.set(key, list);
+            }
         }
     }
-    return lookHideRules;
+    return hideRules;
+}
+
+/**
+ * **Who takes a box away** (before 8g2; the window's item 5, the critic's
+ * PV): of the node and the boxes above it, those computing `display: none`
+ * (or, above it, `content-visibility: hidden`), read against the rules that
+ * declare the property on them (`hideRulesNow`), in force. `look` where a
+ * look's rule could be the one that hides any of them — its value the
+ * hiding one, a `var()` or a keyword that defers to another value — or
+ * where nothing of the app's own explains any of them: the `hidden`
+ * attribute, an inline style (the app's alone; a look writes none), or an
+ * app rule declaring the hiding value as written. `app` otherwise.
+ * Undefined when nothing above the node takes its box away at all. Read by
+ * value until then, a look's `content-visibility: var(--h)` read as no
+ * look's rule, and the node was skipped as one the app hides.
+ */
+function hiddenBy(node: Element): 'app' | 'look' | undefined {
+    const hidden: [Element, 'display' | 'content-visibility'][] = [];
+    for (let at: Element | null = node; at !== null; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        if (cs.display === 'none') hidden.push([at, 'display']);
+        else if (at !== node && cs.getPropertyValue('content-visibility') === 'hidden') hidden.push([at, 'content-visibility']);
+    }
+    if (hidden.length === 0) return undefined;
+    const rules = hideRulesNow();
+    let app = false;
+    for (const [el, prop] of hidden) {
+        const hiding = prop === 'display' ? 'none' : 'hidden';
+        if (prop === 'display' && el.hasAttribute('hidden')) app = true;
+        if (el instanceof HTMLElement && el.style.getPropertyValue(prop) === hiding) app = true;
+        const keys = ['*', ...(el.id === '' ? [] : [`#${el.id}`]), ...[...el.classList].map((c) => `.${c}`)];
+        for (const key of keys) {
+            for (const r of rules.get(key) ?? []) {
+                if (r.prop !== prop || !r.media.every((m) => matchMedia(m).matches) || !el.matches(r.selector)) continue;
+                if (r.look) {
+                    if (r.value === hiding || r.value.includes('var(') || /^(inherit|unset|revert|revert-layer)$/.test(r.value)) return 'look';
+                } else if (r.value === hiding) {
+                    app = true;
+                }
+            }
+        }
+    }
+    return app ? 'app' : 'look';
 }
 
 /**
@@ -745,7 +798,7 @@ function lookHideRulesNow(): { selector: string; media: string[] }[] {
  * one, with the box running it and the value, as a sentence — or
  * undefined. A keyframe `display: none` is a look's (no served sheet's
  * keyframes name either property, and the app runs no script animation),
- * and the rule reading style rules alone (`lookHides`), like a skip of
+ * and the rule reading style rules alone (now `hiddenBy`), like a skip of
  * every node with no box, took it for the app hiding the node: the
  * critic's T2c hid every quote row's figure behind a keyframe and left Pay
  * standing, and the whole runner passed. Only an animation that names one
@@ -772,23 +825,6 @@ function animatedAway(node: Element): string | undefined {
         if (at.matches('.stall')) break;
     }
     return undefined;
-}
-
-/**
- * Whether a look's rule takes `node`'s box away: on the node or a box above
- * it that computes `display: none` (or, above it, `content-visibility:
- * hidden`), a look's hiding rule in force matches. Undefined when nothing
- * above it takes its box away at all (a node with nothing in it).
- */
-function lookHides(node: Element): boolean | undefined {
-    const hidden: Element[] = [];
-    for (let at: Element | null = node; at !== null; at = at.parentElement) {
-        const cs = getComputedStyle(at);
-        if (cs.display === 'none' || (at !== node && cs.getPropertyValue('content-visibility') === 'hidden')) hidden.push(at);
-    }
-    if (hidden.length === 0) return undefined;
-    const rules = lookHideRulesNow().filter((r) => r.media.every((m) => matchMedia(m).matches));
-    return hidden.some((el) => rules.some((r) => el.matches(r.selector)));
 }
 
 /** A node's corner radii, as computed, against a box `w` by `h`. */
@@ -961,12 +997,12 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
     if (rects.length === 0) {
         const animated = animatedAway(node);
         if (animated !== undefined) return `has no box: ${animated} — a look's animation takes it away`;
-        const look = lookHides(node);
-        if (look === false) {
+        const by = hiddenBy(node);
+        if (by === 'app') {
             scan.appHidden += 1;
             return undefined;
         }
-        return look === true ? 'has no box: a rule of the look takes it away' : 'has no box at all, and nothing above it is hidden';
+        return by === 'look' ? 'has no box: a rule of the look takes it away, or nothing of the app’s own explains why it has none (hiddenBy)' : 'has no box at all, and nothing above it is hidden';
     }
     const framed = coverFrames(node, rects);
     if (framed === undefined) {
@@ -4000,17 +4036,19 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *
  * Not read, stated (round 6: the list says what the code reads, the
  * critic's corrections on round 5):
- * - a figure a look hides whole by a rule: a money node not rendered
- *   (`display: none` on it or above it, `content-visibility: hidden`) is
- *   skipped, as the ink rule skips it, since the app hides figures too (a
- *   sheet with no rate, the address's two spans by width, both by `hidden`
- *   or a width rule) — unless an animation on it or a box above it, up to
- *   the stall, names `display` or `content-visibility` in its keyframes,
- *   which fails (`animatedAway`, before 8g2 item 4: the critic's T2c); of
- *   the money set only the price role and "You pay" are held to having a
- *   box at all (`coveredBy`), and 1a (report-only) fails one a look's rule
- *   hides (`lookHides`); an element under the subject that is not
- *   rendered;
+ * - a figure the app hides: a money node not rendered (`display: none` on
+ *   it or above it, `content-visibility: hidden` above it) is skipped where
+ *   the app hides it (`hiddenBy`: the `hidden` attribute, an inline style,
+ *   or an app rule declaring the hiding value as written — a sheet with no
+ *   rate, the address's two spans by width), as the ink rule skips it; it
+ *   fails where a look takes it away — an animation on it or a box above
+ *   it, up to the stall, naming `display` or `content-visibility` in its
+ *   keyframes (`animatedAway`, before 8g2 item 4: the critic's T2c), or a
+ *   look's rule that could set the hiding value, a `var()` included — or
+ *   where nothing of the app's own explains it (`hiddenBy`, the window's
+ *   item 5: the critic's PV, a look's `content-visibility: var(--h)` on the
+ *   quote row's price column, read as the app's until then); an element
+ *   under the subject that is not rendered;
  * - where the figure's box stands (`DRESS_FREE`'s placement: a figure moved
  *   is the coverage, spill and clip rules'), and a single line set so tight
  *   that the line above or below stands on its glyphs;
@@ -5981,12 +6019,18 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
             // its box away (`animatedAway`, before 8g2 item 4). The ink and
             // self-clip rules skip it either way: this rule owns it.
             const animated = animatedAway(node);
-            if (animated !== undefined) {
+            const why =
+                animated !== undefined
+                    ? `has no box: ${animated}`
+                    : hiddenBy(node) === 'look'
+                      ? 'has no box: a rule of the look takes it away, or nothing of the app’s own explains why it has none (hiddenBy)'
+                      : undefined;
+            if (why !== undefined) {
                 out.push({
                     screen,
                     theme: label,
                     check: DRESS_CHECK,
-                    detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}": has no box: ${animated} — a look may not take a money figure away`,
+                    detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}": ${why} — a look may not take a money figure away`,
                 });
             }
             continue;
