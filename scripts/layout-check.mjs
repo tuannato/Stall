@@ -2277,8 +2277,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * 1a, report-only (before 8g2; `coverScan` in the probe):
                  * the hit test with `pointer-events` forced on, once on the
                  * job's paint at its full height — every frame above put
-                 * back what it changed — where nothing stands below the
-                 * first screen. Folded per look; it moves no verdict yet.
+                 * back what it changed. Below the first screen stands only
+                 * what a wall, shot at its own screen's size, holds inside
+                 * its own scrollers; those points are counted, not asked.
+                 * Folded per look; it moves no verdict yet.
                  */
                 const scan = await timed('cover (1a)', () => evalJson(cdp, sessionId, 'window.__coverFaults()'));
                 cover = {

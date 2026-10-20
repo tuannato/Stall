@@ -543,8 +543,15 @@ function coveredBy(node: Element): string | undefined {
  * **At rest, once a paint, on every geometry pass — last, after every other
  * read of the paint, with every animation its instants moved put back where
  * it stood (`coverAtRest`) — and once a contrast job at its full height**
- * (`window.__coverFaults`), where nothing stands below
- * the first screen. Not at `checkOverTime`'s six instants: measured over the
+ * (`window.__coverFaults`): the job's page is grown to the height it asks
+ * (`pageHeight`), so below its first screen stands only what a surface that
+ * is not the reader's to scroll holds past it — a wall, shot at its own
+ * screen's size, its list and a payment's lines inside its own scrollers
+ * (over the default plan's jobs read at rest, 74,549 of 75,093 such points
+ * on the canvas's 35-item payment and the rest on Browse at the desk;
+ * the reduced-motion and tide jobs were not counted), counted, not asked,
+ * like every point below a geometry pass's screen (D3). Not at
+ * `checkOverTime`'s six instants: measured over the
  * phone pass's whole screen set, they take the reads from 886 to 4,600 and
  * the rule's own time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s), for
  * covers that move into place between frames — which the six instants never
@@ -9995,9 +10002,17 @@ function styleRules(): CSSStyleRule[] {
  * `::before` or `::after` of the scrim moved over the sheet's figure was
  * never marked, never hidden in the look-paint frame, and
  * `no-look-pseudo-paints-inside-a-protected-box` read it as nothing. The
- * scope's ancestors (`.stall`, `.stall-scroll`) stay unmarked, stated: the
- * look-paint frames do not read their pseudos, the geometry passes' cover
- * read does (an ancestor counts as covering).
+ * scope's ancestors stay unmarked, stated — the scrim is a child of the
+ * stall, so a look's pseudo of the stall moved over the sheet's figure (the
+ * critic's T6) is never hidden in the look-paint frame. What reads one is a
+ * hit test, where a pseudo answers as its host and an ancestor counts as
+ * covering: `coveredBy`, bound, on the price, "You pay" and the unbuyable
+ * label alone, and only where the pseudo takes a hit (`pointer-events:
+ * none` reads through it); and 1a (`nothing-covers-money-or-a-protected-
+ * box`), report-only, with `pointer-events` forced on, on every money node
+ * and protected box. T6, with `pointer-events: none` over the pay sheet's
+ * figure, passed every bound geometry rule at 390 (1a: 39 would-be
+ * failures).
  */
 function markLookPseudos(scope: ParentNode): number {
     for (const el of document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]')) {
@@ -10073,6 +10088,8 @@ let lookPaintSheetAdopted = false;
  * together, where a job has both; only a frame that moved is captured again
  * with each hidden alone, to say which painted there.
  */
+/* Descendants alone (`querySelectorAll`), stated: a mark is an empty leaf,
+ * so neither an open sheet's scrim (the scope) nor a box above it is one. */
 function shownLookMarks(scope: ParentNode): number {
     let n = 0;
     for (const mark of scope.querySelectorAll('[data-look-mark]')) {
@@ -10157,7 +10174,11 @@ const layersOf = (value: string): string[] => selectorList(value);
 /**
  * Mark every box and pseudo in `scope` whose art names a file, and write the
  * sheet that paints its two states; how many boxes, and how many whose
- * failed state differs from its pending one.
+ * failed state differs from its pending one. The hosts are the scope's
+ * descendants alone (`querySelectorAll`), stated: an open sheet's scope is
+ * its scrim, so a file mask or clip on the scrim itself, or on the stall
+ * above it, is not switched off in the pending and failed frames
+ * (`markLookPseudos` takes its scope as a host; this does not).
  */
 function markFileArt(scope: ParentNode): { boxes: number; mixed: number } {
     for (const el of document.querySelectorAll('[data-probe-art], [data-probe-art-before], [data-probe-art-after]')) {
