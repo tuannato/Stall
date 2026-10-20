@@ -698,10 +698,11 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  *   is read as its unprefixed name), or `transform` **when it scales** (a
  *   transition names a property and not its end value, so `transform` is
  *   refused when some rule of the sheet whose subject may be a money node
- *   sets a `transform` that scales or that this lint cannot read:
- *   `scale()`, `matrix()` that is not a pure turn and shift, a 3D function,
- *   a `var()`), on a rule whose subject may be a money node: a subject
- *   naming a money node's class or role (`MONEY_NODE`, `.row.big dd` by its
+ *   sets a `transform` that is more than a turn and a shift or that this lint
+ *   cannot read: `scale()`, a `skew()`, a `matrix()` that scales, shears or
+ *   mirrors (`scalingOf` reads its columns and its determinant), a 3D
+ *   function, a `var()`), on a rule whose subject may be a money node: a
+ *   subject naming a money node's class or role (`MONEY_NODE`, `.row.big dd` by its
  *   `dd`), or naming no class, id or attribute of its own at all (`span`,
  *   `*`, a bare `:is(…)`), which may match one; a subject that is a
  *   pseudo-element (`::before`, `::after`) is not the node;
@@ -712,7 +713,11 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  *   ancestor of one, which is any box that is not known to hold none — and
  *   a size animated on any box, a money node among them, is a size the fit
  *   cannot hold. A keyframe that only turns or shifts (`rotate`,
- *   `translate`, Rural's swing and tag) is not refused.
+ *   `translate`, `translate3d(x, y, 0)`, Rural's swing and tag) is not
+ *   refused. **A custom property in a keyframe is refused too** (the
+ *   lint-belts critic's P2, `declarationProblems`): a rule that reads
+ *   `--g` as a `letter-spacing` moves the figure by it under no property
+ *   name any check here reads.
  *
  * Duration is not read: a `transition-property` here and its duration in
  * another rule meet only in the cascade. **Not read, stated**: a transition
@@ -721,10 +726,19 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * those names reach their descendants, so the gap is wider than font-size's
  * was; the same rule for ancestors would refuse them on every box that is not
  * a known leaf, and is the owner's call. `font-stretch`, `font-size-adjust`,
- * `font-variation-settings` and `text-indent` move a width too and are not
- * named. No shipped look transitions or animates any of them. The kit lint is
- * not changed: a rule there is a line of the workshop README, the owner's.
- * Test: `a-look-never-animates-a-money-nodes-size`.
+ * `font-variation-settings`, `text-indent`, `font-weight`, `font-family` and
+ * `font-feature-settings` move a width too and are not named (the last three
+ * were left off D-07's own list; the lint-belts critic's P3). A keyframe is
+ * refused wherever a rule runs it, so a `scale`, a `letter-spacing` or a
+ * `zoom` keyframe that only a pseudo-element runs is refused too: wider than
+ * D-07's "of money nodes", kept (the lint-belts critic's P2, stated).
+ * **No shipped look transitions or animates any of them, but one turn:**
+ * Rural's
+ * `.t-rural .item-p` runs `t-rural-tag` (a `transform: rotate`, ±0.8°) and
+ * `.t-rural .stall-sign` swings by `t-rural-swing` (±0.6°); neither scales, so
+ * neither is refused, and both are read at rest by the probe's dress rule.
+ * The kit lint is not changed: a rule there is a line of the workshop README,
+ * the owner's. Test: `a-look-never-animates-a-money-nodes-size`.
  */
 const MONEY_NODE = /\.(?:item-x|x|pay-x-n|buy|addr-short|addr-full|sw-pay-v|sw-pay-s|fig-say|fig-end)(?![\w-])|\[\s*data-role(?![\w-])/i;
 const SIZE_MOTION = new Set(['all', 'font', 'font-size', 'letter-spacing', 'word-spacing', 'zoom', 'scale']);
@@ -739,6 +753,22 @@ function mayBeMoneyNode(selector) {
     return !/[.#[]/.test(flatten(subject));
 }
 
+/**
+ * A `<time>` token (`.4s`, `+.4s`, `1e3ms`) in seconds, or undefined. The
+ * number goes through `numberToken`, so a sign and an exponent read as CSS
+ * reads them: a transition whose time this missed took that time for the
+ * property's name (the lint-belts critic's P1, `+.4s letter-spacing`).
+ */
+function timeToken(token) {
+    const lower = token.toLowerCase();
+    if (lower.endsWith('ms')) {
+        const n = numberToken(lower.slice(0, -2));
+        return n === undefined ? undefined : n / 1000;
+    }
+    if (lower.endsWith('s')) return numberToken(lower.slice(0, -1));
+    return undefined;
+}
+
 /** The properties a `transition` or `transition-property` declaration transitions, lower case; `all` where it cannot be read. */
 function transitioned(prop, value) {
     const v = value.trim().toLowerCase();
@@ -747,7 +777,7 @@ function transitioned(prop, value) {
     if (prop === 'transition-property') return splitTopLevel(v, ',');
     return splitTopLevel(v, ',').map((one) => {
         const named = splitTopLevel(one, ' ').find(
-            (token) => !/^-?[\d.]+m?s$/.test(token) && !EASING.test(token) && !token.includes('(') && token !== 'allow-discrete' && token !== 'normal',
+            (token) => timeToken(token) === undefined && !EASING.test(token) && !token.includes('(') && token !== 'allow-discrete' && token !== 'normal',
         );
         return named ?? 'all';
     });
@@ -781,9 +811,17 @@ function moneySizeMotionProblems(decls, selectors, { scales = false } = {}) {
 
 /* ---------- transform values: what a value turns, shifts, scales or skews ---------- */
 
-/** A plain `<number>` token, or undefined. */
+/**
+ * A plain `<number>` token, or undefined. **Finite only**: `1e400` is
+ * Infinity in a double, and an Infinity compares false against every bound
+ * (`rotate: 1e400deg` and `scale: 1e400` passed the belt), so a number the
+ * lint cannot hold reads as a value it cannot read, which every reader treats
+ * as the worst case (the lint-belts critic's P2).
+ */
 function numberToken(token) {
-    return /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(token) ? Number(token) : undefined;
+    if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(token)) return undefined;
+    const n = Number(token);
+    return Number.isFinite(n) ? n : undefined;
 }
 
 /** The factor a `<number>` or `<percentage>` token stands for (`1.2`, `120%`), or undefined. */
@@ -795,29 +833,48 @@ function factorToken(token) {
     return numberToken(token);
 }
 
-/** An `<angle>` token in degrees (a bare 0 is an angle), or undefined for a `calc()`, a `var()`, a keyword. */
+/**
+ * The largest angle this lint reads, in degrees: ten turns. A turn is read
+ * modulo 360, and a double that large has lost the digits the modulo needs
+ * (`rotate: 1e300deg` read as 0°); no look turns a box ten times round, so a
+ * larger one reads as a value the lint cannot read.
+ */
+export const ANGLE_CAP_DEG = 3600;
+
+/** An `<angle>` token in degrees (a bare 0 is an angle), or undefined for a `calc()`, a `var()`, a keyword, a non-finite number or an angle past `ANGLE_CAP_DEG`. */
 function angleToken(token) {
     const m = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(deg|grad|rad|turn)?$/i.exec(token);
     if (m === null) return undefined;
-    const n = Number(m[1]);
+    const n = numberToken(m[1]);
+    if (n === undefined) return undefined;
     const unit = (m[2] ?? '').toLowerCase();
     if (unit === '') return n === 0 ? 0 : undefined;
-    if (unit === 'deg') return n;
-    if (unit === 'grad') return n * 0.9;
-    if (unit === 'rad') return (n * 180) / Math.PI;
-    return n * 360;
+    const deg = unit === 'deg' ? n : unit === 'grad' ? n * 0.9 : unit === 'rad' ? (n * 180) / Math.PI : n * 360;
+    return Number.isFinite(deg) && Math.abs(deg) <= ANGLE_CAP_DEG ? deg : undefined;
 }
 
 /** The CSS-wide keywords that read as `none` on a property that does not inherit (`transform`, `rotate`, `scale`, `translate`). */
 const INITIAL_KEYWORD = /^(?:initial|unset)$/i;
 
+/** Whether a token is a length of zero (`0`, `0px`, `0%`, `-0.0em`): a shift of nothing. A `calc()` is not read, so it is not zero. */
+function zeroLength(token) {
+    const m = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(?:[a-z]+|%)?$/i.exec(token);
+    return m !== null && numberToken(m[1]) === 0;
+}
+
 /**
  * A `transform` value as the list of what it does — `{ kind: 'rotate', deg }`,
- * `'translate'`, `'skew'`, `{ kind: 'scale', x, y }`, `{ kind: 'matrix', a, b,
- * c, d }` and `'3d'` (a function that foreshortens or scales by depth) — or
+ * `{ kind: 'translate', zero }` (`zero`: every length of it is zero),
+ * `'skew'`, `{ kind: 'scale', x, y }`, `{ kind: 'matrix', a, b, c, d, zero }`
+ * and `'3d'` (a function that foreshortens or scales by depth) — or
  * undefined for a value this lint cannot take apart: a `var()`, a CSS-wide
  * keyword that reads another box's transform, a function it does not know.
  * **Fail closed**: every reader below treats undefined as the worst case.
+ * **A shift in depth of zero is flat**: `translate3d(x, y, 0)` and
+ * `translateZ(0)` are the 2D shift (and an identity), which Chrome computes
+ * as a `matrix()`, the way the probe reads them; any other depth is `'3d'`
+ * (the lint-belts critic's P2: a rain-like `translate3d(0, 100%, 0)` keyframe
+ * was refused as a foreshortening).
  */
 function transformOps(value) {
     let rest = value.replace(/\s*!\s*important\s*$/i, '').trim();
@@ -852,7 +909,12 @@ function transformOps(value) {
             ops.push({ kind: 'rotate', deg });
         } else if (name === 'translate' || name === 'translatex' || name === 'translatey') {
             if (args.length < 1 || args.length > (name === 'translate' ? 2 : 1)) return undefined;
-            ops.push({ kind: 'translate' });
+            ops.push({ kind: 'translate', zero: args.every(zeroLength) });
+        } else if (name === 'translate3d' || name === 'translatez') {
+            if (args.length !== (name === 'translate3d' ? 3 : 1)) return undefined;
+            const depth = args[args.length - 1];
+            if (zeroLength(depth)) ops.push({ kind: 'translate', zero: args.every(zeroLength) });
+            else ops.push({ kind: '3d' });
         } else if (name === 'scale') {
             const x = args.length >= 1 && args.length <= 2 ? factorToken(args[0]) : undefined;
             const y = args.length === 2 ? factorToken(args[1]) : x;
@@ -868,8 +930,8 @@ function transformOps(value) {
         } else if (name === 'matrix') {
             const n = args.map(numberToken);
             if (n.length !== 6 || n.some((v) => v === undefined)) return undefined;
-            ops.push({ kind: 'matrix', a: n[0], b: n[1], c: n[2], d: n[3] });
-        } else if (['translatez', 'translate3d', 'rotatex', 'rotatey', 'rotate3d', 'scalez', 'scale3d', 'perspective', 'matrix3d'].includes(name)) {
+            ops.push({ kind: 'matrix', a: n[0], b: n[1], c: n[2], d: n[3], zero: n[4] === 0 && n[5] === 0 });
+        } else if (['rotatex', 'rotatey', 'rotate3d', 'scalez', 'scale3d', 'perspective', 'matrix3d'].includes(name)) {
             ops.push({ kind: '3d' });
         } else {
             return undefined;
@@ -905,13 +967,14 @@ function scalePropertyOps(value) {
     return ops;
 }
 
-/** The individual `translate` property as ops: `none`, or one or two lengths; a third (depth) is 3D. */
+/** The individual `translate` property as ops: `none`, or one or two lengths; a third (depth) is 3D unless it is zero. */
 function translatePropertyOps(value) {
     const v = value.replace(/\s*!\s*important\s*$/i, '').trim();
     if (/^none$/i.test(v) || INITIAL_KEYWORD.test(v)) return [];
     const tokens = splitTopLevel(v, ' ');
     if (tokens.length < 1 || tokens.length > 3) return undefined;
-    return tokens.length === 3 ? [{ kind: '3d' }] : [{ kind: 'translate' }];
+    if (tokens.length === 3 && !zeroLength(tokens[2])) return [{ kind: '3d' }];
+    return [{ kind: 'translate', zero: tokens.every(zeroLength) }];
 }
 
 /** A transform-family declaration as ops: `transform`, `rotate`, `scale` or `translate` (vendor prefix read as plain), else undefined. */
@@ -926,17 +989,26 @@ function transformFamilyOps(name, value) {
 /** A factor within this of 1 is no scale (the probe's own tolerance for a box that holds a figure, `boxTransformFault`). */
 const SCALE_EPSILON = 1e-3;
 
-/** Why ops scale a box — a factor other than 1, a matrix that is not a turn and a shift, a 3D function — or undefined. */
+/**
+ * Why ops are more than a turn and a shift — a factor other than 1, a skew, a
+ * `matrix()` that scales, shears or mirrors, a 3D function — or undefined.
+ * **Turn and shift only** (the lint-belts critic's B1): the column-lengths
+ * check alone let `matrix(0.6, 0.8, 0.8, 0.6, 0, 0)` (a shear and a mirror)
+ * and `skewX(60deg)` through a rule whose docblock said otherwise.
+ */
 function scalingOf(ops) {
     for (const op of ops) {
         if (op.kind === '3d') return 'a 3D function foreshortens it';
+        if (op.kind === 'skew') return 'a skew shears it';
         if (op.kind === 'scale' && (Math.abs(op.x - 1) > SCALE_EPSILON || Math.abs(op.y - 1) > SCALE_EPSILON)) {
             return `scale ${op.x === op.y ? op.x : `${op.x}, ${op.y}`} scales it`;
         }
         if (op.kind === 'matrix') {
-            if (Math.abs(Math.hypot(op.a, op.b) - 1) > SCALE_EPSILON || Math.abs(Math.hypot(op.c, op.d) - 1) > SCALE_EPSILON) {
-                return 'a matrix scales it';
-            }
+            const sx = Math.hypot(op.a, op.b);
+            const sy = Math.hypot(op.c, op.d);
+            if (Math.abs(sx - 1) > SCALE_EPSILON || Math.abs(sy - 1) > SCALE_EPSILON) return 'a matrix scales it';
+            if (Math.abs(op.a * op.c + op.b * op.d) >= SCALE_EPSILON) return 'a matrix shears it';
+            if (op.a * op.d - op.b * op.c <= 0) return 'a matrix mirrors it';
         }
     }
     return undefined;
@@ -970,7 +1042,7 @@ function keyframeSizeMotion(decls) {
         const name = prop.replace(VENDOR_PREFIX, '');
         if (name === 'font-size' || name === 'font' || name === 'letter-spacing' || name === 'word-spacing' || name === 'zoom') {
             out.push({ prop, why: '' });
-        } else if (name === 'transform' || name === 'scale' || name === 'rotate') {
+        } else if (name === 'transform' || name === 'scale' || name === 'rotate' || name === 'translate') {
             const ops = transformFamilyOps(name, value);
             const why = ops === undefined ? 'a value this lint cannot read, which may scale it' : scalingOf(ops);
             if (why !== undefined) out.push({ prop, why });
@@ -983,75 +1055,386 @@ function keyframeSizeMotion(decls) {
 
 /*
  * **A state rule hides no money** (D5 (a), the owner's, on the plan before
- * step 8g2; the plan's critic, P2-4). The probe measures every screen at
- * rest and paints no hover, no focus, no press and no turned wall's
- * rotation, so a rule that arrives with one is read by no pass — the one
- * thing the file-mask rule above (`a-file-mask-arrives-at-rest`) already
- * says of a mask. A first-party look sheet's rule whose selector names a
- * state — `:hover`, `:focus`, `:focus-visible`, `:focus-within`, `:active`
- * or the attribute `[data-turn]`, anywhere in the selector (an ancestor's
- * state reaches a figure inside it, and `:is()` and `:not()` are read as the
- * state they name: fail closed) — may not set, to anything but its harmless
- * value, one of the families that can hide or misstate a figure:
+ * step 8g2; the plan's critic, P2-4; widened by the window's reading of D5
+ * (a) after the lint-belts critic's B2: the whole of the probe's two sets).
+ * The probe measures every screen at rest and paints no hover, no focus, no
+ * press and no turned wall's rotation, so a rule that arrives with one is
+ * read by no pass — the one thing the file-mask rule above
+ * (`a-file-mask-arrives-at-rest`) already says of a mask. A first-party look
+ * sheet's rule whose selector names a state — `:hover`, `:focus`,
+ * `:focus-visible`, `:focus-within`, `:active` or the attribute `[data-turn]`,
+ * anywhere in the selector (an ancestor's state reaches a figure inside it,
+ * and `:is()` and `:not()` are read as the state they name: fail closed) —
+ * is held to what the probe holds at rest: **every longhand in the probe's
+ * `DRESS_HELD` (a money node and the text under it) and `BOX_HELD` (a box
+ * that holds one), read for the value the probe refuses**, each refused value
+ * the one the probe refuses at rest and each allowed value the one it allows
+ * (`STATE_BELT_ACCOUNT` lists every member and how it is read; the test
+ * `the-state-belt-accounts-for-every-longhand-the-probe-holds` parses the two
+ * sets out of `layout/probe.ts` and fails on a member this table does not
+ * name). Read under a state (`STATE_BELT`):
  *
  * - a clip or a mask: `clip-path`, `clip`, every `mask` and `mask-*`
- *   property (the border and the legacy box image among them), only `none`;
- * - `filter` and `backdrop-filter`, only `none`;
+ *   property (the border and the legacy box image among them), only `none`
+ *   (a clip that encloses the figure's ink is the probe's to judge at rest;
+ *   under a state there is no ink to measure, so none stands);
+ * - `filter`, only `none`; `backdrop-filter`, `none` or blurs alone (the
+ *   probe allows a blur on a box that holds a figure and refuses every other
+ *   function: it repaints the ground behind the glyphs);
  * - `mix-blend-mode` and `background-blend-mode`, only `normal`;
- * - `opacity` under 1, and `visibility` but `visible`;
- * - `transform`, `rotate`, `translate` and `scale` that turn the box more
- *   than a tilt (`STATE_TILT_DEG`, the probe's `DRESS_TILT_DEG`, 10°) or
- *   shrink, stretch, mirror, skew or foreshorten it. A shift of any length
- *   and a growth stand, as the probe reads a box that holds a figure
- *   (`boxTransformFault`): `rotate: 0deg`, `transform: none` and
- *   `scale: 1` are the "no transform" values Rural's straightening needs.
+ * - `opacity` under 1, `visibility` but `visible`, `content-visibility` but
+ *   `visible`, `zoom` but 1, `font-size-adjust` but `none`;
+ * - `word-spacing`, `text-indent` and `letter-spacing` that are not plainly
+ *   zero or more (`letter-spacing` is stricter than the probe, which reads a
+ *   negative one per face for piling digits: no sheet can);
+ * - `writing-mode` but `horizontal-tb`, `text-overflow` but `clip`,
+ *   `line-clamp` but `none`, a motion path (`offset-path`; the `offset`
+ *   shorthand as `none`, `normal` or `auto` alone — a motion path turns the
+ *   box along it with `offset-rotate`, and the probe refuses any path);
+ * - a line through or over the text (`text-decoration-line`, the
+ *   `text-decoration` shorthand), an underline with a thickness but the
+ *   face's own, an underline offset below zero;
+ * - a `text-shadow` whose sharp copies stand further than
+ *   `STATE_SHADOW_EM` (the probe's `DRESS_SHADOW_EM`, 0.12em) from the glyph or
+ *   from each other (a glow, blurred as far as it stands off, stands). The
+ *   size of the text is not known to a sheet, so a pixel is read at the type
+ *   floor, 11px (`small-text-is-at-least-11px`): the strictest a figure can
+ *   be;
+ * - `color` whose alpha is under 1 (a faded ink is a faded figure), read in
+ *   a literal (`transparent`, a `#rgba` or `#rrggbbaa`, the alpha of a
+ *   colour function, a `color-mix()` that mixes a faint colour or whose
+ *   percentages sum to under 100); a `var()` stands here (see below);
+ * - on a subject that may be a money node, a picture in `background` or
+ *   `background-image` (the probe fails a picture under a figure's glyphs);
+ * - `transform`, `rotate`, `translate` and `scale`: **on a subject that may be
+ *   a money node, the figure's own rule** (`figureTransformProblem`; the
+ *   lint-belts critic's P1) — no `rotate`, `translate` or `scale` property at
+ *   all (identities, `none`, `0deg`, `1`, stand), and `transform` only a
+ *   uniform scale of at least 1, unturned and unmoved (the stream card's
+ *   pulse); **on any other box, the holder's rule** — a tilt of at most
+ *   `STATE_TILT_DEG` (the probe's `DRESS_TILT_DEG`, 10°) with any shift and
+ *   any growth, and no shrink, stretch, skew, flip or foreshortening
+ *   (`boxTransformProblem`; Rural's tag sways ±0.8° and its rows tilt 0.6°).
+ *   `translate3d(x, y, 0)`, `translateZ(0)` and `translate: x y 0` are flat;
+ *   a depth other than zero is 3D. **A holder's shift and growth are
+ *   uncapped, as the probe leaves them at rest; capping them is the owner's
+ *   call, not made;**
+ * - **on top of the probe**: an `outline` whose width or whose positive
+ *   offset is past `STATE_OUTLINE_MAX_PX` (8px, a number and not a
+ *   measurement: "wider than its own box is wide" is not known to a sheet),
+ *   a negative `outline-offset` (the ring falls inside the box, over the ink
+ *   where the padding is thinner than the ring — only the probe's geometry
+ *   can tell), and a `z-index` under zero or one this lint cannot read (it
+ *   puts the figure behind its card's ground); **any custom property**, since
+ *   a state rule that sets `--s-price-clip` or `--s-head-blur` re-states, in
+ *   a rule the families above never see, the very value `stall.css` reads at
+ *   rest as `clip-path` or `animation` (the lint-belts critic's P1); and **the
+ *   keyframes a state starts**, through `animation` or `animation-name`: each
+ *   stop of a keyframe a state rule names is read as if the state rule had
+ *   set it, and a name this lint cannot read (a `var()`) is refused.
  *
- * **A `var()` in any of these fails closed**, whatever it would substitute.
- * Colour, ground, border and shadow changes stand — all 16 state rules the
- * shipped looks have set nothing else but Rural's `rotate: 0deg` — so a
- * hover that changes a money control's colour to a low contrast is still
- * read by no pass (the plan's D5 (a), its stated cost). **Not read,
- * stated**: a custom property set under a state and read by one of these
- * families at rest; `display`, `content-visibility`, `overflow` with a
- * size, `zoom`, `font-size`, `letter-spacing`, a position or a margin under
- * a state; `all`; an `animation` a state starts; a state this list does not
- * name (`:checked`, `:disabled`, `[aria-pressed]`, which the fixtures paint);
- * and the net of a rotation across two declarations, which a computed
- * transform would add up. First party only: the workshop README says a
- * pointer's hover is Stall's at intake, not the kit's, so the kit lint is
- * unchanged. Test: `a-look-state-rule-never-hides-money`.
+ * **A `var()` in any of these fails closed**, whatever it would substitute,
+ * save where the property carries a colour or a picture the sheet cannot
+ * hide in a custom property (`color`, `background`, and the colour of an
+ * `outline` written beside its width): a custom property holding a file is refused in a first-party
+ * sheet and one set under a state is refused here, so a `var(--s-*)` there is
+ * the theme table's own opaque token. Colour, ground, border and shadow
+ * changes otherwise stand — all 16 state rules the shipped looks have set
+ * nothing else but Rural's `rotate: 0deg` — so a hover that changes a
+ * money control's colour to a low contrast is still read by no pass (the
+ * plan's D5 (a), its stated cost).
+ *
+ * **Not read, stated, and why** (`STATE_BELT_ACCOUNT` names each):
+ * - `background-color`, a gradient, and the contrast of `color` against the
+ *   ground: the probe reads them as a stack of paints against the ink
+ *   (`groundStackFault`), which needs the browser's layout and the colours
+ *   the engine resolves; only the ink's alpha and a picture are read here;
+ * - a `color` whose fade is carried by a custom property the sheet itself
+ *   declares (`color: var(--wash)` with `--wash` translucent at rest);
+ * - `display` but `list-item` (refused everywhere), `overflow` with a size,
+ *   a position, a margin or a positive `z-index` that moves a box over a
+ *   neighbour's figure: where a box stands is the coverage rules', at rest;
+ * - paint that reaches a neighbour: a `box-shadow` spread, a
+ *   `border-image-outset`;
+ * - a pixel `text-shadow` is read at the 11px type floor, never against the
+ *   real size of the text;
+ * - an `animation` a state starts by a name the sheet does not declare (the
+ *   keyframes are read only when the sheet holds them);
+ * - the net of a rotation across two declarations (`transform` and
+ *   `rotate`), which a computed transform would add up;
+ * - a state this list does not name (`:checked`, `:disabled`,
+ *   `[aria-pressed]`, which the fixtures paint).
+ *
+ * **First party only, and that is the owner's D5 as the window read it
+ * (D-2026-10-20-01):** the workshop README says a pointer's hover is Stall's
+ * at intake and not the kit's, so the kit lint carries no belt and the three
+ * starters are unchanged by it (`the-state-belt-is-first-party-only`, which
+ * holds the README's own words). A creator's `:hover` is read by a person at
+ * intake, not by this lint. Test: `a-look-state-rule-never-hides-money`.
  */
 export const STATE_TILT_DEG = 10;
+export const STATE_SHADOW_EM = 0.12;
+export const STATE_TYPE_FLOOR_PX = 11;
+export const STATE_OUTLINE_MAX_PX = 8;
 const STATE_PSEUDO_CLASS = /:(?:hover|focus|focus-visible|focus-within|active)(?![\w-])/i;
+const BELT_TAIL = '; the probe measures every screen at rest and paints no hover, focus, press or turned wall, so what arrives with a state is read by no pass';
+const BELT_VAR = 'a var() here carries a value past this check, so it is read as the worst it could be';
 
 /** Whether a selector names a state the probe never paints (see above). */
 function namesABeltState(selector) {
     return STATE_PSEUDO_CLASS.test(blankAttributes(selector)) || attributeBlocks(selector).some((inner) => /^\s*data-turn(?![\w-])/i.test(inner));
 }
 
-/** The families the belt reads: which property names, the one list of values each may take, and why. */
-const STATE_BELT = Object.freeze([
-    {
-        name: /^(?:clip-path|clip|mask(?:-.*)?)$/,
-        harmless: /^(?:none|auto|initial|unset)$/i,
-        why: 'a clip or a mask cuts a figure away',
-    },
-    {
-        name: /^(?:backdrop-)?filter$/,
-        harmless: /^(?:none|initial|unset)$/i,
-        why: 'a filter blurs a figure out of sight',
-    },
-    {
-        name: /^(?:mix-blend-mode|background-blend-mode)$/,
-        harmless: /^(?:normal|initial|unset)$/i,
-        why: 'a blend mode loses a figure into what is behind it',
-    },
-    {
-        name: /^visibility$/,
-        harmless: /^(?:visible|initial)$/i,
-        why: 'hiding a box hides the figure in it',
-    },
-]);
+/** A `<length>` or `<percentage>` token as `{ n, unit }` (unit lower case, `''` for a bare number), or undefined. */
+function lengthToken(token) {
+    const m = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)([a-z]+|%)?$/i.exec(token);
+    if (m === null) return undefined;
+    const n = numberToken(m[1]);
+    return n === undefined ? undefined : { n, unit: (m[2] ?? '').toLowerCase() };
+}
+
+/** Whether a token is a length or percentage of zero or more (a bare number is a length only at zero). */
+function nonNegativeLength(token) {
+    const len = lengthToken(token);
+    return len !== undefined && len.n >= 0 && (len.unit !== '' || len.n === 0);
+}
+
+/** A reader for a longhand whose every comma-separated part must be one of `harmless`. */
+const only = (harmless, why) => (clean) => (splitTopLevel(clean, ',').every((one) => harmless.test(one)) ? undefined : why);
+
+/** A reader for a spacing whose value is `normal` or a length of zero or more. */
+const noNegative = (why) => (clean) => (/^(?:normal|initial|unset)$/i.test(clean) || nonNegativeLength(clean) ? undefined : why);
+
+const READ_OPACITY = (clean) => {
+    if (INITIAL_KEYWORD.test(clean)) return undefined;
+    const factor = factorToken(clean);
+    if (factor === undefined) return 'an opacity this lint cannot read may fade a figure';
+    return factor >= 1 ? undefined : `an opacity of ${clean} fades a figure`;
+};
+
+const READ_ZOOM = (clean) =>
+    /^(?:normal|initial|unset)$/i.test(clean) || factorToken(clean) === 1 ? undefined : 'a zoom but 1 scales the glyphs under the size the type floor reads';
+
+const READ_TEXT_INDENT = (clean) => {
+    const rest = splitTopLevel(clean, ' ').filter((token) => !/^(?:each-line|hanging)$/i.test(token));
+    if (rest.length === 1 && (/^(?:initial|unset)$/i.test(rest[0]) || nonNegativeLength(rest[0]))) return undefined;
+    return 'a negative text-indent (or one this lint cannot read) pushes the first glyphs of a figure out of its line';
+};
+
+const DECORATION_LINES = /^(?:none|underline|blink|spelling-error|grammar-error|initial|unset)$/i;
+const READ_DECORATION_LINE = (clean) =>
+    splitTopLevel(clean, ' ').every((token) => DECORATION_LINES.test(token))
+        ? undefined
+        : 'a line through or over the text strikes a figure out (the probe fails line-through and overline in effect on it)';
+
+const READ_UNDERLINE_OFFSET = (clean) =>
+    /^(?:auto|initial|unset)$/i.test(clean) || nonNegativeLength(clean)
+        ? undefined
+        : 'an underline offset below zero (or one this lint cannot read) raises the line into the glyphs';
+
+/** The `text-decoration` shorthand: a line through or over, or an underline with a thickness of its own. */
+const READ_DECORATION = (clean) => {
+    const tokens = splitTopLevel(clean, ' ');
+    if (tokens.some((token) => /^(?:overline|line-through)$/i.test(token))) {
+        return 'a line through or over the text strikes a figure out (the probe fails line-through and overline in effect on it)';
+    }
+    const thick = tokens.some((token) => lengthToken(token) !== undefined || /^(?:calc|min|max|clamp)\(/i.test(token));
+    if (thick && tokens.some((token) => /^underline$/i.test(token))) {
+        return "an underline with a thickness of its own (only the face's own, auto or from-font, stands under a figure)";
+    }
+    return undefined;
+};
+
+/** A `text-shadow`: glows stand, and sharp copies only within `STATE_SHADOW_EM` of the glyph and of each other. */
+const READ_TEXT_SHADOW = (clean) => {
+    if (/^(?:none|initial|unset)$/i.test(clean)) return undefined;
+    const unreadable = 'a text-shadow this lint cannot size (a unit but px, em or zero, or a layer it cannot take apart) may draw a copy of a figure';
+    const sharp = [[0, 0]];
+    for (const layer of splitTopLevel(clean, ',')) {
+        const lengths = [];
+        for (const token of splitTopLevel(layer, ' ')) {
+            const len = lengthToken(token);
+            if (len === undefined) continue;
+            if (len.unit === '' && len.n !== 0) return unreadable;
+            if (len.unit !== '' && len.unit !== 'px' && len.unit !== 'em') return unreadable;
+            lengths.push(len.unit === 'px' ? len.n / STATE_TYPE_FLOOR_PX : len.n);
+        }
+        if (lengths.length < 2 || lengths.length > 3) return unreadable;
+        const [x, y, blur = 0] = lengths;
+        if (blur >= Math.hypot(x, y)) continue;
+        sharp.push([x, y]);
+    }
+    for (let i = 0; i < sharp.length; i += 1) {
+        for (let j = i + 1; j < sharp.length; j += 1) {
+            if (Math.hypot(sharp[i][0] - sharp[j][0], sharp[i][1] - sharp[j][1]) > STATE_SHADOW_EM + 1e-9) {
+                return `a sharp text-shadow copy more than ${STATE_SHADOW_EM}em from the glyph or from another copy (a pixel is read at the ${STATE_TYPE_FLOOR_PX}px type floor) draws a second figure beside the first`;
+            }
+        }
+    }
+    return undefined;
+};
+
+/** The width keywords of `outline-width`, in pixels. */
+const OUTLINE_WIDTH_KEYWORDS = Object.freeze({ thin: 1, medium: 3, thick: 5 });
+const OUTLINE_STYLES = /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i;
+
+/** An outline width in px, or undefined where this lint cannot size it. */
+function outlineWidthPx(token) {
+    const keyword = OUTLINE_WIDTH_KEYWORDS[token.toLowerCase()];
+    if (keyword !== undefined) return keyword;
+    const len = lengthToken(token);
+    if (len === undefined || (len.unit !== 'px' && !(len.unit === '' && len.n === 0))) return undefined;
+    return len.n;
+}
+
+const OUTLINE_TOO_WIDE = (px) =>
+    `an outline ${px}px wide paints over what stands beside the box, a neighbour's figure among them ` +
+    `(a sheet cannot know the box's own width; ${STATE_OUTLINE_MAX_PX}px is the most a look may draw)`;
+const OUTLINE_UNSIZED = 'an outline width this lint cannot size (px, thin, medium, thick or zero are read) may paint over a neighbour';
+
+const READ_OUTLINE_WIDTH = (clean) => {
+    if (/^(?:initial|unset)$/i.test(clean)) return undefined;
+    const px = outlineWidthPx(clean);
+    if (px === undefined) return OUTLINE_UNSIZED;
+    return px > STATE_OUTLINE_MAX_PX ? OUTLINE_TOO_WIDE(px) : undefined;
+};
+
+const READ_OUTLINE_OFFSET = (clean) => {
+    if (/^(?:initial|unset)$/i.test(clean)) return undefined;
+    const len = lengthToken(clean);
+    if (len === undefined || (len.unit !== 'px' && !(len.unit === '' && len.n === 0))) {
+        return 'an outline offset this lint cannot size (px or zero is read) may move the ring over a neighbour';
+    }
+    if (len.n < 0) return 'a negative outline offset draws the ring inside the box, over the ink where the padding is thinner than the ring';
+    return len.n > STATE_OUTLINE_MAX_PX ? OUTLINE_TOO_WIDE(len.n) : undefined;
+};
+
+/**
+ * The `outline` shorthand: its width is read, its colour and its style are
+ * not. A `var()` is read as the colour (`outline: 2px solid var(--s-accent)`,
+ * the base sheet's own ring), and so stands only beside a width written in px
+ * or as a keyword: alone, or beside no width, it could carry the width.
+ */
+const READ_OUTLINE = (clean) => {
+    let written = false;
+    let carried = false;
+    for (const token of splitTopLevel(clean, ' ')) {
+        if (OUTLINE_STYLES.test(token) || /^(?:initial|unset)$/i.test(token)) continue;
+        if (/(?<![\w-])var\s*\(/i.test(token)) {
+            carried = true;
+            continue;
+        }
+        const isWidth = Object.hasOwn(OUTLINE_WIDTH_KEYWORDS, token.toLowerCase()) || lengthToken(token) !== undefined || /^(?:calc|min|max|clamp)\(/i.test(token);
+        if (isWidth) {
+            written = true;
+            const why = READ_OUTLINE_WIDTH(token);
+            if (why !== undefined) return why;
+        }
+    }
+    return carried && !written ? 'a var() in an outline with no width written beside it may carry the width (write it in px, or thin, medium or thick)' : undefined;
+};
+
+const READ_Z_INDEX = (clean) =>
+    /^(?:auto|initial|unset)$/i.test(clean) || /^\+?\d+$/.test(clean)
+        ? undefined
+        : 'a z-index under zero (or one this lint cannot read) puts the box, and the figure in it, behind its card\'s ground';
+
+/** Why a colour fades its ink: the alpha of a literal, of a colour function's, of a mix; undefined where it does not (a `var()` stands). */
+function inkFade(value) {
+    const v = value.trim();
+    const fades = 'an ink under alpha 1 is a faded figure (the probe holds an ink at full alpha)';
+    if (/^(?:inherit|initial|unset|revert|revert-layer|currentcolor)$/i.test(v)) return undefined;
+    if (/^transparent$/i.test(v)) return fades;
+    const hex = /^#([0-9a-f]+)$/i.exec(v);
+    if (hex !== null) {
+        const d = hex[1];
+        const alpha = d.length === 4 ? Number.parseInt(d[3] + d[3], 16) : d.length === 8 ? Number.parseInt(d.slice(6), 16) : 255;
+        return alpha < 255 ? fades : undefined;
+    }
+    const fn = /^([a-z-]+)\(([\s\S]*)\)$/i.exec(v);
+    if (fn === null) return /^[a-z]+$/i.test(v) ? undefined : 'a colour this lint cannot take apart may be a faded ink';
+    const name = fn[1].toLowerCase();
+    const inner = fn[2];
+    if (name === 'var') return undefined;
+    if (name === 'light-dark') {
+        for (const one of splitTopLevel(inner, ',')) {
+            const why = inkFade(one);
+            if (why !== undefined) return why;
+        }
+        return undefined;
+    }
+    if (name === 'color-mix') {
+        const operands = splitTopLevel(inner, ',').slice(1);
+        const shares = [];
+        for (const operand of operands) {
+            const tokens = splitTopLevel(operand, ' ');
+            const percent = tokens.filter((token) => /^[+-]?[\d.]+%$/.test(token));
+            const why = inkFade(tokens.filter((token) => !percent.includes(token)).join(' '));
+            if (why !== undefined) return why;
+            if (percent.length === 1) shares.push(Number.parseFloat(percent[0]));
+        }
+        return operands.length === 2 && shares.length === 2 && shares[0] + shares[1] < 100 ? fades : undefined;
+    }
+    if (!/^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)$/.test(name)) return 'a colour this lint cannot take apart may be a faded ink';
+    if (/(?<![\w-])from(?![\w-])/i.test(inner)) return 'a relative colour this lint cannot take apart may be a faded ink';
+    let alpha;
+    const slash = inner.lastIndexOf('/');
+    if (slash >= 0) alpha = inner.slice(slash + 1).trim();
+    else if (/^(?:rgba?|hsla?)$/.test(name)) {
+        const parts = splitTopLevel(inner, ',');
+        if (parts.length === 4) alpha = parts[3];
+    }
+    if (alpha === undefined) return undefined;
+    const factor = factorToken(alpha);
+    if (factor === undefined) return 'an alpha this lint cannot read may fade the ink';
+    return factor < 1 ? fades : undefined;
+}
+
+const PICTURE = /(?<![\w-])(?:url|image-set|-webkit-image-set|cross-fade|-webkit-cross-fade|element|paint)\s*\(/i;
+
+/**
+ * The figure's own rule for a transform-family value, taken apart (`ops`):
+ * the probe's `dressHeldFault` — the `rotate`, `translate` and `scale`
+ * properties are `none` (identity values stand), and `transform` is `none`
+ * or a uniform scale of at least 1 with no turn, skew, flip or shift. The ops
+ * are composed in order, as the computed matrix is.
+ */
+function figureTransformProblem(name, ops) {
+    let a = 1;
+    let b = 0;
+    let c = 0;
+    let d = 1;
+    for (const op of ops) {
+        if (op.kind === '3d') return 'a 3D function foreshortens it';
+        if (op.kind === 'skew') return 'a skew shears it';
+        if ((op.kind === 'translate' || op.kind === 'matrix') && !op.zero) return 'a shift moves it';
+        let m;
+        if (op.kind === 'matrix') {
+            m = [op.a, op.b, op.c, op.d];
+        } else if (op.kind === 'rotate') {
+            const r = (op.deg * Math.PI) / 180;
+            m = [Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r)];
+        } else if (op.kind === 'scale') {
+            m = [op.x, 0, 0, op.y];
+        } else {
+            continue;
+        }
+        [a, b, c, d] = [a * m[0] + c * m[1], b * m[0] + d * m[1], a * m[2] + c * m[3], b * m[2] + d * m[3]];
+    }
+    const sx = Math.hypot(a, b);
+    const sy = Math.hypot(c, d);
+    if (sx === 0 || sy === 0) return 'a transform collapses it';
+    if (Math.abs(sx - sy) > SCALE_EPSILON * Math.max(sx, sy)) return 'a scale that is not the same both ways stretches it';
+    if (Math.abs((a * c + b * d) / (sx * sy)) >= SCALE_EPSILON) return 'a transform skews it';
+    if (a * d - b * c <= 0) return 'a transform mirrors it';
+    const deg = (Math.atan2(b, a) * 180) / Math.PI;
+    if (Math.abs(deg) >= 0.01) return `a turn of ${Number(deg.toFixed(1))}° turns it (the probe refuses any rotate on a figure, and any transform but a uniform scale of at least 1)`;
+    if (sx < 1 - SCALE_EPSILON) return 'a scale under 1 shrinks it';
+    if (name !== 'transform' && Math.abs(sx - 1) > SCALE_EPSILON) {
+        return `the ${name} property scales it (the probe refuses any rotate, translate or scale on a figure; transform may grow it uniformly)`;
+    }
+    return undefined;
+}
 
 /** Why a transform-family value, taken apart, is more than a tilt on a box that holds a figure, or undefined. */
 function boxTransformProblem(ops) {
@@ -1081,44 +1464,219 @@ function boxTransformProblem(ops) {
     return Math.abs(tilt) > STATE_TILT_DEG + 1e-9 ? `a turn of ${Number(tilt.toFixed(1))}° is more than a ${STATE_TILT_DEG}° tilt` : undefined;
 }
 
-/** Why one declaration under a state may not stand, or undefined. */
-function stateBeltReason(prop, value) {
-    const name = prop.replace(VENDOR_PREFIX, '');
-    const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
-    const family = STATE_BELT.find((f) => f.name.test(name));
-    const transform = name === 'transform' || name === 'rotate' || name === 'translate' || name === 'scale';
-    if (family === undefined && !transform && name !== 'opacity') return undefined;
-    if (/(?<![\w-])var\s*\(/i.test(withoutStrings(clean))) {
-        return 'a var() here carries a value past this check, so it is read as the worst it could be';
-    }
-    if (family !== undefined) {
-        return splitTopLevel(clean, ',').every((one) => family.harmless.test(one)) ? undefined : family.why;
-    }
-    if (name === 'opacity') {
-        if (INITIAL_KEYWORD.test(clean)) return undefined;
-        const factor = factorToken(clean);
-        if (factor === undefined) return 'an opacity this lint cannot read may fade a figure';
-        return factor >= 1 ? undefined : `an opacity of ${clean} fades a figure`;
-    }
+const READ_TRANSFORM = (clean, ctx, name) => {
     const ops = transformFamilyOps(name, clean);
-    return ops === undefined ? 'a value this lint cannot take apart may do more than tilt the box' : boxTransformProblem(ops);
+    if (ops === undefined) return 'a value this lint cannot take apart may do more than tilt the box';
+    return ctx.money ? figureTransformProblem(name, ops) : boxTransformProblem(ops);
+};
+
+/**
+ * The families the belt reads: which property names (a vendor prefix read as
+ * plain), how, and whether a `var()` may stand (`varOk`). One entry per
+ * property family; the first match reads. `read(clean, ctx, name)` gives the
+ * reason a value may not stand, or undefined; `ctx.money` is whether the
+ * rule's state selector may name a money node.
+ */
+const STATE_BELT = Object.freeze([
+    { name: /^(?:clip-path|clip|mask(?:-.*)?)$/, read: only(/^(?:none|auto|initial|unset)$/i, 'a clip or a mask cuts a figure away') },
+    { name: /^filter$/, read: only(/^(?:none|initial|unset)$/i, 'a filter blurs a figure out of sight') },
+    {
+        name: /^backdrop-filter$/,
+        read: (clean) =>
+            /^(?:none|initial|unset)$/i.test(clean) || /^(?:blur\([^()]*\)\s*)+$/i.test(clean)
+                ? undefined
+                : 'a backdrop-filter other than a blur repaints the ground behind a figure from what is behind it',
+    },
+    { name: /^(?:mix-blend-mode|background-blend-mode)$/, read: only(/^(?:normal|initial|unset)$/i, 'a blend mode loses a figure into what is behind it') },
+    { name: /^visibility$/, read: only(/^(?:visible|initial)$/i, 'hiding a box hides the figure in it') },
+    { name: /^content-visibility$/, read: only(/^(?:visible|initial)$/i, 'content-visibility but visible skips painting the figure') },
+    { name: /^opacity$/, read: READ_OPACITY },
+    { name: /^zoom$/, read: READ_ZOOM },
+    { name: /^font-size-adjust$/, read: only(/^(?:none|initial|unset)$/i, 'a font-size-adjust scales the glyphs under the size the type floor reads') },
+    { name: /^word-spacing$/, read: noNegative('a negative word-spacing (or one this lint cannot read) pulls the words of a figure onto each other') },
+    {
+        name: /^letter-spacing$/,
+        read: noNegative(
+            "a letter-spacing that is not plainly zero or more (or one this lint cannot read) may pile a figure's digits on each other; the probe reads the piling per face at rest, which no sheet can",
+        ),
+    },
+    { name: /^text-indent$/, read: READ_TEXT_INDENT },
+    { name: /^writing-mode$/, read: only(/^(?:horizontal-tb|initial)$/i, 'a writing mode but horizontal-tb reads a figure down') },
+    { name: /^text-overflow$/, read: (clean) => (splitTopLevel(clean, ' ').every((t) => /^(?:clip|initial|unset)$/i.test(t)) ? undefined : 'an ellipsis prints in place of a figure\'s digits') },
+    { name: /^line-clamp$/, read: only(/^(?:none|initial|unset)$/i, "a line clamp cuts a figure's later lines away and prints an ellipsis in their place") },
+    { name: /^offset-path$/, read: only(/^(?:none|initial|unset)$/i, 'a motion path moves a box along it, and offset-rotate turns it') },
+    { name: /^offset$/, read: only(/^(?:none|normal|auto|initial|unset)$/i, 'the offset shorthand may carry a motion path, which moves a box along it and turns it') },
+    { name: /^text-decoration-line$/, read: READ_DECORATION_LINE },
+    { name: /^text-decoration-thickness$/, read: only(/^(?:auto|from-font|initial|unset)$/i, "an underline thickness but the face's own (auto or from-font) strikes the glyphs") },
+    { name: /^text-underline-offset$/, read: READ_UNDERLINE_OFFSET },
+    { name: /^text-decoration$/, read: READ_DECORATION },
+    { name: /^text-shadow$/, read: READ_TEXT_SHADOW },
+    { name: /^outline-width$/, read: READ_OUTLINE_WIDTH },
+    { name: /^outline-offset$/, read: READ_OUTLINE_OFFSET },
+    { name: /^outline$/, read: READ_OUTLINE, varOk: true },
+    { name: /^z-index$/, read: READ_Z_INDEX },
+    { name: /^(?:transform|rotate|translate|scale)$/, read: READ_TRANSFORM },
+    { name: /^color$/, read: inkFade, varOk: true },
+    {
+        name: /^(?:background|background-image)$/,
+        read: (clean, ctx) => (ctx.money && PICTURE.test(withoutStrings(clean)) ? 'a picture under a figure\'s glyphs is a ground the probe cannot read, and fails' : undefined),
+        varOk: true,
+    },
+]);
+
+/**
+ * Every longhand in the probe's `DRESS_HELD` set (`layout/probe.ts`; its
+ * `BOX_HELD` is a subset), and how a first-party look sheet meets it. The
+ * test `the-state-belt-accounts-for-every-longhand-the-probe-holds` parses
+ * both sets out of the probe and fails on a member missing here, a member
+ * here the probe no longer holds, and, for each `how`, on the behaviour it
+ * names:
+ * - `belt`: read under a state by `STATE_BELT` (a vendor prefix read as
+ *   plain), save `outline-style`, which paints nothing without the width and
+ *   offset that are read;
+ * - `refused`: refused in a first-party look sheet wherever it stands, at rest
+ *   or under a state (`REFUSED_PROPERTIES`, `PRINTING_KEYWORD`, or a keyword
+ *   `declarationProblems` refuses);
+ * - `unread`: read by no static rule, with the reason.
+ */
+export const STATE_BELT_ACCOUNT = Object.freeze({
+    'clip-path': { how: 'belt' },
+    clip: { how: 'belt' },
+    'mask-image': { how: 'belt' },
+    '-webkit-mask-image': { how: 'belt' },
+    'mask-border-source': { how: 'belt' },
+    '-webkit-mask-box-image-source': { how: 'belt' },
+    '-webkit-mask-box-image': { how: 'belt' },
+    filter: { how: 'belt' },
+    'backdrop-filter': { how: 'belt' },
+    'mix-blend-mode': { how: 'belt' },
+    'background-blend-mode': { how: 'belt' },
+    '-webkit-box-reflect': { how: 'refused' },
+    'offset-path': { how: 'belt' },
+    rotate: { how: 'belt' },
+    scale: { how: 'belt' },
+    translate: { how: 'belt' },
+    transform: { how: 'belt' },
+    opacity: { how: 'belt' },
+    visibility: { how: 'belt' },
+    'content-visibility': { how: 'belt' },
+    zoom: { how: 'belt' },
+    'font-size-adjust': { how: 'belt' },
+    'word-spacing': { how: 'belt' },
+    'text-indent': { how: 'belt' },
+    'letter-spacing': { how: 'belt' },
+    '-webkit-text-fill-color': { how: 'refused' },
+    '-webkit-text-stroke-width': { how: 'refused' },
+    '-webkit-text-security': { how: 'refused' },
+    'background-clip': { how: 'refused' },
+    '-webkit-background-clip': { how: 'refused' },
+    'background-color': { how: 'unread', why: "its contrast against the ink is the probe's ground stack (`groundStackFault`), which needs the browser's layout and the engine's colours" },
+    'background-image': { how: 'belt', why: 'a picture on a subject that may be a money node; a gradient is a ground, unread like background-color' },
+    'outline-style': { how: 'belt' },
+    'outline-width': { how: 'belt' },
+    'outline-offset': { how: 'belt' },
+    'text-decoration-line': { how: 'belt' },
+    'text-decoration-thickness': { how: 'belt' },
+    'text-underline-offset': { how: 'belt' },
+    'text-emphasis-style': { how: 'refused' },
+    'text-shadow': { how: 'belt' },
+    direction: { how: 'refused' },
+    'unicode-bidi': { how: 'refused' },
+    'writing-mode': { how: 'belt' },
+    '-webkit-writing-mode': { how: 'belt' },
+    display: { how: 'refused', why: 'list-item is refused everywhere; display: none is skipped by the probe too (a figure a look hides whole)' },
+    'animation-name': { how: 'belt', why: 'the keyframes a state rule names are read as if the state rule set them' },
+    content: { how: 'refused' },
+    '-webkit-text-decorations-in-effect': { how: 'unread', why: 'a computed value no sheet can set; the text-decoration properties that make it are read' },
+    color: { how: 'belt', why: "the ink's alpha only, in a literal; its contrast against the ground is the ground stack's, and a var() stands" },
+    'text-overflow': { how: 'belt' },
+    'line-clamp': { how: 'belt' },
+    '-webkit-line-clamp': { how: 'belt' },
+});
+
+/** Why one declaration under a state may not stand, or undefined. */
+function stateBeltReason(prop, value, ctx) {
+    if (prop.startsWith('--')) {
+        return 'a custom property set under a state re-states, where no family here reads it, a value a rule at rest reads as a clip, a blur or an animation (stall.css reads --s-price-clip, --s-icon-clip, --s-head-blur and --s-tabs-blur that way)';
+    }
+    const name = prop.replace(VENDOR_PREFIX, '');
+    const entry = STATE_BELT.find((family) => family.name.test(name));
+    if (entry === undefined) return undefined;
+    const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    if (entry.varOk !== true && /(?<![\w-])var\s*\(/i.test(withoutStrings(clean))) return BELT_VAR;
+    return entry.read(clean, ctx, name);
 }
 
-/** Why the declarations of a rule whose selector names a state may not stand (see above); a rule of no state has none. */
-function stateBeltProblems(decls, selectors) {
-    const state = selectors.find(namesABeltState);
-    if (state === undefined) return [];
+/** The names an `animation` or `animation-name` declaration starts, or undefined where it names one through a `var()`. */
+function animationNames(prop, value) {
+    const clean = value.replace(/\s*!\s*important\s*$/i, '').trim();
+    if (/(?<![\w-])var\s*\(/i.test(clean)) return undefined;
+    const names = [];
+    for (const part of splitTopLevel(clean, ',')) {
+        const name = prop === 'animation-name' ? part : parseSingleAnimation(part).name;
+        if (name !== undefined) names.push(name.replace(/^["']|["']$/g, ''));
+    }
+    return names;
+}
+
+/**
+ * Why the declarations of a rule whose selector names a state may not stand
+ * (see above); a rule of no state has none. `keyframes` is the sheet's
+ * keyframes by name (`keyframesOf`): the stops of one a declaration starts
+ * are read as if the state rule had set them.
+ */
+function stateBeltProblems(decls, selectors, keyframes = new Map()) {
+    const states = selectors.filter(namesABeltState);
+    if (states.length === 0) return [];
+    const state = states[0];
+    const ctx = { money: states.some(mayBeMoneyNode) };
     const out = [];
+    const said = new Set();
     for (const { prop, value } of decls) {
-        const why = stateBeltReason(prop, value);
-        if (why !== undefined) {
+        const why = stateBeltReason(prop, value, ctx);
+        if (why !== undefined) out.push(`${prop}: ${echo(value, 48)} under "${echo(state)}" — ${why}${BELT_TAIL}`);
+        const name = prop.replace(VENDOR_PREFIX, '');
+        if (name !== 'animation' && name !== 'animation-name') continue;
+        const names = animationNames(name, value);
+        if (names === undefined) {
             out.push(
-                `${prop}: ${echo(value, 48)} under "${echo(state)}" — ${why}; the probe measures every screen at rest and paints no hover, ` +
-                    'focus, press or turned wall, so what arrives with a state is read by no pass',
+                `${prop}: ${echo(value, 48)} under "${echo(state)}" — an animation a state starts by a name this lint cannot read (a var()) may run any keyframe, ` +
+                    `and every stop of one is read as if the state rule had set it${BELT_TAIL}`,
             );
+            continue;
+        }
+        for (const keyframe of names) {
+            for (const stop of keyframes.get(keyframe) ?? []) {
+                for (const decl of stop) {
+                    const reason = stateBeltReason(decl.prop, decl.value, ctx);
+                    const message = `${decl.prop}: ${echo(decl.value, 48)} in @keyframes "${echo(keyframe)}", which ${prop} starts under "${echo(state)}" — ${reason}${BELT_TAIL}`;
+                    if (reason !== undefined && !said.has(message)) {
+                        said.add(message);
+                        out.push(message);
+                    }
+                }
+            }
         }
     }
     return out;
+}
+
+/** The sheet's keyframes by name, each as the declarations of its stops: what a state rule that names one starts. */
+function keyframesOf(nodes, into = new Map()) {
+    for (const node of nodes) {
+        if (node.kind === 'rule' || node.statement) continue;
+        if (node.name === 'keyframes') {
+            const name = node.prelude.replace(/^@keyframes\s*/i, '').trim().replace(/^["']|["']$/g, '');
+            const body = node.body ?? '';
+            const stops = parseList(body, 0, body.length, [])
+                .filter((stop) => stop.kind === 'rule')
+                .map((stop) => declarationsOf(stop.body));
+            into.set(name, [...(into.get(name) ?? []), ...stops]);
+        } else if (node.children !== undefined) {
+            keyframesOf(node.children, into);
+        }
+    }
+    return into;
 }
 
 function selectorProblems(selector, { kit = false } = {}) {
@@ -1556,6 +2114,21 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * own rules: its README states them, and a rule added there is the
          * owner's line to write.
          */
+        /*
+         * A custom property in a keyframe (the lint-belts critic's P2): which
+         * property a rule reads it as (`letter-spacing: var(--g)`, a clip, a
+         * size) is the rule's, not the keyframe's, so every check that reads
+         * the property names a keyframe sets — the money node's size and
+         * width (`keyframeSizeMotion`), the state belt, the probe's own read
+         * of a running animation's longhands — passes a figure that moves by
+         * `--g`. No look sheet animates one; stall.css's own do (it is no
+         * look sheet). The kit keeps the rules its README states.
+         */
+        if (firstParty && selectors === undefined && prop.startsWith('--')) {
+            out.push(
+                `${shown} — a custom property in a keyframe: it animates a value under no property name, so a rule that reads it as a letter-spacing, a clip or a size moves a money node past every check that reads the names a keyframe sets`,
+            );
+        }
         if (firstParty && prop.startsWith('--') && /(?:url|image-set)\(/i.test(decodeEscapes(value))) {
             out.push(
                 `${shown} — a file named in a custom property: write each url() and image-set() in the property that paints it, where the file-art checks read it`,
@@ -1690,8 +2263,15 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * paints over whatever is tapped, a money control among them, in a
          * colour no pass reads. In a first-party sheet only `transparent`
          * stands, at rest, under a state and in a keyframe alike. It has no
-         * unprefixed twin, so the twin rule below does not apply to it here;
-         * the kit keeps that rule, which refuses it in any value.
+         * unprefixed twin, so the twin rule below does not apply to it here.
+         * The kit keeps that rule, which asks for a `tap-highlight-color` of
+         * the same value beside it and passes the pair: `-webkit-tap-highlight-color:
+         * red; tap-highlight-color: red;` is a kit sheet that stands (a
+         * twin naming a property nothing reads satisfies the rule). So the
+         * kit refuses the highlight only when it stands without such a twin
+         * (the lint-belts critic's B1; this comment, the belt's docblock and
+         * 009ddbc's message said "in any value").
+         * `the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin`.
          */
         if (firstParty && prop === TAP_HIGHLIGHT && !/^transparent$/i.test(clean)) {
             out.push(`${shown} — a tap highlight paints a colour over whatever is tapped, a money control among them, where no pass looks; only transparent stands`);
@@ -1905,6 +2485,8 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
     const ownFamilies = load === 'worn' ? declaredNames(css).families : [];
     // Whether a transition of `transform` is one of a size: some rule of this sheet scales (money-size motion).
     const sheetScales = !kit && sheetSetsAScalingTransform(nodes);
+    // The sheet's keyframes by name: a state rule that starts one is read as if it set the stops (the state belt).
+    const keyframes = kit ? new Map() : keyframesOf(nodes);
 
     const walk = (list) => {
         for (const node of list) {
@@ -1921,7 +2503,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const why of declarationProblems(declarationsOf(node.body), selectors, { firstParty: !kit })) at(node.start, why);
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
                 if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors, { scales: sheetScales })) at(node.start, why);
-                if (!kit) for (const why of stateBeltProblems(declarationsOf(node.body), selectors)) at(node.start, why);
+                if (!kit) for (const why of stateBeltProblems(declarationsOf(node.body), selectors, keyframes)) at(node.start, why);
                 continue;
             }
             if (node.name === 'keyframes') {
@@ -2054,9 +2636,15 @@ export function lintSheet(css, { art = [] } = {}) {
  * of any of them or of a transform that scales anywhere
  * (`a-look-never-animates-a-money-nodes-size`); and, under a state the probe
  * never paints (`:hover`, `:focus`, `:focus-visible`, `:focus-within`,
- * `:active`, `[data-turn]`), no clip, mask, filter, blend mode, opacity
- * under 1, hidden box or transform past a tilt, and no tap highlight but
- * transparent anywhere (`a-look-state-rule-never-hides-money`).
+ * `:active`, `[data-turn]`), any value of a longhand in the probe's
+ * `DRESS_HELD` or `BOX_HELD` that the probe refuses at rest (a clip, a mask,
+ * a filter, a blend mode, an opacity under 1, a hidden box, a transform past
+ * a tilt, a motion path, a line through the text, a negative indent or
+ * spacing, a vertical writing mode, an outline wider than a ring, a z-index
+ * under zero, …), a custom property, and the keyframes a state starts, and
+ * no tap highlight but transparent anywhere
+ * (`a-look-state-rule-never-hides-money`). First party only: the kit lint
+ * carries none of these.
  */
 export function lintLookSheet(css, { lookClass, load = 'bundled', ownArt = undefined }) {
     return lintLook(css, { scope: lookClass, kit: false, art: [], load, ownArt });
