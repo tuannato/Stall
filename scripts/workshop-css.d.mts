@@ -14,3 +14,6 @@ export const PRESENCE_ATTRIBUTES: readonly string[];
 
 /** Whether a first-party selector names a state the probe never paints (see `STATE_ATTRIBUTE_NAMES` and `STRUCTURAL_PSEUDO_CLASSES`). */
 export function namesAState(selector: string): boolean;
+
+/** The attributes that are states except for the values a probe screen paints (`data-format` but `tag`, `data-code`). */
+export const STATE_EXCEPT_PAINTED: Readonly<Record<string, readonly string[]>>;

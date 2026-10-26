@@ -20,8 +20,10 @@ import {
     OUTLINE_OFFSET_MAX_PX,
     OUTLINE_OFFSET_MIN_PX,
     OUTLINE_WIDTH_MAX_PX,
+    DECORATION_THICKNESS_MAX_PX,
     STATE_ALLOWED,
     STATE_ATTRIBUTES,
+    STATE_EXCEPT_PAINTED,
     STATE_OPAQUE_ROLES,
     STATE_PSEUDO_ALLOWED,
     STATE_SHADOW_BLUR_MAX_PX,
@@ -39,9 +41,12 @@ import {
     masksWithAFile,
     namesAState,
     sheetMasksWithAFile,
+    sheetNamesAttribute,
     PRESENCE_ATTRIBUTES,
     SERVED_FAMILIES,
     STICKY_BOXES,
+    STROKE_WIDTH_MAX,
+    UNDERLINE_OFFSET_MAX_PX,
     parseSheet,
     foreignNamingProblems,
     rescopeSheet,
@@ -2953,6 +2958,629 @@ describe('an-outline-is-capped-per-longhand', () => {
     });
 });
 
+/** A rule or keyframe-stop whose declarations a test reads, with the at-rules entered; `selectors` is undefined in a keyframe. */
+function declarationsIn(css) {
+    return everyRule(css).flatMap(({ selectors, decls }) => decls.map((decl) => ({ ...decl, selectors })));
+}
+
+describe('a-line-and-a-stroke-are-capped-per-declaration', () => {
+    /**
+     * The lint-belts critic's fifth review, B1: an underline, a strike and an
+     * SVG stroke are drawn in the ink of their box, and each reaches past it
+     * with one number — `text-underline-offset: 300px` with
+     * `text-decoration-thickness: 60px` on a link stall.css already
+     * underlines, or `stroke-width: 300` on a glyph (`.ic` is `stroke:
+     * currentColor`). A state that changes the ink reveals it with no move.
+     * So in a first-party sheet, wherever a declaration stands (at rest, in a
+     * media block and in a keyframe) the offset is within 4px of its line,
+     * the thickness at most 3px, the stroke at most 3 wide, each in px or a
+     * keyword with no `var()` or `calc()`, and the `d` property is not
+     * written. Red: `inkReachProblems` out of `lintLook` (every refusal below
+     * fails, the sheets pass).
+     */
+    const INK = /is drawn in the ink of its box and reaches past it, where a state that changes the ink shows it/;
+    const refusedInk = (rule) => {
+        const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => INK.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+
+    it('pins the caps by value', () => {
+        assert.equal(UNDERLINE_OFFSET_MAX_PX, 4);
+        assert.equal(DECORATION_THICKNESS_MAX_PX, 3);
+        assert.equal(STROKE_WIDTH_MAX, 3);
+    });
+
+    it('refuses the critic\'s plants: the bar 300px below a base-underlined link, the shorthand, the keyframe, the stroke and the path (f2, f8)', () => {
+        // The look writes only the offset and the thickness, on a link stall.css underlines; a colour under :hover recolours the bar.
+        refusedInk('.t-neo .guide-link { text-underline-offset: 300px; text-decoration-thickness: 60px; }\n.t-neo .guide-link:hover { color: #000000; }');
+        refusedInk('.t-neo .stall-sub { text-decoration: underline 60px; text-underline-offset: 300px; }\n.t-neo .stall-head:hover .stall-sub { color: #ff00aa; }');
+        refusedInk('.t-neo .stall-sub { text-decoration: underline currentColor 60px; text-underline-offset: 300px; }');
+        refusedInk('@keyframes t-neo-td { 50% { text-underline-offset: 300px; } }');
+        refusedInk('.t-neo .item-caret { overflow: visible; stroke-width: 300; pointer-events: none; color: transparent; }\n.t-neo .item-caret:hover { color: #ff00aa; }');
+        refusedInk(".t-neo .item-caret { overflow: visible; }\n.t-neo .item-caret path { d: path('M -400 -400 L 400 400'); }");
+    });
+
+    it('refuses an offset past 4px either side or not in px, a thickness past 3px or not in px, a stroke past 3, a var() or calc(), and d, in every position', () => {
+        for (const decl of [
+            'text-underline-offset: 4.01px',
+            'text-underline-offset: -4.01px',
+            'text-underline-offset: 300px',
+            'text-underline-offset: 1em',
+            'text-underline-offset: 10%',
+            'text-underline-offset: 1rem',
+            'text-underline-offset: 2',
+            'text-underline-offset: var(--o)',
+            'text-underline-offset: calc(2px)',
+            'text-underline-offset: min(2px, 3px)',
+            'text-decoration-thickness: 3.01px',
+            'text-decoration-thickness: 60px',
+            'text-decoration-thickness: 0.2em',
+            'text-decoration-thickness: 5%',
+            'text-decoration-thickness: var(--t)',
+            'text-decoration-thickness: calc(1px)',
+            'text-decoration: underline 3.01px',
+            'text-decoration: underline 60px red',
+            'text-decoration: underline wavy 4px',
+            'text-decoration: underline 50%',
+            'text-decoration: underline var(--t)',
+            'text-decoration: underline calc(2px)',
+            'stroke-width: 3.01',
+            'stroke-width: 3.01px',
+            'stroke-width: 300',
+            'stroke-width: 1em',
+            'stroke-width: 50%',
+            'stroke-width: var(--w)',
+            'stroke-width: calc(2)',
+            "d: path('M 0 0 L 8 8')",
+            'd: none',
+        ]) {
+            refusedInk(`.t-neo .guide-link { ${decl}; }`);
+            refusedInk(`@media (min-width: 680px) { .t-neo .guide-link { ${decl}; } }`);
+            refusedInk(`@keyframes t-neo-ring { to { ${decl}; } }`);
+            refusedInk(`.t-neo .item-caret::after { content: ''; ${decl}; }`);
+        }
+        // The property in capitals.
+        refusedInk('.t-neo .guide-link { TEXT-UNDERLINE-OFFSET: 300px; }');
+        // The prefixed shorthand's twin is a different fault; its thickness is read as the shorthand's.
+        refusedInk('.t-neo .guide-link { -webkit-text-decoration: underline 60px; }');
+    });
+
+    it('takes the edges of the caps, a keyword, a zero, a CSS-wide keyword, a palette role and the sheets\' own widths', () => {
+        for (const decl of [
+            'text-underline-offset: 4px',
+            'text-underline-offset: -4px',
+            'text-underline-offset: +4.0PX',
+            'text-underline-offset: 0',
+            'text-underline-offset: auto',
+            'text-underline-offset: from-font',
+            'text-underline-offset: initial',
+            'text-underline-offset: unset',
+            'text-underline-offset: inherit',
+            'text-underline-offset: revert',
+            'text-decoration-thickness: 3px',
+            'text-decoration-thickness: 0',
+            'text-decoration-thickness: auto',
+            'text-decoration-thickness: from-font',
+            'text-decoration-thickness: inherit',
+            'text-decoration: underline 3px red',
+            'text-decoration: underline wavy 2px var(--s-text)',
+            'text-decoration: underline var(--s-accent)',
+            'text-decoration: underline from-font',
+            'text-decoration: line-through auto',
+            'text-decoration: none',
+            'text-decoration: revert',
+            'text-decoration: inherit',
+            'stroke-width: 3',
+            'stroke-width: 3px',
+            'stroke-width: 1.75',
+            'stroke-width: 2',
+            'stroke-width: 0',
+            'stroke-width: initial',
+            'stroke-width: inherit',
+        ]) {
+            accepts(`.t-neo .guide-link { ${decl}; }`);
+        }
+        accepts('@keyframes t-neo-ring { from { text-underline-offset: -2px; text-decoration-thickness: 1px; stroke-width: 1; } to { text-underline-offset: 4px; text-decoration-thickness: 3px; stroke-width: 3; } }');
+        accepts('@media (min-width: 680px) { .t-neo .item-caret { stroke-width: 2; } }');
+    });
+
+    it('is first party only, leaves a state rule to the belt, and costs the shipped looks, the starters, the fixtures and the canary nothing: they set a stroke of 1.75 to 2 and no underline', () => {
+        for (const rule of [
+            '.t-neo .guide-link { text-underline-offset: 300px; text-decoration-thickness: 60px; stroke-width: 300; }',
+            "@keyframes wk-ring { to { text-underline-offset: 300px; } }\n.t-neo .item-caret path { d: path('M 0 0'); }",
+        ]) {
+            const kit = lintSheet(plantedKit(rule));
+            assert.ok(!kit.some((p) => INK.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
+        }
+        // Under a state the belt refuses the property by name, so the cap does not say it again.
+        const hover = lintLookSheet(plantedNeo('.t-neo .guide-link:hover { text-underline-offset: 300px; stroke-width: 300; }'), { lookClass: 't-neo' });
+        assert.ok(hover.length > 0 && !hover.some((p) => INK.test(p)), hover.join('\n'));
+        const strokes = [];
+        let reach = 0;
+        for (const { name, css } of FIRST_PARTY_SHEETS) {
+            for (const { prop, value } of declarationsIn(css)) {
+                if (prop === 'stroke-width') strokes.push(Number.parseFloat(value));
+                if (/^(?:text-underline-offset|text-decoration-thickness|d|column-rule(?:-.*)?)$/.test(prop) || (prop === 'text-decoration' && /\d/.test(value))) reach += 1;
+            }
+            assert.ok(!lintLookSheet(css, { lookClass: (/--look-sheet:\s*([\w-]+)/.exec(css) ?? [])[1], load: 'worn', ownArt: undefined }).some((p) => INK.test(p)), name);
+        }
+        // The three shipped looks set a stroke width (Modern and Neo 2, Rural 1.75) and nothing else on these lines.
+        assert.deepEqual([...strokes].sort(), [1.75, 2, 2]);
+        assert.equal(reach, 0, 'no served first-party sheet writes an underline offset or thickness, d or a column rule');
+    });
+});
+
+describe('the-column-rule-names-its-own-colour', () => {
+    /**
+     * The fifth review's B1 (the column rule's half): a column rule wider
+     * than its gap reaches past the box, and with no colour it is drawn in
+     * the ink. So, like an outline (`a-paint-past-its-box-names-its-own-colour`),
+     * `column-rule` and `column-rule-color` name a literal colour or a palette
+     * role, and a rule that draws (`column-rule-style`) names one in the same
+     * rule. Red: `column-rule` out of `REACH_PROPS` (every refusal below
+     * fails).
+     */
+    const REACH = /it reaches past its box, where a state that changes the ink of its box shows it/;
+    const refusedRule = (rule) => {
+        const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => REACH.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+
+    it('refuses a column rule in currentColor, inherit, revert, no colour or a variable that is not a role, at rest, in a media block and in a keyframe', () => {
+        for (const decl of [
+            'column-rule: 4000px solid currentColor',
+            'column-rule: 4000px solid CURRENTCOLOR',
+            'column-rule: 2px solid',
+            'column-rule: 2px dashed',
+            'column-rule: 2px solid inherit',
+            'column-rule: 2px solid var(--g)',
+            'column-rule: 2px solid color-mix(in srgb, currentColor 50%, red)',
+            'column-rule: inherit',
+            'column-rule-color: currentColor',
+            'column-rule-color: inherit',
+            'column-rule-color: initial',
+            'column-rule-color: unset',
+            'column-rule-color: revert',
+            'column-rule-color: revert-layer',
+            'column-rule-color: var(--g)',
+            'column-rule-style: solid',
+            'column-rule-style: dashed',
+        ]) {
+            refusedRule(`.t-neo .item-n { column-count: 2; ${decl}; }`);
+            refusedRule(`@media (min-width: 680px) { .t-neo .item-n { ${decl}; } }`);
+            refusedRule(`@keyframes t-neo-cr { to { ${decl}; } }`);
+        }
+    });
+
+    it('takes a column rule that names its colour, a rule that draws nothing, a zero width and a palette role', () => {
+        for (const decl of [
+            'column-rule: 2px solid red',
+            'column-rule: 2px solid var(--s-text)',
+            'column-rule: 2px dashed color-mix(in srgb, var(--s-muted) 35%, transparent)',
+            'column-rule: none',
+            'column-rule: 0 solid',
+            'column-rule: initial',
+            'column-rule-color: red',
+            'column-rule-color: var(--s-accent)',
+            'column-rule-color: red; column-rule-style: solid; column-rule-width: 2px',
+            'column-rule-style: none',
+        ]) {
+            accepts(`.t-neo .item-n { column-count: 2; ${decl}; }`);
+        }
+    });
+
+    it('is first party only, and costs the sheets nothing: none writes a column rule', () => {
+        const kit = lintSheet(plantedKit('.t-neo .item-n { column-count: 2; column-rule: 4000px solid currentColor; }'));
+        assert.ok(!kit.some((p) => REACH.test(p)), kit.join('\n'));
+        for (const { name, css } of FIRST_PARTY_SHEETS) {
+            assert.equal(declarationsIn(css).filter((d) => d.prop.startsWith('column-rule')).length, 0, name);
+        }
+    });
+});
+
+describe('no-custom-property-holds-the-ink', () => {
+    /**
+     * The fifth review's B2. `var()` is substituted as tokens, so wherever it
+     * stands it can carry a comma and then a stop, a layer or a whole value
+     * in the ink of the box that reads it: a stop's place (`#000 var(--x)`
+     * with `--x: 50%, currentColor`), the `mask` position slot, the size
+     * after a `/`, a radial gradient's `at`, a conic gradient's `from`.
+     * Chrome confirms all five (the critic's `chrome/mask.png`). The reader
+     * of a position cannot tell, so the closure is at the declaration: in a
+     * first-party sheet no custom property holds `currentColor` or `inherit`
+     * anywhere in its value, nor is `revert` or `revert-layer` its whole
+     * value. That closes the class `c1:8` stated as a gap, and backs up the
+     * pseudo-element reader's palette-role-only rule. Red: the custom-property
+     * block out of `declarationProblems` (every refusal below fails, and so
+     * do `c1:8`, `m2:0` and the mask plants `f5:0` to `f5:2`).
+     */
+    const HOLDS = /a custom property that holds (?:currentcolor|inherit|revert)/;
+    const refusedHolds = (rule) => {
+        const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => HOLDS.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+
+    it('refuses currentColor and inherit anywhere in a value, and revert and revert-layer as the whole value, at rest, in a media block, on the root and on a pseudo-element', () => {
+        for (const decl of [
+            '--x: currentColor',
+            '--x: CurrentColor',
+            '--x: 50%, currentColor',
+            '--x: 0 0, linear-gradient(currentColor, currentColor)',
+            '--x: color-mix(in srgb, currentColor 50%, red)',
+            '--x: 1px solid currentColor',
+            '--x: inherit',
+            '--x: INHERIT',
+            '--x: 1px solid inherit',
+            '--x: revert',
+            '--x: revert-layer',
+            '--x: REVERT-LAYER',
+            '--s-addr-bg: currentColor',
+            '--look-extra: inherit',
+        ]) {
+            refusedHolds(`.t-neo .item-p { ${decl}; }`);
+            refusedHolds(`@media (min-width: 680px) { .t-neo .item-p { ${decl}; } }`);
+            refusedHolds(`.t-neo { ${decl}; }`);
+            refusedHolds(`.t-neo .item-p::after { content: ''; ${decl}; }`);
+        }
+    });
+
+    it('closes the five roads the critic confirmed in Chrome (f5:0 to f5:2, c1:8): the custom property is refused where it is declared', () => {
+        for (const rule of [
+            ".t-neo .item-p { --p: 0 0, linear-gradient(currentColor, currentColor); }\n.t-neo .item-p::after { content: ''; background: #000; mask: linear-gradient(#000, #000) var(--p); }",
+            ".t-neo .item-p { --w: auto, linear-gradient(currentColor, currentColor); }\n.t-neo .item-p::after { content: ''; background: #000; mask: linear-gradient(#000, #000) 0 0 / var(--w); }",
+            ".t-neo .item-p { --y: 50%, currentColor 0 100%; }\n.t-neo .item-p::after { content: ''; background: #000; mask-image: radial-gradient(circle at 50% var(--y), #000, transparent); }",
+            ".t-neo .item-p { --a: 0deg, currentColor 0 100%; }\n.t-neo .item-p::after { content: ''; background: #000; mask-image: conic-gradient(from var(--a), #000, transparent); }",
+            ".t-neo .item-p { --x: 50%, currentColor; }\n.t-neo .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000 var(--x), transparent); }",
+        ]) {
+            refusedHolds(rule);
+        }
+    });
+
+    it('takes a value that only starts like the keyword, a string, a reference to another property, a palette role and a literal colour', () => {
+        for (const decl of ['--x: currentcolorful', '--x: "currentColor"', "--x: 'inherit'", '--x: 1px revert', '--x: var(--y)', '--x: var(--s-text)', '--x: red', '--x: 50%, red', '--x: initial', '--x: unset', '--inherit-currentcolor: 1px']) {
+            accepts(`.t-neo .item-p { ${decl}; }`);
+        }
+    });
+
+    it('is first party only, leaves a state rule and a keyframe to their own sentences, and reads the kit as before', () => {
+        const kit = lintSheet(plantedKit('.t-neo .item-p { --x: 50%, currentColor; --y: inherit; }'));
+        assert.ok(!kit.some((p) => HOLDS.test(p)), kit.join('\n'));
+        // Under a state the belt refuses a custom property by name: one sentence, not two.
+        const hover = lintLookSheet(plantedNeo('.t-neo .item:hover { --x: currentColor; }'), { lookClass: 't-neo' });
+        assert.ok(hover.some((p) => /a custom property set under a state/.test(p)) && !hover.some((p) => HOLDS.test(p)), hover.join('\n'));
+    });
+
+    it('costs nothing: no served stylesheet the app loads declares such a custom property, and the theme table emits none', async () => {
+        const roles = new Set(['base', 'screen', 'look', 'kit', 'fixture', 'private']);
+        const rows = SERVED.filter((row) => roles.has(row.role));
+        const seen = new Set(rows.map((row) => row.role));
+        for (const role of roles) assert.ok(seen.has(role), `a ${role} sheet is read`);
+        let declared = 0;
+        for (const row of rows) {
+            for (const { prop, value } of declarationsIn(row.css)) {
+                if (!prop.startsWith('--')) continue;
+                declared += 1;
+                assert.ok(!/(?<![\w-])(?:currentcolor|inherit)(?![\w-])/i.test(value) && !/^(?:revert|revert-layer)$/i.test(value), `${row.path}: ${prop}: ${value}`);
+            }
+        }
+        assert.ok(declared >= 80, `${declared} custom properties read (the look rows' own, stall.css's, the screens')`);
+        // The starters (the shipped looks re-scoped for the kit) and the canary carry the same.
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            const starter = rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried);
+            assert.deepEqual(declarationsIn(starter).filter((d) => d.prop.startsWith('--') && /(?<![\w-])(?:currentcolor|inherit)(?![\w-])/i.test(d.value)), [], `${cls} starter`);
+        }
+        const canary = canaryFiles()['canary/sheet.css'];
+        assert.deepEqual(declarationsIn(canary).filter((d) => d.prop.startsWith('--') && /(?<![\w-])(?:currentcolor|inherit)(?![\w-])/i.test(d.value)), [], 'the canary');
+        // The inline custom properties the app writes: the theme table, under every shipped look and mood, and none the code sets by hand holds the ink.
+        const { runnerImport } = await import('vite');
+        const { module: attachments } = await runnerImport(join(ROOT, 'src/domain/attachments.ts'), { configFile: false, logLevel: 'silent' });
+        const theme = await import('../src/domain/theme.ts');
+        let vars = 0;
+        for (const { id } of theme.SHIPPED_THEMES) {
+            const worn = [[], ...attachments.SHIPPED_ATTACHMENTS.filter((a) => a.themeId === id && a.slot === 'mood').map((a) => [a])];
+            for (const set of worn) {
+                for (const [name, value] of Object.entries(theme.themeVars(attachments.withMood(theme.decodeTheme(id), set)))) {
+                    vars += 1;
+                    assert.ok(!/(?<![\w-])(?:currentcolor|inherit|revert|revert-layer|light-dark)(?![\w-])/i.test(value), `${id} ${name}: ${value}`);
+                }
+            }
+        }
+        assert.ok(vars >= 200, `${vars} theme variables read`);
+    });
+});
+
+describe('a-rule-runs-only-the-keyframes-its-own-sheet-declares', () => {
+    /**
+     * The fifth review's B3. `@keyframes` names are global, and stall.css
+     * ships keyframes of its own: `animation: pin-demo-land 1s 120s reverse
+     * forwards` on a quote's `.item-a` runs a base keyframe that holds
+     * `visibility: hidden` from 0 to 44% (the critic's PT, reopened);
+     * `animation: sel-bump 1s infinite` on a money node scales it by 1.18,
+     * which the size lint refuses in a look's own keyframes and never reads in
+     * a base sheet's; `animation-name: var(--an)` does the same. So in a
+     * first-party sheet each rule's `animation` and `animation-name` name
+     * `none` or a keyframe the same sheet declares, and never through a
+     * `var()`. Red: `animationNameProblems` out of `lintLook` (every refusal
+     * below fails, and the plants `f4:0` to `f4:4`, `f4:6`).
+     */
+    const FOREIGN = /a rule of a look sheet runs only a keyframe its own sheet declares/;
+    const refusedName = (rule) => {
+        const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => FOREIGN.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+
+    it('refuses the critic\'s plants: the base sheet\'s hide, fade, scale and roam by name, and a name through a var() (f4)', () => {
+        refusedName('.t-neo .item-a { animation: pin-demo-land 1s 120s reverse forwards; }');
+        refusedName('.t-neo .item-a { animation-name: pin-demo-land; animation-duration: 1s; animation-delay: 120s; animation-direction: reverse; animation-fill-mode: forwards; }');
+        refusedName('.t-neo .item-x { animation: sel-fade 1s 120s reverse forwards; }');
+        refusedName('.t-neo .item-x { animation: sel-bump 1s 120s infinite; }');
+        refusedName('.t-neo .item-x { animation: att-beetle-roam 24s 120s infinite; }');
+        refusedName('.t-neo .item-a { --an: pin-demo-land; animation-name: var(--an); animation-duration: 1s; animation-delay: 120s; animation-direction: reverse; animation-fill-mode: forwards; }');
+    });
+
+    it('refuses a name this sheet does not declare in every spelling: quoted, one of several, in a media block, on a pseudo-element, prefixed, in another case, behind a var(), or taken from the parent', () => {
+        for (const decl of [
+            'animation: pin-demo-land 1s',
+            'animation: 1s 120s reverse forwards pin-demo-land',
+            'animation: "pin-demo-land" 1s',
+            "animation: 'pin-demo-land' 1s",
+            'animation: t-neo-cur 1s, pin-demo-land 1s',
+            'animation: pin-demo-land 1s, t-neo-cur 1s',
+            'animation-name: sel-bump',
+            'animation-name: t-neo-cur, sel-bump',
+            'animation-name: "sel-bump"',
+            'animation: T-NEO-CUR 1s',
+            'animation: t-neo-cu 1s',
+            'animation: ease 1s ease',
+            'animation: var(--a)',
+            'animation: t-neo-cur var(--d)',
+            'animation: t-neo-cur 1s var(--e)',
+            'animation-name: var(--an)',
+            'animation-name: t-neo-cur, var(--an)',
+            'animation: inherit',
+            'animation: revert',
+            'animation: revert-layer',
+            'animation-name: inherit',
+            'animation-name: revert-layer',
+            '-webkit-animation: pin-demo-land 1s; animation: pin-demo-land 1s',
+            'ANIMATION: pin-demo-land 1s',
+        ]) {
+            refusedName(`.t-neo .item-a { ${decl}; }`);
+            refusedName(`@media (min-width: 680px) { .t-neo .item-a { ${decl}; } }`);
+            refusedName(`.t-neo .item-a::after { content: ''; ${decl}; }`);
+        }
+    });
+
+    it('takes none, initial and unset, a name with no keyframe to run, the sheet\'s own keyframes (a media block\'s too) and a longhand that names none', () => {
+        for (const decl of [
+            'animation: none',
+            'animation: initial',
+            'animation: unset',
+            'animation: 1s linear infinite',
+            'animation-name: none',
+            'animation-name: NONE',
+            'animation-name: initial',
+            'animation-name: unset',
+            'animation-duration: 3s; animation-delay: 1s; animation-fill-mode: forwards',
+            'animation: t-neo-cur 1s infinite',
+            'animation: 1s infinite t-neo-astep',
+            'animation: t-neo-cur 1s, t-neo-astep 2s',
+            'animation-name: t-neo-cur, t-neo-astep',
+        ]) {
+            accepts(`.t-neo .item-a { ${decl}; }`);
+        }
+        accepts('@keyframes t-neo-here { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
+        accepts('@media (min-width: 680px) { @keyframes t-neo-here { to { color: red; } } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
+        accepts('@keyframes t-neo-here { to { color: red; } }\n@media (min-width: 680px) { .t-neo .item-a { animation: t-neo-here 1s; } }');
+    });
+
+    it('is first party only and leaves a state rule to the belt', () => {
+        const kit = lintSheet(plantedKit('.t-neo .item-a { animation: pin-demo-land 1s; animation-name: var(--an); }'));
+        assert.ok(!kit.some((p) => FOREIGN.test(p)), kit.join('\n'));
+        const hover = lintLookSheet(plantedNeo('.t-neo .item:hover .item-a { animation: pin-demo-land 1s; }'), { lookClass: 't-neo' });
+        assert.ok(hover.length > 0 && !hover.some((p) => FOREIGN.test(p)), hover.join('\n'));
+    });
+
+    it('costs nothing: every shipped look, the fixtures, the canary and every starter run only their own keyframes', () => {
+        const keyframesOf = (css) => {
+            const names = new Set();
+            const walk = (nodes) => {
+                for (const node of nodes) {
+                    if (node.kind === 'rule') continue;
+                    if (node.name === 'keyframes') names.add(node.prelude.replace(/^@keyframes\s*/i, '').trim());
+                    else if (node.children !== undefined) walk(node.children);
+                }
+            };
+            walk(parseSheet(css).nodes);
+            return names;
+        };
+        const sheets = [...FIRST_PARTY_SHEETS];
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried) });
+        }
+        let named = 0;
+        let declared = 0;
+        for (const { name, css } of sheets) {
+            const own = keyframesOf(css);
+            declared += own.size;
+            for (const { prop, value } of declarationsIn(css)) {
+                if (prop !== 'animation' && prop !== 'animation-name') continue;
+                for (const token of value.split(/[\s,]+/)) {
+                    if (own.has(token)) named += 1;
+                }
+                assert.ok(!/var\(/.test(value), `${name}: ${prop}: ${value}`);
+            }
+        }
+        // Neo declares three, Rural two, Modern two, and the starters re-name each `wk-…`: the walk sees them run.
+        assert.ok(declared >= 7 + 7 && named >= 8, `${declared} keyframes declared, ${named} names run`);
+        // The starters run only the keyframes they declare, renamed.
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            const starter = rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried);
+            assert.ok([...keyframesOf(starter)].every((name) => name.startsWith('wk-')), cls);
+            assert.deepEqual(lintLookSheet(starter, { lookClass: 't-workshop' }).filter((p) => FOREIGN.test(p)), [], `${cls} starter`);
+        }
+    });
+});
+
+describe('the-os-colour-scheme-is-not-a-looks-to-paint', () => {
+    /**
+     * The fifth review's ranked item 3 (older than this branch).
+     * `color-scheme: light dark` with `light-dark(#000, transparent)` leaves a
+     * figure invisible in a dark scheme, and system colours (`Canvas`,
+     * `CanvasText`) flip the same way; the probe paints one scheme only. So
+     * in a first-party sheet `light-dark()` is not written, and `color-scheme`
+     * is `normal` or `light`. Red: the two blocks out of
+     * `declarationProblems` (every refusal below fails, and the plants `f6:0`
+     * and `f6:1`).
+     */
+    const SCHEME = /light-dark\(\) paints one colour in a light colour scheme|color-scheme other than normal or light/;
+    const refusedScheme = (rule) => {
+        const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => SCHEME.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+    };
+
+    it('refuses light-dark() anywhere in a value and a color-scheme other than normal or light', () => {
+        refusedScheme('.t-neo { color-scheme: light dark; }\n.t-neo .item-x { color: light-dark(#ffffff, transparent); }');
+        for (const decl of [
+            'color: light-dark(#fff, #000)',
+            'color: LIGHT-DARK(#fff, #000)',
+            'background: light-dark(red, blue)',
+            'border-color: light-dark(red, blue)',
+            'box-shadow: 0 0 4px light-dark(red, blue)',
+            '--x: light-dark(red, blue)',
+            'color: light-dark (red, blue)',
+            'color-scheme: dark',
+            'color-scheme: light dark',
+            'color-scheme: dark light',
+            'color-scheme: only light',
+            'color-scheme: light only',
+            'color-scheme: only dark',
+            'color-scheme: inherit',
+            'color-scheme: unset',
+            'color-scheme: revert',
+            'color-scheme: var(--s)',
+            'COLOR-SCHEME: dark',
+        ]) {
+            refusedScheme(`.t-neo .item-x { ${decl}; }`);
+            refusedScheme(`@media (min-width: 680px) { .t-neo .item-x { ${decl}; } }`);
+            refusedScheme(`@keyframes t-neo-sc { to { ${decl}; } }`);
+        }
+    });
+
+    it('takes normal, light and initial, and a string that spells the function', () => {
+        for (const decl of ['color-scheme: normal', 'color-scheme: light', 'color-scheme: LIGHT', 'color-scheme: initial']) accepts(`.t-neo { ${decl}; }`);
+        accepts(".t-neo .item-p::before { content: ''; color: red; }");
+        accepts(".t-neo .item-p { --x: 'light-dark(red, blue)'; }");
+    });
+
+    it('is first party only, and costs nothing: no first-party sheet writes either, and no base sheet of the app sets a scheme', () => {
+        const kit = lintSheet(plantedKit('.t-neo { color-scheme: light dark; }\n.t-neo .item-x { color: light-dark(#fff, #000); }'));
+        assert.ok(!kit.some((p) => SCHEME.test(p)), kit.join('\n'));
+        for (const { name, css } of FIRST_PARTY_SHEETS) {
+            assert.deepEqual(declarationsIn(css).filter((d) => d.prop === 'color-scheme' || /light-dark\s*\(/i.test(d.value)), [], name);
+        }
+        // The base and screen sheets the app loads set no scheme either, so a look cannot meet one it did not choose (the documents `/404` and `/stream` are pages of their own).
+        for (const row of SERVED.filter((r) => ['base', 'screen'].includes(r.role))) {
+            assert.deepEqual(declarationsIn(row.css).filter((d) => d.prop === 'color-scheme' || /light-dark\s*\(/i.test(d.value)), [], row.path);
+        }
+    });
+});
+
+describe('a-partly-painted-attribute-is-a-state-except-for-the-values-painted', () => {
+    /**
+     * The fifth review's ranked item 1. `data-format` is the poster sheet's
+     * format: the fixtures paint `tag` and none of `square`, `story` and
+     * `stream`; `data-code='false'` is the shop window sheet with its pay code
+     * off, and no fixture sets `paycode=off`. A rule under a value no screen
+     * paints is read by no pass, so the belt treats it as a state
+     * (`STATE_EXCEPT_PAINTED`): a selector on the name that is not an exact
+     * match on a painted value fails closed. `layout/stateAttributes.test.ts`
+     * holds each painted value to a screen. Red: `STATE_EXCEPT_PAINTED` emptied
+     * (the four states, the fail-closed forms and the plants `g1` fail).
+     */
+    const stateRule = (selector, decl) => lintLookSheet(plantedNeo(`.t-neo ${selector} { ${decl}; }`), { lookClass: 't-neo' });
+
+    it('pins the list by value', () => {
+        assert.deepEqual(JSON.parse(JSON.stringify(STATE_EXCEPT_PAINTED)), { 'data-code': [], 'data-format': ['tag'] });
+        // Every value it leaves a look to match is a value STATE_ATTRIBUTES lists.
+        for (const [name, painted] of Object.entries(STATE_EXCEPT_PAINTED)) {
+            for (const value of painted) assert.ok(STATE_ATTRIBUTES[name].includes(value), `${name}=${value}`);
+        }
+    });
+
+    it('makes the unpainted formats and the pay code off states: a rule under one sets only what a state may', () => {
+        for (const selector of [".stall-sub[data-format='square']", ".stall-sub[data-format='story']", ".stall-sub[data-format='stream']", ".stall-sub[data-code='false']", ".item-x:has([data-code='false'])", ":is([data-format='stream'], .item-n)"]) {
+            assert.equal(namesAState(selector), true, selector);
+            const problems = stateRule(selector, 'width: 10px');
+            assert.ok(problems.some((p) => /is not a property a state rule may set/.test(p)), `${selector}:\n  ${problems.join('\n  ')}`);
+            assert.deepEqual(stateRule(selector, 'color: #ffffff'), [], selector);
+        }
+    });
+
+    it('leaves the format that is painted a rule at rest, and fails closed on every other form of either name', () => {
+        assert.equal(namesAState("[data-format='tag']"), false);
+        assert.equal(namesAState('[data-format=tag]'), false);
+        assert.deepEqual(stateRule(".stall-sub[data-format='tag']", 'width: 10px'), []);
+        for (const selector of ['[data-format]', '[data-code]', "[data-format='tag' i]", "[data-format*='tag']", "[data-format~='tag']", "[data-format|='tag']", "[data-format^='t']", "[data-format='Tag']", "[data-FORMAT='story']", '[data-format="story"]', '[ data-format = story ]', "[data-code='true']"]) {
+            assert.equal(namesAState(selector), true, selector);
+        }
+        // The other attributes the fixtures paint are not states: the list is these two names and the six before them.
+        for (const selector of ["[data-copied='true']", "[data-copied='shown']", "[data-tier='2']", "[data-price-tier='3']", "[data-mode='browse']", "[aria-pressed='true']"]) {
+            assert.equal(namesAState(selector), false, selector);
+        }
+    });
+
+    it('costs nothing: no sheet a run serves, a starter or the canary names either attribute', () => {
+        for (const { name, css } of FIRST_PARTY_SHEETS) {
+            assert.equal(sheetNamesAttribute(css, 'data-format'), false, name);
+            assert.equal(sheetNamesAttribute(css, 'data-code'), false, name);
+        }
+    });
+});
+
+describe('a-sheet-names-an-attribute-for-the-contrast-plan', () => {
+    /**
+     * The fifth review's ranked item 4: the contrast plan samples the staged
+     * address screens for each measured look whose sheet names `[data-copied]`.
+     * The page derives the list from the stylesheets it loaded
+     * (`layout/sheetNaming.ts`) and the runner from the served text with this
+     * reader, and fails a run whose two differ. This holds the reader.
+     */
+    it('finds the attribute in any selector, form, case and nesting, and nowhere else', () => {
+        for (const css of [
+            ".t-x .addr[data-copied='true'] { color: red; }",
+            '.t-x .addr[data-copied] { color: red; }',
+            '.t-x .addr[DATA-COPIED=shown] { color: red; }',
+            '@media (min-width: 680px) { .t-x .a, .t-x .addr[data-copied="true"] { color: red; } }',
+            '.t-x .sign:has(.addr[data-copied]) { color: red; }',
+            '.t-x .sign:not([data-copied="true"]) { color: red; }',
+            '.t-x .addr[data\\-copied] { color: red; }',
+        ]) {
+            assert.equal(sheetNamesAttribute(css, 'data-copied'), true, css);
+        }
+        for (const css of [
+            '.t-x .addr { color: red; }',
+            ".t-x .addr[data-copied-not='1'] { color: red; }",
+            ".t-x .addr[data-code='false'] { color: red; }",
+            ".t-x .addr { --x: '[data-copied]'; }",
+            '@keyframes t-x-a { to { color: red; } }',
+            '',
+        ]) {
+            assert.equal(sheetNamesAttribute(css, 'data-copied'), false, css);
+        }
+    });
+
+    it('finds no shipped look, no fixture and no starter naming it, and the rule it plants in Neo', () => {
+        // The public tree names it nowhere: the shipped looks, the harness's fixture look, the tracked private fixture and the canary.
+        // A run that selects the private look at 0x04 reads that look's sheet too, which names it, and that sheet is no test's to state.
+        const publicSheets = FIRST_PARTY_SHEETS.filter(({ name }) => name.startsWith('look:') || name.startsWith('fixture:') || name === 'canary' || name.includes('layout/fixture-private-looks/'));
+        assert.ok(publicSheets.length >= 6, `${publicSheets.length} public first-party sheets read`);
+        for (const { name, css } of publicSheets) assert.equal(sheetNamesAttribute(css, 'data-copied'), false, name);
+        assert.equal(sheetNamesAttribute(plantedNeo(".t-neo .addr[data-copied='true'] { --x: 4px; }"), 'data-copied'), true);
+        assert.equal(sheetNamesAttribute(NEO_CSS, 'data-copied'), false);
+    });
+});
+
 describe('a-private-look-palette-role-is-opaque-by-construction', () => {
     /**
      * `STATE_OPAQUE_ROLES` are the colours `themeVars` writes as `rgb(r, g,
@@ -3050,6 +3678,11 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         // The fourth review's sentences end in a reach or a ring and embed the colour readers' own, so they are told first.
         ['paint-reach', /it reaches past its box, where a state that changes the ink of its box shows it/],
         ['outline-cap', /an outline's ring reaches over the boxes beside its box/],
+        // The fifth review's four: a line or a stroke past its box, a custom property holding the ink, a keyframe from another sheet, the OS colour scheme.
+        ['ink-reach', /is drawn in the ink of its box and reaches past it/],
+        ['custom-property:ink', /a custom property that holds (?:currentcolor|inherit|revert)/],
+        ['keyframe:foreign', /a rule of a look sheet runs only a keyframe its own sheet declares/],
+        ['colour-scheme', /light-dark\(\) paints one colour in a light colour scheme|color-scheme other than normal or light/],
         ['keyframe:all', /all in a keyframe re-states every property/],
         ['state:custom-property', /a custom property set under a state/],
         ['state:property', /is not a property a state rule may set/],
@@ -3081,20 +3714,34 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s thirty-five plant files, 704 plants, the window\'s thirteen, the builder\'s 108 and the selected check\'s 24, with an outcome each', () => {
+    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108 and 158 and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 849);
+        assert.equal(Object.values(PLANTS).flat().length, 1160);
+        // The fifth review's eight plant files (`f1`–`f8`: per-side colours, past the box, the outline cap, keyframes, the mask reader, the colour scheme and a custom property, the states, the underline) and the builder's own (`g1`).
+        assert.deepEqual(
+            ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1'].map((set) => PLANTS[set].length),
+            [36, 33, 25, 10, 26, 5, 15, 3, 158],
+        );
         // The fourth review's nine plant files (`m1`–`m9`, 224 plants, the control among them) and the builder's own (`b1`).
         assert.deepEqual(
             ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1'].map((set) => PLANTS[set].length),
             [48, 45, 11, 6, 40, 25, 27, 9, 13, 108],
         );
-        // c1: the window's selected check after the fourth fix round, a var() in a mask where it is a length (nine accepted) and where it is a colour or the picture (fifteen refused).
+        // c1: the window's selected check after the fourth fix round, a var() in a mask where it is a length (eight accepted) and where it is a colour or the picture (sixteen refused:
+        // the fifteen, and `c1:8`, the custom property that held 'currentColor', which the fifth review's B2 refuses where it is declared).
         assert.equal(PLANTS.c1.length, 24);
-        assert.equal(PLANTS.c1.filter((entry) => entry.expect === 'accepted').length, 9);
+        assert.equal(PLANTS.c1.filter((entry) => entry.expect === 'accepted').length, 8);
+        assert.equal(PLANTS.c1[8].expect, 'refused');
+        assert.deepEqual(PLANTS.c1[8].by, ['custom-property:ink']);
+        // `c1:5` and `c1:7` stay accepted, now for the reason that is true: a var() as a place may carry a stop, but no custom property holds the ink.
+        for (const i of [5, 7]) {
+            assert.equal(PLANTS.c1[i].expect, 'accepted');
+            assert.match(PLANTS.c1[i].why, /no first-party custom property holds currentColor, inherit or revert/);
+            assert.doesNotMatch(PLANTS.c1[i].why, /stated gap/);
+        }
         // w1: a pseudo-element a rule at rest moved over a figure with its ground clear, given a ground under :hover.
         assert.equal(PLANTS.w1.length, 1);
         assert.match(PLANTS.w1[0].rule, /::after \{ content: ''; position: relative; left: -80px; background: transparent;/);
@@ -3121,10 +3768,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 849, only the 176 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 1,160, only the 286 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
-        assert.equal(accepted.length, 176);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 673, 'and refuses the other 673');
+        assert.equal(accepted.length, 286);
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 874, 'and refuses the other 874');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);

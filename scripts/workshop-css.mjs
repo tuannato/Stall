@@ -1432,6 +1432,22 @@ export const STRUCTURAL_PSEUDO_CLASSES = Object.freeze([
  */
 const STATE_ATTRIBUTE_NAMES = new Set(['data-turn', 'open', 'hidden', 'data-state', 'aria-disabled', 'data-over']);
 
+/**
+ * The attributes that are states **except for the values a probe screen
+ * paints** (the fifth review's ranked item 1): `data-format` is the poster
+ * sheet's format, and the fixtures paint `tag` and none of `square`, `story`
+ * and `stream`; `data-code='false'` is the shop window sheet with its pay
+ * code off, and no fixture sets `paycode=off`. A selector on the name that is
+ * not an exact match on a painted value (`=`, no flag) is a state, and fails
+ * closed: presence, a partial match, any other value, a form this lint cannot
+ * parse. `layout/stateAttributes.test.ts` holds each painted value to a
+ * screen. Pinned by value.
+ */
+export const STATE_EXCEPT_PAINTED = Object.freeze({
+    'data-code': Object.freeze([]),
+    'data-format': Object.freeze(['tag']),
+});
+
 const STRUCTURAL = new Set(STRUCTURAL_PSEUDO_CLASSES);
 const BELT_TAIL = '; the probe measures every screen at rest and paints no hover, focus, press or turned wall, so what arrives with a state is read by no pass';
 
@@ -1441,12 +1457,46 @@ function attributeNameOf(inner) {
     return m === null ? '' : m[1].toLowerCase();
 }
 
+/** Whether one attribute selector names a state: one of the six, or a partly painted one by any form but an exact match on a painted value. */
+function attributeIsAState(inner) {
+    const name = attributeNameOf(inner);
+    if (STATE_ATTRIBUTE_NAMES.has(name)) return true;
+    if (!Object.hasOwn(STATE_EXCEPT_PAINTED, name)) return false;
+    const m = ATTRIBUTE_SELECTOR.exec(inner);
+    if (m === null || m[2] !== '=' || m[4] !== undefined) return true;
+    const value = /^["']/.test(m[3]) ? decodeEscapes(m[3].slice(1, -1)) : decodeEscapes(m[3]);
+    return !STATE_EXCEPT_PAINTED[name].includes(value);
+}
+
 /** Whether a selector names a state the probe never paints (see above): fail closed. */
 export function namesAState(selector) {
     return (
         pseudoTokens(selector, true).some((token) => !token.element && !STRUCTURAL.has(token.name)) ||
-        attributeBlocks(selector).some((inner) => STATE_ATTRIBUTE_NAMES.has(attributeNameOf(inner)))
+        attributeBlocks(selector).some(attributeIsAState)
     );
+}
+
+/**
+ * Whether any rule of a sheet — a media block entered — names the attribute
+ * in a selector, in any form or case (`[data-copied='true']`, `[DATA-COPIED]`,
+ * an escaped name; `:has()` and `:not()` entered). The runner reads which
+ * looks name `[data-copied]` with it (the fifth review's ranked item 4: the
+ * two staged address screens are sampled for contrast for those looks), and
+ * holds the plan the page derives from the stylesheet it loaded to it.
+ */
+export function sheetNamesAttribute(css, attribute) {
+    const want = attribute.toLowerCase();
+    const walk = (nodes) => {
+        for (const node of nodes) {
+            if (node.kind === 'rule') {
+                if (splitTopLevel(node.prelude, ',').some((selector) => attributeBlocks(selector).some((inner) => attributeNameOf(inner) === want))) return true;
+            } else if (node.children !== undefined && walk(node.children)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    return walk(parseSheet(css).nodes);
 }
 
 /**
@@ -2258,7 +2308,7 @@ function pseudoHostPaintProblems(decls, selectors) {
  * written as a system colour or a form this lint does not read (refused: it
  * is "not a colour this lint reads").
  */
-const REACH_PROPS = /^(?:box-shadow|text-shadow|filter|outline|outline-color|outline-style|border-image|border-image-source)$/;
+const REACH_PROPS = /^(?:box-shadow|text-shadow|filter|outline|outline-color|outline-style|column-rule|column-rule-color|column-rule-style|border-image|border-image-source)$/;
 const REACH_NO_COLOUR = 'names no colour, and is drawn in currentColor, the ink of its box, which a state may change';
 
 /** Why the colour tokens of a layer, a call or a shorthand may not stand as the colour of a paint that reaches past its box, or undefined. */
@@ -2276,8 +2326,9 @@ function reachColourProblem(tokens) {
 function pastTheBoxProblems(decls) {
     const out = [];
     const say = (decl, why) => out.push(`${decl.prop}: ${echo(decl.value, 48)} — ${why}; it reaches past its box, where a state that changes the ink of its box shows it`);
-    const outline = freshEdge();
-    let drawing;
+    // The two edge families that reach past a box: an outline's ring, and a column rule, whose width can pass its gap (the fifth review's B1).
+    const families = { outline: freshEdge(), 'column-rule': freshEdge() };
+    const drawing = {};
     for (const decl of decls) {
         const name = decl.prop.replace(VENDOR_PREFIX, '');
         if (!REACH_PROPS.test(name)) continue;
@@ -2313,11 +2364,11 @@ function pastTheBoxProblems(decls) {
             if (keyword !== null) say(decl, `${keyword[0].toLowerCase()} is the ink of the box or the cascade's, not a colour of its own`);
             else if (variable !== undefined) say(decl, `a var() that is not a palette role (${STATE_OPAQUE_ROLES.join(', ')}) may hold currentcolor`);
         } else {
-            const edge = /^outline(?:-(style|color))?$/.exec(name);
-            applyEdge(outline, edge?.[1], clean);
-            if (outline.visible) drawing ??= decl;
+            const edge = /^(outline|column-rule)(?:-(style|color))?$/.exec(name);
+            applyEdge(families[edge[1]], edge[2], clean);
+            if (families[edge[1]].visible) drawing[edge[1]] ??= decl;
             // The colour of the shorthand or the longhand, each token read as a shadow's is.
-            const colours = edge?.[1] === 'style' ? [] : edge?.[1] === 'color' ? [clean] : edgeShorthand(clean).colours;
+            const colours = edge[2] === 'style' ? [] : edge[2] === 'color' ? [clean] : edgeShorthand(clean).colours;
             for (const token of colours) {
                 const why = groundColourProblem(token, 'own');
                 if (why !== undefined) {
@@ -2327,7 +2378,10 @@ function pastTheBoxProblems(decls) {
             }
         }
     }
-    if (drawing !== undefined && outline.visible && !outline.zero && !outline.coloured) say(drawing, `an outline that ${REACH_NO_COLOUR}`);
+    for (const [family, noun] of [['outline', 'an outline'], ['column-rule', 'a column rule']]) {
+        const state = families[family];
+        if (drawing[family] !== undefined && state.visible && !state.zero && !state.coloured) say(drawing[family], `${noun} that ${REACH_NO_COLOUR}`);
+    }
     return out;
 }
 
@@ -2394,6 +2448,159 @@ function outlineCapProblems(decls) {
             const why = /^(?:var|env|attr)\s*\(/i.test(token) || SHAPE_FUNCTION.test(token) ? `${echo(token, 32)} is a var() or calc() that this lint cannot size` : widthWhy(token);
             if (why !== undefined) {
                 say(decl, why);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+/*
+ * **A line and a stroke are capped, per declaration** (the fifth review's B1).
+ * An underline, a strike and an SVG stroke are drawn in the ink of their box
+ * (`currentColor` is their initial colour), and each reaches past the box
+ * with one number: `text-underline-offset: 300px` with
+ * `text-decoration-thickness: 60px` draws a bar 300px below its line, and
+ * stall.css already underlines `.guide-link`, `.wearing-link` and
+ * `.token-link-live`, so a look needs no `text-decoration` of its own to
+ * reach it; `stroke-width: 300` on a glyph (`.ic` is `stroke:
+ * currentColor`) with `overflow: visible` fills the page. A state that
+ * changes the ink then reveals it, with no move. So in a first-party sheet,
+ * wherever a declaration stands (at rest, in a media block and in a
+ * keyframe), each is capped where it is written, in px or a keyword and with
+ * no `var()` or `calc()` (a sum per rule is split by the cascade):
+ *
+ * - `text-underline-offset`, at most `UNDERLINE_OFFSET_MAX_PX` (4px) either
+ *   side of the line, or `auto` or `from-font`;
+ * - `text-decoration-thickness`, and the thickness a `text-decoration`
+ *   shorthand carries, at most `DECORATION_THICKNESS_MAX_PX` (3px), or `auto`
+ *   or `from-font`;
+ * - `stroke-width`, a bare number or px, at most `STROKE_WIDTH_MAX` (3; the
+ *   shipped glyphs paint 1.75 to 2);
+ * - the `d` property, which draws an SVG path from CSS, is not written.
+ *
+ * A column rule is the other half of the same road (its width can pass its
+ * gap) and names its own colour like an outline (`pastTheBoxProblems`).
+ * A CSS-wide keyword (`inherit`, `revert`, …) takes a value the cascade
+ * already holds, a capped look rule's or a base sheet's, and is not read.
+ * Under a state the belt refuses all of these properties by name. Not read,
+ * stated: an element that grows (`width`, `height`, `zoom`, `scale`) so
+ * that a capped stroke or offset is multiplied (the element road, in the
+ * belt's list above), and `filter: url()`, an SVG filter whose primitives
+ * this lint does not open.
+ */
+export const UNDERLINE_OFFSET_MAX_PX = 4;
+export const DECORATION_THICKNESS_MAX_PX = 3;
+export const STROKE_WIDTH_MAX = 3;
+
+const INK_REACH_OFFSET = { low: -UNDERLINE_OFFSET_MAX_PX, high: UNDERLINE_OFFSET_MAX_PX, keywords: ['auto', 'from-font'], bare: false };
+const INK_REACH_THICKNESS = { low: 0, high: DECORATION_THICKNESS_MAX_PX, keywords: ['auto', 'from-font'], bare: false };
+const INK_REACH_STROKE = { low: 0, high: STROKE_WIDTH_MAX, keywords: [], bare: true };
+
+/** Why one token may not stand as a length of the given reach (a px length within `low` to `high`, a keyword, or a bare number where `bare`), or undefined. */
+function reachLengthWhy(token, { low, high, keywords, bare }) {
+    if (keywords.includes(token.toLowerCase())) return undefined;
+    if (/^(?:var|env|attr)\s*\(/i.test(token) || SHAPE_FUNCTION.test(token)) return `${echo(token, 32)} is a var() or calc() that this lint cannot size`;
+    const length = lengthToken(token);
+    if (length === undefined) return `${echo(token, 32)} is not a length this lint reads`;
+    if (!(length.unit === 'px' || (length.unit === '' && (bare || length.n === 0)))) return `${echo(token, 32)} is not in px${bare ? ' or a bare number' : ''}`;
+    return length.n < low || length.n > high ? `${echo(token, 32)} is outside ${low}px to ${high}px` : undefined;
+}
+
+/** Why one token of a `text-decoration` shorthand may not stand: a length or percentage is its thickness, a var() that is not a palette role may hold one. */
+function decorationTokenWhy(token) {
+    if (lengthToken(token) !== undefined) return reachLengthWhy(token, INK_REACH_THICKNESS);
+    const role = VAR_TOKEN.exec(token);
+    if (role !== null && STATE_OPAQUE_ROLES.includes(role[1])) return undefined;
+    return /^(?:var|env|attr)\s*\(/i.test(token) || SHAPE_FUNCTION.test(token) ? `${echo(token, 32)} is a var() or calc() that this lint cannot size` : undefined;
+}
+
+function inkReachProblems(decls) {
+    const out = [];
+    const say = (decl, why) =>
+        out.push(
+            `${decl.prop}: ${echo(decl.value, 48)} — ${why}; an underline, a strike or a stroke is drawn in the ink of its box and reaches past it, where a state that changes the ink shows it (an underline sits within ${UNDERLINE_OFFSET_MAX_PX}px of its line and is at most ${DECORATION_THICKNESS_MAX_PX}px thick, a stroke is at most ${STROKE_WIDTH_MAX} wide, each in px or a keyword with no var() or calc(), and d is not written)`,
+        );
+    for (const decl of decls) {
+        const name = decl.prop.replace(VENDOR_PREFIX, '');
+        const clean = decl.value.replace(/\s*!\s*important\s*$/i, '').trim();
+        if (name === 'd') {
+            say(decl, "the d property draws an SVG path from CSS, anywhere in the glyph's space");
+            continue;
+        }
+        if (name !== 'text-underline-offset' && name !== 'text-decoration-thickness' && name !== 'text-decoration' && name !== 'stroke-width') continue;
+        // A CSS-wide keyword takes a value the cascade already holds: a capped look rule's, or a base sheet's (none of which reaches).
+        if (/^(?:initial|unset|inherit|revert|revert-layer)$/i.test(clean)) continue;
+        if (name === 'text-decoration') {
+            const why = splitTopLevel(clean, ' ').map(decorationTokenWhy).find((found) => found !== undefined);
+            if (why !== undefined) say(decl, why);
+            continue;
+        }
+        const reach = name === 'text-underline-offset' ? INK_REACH_OFFSET : name === 'stroke-width' ? INK_REACH_STROKE : INK_REACH_THICKNESS;
+        const why = reachLengthWhy(clean, reach);
+        if (why !== undefined) say(decl, why);
+    }
+    return out;
+}
+
+/*
+ * **A rule runs only a keyframe its own sheet declares** (the fifth review's
+ * B3). `@keyframes` names are global, and stall.css ships keyframes of its
+ * own: `animation: pin-demo-land 1s 120s reverse forwards` on a quote's
+ * `.item-a` runs a base keyframe that holds `visibility: hidden` from 0 to
+ * 44% (the critic's PT, reopened by a name the sheet never declared);
+ * `animation: sel-bump 1s infinite` on a money node scales it by 1.18, which
+ * the money size lint refuses in a look's own keyframes and never reads in a
+ * base sheet's; `animation-name: var(--an)` does the same through a custom
+ * property. So in a first-party sheet each rule's `animation` and
+ * `animation-name` name `none` or a keyframe the same sheet declares
+ * (`@keyframes` anywhere in it, a media block included), and never through a
+ * `var()`: the keyframes a look runs are the keyframes the look lint reads.
+ * The shorthand is read single by single (`parseSingleAnimation`, the flash
+ * rule's reader). `inherit`, `revert` and `revert-layer` take the parent's or
+ * the cascade's name and are refused; `initial` and `unset` are `none`. Under
+ * a state the belt refuses `animation*` by name. Cost: nil — every shipped
+ * look, the fixture look, the tracked private fixture and the canary run
+ * only their own keyframes, and so does every starter (`workshop:start`
+ * renames the keyframes `wk-…` and the rules with them).
+ */
+function keyframeNamesOf(nodes) {
+    const out = new Set();
+    const walk = (list) => {
+        for (const node of list) {
+            if (node.kind === 'rule') continue;
+            if (node.name === 'keyframes') out.add(unquoted(node.prelude.replace(/^@keyframes\s*/i, '').trim()));
+            else if (node.children !== undefined) walk(node.children);
+        }
+    };
+    walk(nodes);
+    return out;
+}
+
+function animationNameProblems(decls, own) {
+    const out = [];
+    const say = (decl, why) =>
+        out.push(
+            `${decl.prop}: ${echo(decl.value, 48)} — ${why}; a rule of a look sheet runs only a keyframe its own sheet declares (a base sheet's keyframes are global, and one can hide, scale or fade a money node), and never through a var()`,
+        );
+    for (const decl of decls) {
+        const name = decl.prop.replace(VENDOR_PREFIX, '');
+        if (name !== 'animation' && name !== 'animation-name') continue;
+        const clean = decl.value.replace(/\s*!\s*important\s*$/i, '').trim();
+        if (/^(?:initial|unset)$/i.test(clean)) continue;
+        if (/^(?:inherit|revert|revert-layer)$/i.test(clean)) {
+            say(decl, `${clean.toLowerCase()} takes the animation of the parent or the cascade, which this lint cannot name`);
+            continue;
+        }
+        if (/(?<![\w-])(?:var|env|attr)\s*\(/i.test(withoutStrings(clean))) {
+            say(decl, 'a var() can hold a keyframe name this lint never reads');
+            continue;
+        }
+        for (const single of splitTopLevel(clean, ',')) {
+            const named = name === 'animation' ? parseSingleAnimation(single).name : unquoted(single.trim());
+            if (named === undefined || (name === 'animation-name' && /^none$/i.test(named))) continue;
+            if (!own.has(named)) {
+                say(decl, `${echo(named, 32)} is not a keyframe this sheet declares`);
                 break;
             }
         }
@@ -2870,6 +3077,56 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
             out.push(`${shown} — ${prop} is a palette role the theme table writes on the stall; a state rule reads it as an opaque colour, which holds only while no sheet re-declares it`);
         }
         /*
+         * A custom property that holds the ink of the box that reads it (the
+         * fifth review's B2). `var()` is substituted as tokens, so wherever it
+         * stands it can carry a comma and then a stop, a layer or a whole
+         * value in `currentColor` into the box that reads it: a stop's place
+         * (`#000 var(--x)` with `--x: 50%, currentColor`), the `mask` position
+         * slot, the size after a `/`, a radial gradient's `at` and a conic
+         * gradient's `from` or `in`. No read of the position a `var()` stands
+         * in can tell, and the property is read by a rule this lint never
+         * pairs with it. So in a first-party sheet no custom property holds
+         * `currentColor` or `inherit` (anywhere in its value), and none is
+         * `revert` or `revert-layer` as its whole value. That closes the
+         * class the pseudo-element's mask reader left as a stated gap
+         * (`c1:8`), backs up the pseudo-element reader's palette-role-only
+         * rule for a colour, and closes the belt's `var(--s-…)` road (a state
+         * rule accepts `var(--s-…)` as a colour with no look at what a sheet's
+         * own property holds). No served sheet declares one (surveyed: the
+         * shipped looks, the starters, the fixture look, the tracked private
+         * fixture, the canary, the base and screen sheets). A rule under a
+         * state is refused its custom properties by the belt on its own. The
+         * kit keeps the rules its README states.
+         */
+        if (firstParty && prop.startsWith('--') && (selectors === undefined || !selectors.some(namesAState))) {
+            const keyword = /(?<![\w-])(?:currentcolor|inherit)(?![\w-])/i.exec(bare);
+            const wholeValue = /^(?:revert|revert-layer)$/i.test(value.replace(/\s*!\s*important\s*$/i, '').trim());
+            if (keyword !== null || wholeValue) {
+                out.push(
+                    `${shown} — a custom property that holds ${keyword !== null ? keyword[0].toLowerCase() : 'revert'}: a var() is substituted as tokens, so it brings the ink of the box that reads it (or the cascade's) into a stop, a layer or a value, wherever the var() stands`,
+                );
+            }
+        }
+        /*
+         * The OS colour scheme (the fifth review's ranked item 3, older than this
+         * branch). `light-dark(#000, transparent)` paints the first colour in
+         * a light scheme and the second in a dark one, and system colours
+         * (`Canvas`, `CanvasText`) flip the same way once `color-scheme`
+         * lists `dark`; the probe paints one scheme only (the page's, light),
+         * so a figure `light-dark()` leaves clear in a dark scheme is read by
+         * no pass. In a first-party sheet `light-dark()` is not written, and
+         * `color-scheme` is `normal` or `light`. None of the base sheets sets
+         * a scheme (stall.css, window.css, broadcast.css, obsGuide.css) and no
+         * served look sheet writes either, so the cost is nil. The kit keeps
+         * the rules its README states.
+         */
+        if (firstParty && /(?<![\w-])light-dark\s*\(/i.test(bare)) {
+            out.push(`${shown} — light-dark() paints one colour in a light colour scheme and another in a dark one, and the probe paints only the light one`);
+        }
+        if (firstParty && prop === 'color-scheme' && !/^(?:normal|light|initial)$/i.test(value.replace(/\s*!\s*important\s*$/i, '').trim())) {
+            out.push(`${shown} — color-scheme other than normal or light lets the system colours (and light-dark()) paint a dark scheme the probe never paints`);
+        }
+        /*
          * `display`, `content-visibility` and `visibility` in a keyframe
          * (D-2026-10-20-10, the lint-belts critic's T2c; `visibility` added by
          * D-2026-10-20-13 (3), the critic's PT): a keyframe that sets one takes
@@ -3260,6 +3517,8 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
     const ownFamilies = load === 'worn' ? declaredNames(css).families : [];
     // Whether a transition of `transform` is one of a size: some rule of this sheet scales (money-size motion).
     const sheetScales = !kit && sheetSetsAScalingTransform(nodes);
+    // The keyframes this sheet declares: the only ones a first-party rule may run (`animationNameProblems`).
+    const ownKeyframes = kit ? undefined : keyframeNamesOf(nodes);
 
     const walk = (list) => {
         for (const node of list) {
@@ -3283,6 +3542,8 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 // pseudo-element too (`pseudoHostPaintProblems` reads that rule's, as strictly).
                 if (!kit && !selectors.some(namesAState)) {
                     for (const why of outlineCapProblems(declarationsOf(node.body))) at(node.start, why);
+                    for (const why of inkReachProblems(declarationsOf(node.body))) at(node.start, why);
+                    for (const why of animationNameProblems(declarationsOf(node.body), ownKeyframes)) at(node.start, why);
                     if (!selectors.some(isPseudoElementSelector)) {
                         for (const why of pastTheBoxProblems(declarationsOf(node.body))) at(node.start, why);
                     }
@@ -3302,6 +3563,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                         for (const why of fontProblems(declarationsOf(stop.body), ownFamilies)) at(node.start, why);
                         if (!kit) {
                             for (const why of outlineCapProblems(declarationsOf(stop.body))) at(node.start, why);
+                            for (const why of inkReachProblems(declarationsOf(stop.body))) at(node.start, why);
                             for (const why of pastTheBoxProblems(declarationsOf(stop.body))) at(node.start, why);
                             for (const { prop, why } of keyframeSizeMotion(declarationsOf(stop.body))) {
                                 const message =
