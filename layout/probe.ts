@@ -564,24 +564,23 @@ function coveredBy(node: Element): string | undefined {
  * `interactivity` forced on by one sheet adopted once a page, over every
  * element the app's root holds, switched on for the read and left on until
  * the next paint throws its tree away (`coverPointers`, `releaseCover`,
- * `dropCoverForPaint`): for a node with text, points over every glyph's ink,
- * at several heights and across a wide glyph (`eachInkPoint`); for one with
- * none — a code — the box's centre, its corners inside its rounded shape and
- * a grid over the code (`layout/coverPoints.ts`), each in its own frame. A
- * paint with no hit area — a shadow, an outline, a neighbour's underline —
- * is not hit-testable whatever the forcing, and is 1b's (C-1).
+ * `dropCoverForPaint`): for a node with text, points over every glyph's ink
+ * — down its centre column and along its middle row no more than
+ * `INK_LINE_PITCH` (3px) apart, and a coarser lattice off those lines on a
+ * glyph wider than one column (`eachInkPoint`); for one with none — a code —
+ * the box's centre, its corners inside its rounded shape and a grid over the
+ * code (`layout/coverPoints.ts`), each in its own frame. A paint with no hit
+ * area — a shadow, an outline, a neighbour's underline — is not
+ * hit-testable whatever the forcing, and is 1b's (C-1).
  *
  * **What a lattice of points cannot see, stated** (the critic's item 7):
  * any fixed set of points can be dodged. A cover thinner than the pitch
  * between two points, or one cut around them — a `clip-path` with holes
- * where the points stand, a mask — is asked nowhere. On a glyph under 12px
- * of ink the lattice's two rows stand at a quarter and three quarters of it,
- * and a band over its middle half meets neither: the critic's PB, a band
- * over 46% of the ink of "15,750.00 XEC" at 360px, which every bound rule
- * passes too. Points no more than 3px apart down each glyph's centre column
- * and along its middle row close that band (the owner's D-2026-10-20-13),
- * and cost more wall time than the owner's line for them; they are held for
- * the owner. What a cover does to a glyph's own pixels is the paint reads'.
+ * where the points stand, a mask, a shape that reaches neither the centre
+ * column nor the middle row — is asked nowhere; a band at least 3px tall
+ * across a glyph's centre column, or 3px wide across its middle row, meets
+ * a point wherever it stands. What a cover does to a glyph's own pixels is
+ * the paint reads'.
  * **And the other way, a class of false red** (the
  * critic's item 8): a box that paints nothing — a transparent wrapper — has
  * a hit area all the same, and where it meets a glyph's ink box it reads as

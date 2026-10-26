@@ -7,20 +7,25 @@
  * price column are excused. A paint with no hit area (a shadow, an outline, a
  * neighbour's underline) is not here: 1b's.
  *
- * - **Points over the ink** (`eachInkPoint`, before 8g2 item 2). A node with
- *   text is asked over every glyph's ink, at several heights and, on a wide
- *   glyph, across it: one centre a character left a band over half of every
- *   digit unasked (the critic's T5, a band of the look's ground over the
- *   lower half of the Cycle card's figure), and a box's corners asked its
- *   line box rather than its glyphs (20 of the 44 would-be failures of the
- *   first clean run were a stepper's box meeting a figure's line box where
- *   no glyph stood). The caller measures each glyph (`measurePainted`, the
- *   ink model's own).
+ * - **Points over the ink** (`eachInkPoint`, before 8g2 item 2, and the
+ *   owner's D-2026-10-20-13). A node with text is asked over every glyph's
+ *   ink: down its centre column and along its middle row at points no more
+ *   than `INK_LINE_PITCH` apart, and on a glyph wider than one column at a
+ *   coarser lattice of rows and columns off those two lines. One centre a
+ *   character left a band over half of every digit unasked (the critic's
+ *   T5, a band of the look's ground over the lower half of the Cycle card's
+ *   figure); two rows a glyph left the middle half of a phone glyph unasked
+ *   (the critic's PB, a band over 46% of the ink of "15,750.00 XEC" at
+ *   360px, between the rows); and a box's corners asked its line box rather
+ *   than its glyphs (20 of the 44 would-be failures of the first clean run
+ *   were a stepper's box meeting a figure's line box where no glyph stood).
+ *   The caller measures each glyph (`measurePainted`, the ink model's own).
  * - **What a lattice cannot see, stated.** Any fixed set of points can be
  *   dodged: a cover thinner than the pitch between two points, or one
  *   shaped around them — a `clip-path` with holes where the points stand —
- *   is asked nowhere. On a phone glyph that is the middle half of its ink,
- *   between its two rows (`INK_MIN_ROWS`; the critic's PB).
+ *   is asked nowhere. A band at least `INK_LINE_PITCH` tall across a glyph's
+ *   centre column, or as wide across its middle row, meets a point; a cover
+ *   that reaches neither line, or that is thinner, is the paint reads'.
  * - **A box's points.** A node with no text — a code — is asked at its
  *   centre and its four corners, each corner taken **inside the box's
  *   rounded shape** (`cornerInset`): a corner point two pixels in from a
@@ -169,47 +174,53 @@ export function gridPoints(f: Frame, pitch: number, radii: Radii = SQUARE): Cove
 }
 
 /**
- * How far apart the points over a glyph's ink stand, CSS px, down the glyph
- * and across it. Set on cost (before 8g2, item 2): most of the app's money
- * is set at 11–16px, two rows and one column a glyph, and the phone pass
- * asks 167,013 points (103,982 hit-tested; measured 2026-10-20 at cba463b)
- * where one centre a character and every box's corners asked 118,437
- * (76,263). A cover thinner than the pitch can stand between two rows or
- * columns, stated: a stroke of a digit is thinner than any pitch a hit test
- * can afford, and what a cover does to a glyph's own pixels is the paint
- * reads'.
+ * The most two points down a glyph's centre column, or along its middle
+ * row, stand apart, CSS px (the owner, D-2026-10-20-13): a band at least
+ * this tall across the centre column, or this wide across the middle row,
+ * meets one wherever it stands, the first and last point half a pitch in
+ * from the ink's edges. The critic's PB band, 4.5px over a 9.8px ink, stood
+ * between the two rows of the lattice below and met no point.
+ */
+export const INK_LINE_PITCH = 3;
+
+/**
+ * The coarser lattice off the two lines, for a glyph wider than one column:
+ * rows every `INK_ROW_PITCH` down the ink and columns every
+ * `INK_COLUMN_PITCH` across it, each at the middle of its band, between
+ * `INK_MIN_ROWS` and `INK_MAX_ROWS` rows and at most `INK_MAX_COLUMNS`
+ * columns. A lattice point that stands on the centre column or the middle
+ * row is not asked again: that line asks it at least as densely. On a glyph
+ * one column wide — most of the app's money, set at 11–16px — every lattice
+ * point stands on the centre column, and the two lines are all that is
+ * asked: about 9 by 6 px of ink, three points down and two across. Before
+ * the two lines the lattice was all: two rows of one column on that glyph,
+ * and the middle half of the ink between them unasked.
  */
 export const INK_ROW_PITCH = 6;
 export const INK_COLUMN_PITCH = 12;
-/**
- * At least two rows over every glyph: one in its upper half and one in its
- * lower. That is all it promises — on a glyph under 12px of ink the two rows
- * stand at a quarter and three quarters of it, and a band over its middle
- * half meets neither (the critic's PB, a band over 46% of the ink of
- * "15,750.00 XEC" at 360px).
- */
+/** The least rows of the lattice off the centre column, on a glyph wide enough to have columns off it. */
 export const INK_MIN_ROWS = 2;
 /**
- * At most this many rows and columns over one glyph: a wall's 60–80px figure
- * would otherwise take 50 points a digit, its rows then standing up to a
- * tenth of its height apart.
+ * At most this many rows and columns of the lattice over one glyph: a
+ * wall's 60–80px figure would otherwise take 50 lattice points a digit.
+ * The two lines are not capped: a taller glyph has more of them.
  */
 export const INK_MAX_ROWS = 6;
 export const INK_MAX_COLUMNS = 3;
 
 /**
  * Every point over a glyph's ink, handed to `emit` in the page's
- * coordinates — no object a point (before 8g2, the owner's
- * D-2026-10-20-13: a pass asks hundreds of thousands): `ink` is where the
- * glyph's ink reaches, from the character box's top-left before its turn
- * (`measurePainted`'s actual bounding box about the baseline), cut to the
- * box itself — a hit outside the character's own box answers whatever
- * stands beside it, the node's own parent included, which is no cover. Rows
- * every `INK_ROW_PITCH` down the ink, at least `INK_MIN_ROWS`, and columns
- * every `INK_COLUMN_PITCH` across it, at least one, each at the middle of
- * its band, in the glyph's own frame and turned back. An ink the box cuts to
- * nothing (a mark set wholly above its line's box, a metric that did not
- * resolve) is read as the box.
+ * coordinates (no object a point: a pass asks about a million):
+ * `ink` is where the glyph's ink reaches, from the character box's top-left
+ * before its turn (`measurePainted`'s actual bounding box about the
+ * baseline), cut to the box itself — a hit outside the character's own box
+ * answers whatever stands beside it, the node's own parent included, which
+ * is no cover. Down the centre column and along the middle row every
+ * `INK_LINE_PITCH` or less, then the lattice (`INK_ROW_PITCH`,
+ * `INK_COLUMN_PITCH`) where it stands off those two lines, each point at
+ * the middle of its band, in the glyph's own frame and turned back. An ink
+ * the box cuts to nothing (a mark set wholly above its line's box, a metric
+ * that did not resolve) is read as the box.
  */
 export function eachInkPoint(f: Frame, ink: Box, emit: (x: number, y: number) => void): void {
     let left = Math.max(0, ink.left);
@@ -224,13 +235,29 @@ export function eachInkPoint(f: Frame, ink: Box, emit: (x: number, y: number) =>
     // From the frame's top-left to its centre, then about it.
     const ox = -f.w / 2;
     const oy = -f.h / 2;
+    const at = (dx: number, dy: number): void => {
+        const x = dx + ox;
+        const y = dy + oy;
+        emit(f.cx + x * cos - y * sin, f.cy + x * sin + y * cos);
+    };
+    const midX = left + w / 2;
+    const midY = top + h / 2;
+    const down = Math.max(1, Math.ceil(h / INK_LINE_PITCH));
+    for (let i = 0; i < down; i += 1) at(midX, top + ((i + 0.5) * h) / down);
+    const across = Math.max(1, Math.ceil(w / INK_LINE_PITCH));
+    // The middle row's centre point is the column's, where both have one.
+    const shared = across % 2 === 1 && down % 2 === 1 ? (across - 1) / 2 : -1;
+    for (let j = 0; j < across; j += 1) if (j !== shared) at(left + ((j + 0.5) * w) / across, midY);
     const rows = Math.min(INK_MAX_ROWS, Math.max(INK_MIN_ROWS, Math.ceil(h / INK_ROW_PITCH)));
     const columns = Math.min(INK_MAX_COLUMNS, Math.max(1, Math.ceil(w / INK_COLUMN_PITCH)));
+    // A lattice column or row on one of the two lines is that line's.
+    const onColumn = columns % 2 === 1 ? (columns - 1) / 2 : -1;
+    const onRow = rows % 2 === 1 ? (rows - 1) / 2 : -1;
     for (let i = 0; i < rows; i += 1) {
+        if (i === onRow) continue;
         for (let j = 0; j < columns; j += 1) {
-            const x = left + ((j + 0.5) * w) / columns + ox;
-            const y = top + ((i + 0.5) * h) / rows + oy;
-            emit(f.cx + x * cos - y * sin, f.cy + x * sin + y * cos);
+            if (j === onColumn) continue;
+            at(left + ((j + 0.5) * w) / columns, top + ((i + 0.5) * h) / rows);
         }
     }
 }

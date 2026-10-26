@@ -9628,12 +9628,13 @@ arrays reused node to node (`pushPoint`), the glyph points handed to a
 callback (`eachInkPoint`): asked for first, and worth little, since
 collection was small.
 
-### Denser points over a glyph: measured, held for the owner (D-2026-10-20-13 item 1)
+### Denser points over a glyph (D-2026-10-20-13 item 1)
 
 The owner asked for points no more than 3px apart down each glyph's centre
 column and along its middle row, on top of the lattice, and to stop and
-report if that added more than 5s of wall time. It does, so it is held out
-of the rule as a patch.
+report if that added more than 5s of wall time. It did, by the measures
+below; it was held out of the rule as a patch, and is applied here on the
+owner's yes.
 
 - **The rule as written**: the centre column and the middle row each at
   `ceil(extent / 3)` points, at the middles of their bands; a lattice point
@@ -9659,9 +9660,10 @@ of the rule as a patch.
 
 Any fixed set of points can be dodged: a cover thinner than the pitch
 between two points, or one cut around them — a `clip-path` with holes where
-the points stand, a mask — is asked nowhere. On the lattice this round
-keeps, a phone glyph's two rows stand at a quarter and three quarters of
-its ink, and a band over its middle half meets neither (PB). And the other
+the points stand, a mask — is asked nowhere. On the points this rule
+asks, a band at least 3px tall across a glyph's centre column, or 3px wide
+across its middle row, meets a point; one thinner, or one that reaches
+neither line, does not. And the other
 way: a box that paints nothing — a transparent wrapper — has a hit area all
 the same, and where it meets a glyph's ink box it reads as a cover. The
 touch wall's `span.sw-step` over a quote's figure does, on the clean run. It
@@ -9680,6 +9682,10 @@ and `-long-figures`), as at cba463b: 7 at 768x1024, 14 at 1024x768 and 14 at
   class above.
 - No line is out of reach past a side or above the top, and none is a box a
   look takes away.
+- With the denser points (sessions, 2026-10-20): 45 lines, 7 at 768x1024,
+  24 at 1024x768 and 14 at 800x1280, every one the stepper or its wrapper
+  over the same figures, more of them found at the points between the
+  lattice's rows (Rural at 800x1280 among them).
 
 ### Cost and the contrast dump
 Two pairs back to back, main (0a34999) then the branch, two tabs, the

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
     EDGE_INSET,
     INK_COLUMN_PITCH,
+    INK_LINE_PITCH,
     INK_MAX_COLUMNS,
     INK_MAX_ROWS,
-    INK_MIN_ROWS,
     INK_ROW_PITCH,
     SQUARE,
     columnExcuses,
@@ -115,21 +115,68 @@ describe('nothing-covers-money-or-a-protected-box: where it is hit-tested', () =
         for (let from = 15; from + 12 <= 59; from += 1) {
             expect(points.some((p) => p.y >= top + from && p.y <= top + from + 12)).toBe(true);
         }
-        const rows = new Set(points.map((p) => p.y)).size;
-        const columns = new Set(points.map((p) => p.x)).size;
-        expect(rows).toBe(Math.min(INK_MAX_ROWS, Math.ceil(44 / INK_ROW_PITCH)));
-        expect(columns).toBe(Math.min(INK_MAX_COLUMNS, Math.ceil(28 / INK_COLUMN_PITCH)));
         expect(points.every((p) => p.kind === 'ink')).toBe(true);
     });
 
-    it('asks a small glyph at two heights at least, and at its middle across', () => {
-        // An 11px digit: its ink 6 by 8.
+    /*
+     * The critic's PB (the owner's D-2026-10-20-13): at 360px a band 4.531px
+     * tall laid in the strip's ground over 46% of the ink of "15,750.00 XEC"
+     * stood between the two rows a phone glyph had, and met no point. Red
+     * with the lattice alone: two rows at a quarter and three quarters of
+     * the ink leave its middle half unasked.
+     */
+    it('asks down the centre column and along the middle row at most INK_LINE_PITCH apart', () => {
+        const f = { cx: 50, cy: 50, w: 8, h: 15, angle: 0 };
+        const ink = { left: 1, right: 7, top: 2.6, bottom: 12.45 };
+        const points = inkPoints(f, ink);
+        const [left, top] = [f.cx - f.w / 2, f.cy - f.h / 2];
+        const column = points.filter((p) => Math.abs(p.x - (left + 4)) < 1e-9).map((p) => p.y).sort((a, b) => a - b);
+        const row = points.filter((p) => Math.abs(p.y - (top + (2.6 + 12.45) / 2)) < 1e-9).map((p) => p.x).sort((a, b) => a - b);
+        // From the ink's edge to the first point, between points, and to the far edge: never past the pitch.
+        const gaps = (at: number[], from: number, to: number) => [at[0]! - from, ...at.slice(1).map((v, i) => v - at[i]!), to - at[at.length - 1]!];
+        expect(column.length).toBeGreaterThan(1);
+        expect(Math.max(...gaps(column, top + 2.6, top + 12.45).map((g, i, all) => (i === 0 || i === all.length - 1 ? 2 * g : g)))).toBeLessThanOrEqual(INK_LINE_PITCH + 1e-9);
+        expect(Math.max(...gaps(row, left + 1, left + 7).map((g, i, all) => (i === 0 || i === all.length - 1 ? 2 * g : g)))).toBeLessThanOrEqual(INK_LINE_PITCH + 1e-9);
+        // The PB band, 4.531px tall, at every offset down the ink: a point of the column stands in it.
+        for (let from = 2.6; from + 4.531 <= 12.45 + 1e-9; from += 0.0625) {
+            expect(column.some((y) => y >= top + from && y <= top + from + 4.531)).toBe(true);
+        }
+        // Any band INK_LINE_PITCH tall across the column, anywhere in the ink.
+        for (let from = 2.6; from + INK_LINE_PITCH <= 12.45 + 1e-9; from += 0.0625) {
+            expect(column.some((y) => y >= top + from - 1e-9 && y <= top + from + INK_LINE_PITCH + 1e-9)).toBe(true);
+        }
+    });
+
+    it('asks a small glyph down its column and across its middle, and asks no point twice', () => {
+        // An 11px digit: its ink 6 by 8, one column wide, so the lattice is all on the centre column.
         const points = inkPoints({ cx: 3.5, cy: 7, w: 7, h: 14, angle: 0 }, { left: 0.5, right: 6.5, top: 3, bottom: 11 });
-        expect(points).toHaveLength(INK_MIN_ROWS);
-        expect(points.map((p) => [p.x, p.y])).toEqual([
-            [3.5, 5],
-            [3.5, 9],
+        const at = points.map((p) => [Number(p.x.toFixed(6)), Number(p.y.toFixed(6))]);
+        expect(at).toEqual([
+            [3.5, Number((3 + 8 / 6).toFixed(6))],
+            [3.5, 7],
+            [3.5, Number((3 + 40 / 6).toFixed(6))],
+            [2, 7],
+            [5, 7],
         ]);
+        expect(new Set(at.map(([x, y]) => `${x},${y}`)).size).toBe(at.length);
+    });
+
+    it('keeps the lattice off the two lines on a glyph wider than one column', () => {
+        // A 28px-wide ink: three lattice columns, the middle one the centre column's.
+        const f = { cx: 118, cy: 336.5, w: 36, h: 73, angle: 0 };
+        const ink = { left: 4, right: 32, top: 15, bottom: 59 };
+        const points = inkPoints(f, ink);
+        const left = f.cx - f.w / 2;
+        const columns = Math.min(INK_MAX_COLUMNS, Math.ceil(28 / INK_COLUMN_PITCH));
+        const rows = Math.min(INK_MAX_ROWS, Math.ceil(44 / INK_ROW_PITCH));
+        const lattice = [...Array(columns).keys()].map((j) => left + 4 + ((j + 0.5) * 28) / columns).filter((x) => Math.abs(x - (left + 18)) > 1e-9);
+        for (const x of lattice) {
+            expect(points.filter((p) => Math.abs(p.x - x) < 1e-9 && Math.abs(p.y - (f.cy - f.h / 2 + 37)) > 1e-9)).toHaveLength(rows % 2 === 1 ? rows - 1 : rows);
+        }
+        // Every point is on the column, on the row, or on a lattice column off them.
+        const midX = left + 18;
+        const midY = f.cy - f.h / 2 + 37;
+        expect(points.every((p) => Math.abs(p.x - midX) < 1e-9 || Math.abs(p.y - midY) < 1e-9 || lattice.some((x) => Math.abs(p.x - x) < 1e-9))).toBe(true);
     });
 
     it('cuts the ink to the character’s own box, and reads the box where nothing is left', () => {
@@ -151,9 +198,9 @@ describe('nothing-covers-money-or-a-protected-box: where it is hit-tested', () =
         const angle = (0.8 * Math.PI) / 180;
         const f = { cx: 200, cy: 100, w: 20, h: 30, angle };
         const [first] = inkPoints(f, { left: 0, right: 20, top: 0, bottom: 30 });
-        // The first row and the first column, each at the middle of its band, from the centre.
-        const dx = 20 / Math.ceil(20 / INK_COLUMN_PITCH) / 2 - 10;
-        const dy = 30 / Math.ceil(30 / INK_ROW_PITCH) / 2 - 15;
+        // The centre column's first point, half a pitch below the ink's top, from the centre.
+        const dx = 0;
+        const dy = 30 / Math.ceil(30 / INK_LINE_PITCH) / 2 - 15;
         expect(first!.x).toBeCloseTo(200 + dx * Math.cos(angle) - dy * Math.sin(angle), 9);
         expect(first!.y).toBeCloseTo(100 + dx * Math.sin(angle) + dy * Math.cos(angle), 9);
     });
