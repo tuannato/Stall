@@ -1034,6 +1034,35 @@ money path this app can have, because nothing on it is derived.
   `GEOMETRY_PASSES` and both money surface tables are derived, and shot at
   their sizes. The flake's cause is still unknown.
 
+- **Before 8g2, the fourth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-4.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fourth review's fixes"). Not built:
+  1. **Points below the screen skip the clip and reach checks.** They need
+     no hit test, so the cut and the reach can be read for them where they
+     stand (this closes D3's cut half).
+  2. **A point past a box on an axis whose `overflow` is `visible` is counted
+     "behind a clip" and never hit-tested.** The unit test pins this as
+     intended; nothing has asked whether it should be.
+  3. **The running ribbon's exception excuses every sideways clip of a
+     ribbon figure, a look's own clip included**, and a look can dress
+     `.tk-run:not(.still)` alone, which no pass reads with its figures in
+     view.
+  4. **A keyframe on `left`, `top`, `inset` or a margin of a box above money
+     moves it between instants.** `keyframeHeld` refuses a moving `translate`
+     for that reason, and not these.
+  5. **A size keyframe on the money node itself is held by nothing.**
+  6. **`keepsItsEnd` ignores CSS transitions, whose end state lasts.** The
+     critic's PTR went red through other reads, and why it was caught at
+     rest is not known.
+  7. **A `line-through` (3px or less) or an outline in a keyframe on a box
+     above is unread between instants.**
+  8. **A cover keyed to a class only a press adds (`.sel-enter`) is never
+     painted.** And the day a fixture paints a press, the app's own one-shot
+     entrance (`sel-unfold`, `sel-fade`, `sel-line-in`) goes red on
+     `keyframeHeld` and on 1a at rest: such a fixture lands with a read of
+     the entrance at its end.
+
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,
   `private/design/workshop-2026-09-23/touch-wall/CRITIC.md`, item 3). The

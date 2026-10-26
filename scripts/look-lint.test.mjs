@@ -2216,9 +2216,11 @@ describe('a-keyframe-never-sets-an-inherited-ink', () => {
      * plant `g1:130`, `color: red`, with it), since the custom-property
      * refusal reads only `--` names. The probe reads the held dress at every
      * keyframe offset (`offsetDressFaults`, `layout/probe.ts`); this refuses
-     * the road where it is written. The fill colour and the stroke are
-     * refused everywhere already, the tap highlight is `transparent`
-     * everywhere. The kit is unchanged.
+     * the road where it is written. The text's fill colour and stroke
+     * (`-webkit-text-fill-color`, `-webkit-text-stroke*`) are refused
+     * everywhere already, SVG `fill` and `stroke` off a drawn icon and in a
+     * keyframe (`svg-paint-stands-only-on-a-drawn-icon`), and the tap
+     * highlight is `transparent` everywhere. The kit is unchanged.
      */
     const INK = /in a keyframe is inherited: it changes how the text of every box below the one that runs it is painted, a money figure's among them, for part of a cycle/;
 
@@ -2249,7 +2251,7 @@ describe('a-keyframe-never-sets-an-inherited-ink', () => {
             const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
             assert.ok(problems.some((p) => INK.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
         }
-        // The fill colour and the stroke stay refused everywhere, by their own rule.
+        // The text's fill colour and stroke (`-webkit-text-fill-color`, `-webkit-text-stroke*`) stay refused everywhere, by their own rule.
         for (const stop of ['-webkit-text-fill-color: transparent', '-webkit-text-stroke-color: #000', '-webkit-text-stroke-width: 1px']) {
             const problems = lintLookSheet(plantedNeo(`@keyframes t-neo-ink { 50% { ${stop}; } }`), { lookClass: 't-neo' });
             assert.ok(problems.some((p) => /contrast pass never reads/.test(p)) && !problems.some((p) => INK.test(p)), `${stop}:\n  ${problems.join('\n  ')}`);

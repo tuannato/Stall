@@ -10058,10 +10058,16 @@ it. None fired on the clean tree.
   cost `coveredBy` 7.3s of page time over every geometry pass (4,950 calls in
   1.03s at 390, 6,480 in 1.61s at 1280), its at-rest read 1.2s; 1a's own
   read 36.5s (the clean run below; the runner prints both per pass).
-- **Not read, stated**: over time, a cover that takes no hit is read by
-  nothing but the decoration sweep (a positioned or decoration box) and, on
-  the sampled screens, the contrast pass at its one frozen instant; a cover
-  that moves into place between frames, by neither (the critic's P3-1).
+- **Not read, stated**: over time no hit test asks any money node but the
+  price and "You pay" (`coveredBy`'s, at the six instants); every other
+  money node and every protected box is hit-tested at rest alone, and since
+  D-2026-10-26-03 at the end of a lasting animation (the fourth review's item
+  5(a): this line read as if over time were read for every money node). Even
+  over those two, `coveredBy` asks with `pointer-events` as the page has it,
+  so a cover that takes no hit is read over time by nothing but the
+  decoration sweep (a positioned or decoration box) and, on the sampled
+  screens, the contrast pass at its one frozen instant; a cover that moves
+  into place between frames, by neither (the critic's P3-1).
 
 ### The clip ceiling reads 1a's points
 
@@ -10211,9 +10217,14 @@ cover rules, not the ink; the contrast pass freezes at 400ms.
   longhands** (`seekNeedless`): none inherited (or `visibility`, held where
   it is written), each held at its written value by `animationFaults` and
   `keyframeHeld` already (a transform and its parts, an opacity, a filter, a
-  blend, a clip, a motion path, a zoom, `visibility`, `content-visibility`, a
-  size), or reaching no held longhand (where a box stands, a background, a
-  box shadow, an outline). Anything else is seeked: a custom property, an
+  blend, a clip, a motion path, a zoom, `visibility`, a size), or reaching no
+  held longhand (where a box stands, an outline; a background and a box
+  shadow until the fourth review). Corrected by the fourth review, items 2
+  and 3: this list named `content-visibility` as held at its written value,
+  and on a box above nothing held it (`BOX_HELD` did not name it); and a
+  background or a shadow reaches the ground under the glyphs, which no read
+  held between instants. Both leave the list (below, "The fourth review's
+  fixes"). Anything else is seeked: a custom property, an
   inherited ink or shadow, a font, a property the list does not name. On the
   clean tree that leaves the aurora's `--au-tide` and the sunburst's
   `--att-sun-angle` on the stall's root, two offsets each; every Rural tag's
@@ -10223,10 +10234,13 @@ cover rules, not the ink; the contrast pass freezes at 400ms.
 - **Not read, stated**: a value between two offsets (a timing function that
   overshoots, `cubic-bezier()` with a y outside 0–1 or `linear()` with
   points outside them, can carry a value past both its keyframes); two
-  animations at once; a pseudo-element's animation; at an offset, the
-  grounds under the glyphs, the lines, the spacing and an outline's ring
-  (read at the pass's last instant alone); an animation whose duration is
-  not a finite time over 0.
+  animations at once; a pseudo-element's animation; at an offset, the lines,
+  the spacing and an outline's ring (read at the pass's last instant alone;
+  the grounds are read at an offset since the fourth review, where a seek
+  changed them); an animation whose duration is not a finite time over 0.
+  And the held list itself was 17 longhands copied by hand, fewer than this
+  bullet's "every held longhand the value decides" (the fourth review's item
+  1, PFA): derived from `DRESS_HELD` since.
 
 Red, the whole runner (exit 1): PT2 fails `a-money-figure-is-never-misdressed`
 76 times at 390, 94 at 1280, 333 at the canvas, 351 on the portrait wall,
@@ -10311,8 +10325,10 @@ pass and the contrast pass.
 `lintLookSheet` (first party only) refuses an inherited longhand that paints
 text in any keyframe (`KEYFRAME_INK`, `scripts/workshop-css.mjs`): `color`,
 `text-shadow`, `caret-color`, `text-emphasis` and its longhands with their
-`-webkit-` twins, `paint-order`, `font-palette`. The fill colour and the
-stroke are refused everywhere already (`REFUSED_PROPERTIES`), and the tap
+`-webkit-` twins, `paint-order`, `font-palette`. The text's fill colour and
+stroke (`-webkit-text-fill-color`, `-webkit-text-stroke*`) are refused
+everywhere already (`REFUSED_PROPERTIES`; SVG `fill` and `stroke` were refused
+nowhere until the fourth review's belt, below), and the tap
 highlight is `transparent` everywhere. The kit is unchanged.
 
 - Cost nil, read by the lint itself
@@ -10325,7 +10341,11 @@ highlight is `transparent` everywhere. The kit is unchanged.
 - New plant set `i1`, 22: 18 refused (PT2's shape with `color:
   transparent` first, then every property, a `var()`, `currentColor`, a
   pseudo-element that runs it, a media block, a stop beside an opacity) and
-  4 controls. Five older plants moved with the belt: `g1:130` (`color: red`
+  4 controls. The last control, a keyframe `background-color: red` on
+  `.item-a`, was accepted "a ground, which no box below inherits": true, and
+  no reason the ground was harmless — the critic's PG is the same shape, a
+  figure on its own ink. It is refused by the ground belt since the fourth
+  review (`i1:21`, below). Five older plants moved with the belt: `g1:130` (`color: red`
   in the sheet's own keyframe, run on `.item-a`) was accepted and is
   refused; `f2:18`, `g1:131`, `g1:139` and `h1:9` are refused by the belt as
   well. 1,222 plants: 924 refused, 298 accepted.
@@ -10361,6 +10381,153 @@ cell that clips and holds no asked node) would take back most of the 8s of
 page time, at the cost of an exception 1a would then have to hold.
 
 The README labels are unchanged: "most" stays until step 10.
+
+## Before 8g2: the fourth review's fixes (2026-10-26; CRITIC-4, D-2026-10-26-04)
+
+The critic's fourth review on before-8g2 (`private/design/workshop-2026-09-23/before-8g2/CRITIC-4.md`,
+its plants in `critic4/plants/`). The plants, logs and tools of this round
+are in `before-8g2/critic4-fixes/`. Every run is the whole runner, two tabs,
+the tracked fixture carried (796 contrast jobs), each plant alone, the load
+in each log's `.meta`.
+
+### The held list is `DRESS_HELD` less the geometry (item 1: PFA; item 3: PCV)
+
+- `OFFSET_HELD_OWN`, the longhands the offset read holds a figure's own
+  elements on, was 17 copied by hand under a docblock that said "every
+  longhand `dressHeldFault` decides from the value alone". It is
+  `DRESS_HELD` less `OFFSET_GEOMETRY` (the spacing, the grounds, an outline,
+  the decoration line with its thickness and offset, `animation-name`),
+  derived in code. `the-keyframe-offset-read-holds-every-held-longhand-the-value-decides`
+  (`layout/offsetHeld.test.ts`) parses `DRESS_HELD`, `OFFSET_GEOMETRY` and
+  `dressHeldFault`'s cases out of the probe strictly: every held longhand
+  has a case, and `OFFSET_GEOMETRY` is exactly the held longhands whose case
+  answers nothing.
+- `content-visibility` leaves `SEEK_NEEDLESS`, whose docblock called it
+  "held at its written value" while `BOX_HELD` did not name it. `BOX_HELD`
+  holds it now, at rest and at its written value in a keyframe: a box above
+  that skips its contents does not render the figure, and one that skips them
+  off-screen (`auto`) is size- and paint-contained there, which `contain`
+  does not report and no clip read sees. No served sheet and no app code
+  sets it.
+- **Red, PFA** (the critic's, `font-size-adjust: 0.05` from 25% to 68% of a
+  100s loop on Rural's quote `.item-a`; exit 0 on the whole runner before):
+  exit 1, `a-money-figure-is-never-misdressed` 76 times at 390, 94 at 1280,
+  333 at the canvas, 351 on the portrait wall, 60 on desk-wall, 78 on each of
+  the six other wall passes and 64 at 360, every one from the offset read
+  ("it: font-size-adjust 0.05 … with t-rural-adjust on span.item-a seeked to
+  its keyframe at 25%"; the pass lines' offset faults equal the failures).
+  Nothing else failed. PT2's own counts, exactly.
+- **Red, PCV** (the critic's, `content-visibility: hidden` on `.item-a`, red
+  before only by accident): exit 1, the dress rule 76 / 94 / 333 / 351 / 78
+  on the tablet / 60 / 78 / 78 / 78 / 78 / 78 / 64, each failure carrying
+  the offset read's "it has no box, with t-rural-cv on span.item-a seeked to
+  its keyframe at 25%" (`rendersAt` at the seek) beside the box read's
+  "content-visibility hidden" at rest's keyframe values and at the seek: 152
+  offset faults at 390, two a figure. Beside them, the accidental reds stay
+  (text escapes its clip 258 at 390, a protected box cut sideways 30, and so
+  on: the size containment collapsing the box at the six instants).
+- **PCVcis** (the same keyframe with `contain-intrinsic-size: auto 240px auto
+  48px` on `.item-a`, CRITIC-4's "not verified"): red too, the dress rule's
+  counts exactly PCV's, and the accidental reds change shape and do not go
+  (`text-spills` 96 and a name column collapsed 48 at 390, text escapes its
+  clip 111 at 1280): a fixed intrinsic size is not the box's own, so the
+  instants still read a box of another size. Whether a plant that gave each
+  box its exact size would pass every older rule was not tried; the offset
+  read and the box read each fail it either way.
+- **PT2 again**: 76 / 94 / 333 / 351 / 60 / 78 ×6 / 64, unchanged.
+
+### The ground at an offset (item 2: PG)
+
+- **Probe**: `background-color`, `background-image` and `box-shadow` leave
+  `SEEK_NEEDLESS`. At each offset, where the seek changed a ground or an ink
+  on a figure's walk (its own elements under the animated box, and the
+  boxes from its parent up to that box; `GROUND_SIGNATURE` against the
+  pass's last instant), the ground under each own element's glyphs is read
+  again (`offsetGroundFaults`, `groundStackFault` with its paints read
+  fresh). A box above is compared without its background image, which the
+  ground read does not read there. An animation that sets only grounds,
+  shadows and `SEEK_NEEDLESS` longhands is read for the ground alone
+  (`GROUND_ONLY`); one that sets only an outer shadow, as `getKeyframes()`
+  resolves it (its `var()`s substituted, measured in Chrome), on a box every
+  figure it reaches stands inside with a quarter of its size to spare, is not
+  seeked (`outerShadowOnly`).
+- **Cost of the first version**: with neither narrowing, every Neo row
+  head's card pulse was seeked and every seek of the aurora's tide read the
+  ground again (the root's gradient changed): the offset read took 1.87s at
+  390 against 0.44s at d19f1ff (657 animations, 3,661 grounds read again),
+  14.4s over the geometry passes against 3.7s in the critic's clean run at
+  d19f1ff (`clean2.c2-first.log`, exit 0, 262.5s). Narrowed (`clean3.log`,
+  exit 0, 256.3s, load 2.1 → 4.9): 0.67s at 390 (177 animations, 3 grounds
+  read again) and 6.2s over the passes — the held list's 43 longhands where
+  it held 17, and the door button's breathing seeked, single runs under
+  load 2–5.
+- **Red, PG** (the critic's; exit 0 before): exit 1, the dress rule 76 / 94 /
+  333 / 351 / 78 / 60 / 78 ×5 / 64, every Rural quote figure, "the ground
+  under its glyphs (span.item-a's ground) reads at 1.00:1 on its ink … with
+  t-rural-ground on span.item-a seeked to its keyframe at 25%". The same
+  counts on the first version and on the narrowed one.
+- **Red, PGv** (new: the ground fed through a custom property,
+  `--t-rural-g`, which the `.item-a` reads as its background; the keyframe
+  names no ground) and **PGs** (new: an inset shadow in the figure's ink):
+  each exit 1 with PG's counts, on the first version. Both stay seeked on the
+  narrowed one (a custom property; an inset layer), not re-run there.
+- **Lint, first party only** (D-2026-10-26-04 (a)): `KEYFRAME_GROUND`, a
+  background's colour or image, the shorthand and a box shadow, refused in
+  any keyframe (`a-keyframe-never-sets-a-ground-or-a-shadow`). New plant set
+  `j1`, 16 (13 refused, PG's shape first; 3 controls); `i1:21`, the ink
+  belt's last control, moved to refused, its reason ("a ground, which no box
+  below inherits") true and beside the point (item 5(c)); `b1:78` and
+  `f2:19` refused by the belt as well. Red by mutation: the belt off, 5
+  tests fail.
+
+### A code is drawn black on white (item 4: PFQ)
+
+- **Probe**, every geometry pass, no pixels (`a-code-is-drawn-black-on-white`):
+  every `svg.qr` a paint shows is the shape `qrSvg` draws — a rect at 0,0 the
+  size of its viewBox, then one path of `M c r h1v1h-1z` squares, its
+  computed `d` the same squares (Chrome serialises them `M c r H c+1 V r+1 H
+  c Z`, measured) — and computes the rect `rgb(255, 255, 255)` and the path
+  `rgb(0, 0, 0)`, each at a fill opacity of 1 with no stroke, the svg, the
+  rect and the path at opacity 1, visible, displayed, with no filter, mask,
+  clip-path, blend or transform. Owed per look (`qrColourByClass`: painted,
+  counted where the codes are listed, and read); the pass line prints them.
+  On the clean tree 35 / 78 / 122 / 130 … codes a look a pass, 0 failures.
+- **Red, PFQ** (the critic's, `.t-modern .qr path { fill: #fff }`; exit 0
+  before): exit 1, every Modern code: 35 at 390, 78 at 1280, 122 at the
+  canvas, 130 on the portrait wall and on each wall pass but desk-wall's 97,
+  29 at 360, 5 and 3 under reduced motion ("pay-qr: its modules are filled
+  rgb(255, 255, 255), not black"). Nothing else failed.
+- **Lint, first party only** (D-2026-10-26-04 (b)): `fill`, `stroke` and every
+  `fill-*` and `stroke-*` longhand only on a rule whose every selector's
+  subject is the `.ic` svg or a shape under it by a descendant or child
+  combinator (`isIconRule`, `svg-paint-stands-only-on-a-drawn-icon`); never
+  in a keyframe. New plant set `k1`, 20 (14 refused, PFQ's first; 6
+  controls). Sixteen older plants moved: the `g1` stroke-cap plants and
+  `f2:5` set a stroke on `.item-caret`, a drawn icon whose rule does not say
+  `.ic` (five of them the cap's accepted controls), and `f1:35` a fill and a
+  stroke on a pseudo-element. 1,258 plants: 958 refused, 300 accepted. Red by
+  two mutations (the belt off; every rule taken as an icon's), 5 tests each.
+- **Not read, stated**: a box above the code (the cover rules' and the
+  quiet zone's), the code's size, the pixels (the quiet-zone read's, on the
+  contrast jobs).
+
+### Statements (item 5) and the one-shots (item 6)
+
+- The 1a docblock and 7a's "Not read" said "over time, a cover that takes no
+  hit is read by nothing but …" as if over time were read for every money
+  node: over time no hit test asks any money node but the price and "You
+  pay" (`coveredBy`); every other money node and protected box is asked at
+  rest, and at the end of a lasting animation. Both say so now.
+- "The fill colour and the stroke are refused everywhere" (CLAUDE.md §6, the
+  `KEYFRAME_INK` docblock, the ink belt's section above) names
+  `-webkit-text-fill-color` and the `-webkit-text-stroke` family now; SVG
+  `fill` and `stroke` were refused nowhere until the belt above.
+- **The app's one-shot entrance, for the day a fixture paints a press**: a
+  strip painted with `selectionEntered` fails `keyframeHeld` (57 at 390 and
+  at 1280) and 1a at rest (38 at 390) on the app's own `sel-unfold`,
+  `sel-fade` and `sel-line-in` (above, "1a at the end of a lasting
+  animation"). No fixture paints a press. Such a fixture must land with a
+  read of the entrance at its end. Not fixed.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

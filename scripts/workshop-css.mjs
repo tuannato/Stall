@@ -2889,8 +2889,12 @@ const REFUSED_PROPERTIES = Object.freeze({
 /**
  * The inherited longhands that paint text, which a first-party keyframe may
  * not set (`declarationProblems`, the inherited-ink belt beside the probe's
- * keyframe-offset read). The fill colour and the stroke are not here: they
- * are refused everywhere (`REFUSED_PROPERTIES`).
+ * keyframe-offset read). The text's own fill colour and stroke,
+ * `-webkit-text-fill-color` and the `-webkit-text-stroke` family, are not
+ * here: they are refused everywhere (`REFUSED_PROPERTIES`). SVG `fill` and
+ * `stroke` are a different paint, an element's own, and inherited too: a
+ * first-party sheet sets them on a drawn icon alone, and never in a keyframe
+ * (`SVG_PAINT`, `isIconRule`; D-2026-10-26-04 (b)).
  */
 const KEYFRAME_INK = new Set([
     'color',
@@ -3342,9 +3346,11 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * the keyframe. `KEYFRAME_INK`: the inherited longhands that paint
          * text — the ink, a text shadow, the caret, the emphasis marks (each
          * prefixed twin too), the order a stroke and a fill are painted in,
-         * a colour font's palette. The fill colour and the stroke are
-         * refused everywhere already (`REFUSED_PROPERTIES`), and the tap
-         * highlight is `transparent` everywhere. No first-party sheet a run
+         * a colour font's palette. The text's fill colour and stroke
+         * (`-webkit-text-fill-color`, `-webkit-text-stroke*`) are refused
+         * everywhere already (`REFUSED_PROPERTIES`), SVG `fill` and `stroke`
+         * off a drawn icon and in any keyframe below (`SVG_PAINT`), and the
+         * tap highlight is `transparent` everywhere. No first-party sheet a run
          * serves sets one in a keyframe (the shipped looks, the starters, the
          * fixture look, the tracked private fixture and the canary;
          * `refuses-an-inherited-ink-in-a-keyframe`); stall.css does (the

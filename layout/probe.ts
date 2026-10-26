@@ -616,16 +616,20 @@ function coveredByRead(node: Element): string | undefined {
  *
  * **Not at `checkOverTime`'s six instants**: measured over the phone pass's
  * whole screen set, they take the reads from 886 to 4,600 and the rule's own
- * time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s). Over time the price
- * and "You pay" are read by `coveredBy`, bound at rest and at the six
- * instants under its own check names ("asked amount is covered", "you-pay
- * figure is covered"), and the unbuyable label by `coveredBy` at the last
- * instant (`unbuyableFaults`) — with `pointer-events` as the page has it,
- * so a moving cover that takes no hit is read over time by nothing but the
- * decoration sweep (a positioned or decoration box) and, on the sampled
- * screens, the contrast pass at its one frozen instant. Its cost is counted
- * (`coveredByCalls`, `coveredByMs`). A cover that moves into place between
- * frames is read by neither (the critic's P3-1). Stated.
+ * time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s). **Over time no hit
+ * test asks any money node but the price and "You pay"** (the fourth
+ * review's item 5(a)): those two are read by `coveredBy`, bound at rest and
+ * at the six instants under its own check names ("asked amount is covered",
+ * "you-pay figure is covered"), and the unbuyable label by `coveredBy` at
+ * the last instant (`unbuyableFaults`); every other money node and every
+ * protected box is hit-tested at rest alone, and at the end of a lasting
+ * animation (below). Even over the price and "You pay", `coveredBy` asks
+ * with `pointer-events` as the page has it, so a moving cover that takes no
+ * hit is read over time by nothing but the decoration sweep (a positioned
+ * or decoration box) and, on the sampled screens, the contrast pass at its
+ * one frozen instant. Its cost is counted (`coveredByCalls`,
+ * `coveredByMs`). A cover that moves into place between frames is read by
+ * neither (the critic's P3-1). Stated.
  *
  * **And once more at the end of every animation that keeps its end**
  * (`coverAtEnd`; the critic's third review, item 2, PF2; D-2026-10-26-03):
