@@ -6524,6 +6524,141 @@ its row to the band and the band takes the counter tablet's text steps
 0–106px, and at 1280x800 the band's code, total and "+1 more" were cut
 from below under the Awning.
 
+**The touch wall's stepper stands clear of the figure** (2026-10-20,
+D-2026-10-20-09 and D-2026-10-20-12; window.css, "A touch wall narrower than
+1920" and the three blocks after it). The stepper was a column of 218–317px
+that spanned both lines of a touch quote row, so the figure had the row less
+the picture, the gaps and that column, and the − and + controls and the figure
+stood on each other at 768x1024, 1024x768 and 800x1280 on every look: a
+16-character quote is 280–315px at 1024x768 in a 154px area, and 406–456px at
+768x1024 in the column beside the picture. **No rule read it.** The hit test
+(`coveredBy`) is asked of the `price` role, and a quote's figure is
+`seller-price`; the stepper is in flow, so the box sweep over decorations
+never meets it. Now:
+
+- **1280 to 1919 wide in landscape is main's row, row for row** (the owner,
+  D-2026-10-20-12: it was clear there, leave it): the stepper spans both
+  lines. An ordinary figure stands under the picture and the name, left of
+  the stepper (`ic name step / price price step`). An eight-byte figure
+  (`fig-wraps`) takes the landscape `:has()` rule, (0,8,0) against the
+  row's (0,6,0), and becomes `ic name step / ic price step`: beside the
+  picture, under the name, left of the stepper. That is main's too, with no
+  fault. Compared with main at 1280x900, 1280x800, 1366x768, 1920x1080 and
+  1080x1920 (every touch screen, every look bare and worn): the row's areas,
+  columns, height, width, name column, figure width and size, and its faults
+  are identical on every row.
+- **Under 1280 in landscape** the picture takes two lines, the stepper stands
+  under the name and the figure takes the line under both: beside the name
+  the stepper left the name's column 41–47px at 1024 and 2–6px at 960.
+- **Under 1080 in portrait** the figure takes the line under the picture, the
+  name and the stepper, and the picture is **104px, not 160** (option (e) of
+  the touch-wall critic, the owner's choice). With a 160px picture the row was
+  256–274px at 768x1024 against main's 200, in a list of 123–261px, and the
+  first price stood cut at rest on five looks of six there.
+
+**The proof is a scratch measurement, not a rule** (the touch-wall critic's
+`m.mjs`: kept in the session scratchpad, not in the tree). On every touch
+screen (`shop-window-touch-quotes`, `-16`, `-long-figures`, `-pay`, `-pay-3`,
+`-pay-35`), every look bare and worn, with transforms and animations held
+off, no rect of the stepper's controls or count meets a character of the
+figure, of the name (clipped to its cell) or of its label, nor the tag's box,
+nor the name's cell or the picture; and the stepper's box and the figure's
+characters stay inside the row. **Landscape, 880 to 2560 wide** (150 sizes,
+the ones main fails are 880 to 1200 wide): main 1,573 of 12,888 rows red on
+66 sizes, here 0 of 12,888, and the rows from 1280 up identical to main's on
+all 77 sizes there. **These counts are over every size painted, not over wall
+sizes only**: the critic counts 24 of the 150 landscape sizes at 600 tall,
+below the wall's floor (680 on the short side), which the showroom paints and
+the app would not; they were not recounted without them, the size list being
+gone. **Portrait, 680 to 1440 wide up to 2560 tall** (115
+sizes): main 746 of 15,567 rows red on 56 sizes, here 0 of 15,567. At the
+first set of 16 sizes (the nine wall sizes, 834x1112, 1152x864, 1279x800,
+1279x768, 1200x800, 1100x800 and 960x720): main 138 of 1,044 rows red, here
+0. Run twice, on Chrome 155 and again on Chrome 156 (2026-10-26, from the
+committed tree): the landscape and first-set numbers are the same to the row.
+
+**What is not claimed: a landscape wall under 870 wide** (D-2026-10-20-12,
+PLAN § Open). The row is 266px wide at 800 and 306px at 840, and there the
+stepper itself runs past its row: its "+" button by 58.4px at 800, 41.1px at
+820, 23.9px at 840 and 6.6px at 860 (a one-digit count); with a three-digit
+count by 76.6px at 800, 42.1px at 840, 24.8px at 860, 16.2px at 870 and
+7.6px at 880, clear from 890. A figure runs past the row too, by 8–30.9px
+on Neo and Rural at 800 and 3.2px on Rural at 840. This branch's first
+comment said "nothing of the stepper's" and "every one a figure past its
+row": both were false, and a sweep that took the stepper's own box against
+the row's was what found it (the earlier tool did not read it). Main is
+worse at those sizes (90.4px at 800, 24.6px at 880, 9px at 900), so nothing
+is made worse; nothing there is held.
+
+**The floor is the short side, and a near-square portrait wall is not held
+either** (PLAN § Open). `wallWidth` in `src/app.ts` asks `Math.min(innerWidth,
+innerHeight) >= WINDOW_MIN_PX` (680), so a portrait screen is a wall from 680
+wide, and a near-square one under about 880 wide shows almost no list: 0–37px
+at 700x701 and 760x761, 0–124px at 880x881. Under the Awning the frame reads
+as landscape there (the canopy takes its height) and takes the landscape
+limit: the stepper runs 154px past its row at 700x701 and 96px at 760x761
+(the critic's second review, `touch-wall/critic2/`). Main behaves the same
+(182 and 127px past at those two sizes).
+
+**What the probe paints.** No probe pass paints a landscape wall from 1080 to
+1279 wide: the landscape wall passes are 1024x768, 1280x900, 1280x800,
+1366x768 and 1920x1080. From 1080 to 1279 wide the under-1280 rule is
+measured by the scratch sweep alone.
+
+**The cost, measured.** Under 1280 in landscape a row is taller: 169px became
+214 at 1024x768, 194 became 242 at 1279x800, 182 became 232 at 1152x864 (a row
+with a stepper and a figure of 17 characters or fewer is 42–51px taller
+across the sweep, and a row with no stepper, one in another unit, is not; a
+re-flowed figure's row is 38px shorter to 28px taller). In portrait under 1080 a row is
+200px at 768x1024, 800x1280 and 834x1112 (218 on Rural, whose tag is taller),
+as main's was, where a figure beside the picture is now under it; a
+re-flowed figure's row, which was 256–274px on main, is 200–218.
+**The first price at rest** (`figWholeAtRest`, the figure's characters inside
+the strip's visible box with the list at its top): at 768x1024 it is whole
+on 4 of 6 look variants, as on main; at 680x1000 on 4 of 6 (main 3 of 6); at
+834x1112 on 6 of 6. The two it is not at 768x1024 are the Awning (a list of
+129px) and Rural's yard (123px), and a row of any shape is taller than
+either: those are the older cuts, main had them. **This branch adds cuts of
+its own.** Counted *whole and clear* (the first price inside the list at
+rest and none of the stepper's controls on it; the critic's recount, second
+review, over every touch screen with a list on screen; "whole" alone flatters
+main, whose price stood under the controls in most cells under 1280):
+landscape 880–1279 wide, 1,404 cells, 1,364 here against main's 536, 841
+gain and 13 lose; portrait under 1080 wide, 2,379 cells, 2,216 here against
+main's 1,791, 437 gain and 12 lose. (By "whole" alone, the builder's count:
+1,364 against main's 1,377 in landscape, 2,216 against 2,186 in portrait; the
+two plain touch screens are whole in every cell under 1280, 876 of 876, as on
+main; from 1280 up identical to main, 1,427 of 1,476.) **The 25 that lose
+are new cuts**: on main each had a first price whole and clear of the
+controls ("$5.00" in 22 of them). They are payment screens 1,080–1,200 tall
+and 1,100–1,279 wide in landscape (lists of 155–223px beside rows 42–51px
+taller), payment screens 1,501–1,600 tall in portrait, the yard or the Awning
+at 1,000–1,079x1,112, and 1000x1001 Rural bare (in portrait a figure under
+the picture ends 185–209px down its row, and main's, beside it, ended
+152–162px down). Six are at 1279 wide: the cost of moving the cut to 1280,
+which the owner chose. The ranges are those of the sweep's sizes, not edges:
+the critic's spot sizes lose the same way at payment screens of 960x950,
+1000x999, 1024x1000 and 1240x1230. **No rule was built for it** (the owner,
+D-2026-10-20-12): it would be red on main at 768x1024 and 680x1000; PLAN §
+Open has the numbers and the ways out.
+
+`a-touch-quote-row-stands-its-figure-clear-of-its-stepper` pins the rules'
+text; **it pins text, not geometry**, and a planted 150px stepper passes it.
+The geometry guard is step 1a on the `before-8g2` branch (a hit test with
+`pointer-events` forced on over every money node), which the touch-wall
+critic ran on that branch's probe: this wall's touch list went from 35
+failures to 0 with the first version of this fix only (the critic's run, not
+re-run on this tree). It reads a figure covered by a control. By the
+critic's reading it does not see Rural's tag over the controls, the name
+squeezed, or the stepper past its row, which only the sweep above reads.
+
+**CLAUDE.md § 4's "Still red" counts at 900x1600 and 864x1536 may be out of
+date** (25 and 195 failures there). This branch's portrait rule applies at
+both sizes (under 1080 wide), and the critic's second-review sweep reads 17
+red touch rows on main at each and 0 on the branch. The probe was
+not run at those two sizes with this branch, so the counts were not
+re-measured.
+
 ### The passes
 
 - **`desk-wall`**, 1280x900: every wall screen the canvas split keeps off

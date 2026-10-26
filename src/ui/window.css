@@ -1483,20 +1483,15 @@
  * row: `from 100,000,000 XEC` ran 32–76px past the row on every look and
  * Rural's tag was cut, and a touch row's 16-character quote, beside the
  * stepper's column, ran up to 81px past it. So below 768 every Browse row
- * stands its price under the picture and the name, across the row, and a
- * touch row puts its price under the stepper too.
+ * stands its price under the picture and the name, across the row. A touch
+ * quote row's own layout is stated by the portrait block that follows "A
+ * touch wall narrower than 1920", below.
  */
 @container sw (orientation: portrait) and (max-width: 767.98px) {
     .stall.shop-window[data-mode='browse'] .item-head {
         grid-template-areas:
             'ic name'
             'price price';
-    }
-
-    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row {
-        grid-template-areas:
-            'ic name step'
-            'price price price';
     }
 
     /* And the Cycle card's air, the short landscape wall's answer: at 680
@@ -1640,6 +1635,18 @@
  * (`fig-narrow`, 17 characters) and on the rows' re-flow (`fig-wraps`),
  * where the tablet's re-flowed figure stands. At 1920 the rows are what
  * they were.
+ *
+ * **From 1280 to 1919 wide this is the row as it was on main, on purpose**
+ * (D-2026-10-20-12, the owner: leave it). The stepper spans both lines. An
+ * ordinary figure stands under the picture and the name, left of the
+ * stepper's column (`ic name step / price price step`). An eight-byte
+ * figure (`fig-wraps`) does not take this rule: the landscape `:has()` rule
+ * further up is (0,8,0) against this block's (0,6,0), so that figure stands
+ * beside the picture, under the name (`ic name step / ic price step`). That
+ * is main's row too: the sentence above that puts every row's figure on a
+ * row of its own never held for it. Both are clear on every look, bare and
+ * worn, over every touch screen.
+ * Below 1280 the next block takes the row.
  */
 @container sw (orientation: landscape) and (max-width: 1919.98px) {
     .stall.shop-window[data-touch='on'][data-mode='browse'] .item-head.item-head-q {
@@ -1660,6 +1667,93 @@
 
     .stall.shop-window[data-touch='on'] .item-head-q :is(.fig-wraps, .fig-narrow) .item-x {
         font-size: min(3.1cqw, 30px);
+    }
+}
+
+/*
+ * **Under 1280 wide, a landscape touch quote row stands its stepper under
+ * the name and its figure on a row of its own** (2026-10-20,
+ * D-2026-10-20-12; the case measured is 1024x768, the counter tablet on its
+ * side). The row above lets the stepper span both lines, so the figure has
+ * the row less the picture, the gaps and the stepper's column (259px at
+ * 1024, 218px at 680 wide): a 16-character quote (`1,000,000.00 XEC`,
+ * 280–315px at 31.7px) had a 154px area at 1024x768, and the − and +
+ * controls and the figure stood on each other on every look (Rural's tag over
+ * the controls, Modern's and Neo's controls over the digits). Beside the
+ * name the stepper left the name's column 41–47px at 1024 and 2–6px at 960,
+ * where the name's 8ch floor (`.stall.shop-window .item-b`) reaches into the
+ * gaps and, under about 1010, over the stepper (a 65–75px cell at 1024:
+ * "Roasted Beans" ran in a cell the width of its first five letters). So the
+ * picture takes the first two lines, the name has the rest of the line, the
+ * stepper stands under the name and the figure takes the whole line under
+ * all three. The row is 42–51px taller than main's (169px became 214 at
+ * 1024x768; a row with no stepper is as it was). Fewer rows stand in view:
+ * the owner's cost. The rule has the weight of the landscape re-flowed rule
+ * (`:has(… .fig-wraps)`, which applies at every landscape width;
+ * `.sw-strip …sw-row` is as heavy) and comes after it, so it wins the tie
+ * for a re-flowed figure.
+ *
+ * **Held down to 870 wide, and not below** (D-2026-10-20-12). The row is
+ * 266px wide at 800 and 306px at 840, beside the code's 400px column, and
+ * under 870 the stepper itself runs past its row: its "+" button 58px at 800,
+ * 41px at 820, 24px at 840 and 6.6px at 860 (a one-digit count). With a
+ * three-digit count it runs 7.6px past at 880 and is clear from 890. A figure
+ * runs past its row
+ * too (3px on Rural at 840; 8–31px on Neo and Rural at 800). This rule does
+ * not claim those sizes: main is worse there (the stepper 90px past its row
+ * at 800, 25px at 880 and 9px at 900), and a landscape wall under about 900
+ * wide is not supported yet. The wall's floor is 680 on the screen's short
+ * side (`wallWidth` in app.ts), not on its width (PLAN.md, § Open).
+ */
+@container sw (orientation: landscape) and (max-width: 1279.98px) {
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row {
+        grid-template-areas:
+            'ic name'
+            'ic step'
+            'price price';
+        grid-template-columns: clamp(72px, 9cqw, 140px) minmax(0, 1fr);
+        row-gap: 8px;
+    }
+
+    .stall.shop-window[data-touch='on'] .item-head-q .sw-step {
+        justify-self: start;
+        margin-left: 0;
+    }
+}
+
+/*
+ * The same figure row on a wall hung the tall way, under 1080 wide
+ * (2026-10-20, D-2026-10-20-12). From 768 the portrait row's `ic price step`
+ * put the figure in the column beside the picture, about 190px (768x1024,
+ * 800x1280: a 16-character quote is 406–456px at 46px), and under 768 a rule
+ * of its own stood the price under the stepper (680x1000), which this one
+ * states for every width. From 1080 the beside layout is as it was: it
+ * measured clear from 1080x1280 up.
+ *
+ * **The picture is 104px here, not 160px** (the owner's choice, option (e)
+ * of the touch-wall critic). With the figure on a row of its own the row
+ * is 256–274px tall at 768x1024 against main's 200, and the list a touch
+ * wall leaves there is 123–261px: the first price stood cut at the list's
+ * edge at rest on five looks of six. A 104px picture takes the row to
+ * 200–218px, the shape stays, and the first price stands whole on four of six
+ * looks (the Awning and the Yard leave a list of 123–129px, which fits no
+ * row, and that was so on main). The initials step down with the tile (38px,
+ * as the 160px tile's 56px). Both rules have the row's own weight, because
+ * the portrait block above states the 160px tile at `.item-ic` weight.
+ */
+@container sw (orientation: portrait) and (max-width: 1079.98px) {
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row {
+        grid-template-areas:
+            'ic name step'
+            'price price price';
+        grid-template-columns: 104px minmax(0, 1fr) auto;
+        row-gap: 8px;
+    }
+
+    .stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row .item-ic {
+        width: 104px;
+        height: 104px;
+        font-size: 38px;
     }
 }
 
