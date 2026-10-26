@@ -10690,6 +10690,23 @@ tracked fixture carried, each plant alone, the load in each log's `.meta`.
   (`.item-head`, `.item`), and the rain, the aurora and the confetti on the
   stall's root.
 
+### Masks on a box above, at a keyframe (item 5: PMk)
+
+- PMk (the critic's: a keyframe sets `mask-image: linear-gradient(#0000,
+  #0000)` on Rural's quote `.item-a`, a box above the figure, from 25% to 68%
+  of a 100s loop; the first-party look lint refuses a file's mask in a
+  keyframe, not a gradient's) passed the whole runner (254s): the animation
+  was seeked, and the offset read held the boxes above on `BOX_HELD`, which
+  named no mask; `boxFaults` held a keyframe on a box above at its written
+  value for a clip-path, a size and `BOX_HELD` alone. The same mask at rest
+  failed 28 times (read 4., `clipCut`: any mask above the figure).
+- The fix: the four mask sources read 4. holds at rest (`mask-image`,
+  `-webkit-mask-image`, `mask-border-source`, `-webkit-mask-box-image-source`)
+  join `BOX_HELD`, so `boxFaults` holds them at every keyframe's written value
+  and the offset read at every offset, and `boxHeldFault` fails any mask
+  there, as 4. does at rest. At rest the box read leaves them to 4.
+  (`BOX_HELD_AT_REST`), which says a mask above once.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

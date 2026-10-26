@@ -4408,7 +4408,10 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * its rows tilt 0.6°; a screen hung sideways turns the whole stall a quarter
  * turn, `[data-turn]`, and the figure stands upright on the screen it is
  * painted for) — read at rest and at every keyframe of an animation it
- * runs, a keyframe that moves a `clip-path` included.
+ * runs, a keyframe that moves a `clip-path` included; and no mask in a
+ * keyframe or at a keyframe offset (a mask at rest is 4.'s; the fifth
+ * review's item 5, the critic's PMk, a gradient mask in a keyframe on Rural's
+ * quote `.item-a`, was seeked and read clean before).
  *
  * **4. Every clip above it, up to the stall.** A box above the figure may
  * clip, mask or `clip-path` it for decoration — Rural's tag is a notched
@@ -6118,11 +6121,42 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
         case 'clip-path':
             // Read at rest against the ink (3.); a clip that moves is read at no instant.
             return undefined;
+        case 'mask-image':
+        case '-webkit-mask-image':
+        case 'mask-border-source':
+        case '-webkit-mask-box-image-source':
+            // Any mask on a box above fails (4. at rest, `clipCut`); held here
+            // for a keyframe and at a keyframe offset (before 8g2, the fifth
+            // review's item 5: the critic's PMk, a gradient mask in a keyframe
+            // on Rural's quote `.item-a`, seeked and read clean). At rest the
+            // box read leaves it to 4. (`BOX_HELD_AT_REST`).
+            return noMask(value) ? undefined : `a mask (${prop} ${value.slice(0, 60)}): a mask fades the figure in any shape`;
         default:
             return undefined;
     }
 }
-const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'translate', 'visibility', 'content-visibility', 'backdrop-filter'] as const;
+const BOX_HELD = [
+    'opacity',
+    'filter',
+    'mix-blend-mode',
+    'background-blend-mode',
+    '-webkit-box-reflect',
+    'offset-path',
+    'zoom',
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+    'visibility',
+    'content-visibility',
+    'backdrop-filter',
+    'mask-image',
+    '-webkit-mask-image',
+    'mask-border-source',
+    '-webkit-mask-box-image-source',
+] as const;
+/** The `BOX_HELD` longhands the box read holds at rest: every one but a mask's source, which 4. (`clipCut`) fails at rest wherever it stands above the figure, so it is said once. */
+const BOX_HELD_AT_REST = BOX_HELD.filter((prop) => !/mask/.test(prop));
 
 /**
  * The sizes a keyframe may not move on a box holding a figure (before 8g2,
@@ -6449,7 +6483,7 @@ function boxFaults(at: HTMLElement): string[] {
     if (known !== undefined) return known;
     const out: string[] = [];
     const cs = getComputedStyle(at);
-    for (const prop of BOX_HELD) {
+    for (const prop of BOX_HELD_AT_REST) {
         const why = boxHeldFault(prop, cs.getPropertyValue(prop), at);
         if (why !== undefined) out.push(`${describe(at)} above it: ${why}`);
     }
