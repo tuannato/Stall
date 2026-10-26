@@ -1161,7 +1161,10 @@ function keyframeSizeMotion(decls) {
  * one of six attributes (`STATE_ATTRIBUTE_NAMES`: `[open]`, `[hidden]`,
  * `[data-turn]` and — the fourth review's B3 — `[data-state]`,
  * `[aria-disabled]` and `[data-over]`, the three a look may match and no
- * fixture paints), in any form or case,
+ * fixture paints), or — the fifth review's ranked item 1 —
+ * `data-format` and `data-code` except for the values some screen paints
+ * (`STATE_EXCEPT_PAINTED`: `data-format='tag'`, and no value of `data-code`),
+ * in any form or case,
  * anywhere in the selector: an ancestor's state reaches a figure inside it,
  * and a state inside `:is()`, `:where()`, `:has()` or `:not()` is read as the
  * state it names, so `:not(:hover)` is a state rule too. The first version
@@ -1283,9 +1286,19 @@ function keyframeSizeMotion(decls) {
  *   ring of up to 4px, reaching 8px past the box, shown by a colour;
  * - the reach of an outer shadow: at most 8px of offset and 16px of blur
  *   (24px), in two layers, and an inset one stays inside its box. At rest,
- *   an outer shadow, a text shadow, a drop shadow, an outline and a border
- *   image name their own colour (`pastTheBoxProblems`, B2), so a colour under
- *   a state cannot reveal one written in `currentColor` or no colour;
+ *   an outer shadow, a text shadow, a drop shadow, an outline, a column rule
+ *   and a border image name their own colour (`pastTheBoxProblems`, B2 and
+ *   the fifth review's B1), so a colour under a state cannot reveal one
+ *   written in `currentColor` or no colour; an underline is within 4px of its
+ *   line and at most 3px thick, a stroke at most 3 wide and `d` is not
+ *   written (`inkReachProblems`, the fifth review's B1); no custom property
+ *   holds `currentColor` or `inherit` (B2); a rule runs only the keyframes
+ *   its own sheet declares (B3); and `light-dark()` and a dark
+ *   `color-scheme` are not written;
+ * - **`filter: url()` and `filter: blur()`**: an SVG filter's primitives are
+ *   not opened, and a blur's radius is not capped, so a filter that grows or
+ *   spreads the box's paint, ink included, is not read (the fifth review's
+ *   "not verified"; plants `f2:7`, `f2:32`);
  * - **a colour a state gives an element, not a pseudo-element, that a rule at
  *   rest moved over a figure and left clear** (the fourth review's P2): the
  *   move is an offset (`position: relative; top: 40px`), a negative margin
@@ -1296,18 +1309,27 @@ function keyframeSizeMotion(decls) {
  *   it a ground, a border colour, an inset shadow or only `color`. A state's
  *   colours are on the list for an element, and the probe reads an element at
  *   rest. The pseudo-element half is refused above and in `pseudoHostPaintProblems`;
- *   this half stands (plants `m4`, pinned as accepted);
- * - **a ground, an edge or a shadow colour read through a `--s-…` custom
- *   property** that a rule at rest set to `currentColor`: `var(--s-…)` with
- *   no fallback is accepted as a colour for a ground and an edge, and this
- *   lint does not read what a sheet's own custom property holds;
+ *   this half stands (plants `m4`, pinned as accepted). **The move can also be
+ *   a growth, and a multiplier** (the fifth review's smaller item): an
+ *   element that grows (`width`, `height`) or is scaled (`zoom`, `scale`,
+ *   `transform: scale()`) multiplies what a capped ring, offset, stroke or
+ *   underline reaches, because each cap is measured in the box's own
+ *   pixels (`zoom: 40` on a box with a 4px outline at an offset of 4px
+ *   reaches 320px; plants `f3:1`, `f3:2`, `f8:2`);
+ * - a ground, an edge or a shadow colour read through a `--s-…` custom
+ *   property is closed at the declaration since the fifth review: no
+ *   first-party custom property holds `currentColor` or `inherit`, so a
+ *   `var(--s-…)` with no fallback, accepted as a colour for a ground and an
+ *   edge, brings in no ink;
  * - a state written another way: a class a script toggles, an attribute but
- *   the six above (`[aria-pressed]`, `[disabled]`, `[aria-current]`, and the
+ *   the eight above (`[aria-pressed]`, `[disabled]`, `[aria-current]`, and the
  *   others the fixtures paint, are read as a rule at rest, which the probe
  *   measures: `[data-copied='shown']` by `addr-shown` and `[data-copied='true']`
- *   by `addr-copied`, both staged), and a structural pseudo-class, which is
- *   the tree at rest. A value of `STATE_ATTRIBUTES` that no fixture paints is
- *   named in `layout/stateAttributes.test.ts`;
+ *   by `addr-copied`, both staged, and `[data-tier='2']` by the stream card's
+ *   two fixtures), and a structural pseudo-class, which is the tree at rest. A
+ *   value of `STATE_ATTRIBUTES` that no fixture paints and the belt does not
+ *   name (the name ladder's rungs) is on `UNPAINTED` in
+ *   `layout/stateAttributes.test.ts`;
  * - a transition (read only by the size lint, on a money node);
  * - a state rule in the kit: the kit lint carries none of it.
  *
@@ -1428,7 +1450,9 @@ export const STRUCTURAL_PSEUDO_CLASSES = Object.freeze([
  * link with no destination (`aria-disabled='true'`) and the byte meter over its
  * ceiling (`data-over='true'`). `data-copied='true'` is not here: the staged
  * screen `addr-copied` paints it, so a rule under it is measured at rest
- * (`layout/stateAttributes.test.ts` holds both).
+ * (`layout/stateAttributes.test.ts` holds both). `data-tier='2'` is not
+ * here either: it sizes a figure, which a state may not, so the stream card's
+ * two fixtures paint it (`broadcast-from-123456`, `broadcast-from-1234567`).
  */
 const STATE_ATTRIBUTE_NAMES = new Set(['data-turn', 'open', 'hidden', 'data-state', 'aria-disabled', 'data-over']);
 
@@ -2016,11 +2040,16 @@ function nonRoleVar(value) {
  * - `currentColor`, `inherit` and `revert` stay refused anywhere in a mask
  *   (`HOST_KEYWORD`, read first).
  *
- * Not read, stated: a `var()` that stands as a position may hold more than a
- * position — substitution is by tokens, so a custom property the host set to
- * `50%, currentColor` brings a stop in the host's ink into `#000 var(--x)`. It
- * takes a host rule that writes it, and the window chose to read a length as
- * no colour (plant `c1:8`, pinned as accepted).
+ * A `var()` that stands as a position may hold more than a position —
+ * substitution is by tokens, so a custom property the host set to
+ * `50%, currentColor` would bring a stop in the host's ink into `#000
+ * var(--x)` (plant `c1:8`; and the same in the `mask` position slot, the size
+ * after a `/`, a radial gradient's `at` and a conic gradient's `from` or `in`,
+ * the fifth review's B2). **That class is closed where the custom property is
+ * declared**: no first-party custom property holds `currentColor` or
+ * `inherit`, so what a `var()` brings in is a colour of the sheet's own
+ * (`c1:8` is refused at its declaration; `c1:5` and `c1:7` stay accepted for
+ * that reason).
  */
 const MASK_NO_PICTURE =
     /^mask-(?:size|position(?:-x|-y)?|repeat|composite|mode|origin|clip|type|border-(?:slice|width|outset|repeat|mode)|box-image-(?:slice|width|outset|repeat))$/;
@@ -2294,6 +2323,9 @@ function pseudoHostPaintProblems(decls, selectors) {
  * - every `filter: drop-shadow()`;
  * - `outline` and `outline-color`, and `outline-style` when it draws (a ring
  *   that names no colour is drawn in `currentColor`);
+ * - `column-rule` and `column-rule-color`, and `column-rule-style` when it
+ *   draws, alike (the fifth review's B1: a rule wider than its gap reaches
+ *   past the box, and with no colour it is drawn in the ink);
  * - a `border-image` and `border-image-source`.
  *
  * None of them is `currentColor`, `inherit`, `revert`, `revert-layer`,
@@ -2301,8 +2333,17 @@ function pseudoHostPaintProblems(decls, selectors) {
  * outline's), a `var()` that is not a palette role, or a layer with no colour.
  * A border's own band lies inside its box and is not read here. The rule
  * runs on a rule that names no state (the belt refuses most of these by name
- * under one and bounds the rest) and on a rule that holds no pseudo-element
- * (`pseudoHostPaintProblems` reads that rule's, as strictly). Not read,
+ * under one and bounds the rest) and on a rule that holds no pseudo-element.
+ * **The other two readers read those rules differently, not "as strictly"**
+ * (the fifth review's smaller item): the belt reads a state rule's
+ * `box-shadow` colour as a literal or a palette role, and its `outline-color`
+ * (and its border and ground colours) as a literal or a `var(--s-…)` of any
+ * name with no fallback, never `currentColor`, `inherit`, `initial` or
+ * `unset`; `pseudoHostPaintProblems` reads a pseudo-element rule's paints for
+ * the same host keywords, a `var()` only as a palette role, and a colour for
+ * each family and side, but counts any token that is not a length or a
+ * keyword as a colour, so a system colour or an `env()` passes there and
+ * `initial` or `unset` as a shadow's colour is not refused. Not read,
  * stated: a style in one rule and its colour in another (an `outline-style`
  * that draws names a colour in the same rule or is refused), and a colour
  * written as a system colour or a form this lint does not read (refused: it
@@ -3539,7 +3580,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 if (!kit) for (const why of pseudoHostPaintProblems(declarationsOf(node.body), selectors)) at(node.start, why);
                 // The paints that reach past a box, and the outline's cap: on a rule that names no state (the belt
                 // refuses most of them by name under one and bounds the rest), the colours on one with no
-                // pseudo-element too (`pseudoHostPaintProblems` reads that rule's, as strictly).
+                // pseudo-element too (`pseudoHostPaintProblems` reads that rule's, by its own rules: see `pastTheBoxProblems`).
                 if (!kit && !selectors.some(namesAState)) {
                     for (const why of outlineCapProblems(declarationsOf(node.body))) at(node.start, why);
                     for (const why of inkReachProblems(declarationsOf(node.body))) at(node.start, why);
@@ -3694,10 +3735,17 @@ export function lintSheet(css, { art = [] } = {}) {
  * and side, no `revert`, `revert-layer` or `all`, masks read, a `var()` only
  * as a palette role where it stands as a colour or as a mask's picture, never
  * where it is a length); an outer shadow, a text shadow, a drop shadow, an
- * outline and a border image name their own colour at rest
+ * outline, a column rule and a border image name their own colour at rest
  * (`a-paint-past-its-box-names-its-own-colour`); an outline is at most 4px
- * wide and sits from -8px to 4px (`an-outline-is-capped-per-longhand`); no
- * cursor but a keyword; no `display`, `content-visibility` or `all` in a
+ * wide and sits from -8px to 4px (`an-outline-is-capped-per-longhand`); an
+ * underline sits within 4px of its line and is at most 3px thick, a stroke is
+ * at most 3 wide and `d` is not written
+ * (`a-line-and-a-stroke-are-capped-per-declaration`); no custom property
+ * holds `currentColor` or `inherit` (`no-custom-property-holds-the-ink`); a
+ * rule runs only `none` or a keyframe its own sheet declares
+ * (`a-rule-runs-only-the-keyframes-its-own-sheet-declares`); no
+ * `light-dark()` and no `color-scheme` but `normal` or `light`; no cursor but
+ * a keyword; no `display`, `content-visibility`, `visibility` or `all` in a
  * keyframe; and no tap highlight but transparent anywhere. First party only:
  * the kit lint carries none of these (bar one fix of a hole on main).
  */

@@ -3185,7 +3185,7 @@ describe('no-custom-property-holds-the-ink', () => {
      * in the ink of the box that reads it: a stop's place (`#000 var(--x)`
      * with `--x: 50%, currentColor`), the `mask` position slot, the size
      * after a `/`, a radial gradient's `at`, a conic gradient's `from`.
-     * Chrome confirms all five (the critic's `chrome/mask.png`). The reader
+     * Chrome confirms all five (the critic's page). The reader
      * of a position cannot tell, so the closure is at the declaration: in a
      * first-party sheet no custom property holds `currentColor` or `inherit`
      * anywhere in its value, nor is `revert` or `revert-layer` its whole
