@@ -6666,7 +6666,19 @@ const SEEK_ON_OWN: ReadonlySet<string> = new Set([
  * `GROUND_ABOVE` alone: its background image is not read there (a
  * decoration's paint, the contrast pass's), so a decoration's custom
  * property turning a root's gradient — the aurora's tide, the sunburst's
- * angle — changes nothing the ground read sees.
+ * angle — changes nothing the ground read sees. Every longhand
+ * `boxPaintsOf` reads is here, those it reads of a box above before
+ * `GROUND_ABOVE` and those it reads of a figure's own elements alone after
+ * it (`the-ground-signature-names-every-longhand-the-ground-read-reads`,
+ * `layout/offsetHeld.test.ts`): the sixth review's PGatt3 — a keyframe
+ * `background-attachment: fixed` from 30% to 40% of a loop on Modern's
+ * quote `.item-x`, painted on its own ink under one tile of the page's
+ * ground — was seeked and its ground never read again, the attachment not
+ * being here; the paddings, which place a box's content box (a background
+ * clipped or placed there), were not here either. Where the glyphs move
+ * over a ground that stays (a padding, an indent, a margin), no longhand
+ * here changes, and the ground is read again by the ink's own move
+ * (`inkSignature`, the sixth review's PGpad).
  */
 const GROUND_SIGNATURE = [
     'color',
@@ -6689,7 +6701,12 @@ const GROUND_SIGNATURE = [
     'border-image-source',
     'border-image-slice',
     'border-image-outset',
+    'padding-top',
+    'padding-right',
+    'padding-bottom',
+    'padding-left',
     'background-image',
+    'background-attachment',
     'background-origin',
     'background-repeat',
     'background-size',
@@ -6702,8 +6719,9 @@ const GROUND_ABOVE = GROUND_SIGNATURE.indexOf('background-image');
 /**
  * The longhands that change a box's paints and nothing a held read holds: a
  * background's colour or image (the shorthand is these to a keyframe), where
- * its tile stands and how large (the fifth review's item 4), a box shadow
- * and its prefixed twin, a border's colour. An animation that sets only
+ * its tile stands and how large (the fifth review's item 4) and what it is
+ * fixed to (the sixth review's PGatt3), a box shadow and its prefixed twin,
+ * a border's colour. An animation that sets only
  * these and `SEEK_NEEDLESS` longhands is seeked for the ground read alone
  * (`offsetGroundFaults`); the held reads, which no ground or shadow can
  * move, are not made at its seeks.
@@ -6711,6 +6729,7 @@ const GROUND_ABOVE = GROUND_SIGNATURE.indexOf('background-image');
 const GROUND_ONLY: ReadonlySet<string> = new Set([
     'background-color',
     'background-image',
+    'background-attachment',
     'background-position',
     'background-position-x',
     'background-position-y',
@@ -6976,6 +6995,25 @@ function groundSignature(el: Element, own: boolean): string {
 }
 /** The ground signatures the offset read compares against (`offsetDressFaults`), as the pass's last instant left them, by element and by whether it is a figure's own. */
 let restGround = new Map<string, string>();
+/**
+ * Where a figure's text stands, as its text's client rects to a hundredth
+ * of a pixel (`offsetGroundFaults`): a seek that moves the glyphs (a
+ * padding, an indent, a margin) moves them over a ground that may stay
+ * still, which no `GROUND_SIGNATURE` longhand says — the sixth review's
+ * PGpad, a keyframe `padding-top: 80px` on Modern's quote `.item-x` under
+ * a 60px tile of the page's ground, the glyphs 80px down on the figure's
+ * own ink, seeked and read clean. The rects the self-clip read reads.
+ */
+function inkSignature(node: Element): string {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()]
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => `${r.left.toFixed(2)},${r.top.toFixed(2)},${r.width.toFixed(2)},${r.height.toFixed(2)}`)
+        .join(';');
+}
+/** Each figure's `inkSignature` as the pass's last instant left it (`offsetDressFaults`). */
+let restInk = new Map<Element, string>();
 const groundKeys = new WeakMap<Element, number>();
 let groundKeyNext = 0;
 /** A key for an element's signature in `restGround`, by element and by the list it is read on. */
@@ -7039,7 +7077,9 @@ function groundWalk(r: DressRead, target: Element): [Element, boolean][] {
  * seek changed the ground or the ink of an element on a figure's walk — one
  * of its own elements under the animated box, or a box from its parent up to
  * the animated box (`groundWalk`, compared by `groundSignature` against the
- * pass's last instant) — the ground under the glyphs of each of its own
+ * pass's last instant) — or moved the figure's text (`inkSignature`, the
+ * sixth review's PGpad: a padding, an indent or a margin carries the glyphs
+ * over a ground that stays), the ground under the glyphs of each of its own
  * elements under the animated box is read again (`groundStackFault`), its
  * paints read fresh at this offset (`paintsHere`). PG — `background-color:
  * var(--s-text)` from 25% to 68% of a loop on Rural's quote `.item-a` —
@@ -7054,10 +7094,15 @@ function groundWalk(r: DressRead, target: Element): [Element, boolean][] {
  * decoration's paint, the contrast pass's on the screens it samples), and so
  * a ground its position or size moves (`SEEK_NEEDLESS` there; on the
  * figure's own elements they are seeked, `SEEK_ON_OWN`); a ground between
- * two offsets; and a pseudo-element's animation.
+ * two offsets; a pseudo-element's animation; an animation off the figure's
+ * walk (seeked for the self-clip read alone, `movesOtherBoxes`); and a
+ * ground box above that moves while the glyphs stand still — a size on it
+ * (refused at its written value, `keyframeHeld`), or its offsets or margin
+ * over a figure positioned against a box above it.
  */
 function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHere: { own: Map<Element, BoxPaints>; above: Map<Element, BoxPaints> }): string[] {
-    if (!groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];
+    const inkMoved = inkSignature(r.node) !== restInk.get(r.node);
+    if (!inkMoved && !groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];
     dressSeek.grounds += 1;
     const out: string[] = [];
     const kept = { own: ownPaintsSeen, above: abovePaintsSeen };
@@ -7199,8 +7244,11 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
         }
     }
     const said = new Set<string>();
-    // The ground of each element as the pass's last instant left it (`groundSignature`): every animation is put back before the next is read.
+    // The ground of each element, and where each figure's text stands, as
+    // the pass's last instant left them (`groundSignature`, `inkSignature`):
+    // every animation is put back before the next is read.
     restGround = new Map();
+    restInk = new Map();
     const sheets = `${document.styleSheets.length}:${document.adoptedStyleSheets.length}`;
     if (movesByName.key !== sheets) movesByName = { key: sheets, byName: new Map() };
     for (const anim of document.getAnimations()) {
@@ -7245,6 +7293,7 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
                 const key = groundKey(el, own);
                 if (!restGround.has(key)) restGround.set(key, groundSignature(el, own));
             }
+            if (!restInk.has(r.node)) restInk.set(r.node, inkSignature(r.node));
         }
         // The figures whose text the self-clip read reads at each offset:
         // every one on the paint where the keyframes can move another box;
