@@ -767,9 +767,19 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * were left off D-07's own list; the lint-belts critic's P3), and neither are
  * `width`, `min-width`, `max-width`, `padding*`, `margin*` and `border-width`,
  * which move the box a figure stands in (a transition or a keyframe of any of
- * them is accepted: the third review's plants `n6`, stated), nor `opacity` or
- * `clip-path` in a keyframe, which the probe reads at one frozen instant
- * (CLAUDE.md §10, "moving inks"). **`display` and `content-visibility` in a
+ * them is accepted: the third review's plants `n6`, stated). The probe reads
+ * what a keyframe of any of them does to a money figure at each keyframe
+ * offset (before 8g2): `font-size-adjust` and a negative `text-indent` are
+ * held by the dress rule there, and a figure's text a positive indent, a
+ * size, a padding or a margin cuts is the self-clip read's (the fifth
+ * review's PTI); a figure one spills or covers between the instants is read
+ * by nothing. Nor are `opacity` or `clip-path` in a keyframe named, which the
+ * probe's dress rule holds on a money figure at each keyframe's written value
+ * and at each keyframe offset, and on a box above it at each keyframe's
+ * written value (a `clip-path` that moves refused, an opacity held at each
+ * offset too); off money a moving ink is read at one frozen instant
+ * (CLAUDE.md §10, "moving inks").
+ * **`display` and `content-visibility` in a
  * keyframe are refused** (D-2026-10-20-10, `declarationProblems`): a keyframe
  * that sets either takes a box out of the layout for part of a cycle. A
  * keyframe is refused wherever a rule runs it, so a `scale`, a `letter-spacing` or a

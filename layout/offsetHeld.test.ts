@@ -63,6 +63,18 @@ function heldCases(): { labels: string[]; body: string }[] {
     return groups;
 }
 
+/** `offsetDressFaults`'s body, comments out and whitespace flattened to one space: the loops are pinned on it. */
+function offsetReadBody(): string {
+    const start = PROBE.indexOf('function offsetDressFaults(');
+    expect(start, 'layout/probe.ts declares offsetDressFaults').toBeGreaterThanOrEqual(0);
+    const end = PROBE.indexOf('\n}\n', start);
+    return PROBE.slice(start, end)
+        .split('\n')
+        .map((line) => line.replace(/^\s*\/\/.*$/, ''))
+        .join('\n')
+        .replace(/\s+/g, ' ');
+}
+
 describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides', () => {
     const held = setOf('DRESS_HELD');
     const geometry = setOf('OFFSET_GEOMETRY');
@@ -88,6 +100,23 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         for (const prop of geometry) expect(held, `OFFSET_GEOMETRY names ${prop}, which DRESS_HELD does not hold`).toContain(prop);
         const nothing = cases.filter((c) => c.body.trim() === 'return undefined;').flatMap((c) => c.labels);
         expect([...geometry].sort()).toEqual([...nothing].sort());
+    });
+
+    it('asks every longhand of OFFSET_HELD_OWN, BOX_HELD and the rest at each offset: the loops are pinned whole, not only the lists', () => {
+        // The fifth review's item 8: a loop over `OFFSET_HELD_OWN.filter(p => p !== 'font-size-adjust' && p !== 'text-indent')`
+        // left the definition the test held and read neither longhand. The loops that ask the lists are held here as written.
+        const body = offsetReadBody();
+        for (const loop of [
+            'for (const prop of OFFSET_HELD_OWN) { const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs); if (why !== undefined) found.push(`${elName}: ${why}, ${at}`); }',
+            'for (const prop of dressReadList().rest) { const value = cs.getPropertyValue(prop); if (value !== (ref.get(prop) ?? \'\')) found.push(',
+            'for (const prop of BOX_HELD) { const why = boxHeldFault(prop, cs.getPropertyValue(prop), box); if (why !== undefined) found.push(`${describe(box)} above it: ${why}, ${at}`); }',
+        ]) {
+            expect(body, loop).toContain(loop);
+        }
+        // Each list is asked in the read exactly once, and only through its pinned loop.
+        for (const list of ['OFFSET_HELD_OWN', 'BOX_HELD', 'dressReadList()']) {
+            expect(body.split(list).length - 1, list).toBe(1);
+        }
     });
 
     it('reads at the offsets every longhand the fourth review found left out, PFA among them', () => {

@@ -6926,7 +6926,10 @@ function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHer
  * `offset × duration` is that keyframe's own value, and both put back after.
  * At each offset every figure it can reach is read as the dress rule holds
  * it at rest: rendered still; each of its own elements under the animated
- * box, held on `OFFSET_HELD_OWN` by `dressHeldFault`; every box between
+ * box, held on `OFFSET_HELD_OWN` by `dressHeldFault`, and compared on every
+ * longhand no family frees and none holds (`dressReadList().rest`) with the
+ * untouched reference (the fifth review's item 9: the rest was compared at
+ * rest alone; `text-fit` is the one such longhand in Chrome 156); every box between
  * the figure and the animated box, held on `BOX_HELD` by `boxHeldFault`;
  * and, where the seek changed a ground or an ink on its walk, the ground
  * under its glyphs (`offsetGroundFaults`; the fourth review's item 2, PG);
@@ -7040,6 +7043,13 @@ function offsetDressFaults(read: readonly DressRead[]): void {
                             for (const prop of OFFSET_HELD_OWN) {
                                 const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs);
                                 if (why !== undefined) found.push(`${elName}: ${why}, ${at}`);
+                            }
+                            // And every longhand no family frees and none holds, against the
+                            // untouched reference, as at rest (the fifth review's item 9).
+                            const ref = dressReference(r.stall);
+                            for (const prop of dressReadList().rest) {
+                                const value = cs.getPropertyValue(prop);
+                                if (value !== (ref.get(prop) ?? '')) found.push(`${elName} computes ${prop} ${value || '(nothing)'}, which no rule lets a look dress (untouched: ${ref.get(prop) || '(nothing)'}), ${at}`);
                             }
                         }
                         if (target !== r.node && target.contains(r.node)) {

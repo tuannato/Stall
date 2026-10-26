@@ -1050,18 +1050,62 @@ money path this app can have, because nothing on it is derived.
      view.
   4. **A keyframe on `left`, `top`, `inset` or a margin of a box above money
      moves it between instants.** `keyframeHeld` refuses a moving `translate`
-     for that reason, and not these.
-  5. **A size keyframe on the money node itself is held by nothing.**
+     for that reason, and not these. Since the fifth review the offset read
+     seeks them and the self-clip read reads at each offset whether the
+     figure's text is cut; what the moved box covers there is not read (1a
+     reads at rest and at the end of a lasting animation, and over time only
+     the price and "You pay" are hit-tested).
+  5. **A size keyframe on the money node itself is held by nothing** but,
+     since the fifth review, the self-clip read at each offset (it is
+     seeked there, `SEEK_ON_OWN`): a size that cuts the figure is read, one
+     that spills it or lays it under something is not.
   6. **`keepsItsEnd` ignores CSS transitions, whose end state lasts.** The
      critic's PTR went red through other reads, and why it was caught at
      rest is not known.
-  7. **A `line-through` (3px or less) or an outline in a keyframe on a box
-     above is unread between instants.**
+  7. **An outline in a keyframe on a box above is unread between instants.**
+     (Its `line-through` half is read since `4264938`: the offset read holds
+     `-webkit-text-decorations-in-effect`; the fifth review's PLT is red at
+     390, 28.)
   8. **A cover keyed to a class only a press adds (`.sel-enter`) is never
      painted.** And the day a fixture paints a press, the app's own one-shot
      entrance (`sel-unfold`, `sel-fade`, `sel-line-in`) goes red on
      `keyframeHeld` and on 1a at rest: such a fixture lands with a read of
      the entrance at its end.
+
+- **Before 8g2, the fifth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-5.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fifth review's fixes"). Not built:
+  1. **The end read's prune ignores stacking** (the critic's item 11): it
+     compares a clip box with 1a's asked boxes and points in viewport
+     coordinates, so a marquee's cell behind an open sheet or poster that
+     overlaps the sheet's Pay, Close, code or tag figure on screen is read at
+     its end though the sheet stands over it. Conservative (it reads more),
+     and the clean tree's 161 end reads are such paints; a prune that knew
+     which surface stands over which would leave them out.
+  2. **`outerShadowOnly` reads the figure's box, not its ink, and reads the
+     animated box's corners square** (the critic's item 12): a rounded box
+     whose shadow pulses outside a corner the figure's box stands near is
+     taken as outside every glyph. Kit-only: the first-party belt refuses a
+     shadow in a keyframe. Not planted.
+  3. **The kit's twin rule accepts a twin nothing reads** (`mask-box-image`
+     beside `-webkit-mask-box-image`, `tap-highlight-color` beside
+     `-webkit-tap-highlight-color`): the first-party lint holds the twin to a
+     property since the fifth review (`PREFIXED_TWINS`), and the kit keeps
+     the rule its README states. A README line for the owner. Beside it, in
+     both: a prefixed property Chrome does not list (a `-moz-` one) keeps the
+     name less its prefix as its twin, not held to exist.
+  4. **A code's size is held by nothing but its squareness and the pay
+     code's width gate** (the critic's PQZ, read on page passes only): a
+     look that shrinks a share, studio or record code to a few pixels, with
+     a box kept, passes the code hold and the per-screen owe.
+  5. **What the self-clip read at an offset does not read**: a figure a
+     keyframe spills (the spill rules read the instants alone) or lays
+     under another box (1a); a `.fig-say` parent that is no money node (the
+     self-clip rule's own subjects); a value between two offsets; two
+     animations at once. And the end read's prune rests on Chrome's clipping
+     as measured per display (`CLIPPING_DISPLAYS`, Chrome 156 only) and, for
+     a positioned box under the animated one, on reading alone (not planted).
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

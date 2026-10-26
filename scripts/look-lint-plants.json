@@ -8279,12 +8279,12 @@
     {
       "rule": "@keyframes $C-ground { to { background-position: 100% 0; } }",
       "expect": "accepted",
-      "why": "a background that moves, which lays no new ground: the belt reads a colour, an image and a shadow, and where a moving tile lands is read at rest and at the frozen instant alone (stated)"
+      "why": "a background that moves, which lays no new ground: the belt reads a colour, an image and a shadow; where a moving tile lands under a money figure's own glyphs the probe reads at each keyframe offset since the fifth review (SEEK_ON_OWN, PGpos), and a box above's background image is the contrast pass's alone (stated)"
     },
     {
       "rule": "@keyframes $C-ground { from { background-size: 100% 100%; } to { background-size: 220% 100%; } }",
       "expect": "accepted",
-      "why": "a background that grows, which lays no new ground: the belt reads a colour, an image and a shadow, and where a growing tile lands is read at rest and at the frozen instant alone (stated)"
+      "why": "a background that grows, which lays no new ground: the belt reads a colour, an image and a shadow; where a growing tile lands under a money figure's own glyphs the probe reads at each keyframe offset since the fifth review (SEEK_ON_OWN, PGpos), and a box above's background image is the contrast pass's alone (stated)"
     },
     {
       "rule": ".$C .item-a { background-color: var(--s-surface); }",

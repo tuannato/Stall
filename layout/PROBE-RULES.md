@@ -10758,6 +10758,130 @@ tracked fixture carried, each plant alone, the load in each log's `.meta`.
   for a twin nothing reads as well as for their host's paint, and for their
   host's paint alone now). 1,267 plants: 963 refused, 304 accepted.
 
+### Pins and statements (items 7–10)
+
+- **The offset read's loops are pinned whole** (item 8): the critic changed
+  the held loop to `OFFSET_HELD_OWN.filter(p => p !== 'font-size-adjust' &&
+  p !== 'text-indent')` and `layout/offsetHeld.test.ts` stayed green, 5 of
+  5: it pinned the list's definition, not its use. It now holds the three
+  loops the read asks at each offset as written (`OFFSET_HELD_OWN` through
+  `dressHeldFault`, the rest against the reference, `BOX_HELD` through
+  `boxHeldFault`), and each list asked once in `offsetDressFaults`. Red by
+  the critic's mutation and by a `continue` on `text-indent` inside the
+  loop's body, 1 of 6 failing each; green restored.
+- **The rest at an offset** (item 9): the dress rule compared the longhands
+  no family frees and none holds (`dressReadList().rest`, `text-fit` alone
+  in Chrome 156) with the untouched reference at rest alone; the offset read
+  compares them at each offset too, a fault said once and not where the rest
+  read said it. Cost: one read of one longhand per own element per seek.
+- **The per-screen code owe** (item 10): above, "A code drawn as nothing".
+- **Statements** (item 7): "no loss" (the prune, above); the code hold's "no
+  … mask … visible, displayed" (above); PLAN § Open's fourth list, item 7,
+  keeps its outline half (a `line-through` in a keyframe on a box above is
+  read since `4264938`, `-webkit-text-decorations-in-effect`; the critic's
+  PLT is red at 390, 28), and items 4 and 5 say what the self-clip read at an
+  offset now reads of them; CLAUDE.md §6's ground belt said "a background
+  that moves or grows stays … the probe reads the ground at every keyframe
+  offset", which PGpos showed false (it says now where it is read, and
+  where not); and the money size lint's "not named" reasons said `opacity`
+  and `clip-path` in a keyframe are "read at one frozen instant", which the
+  dress rule's keyframe reads and the offset read made stale (refreshed in
+  `scripts/workshop-css.mjs`, CLAUDE.md §6 and the state belt's section
+  here, with what the offset read now reads of the width-moving names).
+  The `j1` controls' reasons for a moving and a growing background say the
+  same.
+
+### Red proofs, the whole runner, each plant alone
+
+Counts per pass, in this order where a pass is not named: 390 / 1280 / canvas
+/ portrait / tablet / desk-wall / short-wall / side-tablet / hd-wall /
+tall-tablet / narrow-wall / 360. The load is in each log's `.meta`.
+
+- **On the prune's fix** (`90e727e`): **PFCd3** (exit 0 before) exit 1, 1a 16
+  at 390 and 13 at 360, every one "at the end of t-modern-pfcd3" (the
+  quote's figure and Pay covered by the rail label): the critic's counts
+  with the prune forced off. **PFCd2** (exit 0 before) exit 1, 37 at 390, 10
+  at 1280, 20 at 360. **PFCd** exit 1, 37 at 390, 22 at 1280, 49 on the
+  canvas, 58 on desk-wall, 51 on the short wall, 45 on the side tablet, 51
+  on the hd wall, 4 on the narrow wall, 20 at 360. **PFC** and **PF2** 53 /
+  73 / 109 / 140 / 91 / 91 / 100 / 99 / 100 / 100 / 92 / 29 and **PFCb** 53 /
+  73 / 71 / 102 / 46 / 86 / 95 / 90 / 95 / 48 / 38 / 29, the round before's
+  counts exactly.
+- **On the self-clip read at each offset** (`a697f1a`, the four commits
+  before the owe's fix): **PTI** (exit 0 before) exit 1, the self-clip rule
+  23 at 390, 23 at 1280, 23 at 360, every one "seeked to its keyframe at
+  25%". Three plants of the class built for this round, each holding its
+  value from 30% to 40% of a 100s loop, between the instants at 28.6s and
+  42.9s, so no instant read sees it (a quick read of three pay screens at
+  390 read each 0 at `a9f4d39`): **PTM** (a margin carrying the figure out
+  of its row's clip) 29 / 29 / 29, **PTP** (the row's padding) 29 / 29 / 29,
+  **PTL** (a 300px letter-spacing, which the first-party lint refuses in a
+  keyframe: the kit's road) 23 / 23 / 23; each from the offset read alone.
+  The first versions of PTM and PTP, held from 25% to 68% as PTI is, were
+  red through the instants as well (a protected box cut sideways, and a spill, at 71.4s; a quick read at 390, its log not kept).
+- **On the moving background**: **PGpos** (exit 0 before) exit 1, the dress
+  rule 76 / 94 / 333 / 351 / 78 / 60 / 78 ×5 / 64, every one "the ground under
+  its glyphs … reads at 1.00:1 … with t-rural-gpos on span.item-x seeked to
+  its keyframe at 25%": PT2's and PG's counts.
+- **On masks above at an offset**: **PMk** (exit 0 before) exit 1, the same
+  counts, "span.item-a above it: a mask (mask-image linear-gradient(…)) … at
+  25% of t-rural-mask" from the box read's keyframe values, and the offset
+  read's beside it.
+- **On the code hold**: **PQC** (exit 0 before) exit 1, every Modern code:
+  35 / 78 / 122 / 130 / 130 / 97 / 130 ×5 / 29, and 5 and 3 under reduced
+  motion ("it: content-visibility hidden, which skips what it holds"); the
+  quiet-zone read still reads none of it. **PQM** exit 1, the hold with the
+  same counts ("-webkit-mask-box-image-source linear-gradient(…)"), and the
+  quiet zone's 31 as before. **PQD** (new: `display: none` on every Modern
+  code) exit 1, 1a's "svg has no box" 45 / 45 / 25 and 15 and 3 under reduced
+  motion, 46 on the contrast pass, and the per-screen owe beside them on its
+  pass lines (72 lines, "counted 0 code(s) with a box a t-modern stall painted
+  on pay, of the 1 it built, where a t-fixture-private stall painted 1"): the
+  owe is a belt beside 1a here.
+- **On the rest at an offset** (`11287d0`): **PTF3** (the critic's: a
+  keyframe `text-fit: shrink` and `text-indent: 2400px` on the pay figure,
+  which clips sideways) exit 1, 52 at 390, 1280 and 360: the dress rule 29
+  ("it computes text-fit shrink, which no rule lets a look dress … seeked to
+  its keyframe at 25%") and the self-clip rule 23. **PTFr** (new: `text-fit:
+  shrink` alone from 30% to 40%, which changes nothing a reader sees) 6 on
+  three pay screens at 390, a quick read, the rest's compare alone.
+- **The clean tree** (`11287d0`): exit 0, 244.7s, 0 failures. The end read
+  161 paints read, 1,655 left out, as before the prune's fix (no paint the
+  fix passes over meets the clean tree). The offset read: 1,542 animations,
+  3,106 seeks, 17,190 figure reads and 17,124 self-clip reads, 6.57s of page
+  time summed over the geometry passes, against 5.67s on the prune's fix
+  alone (`90e727e`): the self-clip read, the rest's compare and the masks
+  above cost 0.9s of page time on two tabs. No clean-tree animation sets an
+  offset, a size or a background's position or size on a box the offset read
+  reads newly (the same animations and seeks on both trees).
+- **A false red the round made and took back**: the first per-screen code
+  owe compared every look on a screen, and the clean run at `a697f1a` failed
+  the desk pass on `publish-name` (the tracked fixture, a paid look, built no
+  code where Modern built one). It compares the looks that built as many
+  codes now (`abb403d`).
+
+### Cost of the round
+
+Two pairs back to back on this Mac, main (`c1f3e97`) then the branch
+(`11287d0`), two tabs, the tracked fixture carried (796 contrast jobs), no
+other probe running, each run started once the one-minute load was under 2.5
+(or after three minutes):
+
+| Pair | Main | Branch | Load at start (main, the branch) |
+|---|---|---|---|
+| 1 | 232.4s | 243.2s | 2.38, 2.44 |
+| 2 | 223.1s | 240.2s | 1.27, 2.37 |
+
+The branch is +10.8s and +17.1s (median 227.8s against 241.7s): its geometry
+walk 93.0 → 120.4s and 87.2 → 117.6s, its contrast pass 130.7 → 115.0s and
+128.7 → 114.9s. The round's own reads cost little: the offset read's page
+time, summed over the geometry passes on two tabs, went from 5.67s on the
+prune's fix alone to 6.57s with the self-clip read, the rest's compare and the
+masks above (6.44–6.57s over three runs), the end read's from 0.99s to
+1.07–1.43s (the same 161 paints read); the round before measured
+the branch +10.3s (the critic's matched pair) and +12.3s and +15.6s (the
+builder's). 57–60s stand under the 300s ceiling.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
@@ -11285,7 +11409,11 @@ palette role, an identity transform in each of its spellings, a declaration CSS
 drops); grounds, which paint under the ink; the shadows inside every bound;
 width-moving properties outside D-2026-10-20-07's list (`font-weight`,
 `font-stretch`, `text-indent`, `padding`, `width`, … in a transition or a keyframe),
-a keyframe's `opacity` or `clip-path` (a moving ink, §10), and a keyframe's
+a keyframe's `opacity` or `clip-path` (the probe's dress rule holds both on a
+money figure at each keyframe and, since before 8g2, at each keyframe offset,
+and on a box above it at each keyframe, a moving `clip-path` refused; off money
+a moving ink is read at one frozen instant, §10),
+and a keyframe's
 `position`, `float`, `contain`, `overflow`, `height`, `order`, `z-index`,
 `mix-blend-mode` or `filter` (outside the four names `display`,
 `content-visibility`, `visibility` and `all`; stated); `mini`, `fine` and `pay-sub`,
