@@ -10085,6 +10085,36 @@ look whose sheet names `[data-copied]`, so such a run plans the two screens for 
 0:1/1:1/2:1/3:4`; that one print was added after the full run and is checked by the
 kit's probe and a unit test).
 
+**The sixth review's round, measured** (2026-10-26, the sixth review's builder; the
+`STALL_LOOKS_*` variables unset but for the one command named below). Both `tsc` projects
+exit 0. `pnpm test` exits 0: vitest 106 files, 2,439 tests (from 2,435); node 1,121
+tests, 1,120 pass and the one skip it always had (from 1,113); `look-lint.test.mjs`
+alone 238 tests (from 230). `pnpm build` exits 0. `pnpm test:layout` (ports 4421 and
+9441, checked free at the start): **every pass green and `layout-check: passed` at
+255.6s of the 300s ceiling**, at a load of 4.2 at the start (6.9 a minute after the
+run ended); 17 geometry passes, the canvas pass **66 screens** (the 62 it had and the
+four quote-card fixtures, on a pass of 12.1s), the contrast plan 796 jobs, unchanged,
+the transparency pass green. It printed the stream card's tiers per rail: `quotes
+0:3/1:1/2:1/3:2` on Modern, Neo and the skeleton and `quotes 0:4/1:1/2:1/3:1` on
+Rural, with the listing rail as it was. One run, not a back-to-back pair against main,
+on a shared machine, so the time says the runner finishes with the round and does not
+measure what four canvas screens cost. **Red**: 14 mutations of
+`scripts/workshop-css.mjs`, each file put back and compared by hash, each failing at
+least one test: the shorthand's old reader (2 tests and the `h1` and critics' plants),
+the colour read dropped, a nested keyframe counted again, a nested keyframe not refused,
+`declaredNames` keeping its quotes, a statement counted as declared, `blurCapProblems`
+not called at rest and not called in a keyframe, the cap raised to 400, two blurs
+allowed, a `var()` in the list allowed, the prefix unread, a negated painted value read
+as a painted one, and `unset` allowed on a custom property. **The probe side, three
+more**: a quote fixture at the wrong length (`broadcast-quote-11` made 10 characters)
+fails 2 vitest tests; quote tier 1 un-owed on Modern, 1; the quotes rail not owed at
+all, 1 (`probe-coverage.test.mjs` names the tier, the rail and the look for each
+missing count). **Not measured**: `streamTierRead`'s per-rail split in Chrome has no mutation of
+its own (the full run prints it, and `streamTiers.test.ts` holds the same selector in
+happy-dom); the pairwise cost against main. The selected look-lint check (the private
+look at 0x04, the window's command) passes 238 of 238 and names `t-fixture-private`
+and `t-inkwash` in the guards' line.
+
 **The probe's sets, kept as a drift test.** `the-state-belt-reads-every-longhand-the-probe-holds-or-refuses-it`
 parses `DRESS_HELD` and `BOX_HELD` out of `layout/probe.ts` — strictly: a list
 body that is not single-quoted strings fails the parse (the critic's P3-7: a
