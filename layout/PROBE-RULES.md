@@ -10639,6 +10639,35 @@ tracked fixture carried, each plant alone, the load in each log's `.meta`.
   positioned, whose containing block could stand outside the clip once a
   transform ends at `none`.
 
+### The self-clip read at each offset (item 3: PTI; D (2)(a))
+
+- PTI (the critic's: the pay sheet's `.pay-x-n` at `width: 100%; min-width:
+  0; overflow-x: clip` at rest, which cuts nothing, and a keyframe
+  `text-indent: 2400px` from 25% to 68% of a 100s loop; the first-party look
+  lint admits it) passed the whole runner: the offset read seeked it and
+  held `text-indent` negative-only, and the self-clip rule
+  (`a-money-figure-never-clips-itself`) read at the pass's last instant
+  alone, where the indent is 0. At 30% the figure's text stood at x
+  2429–2528 against a box at 29–361.
+- The decision (D (2)(a)): run the self-clip read at each offset; hold no
+  indent, padding, margin or spacing still, and add no lint. At every offset
+  the offset read seeks, for every money figure on the animation's walk
+  (`MONEY_FIGURES`, read where the rule reads it: painted, off the door's
+  deck, out of a running ticker ribbon), the rule's own read
+  (`selfClipSentences`, `cutFromItsSurface` and the sideways read, taken out
+  of `moneySelfClipFaults` so the two cannot drift) is made again. A figure
+  the rule found cut at the last instant is not read again
+  (`selfClipCutNow`); one cut at an offset is said once, at its first
+  offset, under the rule's name, with the animation, its box and the offset.
+  The pass line counts the reads (`self-clip read(s)`).
+- Seeked for it: `left`, `top`, `right` and `bottom` leave `SEEK_NEEDLESS`
+  (nothing held them; a relatively positioned box moved by them carries the
+  figure inside a clip as an indent or a margin does), and a size is seeked
+  where the animated box is one of a figure's own elements (`SEEK_ON_OWN`; on
+  a box above, `keyframeHeld` refuses any keyframe naming a size, so it stays
+  needless there). No shipped keyframe sets an offset or a size on a box on a
+  figure's walk (the beetle's `left` and `bottom` run on no box above money).
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
