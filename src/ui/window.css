@@ -1637,10 +1637,16 @@
  * they were.
  *
  * **From 1280 to 1919 wide this is the row as it was on main, on purpose**
- * (D-2026-10-20-12, the owner: leave it): the stepper spans both lines and
- * the figure stands under the picture and the name, left of the stepper's
- * column. It is clear there on every look, bare and worn, over every touch
- * screen. Below 1280 the next block takes the row.
+ * (D-2026-10-20-12, the owner: leave it). The stepper spans both lines. An
+ * ordinary figure stands under the picture and the name, left of the
+ * stepper's column (`ic name step / price price step`). An eight-byte
+ * figure (`fig-wraps`) does not take this rule: the landscape `:has()` rule
+ * further up is (0,8,0) against this block's (0,6,0), so that figure stands
+ * beside the picture, under the name (`ic name step / ic price step`). That
+ * is main's row too: the sentence above that puts every row's figure on a
+ * row of its own never held for it. Both are clear on every look, bare and
+ * worn, over every touch screen.
+ * Below 1280 the next block takes the row.
  */
 @container sw (orientation: landscape) and (max-width: 1919.98px) {
     .stall.shop-window[data-touch='on'][data-mode='browse'] .item-head.item-head-q {
@@ -1680,10 +1686,12 @@
  * "Roasted Beans" ran in a cell the width of its first five letters). So the
  * picture takes the first two lines, the name has the rest of the line, the
  * stepper stands under the name and the figure takes the whole line under
- * all three. The row is 42–47px taller than main's: 169px became 214 at
- * 1024x768. Fewer rows stand in view: the owner's cost. The rule has the
- * weight of the row's re-flowed rule at 1920 (`.sw-strip …sw-row` is as
- * heavy) and comes after it, so it wins the tie for a re-flowed figure.
+ * all three. The row is 42–51px taller than main's (169px became 214 at
+ * 1024x768; a row with no stepper is as it was). Fewer rows stand in view:
+ * the owner's cost. The rule has the weight of the landscape re-flowed rule
+ * (`:has(… .fig-wraps)`, which applies at every landscape width;
+ * `.sw-strip …sw-row` is as heavy) and comes after it, so it wins the tie
+ * for a re-flowed figure.
  *
  * **Held down to 870 wide, and not below** (D-2026-10-20-12). The row is
  * 266px wide at 800 and 306px at 840, beside the code's 400px column, and
@@ -1694,7 +1702,8 @@
  * too (3px on Rural at 840; 8–31px on Neo and Rural at 800). This rule does
  * not claim those sizes: main is worse there (the stepper 90px past its row
  * at 800, 25px at 880 and 9px at 900), and a landscape wall under about 900
- * wide is not supported yet. The wall's floor is 680 (PLAN.md, § Open).
+ * wide is not supported yet. The wall's floor is 680 on the screen's short
+ * side (`wallWidth` in app.ts), not on its width (PLAN.md, § Open).
  */
 @container sw (orientation: landscape) and (max-width: 1279.98px) {
     .stall.shop-window[data-touch='on'][data-mode='browse'] .sw-strip .item-head.item-head-q.sw-row {
