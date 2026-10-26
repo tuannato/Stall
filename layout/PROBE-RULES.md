@@ -9760,8 +9760,9 @@ air than 0.5px is the owner's, and not asked.
 
 ## Before 8g2: 1a's second fix round (2026-10-20, D-2026-10-20-13)
 
-1a, `nothing-covers-money-or-a-protected-box`, stays report-only, and
-`coveredBy` still binds under its own check names. This round carries the
+1a, `nothing-covers-money-or-a-protected-box`, stayed report-only through
+this round (it binds since 7a, "Before 8g2, 7a: 1a binds", below), and
+`coveredBy` binds under its own check names. This round carries the
 owner's decisions D-2026-10-20-13 (denser points over a glyph; the horizon's
 worst pruned to its pinned jobs) and the window's rule fixes for the
 critic's review of the first fix round. The plants are the critic's.
@@ -9806,7 +9807,9 @@ reaches ("1,200" at x 563–643 at 360px). Every bound rule passed.
   together could bring in reads as out of reach.
 - 1a only counted a point past a side edge, and counted one above the top
   as below the screen. Both are now asked whether a scroller, or the page,
-  brings them into view (`offScreenReach`), and fail where none does. A
+  brings them into view (`offScreenReach`), and fail where none does. (Where
+  one does, this round counted a point above the top as past a side edge;
+  since 7a it is counted apart, the critic's third review, item 5.) A
   point below the bottom is still counted, not asked (D3): out of reach
   there is read by the self-clip rule for a node's own text, and by nothing
   for a cover.
@@ -9830,11 +9833,15 @@ and every pass read 0.
 - `BOX_HELD` holds `visibility` (anything but `visible` fails, at rest and
   at every keyframe) and names `translate`. Every keyframe on a box above a
   money node is held as the box is held at rest (`keyframeHeld`), and what
-  the geometry reads only at rest may not move between the instants: a
-  `clip-path`, a `translate`, a transform's translation and a size
-  (`KEYFRAME_SIZES`: the width and height families, `flex-basis` and the
-  grid tracks), each against the value the box computes at rest. A moving
-  ticker ribbon moves by design, by value.
+  the geometry reads only at the instants may not move: a keyframe's
+  `clip-path`, `translate` or transform translation that differs from the
+  value the box computes when the dress rule reads it fails — and the dress
+  rule reads after `checkOverTime`, at the last of its six instants, not at
+  rest — and any keyframe naming a size (`KEYFRAME_SIZES`: the width and
+  height families, `flex-basis` and the grid tracks) fails, whatever its
+  value: sizes are never compared. (Until 7a this said each was held
+  against the value the box computes at rest; the critic's third review,
+  item 5.) A moving ticker ribbon moves by design, by value.
 - `checkOverTime` zeroes every animation's delay before its six instants,
   as the contrast freeze does (`freezeAnimations`). With its delay, PT's
   animation stood before its first keyframe at every instant. The per-paint
@@ -9844,10 +9851,13 @@ and every pass read 0.
   lists do not name. The look lint's refusal of `visibility` in first-party
   keyframes is the lint-belts branch's.
 Red, the whole runner on the branch: `a-money-figure-is-never-misdressed`
-76 failures at 390, 94 at 1280, 64 at 360, 333 at the canvas and 78 on
-each wall pass, on every Rural quote figure (`span.item-a above it:
-visibility hidden, at 100% of t-rural-later`, and the figure itself hidden
-at the last instant). On cba463b, 0 at 390 (a session).
+76 failures at 390, 94 at 1280, 64 at 360 and 333 at the canvas, and on the
+wall passes 351 on the portrait wall, 60 on desk-wall and 78 on each of the
+other six, on every Rural quote figure (`span.item-a above it: visibility
+hidden, at 100% of t-rural-later`, and the figure itself hidden at the last
+instant). (This said "78 on each wall pass" until 7a, the critic's third
+review, item 5; the counts are 7a's own run of PT, at 381d3b7, the same as
+the critic's.) On cba463b, 0 at 390 (a session).
 
 ### Who takes a box away (the window's item 5)
 
@@ -9870,7 +9880,9 @@ or id of their selector's last compound (`*` where it has none or holds a
 functional pseudo-class), and a rule under a container query counts as in
 force, which for an app rule errs toward excusing. The clean tree's counts
 of nodes the app hides are unchanged on every pass (744 on the phone pass,
-1,872 on each wall pass).
+1,872 on each wall pass but the portrait wall and the canvas, which hide
+none; this said "each wall pass" until 7a, the critic's third review, item
+5).
 Red, the whole runner on the branch: the dress rule 76 failures at 390, 94
 at 1280, 64 at 360, 333 at the canvas and 351 on the tall wall passes (`has
 no box: a rule of the look takes it away …`), beside the clip and spill
@@ -9884,11 +9896,20 @@ with its own delay. The ticker continues a pass across repaints through a
 negative delay as long as the wall-clock time since its pass began
 (`armTicker`), so at rest the ribbon stood a few pixels further on in one
 run than another, and four of its points flipped between past the screen's
-side and behind its cell. Now every animation on the page is put back at
-rest with its delay zeroed: one the instants moved where it stood before
-them, any other at its start. Five runs of `broadcast-ticker-live` at the
-canvas read the same tallies on every look (Neo: 288 points, 54
-hit-tested, 218 past a side, 16 behind a clip).
+side and behind its cell. Now every animation on the page is reset with
+its delay zeroed: one the instants moved to the time it stood at before
+them, any other to 0. With its delay zeroed that time is a time into its
+active phase, so one that stood in its delay before the instants does not
+stand where it stood (until 7a this said "where it stood", the critic's
+third review, item 5). Five runs of `broadcast-ticker-live` at the canvas
+read the same tallies on every look (Neo: 288 points, 54 hit-tested, 218
+past a side, 16 behind a clip). That holds for the ticker's tallies alone:
+a pass's point count still moves from run to run, by a few hundred points,
+every one among those hit-tested (the critic's two clean runs at ffecdc7:
+mobile 407,329 and 407,252, the canvas 1,137,001 and 1,136,695), while the
+contrast pass, on a fixed clock, read the same 697,851 points in all four
+of the critic's runs. A relative time in a fixture's text, on the geometry
+passes' real clock, is the likely mover; not traced.
 
 ### Where the time outside 1a's own timer went (the window's item 7)
 
@@ -9960,9 +9981,9 @@ is a class of false red, not a one-off.
 
 ### The clean run's would-be list
 
-35 lines, all on the touch wall's quote rows (`shop-window-touch-quotes-16`
-and `-long-figures`), as at cba463b: 7 at 768x1024, 14 at 1024x768 and 14 at
-800x1280; contrast 0.
+At 2dc66f0, on the lattice alone, 35 lines, all on the touch wall's quote
+rows (`shop-window-touch-quotes-16` and `-long-figures`), as at cba463b: 7 at
+768x1024, 14 at 1024x768 and 14 at 800x1280; contrast 0.
 
 - 33 are the stepper's "−" (`button.sw-step-b`) painting over part of the
   figure's glyphs: real, the layout defect the touch-wall branch fixes.
@@ -9971,10 +9992,14 @@ and `-long-figures`), as at cba463b: 7 at 768x1024, 14 at 1024x768 and 14 at
   class above.
 - No line is out of reach past a side or above the top, and none is a box a
   look takes away.
-- With the denser points (sessions, 2026-10-20): 45 lines, 7 at 768x1024,
-  24 at 1024x768 and 14 at 800x1280, every one the stepper or its wrapper
-  over the same figures, more of them found at the points between the
-  lattice's rows (Rural at 800x1280 among them).
+
+With the denser points (ffecdc7, the critic's whole-runner log): 45 lines,
+7 at 768x1024, 24 at 1024x768 and 14 at 800x1280, every one the stepper or
+its wrapper over the same figures, more of them found at the points between
+the lattice's rows (Rural at 800x1280 among them). (This section gave the
+lattice's 35, and 14 at 1024x768, as the dense rule's list until 7a, the
+critic's third review, item 5.) After the touch-wall merge the list is 0 on
+every pass, the wrapper's two false reds with it.
 
 ### Cost and the contrast dump
 Two pairs back to back, main (0a34999) then the branch, two tabs, the
@@ -9996,6 +10021,157 @@ tracked fixture carried (796 contrast jobs), 2026-10-20:
   two boxes of `mobile/publish-name`, 5.49 against 6.15:1, a difference
   between cba463b's own runs), and every job record the same but for
   `horizonWorst`, gone from the 91 jobs the prune no longer reads.
+
+## Before 8g2, 7a: 1a binds (2026-10-26; the critic's third review, its step-7a checklist)
+
+1a, `nothing-covers-money-or-a-protected-box`, is a bound rule. Every line it
+used to print as a would-be failure is a failure: on every geometry pass, the
+reduced-motion passes among them, in the pass's own failure list; once a
+contrast job, at its full height, a failure of the contrast pass. Its fail-
+closed sentences (a `pointer-events` or `interactivity` the forcing did not
+take, an inert subtree or a modal dialog, a point with nothing under it, a
+node turned past 45° with no box, a box a look takes away) are failures with
+it. None fired on the clean tree.
+
+### What it reads, and what stays beside it
+
+- **The unbuyable label** joins its nodes (`COVER_NODES`: the money nodes,
+  the protected boxes and `[data-role="unbuyable"]`). On the clean tree the
+  phone pass read 99 more nodes than at ffecdc7 (5,117 against 5,018), and
+  18 more the app hides (762 against 744).
+- **`coveredBy` is kept whole**, at rest and at the six instants for the
+  price and "You pay", and after the instants for the unbuyable label, under
+  its own check names: "asked amount is covered", "you-pay figure is
+  covered" and the label's sentence. 1a reads at rest alone, and does not
+  strictly cover `coveredBy`'s at-rest read either — `coveredBy` asks a text
+  node's box at its centre and corners, where 1a asks its glyphs' ink, and
+  it fails a price or "You pay" with no box at all, which 1a skips where the
+  app hides it — so that read stays too, and the names stay as they are.
+- **Its over-time read is the cheaper of the two ways**, measured (sessions
+  on the probe page, the shipped looks and the skeleton, the fixture not
+  carried, two runs of each, load 3.5–4.7; `private/design/workshop-2026-09-23/before-8g2/7a/tools/instants.mjs`).
+  The six instants' loop, with `coveredBy` asking the price and "You pay":
+  2.73s and 3.15s at 390, 3.53s and 4.33s at 1280. With `coveredBy` taken off
+  the instants and 1a's `coverOf` asking the same nodes with the forcing on:
+  5.22s and 6.81s at 390, 9.66s and 11.97s at 1280 — 2.5 to 3.7s more a phone
+  pass and 6.1 to 7.6s more a desk pass. On the whole runner the instants
+  cost `coveredBy` 7.3s of page time over every geometry pass (4,950 calls in
+  1.03s at 390, 6,480 in 1.61s at 1280), its at-rest read 1.2s; 1a's own
+  read 36.5s (the clean run below; the runner prints both per pass).
+- **Not read, stated**: over time, a cover that takes no hit is read by
+  nothing but the decoration sweep (a positioned or decoration box) and, on
+  the sampled screens, the contrast pass at its one frozen instant; a cover
+  that moves into place between frames, by neither (the critic's P3-1).
+
+### The clip ceiling reads 1a's points
+
+`CLIP_SKIP_CEILING` held `coveredBy`'s points, over the price and "You pay"
+alone. It holds 1a's (`coverByClass`) since 7a, on every pass that read 1a —
+the geometry passes but the short ones, and the contrast pass — the public
+looks' sum on each, and every carried look on its own (`look-tallies.mjs`
+reads `coverByClass`: `coverTally`, `clipCeilingFault`, `clipLine`). It stays
+30%, and a tally that hit-tested nothing fails.
+
+- **The two wall scrollers are named by value and counted apart**
+  (`WALL_SCROLLERS`, `layout/coverPoints.ts`: `div.items.sw-strip`,
+  `dl.sw-pay-lines`; a point is theirs when its innermost clip is one of
+  them). At ffecdc7 they took the counter tablet to 34% and the narrow wall to
+  33% (the critic's run): every point behind a clip on the tall and tablet
+  walls was behind one of the two (the critic's census). On the clean tree
+  at 7a, over every look the pass painted (the pass's own line prints the
+  public looks' share), points behind a clip of those behind or hit-tested,
+  and the wall scrollers' apart: mobile 23,996 of 289,563 (8%), 0;
+  desktop 38,555 of 569,375 (7%), 7,090; canvas 641 of 486,570 (0%), 111,885;
+  every other wall pass 0%, with 72,087 to 177,239 apart; narrow 11,828 of
+  208,873 (6%), 0; contrast 783 of 466,318 (0%), 32,362. Each sum of the two
+  is the same as the critic's count at the merge (the canvas's 112,526,
+  the tablet's 173,880), where the phone's rose with the unbuyable label's
+  nodes.
+- **A point behind a clip that cuts and does not scroll fails**
+  (`clipVerdict`, the critic's third review, item 3): past a clip whose
+  `overflow` on that axis is `hidden` or `clip`, by more than a pixel, with
+  no scroller inside it that brings the point into the clip's window
+  (`reachWithin`). Until 7a it was counted as a point behind a scroller. A
+  figure in a running ticker ribbon is cut sideways by design
+  (`RUNNING_RIBBON`, `cutSideways`' own exception, by value): the first
+  clean run failed 10 ribbon figures on the canvas and 1 contrast job, past
+  the ticker cell's side (`div.tk-clip`) and then past the bar's
+  (`div.plate.tk-bar`), and none since. No other point on the clean tree is
+  cut; the critic's census, over the innermost clip alone, found none
+  either.
+- **A point above the top is counted apart** from one past a side edge
+  (`above`; the critic's third review, item 5). 0 on every pass of the clean
+  tree.
+
+### Owed
+
+Every geometry pass owes, on every look it painted, a 1a read that
+hit-tested a point (`probe-coverage.mjs`; `1a-is-owed-a-read-on-every-look-of-every-geometry-pass`).
+Every contrast job not refused owes its read (`coverUnread`), and a job whose
+page answers no tally a job can be held to throws.
+
+### The clean run
+
+381d3b7, two tabs, the tracked fixture carried (796 contrast jobs): exit 0,
+242.8s (load 4.1 → 3.8), 0 failures of 1a on every pass and on the contrast
+pass, every pass and the contrast pass under the clip ceiling (the numbers
+above). Every run of the timing pairs below read the same: exit 0.
+
+### Cost
+
+Two pairs back to back on this Mac, main (c1f3e97) then the branch
+(381d3b7), two tabs, the tracked fixture carried (796 contrast jobs), no
+other probe running:
+
+| Pair | Main | Branch | Load (main, then the branch) |
+|---|---|---|---|
+| 1 | 240.2s | 251.5s | 2.0 → 3.2, then 3.2 → 2.9 |
+| 2 | 243.0s | 252.8s | 2.9 → 4.1, then 4.1 → 3.9 |
+
+The branch as a whole is +11.3s and +9.8s: its geometry walk 99.5 → 124.5s
+and 102.0 → 125.5s, its contrast pass 132.9 → 118.3s and 132.9 → 118.9s
+(the horizon's worst pruned to its three jobs, 1f44e05). 7a's own cost, one
+pair, the branch before it (cd34f73) then after it: 249.2s (load 2.6 → 5.0)
+and 252.5s (5.0 → 3.4), the walk 122.6 → 124.7s, the contrast pass 118.8 →
+119.5s — +3.3s, inside the noise of one pair. 1a's own time is 36.5s of page
+time over the geometry passes and 6.1s of tab time in the contrast pass (the
+clean run). 47–49s stand under the 300s ceiling.
+
+### Red proofs, the whole runner, each plant alone (381d3b7)
+
+Each to exit 1. Plants in `private/design/workshop-2026-09-23/before-8g2/7a/plants/`, logs in its `runs/`. Counts
+are 1a's failures, then what else failed; "alone" where 1a is the only
+geometry rule that fails.
+
+| Plant | 1a's failures | Beside them |
+|---|---|---|
+| PC2 (the no-escrow note moved over the pay figure, `pointer-events: none`, 390 media block) | 44 at 390, 59 at 360, 10 reduced motion; contrast 20 | contrast 12 figures on paint under 3:1 (the chance red it had before 7a) |
+| PC3′ (the quote face's fine line moved over the quote's figure) | 6 at 390, 10 at 1280, 8 at 360 — `item-quote` at 390 and 1280 among them, which read 0 before | `text-spills` 56 a pass (the face icon's spill, chance) |
+| PC3 (the face's head row moved down over the figure; rebuilt from set F) | 27 at 390 and 1280, 25 at 360; contrast 16 | "asked amount is covered" 105 a pass, the decoration sweep 175, a spill 175–189 |
+| SVs (a stepper's glyph moved and scaled over the chosen line; stroke-width 3, which the look lint admits since lint-belts) | 1 at 1280; contrast 8 (`pay-several-strip` at 390, which the phone pass read none of: below its first screen, it is likely, not checked) | `LINE_SKIP_CEILING` 71 > 63 at 390, 2 figures under 3:1 |
+| PQ (the code's fold summary moved over its modules) | 16 at 390; contrast 12 | none: red by 1a alone (the whole runner passed it before) |
+| PWa (the Cycle card's price column `::after` moved over the figure) | 16 at 1280, 70 at the canvas, 70–86 on each other wall pass; contrast 8 | contrast: the look-pseudo frame 8, figures under 3:1 8 |
+| T5 (a band in the look's ground over the Cycle figure's lower half; rebuilt) | 16 at 1280, 70 at the canvas, 58–86 on each other wall pass; contrast 8 | 4 and 4 on the hd wall; contrast: the look-pseudo frame 8, figures under 3:1 8 |
+| PB (a 4.5px band through the selection total's digits) | 10 at 390, 10 at 360; contrast 6 | contrast: the look-pseudo frame 6, figures under 3:1 12 |
+| PC (a centred, reversed sideways shelf) | 202 at 390, 186 at 1280, 90 at 360, 30 reduced motion; contrast 158 | `cutSideways` 1,400 / 1,372 / 616, "asked amount is covered" 924 / 924 / 224 |
+| PH (every shelf cut to its first row by `overflow: hidden`) | 186 at 390 and 1280, 140 at the canvas, 128–172 on each other wall pass, 76 at 360, 6 reduced motion; contrast 152 — 1,892 of these 2,012 a point past a cutting clip (the shelf, `div.items`, the wall's strip among them, or a row card it squeezed), the rest a figure covered by the row beside it | the self-clip rule, the wall's cut-from-below rule, `LINE_SKIP_CEILING` |
+| PT (a keyframe `visibility: hidden` on the quote's column, 120s later) | contrast 48 | the dress rule (above) |
+
+### Pending for the owner, stated
+
+- **PF2**: a cover that arrives at the end of a finite animation and stays
+  (`forwards`), read by no probe rule — 1a reads at rest, the instants stop
+  at six sevenths of the longest animation. An end-state read is not built.
+- **PT2**: a keyframe on a custom property or an inherited ink on a box
+  above a figure, which hides it from every probe read. Seeking each
+  animation to each keyframe offset is not built.
+- **The lint belt**: the first-party look lint refuses both plants as
+  written since lint-belts (a custom property in a keyframe; a scale to 0)
+  and admits an inherited ink in one (`color: transparent` at the same
+  offsets, measured with the critic's lint tool). A belt for that is the
+  owner's.
+
+The README labels are unchanged: "most" stays until step 10.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
