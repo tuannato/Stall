@@ -6551,8 +6551,8 @@ const OFFSET_GEOMETRY: ReadonlySet<string> = new Set([
  */
 const OFFSET_HELD_OWN: readonly string[] = [...DRESS_HELD].filter((prop) => !OFFSET_GEOMETRY.has(prop));
 
-/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), seeks, subjects read at a seek, their grounds read again where a seek changed them (`offsetGroundFaults`), the self-clip reads made at a seek (`selfClipSentences`), failures found there; and its own time. */
-const dressSeek = { anims: 0, needless: 0, seeks: 0, reads: 0, grounds: 0, clips: 0, faults: 0, names: {} as Record<string, number> };
+/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), those seeked for the self-clip read alone (`layout`: off every figure's walk, or needless there, and setting a longhand `MOVES_NO_OTHER_BOX` does not name), seeks, subjects read at a seek, their grounds read again where a seek changed them (`offsetGroundFaults`), the self-clip reads made at a seek (`selfClipSentences`), failures found there; and its own time. */
+const dressSeek = { anims: 0, needless: 0, layout: 0, seeks: 0, reads: 0, grounds: 0, clips: 0, faults: 0, names: {} as Record<string, number> };
 let dressSeekMs = 0;
 
 /**
@@ -6764,6 +6764,170 @@ function keyframesDeclare(name: string): ReadonlySet<string> | undefined {
 const needlessHere = (prop: string, own: boolean): boolean => SEEK_NEEDLESS.has(prop) && !(own && SEEK_ON_OWN.has(prop));
 
 /**
+ * The longhands a keyframe may set and leave every box that does not hold
+ * the animated one where it stands, at its size (`movesOtherBoxes`; before
+ * 8g2, the sixth review's P1-a and its PSQ2):
+ *
+ * - **the paints**: an ink and its fill and stroke, a caret's and an
+ *   accent's colour, a background and its tile, a border's colour, a box
+ *   shadow and a text shadow, an outline (drawn outside the layout), a text
+ *   decoration's line, colour, style, thickness, offset and skip, an
+ *   emphasis mark's colour, an SVG paint;
+ * - **the compositing**: an opacity, a filter, a backdrop filter, a blend,
+ *   an isolation, a `clip`, a `clip-path`, a mask and its parts, a mask
+ *   border, `visibility`, a stacking order, a cursor and `pointer-events`;
+ * - **what moves or turns the animated box and what it holds, and no other
+ *   box**: a transform, its parts, its origin, its box and its style, a
+ *   perspective and its origin, `backface-visibility`, a motion path and
+ *   its parts, and a box's offsets (`left`, `top`, `right`, `bottom` and
+ *   `inset`'s longhands: a relatively positioned box is offset after the
+ *   layout, an absolutely positioned one stands out of the flow).
+ *
+ * The self-clip read (`selfClipSentences`) reads a figure's text against
+ * the figure's own box and the boxes above it up to its surface, and none
+ * of these moves one that does not hold the animated box: so an animation
+ * that sets only these cuts no figure but one it holds, and a figure it
+ * holds is on its walk, where the offset read reads it already (with the
+ * turns held off, as the self-clip read always reads). **Anything else** —
+ * a size, a margin, a padding, a border's width or style, a font, a
+ * spacing, an indent, a line height, a grid or flex track, an order,
+ * `display`, `zoom`, `content-visibility`, a custom property (which can
+ * feed any of them through `var()`), a property this list does not name, a
+ * keyframe rule this page cannot read — can move another box, and its
+ * animation is seeked for the self-clip read of every money figure on the
+ * paint, wherever it runs (`offsetDressFaults`). PSQ2: a keyframe
+ * `margin-inline-start: calc(100% - 70px)` on the pay figure's unit
+ * sibling, `.item-u`, from 30% to 40% of a 100s loop, squeezed the figure
+ * the wallet signs inside its own `overflow-x: clip` at desk width, and
+ * nothing seeked it: it ran on no box of the figure's walk.
+ */
+const MOVES_NO_OTHER_BOX: ReadonlySet<string> = new Set([
+    'color',
+    '-webkit-text-fill-color',
+    '-webkit-text-stroke-color',
+    '-webkit-text-stroke-width',
+    'caret-color',
+    'accent-color',
+    'background-color',
+    'background-image',
+    'background-position',
+    'background-position-x',
+    'background-position-y',
+    'background-size',
+    'background-repeat',
+    'background-origin',
+    'background-clip',
+    'background-attachment',
+    'background-blend-mode',
+    'border-top-color',
+    'border-right-color',
+    'border-bottom-color',
+    'border-left-color',
+    'border-block-start-color',
+    'border-block-end-color',
+    'border-inline-start-color',
+    'border-inline-end-color',
+    'box-shadow',
+    '-webkit-box-shadow',
+    'text-shadow',
+    'outline-color',
+    'outline-style',
+    'outline-width',
+    'outline-offset',
+    'text-decoration-line',
+    'text-decoration-color',
+    'text-decoration-style',
+    'text-decoration-thickness',
+    'text-decoration-skip-ink',
+    'text-underline-offset',
+    'text-emphasis-color',
+    'fill',
+    'fill-opacity',
+    'stroke',
+    'stroke-opacity',
+    'stroke-width',
+    'stroke-dasharray',
+    'stroke-dashoffset',
+    'stop-color',
+    'stop-opacity',
+    'flood-color',
+    'flood-opacity',
+    'lighting-color',
+    'opacity',
+    'filter',
+    'backdrop-filter',
+    'mix-blend-mode',
+    'isolation',
+    'clip',
+    'clip-path',
+    'mask-image',
+    'mask-position',
+    'mask-position-x',
+    'mask-position-y',
+    'mask-size',
+    'mask-repeat',
+    'mask-origin',
+    'mask-clip',
+    'mask-composite',
+    'mask-mode',
+    'mask-type',
+    'mask-border-source',
+    'mask-border-slice',
+    'mask-border-width',
+    'mask-border-outset',
+    'mask-border-repeat',
+    'mask-border-mode',
+    '-webkit-mask-image',
+    '-webkit-mask-position',
+    '-webkit-mask-position-x',
+    '-webkit-mask-position-y',
+    '-webkit-mask-size',
+    '-webkit-mask-repeat',
+    '-webkit-mask-origin',
+    '-webkit-mask-clip',
+    '-webkit-mask-composite',
+    '-webkit-mask-box-image',
+    '-webkit-mask-box-image-source',
+    '-webkit-mask-box-image-slice',
+    '-webkit-mask-box-image-width',
+    '-webkit-mask-box-image-outset',
+    '-webkit-mask-box-image-repeat',
+    'visibility',
+    'z-index',
+    'cursor',
+    'pointer-events',
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+    'transform-origin',
+    'transform-box',
+    'transform-style',
+    'perspective',
+    'perspective-origin',
+    'backface-visibility',
+    'offset-path',
+    'offset-distance',
+    'offset-rotate',
+    'offset-anchor',
+    'offset-position',
+    'left',
+    'top',
+    'right',
+    'bottom',
+    'inset-block-start',
+    'inset-block-end',
+    'inset-inline-start',
+    'inset-inline-end',
+]);
+
+/** Whether an animation's keyframes can move a box other than the one it runs on (`MOVES_NO_OTHER_BOX`): true unless every longhand they set is on that list, and true for a keyframe rule this page cannot read. */
+function movesOtherBoxes(anim: Animation, effect: KeyframeEffect): boolean {
+    const props = keyframeProps(anim, effect);
+    return props === undefined || ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop));
+}
+
+/**
  * Whether seeking an animation could show the held dress anything the
  * declared reads did not (`SEEK_NEEDLESS`): false only when every property
  * it sets is on that list, for the box it runs on (`needlessHere`) — read
@@ -6950,6 +7114,16 @@ function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHer
  * text moved by an indent, a margin, a padding, a spacing, a box's offsets
  * (no longer `SEEK_NEEDLESS`) or a size on the figure's own element
  * (`SEEK_ON_OWN`) is read so; none of them is held still.
+ * **And wherever the animation runs, for the self-clip read** (the sixth
+ * review's P1-a, the critic's PSQ2: a keyframe margin on the pay figure's
+ * unit sibling squeezed the figure inside its own clip at desk width, and
+ * the read seeked only animations on a figure's walk): every animation,
+ * a pseudo-element's included, whose keyframes set a longhand that can move
+ * a box other than its own (`movesOtherBoxes`, `MOVES_NO_OTHER_BOX`) is
+ * seeked the same way, and at each offset the self-clip read is made for
+ * every money figure on the paint, not only those it holds; one on a
+ * figure's walk does both reads at the same seeks. A figure the dress rule
+ * does not read (one not rendered at rest) is answered to the caller.
  * An animation that sets only grounds, shadows and `SEEK_NEEDLESS`
  * longhands (`groundOnly`) is read for the ground alone: it can move no
  * held longhand. A failure names the animation, the box it runs on and the
@@ -6959,25 +7133,46 @@ function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHer
  * that overshoots (`cubic-bezier()` with a y outside 0–1, a `linear()` with
  * points outside them) can carry a value past both its keyframes; two
  * animations at once, each seeked with the others where the last instant
- * left them; a pseudo-element's animation (it is the cover rules'); the
- * reads that need the geometry but the ground and the self-clip read
- * (`OFFSET_GEOMETRY`: a spacing that piles digits, the lines, an outline's
- * ring); and an animation whose duration
+ * left them; a pseudo-element's animation for the dress reads (it is the
+ * cover rules'; it is seeked for the self-clip read where it can move
+ * another box); the reads that need the geometry but the ground and the
+ * self-clip read (`OFFSET_GEOMETRY`: a spacing that piles digits, the
+ * lines, an outline's ring); what a keyframe off a figure's walk does to it
+ * but cut its text — a spill or a cover — and a figure's text a turn or a
+ * shift on a box of its walk carries out of a clip (the self-clip read
+ * holds the turns off, and `BOX_HELD` holds a box above to a small tilt);
+ * and an animation whose duration
  * is not a finite time over 0. Cost: only paints with an animation on
- * money's ancestry that sets something `SEEK_NEEDLESS` does not name pay —
+ * money's ancestry that sets something `SEEK_NEEDLESS` does not name, or one
+ * anywhere that sets something `MOVES_NO_OTHER_BOX` does not name, pay —
  * on the clean tree the decorations' custom properties on the stall's root
  * (the aurora's `--au-tide`, the sunburst's `--att-sun-angle`), two offsets
  * each (a root's gradient, which the ground read does not read above a
  * figure, so no ground is read again), and, since the ground read, the door
  * button's breathing (a shadow on a money node itself, read for the ground
  * alone); Neo's card pulse on every row head is an outer shadow on a box
- * above (`outerShadowOnly`) and is not seeked — and each pays a style
+ * above (`outerShadowOnly`) and is not seeked; no shipped keyframe off a
+ * figure's walk sets a longhand that moves another box, so the layout-wide
+ * read seeks nothing more there (`dressSeek.layout`) — and each pays a style
  * recalc a seek (`dressSeek`, `dressSeekMs`). Without the skip, every Rural tag's sway and every sign's
  * swing and sweep was seeked: about ten times the time (3.1s against 0.44s
  * over the desk pass's screens, in a session).
  */
-function offsetDressFaults(read: readonly DressRead[]): void {
-    if (read.length === 0) return;
+function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[]> {
+    // The figures the self-clip read reads at an offset (`MONEY_FIGURES`, off
+    // the door's deck), each with the list its cut goes to: its dress
+    // subject's, or one of its own for a figure the dress rule does not read
+    // (answered to the caller).
+    const figures = new Map<HTMLElement, string[]>();
+    const unread = new Map<HTMLElement, string[]>();
+    for (const r of read) if (r.node.matches(MONEY_FIGURES)) figures.set(r.node, r.clip);
+    for (const node of document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`)) {
+        if (figures.has(node) || node.closest('.deck-stall') !== null) continue;
+        const list: string[] = [];
+        figures.set(node, list);
+        unread.set(node, list);
+    }
+    if (figures.size === 0 && read.length === 0) return unread;
     const t0 = performance.now();
     // Every element an animation could change a figure's dress from: its own elements and the boxes above it, up to and with its stall.
     const reach = new Map<Element, DressRead[]>();
@@ -6998,16 +7193,23 @@ function offsetDressFaults(read: readonly DressRead[]): void {
     restGround = new Map();
     for (const anim of document.getAnimations()) {
         const effect = anim.effect;
-        if (!(effect instanceof KeyframeEffect) || effect.target === null || effect.pseudoElement !== null) continue;
+        if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;
         const target = effect.target;
-        const reads = reach.get(target);
-        if (reads === undefined) continue;
+        // On a figure's walk (an element, never a pseudo-element, which
+        // nothing inherits from): the figures whose dress it can change.
+        const walk = effect.pseudoElement === null ? reach.get(target) : undefined;
         // One of a figure's own elements, where a size is seeked (`SEEK_ON_OWN`).
-        const ownTarget = reads.some((r) => r.own.includes(target as HTMLElement));
-        if (seekNeedless(anim, effect, ownTarget) || outerShadowOnly(anim, effect, target, reads)) {
+        const ownTarget = walk?.some((r) => r.own.includes(target as HTMLElement)) ?? false;
+        let reads = walk;
+        if (walk !== undefined && (seekNeedless(anim, effect, ownTarget) || outerShadowOnly(anim, effect, target, walk))) {
             dressSeek.needless += 1;
-            continue;
+            reads = undefined;
         }
+        // Wherever it runs: a keyframe that can move a box other than its
+        // own (`movesOtherBoxes`) can cut any figure's text — a sibling's
+        // margin squeezing it inside its own clip, the sixth review's PSQ2.
+        const movesOthers = movesOtherBoxes(anim, effect);
+        if (reads === undefined && !movesOthers) continue;
         const duration = effect.getComputedTiming().duration;
         if (typeof duration !== 'number' || !Number.isFinite(duration) || !(duration > 0)) continue;
         const offsets = [...new Set([0, 1, ...effect.getKeyframes().map((k) => k.computedOffset ?? 0)])].filter((o) => o >= 0 && o <= 1).sort((a, b) => a - b);
@@ -7016,17 +7218,22 @@ function offsetDressFaults(read: readonly DressRead[]): void {
         const kept = { delay, endDelay, iterations, iterationStart, direction, fill, easing };
         const time = anim.currentTime;
         const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
-        const where = describe(target);
-        const onlyGround = groundOnly(anim, effect, ownTarget);
+        const where = effect.pseudoElement === null ? describe(target) : `${describe(target)}${effect.pseudoElement}`;
+        const onlyGround = reads !== undefined && groundOnly(anim, effect, ownTarget);
         // Before the read sets its timing: the ground of every element this
         // animation can change, as the pass's last instant left it.
-        for (const r of reads) {
+        for (const r of reads ?? []) {
             for (const [el, own] of groundWalk(r, target)) {
                 const key = groundKey(el, own);
                 if (!restGround.has(key)) restGround.set(key, groundSignature(el, own));
             }
         }
+        // The figures whose text the self-clip read reads at each offset:
+        // every one on the paint where the keyframes can move another box;
+        // else those on the animation's walk, unless it sets only grounds.
+        const clipped = movesOthers ? [...figures.keys()] : (reads ?? []).filter((r) => !onlyGround && figures.has(r.node)).map((r) => r.node);
         dressSeek.anims += 1;
+        if (reads === undefined) dressSeek.layout += 1;
         dressSeek.names[name] = (dressSeek.names[name] ?? 0) + 1;
         try {
             effect.updateTiming({ delay: 0, endDelay: 0, iterations: 1, iterationStart: 0, direction: 'normal', fill: 'both', easing: 'linear' });
@@ -7036,7 +7243,7 @@ function offsetDressFaults(read: readonly DressRead[]): void {
                 const at = `with ${name} on ${where} seeked to its keyframe at ${Math.round(offset * 100)}%`;
                 // The paints read at this offset, fresh: the pass's own are of its last instant.
                 const paintsHere = { own: new Map<Element, BoxPaints>(), above: new Map<Element, BoxPaints>() };
-                for (const r of reads) {
+                for (const r of reads ?? []) {
                     dressSeek.reads += 1;
                     const found: string[] = [];
                     if (!onlyGround) {
@@ -7067,17 +7274,6 @@ function offsetDressFaults(read: readonly DressRead[]): void {
                                 if (box === target) break;
                             }
                         }
-                        // The self-clip read (`a-money-figure-never-clips-itself`) at
-                        // this offset: a figure the pass's last instant found whole,
-                        // said once, at its first offset that cuts it.
-                        if (r.clip.length === 0 && !selfClipCutNow.has(r.node) && r.node.matches(MONEY_FIGURES) && selfClipReads(r.node)) {
-                            dressSeek.clips += 1;
-                            const cut = selfClipSentences(r.node);
-                            if (cut.length > 0) {
-                                r.clip.push(`${cut[0]}, ${at}`);
-                                dressSeek.faults += 1;
-                            }
-                        }
                     }
                     found.push(...offsetGroundFaults(r, target, at, paintsHere));
                     for (const fault of found) {
@@ -7086,6 +7282,19 @@ function offsetDressFaults(read: readonly DressRead[]): void {
                         if (said.has(key) || r.faults.some((f) => f === fault.slice(0, fault.lastIndexOf(', with ')))) continue;
                         said.add(key);
                         r.faults.push(fault);
+                        dressSeek.faults += 1;
+                    }
+                }
+                // The self-clip read (`a-money-figure-never-clips-itself`) at
+                // this offset: a figure the pass's last instant found whole,
+                // said once, at its first offset that cuts it.
+                for (const node of clipped) {
+                    const list = figures.get(node)!;
+                    if (list.length > 0 || selfClipCutNow.has(node) || !selfClipReads(node)) continue;
+                    dressSeek.clips += 1;
+                    const cut = selfClipSentences(node);
+                    if (cut.length > 0) {
+                        list.push(`${cut[0]}, ${at}`);
                         dressSeek.faults += 1;
                     }
                 }
@@ -7106,6 +7315,7 @@ function offsetDressFaults(read: readonly DressRead[]): void {
         }
     }
     dressSeekMs += performance.now() - t0;
+    return unread;
 }
 
 function moneyDressFaults(screen: string, label: string): Failure[] {
@@ -7247,8 +7457,19 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
         });
     }
     // 5. The held dress at every keyframe offset of every animation on the
-    // figure or a box above it (`offsetDressFaults`), each put back after.
-    offsetDressFaults(read);
+    // figure or a box above it, and the self-clip read there of every
+    // animation that can move a box (`offsetDressFaults`), each put back after.
+    const unread = offsetDressFaults(read);
+    for (const [node, clip] of unread) {
+        for (const detail of clip) {
+            out.push({
+                screen,
+                theme: label,
+                check: SELF_CLIP_CHECK,
+                detail: `${describe(node)} "${(node.textContent ?? '').trim().slice(0, 32)}" ${detail} at ${window.innerWidth}x${window.innerHeight}`,
+            });
+        }
+    }
     for (const { node, faults, clip } of read) {
         // A figure whose text a keyframe cuts at an offset is the self-clip rule's (`selfClipSentences`).
         for (const detail of clip) {

@@ -770,10 +770,13 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * them is accepted: the third review's plants `n6`, stated). The probe reads
  * what a keyframe of any of them does to a money figure at each keyframe
  * offset (before 8g2): `font-size-adjust` and a negative `text-indent` are
- * held by the dress rule there, and a figure's text a positive indent, a
- * size, a padding or a margin cuts is the self-clip read's (the fifth
- * review's PTI); a figure one spills or covers between the instants is read
- * by nothing. Nor are `opacity` or `clip-path` in a keyframe named, which the
+ * held by the dress rule there where the keyframe runs on the figure or a
+ * box above it, and a figure's text that a keyframe of any of them cuts —
+ * a positive indent, a size, a padding or a margin, wherever the keyframe
+ * runs, a sibling's margin squeezing the figure inside its own clip among
+ * them — is the self-clip read's (the fifth review's PTI, the sixth
+ * review's PSQ2); a figure one spills over or covers, and a value between
+ * two offsets, is read by nothing. Nor are `opacity` or `clip-path` in a keyframe named, which the
  * probe's dress rule holds on a money figure at each keyframe's written value
  * and at each keyframe offset, and on a box above it at each keyframe's
  * written value (a `clip-path` that moves refused, an opacity held at each
