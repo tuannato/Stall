@@ -9701,8 +9701,36 @@ list holds a pseudo-element:
   edge's colour, nor `inherit`, `unset`, `revert`, `revert-layer` or `currentColor`
   for its own `color`;
 - reads a `var()` in any of those only as a palette role standing alone
-  (`STATE_OPAQUE_ROLES`, no fallback), a mask's included; any other custom
-  property may be one the host set to `currentColor`;
+  (`STATE_OPAQUE_ROLES`, no fallback); any other custom property may be one the
+  host set to `currentColor`. **In a mask that holds where the `var()` stands as
+  a colour or as the picture, and nowhere it stands as a length** (the window's
+  selected check after the fourth fix round: judgement 14 refused any non-role
+  `var()` anywhere in a mask, and the private look at 0x04, read under its
+  selection, was refused on `var()` calls that stand as lengths; a length carries
+  no colour, so B1 (d) and (e) — a mask colour that follows the host's ink —
+  never needed that reach). So
+  `mask-size`, `mask-position`, `mask-repeat`, `mask-composite`, `mask-mode`,
+  `mask-origin`, `mask-clip`, `mask-type` and the border mask's slice, width,
+  outset, repeat and mode are not read for a `var()` at all; in a picture
+  (`mask-image`, `mask-border-source`, the `mask` and `mask-border`
+  shorthands, a layer at a time) a gradient's arguments are split at their
+  top-level commas, an argument holding a geometry word (`to`, `at`, `from`,
+  `in`, a side, a shape, a colour space) names no colour, and any other is a
+  stop, `<color> <length-percentage>?` with the colour first or last. A `var()`
+  standing alone as a token of a stop is its place only beside a colour that is
+  not itself a `var()` (`#000 var(--r)`, `var(--s-text) var(--r)`); with no such
+  colour it is the colour (`var(--g) 50%`) or, alone, ambiguous, and is refused
+  unless it is a palette role. A `var()` inside a colour function (`rgb()`,
+  `color-mix()`) is a colour; inside a `calc()`, `min()`, `max()` or `clamp()` a
+  length. A bare `var()` where a picture goes (`mask-image: var(--m)`, a layer of
+  the shorthand with no picture of its own) is the picture, whose custom
+  property may hold a gradient in `currentColor`, and is refused; after a `/` it
+  is a length. `currentColor`, `inherit` and `revert` stay refused anywhere in a
+  mask. Plants `c1` (nine accepted, fifteen refused). **Not read, stated:** a
+  `var()` that stands as a place may hold more than a place — substitution is by
+  tokens, so a custom property a host rule set to `50%, currentColor` brings a
+  stop in the host's ink into `#000 var(--x)`; it takes a host rule that writes
+  it, and the window chose to read a length as no colour (plant `c1:8`);
 - writes no `all`, in any value (on an element `all` stays `inherit` or `unset`);
 - names a colour for **each family and each side** of what it draws: a shadow or
   text-shadow layer, a `drop-shadow()`, each of a border's four physical sides, an

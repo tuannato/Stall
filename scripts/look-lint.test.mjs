@@ -2428,6 +2428,92 @@ describe('a-pseudo-element-paints-its-own-ground-and-ink', () => {
         }
     });
 
+    /*
+     * The window's selected check after the fourth fix round: judgement 14
+     * refused any non-role `var()` anywhere in a pseudo-element's mask, and
+     * the private look at 0x04, read under its selection, was refused on
+     * `var()` calls that stand as lengths. B1 (d) and (e) are about a mask
+     * *colour* that follows the host's ink, and a length carries none. Red:
+     * the old rule back (`maskColourVar` as `nonRoleVar`): the first case
+     * below fails, and with it the nine accepted plants `c1:0`–`c1:8`.
+     */
+    it('reads a var() in a mask only where it stands as a colour or as the picture: a length, a percentage or a calc() in a size, a position or a stop\'s place carries none', () => {
+        const masked = (decl) => `.t-neo .item-b::after { content: ''; background: #000; ${decl}; }`;
+        // The lengths: the longhands that hold no picture, a stop's place, the shorthand's slash and its positions.
+        for (const decl of [
+            'mask-size: var(--x) var(--y)',
+            'mask-size: var(--x) var(--y), 100% calc(100% / 0.22), var(--x) 2px',
+            'mask-position: var(--x) 0',
+            'mask-position: calc(100% - var(--r)) 0, var(--x) var(--y)',
+            'mask-position-x: var(--x); mask-position-y: calc(100% - var(--y))',
+            'mask-repeat: var(--x); mask-composite: var(--x); mask-mode: var(--x); mask-origin: var(--x); mask-clip: var(--x)',
+            'mask-border-slice: var(--x); mask-border-width: var(--x); mask-border-outset: var(--x)',
+            '-webkit-mask-size: var(--x) var(--y); mask-size: var(--x) var(--y)',
+            '-webkit-mask-position: var(--x) 0; mask-position: var(--x) 0',
+            'mask-image: linear-gradient(#000 calc(100% - var(--r)), transparent 0)',
+            'mask-image: linear-gradient(#000 calc(100% - var(--r) - 4px), transparent calc(100% - var(--r)))',
+            'mask-image: linear-gradient(to right, #000 var(--r), transparent)',
+            'mask-image: linear-gradient(var(--r) #000, transparent)',
+            'mask-image: linear-gradient(#000 var(--a) var(--b), transparent)',
+            'mask-image: linear-gradient(#000, 30%, transparent)',
+            'mask-image: linear-gradient(to right, var(--s-text) var(--r), transparent)',
+            'mask-image: radial-gradient(circle at var(--x) var(--y), #000, transparent)',
+            'mask-image: conic-gradient(from var(--a) at 50% 50%, #000, transparent)',
+            'mask-image: repeating-linear-gradient(#000 0 var(--r), transparent var(--r) calc(var(--r) * 2))',
+            '-webkit-mask-image: linear-gradient(#000 calc(100% - var(--r)), transparent 0); mask-image: linear-gradient(#000 calc(100% - var(--r)), transparent 0)',
+            'mask: linear-gradient(#000 var(--r), transparent) calc(100% - var(--r)) 0 / var(--w) var(--h) no-repeat',
+            'mask: url(./art/under-name.svg) var(--p) / var(--w) 100% no-repeat, linear-gradient(#000, #000) center / var(--w) 60% no-repeat',
+            'mask: linear-gradient(#000, transparent) 0 0 / min(100%, var(--w)) clamp(1px, var(--h), 9px)',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(masked(decl)), { lookClass: 't-neo' });
+            assert.deepEqual(problems, [], decl);
+        }
+        // A colour, or the picture: a stop's colour, a colour function's argument, a lone var(), a bare var() as the picture.
+        for (const decl of [
+            'mask-image: linear-gradient(var(--x), transparent)',
+            'mask-image: linear-gradient(#000, var(--x) 50%)',
+            'mask-image: linear-gradient(#000, 50% var(--x))',
+            'mask-image: radial-gradient(var(--x) 10%, #000)',
+            'mask-image: linear-gradient(var(--a) var(--b), transparent)',
+            'mask-image: linear-gradient(var(--a), #000, transparent)',
+            'mask-image: linear-gradient(to right, #000, transparent, var(--x))',
+            'mask-image: linear-gradient(to right, var(--x) calc(100% - var(--r)), transparent)',
+            'mask-image: linear-gradient(#000, rgb(0 0 0 / var(--a)))',
+            'mask-image: linear-gradient(color-mix(in srgb, var(--g) 50%, red), red)',
+            'mask-image: linear-gradient(#000 calc(100% - var(--r)), var(--x) calc(100% - var(--r)))',
+            'mask-image: conic-gradient(from 0deg, var(--x), #000)',
+            'mask-image: var(--m)',
+            'mask-image: var(--s-text, red)',
+            'mask-image: linear-gradient(#000, #000), var(--m)',
+            'mask-border-source: var(--m)',
+            '-webkit-mask-image: linear-gradient(var(--x) 50%, #000); mask-image: linear-gradient(var(--x) 50%, #000)',
+            'mask: var(--m) center / 100% 100% no-repeat',
+            'mask: var(--m)',
+            'mask: url(art/x.svg) center / var(--w) 100% no-repeat, linear-gradient(var(--g) 0, #000) center / 60% 40% no-repeat',
+            'mask: url(art/x.svg) center / var(--w) 100% no-repeat, var(--m) center / 60% 40% no-repeat',
+            'mask: image-set(var(--m) 1x) center / 100% 100% no-repeat',
+        ]) {
+            refusedWith(masked(decl), VAR);
+        }
+        // Whatever stands beside a length, currentColor, inherit and revert are refused anywhere in a mask.
+        for (const decl of [
+            'mask-image: linear-gradient(#000 calc(100% - var(--r)), currentColor)',
+            'mask-image: linear-gradient(to right, #000 var(--r), color-mix(in srgb, currentColor 50%, red))',
+            'mask-position: inherit',
+            'mask-size: revert',
+            'mask: linear-gradient(#000, transparent) calc(100% - var(--r)) 0 / var(--w) 100% no-repeat, inherit',
+        ]) {
+            refusedWith(masked(decl), HOST);
+        }
+        // A role stands as a colour and a length stands beside it; a sentence names what a mask may hold.
+        const sentence = lintLookSheet(plantedNeo(masked('mask-image: linear-gradient(var(--x), transparent)')), { lookClass: 't-neo' }).join('\n');
+        assert.match(sentence, /a length, a percentage or a calc\(\) of them, in a size, a position or a stop's place, is none/);
+        // On an element, and in the kit, a var() in a mask is nobody's concern here.
+        accepts('.t-neo .item-b { mask-image: var(--m); mask-size: var(--x) var(--y); }');
+        const kit = lintSheet(plantedKit(masked('mask-image: linear-gradient(var(--x), transparent); mask-size: var(--x) var(--y)')));
+        assert.ok(!kit.some((p) => VAR.test(p)), kit.join('\n'));
+    });
+
     it('reads a var() in a pseudo-element\'s paint only as a palette role, so a custom property the host set to currentColor is refused (B1 e)', () => {
         for (const decl of [
             'background: var(--g)',
@@ -2995,17 +3081,20 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s thirty-five plant files, 704 plants, the window\'s thirteen and the builder\'s 108, with an outcome each', () => {
+    it('holds the critic\'s thirty-five plant files, 704 plants, the window\'s thirteen, the builder\'s 108 and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 825);
+        assert.equal(Object.values(PLANTS).flat().length, 849);
         // The fourth review's nine plant files (`m1`–`m9`, 224 plants, the control among them) and the builder's own (`b1`).
         assert.deepEqual(
             ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1'].map((set) => PLANTS[set].length),
             [48, 45, 11, 6, 40, 25, 27, 9, 13, 108],
         );
+        // c1: the window's selected check after the fourth fix round, a var() in a mask where it is a length (nine accepted) and where it is a colour or the picture (fifteen refused).
+        assert.equal(PLANTS.c1.length, 24);
+        assert.equal(PLANTS.c1.filter((entry) => entry.expect === 'accepted').length, 9);
         // w1: a pseudo-element a rule at rest moved over a figure with its ground clear, given a ground under :hover.
         assert.equal(PLANTS.w1.length, 1);
         assert.match(PLANTS.w1[0].rule, /::after \{ content: ''; position: relative; left: -80px; background: transparent;/);
@@ -3032,10 +3121,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 825, only the 167 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 849, only the 176 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
-        assert.equal(accepted.length, 167);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 658, 'and refuses the other 658');
+        assert.equal(accepted.length, 176);
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 673, 'and refuses the other 673');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);

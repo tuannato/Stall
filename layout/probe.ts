@@ -3402,7 +3402,8 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   pseudo-element is measured only by its paint at rest, and at rest a
  *   first-party pseudo-element takes its paint from neither its host nor the
  *   cascade (a colour for each family and side, no `revert`, `revert-layer`
- *   or `all`, masks read, a `var()` only as a palette role). At rest, in
+ *   or `all`, masks read, a `var()` only as a palette role where it stands as a
+ *   colour or as a mask's picture, never where it is a length). At rest, in
  *   a media block and in a keyframe, an outer shadow, a text shadow, a drop
  *   shadow, an outline and a border image name their own colour, and an
  *   outline is at most 4px wide and sits from -8px to 4px, per declaration

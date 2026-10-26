@@ -5581,5 +5581,157 @@
       "expect": "accepted",
       "why": "visibility at rest is a box the probe measures as it stands: only a keyframe's is refused"
     }
+  ],
+  "c1": [
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-size: var(--x) var(--y); mask-position: var(--x) 0; mask-image: linear-gradient(#000 calc(100% - var(--r)), transparent 0); }",
+      "expect": "accepted",
+      "why": "the window's selected check: a size, a position and a stop's place built from lengths carry no colour, so a var() in them is no host paint"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-size: var(--x) var(--y); }",
+      "expect": "accepted",
+      "why": "mask-size holds lengths and keywords, never a colour or a picture: a var() in it is read by nothing"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-position: var(--x) 0; mask-repeat: var(--x); mask-composite: var(--x); mask-mode: var(--x); mask-origin: var(--x); mask-clip: var(--x); }",
+      "expect": "accepted",
+      "why": "the longhands that hold no picture and no colour are not read for a var()"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000 calc(100% - var(--r) - 4px), transparent calc(100% - var(--r))); }",
+      "expect": "accepted",
+      "why": "a calc() in a stop's place is a length: the colours of both stops are literals"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; -webkit-mask-size: var(--x) var(--y); mask-size: var(--x) var(--y); -webkit-mask-position: calc(100% - var(--r)) 0; mask-position: calc(100% - var(--r)) 0; -webkit-mask-image: linear-gradient(#000 calc(100% - var(--r)), transparent 0); mask-image: linear-gradient(#000 calc(100% - var(--r)), transparent 0); }",
+      "expect": "accepted",
+      "why": "the prefixed twins read exactly as the standard ones, a var() in a length included"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask: linear-gradient(#000 var(--r), transparent) calc(100% - var(--r)) 0 / var(--w) var(--h) no-repeat; }",
+      "expect": "accepted",
+      "why": "in the mask shorthand a var() after the slash is a size, one beside a picture is a position, and one beside a literal colour in a stop is the stop's place"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(to right, var(--s-text) var(--r), transparent); }",
+      "expect": "accepted",
+      "why": "a palette role is the stop's colour and the bare var() beside it its place"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: radial-gradient(circle at var(--x) var(--y), #000, transparent); }",
+      "expect": "accepted",
+      "why": "an argument holding a geometry word (circle, at) names no colour: its var() calls are the centre"
+    },
+    {
+      "rule": ".$C .item-p { --x: 50%, currentColor; }\n.$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000 var(--x), transparent); }",
+      "expect": "accepted",
+      "why": "stated gap: a var() standing as a stop's place is substituted as tokens, so a custom property the host set to '50%, currentColor' brings a stop in the host's ink; it takes a host rule that writes it, and the window chose to read a length as no colour"
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(var(--x), transparent); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000, var(--x) 50%); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: radial-gradient(var(--x) 10%, #000); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(var(--a) var(--b), transparent); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(var(--a), #000, transparent); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(to right, #000, transparent, var(--x)); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000, rgb(0 0 0 / var(--a))); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(color-mix(in srgb, var(--g) 50%, red), red); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000 calc(100% - var(--r)), currentColor); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: linear-gradient(#000 calc(100% - var(--r)), var(--x) calc(100% - var(--r))); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-image: var(--m); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask: var(--m) center / 100% 100% no-repeat; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask-border-source: var(--m); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; mask: url(art/x.svg) center / var(--w) 100% no-repeat, linear-gradient(var(--g) 0, #000) center / 60% 40% no-repeat; }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; background: #000; -webkit-mask-image: linear-gradient(var(--x) 50%, #000); mask-image: linear-gradient(var(--x) 50%, #000); }",
+      "expect": "refused",
+      "by": [
+        "pseudo:host-paint"
+      ]
+    }
   ]
 }

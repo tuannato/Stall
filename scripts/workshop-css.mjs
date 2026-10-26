@@ -1854,7 +1854,10 @@ function cursorProblem(value) {
  * - **reads a `var()` there only as a palette role** (`var(--s-text)` and its
  *   seven kin, `STATE_OPAQUE_ROLES`, no fallback): any other custom property
  *   may be one the host set to `currentColor` (`--g: currentColor` on the
- *   host, `background: var(--g)` on the pseudo-element);
+ *   host, `background: var(--g)` on the pseudo-element). **In a mask that
+ *   holds where the `var()` stands as a colour or as the picture, and nowhere
+ *   it stands as a length** (`maskColourVar`, below): a size, a position, a
+ *   stop's place or a `calc()` of them carries no colour;
  * - **writes no `all`, in any value**: it re-states every property, the paint
  *   among them, from the host's or the initial value, and a later rule's
  *   `all: unset` takes back what this rule wrote;
@@ -1884,6 +1887,7 @@ const EDGE_SIDE = '(?:-(?:top|right|bottom|left|block|inline|block-start|block-e
 const PSEUDO_PAINT_PROPS = new RegExp(
     `^(?:background(?:-color|-image)?|border${EDGE_SIDE}(?:-color)?|border-image(?:-source)?|outline(?:-color)?|column-rule(?:-color)?|text-decoration(?:-color)?|box-shadow|text-shadow|filter|mask(?:-[a-z-]+)?)$`,
 );
+const MASK_FAMILY = /^mask(?:-|$)/;
 const EDGE_COLOUR_PROPS = new RegExp(`^(?:border${EDGE_SIDE}|outline|column-rule|text-decoration)-color$`);
 const HOST_KEYWORD = /(?<![\w-])(?:inherit|currentcolor|revert-layer|revert)(?![\w-])/i;
 const LINE_STYLE = /^(?:dotted|dashed|solid|double|groove|ridge|inset|outset|auto)$/i;
@@ -1926,6 +1930,131 @@ function varCalls(value) {
 /** The first `var()` of a value that is not a palette role standing alone, or undefined. */
 function nonRoleVar(value) {
     return varCalls(value).find((call) => call.name === undefined || !STATE_OPAQUE_ROLES.includes(call.name));
+}
+
+/*
+ * **A `var()` in a mask is refused where it stands as a colour or as the
+ * picture, and nowhere it stands as a length** (the window's selected check
+ * after the fourth fix round: judgement 14 refused any non-role `var()`
+ * anywhere in a pseudo-element's mask, and the private look at 0x04, read
+ * under its selection, was refused on `var()` calls that stand as lengths).
+ * The concern behind B1 (d) and (e) is a mask *colour* that follows the
+ * host's ink, through `currentColor`, `inherit` or a custom property the host
+ * set to `currentColor`; a length, a percentage or a `calc()` of them carries
+ * no colour. So, in a first-party pseudo-element rule:
+ *
+ * - `mask-size`, `mask-position` (and `-x`, `-y`), `mask-repeat`,
+ *   `mask-composite`, `mask-mode`, `mask-origin`, `mask-clip`, `mask-type` and
+ *   the border mask's slice, width, outset, repeat and mode hold no picture
+ *   and no colour: a `var()` in them is read by nothing (`MASK_NO_PICTURE`);
+ * - in a picture (`mask-image`, `mask-border-source`, the `mask` and
+ *   `mask-border` shorthands, a layer at a time) a gradient's arguments are
+ *   taken apart at their top-level commas: an argument holding a geometry
+ *   word (`to`, `at`, `from`, `in`, a side, a shape, a colour space) names no
+ *   colour; any other is a stop, `<color> <length-percentage>?` with the
+ *   colour first or last. A `var()` standing alone as a token of a stop is the
+ *   stop's position only if the stop holds a colour that is not a `var()`
+ *   (`#000 var(--r)`); otherwise it is the colour (`var(--g) 50%`) or, alone,
+ *   ambiguous, and is refused unless it is a palette role. A `var()` inside a
+ *   colour function (`rgb()`, `color-mix()`) is a colour; inside a `calc()`,
+ *   `min()`, `max()` or `clamp()` it is a length;
+ * - a bare `var()` in a picture slot is the picture: `mask-image: var(--m)`
+ *   and a layer of the `mask` shorthand with no picture of its own, whose
+ *   custom property may hold a gradient in `currentColor`, are refused unless
+ *   a palette role. After a `/` (a size, a slice, a width) a `var()` is a
+ *   length;
+ * - `currentColor`, `inherit` and `revert` stay refused anywhere in a mask
+ *   (`HOST_KEYWORD`, read first).
+ *
+ * Not read, stated: a `var()` that stands as a position may hold more than a
+ * position — substitution is by tokens, so a custom property the host set to
+ * `50%, currentColor` brings a stop in the host's ink into `#000 var(--x)`. It
+ * takes a host rule that writes it, and the window chose to read a length as
+ * no colour (plant `c1:8`, pinned as accepted).
+ */
+const MASK_NO_PICTURE =
+    /^mask-(?:size|position(?:-x|-y)?|repeat|composite|mode|origin|clip|type|border-(?:slice|width|outset|repeat|mode)|box-image-(?:slice|width|outset|repeat))$/;
+const MASK_PICTURE_ONLY = /^mask-(?:image|border-source|box-image-source)$/;
+const GRADIENT_GEOMETRY =
+    /^(?:to|at|from|in|left|right|top|bottom|center|circle|ellipse|closest-side|closest-corner|farthest-side|farthest-corner|shorter|longer|increasing|decreasing|hue|srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|lab|oklab|lch|oklch|hsl|hwb|xyz|xyz-d50|xyz-d65)$/i;
+const PICTURE_FUNCTION = /^(?:url|image|image-set|-webkit-image-set|cross-fade|-webkit-cross-fade|element|-moz-element|paint)\s*\(/i;
+const GRADIENT_CALL = /^(?:-webkit-)?(?:repeating-)?(?:linear|radial|conic)-gradient\s*\(/i;
+
+/** A token that is one `var(…)` call and nothing else: `{ role }` (a palette role with no fallback), or undefined for any other token. */
+function bareVar(token) {
+    if (!/^var\s*\(/i.test(token)) return undefined;
+    if (closingParen(token, token.indexOf('(')) !== token.length - 1) return undefined;
+    const m = VAR_TOKEN.exec(token);
+    return { role: m !== null && STATE_OPAQUE_ROLES.includes(m[1]) };
+}
+
+/** Whether a token is a length, a percentage, a number or an angle, or a `calc()`, `min()`, `max()` or `clamp()`: a place and never a colour. */
+function placeToken(token) {
+    return lengthToken(token) !== undefined || SHAPE_FUNCTION.test(token);
+}
+
+/** Whether a token is a colour this lint can read as one: a literal, or a `color-mix()` or `light-dark()`. */
+function colourToken(token) {
+    return literalColour(token) !== undefined || /^(?:color-mix|light-dark)\(/i.test(token);
+}
+
+/** The first token of a gradient's arguments that is a `var()` standing as a colour and not a palette role, or undefined. */
+function gradientColourVar(inner) {
+    for (const arg of splitTopLevel(inner, ',')) {
+        const tokens = splitTopLevel(arg, ' ');
+        if (tokens.some((token) => GRADIENT_GEOMETRY.test(token))) continue;
+        const coloured = tokens.some((token) => {
+            const v = bareVar(token);
+            return v === undefined ? colourToken(token) : v.role;
+        });
+        for (const token of tokens) {
+            const v = bareVar(token);
+            if (v === undefined) {
+                if (!placeToken(token)) {
+                    const bad = nonRoleVar(token);
+                    if (bad !== undefined) return bad;
+                }
+            } else if (!v.role && !coloured) return token;
+        }
+    }
+    return undefined;
+}
+
+/** The first token of one layer of a mask picture that is a `var()` standing as a colour or as the picture and not a palette role, or undefined. */
+function maskLayerVar(layer, pictureOnly) {
+    // What follows a `/` is a size, a slice or a width: lengths.
+    const [head = ''] = splitTopLevel(layer, '/');
+    const tokens = splitTopLevel(head, ' ');
+    const hasPicture = tokens.some((token) => /^none$/i.test(token) || PICTURE_FUNCTION.test(token) || GRADIENT_CALL.test(token));
+    for (const token of tokens) {
+        const v = bareVar(token);
+        if (v !== undefined) {
+            if (!v.role && (pictureOnly || !hasPicture)) return token;
+            continue;
+        }
+        const gradient = GRADIENT_CALL.exec(token);
+        if (gradient !== null) {
+            const open = gradient[0].length - 1;
+            const close = closingParen(token, open);
+            const bad = gradientColourVar(token.slice(open + 1, close < 0 ? token.length : close));
+            if (bad !== undefined) return bad;
+        } else if (!placeToken(token)) {
+            const bad = nonRoleVar(token);
+            if (bad !== undefined) return bad;
+        }
+    }
+    return undefined;
+}
+
+/** The first `var()` of a mask property's value that stands as a colour or as the picture and is not a palette role, or undefined (see above). */
+function maskColourVar(name, value) {
+    if (MASK_NO_PICTURE.test(name)) return undefined;
+    const pictureOnly = MASK_PICTURE_ONLY.test(name);
+    for (const layer of splitTopLevel(value, ',')) {
+        const bad = maskLayerVar(layer, pictureOnly);
+        if (bad !== undefined) return bad;
+    }
+    return undefined;
 }
 
 /** Whether a `color` a pseudo-element states is its own: a literal colour, or a palette role with no fallback. */
@@ -2013,6 +2142,7 @@ function applyEdge(family, part, clean) {
 const HOST_WHY = "takes its paint from its host, which is an element and may change its ground or its ink under a state: the pseudo-element is clear while its host is, and covers a figure it was moved over once the host is not";
 const REVERT_WHY = `rolls the paint back to the browser's own, which for an edge's colour is currentcolor, so it ${HOST_WHY}`;
 const VAR_WHY = 'reads a custom property that is not a palette role (var(--s-text) and its seven kin, no fallback): the host may have set it to currentColor, and the paint then follows the ink of its host, which a state may change';
+const VAR_MASK_WHY = `${VAR_WHY}; in a mask that is a var() standing as a colour (a stop's colour, a colour function's argument) or as the picture itself: a length, a percentage or a calc() of them, in a size, a position or a stop's place, is none`;
 const LOGICAL_WHY = 'names a side by the writing mode (block, inline, start, end), so a write to it may land on any of the four a physical property covers, and one that sets a style or a width there may draw where no colour was written: write top, right, bottom and left';
 const ALL_WHY = "all re-states every property from the host's or the initial value, the paint among them; a pseudo-element writes the properties it means";
 const NO_COLOUR_WHY = 'names no colour, and is drawn in currentColor, the ink of its host, which a state may change';
@@ -2042,7 +2172,7 @@ function pseudoHostPaintProblems(decls, selectors) {
         if (PSEUDO_PAINT_PROPS.test(name)) {
             const keyword = HOST_KEYWORD.exec(bare);
             if (keyword !== null) say(decl, /^revert/i.test(keyword[0]) ? REVERT_WHY : HOST_WHY);
-            else if (nonRoleVar(clean) !== undefined) say(decl, VAR_WHY);
+            else if ((MASK_FAMILY.test(name) ? maskColourVar(name, clean) : nonRoleVar(clean)) !== undefined) say(decl, MASK_FAMILY.test(name) ? VAR_MASK_WHY : VAR_WHY);
             if (EDGE_COLOUR_PROPS.test(name) && splitTopLevel(clean, ' ').some((token) => /^(?:initial|unset)$/i.test(token))) {
                 say(decl, `${clean.toLowerCase()} is currentcolor on an edge, and it ${HOST_WHY}`);
             }
@@ -3300,7 +3430,8 @@ export function lintSheet(css, { art = [] } = {}) {
  * pseudo-element takes its paint from neither its host nor the cascade at rest
  * (`a-pseudo-element-paints-its-own-ground-and-ink`: a colour for each family
  * and side, no `revert`, `revert-layer` or `all`, masks read, a `var()` only
- * as a palette role); an outer shadow, a text shadow, a drop shadow, an
+ * as a palette role where it stands as a colour or as a mask's picture, never
+ * where it is a length); an outer shadow, a text shadow, a drop shadow, an
  * outline and a border image name their own colour at rest
  * (`a-paint-past-its-box-names-its-own-colour`); an outline is at most 4px
  * wide and sits from -8px to 4px (`an-outline-is-capped-per-longhand`); no
