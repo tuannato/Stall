@@ -251,6 +251,20 @@ working accept, and there is no accept.
   larger; its card is then held clear of the status line at the largest size
   from 32px up that clears. The shape order is unchanged: one line, then a
   listing's `from` stacked, at 32px or more, before a break.
+- **A touch quote row's figure stands clear of its stepper (owner,
+  2026-10-20 and 2026-10-26, D-2026-10-20-09, D-2026-10-20-12 and
+  D-2026-10-26-02, all as recommended).** On main, the touch wall's stepper
+  and a quote's figure stood on each other at 768x1024, 1024x768 and
+  800x1280, on every look. Under 1280 wide in landscape the stepper now
+  stands under the name and the figure takes the line under both. Under
+  1080 wide in portrait the figure takes its own line and the picture is
+  104px, not 160. From 1280 to 1919 the row is main's, unchanged. **Accepted
+  cost: rows 42–51px taller, and 25 cells where main's first price stood
+  whole and clear and the taller row now cuts it at rest** (payment screens
+  1080–1200 tall or 1501–1600 tall, the yard or the Awning at about
+  1000x1112). Against that, about 1,280 cells gain a first price that is
+  clear of the controls. Landscape walls under about 870 wide and
+  near-square portrait walls are not supported yet (§ Open).
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
