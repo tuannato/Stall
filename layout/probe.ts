@@ -57,7 +57,28 @@ import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
-import { columnExcuses, columnPlace, eachInkPoint, fittedRadii, framePoints, gridPoints, insideRounded, movedBy, radiusOf, SQUARE, type Frame, type PointKind, type Radii } from './coverPoints';
+import {
+    clipVerdict,
+    columnExcuses,
+    columnPlace,
+    eachInkPoint,
+    fittedRadii,
+    framePoints,
+    gridPoints,
+    insideRounded,
+    movedBy,
+    radiusOf,
+    reachWithin,
+    RUNNING_RIBBON,
+    scrollsOn,
+    SQUARE,
+    WALL_SCROLLERS,
+    type ClipBox,
+    type Frame,
+    type PointKind,
+    type Radii,
+    type Reach,
+} from './coverPoints';
 import { LOOK_RULE, PSEUDO_AT, lookPseudoOf, selectorList } from './lookRule';
 import { MIN_CONTRAST, contrastRatio } from '../src/domain/theme';
 import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
@@ -257,39 +278,36 @@ type Failure = { screen: string; theme: string; check: string; detail: string };
  * what is inside.
  */
 /**
- * How many hit-test points the clip tolerance skipped this run, and how many
- * it actually hit-tested.
+ * **What the clip tolerance is held to** (7a): 1a's points (`coverByClass`:
+ * `checked` beside `clipSkips`, with the wall scrollers' points apart), per
+ * look and per pass, not `coveredBy`'s. §6's own complaint is about a check
+ * that quietly does not run: a read that skipped every point would be
+ * indistinguishable from one that found nothing wrong. The skip count alone
+ * could not tell those apart — it has no denominator — and it was printed
+ * **only on a passing run**, which is the one run where a reader is least
+ * likely to look. So both halves are counted and reported on every run,
+ * pass or fail, and `scripts/layout-check.mjs` holds the ratio to a ceiling
+ * (`CLIP_SKIP_CEILING`), on the public looks' sum and on each carried look's
+ * own points (8e2, the 8e2 critic's item 1: one ratio over the page let the
+ * shipped looks satisfy the ceiling for a carried look that measured
+ * nothing, `look-tallies.mjs`). Until 7a the ratio was `coveredBy`'s, over
+ * the price and "You pay" alone; 1a asks every money node and protected box,
+ * and fails what `coveredBy` counted and never asked (a point past a clip
+ * that cuts, `clipVerdict`).
  *
- * §6's own complaint is about a check that quietly does not run: a
- * `coveredBy` that skipped every point would be indistinguishable from one
- * that found nothing wrong. The skip count alone could not tell those apart
- * — it has no denominator, so 1,830 skips is either a tolerance doing its
- * job over a long scroll region or a tolerance that ate the whole pass, and
- * the number was printed **only on a passing run**, which is the one run
- * where a reader is least likely to look.
- *
- * So both halves are counted and both are reported on every run, pass or
- * fail, and `scripts/layout-check.mjs` holds the ratio to a ceiling. A point
- * off the viewport counts as neither: that is the viewport check's failure,
- * not this one's.
+ * `coveredBy` is still bound, at rest and at the six instants
+ * (`checkOverTime`): 1a reads at rest alone. What it costs is counted here
+ * per phase (`coveredByCalls`, `coveredByMs`: `rest`, the first measurement
+ * of a paint; `instants`, the six; `label`, the unbuyable label's own read,
+ * after the instants), and printed beside 1a's own time.
  */
-export let clipSkips = 0;
-export let clipChecks = 0;
-
-/**
- * **The same two halves per look** (8e2, the 8e2 critic's item 1): one
- * ratio over the whole page let the shipped looks satisfy the ceiling for a
- * carried look that measured nothing — every point of one look behind a
- * clip moved the phone's ratio from 8% to about 27%, under the 30% line. So
- * every point is also counted under the class of the look the loop is
- * measuring (`measuringClass`, set by the loop below), and the runner holds
- * a carried look to the ceiling on its own points (`look-tallies.mjs`) while
- * the public looks keep the ratio they always had.
- */
-const clipByClass: Record<string, { skips: number; checks: number }> = {};
+type CoveredByPhase = 'rest' | 'instants' | 'label';
+const coveredByCalls: Record<CoveredByPhase, number> = { rest: 0, instants: 0, label: 0 };
+const coveredByMs: Record<CoveredByPhase, number> = { rest: 0, instants: 0, label: 0 };
+/** Which phase a `coveredBy` call is in: set by `checkOverTime` and `unbuyableFaults`. */
+let coveredByPhase: CoveredByPhase = 'rest';
 /** The `t-*` class of the look the main loop is measuring now; `-` outside it. */
 let measuringClass = '-';
-const clipTallyOf = (cls: string): { skips: number; checks: number } => (clipByClass[cls] ??= { skips: 0, checks: 0 });
 
 type Clip = {
     rect: DOMRect;
@@ -316,7 +334,6 @@ type Clip = {
  * The scroll is put back where it stood; the scroll event it queues fires
  * after the read, on a tree the probe's handlers do nothing with.
  */
-type Reach = { x0: number; x1: number; y0: number; y1: number; pad: Box };
 function scrollReach(el: Element): Reach {
     const pad = paddingBox(el);
     const [sx, sy] = [el.scrollLeft, el.scrollTop];
@@ -328,21 +345,7 @@ function scrollReach(el: Element): Reach {
     return { x0: pad.left - (sx - minX), x1: pad.right + (maxX - sx), y0: pad.top - (sy - minY), y1: pad.bottom + (maxY - sy), pad };
 }
 
-/**
- * **Where a scroller can bring its content into a window** (before 8g2,
- * the window's item 3): on one axis, the span of content positions that
- * some scroll position of `reach`'s box puts inside both the box and the
- * window `[lo, hi]` — the box's padding box cut to the window, widened by
- * how far the box scrolls each way. Content inside it is shown at some
- * scroll position; content outside it at none.
- */
-function reachWithin(reach: Reach, axis: 'x' | 'y', lo: number, hi: number): [number, number] {
-    const [padLo, padHi, r0, r1] = axis === 'x' ? [reach.pad.left, reach.pad.right, reach.x0, reach.x1] : [reach.pad.top, reach.pad.bottom, reach.y0, reach.y1];
-    return [Math.max(padLo, lo) - (padLo - r0), Math.min(padHi, hi) + (r1 - padHi)];
-}
-
-/** Whether an `overflow` value scrolls. */
-const scrollsOn = (mode: string): boolean => mode === 'auto' || mode === 'scroll';
+// `reachWithin` and `scrollsOn` are the pure half's (`coverPoints.ts`), beside the clip verdict that reads them.
 
 function clipsOf(node: Element): Clip[] {
     const clips: Clip[] = [];
@@ -442,6 +445,16 @@ function cutSideways(node: Element, box: DOMRect): string | undefined {
 }
 
 function coveredBy(node: Element): string | undefined {
+    const t0 = performance.now();
+    try {
+        return coveredByRead(node);
+    } finally {
+        coveredByCalls[coveredByPhase] += 1;
+        coveredByMs[coveredByPhase] += performance.now() - t0;
+    }
+}
+
+function coveredByRead(node: Element): string | undefined {
     releaseCover();
     const box = node.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) {
@@ -518,12 +531,8 @@ function coveredBy(node: Element): string | undefined {
                     y < clip.top + 1 || y > clip.bottom - 1 || x < clip.left || x > clip.right,
             )
         ) {
-            clipSkips += 1;
-            clipTallyOf(measuringClass).skips += 1;
             continue;
         }
-        clipChecks += 1;
-        clipTallyOf(measuringClass).checks += 1;
         const hit = document.elementFromPoint(x, y);
         if (hit === null) {
             continue;
@@ -552,17 +561,17 @@ function coveredBy(node: Element): string | undefined {
 }
 
 /*
- * **Nothing covers money or a protected box** (before 8g2, 1a; report-only
- * until it binds, and `coveredBy` above binds under its own check names until
- * then). `coveredBy` asks five points of the price, "You pay" and the
- * unbuyable label alone, with `pointer-events` as the page has it, so a box a
- * look moved over any other money node — the no-escrow note over the pay
- * sheet's figure, a face's line over a quote's, a code's own fold summary
- * over its modules — was read by no geometry rule, and one carrying
- * `pointer-events: none` by none at all (the critic's PC2, PC3, PC3′, SVs,
- * PQ). This asks every money node (`MONEY_FIGURES`) and every protected box
- * (`PROTECTED`) in the open surface, with `pointer-events` and
- * `interactivity` forced on by one sheet adopted once a page, over every
+ * **Nothing covers money or a protected box** (before 8g2, 1a;
+ * `nothing-covers-money-or-a-protected-box`, bound since 7a). `coveredBy`
+ * asks five points of the price, "You pay" and the unbuyable label alone,
+ * with `pointer-events` as the page has it, so a box a look moved over any
+ * other money node — the no-escrow note over the pay sheet's figure, a
+ * face's line over a quote's, a code's own fold summary over its modules —
+ * was read by no geometry rule, and one carrying `pointer-events: none` by
+ * none at all (the critic's PC2, PC3, PC3′, SVs, PQ). This asks every money
+ * node (`MONEY_FIGURES`), every protected box (`PROTECTED`) and the
+ * unbuyable label (`COVER_NODES`) in the open surface, with `pointer-events`
+ * and `interactivity` forced on by one sheet adopted once a page, over every
  * element the app's root holds, switched on for the read and left on until
  * the next paint throws its tree away (`coverPointers`, `releaseCover`,
  * `dropCoverForPaint`): for a node with text, points over every glyph's ink
@@ -572,7 +581,7 @@ function coveredBy(node: Element): string | undefined {
  * the box's centre, its corners inside its rounded shape and a grid over the
  * code (`layout/coverPoints.ts`), each in its own frame. A paint with no hit
  * area — a shadow, an outline, a neighbour's underline — is not
- * hit-testable whatever the forcing, and is 1b's (C-1).
+ * hit-testable whatever the forcing, and is 1b's (C-1, not built).
  *
  * **What a lattice of points cannot see, stated** (the critic's item 7):
  * any fixed set of points can be dodged. A cover thinner than the pitch
@@ -580,16 +589,19 @@ function coveredBy(node: Element): string | undefined {
  * where the points stand, a mask, a shape that reaches neither the centre
  * column nor the middle row — is asked nowhere; a band at least 3px tall
  * across a glyph's centre column, or 3px wide across its middle row, meets
- * a point wherever it stands. What a cover does to a glyph's own pixels is
- * the paint reads'.
- * **And the other way, a class of false red** (the
- * critic's item 8): a box that paints nothing — a transparent wrapper — has
- * a hit area all the same, and where it meets a glyph's ink box it reads as
- * a cover; the touch wall's `span.sw-step` over a quote's figure did.
+ * a point wherever it stands. A cover that meets no point is read by
+ * nothing else off the screens the contrast pass samples, and there only as
+ * the figure's ground: no rule reads a glyph's own pixels for what covers
+ * it (1c, the per-character digit read, is not built).
+ * **And the other way, a class of false red** (the critic's item 8): a box
+ * that paints nothing — a transparent wrapper — has a hit area all the
+ * same, and where it meets a glyph's ink box it reads as a cover; the touch
+ * wall's `span.sw-step` over a quote's figure did, before the touch-wall
+ * branch moved the stepper off the figure.
  *
  * **At rest, once a paint, on every geometry pass — last, after every other
- * read of the paint, with every animation on the page put back at rest, its
- * delay zeroed (`coverAtRest`) — and once a contrast job at its full height**
+ * read of the paint, with every animation on the page reset and its delay
+ * zeroed (`coverAtRest`) — and once a contrast job at its full height**
  * (`window.__coverFaults`): the job's page is grown to the height it asks
  * (`pageHeight`), so below its first screen stands only what a surface that
  * is not the reader's to scroll holds past it — a wall, shot at its own
@@ -597,39 +609,68 @@ function coveredBy(node: Element): string | undefined {
  * (over the default plan's jobs read at rest, 74,549 of 75,093 such points
  * on the canvas's 35-item payment and the rest on Browse at the desk;
  * the reduced-motion and tide jobs were not counted), counted, not asked,
- * like every point below a geometry pass's screen (D3). Not at
- * `checkOverTime`'s six instants: measured over the
- * phone pass's whole screen set, they take the reads from 886 to 4,600 and
- * the rule's own time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s), for
- * covers that move into place between frames — which the six instants never
- * closed (the critic's P3-1); `coveredBy` and the decoration sweep still read
- * them. Stated.
+ * like every point below a geometry pass's screen (D3). Each failure is a
+ * failure of the pass (or of the contrast pass), and every geometry pass
+ * owes a read that hit-tested a point on every look it painted
+ * (`probe-coverage.mjs`); every contrast job not refused owes its read.
  *
- * Fails closed (as would-be failures while it reports): an element still
- * computing `pointer-events` or `interactivity` other than `auto` (only a
- * declaration that outranks the forcing can: an inline `!important`, or an
- * `!important` rule more specific than `[data-probe-cover] *`, which no
- * served sheet writes on either property), an inert subtree or a modal
- * dialog, which no sheet makes hit-testable, a point inside the viewport
- * with nothing under it, a node turned past 45° with no box of its own, and
- * a node with no box that a look takes away — by an animation
- * (`animatedAway`) or a rule (`hiddenBy`, which also fails a box nothing of
- * the app's own explains). One the app hides itself — the address twin a
- * width does not paint, a desk-only fold on a phone, the wall's list while
- * a payment stands — is skipped and counted.
+ * **Not at `checkOverTime`'s six instants**: measured over the phone pass's
+ * whole screen set, they take the reads from 886 to 4,600 and the rule's own
+ * time from 1.2s to 5.8s a pass (desk 2.2s to 11.8s). Over time the price
+ * and "You pay" are read by `coveredBy`, bound at rest and at the six
+ * instants under its own check names ("asked amount is covered", "you-pay
+ * figure is covered"), and the unbuyable label by `coveredBy` at the last
+ * instant (`unbuyableFaults`) — with `pointer-events` as the page has it,
+ * so a moving cover that takes no hit is read over time by nothing but the
+ * decoration sweep (a positioned or decoration box) and, on the sampled
+ * screens, the contrast pass at its one frozen instant. Its cost is counted
+ * (`coveredByCalls`, `coveredByMs`). A cover that moves into place between
+ * frames is read by neither (the critic's P3-1). Stated.
  *
- * **Where a point is asked.** Inside the viewport it is hit-tested, unless
- * it stands behind a clip: one a scroller above it can bring into view is
- * counted beside the points asked (the ratio `CLIP_SKIP_CEILING` holds
- * `coveredBy`'s to), and one past the scroll origin no position shows fails
- * (`scrollReach`, before 8g2 item 3) — the node's own scroller included for
- * the text inside it. Past the viewport's side edges or above its top it is
- * asked whether a scroller brings it into view (`offScreenReach`, the
- * window's item 3): counted where one does, failed where none does — until
- * then it was counted and never asked, and a shelf's prices past the right
- * edge out of every scroll's reach (the critic's PC) passed. **Below the
- * bottom it is counted and not asked** (D3): out-of-reach is read there by
- * the self-clip rule for the node's own text, and by nothing for a cover.
+ * **Pending for the owner, stated** (the critic's third review, items 1
+ * and 2): a cover that arrives at the end of a finite animation and stays
+ * (`forwards`; the critic's PF2, a one-shot `scaleY` from 0 at 95% of 10s)
+ * is read by no probe rule — 1a reads at rest, the instants stop at six
+ * sevenths of the longest animation — and an end-state read (each such
+ * animation seeked to its end, on the paints that have one) is not built;
+ * and a keyframe on a custom property or an inherited ink on a box above a
+ * figure (the critic's PT2, `--s-text: transparent` at 25–68% of a 100s
+ * loop over Rural's quote figure) hides it from every probe read, and
+ * seeking each animation to each keyframe offset is not built. The
+ * first-party look lint refuses both plants as written since lint-belts (a
+ * custom property in a keyframe; a scale to 0) and admits an inherited ink
+ * in one (`color: transparent` at the same offsets, measured): that belt is
+ * the owner's too.
+ *
+ * Fails closed: an element still computing `pointer-events` or
+ * `interactivity` other than `auto` (only a declaration that outranks the
+ * forcing can: an inline `!important`, or an `!important` rule more specific
+ * than `[data-probe-cover] *`, which no served sheet writes on either
+ * property), an inert subtree or a modal dialog, which no sheet makes
+ * hit-testable, a point inside the viewport with nothing under it, a node
+ * turned past 45° with no box of its own, and a node with no box that a look
+ * takes away — by an animation (`animatedAway`) or a rule (`hiddenBy`,
+ * which also fails a box nothing of the app's own explains). One the app
+ * hides itself — the address twin a width does not paint, a desk-only fold
+ * on a phone, the wall's list while a payment stands — is skipped and
+ * counted. That the price and "You pay" have a box at all is `coveredBy`'s
+ * ("has no box at all"), whoever hides them.
+ *
+ * **Where a point is asked** (`clipVerdict`). Inside the viewport it is
+ * hit-tested unless it stands behind a clip: one a scroller above it can
+ * bring into view is counted, held to `CLIP_SKIP_CEILING` beside the points
+ * asked — apart where its innermost clip is one of the two wall scrollers
+ * (`WALL_SCROLLERS`), which scroll by design and are counted beside the
+ * ratio; one past a scroller's reach (`scrollReach`, before 8g2 item 3) —
+ * the node's own scroller included for the text inside it — fails; and one
+ * past a clip that cuts there and does not scroll, with no scroller inside
+ * it to bring it in, fails (7a; until then it was counted as one behind a
+ * scroller, the critic's third review, item 3). Past the viewport's side
+ * edges or above its top it is asked whether a scroller brings it into view
+ * (`offScreenReach`, the window's item 3): counted where one does — past a
+ * side and above the top apart — failed where none does. **Below the bottom
+ * it is counted and not asked** (D3): out-of-reach is read there by the
+ * self-clip rule for the node's own text, and by nothing for a cover.
  */
 const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
 /**
@@ -644,20 +685,37 @@ const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
  * pixels, and 1d (not built) is to read its modules.
  */
 const QR_PITCH = 32;
-/** How many would-be failures a look keeps word for word on one pass; every one is counted. */
-const COVER_KEPT = 400;
+/**
+ * The nodes 1a asks: every money node (`MONEY_FIGURES`), every protected box
+ * (`PROTECTED`), and the unbuyable label (7a; the critic's third review, its
+ * checklist item 4), which `coveredBy` asks too and no list here held.
+ */
+const COVER_NODES = () => `${MONEY_FIGURES}, ${PROTECTED}, [data-role="unbuyable"]`;
+/**
+ * One read's tallies, and its failures as sentences (`faults`), each naming
+ * the node. Points: `checked`, hit-tested; `below`, below the viewport's
+ * bottom, counted and not asked (D3); `offSide` past a side edge and
+ * `above` above the top, each where a scroller or the page brings it into
+ * view (`offScreenReach`); `clipSkips`, behind a clip a scroller brings it
+ * out from, held to `CLIP_SKIP_CEILING` beside `checked`; `wallScroll`,
+ * behind one of the two wall scrollers (`WALL_SCROLLERS`), counted apart.
+ * `appHidden`: nodes the app itself hides, skipped.
+ */
 type CoverScan = {
     nodes: number;
     points: number;
     checked: number;
     below: number;
     offSide: number;
+    above: number;
     clipSkips: number;
+    wallScroll: number;
     appHidden: number;
-    would: string[];
+    faults: string[];
 };
-type CoverTally = Omit<CoverScan, 'would'> & { paints: number; wouldCount: number; would: string[] };
-/** The rule's own tallies and would-be failures per look on this pass; `coverMs` its own time. */
+/** A look's tallies on a pass: its reads (`paints`), every count summed, and its failures counted (`failed`). */
+type CoverTally = Omit<CoverScan, 'faults'> & { paints: number; failed: number };
+/** The rule's own tallies per look on this pass; `coverMs` its own time. */
 const coverByClass: Record<string, CoverTally> = {};
 let coverMs = 0;
 let coverSheet: CSSStyleSheet | undefined;
@@ -1029,7 +1087,16 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
     }
     // The points, flat (`pushPoint`), each with its clips by index.
     ptN = 0;
-    const clipLists: Clip[][] = [];
+    const clipLists: (Clip & ClipBox)[][] = [];
+    const withWall = (list: Clip[]): (Clip & ClipBox)[] => list.map((c) => ({ ...c, wall: c.el.matches(WALL_SCROLLERS) }));
+    const reachOf = (el: Element): Reach => {
+        let reach = reaches.get(el);
+        if (reach === undefined) {
+            reach = scrollReach(el);
+            reaches.set(el, reach);
+        }
+        return reach;
+    };
     let clipIdx = -1;
     const emitInk = (x: number, y: number): void => pushPoint(x, y, KIND_INK, clipIdx);
     // Every character's glyph, over its ink (`eachInkPoint`), inside every
@@ -1067,7 +1134,7 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
         }
         if (own === undefined) {
             const cs = getComputedStyle(parent);
-            clipLists.push(clipsWithin(parent));
+            clipLists.push(withWall(clipsWithin(parent)));
             own = { clips: clipLists.length - 1, cs, face: faceKey(cs), angle: angleOf(parent), vertical: !cs.writingMode.startsWith('horizontal') };
             ofParent.set(parent, own);
         }
@@ -1095,7 +1162,7 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
     // A box with no text — a code — is read by its own points: its centre,
     // its corners inside its rounded shape, and a code's grid.
     if (ptN === 0 && !innerText) {
-        clipLists.push(clipsOf(node));
+        clipLists.push(withWall(clipsOf(node)));
         const nodeClips = clipLists.length - 1;
         for (const f of framed.frames) {
             const radii = framed.whole ? radiiOf(node, f.w, f.h) : SQUARE;
@@ -1111,9 +1178,9 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
     const [vw, vh] = [window.innerWidth, window.innerHeight];
     const where = (x: number, y: number, kind: PointKind): string => `${Math.round(x)},${Math.round(y)} (${kind})`;
     // A figure in a moving or pinned ticker ribbon runs past the screen's
-    // sides by design (`cutSideways`'s one exception, by value).
-    const ribbon = node.closest('[data-ribbon]');
-    const runsPastSides = ribbon !== null && ribbon.getAttribute('data-ribbon') !== 'still';
+    // sides, and past its cell's and its bar's, by design (`cutSideways`'s
+    // one exception, by value: `RUNNING_RIBBON`).
+    const runsPastSides = node.closest(RUNNING_RIBBON) !== null;
     for (let i = 0; i < ptN; i += 1) {
         const x = ptX[i]!;
         const y = ptY[i]!;
@@ -1129,45 +1196,39 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
                 outOfReach ??= `stands at ${where(x, y, kind)}, ${why}`;
                 continue;
             }
-            scan.offSide += 1;
+            if (x < 0 || x >= vw) scan.offSide += 1;
+            else scan.above += 1;
             continue;
         }
         if (y >= vh) {
             scan.below += 1;
             continue;
         }
-        // Behind a clip — reached by scrolling it, or cut, which is the
-        // self-clip rule's — unless a scroller it lies past cannot scroll it
-        // into view (`scrollReach`): then it is money no position shows.
-        let behind = false;
-        let unreached: string | undefined;
-        for (const clip of clips) {
-            const c = clip.rect;
-            const pastX = x < c.left || x > c.right;
-            const pastY = y < c.top + 1 || y > c.bottom - 1;
-            if (!pastX && !pastY) continue;
-            behind = true;
-            if ((pastX && scrollsOn(clip.overflowX)) || (pastY && scrollsOn(clip.overflowY))) {
-                let reach = reaches.get(clip.el);
-                if (reach === undefined) {
-                    reach = scrollReach(clip.el);
-                    reaches.set(clip.el, reach);
-                }
-                if (
-                    (pastX && scrollsOn(clip.overflowX) && (x < reach.x0 - 1 || x > reach.x1 + 1)) ||
-                    (pastY && scrollsOn(clip.overflowY) && (y < reach.y0 - 1 || y > reach.y1 + 1))
-                ) {
-                    unreached = `${named(clip.el)} (overflow ${clip.overflowX} ${clip.overflowY}, which scrolls from ${Math.round(reach.x0)},${Math.round(reach.y0)} to ${Math.round(reach.x1)},${Math.round(reach.y1)})`;
-                    break;
-                }
-            }
-        }
-        if (unreached !== undefined) {
-            outOfReach ??= `stands at ${where(x, y, kind)} out of reach of ${unreached}: no scroll position shows it`;
+        // Behind a clip (`clipVerdict`): counted where a scroller brings it
+        // into view — apart where the innermost clip is a wall scroller —
+        // and failed where it lies past a scroller's reach, or past a clip
+        // that cuts there with no scroller inside it to bring it in.
+        const verdict = clipVerdict(x, y, clips, (j) => reachOf(clips[j]!.el), { sidewaysByDesign: runsPastSides });
+        if (verdict.kind === 'unreached') {
+            const clip = clips[verdict.at]!;
+            const reach = reachOf(clip.el);
+            outOfReach ??=
+                `stands at ${where(x, y, kind)} out of reach of ${named(clip.el)} (overflow ${clip.overflowX} ${clip.overflowY}, which scrolls from ` +
+                `${Math.round(reach.x0)},${Math.round(reach.y0)} to ${Math.round(reach.x1)},${Math.round(reach.y1)}): no scroll position shows it`;
             continue;
         }
-        if (behind) {
-            scan.clipSkips += 1;
+        if (verdict.kind === 'cut') {
+            const clip = clips[verdict.at]!;
+            const c = clip.rect;
+            outOfReach ??=
+                `stands at ${where(x, y, kind)} past ${named(clip.el)}'s ${verdict.axis === 'x' ? 'side' : 'top or bottom'} ` +
+                `(${verdict.axis === 'x' ? `${Math.round(c.left)}–${Math.round(c.right)}` : `${Math.round(c.top)}–${Math.round(c.bottom)}`}, ` +
+                `overflow ${clip.overflowX} ${clip.overflowY}), a clip that cuts there and does not scroll, and no scroller inside it brings it in`;
+            continue;
+        }
+        if (verdict.kind === 'behind') {
+            if (verdict.wall) scan.wallScroll += 1;
+            else scan.clipSkips += 1;
             continue;
         }
         scan.checked += 1;
@@ -1204,10 +1265,8 @@ function coverScan(): CoverScan {
     const root = document.getElementById('app')!;
     const scrim = root.querySelector('[data-role="sheet-scrim"], [data-role="poster"], [data-role="zoom"]');
     const surface: ParentNode = scrim ?? root;
-    const nodes = [...new Set([...surface.querySelectorAll(MONEY_FIGURES), ...surface.querySelectorAll(PROTECTED)])].filter(
-        (n) => n.closest('.deck-stall') === null,
-    );
-    const scan: CoverScan = { nodes: nodes.length, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, would: [] };
+    const nodes = [...new Set(surface.querySelectorAll(COVER_NODES()))].filter((n) => n.closest('.deck-stall') === null);
+    const scan: CoverScan = { nodes: nodes.length, points: 0, checked: 0, below: 0, offSide: 0, above: 0, clipSkips: 0, wallScroll: 0, appHidden: 0, faults: [] };
     coverPointers(true);
     try {
         const interactivity = CSS.supports('interactivity', 'auto');
@@ -1215,17 +1274,17 @@ function coverScan(): CoverScan {
             const cs = getComputedStyle(el);
             const i = cs.getPropertyValue('interactivity');
             if (cs.pointerEvents !== 'auto' || (interactivity && i !== 'auto')) {
-                scan.would.push(`${named(el)} computes pointer-events ${cs.pointerEvents}${interactivity ? `, interactivity ${i}` : ''} with both forced auto — a hit test reads through it`);
+                scan.faults.push(`${named(el)} computes pointer-events ${cs.pointerEvents}${interactivity ? `, interactivity ${i}` : ''} with both forced auto — a hit test reads through it`);
             }
         }
         for (const el of document.querySelectorAll('[inert], dialog:modal')) {
-            scan.would.push(`${named(el)} is ${el.matches('[inert]') ? 'inert' : 'a modal dialog'}, which no sheet makes hit-testable`);
+            scan.faults.push(`${named(el)} is ${el.matches('[inert]') ? 'inert' : 'a modal dialog'}, which no sheet makes hit-testable`);
         }
         const asked = new Set(nodes);
         const reaches = new Map<Element, Reach>();
         for (const node of nodes) {
             const why = coverOf(node, scan, asked, reaches);
-            if (why !== undefined) scan.would.push(`${named(node)} ${why}`);
+            if (why !== undefined) scan.faults.push(`${named(node)} ${why}`);
         }
     } catch (err) {
         coverPointers(false);
@@ -1234,41 +1293,51 @@ function coverScan(): CoverScan {
     return scan;
 }
 
-/** The read on a geometry pass's paint at rest, into the measuring look's tally. */
-function coverRead(screen: string, label: string): void {
+/** The counts a look's tally sums, read by read. */
+const COVER_COUNTS = ['nodes', 'points', 'checked', 'below', 'offSide', 'above', 'clipSkips', 'wallScroll', 'appHidden'] as const;
+
+/** The read on a geometry pass's paint at rest, into the measuring look's tally; its failures. */
+function coverRead(screen: string, label: string): Failure[] {
     const t0 = performance.now();
     const scan = coverScan();
-    const tally = (coverByClass[measuringClass] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, wouldCount: 0, would: [] });
+    const tally = (coverByClass[measuringClass] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, above: 0, clipSkips: 0, wallScroll: 0, appHidden: 0, failed: 0 });
     tally.paints += 1;
-    for (const key of ['nodes', 'points', 'checked', 'below', 'offSide', 'clipSkips', 'appHidden'] as const) tally[key] += scan[key];
-    tally.wouldCount += scan.would.length;
-    for (const why of scan.would) {
-        if (tally.would.length < COVER_KEPT) tally.would.push(`${screen} / ${label}: ${why}`);
-    }
+    for (const key of COVER_COUNTS) tally[key] += scan[key];
+    tally.failed += scan.faults.length;
     coverMs += performance.now() - t0;
+    return scan.faults.map((detail) => ({ screen, theme: label, check: COVER_CHECK, detail }));
 }
 
 /**
- * The animations a paint's instants moved, and where each stood at rest
- * (`checkOverTime`); 1a puts them back before it reads.
+ * The animations a paint's instants moved, and the time each stood at
+ * before them (`checkOverTime`); 1a sets each back to that time before it
+ * reads.
  */
 let coverRest: [Animation, CSSNumberish | null][] = [];
 
 /**
  * 1a on a geometry pass's paint, **last**, after every other read of it,
- * with every animation on the page put back at rest, its delay zeroed as
- * the instants and the contrast freeze zero it: one the instants moved
- * where it stood before them, and one they never moved — armed after they
- * queried the page, or on a screen they did not step — at its start. The
- * delay matters at rest too: the ticker continues a pass across repaints
- * through a negative delay as long as the wall-clock time since its pass
- * began (`armTicker`), so read with it the ribbon stood a few pixels
- * further on in one run than another, and four of its points flipped
- * between past the screen's side and behind its cell from run to run (the
- * critic's item 9). The read leaves the forcing on (`releaseCover`), and
- * only the next paint may take it off.
+ * with every animation on the page reset and its delay zeroed as the
+ * instants and the contrast freeze zero it: one the instants moved to the
+ * time it stood at before them, and one they never moved — armed after they
+ * queried the page, or on a screen they did not step — to 0. With its delay
+ * zeroed that time is a time into its active phase, so an animation that
+ * stood in its delay before the instants does not stand where it stood: it
+ * stands that far into its keyframes (the critic's third review, item 5; a
+ * paint read moments after it was made sits within a few frames of its
+ * first keyframe either way). The delay matters at rest too: the ticker
+ * continues a pass across repaints through a negative delay as long as the
+ * wall-clock time since its pass began (`armTicker`), so read with it the
+ * ribbon stood a few pixels further on in one run than another, and four of
+ * its points flipped between past the screen's side and behind its cell
+ * from run to run (the critic's item 9). Its tallies hold run to run now;
+ * a pass's point count does not (a few hundred points a pass, every one
+ * among those hit-tested; the contrast pass, on a fixed clock, read the same
+ * 697,851 in the critic's four runs, so a relative time in a fixture's text
+ * is the likely mover, not traced). The read leaves the forcing on
+ * (`releaseCover`), and only the next paint may take it off.
  */
-function coverAtRest(screen: string, label: string): void {
+function coverAtRest(screen: string, label: string): Failure[] {
     const rest = new Map(coverRest);
     for (const anim of document.getAnimations()) {
         try {
@@ -1283,7 +1352,7 @@ function coverAtRest(screen: string, label: string): void {
         }
     }
     coverRest = [];
-    coverRead(screen, label);
+    return coverRead(screen, label);
 }
 
 /** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
@@ -2378,6 +2447,7 @@ function checkOverTime(
     worn: readonly ShippedAttachment[],
 ): Failure[] {
     paint(screen, look, worn);
+    coveredByPhase = 'rest';
     const out = measure(screen, themeLabel);
     coverRest = [];
     out.push(...reducedMotionLeaks(screen, themeLabel));
@@ -2418,6 +2488,7 @@ function checkOverTime(
             // Not ours to time.
         }
     }
+    coveredByPhase = 'instants';
     for (let step = 1; step <= STEPS; step += 1) {
         const at = (longest * step) / (STEPS + 1);
         for (const a of running) {
@@ -2628,6 +2699,7 @@ function unbuyablePlace(cell: Element): string | undefined {
 }
 
 function unbuyableFaults(screen: string, label: string): Failure[] {
+    coveredByPhase = 'label';
     const root = document.getElementById('app')!;
     const out: Failure[] = [];
     const fail = (detail: string): void => {
@@ -5801,14 +5873,17 @@ function shiftOf(value: string): [number, number] | undefined {
  * **A keyframe on a box above a figure is held as the box is held at rest**
  * (before 8g2, the window's item 4; the critic's PT): every property
  * `BOX_HELD` holds is held at every keyframe (`boxHeldFault`) — a keyframe
- * `visibility: hidden` among them — and what the geometry reads only at rest
- * may not move between the instants: a clip-path, a translate, a
- * transform's translation and a size (`KEYFRAME_SIZES`), each against the
- * value the box computes at rest. The instants read an animation at six
- * times through its active phase, its delay zeroed, so a look's keyframe
- * that moves, cuts or hides the figure later, or between them, is read here
- * by its values whenever it runs. A box inside a moving or pinned ticker
- * ribbon moves by design (`cutSideways`'s one exception, by value).
+ * `visibility: hidden` among them — and what the geometry reads only at the
+ * instants may not move: a clip-path, a translate or a transform's
+ * translation that differs from the value the box computes when this rule
+ * reads it — after `checkOverTime`, at the last of its six instants, not at
+ * rest — fails, and so does any keyframe naming a size (`KEYFRAME_SIZES`),
+ * whatever its value: sizes are never compared (the critic's third review,
+ * item 5). The instants read an animation at six times through its active
+ * phase, its delay zeroed, so a look's keyframe that moves, cuts or hides
+ * the figure later, or between them, is read here by its values whenever it
+ * runs. A box inside a moving or pinned ticker ribbon moves by design
+ * (`cutSideways`'s one exception, by value).
  */
 function keyframeHeld(prop: string, value: string, at: Element, cs: CSSStyleDeclaration): string | undefined {
     const ribbon = at.closest('[data-ribbon]');
@@ -8615,7 +8690,7 @@ for (const screen of measured) {
             // (`a-sticky-sign-covers-nothing-as-the-region-scrolls`).
             failures.push(...stickyScrollFaults(screen, label));
             // And 1a, after every other read (`coverAtRest`).
-            coverAtRest(screen, label);
+            failures.push(...coverAtRest(screen, label));
         }
     }
 }
@@ -10444,10 +10519,10 @@ function styleRules(): CSSStyleRule[] {
  * covering: `coveredBy`, bound, on the price, "You pay" and the unbuyable
  * label alone, and only where the pseudo takes a hit (`pointer-events:
  * none` reads through it); and 1a (`nothing-covers-money-or-a-protected-
- * box`), report-only, with `pointer-events` forced on, on every money node
- * and protected box. T6, with `pointer-events: none` over the pay sheet's
- * figure, passed every bound geometry rule at 390 (1a: 39 would-be
- * failures).
+ * box`), bound since 7a, with `pointer-events` forced on, on every money
+ * node, protected box and unbuyable label. T6, with `pointer-events: none`
+ * over the pay sheet's figure, passed every geometry rule bound before 7a at
+ * 390 (1a then read it as 39 failures).
  */
 function markLookPseudos(scope: ParentNode): number {
     for (const el of document.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]')) {
@@ -11125,14 +11200,17 @@ const verdict = {
     cjkFaces: [...cjkFaces].sort(),
     /* Every policy refusal the page met before its verdict (`the-probe-page-meets-no-csp-refusal`). */
     cspRefusals: cspRefusals(),
-    clipSkips,
-    clipChecks,
-    /* The same per look (8e2): what the runner holds a carried look to on its own points. */
-    clipByClass,
-    /* 1a, report-only (before 8g2): its tallies and would-be failures per look, and its own time (a clock the runner's tab check leaves out). */
+    /*
+     * 1a (`nothing-covers-money-or-a-protected-box`): its tallies per look —
+     * what the runner holds the clip ceiling and the owed reads to — and its
+     * own time (a clock the runner's tab check leaves out); `coveredBy`'s
+     * calls and time per phase (`coveredByMs` a clock too).
+     */
     coverCheck: COVER_CHECK,
     coverByClass,
     coverMs,
+    coveredByCalls,
+    coveredByMs,
     screensWithQuote: [...withQuote],
     codesPainted: [...codesPainted].sort(),
     /*

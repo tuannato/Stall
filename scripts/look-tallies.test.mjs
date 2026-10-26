@@ -1,6 +1,15 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { CARRIED_LINE_SKIP_CEILING, PAID_LOOK_UNPAINTED_CODES, carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
+import {
+    CARRIED_LINE_SKIP_CEILING,
+    PAID_LOOK_UNPAINTED_CODES,
+    carriedTallyFaults,
+    clipCeilingFault,
+    clipLine,
+    coverTally,
+    skipsByScreen,
+    skipsByScreenLine,
+} from './look-tallies.mjs';
 
 /**
  * `a-carried-look-is-held-to-its-own-skip-ceilings` (8e2, the 8e2 critic's
@@ -17,13 +26,23 @@ import { CARRIED_LINE_SKIP_CEILING, PAID_LOOK_UNPAINTED_CODES, carriedTallyFault
 const FIXTURE = 't-fixture-private';
 const CODES = ['mobile/pay:pay-qr', 'desktop/publish-name:publish-qr', 'canvas/broadcast:broadcast'];
 
+/** One look's 1a tally on a pass (`coverByClass`'s shape), its other counts nothing. */
+function tally(counts) {
+    return { paints: 10, nodes: 50, points: 0, checked: 0, below: 0, offSide: 0, above: 0, clipSkips: 0, wallScroll: 0, appHidden: 0, failed: 0, ...counts };
+}
+
 /** The fixture as measured: its own ceilings exactly, every pass hit-tested, every code read. */
 function measured() {
     const table = CARRIED_LINE_SKIP_CEILING[FIXTURE];
     return {
         carried: [{ cls: FIXTURE, paid: true }],
         lineSkips: { [FIXTURE]: structuredClone({ mobile: table.mobile, desktop: table.desktop, canvas: table.canvas }) },
-        clip: { [FIXTURE]: { mobile: { skips: 100, checks: 2000 }, desktop: { skips: 200, checks: 2500 }, canvas: { skips: 20, checks: 400 } } },
+        cover: {
+            mobile: { [FIXTURE]: tally({ clipSkips: 100, checked: 2000 }) },
+            desktop: { [FIXTURE]: tally({ clipSkips: 200, checked: 2500 }) },
+            canvas: { [FIXTURE]: tally({ clipSkips: 20, checked: 400, wallScroll: 900 }) },
+            tablet: { [FIXTURE]: tally({ clipSkips: 0, checked: 3000, wallScroll: 2500 }) },
+        },
         clipCeiling: 0.3,
         codesRead: { [FIXTURE]: new Set(CODES.filter((code) => !PAID_LOOK_UNPAINTED_CODES.includes(code))) },
         codesRequired: CODES,
@@ -53,7 +72,7 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
     });
 
     it('fails a carried look with no ceiling of its own, naming what it measured', () => {
-        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, clip: { 't-planted-look': measured().clip[FIXTURE] }, codesRead: { 't-planted-look': measured().codesRead[FIXTURE] } });
+        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] } });
         assert.equal(faults.length, 1);
         assert.match(faults[0], /^t-planted-look is carried and has no line-skip ceiling of its own \(CARRIED_LINE_SKIP_CEILING/);
         assert.match(faults[0], /mobile 3\/1, desktop 0\/0, canvas 0\/0/);
@@ -61,13 +80,15 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
         assert.equal(carriedTallyFaults({ ...measured(), carried: [{ cls: 'constructor', paid: false }] }).faults.some((f) => /has no line-skip ceiling/.test(f)), true);
     });
 
-    it('holds a carried look to the clip ceiling on its own points, and a pass that hit-tested none of them fails', () => {
+    it('holds a carried look to the clip ceiling on its own points of 1a, on every pass that read it, and a pass that hit-tested none of them fails', () => {
         const hidden = measured();
-        hidden.clip[FIXTURE].desktop = { skips: 1200, checks: 1300 };
-        hidden.clip[FIXTURE].canvas = { skips: 0, checks: 0 };
+        hidden.cover.desktop[FIXTURE] = tally({ clipSkips: 1200, checked: 1300 });
+        hidden.cover.canvas[FIXTURE] = tally({ clipSkips: 0, checked: 0, wallScroll: 40 });
+        hidden.cover.tablet = { 't-modern': tally({ checked: 10 }) };
         assert.deepEqual(carriedTallyFaults(hidden).faults, [
-            't-fixture-private: 1200/2500 of its points behind a clip at desktop (48%), above the 30% ceiling — the clip tolerance is eating the cover check',
-            't-fixture-private: the canvas pass hit-tested none of its points — the cover check ran over nothing of it',
+            't-fixture-private at desktop: 1200/2500 points behind a clip (48%), above the 30% ceiling — the clip tolerance is eating the cover check',
+            't-fixture-private at canvas: every one of its 40 points inside the viewport was behind a clip — the cover check ran over nothing',
+            't-fixture-private at tablet: it hit-tested no point — the cover check ran over nothing',
         ]);
     });
 
@@ -82,6 +103,39 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
             't-fixture-private: a-code-keeps-its-quiet-zone-white read no quiet zone on mobile/pay:pay-qr under it',
         ]);
         assert.deepEqual(PAID_LOOK_UNPAINTED_CODES, ['desktop/publish-name:publish-qr']);
+    });
+});
+
+/**
+ * The clip ceiling on 1a's tallies (7a; the critic's third review, its
+ * checklist item 8): the two wall scrollers' points are counted apart and
+ * never in the ratio — the counter tablet's 34% and the narrow wall's 33%
+ * on the clean tree were theirs — while every other point behind a clip is
+ * held to the ceiling, and a tally that hit-tested nothing fails.
+ */
+describe('the clip ceiling reads 1a', () => {
+    it('sums a pass’s tallies over the classes asked, a class that is not a key read as nothing', () => {
+        const byClass = { 't-modern': tally({ checked: 10, clipSkips: 2, failed: 1 }), 't-neo': tally({ checked: 5, wallScroll: 7 }) };
+        assert.deepEqual(coverTally(byClass), { ...tally({ checked: 15, clipSkips: 2, wallScroll: 7, failed: 1 }), paints: 20, nodes: 100 });
+        assert.equal(coverTally(byClass, ['t-neo', 'constructor', 't-gone']).checked, 5);
+    });
+
+    it('counts the wall scrollers’ points apart, outside the ratio', () => {
+        // The counter tablet on the clean tree, before 7a: 34% behind a clip, every one a wall scroller's.
+        const tablet = tally({ checked: 338919, clipSkips: 0, wallScroll: 173880 });
+        assert.equal(clipCeilingFault(tablet, 0.3), undefined);
+        assert.equal(clipLine(tablet), '0/338919 points behind a clip (0%), 173880 behind a wall scroller, apart');
+        // The same points behind any other clip break the ceiling.
+        assert.equal(
+            clipCeilingFault(tally({ checked: 338919, clipSkips: 173880 }), 0.3),
+            '173880/512799 points behind a clip (34%), above the 30% ceiling — the clip tolerance is eating the cover check',
+        );
+        assert.equal(clipCeilingFault(tally({ checked: 70, clipSkips: 30 }), 0.3), undefined);
+    });
+
+    it('fails a tally that hit-tested nothing, whatever stood behind a clip', () => {
+        assert.match(clipCeilingFault(tally({ wallScroll: 9 }), 0.3), /^every one of its 9 points inside the viewport was behind a clip/);
+        assert.match(clipCeilingFault(tally({}), 0.3), /^it hit-tested no point/);
     });
 });
 

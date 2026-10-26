@@ -20,8 +20,11 @@
  *   look's numbers arrive by a reviewed diff that names what is clipped and
  *   why, never by a run that read them and said nothing;
  * - **points behind a clip** (`CLIP_SKIP_CEILING`'s rule): the same ratio on
- *   its own points, on every geometry pass, and a pass that hit-tested none
- *   of its points measured nothing of it;
+ *   its own points of 1a (`nothing-covers-money-or-a-protected-box`, its
+ *   `coverByClass`; since 7a, `coveredBy`'s before), on every pass that read
+ *   1a — every geometry pass but the short ones, and the contrast pass —
+ *   the two wall scrollers' points apart (`WALL_SCROLLERS`), and a pass
+ *   that hit-tested none of its points measured nothing of it;
  * - **the codes owed by name** (`CODES_REQUIRED`): every one read on its own
  *   jobs, but the record sheet's code under a paid look — the name sheet
  *   composes no record naming a paid look in step 8 (8b2), so under the
@@ -40,8 +43,58 @@ export const LINE_SKIP_KINDS = Object.freeze(['clipped-away', 'not-rendered']);
 /** The contrast pass's viewports, whose skips a ceiling states. */
 export const SKIP_VIEWPORTS = Object.freeze(['mobile', 'desktop', 'canvas']);
 
-/** The geometry passes whose points a carried look is held to. */
-export const CLIP_PASSES = Object.freeze(['mobile', 'desktop', 'canvas']);
+/**
+ * **1a's points, summed and held to the clip ceiling** (7a; the critic's
+ * third review, its checklist item 8). A tally is 1a's per look on a pass
+ * (`coverByClass` in the page's verdict, `coverTally` in the probe): its
+ * reads (`paints`), the points hit-tested (`checked`), behind a clip a
+ * scroller brings them out from (`clipSkips`), and behind one of the two
+ * wall scrollers (`wallScroll`, `WALL_SCROLLERS` in `layout/coverPoints.ts`),
+ * which scroll by design and are counted apart, outside the ratio.
+ */
+export const COVER_TALLY_KEYS = Object.freeze(['paints', 'nodes', 'points', 'checked', 'below', 'offSide', 'above', 'clipSkips', 'wallScroll', 'appHidden', 'failed']);
+
+/** 1a's tallies of `classes` (or every class) on one pass, summed. */
+export function coverTally(byClass, classes = Object.keys(byClass ?? {})) {
+    const sum = Object.fromEntries(COVER_TALLY_KEYS.map((key) => [key, 0]));
+    for (const cls of classes) {
+        const at = Object.hasOwn(byClass ?? {}, cls) ? byClass[cls] : undefined;
+        if (at === undefined) continue;
+        for (const key of COVER_TALLY_KEYS) sum[key] += at[key] ?? 0;
+    }
+    return sum;
+}
+
+/**
+ * Why a tally breaks the clip ceiling, as a sentence, or undefined: a tally
+ * that read but hit-tested no point ran over nothing; one whose points
+ * behind a clip (the wall scrollers' apart) are more than `ceiling` of
+ * those and the points hit-tested is a tolerance eating the check.
+ */
+export function clipCeilingFault(tally, ceiling) {
+    if (!(tally.checked > 0)) {
+        return tally.clipSkips + tally.wallScroll > 0
+            ? `every one of its ${tally.clipSkips + tally.wallScroll} points inside the viewport was behind a clip — the cover check ran over nothing`
+            : 'it hit-tested no point — the cover check ran over nothing';
+    }
+    const ratio = tally.clipSkips / (tally.clipSkips + tally.checked);
+    if (ratio > ceiling) {
+        return (
+            `${tally.clipSkips}/${tally.clipSkips + tally.checked} points behind a clip (${(ratio * 100).toFixed(0)}%), ` +
+            `above the ${(ceiling * 100).toFixed(0)}% ceiling — the clip tolerance is eating the cover check`
+        );
+    }
+    return undefined;
+}
+
+/** A tally's clip arithmetic as it is printed: behind a clip over behind or hit-tested, and the wall scrollers' apart. */
+export function clipLine(tally) {
+    const all = tally.clipSkips + tally.checked;
+    return (
+        `${tally.clipSkips}/${all} points behind a clip (${all === 0 ? 0 : ((tally.clipSkips / all) * 100).toFixed(0)}%)` +
+        `, ${tally.wallScroll} behind a wall scroller, apart`
+    );
+}
 
 /**
  * Each carried look's line skips, per viewport, as measured — exact
@@ -150,7 +203,8 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  *
  * - `carried`: `[{ cls, paid }]`, every private look the run carries;
  * - `lineSkips`: `{ [cls]: { [viewport]: { 'clipped-away', 'not-rendered' } } }`;
- * - `clip`: `{ [cls]: { [pass]: { skips, checks } } }`, the geometry passes';
+ * - `cover`: `{ [pass]: coverByClass }`, 1a's tallies per look on every pass
+ *   that read it (`coverTally`'s shape);
  * - `clipCeiling`: the ratio the public looks are held to (`CLIP_SKIP_CEILING`);
  * - `codesRead`: `{ [cls]: Set<'viewport/screen:code'> }`, the quiet-zone reads;
  * - `codesRequired`: the codes owed by name (`CODES_REQUIRED`);
@@ -159,7 +213,7 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
 export function carriedTallyFaults({
     carried,
     lineSkips = {},
-    clip = {},
+    cover = {},
     clipCeiling,
     codesRead = {},
     codesRequired = [],
@@ -195,17 +249,9 @@ export function carriedTallyFaults({
                 }
             }
         }
-        for (const pass of CLIP_PASSES) {
-            const at = own(clip, cls)?.[pass] ?? { skips: 0, checks: 0 };
-            const all = at.skips + at.checks;
-            if (at.checks === 0) {
-                faults.push(`${cls}: the ${pass} pass hit-tested none of its points — the cover check ran over nothing of it`);
-            } else if (at.skips / all > clipCeiling) {
-                faults.push(
-                    `${cls}: ${at.skips}/${all} of its points behind a clip at ${pass} (${((at.skips / all) * 100).toFixed(0)}%), ` +
-                        `above the ${(clipCeiling * 100).toFixed(0)}% ceiling — the clip tolerance is eating the cover check`,
-                );
-            }
+        for (const pass of Object.keys(cover)) {
+            const why = clipCeilingFault(coverTally(cover[pass], [cls]), clipCeiling);
+            if (why !== undefined) faults.push(`${cls} at ${pass}: ${why}`);
         }
         const owed = codesRequired.filter((code) => !(paid && PAID_LOOK_UNPAINTED_CODES.includes(code)));
         const read = own(codesRead, cls) ?? new Set();

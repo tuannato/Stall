@@ -59,7 +59,7 @@ import {
     runnerPasses,
     viewportOffPlan,
 } from './probe-passes.mjs';
-import { carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
+import { COVER_TALLY_KEYS, carriedTallyFaults, clipCeilingFault, clipLine, coverTally, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
@@ -645,12 +645,14 @@ const NAMES_COPIED = (await servedSheets({ env: CARRIED.env }))
  */
 const wornClassesSeen = new Set();
 /**
- * Each carried private look's points behind a clip and hit-tested, per
- * geometry pass (`clipByClass` in the page's verdict, 8e2): held to the
- * clip ceiling on its own (`look-tallies.mjs`) where the public looks keep
- * the ratio over theirs.
+ * 1a's tallies per look on every pass that read it (`coverByClass` in the
+ * page's verdict; the contrast pass's own under `contrast`), by pass: each
+ * carried private look is held to the clip ceiling on its own points
+ * (`look-tallies.mjs`, 8e2) where the public looks keep the ratio over
+ * theirs on each pass (`coverClip`). A pass that read 1a on no look (the
+ * short passes) is not here.
  */
-const clipSeen = {};
+const coverSeen = {};
 /**
  * Every code a geometry pass painted, as `pass/screen:name` (the probe's
  * `codesPainted`): the contrast pass lists which of them it read the quiet
@@ -2303,19 +2305,24 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     phases.set('art off', entry);
                 }
                 /*
-                 * 1a, report-only (before 8g2; `coverScan` in the probe):
-                 * the hit test with `pointer-events` forced on, once on the
-                 * job's paint at its full height — every frame above put
-                 * back what it changed. Below the first screen stands only
-                 * what a wall, shot at its own screen's size, holds inside
-                 * its own scrollers; those points are counted, not asked.
-                 * Folded per look; it moves no verdict yet.
+                 * 1a (`nothing-covers-money-or-a-protected-box`; `coverScan`
+                 * in the probe), bound since 7a: the hit test with
+                 * `pointer-events` forced on, once on the job's paint at its
+                 * full height — every frame above put back what it changed.
+                 * Below the first screen stands only what a wall, shot at
+                 * its own screen's size, holds inside its own scrollers;
+                 * those points are counted, not asked. Every failure fails
+                 * the pass; the tallies are folded per look and held to the
+                 * clip ceiling, and every job not refused owes its read.
                  */
                 const scan = await timed('cover (1a)', () => evalJson(cdp, sessionId, 'window.__coverFaults()'));
+                if (!Array.isArray(scan?.faults) || COVER_TALLY_KEYS.some((key) => key !== 'paints' && key !== 'failed' && !Number.isFinite(scan[key]))) {
+                    throw new Error(`the page's 1a read (__coverFaults) answered no tally a job can be held to: ${JSON.stringify(scan)?.slice(0, 120)}`);
+                }
                 cover = {
                     cls: plannedJob.sheetClass,
                     ...scan,
-                    would: scan.would.map((w) => `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${w}`),
+                    faults: scan.faults.map((w) => `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${w} — ${COVER_CHECK}`),
                 };
                 record.sampled = sampled;
                 record.dropped = dropped;
@@ -2451,20 +2458,48 @@ let failed = false;
 // the cost is.
 /*
  * How much of the cover check the clip tolerance may eat before the pass
- * stops meaning anything. `clipsOf` skips a point outside every clipping
- * ancestor because it is reachable by scrolling and nothing outside the clip
- * can cover it — correct, and also the one way this guard can be widened into
- * a green run over nothing.
+ * stops meaning anything. A point behind a clip a scroller brings it out
+ * from is counted and not hit-tested, because it is reachable by scrolling
+ * and nothing outside the clip can cover it — correct, and also the one way
+ * this guard can be widened into a green run over nothing.
  *
- * Measured 2026-09-19, the first run that printed a denominator: mobile
- * 1,830 of 13,118 (14%), desktop 1,582 of 11,319 (14%), canvas 0 of 825.
- * The ceiling is a little over twice that — drift protection, not a target:
- * it catches a tolerance that has started eating the pass while leaving room
- * for a screen or two more. Headroom is jitter, not an invitation. If a
- * legitimate change pushes past it, the question to answer first is which
- * points stopped being checked, not what the number should be.
+ * Measured 2026-09-19 on `coveredBy`'s points, the first run that printed a
+ * denominator: mobile 1,830 of 13,118 (14%), desktop 1,582 of 11,319 (14%),
+ * canvas 0 of 825. The ceiling is a little over twice that — drift
+ * protection, not a target: it catches a tolerance that has started eating
+ * the pass while leaving room for a screen or two more. Headroom is jitter,
+ * not an invitation. If a legitimate change pushes past it, the question to
+ * answer first is which points stopped being checked, not what the number
+ * should be.
+ *
+ * **On 1a's points since 7a** (the critic's third review, its checklist
+ * item 8; `coverClip`, `look-tallies.mjs`): every geometry pass that read 1a
+ * and the contrast pass, the public looks' sum on each, and every carried
+ * look on its own. The two wall scrollers (`WALL_SCROLLERS` in
+ * `layout/coverPoints.ts`, the touch wall's list and a payment's lines)
+ * scroll by design, took the counter tablet to 34% and the narrow wall to
+ * 33% on the clean tree before 7a, and are counted apart, outside the
+ * ratio; a point behind a clip that cuts and does not scroll is no longer
+ * counted at all, but failed (`clipVerdict`). The ceiling stays 30%, and a
+ * pass that hit-tested no point fails.
  */
 const CLIP_SKIP_CEILING = 0.3;
+
+/**
+ * The clip ceiling on one pass's 1a tallies (`coverByClass`): the public
+ * looks' sum, as the line the pass says (` · 1a: …`, empty where 1a read
+ * nothing) and the faults. Each carried look is held on its own at the end
+ * of the run (`carriedTallyFaults`), from `coverSeen`.
+ */
+function coverClip(byClass) {
+    const publicTally = coverTally(
+        byClass,
+        Object.keys(byClass ?? {}).filter((cls) => !PRIVATE_SHEET_CLASSES.includes(cls)),
+    );
+    if (publicTally.paints === 0) return { line: '', faults: [] };
+    const why = clipCeilingFault(publicTally, CLIP_SKIP_CEILING);
+    return { line: ` · 1a: ${clipLine(publicTally)}`, faults: why === undefined ? [] : [`the public looks' 1a points: ${why}`] };
+}
 
 /*
  * How many tabs of the one Chrome the geometry passes and the contrast pass
@@ -2533,7 +2568,6 @@ function geometryRecord(key, tab) {
         sticky: undefined,
         worn: [],
         codes: [],
-        clip: undefined,
         log: (text) => g.lines.push({ err: false, text }),
         error: (text) => g.lines.push({ err: true, text }),
         took: () => `${((performance.now() - startedAt) / 1000).toFixed(1)}s`,
@@ -2555,8 +2589,8 @@ function geometryRecordDiffers(walked, again) {
     // font wait took (`faces.waitedMs`), which is a clock, not a reading.
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
-        // 1a's own time is a clock too (before 8g2).
-        const untimed = { ...report, coverMs: undefined };
+        // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a).
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -2581,7 +2615,7 @@ function geometryRecordDiffers(walked, again) {
     const untimed = (g) =>
         JSON.stringify(g.lines.map(({ err, text }) => [err, text.replace(/— \d+\.\ds/g, '— (time)').replace(/asked, \d+ ms/g, 'asked, (time)')]));
     if (untimed(walked) !== untimed(again)) return 'the lines it says differ';
-    for (const field of ['failed', 'outlined', 'marksShown', 'sticky', 'worn', 'codes', 'clip']) {
+    for (const field of ['failed', 'outlined', 'marksShown', 'sticky', 'worn', 'codes']) {
         if (JSON.stringify(walked[field]) !== JSON.stringify(again[field])) return `what it adds to the totals differs at ${field}`;
     }
     return undefined;
@@ -2747,48 +2781,38 @@ function phaseTable(passMs, tabs = 1) {
 const runDumpJobs = [];
 const runDumpBoxes = [];
 /*
- * **1a, report-only** (before 8g2; `coverScan` in the probe): the hit test
- * with `pointer-events` and `interactivity` forced on, over every money node
- * and protected box, on every geometry pass (each paint, at rest) and once a
- * contrast job at its full height. What it would fail is printed
- * per pass and per look, beside what it read and its own time; nothing here
- * moves a verdict — `coveredBy` binds the price, "You pay" and the
- * unbuyable label under their own check names until 1a binds.
+ * **1a, `nothing-covers-money-or-a-protected-box`** (before 8g2; `coverScan`
+ * in the probe), bound since 7a: the hit test with `pointer-events` and
+ * `interactivity` forced on, over every money node, every protected box and
+ * the unbuyable label, on every geometry pass (each paint, at rest) and once
+ * a contrast job at its full height. A geometry pass's failures are in its
+ * own failure list, beside every other rule's; a contrast job's fail the
+ * contrast pass (`coverFailed`), and a job not refused that read nothing is
+ * named (`coverUnread`). What it read is printed per pass and per look,
+ * with its own time, and `coveredBy`'s — still bound at rest and at the six
+ * instants for the price and "You pay" (and at the last instant for the
+ * unbuyable label), under its own check names — per phase beside it.
  */
+const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
 const coverGeometry = [];
 const coverContrast = {};
-/** How many grouped would-be failures a pass prints word for word. */
-const COVER_PRINTED = 200;
-function coverLines(label, byClass, ms) {
+const coverFailed = [];
+const coverUnread = [];
+function coverLines(label, byClass, ms, coveredBy) {
     const classes = Object.keys(byClass).sort();
     const sum = (key) => classes.reduce((n, cls) => n + (byClass[cls][key] ?? 0), 0);
-    const behind = sum('clipSkips');
-    const checked = sum('checked');
-    const ratio = behind + checked === 0 ? 0 : behind / (behind + checked);
-    const lines = [
-        `    ${label}: ${sum('wouldCount')} would-be failure(s) (${classes.map((cls) => `${cls} ${byClass[cls].wouldCount}`).join(', ') || 'no look'}) · ` +
-            `${sum('paints')} read(s) over ${sum('nodes')} node(s), ${sum('points')} point(s): ${checked} hit-tested, ` +
-            `${sum('below')} off the first screen, ${sum('offSide')} past a side edge, ${behind} behind a clip ` +
-            `(${(ratio * 100).toFixed(0)}%${ratio > CLIP_SKIP_CEILING ? `, over the ${(CLIP_SKIP_CEILING * 100).toFixed(0)}% ceiling` : ''}), ` +
-            `${sum('appHidden')} node(s) the app hides skipped · ${(ms / 1000).toFixed(2)}s`,
-    ];
-    // A sentence said twice on one pass is printed once, with how many.
-    const grouped = new Map();
-    for (const cls of classes) {
-        for (const w of byClass[cls].would) grouped.set(w, (grouped.get(w) ?? 0) + 1);
-    }
-    let printed = 0;
-    for (const [w, n] of grouped) {
-        if (printed === COVER_PRINTED) {
-            lines.push(`      … and ${grouped.size - printed} more`);
-            break;
-        }
-        lines.push(`      ${w}${n > 1 ? ` (×${n})` : ''}`);
-        printed += 1;
-    }
-    const kept = classes.reduce((n, cls) => n + byClass[cls].would.length, 0);
-    if (kept < sum('wouldCount')) lines.push(`      (${sum('wouldCount') - kept} more counted and not kept word for word)`);
-    return lines;
+    const tally = coverTally(byClass);
+    const line =
+        `    ${label}: ${sum('failed')} failure(s) (${classes.map((cls) => `${cls} ${byClass[cls].failed}`).join(', ') || 'no look'}) · ` +
+        `${sum('paints')} read(s) over ${sum('nodes')} node(s), ${sum('points')} point(s): ${sum('checked')} hit-tested, ` +
+        `${sum('below')} below the screen, ${sum('offSide')} past a side edge, ${sum('above')} above the top, ` +
+        `${clipLine(tally)}, ${sum('appHidden')} node(s) the app hides skipped · ${(ms / 1000).toFixed(2)}s` +
+        (coveredBy?.calls === undefined
+            ? ''
+            : ` · coveredBy ${['rest', 'instants', 'label']
+                  .map((phase) => `${phase} ${coveredBy.calls[phase] ?? 0} in ${((coveredBy.ms?.[phase] ?? 0) / 1000).toFixed(2)}s`)
+                  .join(', ')}`);
+    return [line];
 }
 /*
  * How the contrast pass was walked, for the dump's `meta` and never its
@@ -3028,49 +3052,26 @@ try {
         const spent = g.took();
         /*
          * The clip tolerance's own arithmetic, on every run rather than only
-         * on a passing one. A `coveredBy` that skipped every point would be
-         * indistinguishable from one that found nothing wrong — §6's
-         * complaint about a guard that quietly does not run — and the skip
-         * count on its own has no denominator to say which it was. So the
-         * ratio is what is printed and what is held: `clipChecks` is the
-         * points this pass actually hit-tested, and a pass with none of them
-         * proved nothing at all whatever its failure list says.
+         * on a passing one, over 1a's points (7a; `coverClip`): a read that
+         * skipped every point would be indistinguishable from one that found
+         * nothing wrong — §6's complaint about a guard that quietly does not
+         * run — and the skip count on its own has no denominator to say
+         * which it was. So the ratio is what is printed and what is held,
+         * the public looks' here and each carried look's on its own
+         * (`look-tallies.mjs`), and a pass that hit-tested no point proved
+         * nothing at all whatever its failure list says.
          */
-        // The public looks' own points (8e2): a carried look's are held to
-        // the same ceiling on their own (`look-tallies.mjs`), and neither can
-        // mask nor trip the other.
-        const carriedClip = PRIVATE_SHEET_CLASSES.map((cls) => report.clipByClass?.[cls] ?? { skips: 0, checks: 0 });
-        g.clip = { viewport: vp.name, byClass: {} };
-        for (const cls of PRIVATE_SHEET_CLASSES) {
-            g.clip.byClass[cls] = report.clipByClass?.[cls] ?? { skips: 0, checks: 0 };
-        }
-        const skipped = (report.clipSkips ?? 0) - carriedClip.reduce((n, at) => n + at.skips, 0);
-        const checked = (report.clipChecks ?? 0) - carriedClip.reduce((n, at) => n + at.checks, 0);
-        const clipLine =
-            skipped + checked === 0
-                ? ''
-                : ` · ${skipped}/${skipped + checked} points behind a clip` +
-                  ` (${((skipped / (skipped + checked)) * 100).toFixed(0)}%)`;
-        if (skipped > 0 && checked === 0) {
+        const { line: clipSaid, faults: clipFaults } = coverClip(report.coverByClass);
+        if (clipFaults.length > 0) {
             g.failed = true;
-            g.error(
-                `✗ ${vp.name} (${measured}): every hit-test point was behind a clip —` +
-                    ' the cover check ran over nothing',
-            );
-        } else if (skipped + checked > 0 && skipped / (skipped + checked) > CLIP_SKIP_CEILING) {
-            g.failed = true;
-            g.error(
-                `✗ ${vp.name} (${measured}): ${clipLine.trim()} —` +
-                    ` above the ${(CLIP_SKIP_CEILING * 100).toFixed(0)}% ceiling;` +
-                    ' the clip tolerance is eating the cover check',
-            );
+            for (const why of clipFaults) g.error(`✗ ${vp.name} (${measured}): ${why}`);
         }
         const compared = probeCoverageLine(pass.coverage, report);
         if (report.failures.length === 0) {
-            if (gaps.length === 0) {
+            if (gaps.length === 0 && clipFaults.length === 0) {
                 g.log(
                     `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
-                        clipLine +
+                        clipSaid +
                         (compared === '' ? '' : `\n    compared: ${compared}`) +
                         `\n    faces: ${facesLine(report.faces)}`,
                 );
@@ -3079,7 +3080,7 @@ try {
         }
         g.failed = true;
         g.error(
-            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipLine}` +
+            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipSaid}` +
                 `\n    faces: ${facesLine(report.faces)}`,
         );
         for (const f of report.failures) {
@@ -3200,15 +3201,17 @@ try {
                 for (const code of wv.codesPainted ?? []) g.codes.push(`${vp.name}/${code}`);
                 const gaps = probeCoverageGaps(pass.coverage, wv, { privateClasses: PRIVATE_SHEET_CLASSES });
                 const compared = probeCoverageLine(pass.coverage, wv);
-                if (wv.failures.length === 0 && gaps.length === 0) {
+                const { line: clipSaid, faults: clipFaults } = coverClip(wv.coverByClass);
+                if (wv.failures.length === 0 && gaps.length === 0 && clipFaults.length === 0) {
                     g.log(
-                        `✓ ${label}: ${wanted} screens, every look — ${g.took()}\n    compared: ${compared}` +
+                        `✓ ${label}: ${wanted} screens, every look — ${g.took()}${clipSaid}\n    compared: ${compared}` +
                             `\n    faces: ${facesLine(wv.faces)}`,
                     );
                 } else {
                     g.failed = true;
+                    for (const why of clipFaults) g.error(`✗ ${label}: ${why}`);
                     if (wv.failures.length > 0) {
-                        g.error(`✗ ${label}: ${wv.failures.length} failure(s) — ${g.took()}`);
+                        g.error(`✗ ${label}: ${wv.failures.length} failure(s) — ${g.took()}${clipSaid}`);
                         for (const f of wv.failures) {
                             g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                         }
@@ -3275,15 +3278,17 @@ try {
                     sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
                 });
                 const compared = probeCoverageLine(pass.coverage, nv);
-                if (nv.failures.length === 0 && gaps.length === 0) {
+                const { line: clipSaid, faults: clipFaults } = coverClip(nv.coverByClass);
+                if (nv.failures.length === 0 && gaps.length === 0 && clipFaults.length === 0) {
                     g.log(
-                        `✓ ${label}: ${wanted} screens, every look — ${spent}\n    compared: ${compared}` +
+                        `✓ ${label}: ${wanted} screens, every look — ${spent}${clipSaid}\n    compared: ${compared}` +
                             `\n    faces: ${facesLine(nv.faces)}`,
                     );
                 } else {
                     g.failed = true;
+                    for (const why of clipFaults) g.error(`✗ ${label}: ${why}`);
                     if (nv.failures.length > 0) {
-                        g.error(`✗ ${label}: ${nv.failures.length} failure(s) — ${spent}`);
+                        g.error(`✗ ${label}: ${nv.failures.length} failure(s) — ${spent}${clipSaid}`);
                         for (const f of nv.failures) {
                             g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                         }
@@ -3437,13 +3442,19 @@ try {
                             rm.screensWithQuote ?? [],
                         ).join(', ')} mounted no [data-role="seller-price"].`,
                     );
-                } else if (rm.failures.length === 0) {
-                    g.log(`✓ ${label}: every look — ${g.took()}\n    faces: ${facesLine(rm.faces)}`);
                 } else {
-                    g.failed = true;
-                    g.error(`✗ ${label}: ${rm.failures.length} failure(s) — ${g.took()}`);
-                    for (const f of rm.failures) {
-                        g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                    const { line: clipSaid, faults: clipFaults } = coverClip(rm.coverByClass);
+                    if (rm.failures.length === 0 && clipFaults.length === 0) {
+                        g.log(`✓ ${label}: every look — ${g.took()}${clipSaid}\n    faces: ${facesLine(rm.faces)}`);
+                    } else {
+                        g.failed = true;
+                        for (const why of clipFaults) g.error(`✗ ${label}: ${why}`);
+                        if (rm.failures.length > 0) {
+                            g.error(`✗ ${label}: ${rm.failures.length} failure(s) — ${g.took()}${clipSaid}`);
+                            for (const f of rm.failures) {
+                                g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                            }
+                        }
                     }
                 }
             } catch (err) {
@@ -3484,7 +3495,10 @@ try {
      * named.
      */
     const commitGeometryPass = (g) => {
-        if (g.report?.coverByClass !== undefined) coverGeometry.push({ pass: g.key, byClass: g.report.coverByClass, ms: g.report.coverMs ?? 0 });
+        if (g.report?.coverByClass !== undefined) {
+            coverGeometry.push({ pass: g.key, byClass: g.report.coverByClass, ms: g.report.coverMs ?? 0, coveredBy: { calls: g.report.coveredByCalls, ms: g.report.coveredByMs } });
+            if (coverTally(g.report.coverByClass).paints > 0) coverSeen[g.key] = g.report.coverByClass;
+        }
         for (const { err, text } of g.lines) (err ? console.error : console.log)(text);
         if (g.failed) failed = true;
         for (const kind of g.outlined) outlinedTargetsSeen.add(kind);
@@ -3492,9 +3506,6 @@ try {
         if (g.sticky !== undefined) stickySeen[g.sticky.viewport] = g.sticky.classes;
         for (const cls of g.worn) wornClassesSeen.add(cls);
         for (const code of g.codes) codesPaintedSeen.add(code);
-        if (g.clip !== undefined) {
-            for (const [cls, at] of Object.entries(g.clip.byClass)) (clipSeen[cls] ??= {})[g.clip.viewport] = at;
-        }
     };
     /*
      * The walk, on every tab at once (`CONTRAST_TABS`, the contrast pass's
@@ -3668,8 +3679,11 @@ try {
                       ? `; every tab's page after the walk the page before it (${Object.keys(printBefore ?? {}).join(', ')})`
                       : `; ${tabPrintFaults.length} of ${tabs.length} tab(s) on a page that is not the page before the walk`)),
     );
-    console.log(`  1a, report-only (nothing-covers-money-or-a-protected-box; coveredBy still binds): what it would fail on each geometry pass`);
-    for (const { pass, byClass, ms } of coverGeometry) for (const line of coverLines(pass, byClass, ms)) console.log(line);
+    console.log(
+        `  1a (nothing-covers-money-or-a-protected-box), bound: what it read on each geometry pass, its failures in the pass's own list; ` +
+            `coveredBy (asked amount is covered, you-pay figure is covered, and the unbuyable label's) bound beside it, its calls and time per phase`,
+    );
+    for (const { pass, byClass, ms, coveredBy } of coverGeometry) for (const line of coverLines(pass, byClass, ms, coveredBy)) console.log(line);
     took();
 
     /*
@@ -4007,11 +4021,15 @@ try {
             lookPseudoJobs += out.lookPseudoJobs;
             shownApartJobs += out.shownApartJobs;
             if (out.cover !== undefined) {
-                const into = (coverContrast[out.cover.cls] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, clipSkips: 0, appHidden: 0, wouldCount: 0, would: [] });
+                const into = (coverContrast[out.cover.cls] ??= Object.fromEntries(COVER_TALLY_KEYS.map((key) => [key, 0])));
                 into.paints += 1;
-                for (const key of ['nodes', 'points', 'checked', 'below', 'offSide', 'clipSkips', 'appHidden']) into[key] += out.cover[key];
-                into.wouldCount += out.cover.would.length;
-                into.would.push(...out.cover.would);
+                for (const key of COVER_TALLY_KEYS) if (key !== 'paints' && key !== 'failed') into[key] += out.cover[key];
+                into.failed += out.cover.faults.length;
+                coverFailed.push(...out.cover.faults);
+            } else if ((out.dumpJobs ?? []).some((record) => record.refused === undefined)) {
+                // Every job not refused owes its read (7a): one that ended
+                // without it read nothing a verdict can stand on.
+                coverUnread.push(out.dumpJobs.find((record) => record.refused === undefined).key);
             }
             lookMarkJobs += out.lookMarkJobs;
             sumInto(lookMarkJobsByClass, out.lookMarkJobsByClass);
@@ -4453,15 +4471,30 @@ try {
                 verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
             }
         }
+        /*
+         * 1a once a contrast job (7a): every failure fails the pass; every
+         * job not refused owes its read; and its points are held to the clip
+         * ceiling, the public looks' here and each carried look's below.
+         */
+        if (coverFailed.length > 0) {
+            verdicts.push(`${coverFailed.length} failure(s) of ${COVER_CHECK} once a job, at its full height`);
+        }
+        if (coverUnread.length > 0) {
+            verdicts.push(`${COVER_CHECK} read nothing on ${coverUnread.length} job(s) not refused: ${coverUnread.slice(0, 5).join(', ')}${coverUnread.length > 5 ? ', …' : ''}`);
+        }
+        const contrastClip = coverClip(coverContrast);
+        verdicts.push(...contrastClip.faults.map((why) => `${COVER_CHECK}: ${why}`));
+        if (coverTally(coverContrast).paints > 0) coverSeen.contrast = coverContrast;
         if (PRIVATE_SHEET_CLASSES.length > 0) {
             // Every carried look on its own tallies (8e2, the 8e2 critic's
             // item 1): its line skips against its own ceiling, its points
-            // behind a clip, the codes owed by name on its own jobs. A
-            // carried look with no ceiling of its own fails here.
+            // of 1a behind a clip on every pass that read it (7a), the codes
+            // owed by name on its own jobs. A carried look with no ceiling
+            // of its own fails here.
             const { faults, notes } = carriedTallyFaults({
                 carried: CARRIED.looks,
                 lineSkips: privateLineSkips,
-                clip: clipSeen,
+                cover: coverSeen,
                 clipCeiling: CLIP_SKIP_CEILING,
                 codesRead: codesReadByClass,
                 codesRequired: CODES_REQUIRED,
@@ -4479,9 +4512,12 @@ try {
                     ['mobile', 'desktop', 'canvas']
                         .map((vp) => `${vp} ${privateLineSkips[cls]?.[vp]?.['clipped-away'] ?? 0}/${privateLineSkips[cls]?.[vp]?.['not-rendered'] ?? 0}`)
                         .join(', ') +
-                    ' · points behind a clip ' +
-                    ['mobile', 'desktop', 'canvas']
-                        .map((vp) => `${vp} ${clipSeen[cls]?.[vp]?.skips ?? 0}/${(clipSeen[cls]?.[vp]?.skips ?? 0) + (clipSeen[cls]?.[vp]?.checks ?? 0)}`)
+                    ' · 1a points behind a clip ' +
+                    Object.keys(coverSeen)
+                        .map((pass) => {
+                            const t = coverTally(coverSeen[pass], [cls]);
+                            return `${pass} ${t.clipSkips}/${t.clipSkips + t.checked} (wall scrollers ${t.wallScroll} apart)`;
+                        })
                         .join(', '),
                 );
                 console.log(`  carried looks on their own tallies (a-carried-look-is-held-to-its-own-skip-ceilings): ${PRIVATE_SHEET_CLASSES.map((cls, i) => `${cls}: line skips ${said[i]}`).join('; ')}`);
@@ -4541,6 +4577,9 @@ try {
             for (const line of dim) {
                 console.error(`    ${line}`);
             }
+            for (const line of coverFailed) {
+                console.error(`    ${line}`);
+            }
         }
     } catch (err) {
         failed = true;
@@ -4562,7 +4601,7 @@ try {
         for (const line of refused) console.error(`    ${line}`);
     }
     if (Object.keys(coverContrast).length > 0) {
-        console.log(`  1a, report-only (nothing-covers-money-or-a-protected-box): what it would fail once a contrast job, at its full height`);
+        console.log(`  1a (nothing-covers-money-or-a-protected-box), bound: what it read once a contrast job, at its full height`);
         for (const line of coverLines('contrast (its time summed over the tabs)', coverContrast, phases.get('cover (1a)')?.ms ?? 0)) console.log(line);
     }
     // The least ring read per kind of outlined line, whatever the verdict:
