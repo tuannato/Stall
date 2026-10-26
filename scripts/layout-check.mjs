@@ -63,6 +63,7 @@ import { carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tal
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
+import { sheetNamesAttribute } from './workshop-css.mjs';
 
 /*
  * The private looks this run measures (8e2): the selection the shell names,
@@ -608,6 +609,20 @@ const CARRIED_FILE_ART =
         : privateRows(await servedSheets({ env: CARRIED.env }))
               .filter((row) => sheetMasksWithAFile(row.css))
               .map((row) => row.lookClass);
+/**
+ * The measured looks whose own sheet names `[data-copied]` (the lint-belts
+ * critic's fifth review, ranked item 4), read from the sheets as served and
+ * with the look lint's reader (`sheetNamesAttribute`): the contrast plan
+ * samples the staged address screens for exactly these (`COPIED_JOBS`,
+ * `layout/contrastPlan.ts`), and the page derives the same list from the
+ * stylesheets it loaded (`layout/sheetNaming.ts`). The contrast pass holds
+ * the page's list and the plan's to this one. No public look names it, so a
+ * public run's plan is unchanged; any carried look whose sheet names it gets the jobs.
+ */
+const NAMES_COPIED = (await servedSheets({ env: CARRIED.env }))
+    .filter((row) => ['look', 'kit', 'private'].includes(row.role) && EXPECTED_SHEET_CLASSES.includes(row.lookClass) && sheetNamesAttribute(row.css, 'data-copied'))
+    .map((row) => row.lookClass)
+    .sort();
 /**
  * Every decoration class a geometry pass painted worn (the probe's
  * `wornClasses`): the contrast pass's owed jobs must follow it
@@ -3867,6 +3882,23 @@ try {
             }
         }
         for (const tab of tabs) await holdScreensToPlan(tab, CONTRAST_VIEWPORTS[0], plan);
+        /*
+         * The staged address screens are planned for the looks whose sheet
+         * names `[data-copied]`: the page's reading of its loaded stylesheets,
+         * the plan's jobs and the served sheets' text (`NAMES_COPIED`) must
+         * name the same looks, or a CSSOM that serialised a selector another
+         * way would plan nothing and read green over it.
+         */
+        {
+            const copiedScreens = await evalJson(cdp, sessionId, 'window.__copiedScreens');
+            const planned = [...new Set(plan.filter((job) => copiedScreens.includes(job.screen)).map((job) => job.sheetClass))].sort();
+            const pageNames = await evalJson(cdp, sessionId, 'window.__namesCopied()');
+            if (pageNames.join(' ') !== NAMES_COPIED.join(' ') || planned.join(' ') !== NAMES_COPIED.join(' ')) {
+                throw new Error(
+                    `the-plan-follows-the-sheets-that-name-data-copied: the served sheets name it on [${NAMES_COPIED.join(', ')}], the page reads it on [${pageNames.join(', ')}] and the plan samples ${copiedScreens.join(' and ')} for [${planned.join(', ')}]`,
+                );
+            }
+        }
         /*
          * The walk, on every tab at once (`CONTRAST_TABS`). The jobs are
          * handed out one at a time in plan order — viewport by viewport, as

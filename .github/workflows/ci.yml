@@ -71,12 +71,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The geometry passes and the contrast pass walk on this many tabs of one
-    # Chrome. One here, set rather than left to the machine rule in
-    # layout-check.mjs: no Linux run has compared one tab with two, and a
-    # shared runner may have two cores (layout/PROBE-RULES.md, "The contrast
-    # pass walks on two tabs" and "The geometry passes walk on two tabs").
+    # Chrome. Two here, set rather than left to the machine rule in
+    # layout-check.mjs. Measured on the owner's Mac, each figure from its own
+    # run: one tab 261.8-264.1s before the four off-size wall passes landed,
+    # against the probe's 300s ceiling; those four passes' own times sum to
+    # 64.8s in one geometry walk; a quiet two-tab pair read 230.2s for the
+    # branch against 208.8s for main (+21.4s), a loaded one 248.1s against
+    # 208.4s (+39.7s). One tab would likely cross the ceiling with the passes
+    # (one tab with them was not measured); two tabs fit. A standard
+    # ubuntu-latest runner of a public repository has 4 vCPU and 16 GB, which
+    # meets the runner's own two-tab default (4 cores, 8 GiB), so this is what
+    # the machine rule would pick; it is written out so the count does not
+    # move with the image (a runner with fewer cores would take one tab by
+    # that rule, and this line would override it). Not measured on a runner:
+    # the first manual dispatch is the measurement (layout/PROBE-RULES.md,
+    # "CI's layout job on two tabs", "The contrast pass walks on two tabs" and
+    # "The geometry passes walk on two tabs").
     env:
-      LAYOUT_CONTRAST_TABS: '1'
+      LAYOUT_CONTRAST_TABS: '2'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

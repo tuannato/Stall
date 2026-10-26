@@ -39,8 +39,22 @@
  *   to Neo's and Rural's ids, and the Neo starter's outlined lines on the
  *   rain's own screens were never ring-read.
  *
+ * - **The staged address screens follow the sheets that name them** (the
+ *   fifth review's ranked item 4). `addr-shown` and `addr-copied` paint the
+ *   address box in the two states only a press reaches (`STAGED` in
+ *   `fixtures.ts`), and they are geometry only: a rule under
+ *   `[data-copied='true']` is measured at rest by them. But a custom
+ *   property such a rule sets can feed a paint, and no contrast job read
+ *   one. So the two are sampled (`COPIED_JOBS`) for each measured look whose
+ *   sheet names `[data-copied]` (`NamesCopied`: the probe answers it from the
+ *   stylesheets the page has loaded, and the runner holds that answer to the
+ *   sheets it serves, read as the look lint reads them). No public look names
+ *   it today, so a public run's plan is unchanged; a private look that does
+ *   owes the two screens bare and all worn, at the phone and the desk.
+ *
  * Tests: `the-contrast-plan-is-every-job-the-pass-owes`,
- * `every-starter-is-measured-as-its-shipped-look`.
+ * `every-starter-is-measured-as-its-shipped-look`,
+ * `the-staged-address-screens-are-sampled-for-the-looks-that-name-them`.
  */
 import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, paintsBareOnly } from './fixtures';
 import { canWear, wornAllFlags, type Look } from './looks';
@@ -256,6 +270,18 @@ export function contrastOwed(looks: readonly Look[]): { rain: string[]; horizon:
     return { rain, horizon };
 }
 
+/**
+ * The staged address screens (`STAGED`, `fixtures.ts`), sampled for contrast
+ * only for a look whose sheet names `[data-copied]`: the attribute the box
+ * carries in the states a press reaches. Both are page screens, so they are
+ * planned at the phone and the desk.
+ */
+export const COPIED_JOBS: readonly string[] = ['addr-shown', 'addr-copied'];
+
+/** Whether a look's sheet names `[data-copied]` — answered by the probe from the stylesheets the page loaded, by the tests from a stand-in. */
+export type NamesCopied = (look: Look) => boolean;
+const NEVER: NamesCopied = () => false;
+
 /** The overlay screens the pass samples; every other overlay screen is geometry. */
 export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broadcast-ticker']);
 
@@ -265,14 +291,17 @@ export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broad
  * that carries the rain is measured — in the order the plan walks them,
  * which the runner compares.
  */
-export function contrastScreens(width: number, canvas: boolean, looks: readonly Look[]): string[] {
+export function contrastScreens(width: number, canvas: boolean, looks: readonly Look[], namesCopied: NamesCopied = NEVER): string[] {
     const regular = sampledScreens(width, canvas, looks);
     const rainy = looks.filter((look) => carries(look, RAIN_CLASS));
     const at = screensAt(width, canvas);
     const rain = RAIN_JOBS.filter(
         (screen) => at.includes(screen) && rainy.some((look) => canWear(look, screen)) && !regular.includes(screen),
     );
-    return [...regular, ...rain];
+    const copied = COPIED_JOBS.filter(
+        (screen) => at.includes(screen) && looks.some((look) => namesCopied(look) && canWear(look, screen)) && !regular.includes(screen),
+    );
+    return [...regular, ...rain, ...copied];
 }
 
 /** The screens every measured look is sampled on at one viewport. */
@@ -290,7 +319,7 @@ function sampledScreens(width: number, canvas: boolean, looks: readonly Look[]):
 }
 
 /** Every job of the pass over `looks`, viewport by viewport, in the order the runner walks them. */
-export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
+export function contrastPlan(looks: readonly Look[], namesCopied: NamesCopied = NEVER): ContrastJob[] {
     const jobs: ContrastJob[] = [];
     for (const viewport of CONTRAST_VIEWPORTS) {
         for (const screen of sampledScreens(viewport.width, viewport.canvas, looks)) {
@@ -324,8 +353,8 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
         // The rain's own screens, all worn, on every look that carries the
         // rain (`RAIN_JOBS`).
         const regular = sampledScreens(viewport.width, viewport.canvas, looks);
-        const pageScreens = contrastScreens(viewport.width, viewport.canvas, looks);
-        for (const screen of pageScreens.filter((name) => !regular.includes(name))) {
+        const pageScreens = contrastScreens(viewport.width, viewport.canvas, looks, namesCopied);
+        for (const screen of pageScreens.filter((name) => !regular.includes(name) && RAIN_JOBS.includes(name))) {
             for (const look of looks.filter((l) => carries(l, RAIN_CLASS) && canWear(l, screen))) {
                 jobs.push({
                     key: `${viewport.name}/${screen}/${look.id}/${WORN_ALL}`,
@@ -337,6 +366,26 @@ export function contrastPlan(looks: readonly Look[]): ContrastJob[] {
                     sheetClass: look.theme.sheetClass,
                     flags: WORN_ALL,
                 });
+            }
+        }
+        // The staged address screens, bare and all worn, on each look whose
+        // sheet names `[data-copied]` (`COPIED_JOBS`), in the order
+        // `contrastScreens` lists them.
+        for (const screen of pageScreens.filter((name) => !regular.includes(name) && COPIED_JOBS.includes(name))) {
+            for (const look of looks.filter((l) => namesCopied(l) && canWear(l, screen))) {
+                const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, ...wornAllFlags(look)];
+                for (const flags of variants) {
+                    jobs.push({
+                        key: `${viewport.name}/${screen}/${look.id}/${flags}`,
+                        viewport: viewport.name,
+                        width: viewport.width,
+                        height: viewport.height,
+                        screen,
+                        look: look.id,
+                        sheetClass: look.theme.sheetClass,
+                        flags,
+                    });
+                }
             }
         }
         // The aurora alone at both ends of its tide, last in the viewport and
