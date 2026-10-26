@@ -10157,19 +10157,208 @@ geometry rule that fails.
 | PH (every shelf cut to its first row by `overflow: hidden`) | 186 at 390 and 1280, 140 at the canvas, 128–172 on each other wall pass, 76 at 360, 6 reduced motion; contrast 152 — 1,892 of these 2,012 a point past a cutting clip (the shelf, `div.items`, the wall's strip among them, or a row card it squeezed), the rest a figure covered by the row beside it | the self-clip rule, the wall's cut-from-below rule, `LINE_SKIP_CEILING` |
 | PT (a keyframe `visibility: hidden` on the quote's column, 120s later) | contrast 48 | the dress rule (above) |
 
-### Pending for the owner, stated
+### Pending for the owner at 7a, closed since
 
-- **PF2**: a cover that arrives at the end of a finite animation and stays
-  (`forwards`), read by no probe rule — 1a reads at rest, the instants stop
-  at six sevenths of the longest animation. An end-state read is not built.
-- **PT2**: a keyframe on a custom property or an inherited ink on a box
-  above a figure, which hides it from every probe read. Seeking each
-  animation to each keyframe offset is not built.
-- **The lint belt**: the first-party look lint refuses both plants as
-  written since lint-belts (a custom property in a keyframe; a scale to 0)
-  and admits an inherited ink in one (`color: transparent` at the same
-  offsets, measured with the critic's lint tool). A belt for that is the
-  owner's.
+PF2 (a cover that arrives at the end of a finite animation and stays), PT2
+(a keyframe on a custom property or an inherited ink on a box above a
+figure) and the inherited-ink lint belt were the owner's at 7a. All three
+are built since D-2026-10-26-03: "Before 8g2: money read at every keyframe
+and at the end of a lasting animation", below.
+
+The README labels are unchanged: "most" stays until step 10.
+
+## Before 8g2: money read at every keyframe and at the end of a lasting animation (2026-10-26; the critic's third review, items 1 and 2; D-2026-10-26-03)
+
+The owner took both of the critic's recommendations (D-2026-10-26-03). The
+plants are the critic's, `PT2-var-rural.css` and `PF2-end-modern.css` in
+`private/design/workshop-2026-09-23/before-8g2/critic3/plants/`; the logs
+and tools of this round are in `before-8g2/pt2pf2/`.
+
+### The held dress at every keyframe offset (PT2)
+
+The critic's PT2: `@keyframes t-rural-ink { 25%, 68% { --s-text: transparent } }`
+run on Rural's quote row `.item-a` for 100s, looping. Rural's quote figure
+takes its ink from `var(--s-text)`, so it is clear from 12.5% to 84% of the
+cycle (an unregistered custom property flips halfway between keyframes;
+measured in Chrome). Every check passed: the dress rule read a keyframe by
+the longhands it names, and this one names none; the instants read the
+cover rules, not the ink; the contrast pass freezes at 400ms.
+
+- `offsetDressFaults`, the dress rule's fifth read, after the others. Every
+  animation on an element (not a pseudo-element, which nothing inherits
+  from) that is a money subject, an element under it with text, or a box
+  above it up to and with its stall, is seeked alone to each of its own
+  keyframe offsets and to 0 and 1. For the read its timing is one normal,
+  linear iteration, filled both ways, with no delay, so `offset × duration`
+  is that keyframe's own value. The timing and the time are put back after.
+  Every other animation stands where the pass's last instant left it.
+- At each offset, every subject the animation can reach is read with the
+  dress rule's own readers: it must still render (`rendersAt`); its own
+  elements under the animated box are held on `OFFSET_HELD_OWN` by
+  `dressHeldFault` (the ink's alpha, the fill, the stroke width, opacity,
+  `visibility`, `content-visibility`, a filter, a blend, the transforms, a
+  zoom, a clip-path, a mask, a text shadow); every box between it and the
+  animated box is held on `BOX_HELD` by `boxHeldFault`. A failure names the
+  animation, its box and the offset ("with t-rural-ink on span.item-a seeked
+  to its keyframe at 25%"); one the instant's read said already is not said
+  again.
+- **The properties come from the `@keyframes` rule** (`keyframesDeclare`,
+  read from the page's sheets, again when a sheet is added). Chrome's
+  `getKeyframes()` lists no custom property for a CSS animation: PT2 reads as
+  four keyframes, offsets 0, 0.25, 0.68 and 1, with no values (measured). The
+  offsets come from `getKeyframes()`.
+- **An animation is not seeked when its keyframes set only `SEEK_NEEDLESS`
+  longhands** (`seekNeedless`): none inherited (or `visibility`, held where
+  it is written), each held at its written value by `animationFaults` and
+  `keyframeHeld` already (a transform and its parts, an opacity, a filter, a
+  blend, a clip, a motion path, a zoom, `visibility`, `content-visibility`, a
+  size), or reaching no held longhand (where a box stands, a background, a
+  box shadow, an outline). Anything else is seeked: a custom property, an
+  inherited ink or shadow, a font, a property the list does not name. On the
+  clean tree that leaves the aurora's `--au-tide` and the sunburst's
+  `--att-sun-angle` on the stall's root, two offsets each; every Rural tag's
+  sway, every sign's swing and sweep, and the marquee are skipped. Measured
+  in sessions over the desk pass's screens: 2,566 animations seeked in 3.1s
+  without the skip, 206 in 0.44s with it.
+- **Not read, stated**: a value between two offsets (a timing function that
+  overshoots, `cubic-bezier()` with a y outside 0–1 or `linear()` with
+  points outside them, can carry a value past both its keyframes); two
+  animations at once; a pseudo-element's animation; at an offset, the
+  grounds under the glyphs, the lines, the spacing and an outline's ring
+  (read at the pass's last instant alone); an animation whose duration is
+  not a finite time over 0.
+
+Red, the whole runner (exit 1): PT2 fails `a-money-figure-is-never-misdressed`
+76 times at 390, 94 at 1280, 333 at the canvas, 351 on the portrait wall,
+60 on desk-wall, 78 on each of the other six wall passes and 64 at 360,
+every Rural quote figure under `.item-head-q .item-a` ("an ink at alpha 0
+(rgba(0, 0, 0, 0)) … with t-rural-ink on span.item-a seeked to its keyframe
+at 25%"). The contrast pass stays green: it reads one frozen instant. The
+critic ran PT2 green through the whole runner at ffecdc7, and 7a added no
+read of it (not run again here).
+
+### 1a at the end of a lasting animation (PF2)
+
+The critic's PF2: a Modern quote head's own `::after` laid over every cell of
+its grid, in the card's ground, `transform: scaleY(0)` until 95% of a 10s
+run, then none, filled forwards. At rest (its delay zeroed, 0s), at 400ms
+and at every instant (they stop at six sevenths of the longest animation)
+it has no area; from 9.5s on it covers the figure and Pay for good. Every
+check passed.
+
+- `coverAtEnd`, after 1a's read at rest. On a paint with an animation that
+  keeps its end (`keepsItsEnd`: a finite run longer than nothing, filled
+  `forwards` or `both`; a pseudo-element's included), each such animation is
+  seeked to its end time and 1a reads the paint again. Every other animation
+  stands where the read at rest left it. Nothing is put back: 1a is the
+  paint's last read, and the next paint throws the tree away.
+- A failure says "at the end of t-modern-pf: …". Its points join the look's
+  tally, so the clip ceiling reads them; it is not a paint of its own (the
+  tally's `paints` is unchanged). The verdict carries `coverEnd` (reads,
+  failures, and the animations seeked by name) and `coverEndMs`, a clock the
+  geometry canary leaves out; the runner prints them per pass.
+- **On the clean tree only the marquee pays** (`mq-run`, filled both, on a
+  cut name; by name in sessions at 390, 1280 and the canvas over every page
+  screen, and over the wall screens at 1024x768 and 768x1024). Reads at the
+  end, per pass: 145 at 390, 70 at 1280, 31 at the canvas, 0 on the
+  portrait wall, 189 on the tablet and on the tall tablet, 122 on desk-wall,
+  117 on the short wall, 392 on the side tablet, 79 on the hd wall, 246 on
+  the narrow wall, 236 at 360, 0 under reduced motion: 1,816, no failure.
+- **The app's own one-shots, staged** (the critic's item 6). No fixture
+  paints a press, so a scratch copy of `pay-several-strip` with
+  `selectionEntered` and `selectionBumped` was painted in a session (not
+  committed). The end read found nothing: `sel-unfold` (19 paints) and
+  `sel-line-in` (38) at 390, `sel-fade` (19) and `sel-line-in` (38) at 1280,
+  the tray open and the lines in place. But that paint fails two older
+  reads. `keyframeHeld`: 57 failures at 390 and 57 at 1280 (`sel-unfold`
+  names a size; `sel-fade` and `sel-line-in` an opacity of 0 and a shift at
+  0%). And at 390 1a at rest: 38 (with its delay zeroed, `sel-unfold` stands
+  at 0% at rest, the tray closed, and the total and Pay stand past
+  `div.sel-tray-in`'s cutting clip). Neither is this round's; no run sees
+  either, because no fixture paints a press. Both are false reds of the
+  app's own entrance, for the owner. Not fixed.
+- **Not read, stated**: one animation's end against another's (each lasting
+  one is seeked to its end together, every other at rest); a run whose end
+  is not its latest frame; and the contrast pass's one read a job, which
+  stays at its frozen instant.
+
+Red, the whole runner (exit 1): PF2 fails
+`nothing-covers-money-or-a-protected-box` 53 times at 390, 73 at 1280, 109
+at the canvas, 140 on the portrait wall, 91 on the tablet and on desk-wall,
+100 on the short wall, the hd wall and the tall tablet, 99 on the side
+tablet, 92 on the narrow wall and 29 at 360, every one "at the end of
+t-modern-pf": the quote's figure (`span.item-x[seller-price]`) and its Pay
+(`button.buy.pay-btn`) covered by `div.item-head.item-head-q`, the pseudo's
+owner. The contrast pass stays green. The critic ran PF2 green through the
+whole runner at ffecdc7, and 7a added no read of it (not run again here).
+
+### 1a's earlier plants, on this round's code
+
+Each alone through the whole runner, each to exit 1, with the same counts
+7a's table has: PC2 44 failures of 1a at 390, 59 at 360, 10 under reduced
+motion, contrast 20; PB 10 at 390, 10 at 360, contrast 6; PWa 16 at 1280,
+70 at the canvas, 70 to 86 on each other wall pass, contrast 8. The end
+read adds none of its own to them: a cover it finds at rest too, word for
+word, is said once (`coverRead`). It said each twice until the red proofs
+showed it — PC2 read 116 at 360 — and was fixed (0bbdff6).
+
+The clean tree (0bbdff6, the timing pairs' branch runs below, and the
+earlier run of the same code but the dedupe): exit 0, 0 failures on every
+pass and the contrast pass.
+
+### The inherited-ink belt
+
+`lintLookSheet` (first party only) refuses an inherited longhand that paints
+text in any keyframe (`KEYFRAME_INK`, `scripts/workshop-css.mjs`): `color`,
+`text-shadow`, `caret-color`, `text-emphasis` and its longhands with their
+`-webkit-` twins, `paint-order`, `font-palette`. The fill colour and the
+stroke are refused everywhere already (`REFUSED_PROPERTIES`), and the tap
+highlight is `transparent` everywhere. The kit is unchanged.
+
+- Cost nil, read by the lint itself
+  (`a-keyframe-never-sets-an-inherited-ink`): no first-party sheet a run
+  serves sets one in a keyframe — the shipped looks, the three starters
+  linted first party, the fixture look, the tracked private fixture and the
+  canary — and the selected check with the private look at 0x04 (commit
+  `168234a`) passes, 242 of 242. stall.css does set two (the sign's failing
+  lamp, `att-hum-gutter`, and the door's pin demo), and it is no look sheet.
+- New plant set `i1`, 22: 18 refused (PT2's shape with `color:
+  transparent` first, then every property, a `var()`, `currentColor`, a
+  pseudo-element that runs it, a media block, a stop beside an opacity) and
+  4 controls. Five older plants moved with the belt: `g1:130` (`color: red`
+  in the sheet's own keyframe, run on `.item-a`) was accepted and is
+  refused; `f2:18`, `g1:131`, `g1:139` and `h1:9` are refused by the belt as
+  well. 1,222 plants: 924 refused, 298 accepted.
+- Red by mutation: the belt switched off, 5 tests fail (the new describe's
+  refusals and the `f2`, `g1`, `h1` and `i1` sets); `text-shadow` and
+  `caret-color` dropped from its list, 3 fail.
+
+### Cost
+
+Two pairs back to back on this Mac, main (c1f3e97) then the branch
+(0bbdff6), two tabs, the tracked fixture carried (796 contrast jobs), no
+other probe running:
+
+| Pair | Main | Branch | Load (main, then the branch) |
+|---|---|---|---|
+| 1 | 246.5s | 263.3s | 4.6 → 4.0, then 4.0 → 3.3 |
+| 2 | 246.9s | 263.4s | 3.3 → 3.1, then 3.1 → 3.8 |
+
+The branch is +16.8s and +16.5s: its geometry walk 103.0 → 137.0s and
+103.8 → 135.0s, its contrast pass 134.5 → 117.9s and 134.6 → 119.9s (the
+horizon's worst pruned, 1f44e05; this round adds nothing to the contrast
+pass). 7a's own pairs read the branch +11.3s and +9.8s over main, the walk
++25.0s and +23.5s, so this round is about +5 to +7s of wall time, +7 to
++10s of the walk; one pair of this round against 7a was not run. The two
+reads' own page time, summed over the geometry passes: the end read 8.0s
+and 8.1s (1,816 reads), the keyframe offsets 4.15s and 4.16s (1,520
+animations, 3,040 seeks, 17,124 figure reads). 36.6s stand under the 300s
+ceiling.
+
+**A prune, if one is needed, not built**: every end read on the clean tree is
+the marquee's, so a by-value exception for it (a transform alone, inside a
+cell that clips and holds no asked node) would take back most of the 8s of
+page time, at the cost of an exception 1a would then have to hold.
 
 The README labels are unchanged: "most" stays until step 10.
 
