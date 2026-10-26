@@ -378,6 +378,20 @@ const cycleListing = (sats: bigint): StallView =>
         readAtMs: 1_756_400_000_000 - 120_000,
     });
 
+/**
+ * One quote card on the stream's corner preset, at `price`, as the only quote
+ * so that the cursor lands on it: the quote card's money tiers (below).
+ */
+const bcQuote = (price: TokenPrice): StallView =>
+    base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, price]]),
+        genesis: GENESIS,
+        broadcast: bc('corner', 'fixed', false, 'quotes'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    });
+
 /** One quote on the wall's Cycle card, on the quotes rail, at `price`. */
 const cycleQuote = (price: TokenPrice): StallView =>
     base({
@@ -2056,8 +2070,9 @@ export const SCREENS: Record<string, StallView> = {
      *   `from 1,234,567` 11 characters, 3 on Modern and Neo, 2 on Rural
      *
      * Together they paint tier 2 on every look and tier 1 on Rural, and the
-     * runner owes each (`STREAM_TIERS_OWED`). Geometry only: the ink and the
-     * ground are `broadcast`'s, already sampled there.
+     * runner owes each (`STREAM_TIERS_OWED`). Geometry only, so the colour a
+     * look gives the figure at a tier is read by the dress rule's ground read
+     * alone and by no contrast job (`broadcast` is sampled, at tier 3).
      */
     'broadcast-from-123456': base({
         fetch: { kind: 'offers', offers: [offer(T1, 0, 12_345_600n)] },
@@ -2071,6 +2086,31 @@ export const SCREENS: Record<string, StallView> = {
         broadcastState: 'live',
         broadcastCursor: 0,
     }),
+    /*
+     * The quote card's money tiers (the lint-belts critic's sixth review,
+     * ranked item 1). The quote card wears the same ladder as the listing
+     * card (`priceTier` against the look's `overlayTierCeilings`, over the
+     * whole figure with its unit and no `from`), and `[data-tier]` sizes the
+     * seller's own figure under `[data-role='seller-price']`, which a look may
+     * match: but every quote fixture painted tier 0 (`$5.00`), so a rule under
+     * `[data-tier='1']`, `'2'` or `'3'` for that role was read by no pass. An
+     * XEC quote at exponent 0 prints as `N XEC`, so the figure's length is the
+     * number's plus four, and four cards put tiers 1, 2 and 3 on every look:
+     *
+     *   `123 XEC`        7 characters: tier 1 on Modern, Neo and the skeleton (5, 7, 9), 0 on Rural (8, 10, 12)
+     *   `1,234 XEC`      9: tier 2, and tier 1 on Rural
+     *   `123,456 XEC`   11: tier 3, and tier 2 on Rural
+     *   `1,234,567 XEC` 13: tier 3 on every look, Rural's included
+     *
+     * Each is the only quote on the stall, so the cursor lands on it. The
+     * runner owes each look the tiers in `STREAM_TIERS_OWED`, per rail.
+     * Geometry only, as above: the colour at a tier is the dress rule's
+     * ground read alone, and `broadcast-quotes` is the sampled quote card.
+     */
+    'broadcast-quote-7': bcQuote({ code: 'xec', exponent: 0, amount: 123n }),
+    'broadcast-quote-9': bcQuote({ code: 'xec', exponent: 0, amount: 1_234n }),
+    'broadcast-quote-11': bcQuote({ code: 'xec', exponent: 0, amount: 123_456n }),
+    'broadcast-quote-13': bcQuote({ code: 'xec', exponent: 0, amount: 1_234_567n }),
     /*
      * The other rail's card, on the same plate: `cards=quotes`.
      *
@@ -2498,9 +2538,14 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'embed-sheet',
     'stream-sheet',
     'broadcast-hero',
-    // The stream card's tiers 1 and 2: `broadcast`'s plate and ink with a figure of another length.
+    // The stream card's tiers 1 and 2: `broadcast`'s plate with a figure of another length.
     'broadcast-from-123456',
     'broadcast-from-1234567',
+    // The quote card's tiers 1, 2 and 3: `broadcast-quotes`' plate with a figure of another length.
+    'broadcast-quote-7',
+    'broadcast-quote-9',
+    'broadcast-quote-11',
+    'broadcast-quote-13',
     // The remove question in place of a stepper: two words in the row's own
     // ink, on the ground `pay-several-strip` already samples.
     'pay-several-ask',
@@ -2727,6 +2772,10 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-clear',
     'broadcast-from-123456',
     'broadcast-from-1234567',
+    'broadcast-quote-7',
+    'broadcast-quote-9',
+    'broadcast-quote-11',
+    'broadcast-quote-13',
     'broadcast-quotes',
     'broadcast-quotes-clear',
     'broadcast-quotes-long-name',
@@ -2804,6 +2853,10 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast-clear',
     'broadcast-from-123456',
     'broadcast-from-1234567',
+    'broadcast-quote-7',
+    'broadcast-quote-9',
+    'broadcast-quote-11',
+    'broadcast-quote-13',
     'broadcast-quotes',
     'broadcast-quotes-clear',
     'broadcast-quotes-long-name',

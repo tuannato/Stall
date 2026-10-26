@@ -26,7 +26,10 @@
  * (`STATE_EXCEPT_PAINTED`: no fixture paints `square`, `story`, `stream` or
  * a pay code switched off), and painted `data-tier='2'` instead of naming it
  * a state: it sizes the figure the stream shows, and a state may not size a
- * figure. `broadcast-from-123456` and `broadcast-from-1234567` paint it.
+ * figure. `broadcast-from-123456` and `broadcast-from-1234567` paint it on
+ * the listing card, and `broadcast-quote-7`, `-9`, `-11` and `-13` on the
+ * quote card (the sixth review). A painted value under `:not()` is a state
+ * (`attributeIsAState`).
  */
 import { describe, expect, it } from 'vitest';
 import { renderStall } from '../src/ui/render';

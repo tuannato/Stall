@@ -62,10 +62,11 @@
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
- * - **The stream card's money tiers** (the fifth review's ranked item 1)
- *   are counted per look (`streamTierByClass`) and the canvas pass owes
- *   each look the tiers in `STREAM_TIERS_OWED`: tier 2 on every look, tier 1
- *   on Rural.
+ * - **The stream card's money tiers** (the fifth and sixth reviews' ranked
+ *   item 1) are counted per look and per rail (`streamTierByClass`) and the
+ *   canvas pass owes each look the tiers in `STREAM_TIERS_OWED`: for the
+ *   listing card tier 2 on every look and tier 1 on Rural, for the quote card
+ *   tiers 1, 2 and 3 on every look.
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
@@ -290,20 +291,24 @@ export const CARD_FIGURES_OWED = Object.freeze([
 export const CARD_LADDERS_OWED = Object.freeze(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
 /**
  * The money tiers the stream card's price row (`data-tier` on `.bc-p`) is
- * owed on each look the canvas pass paints (the lint-belts critic's fifth
- * review, ranked item 1): tier 2 on every look and tier 1 on Rural, which
- * `broadcast-from-123456` (`from 123,456`) and `broadcast-from-1234567`
- * (`from 1,234,567`) paint with the older cards' tiers 1 and 3. Keyed by the
- * ladder the look's row states (`overlayTierCeilings`: Modern, Neo and the
- * skeleton 5, 7, 9; Rural 8, 10, 12) and pinned by value. A look not named
- * here (the kit's, a carried private look's, whose ceilings are its own)
- * owes nothing.
+ * owed on each look the canvas pass paints, **per rail** (the lint-belts
+ * critic's fifth and sixth reviews, ranked item 1). `listings` is the
+ * covenant's asked amount (`[data-role='price']`): tier 2 on every look and
+ * tier 1 on Rural, which `broadcast-from-123456` (`from 123,456`) and
+ * `broadcast-from-1234567` (`from 1,234,567`) paint with the older cards'
+ * tiers 1 and 3. `quotes` is the seller's own figure
+ * (`[data-role='seller-price']`): tiers 1, 2 and 3 on every look, which
+ * `broadcast-quote-7`, `-9`, `-11` and `-13` (an XEC quote of 7, 9, 11 and 13
+ * characters) paint. Keyed by the ladder the look's row states
+ * (`overlayTierCeilings`: Modern, Neo and the skeleton 5, 7, 9; Rural 8, 10,
+ * 12) and pinned by value. A look not named here (the kit's, a carried
+ * private look's, whose ceilings are its own) owes nothing.
  */
 export const STREAM_TIERS_OWED = Object.freeze({
-    't-modern': Object.freeze(['2']),
-    't-neo': Object.freeze(['2']),
-    't-rural': Object.freeze(['1', '2']),
-    't-skeleton': Object.freeze(['2']),
+    't-modern': Object.freeze({ listings: Object.freeze(['2']), quotes: Object.freeze(['1', '2', '3']) }),
+    't-neo': Object.freeze({ listings: Object.freeze(['2']), quotes: Object.freeze(['1', '2', '3']) }),
+    't-rural': Object.freeze({ listings: Object.freeze(['1', '2']), quotes: Object.freeze(['1', '2', '3']) }),
+    't-skeleton': Object.freeze({ listings: Object.freeze(['2']), quotes: Object.freeze(['1', '2', '3']) }),
 });
 /** The touch wall's controls and held lines, by role: a pass that read none of one read nothing of it. */
 const WALL_ROLES = [
@@ -535,13 +540,16 @@ export function probeCoverageGaps(
             }
         }
     }
-    // The stream card's money tiers (the fifth review): the canvas pass owes each look the tiers its ladder is painted at.
+    // The stream card's money tiers (the fifth and sixth reviews): the canvas pass owes each look the tiers its ladder is painted at, per rail.
     if (pass === 'canvas') {
         const read = report.streamTierByClass ?? {};
         for (const cls of report.sheetClasses ?? []) {
-            for (const tier of STREAM_TIERS_OWED[cls] ?? []) {
-                if (!(((read[cls] ?? {})[tier] ?? 0) > 0)) {
-                    gaps.push(`the stream card's money tier ${tier} was painted by no fixture on a ${cls} stall: a look's rule under [data-tier='${tier}'] would be measured by no pass`);
+            for (const [rail, tiers] of Object.entries(STREAM_TIERS_OWED[cls] ?? {})) {
+                for (const tier of tiers) {
+                    if (!((((read[cls] ?? {})[rail] ?? {})[tier] ?? 0) > 0)) {
+                        const role = rail === 'quotes' ? 'seller-price' : 'price';
+                        gaps.push(`the stream card's ${rail} money tier ${tier} was painted by no fixture on a ${cls} stall: a look's rule under [data-tier='${tier}'] for [data-role='${role}'] would be measured by no pass`);
+                    }
                 }
             }
         }
@@ -740,7 +748,13 @@ export function probeCoverageLine(pass, report) {
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
     // The stream card's money tiers the canvas pass read, per look and tier (`STREAM_TIERS_OWED`).
-    const streamTiers = Object.keys(report.streamTierByClass ?? {}).length === 0 ? '' : ` · stream card tiers read: ${perClass(report.streamTierByClass)}`;
+    const streamTiers =
+        Object.keys(report.streamTierByClass ?? {}).length === 0
+            ? ''
+            : ` · stream card tiers read: ${Object.entries(report.streamTierByClass)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([cls, rails]) => `${cls} ${Object.entries(rails).sort(([a], [b]) => a.localeCompare(b)).map(([rail, tiers]) => `${rail} ${Object.entries(tiers).map(([tier, n]) => `${tier}:${n}`).join('/')}`).join(' ')}`)
+                  .join(', ')}`;
     if (!PAGE_PASSES.has(pass)) {
         return [`unbuyable labels read: ${read || 'none'}${skipped}${streamTiers}`, wall || (money + hiddenSmall + marks).replace(/^ · /, '')]
             .filter(Boolean)

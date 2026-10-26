@@ -1222,6 +1222,19 @@ money path this app can have, because nothing on it is derived.
 - **A Cashtab patch** that preselects a maker on the token market is not on
   Stall's buy path. It remains optional help for people who buy in Cashtab
   from somewhere else, never a blocker.
+- **Three gaps in the first-party look lint and the probe, stated and not
+  closed** (the lint-belts critic's sixth review, 2026-10-26; the window asked
+  for the entry, not the fixes). (1) A longhand that names no keyframe
+  (`animation-delay`, `animation-duration`) re-times what the cascade already
+  runs on its element, a base sheet's keyframe included: `.bc-ext { animation-delay:
+  120s }` re-times `bc-in`. The lint reads names, not timings. (2) The poster's
+  print, square, story and stream formats are painted by no fixture, so a rule
+  that reaches one is read by no pass (the `data-format` values `square`, `story`
+  and `stream` are belt states for that reason; the print page is measured by
+  hand, `scripts/print-measure.mjs`). (3)
+  `stroke-miterlimit` is uncapped: a miter join with a large limit reaches that
+  many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
+  and the plants: `layout/PROBE-RULES.md`, "The state belt".
 
 ---
 

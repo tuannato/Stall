@@ -1468,7 +1468,9 @@ export const STRUCTURAL_PSEUDO_CLASSES = Object.freeze([
  * screen `addr-copied` paints it, so a rule under it is measured at rest
  * (`layout/stateAttributes.test.ts` holds both). `data-tier='2'` is not
  * here either: it sizes a figure, which a state may not, so the stream card's
- * two fixtures paint it (`broadcast-from-123456`, `broadcast-from-1234567`).
+ * fixtures paint it, per rail: the listing card's two (`broadcast-from-123456`,
+ * `broadcast-from-1234567`) and the quote card's four (`broadcast-quote-7`,
+ * `-9`, `-11` and `-13`).
  */
 const STATE_ATTRIBUTE_NAMES = new Set(['data-turn', 'open', 'hidden', 'data-state', 'aria-disabled', 'data-over']);
 
@@ -2537,7 +2539,10 @@ function outlineCapProblems(decls) {
  *   side of the line, or `auto` or `from-font`;
  * - `text-decoration-thickness`, and the thickness a `text-decoration`
  *   shorthand carries, at most `DECORATION_THICKNESS_MAX_PX` (3px), or `auto`
- *   or `from-font`;
+ *   or `from-font`; **the shorthand is read by an allow-list** (the sixth
+ *   review's M1): each token is a line or style keyword, `auto`, `from-font`,
+ *   a colour this lint reads or a palette role, or a px length within the cap,
+ *   and every other token, a function of any name included, is refused;
  * - `stroke-width`, a bare number or px, at most `STROKE_WIDTH_MAX` (3; the
  *   shipped glyphs paint 1.75 to 2);
  * - the `d` property, which draws an SVG path from CSS, is not written.
@@ -2694,16 +2699,26 @@ function blurCapProblems(decls) {
  * the money size lint refuses in a look's own keyframes and never reads in a
  * base sheet's; `animation-name: var(--an)` does the same through a custom
  * property. So in a first-party sheet each rule's `animation` and
- * `animation-name` name `none` or a keyframe the same sheet declares
- * (`@keyframes` anywhere in it, a media block included), and never through a
- * `var()`: the keyframes a look runs are the keyframes the look lint reads.
+ * `animation-name` name `none` or a keyframe the same sheet declares at its
+ * top level, and never through a `var()`: the keyframes a look runs are the
+ * keyframes the look lint reads. **Only a top-level `@keyframes` block counts**
+ * (the sixth review's M2): inside `@media` a keyframe applies only while the
+ * condition does, below it a base sheet's keyframe of the same name is the one
+ * that runs, so a keyframe inside an at-rule is refused where it is written
+ * (`lintLook`); `@keyframes x;` has no block, is no keyframes, and counts as
+ * none. `declaredNames` (the cross-sheet rule) reads names without their quotes.
  * The shorthand is read single by single (`parseSingleAnimation`, the flash
  * rule's reader). `inherit`, `revert` and `revert-layer` take the parent's or
  * the cascade's name and are refused; `initial` and `unset` are `none`. Under
  * a state the belt refuses `animation*` by name. Cost: nil — every shipped
  * look, the fixture look, the tracked private fixture and the canary run
  * only their own keyframes, and so does every starter (`workshop:start`
- * renames the keyframes `wk-…` and the rules with them).
+ * renames the keyframes `wk-…` and the rules with them); none declares a
+ * keyframe inside an at-rule. **Not read, stated**: a longhand that names no
+ * keyframe (`animation-duration`, `animation-delay`) is not harmless. It
+ * re-times what the cascade already runs on its element, a base sheet's
+ * keyframe included (`.bc-ext { animation-delay: 120s }` re-times
+ * `.bc-ext.in`'s `bc-in`), and nothing here reads it.
  */
 function keyframeNamesOf(nodes) {
     const out = new Set();

@@ -617,7 +617,7 @@ const CARRIED_FILE_ART =
  * `layout/contrastPlan.ts`), and the page derives the same list from the
  * stylesheets it loaded (`layout/sheetNaming.ts`). The contrast pass holds
  * the page's list and the plan's to this one. No public look names it, so a
- * public run's plan is unchanged; the private look at 0x04 does.
+ * public run's plan is unchanged; any carried look whose sheet names it gets the jobs.
  */
 const NAMES_COPIED = (await servedSheets({ env: CARRIED.env }))
     .filter((row) => ['look', 'kit', 'private'].includes(row.role) && EXPECTED_SHEET_CLASSES.includes(row.lookClass) && sheetNamesAttribute(row.css, 'data-copied'))

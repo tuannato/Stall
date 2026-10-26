@@ -2269,28 +2269,36 @@ const cardLadderSizes: Record<string, Record<string, Record<string, LadderTiers>
 const cardLadderByClass: Record<string, Record<string, string>> = {};
 
 /*
- * **The stream card's money tiers are read** (the lint-belts critic's fifth
- * review, ranked item 1). A look may size the stream's figure under
- * `[data-tier='2']` (it is a value of `STATE_ATTRIBUTES`), and the fixtures
- * that painted a card painted tiers 1 and 3 only, so a rule under tier 2 was
- * read by no pass. `broadcast-from-123456` and `broadcast-from-1234567` paint
- * the two lengths between (`from 123,456` and `from 1,234,567`), which with
- * the older cards put tier 2 on every shipped look and tier 1 on Rural. The
- * tier each listing card's price row wore is counted per look
- * (`streamTierByClass`, `"2"` for a row on the ladder's second step, `"0"`
- * for a row with none); the runner owes the canvas pass the tiers in
- * `STREAM_TIERS_OWED`, so a fixture that stopped painting one, or a ceiling
- * that moved it, fails the run rather than leaving a rule under the tier
- * unmeasured. Counting only: the card's figure is held by every other rule
- * of the canvas pass (the dress, the spill, the cover and the self-clip).
+ * **The stream card's money tiers are read, per rail** (the lint-belts
+ * critic's fifth and sixth reviews, ranked item 1). A look may size the
+ * stream's figure under `[data-tier='2']` (it is a value of
+ * `STATE_ATTRIBUTES`), and the fixtures that painted a card painted tiers 1
+ * and 3 only, so a rule under tier 2 was read by no pass.
+ * `broadcast-from-123456` and `broadcast-from-1234567` paint the two lengths
+ * between (`from 123,456` and `from 1,234,567`), which with the older cards
+ * put tier 2 on every shipped look and tier 1 on Rural. **The quote card
+ * wears the same ladder** under `[data-role='seller-price']`, a figure of
+ * its own, and every quote fixture painted tier 0 (the sixth review):
+ * `broadcast-quote-7`, `-9`, `-11` and `-13` paint an XEC quote of 7, 9, 11
+ * and 13 characters, tiers 1, 2 and 3 on every look. The tier each price
+ * row wore is counted per look and per rail (`streamTierByClass`: `listings`
+ * for a row holding `price`, `quotes` for one holding `seller-price`; `"2"`
+ * for a row on the ladder's second step, `"0"` for a row with none); the
+ * runner owes the canvas pass the tiers in `STREAM_TIERS_OWED`, per rail, so
+ * a fixture that stopped painting one, or a ceiling that moved it, fails the
+ * run rather than leaving a rule under the tier unmeasured. Counting only:
+ * the card's figure is held by every other rule of the canvas pass (the
+ * dress, the spill, the cover and the self-clip).
  */
-const streamTierByClass: Record<string, Record<string, number>> = {};
+const streamTierByClass: Record<string, Record<string, Record<string, number>>> = {};
 function streamTierRead(): void {
     const byLook = (streamTierByClass[measuringClass] ??= {});
     for (const row of document.querySelectorAll<HTMLElement>('#app .bc-item .bc-p')) {
-        if (row.querySelector('[data-role="price"]') === null) continue;
+        const rail = row.querySelector('[data-role="price"]') !== null ? 'listings' : row.querySelector('[data-role="seller-price"]') !== null ? 'quotes' : undefined;
+        if (rail === undefined) continue;
+        const byRail = (byLook[rail] ??= {});
         const tier = row.getAttribute('data-tier') ?? '0';
-        byLook[tier] = (byLook[tier] ?? 0) + 1;
+        byRail[tier] = (byRail[tier] ?? 0) + 1;
     }
 }
 

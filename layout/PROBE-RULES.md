@@ -5547,11 +5547,16 @@ the critic did not list and no look sheet names, and the fifth review closed
 them: `[data-format='square']`, `'story'` and `'stream'` and `[data-code='false']`
 are belt states since then (`STATE_EXCEPT_PAINTED`: `data-format` but `tag`, which
 the poster fixtures paint, and `data-code`), and `[data-tier='2']` is painted
-(below, "The stream card's tiers"). What is left on `UNPAINTED` is the name
-ladder's rungs, which only Chrome paints, and `[data-marquee]` (a presence
-attribute, armed by a layout measure).
+(below, "The stream card's tiers"). **A painted value under `:not()` is a state too**
+(the sixth review's P3): `:not([data-format='tag'])` matches the three formats no
+screen paints, so a name in `STATE_EXCEPT_PAINTED` inside a `:not(…)` at any depth is
+read as a state, `:is()` and `:has()` around it as before. What is left on
+`UNPAINTED` is the name ladder's six rungs, which only Chrome paints.
+`[data-marquee]` is not on it: it is a presence attribute, armed by a layout measure,
+and it is the one exception of the test that reads every presence attribute as painted
+(`reads every presence attribute as painted, bar the marquee`).
 
-## The stream card's money tiers: `broadcast-from-123456` and `broadcast-from-1234567` (the lint-belts critic's fifth review, ranked item 1)
+## The stream card's money tiers: `broadcast-from-123456`, `broadcast-from-1234567` and `broadcast-quote-7` to `-13` (the lint-belts critic's fifth and sixth reviews, ranked item 1)
 
 `[data-tier='2']` is a value a look may match (`STATE_ATTRIBUTES`), and it sizes
 the figure the stream shows (24px on the card): a money tier, so it could not be
@@ -5566,24 +5571,58 @@ between. The ladder counts the figure and 2 for `from` (`priceTier`):
 | `broadcast-from-123456` (`from 123,456`) | 9 | tier 2 | tier 1 |
 | `broadcast-from-1234567` (`from 1,234,567`) | 11 | tier 3 | tier 2 |
 
-Together they put **tier 2 on every look and tier 1 on Rural**. Both are canvas
+Together they put **tier 2 on every look and tier 1 on Rural**. (The older cards
+paint tier 3 alone on every look, so Rural's tiers 1 and 2 come from these two
+fixtures and from nothing else; a note that said the older cards already paint tier 2
+on Rural was wrong, and `layout/streamTiers.test.ts` holds it.) Both are canvas
 screens that wear no decoration (`CANVAS_SCREENS`, `NO_DECOR_SCREENS`) and geometry
-only (`GEOMETRY_ONLY_SCREENS`): the plate and the ink are `broadcast`'s, already
-sampled there, so every rule of the canvas pass that reads the card (the dress, the
-spill, the cover, the self-clip) reads the new figures, and the contrast plan is
-unchanged. **Owed, not trusted**: the probe counts the tier each listing card's price
-row wore, per look (`streamTierByClass`), and the canvas pass owes the tiers in
-`STREAM_TIERS_OWED` (`probe-coverage.mjs`, pinned by value there: tier 2 on
-`t-modern`, `t-neo`, `t-rural` and `t-skeleton`, tier 1 on `t-rural`), so a fixture
-that stopped painting one, or a ceiling that moved a tier, fails the run. A look not
-named there (the kit's, a carried private look's, whose ladder is its own) owes
-nothing. Tests: `the-stream-card-is-painted-at-tiers-one-and-two`
+only (`GEOMETRY_ONLY_SCREENS`): every rule of the canvas pass that reads the card
+(the dress, the spill, the cover, the self-clip) reads the new figures, and the
+contrast plan is unchanged. **Stated: the colour a look gives a figure at a tier is
+read by the dress rule's ground read alone** (`moneyDressFaults`, which holds a
+figure's ink against every paint under its glyphs), **not by the contrast pass**: the
+contrast plan samples `broadcast`, where the figure is tier 3 on every look, and the
+plate and ink of these screens are the plate and ink `broadcast` paints, but a rule
+under `[data-tier='2']` that gives the figure another ink is sampled for contrast
+nowhere.
+
+**The quote card wears the same ladder** (the sixth review). `quoteCard` runs
+`priceTier` over the whole figure with its unit and no `from`, and
+`[data-tier]` sizes `[data-role='seller-price']` the same way, but every quote
+fixture painted tier 0 (`broadcast-quotes` is a USD `$5.00`; the XEC quote is the
+second card, which the cursor never lands on), and `streamTierRead` counted listing
+cards only, so a rule under `[data-tier='1']`, `'2'` or `'3'` for the seller's figure
+was measured by no pass. Four canvas fixtures paint an XEC quote at exponent 0, which
+prints as `N XEC`, as the only quote of the stall:
+
+| fixture | figure | characters | Modern, Neo, skeleton (5, 7, 9) | Rural (8, 10, 12) |
+|---|---|---|---|---|
+| `broadcast-quote-7` | `123 XEC` | 7 | tier 1 | 0 |
+| `broadcast-quote-9` | `1,234 XEC` | 9 | tier 2 | tier 1 |
+| `broadcast-quote-11` | `123,456 XEC` | 11 | tier 3 | tier 2 |
+| `broadcast-quote-13` | `1,234,567 XEC` | 13 | tier 3 | tier 3 |
+
+Four and not two, because no one length gives a look all three tiers and the two
+ladders differ: 9 and 13 alone (the critic's suggestion) leave Modern, Neo and the
+skeleton with no tier 1 and Rural with no tier 2. Together they put **tiers 1, 2 and 3
+on every look**. The same three lists as above (canvas, no decoration, geometry
+only); the same colour caveat. **Counted per rail**: `streamTierRead` files a price
+row that holds `price` under `listings` and one that holds `seller-price` under
+`quotes` (`streamTierByClass[look][rail][tier]`), and `STREAM_TIERS_OWED` is keyed by
+look and rail (`listings`: tier 2 on every look and tier 1 on Rural; `quotes`: tiers 1,
+2 and 3 on every look), pinned by value, so a count under one rail does not stand in
+for the other. The line prints both (`stream card tiers read: t-modern listings 2:1/3:4
+quotes 0:1/1:1/2:1/3:2`). So a fixture that stopped painting a tier, or a ceiling that
+moved one, fails the run. A look not named in the table (the kit's, a carried private
+look's, whose ladder is its own) owes nothing. Tests:
+`the-stream-card-is-painted-at-tiers-one-and-two` and
+`the-quote-card-is-painted-at-tiers-one-two-and-three`
 (`layout/streamTiers.test.ts`, by value, without a browser),
-`owes the canvas pass the stream card's money tiers on every look it painted`
-(`scripts/probe-coverage.test.mjs`). **Not measured by a run before this was
-written**: the two fixtures were checked in happy-dom (the tiers above) and, with
-the rest of the round, by one `pnpm test:layout` on 2026-10-26 (below, "The fifth
-review's round").
+`owes the canvas pass the stream card's money tiers on every look it painted, per rail`
+(`scripts/probe-coverage.test.mjs`). **Measured**: the listing fixtures were checked in
+happy-dom and, with the rest of the fifth round, by one `pnpm test:layout` on 2026-10-26
+(below, "The fifth review's round"); the four quote fixtures in happy-dom, and by the
+sixth review's round (below, "The sixth review's round").
 
 ## The staged address screens are sampled for the looks that name `[data-copied]` (the lint-belts critic's fifth review, ranked item 4)
 
@@ -5595,8 +5634,8 @@ whose sheet names `[data-copied]` and for no other, **bare and fully worn, at th
 phone and the desk** (a page screen paints at neither wall nor canvas). No public
 look names the attribute and the tracked private fixture does not, so a default run's
 plan is unchanged (796 jobs with the fixture); a private look that does gets, at the
-phone and at the desk, the two screens bare and all worn once for each of its moods
-(the private look at 0x04 names it).
+phone and at the desk, the two screens bare and all worn once for each of its moods.
+The jobs are planned for any carried look whose sheet names `[data-copied]`.
 **Derived, never listed**: the page answers "does this look's sheet name it" from the
 stylesheets it loaded (`layout/sheetNaming.ts`, `loadedSheetNames`: a rule whose
 selector holds the look's class and the attribute, a media block entered), because the
@@ -9913,8 +9952,18 @@ line, or `auto` or `from-font`; `text-decoration-thickness` and the thickness a
 `auto` or `from-font`; `stroke-width` a bare number or px, at most
 `STROKE_WIDTH_MAX` (3); and the `d` property is not written.** A CSS-wide keyword
 (`inherit`, `revert`, …) takes a value the cascade already holds, a capped look
-rule's or a base sheet's, and is not read; a palette role in the shorthand is its
-colour. A column rule is the other half of the road and names its own colour like an
+rule's or a base sheet's, and is not read. **The shorthand is read by an allow-list**
+(the sixth review's M1): each of its tokens is a line keyword (`none`, `underline`,
+`overline`, `line-through`, `blink`), a style keyword (`solid`, `double`, `dotted`,
+`dashed`, `wavy`), `auto`, `from-font`, a colour this lint reads (`literalColour`: a
+name, a hex, `rgb()` and the other colour functions written out) or a palette role
+standing alone, or a px length within the cap; every other token is refused, a
+function of any name included. The reader before it refused the functions it knew
+(`calc()`, `min()`, `max()`, `clamp()`) and let `abs(60px)`, `round(60px, 1px)` and
+`hypot(60px)` through as a thickness, and Chrome draws a 30px bar for each (the
+critic's page). A `color-mix()` or a system colour is not a colour it reads and is
+refused in the shorthand (write it in `text-decoration-color`, which draws no
+thickness). A column rule is the other half of the road and names its own colour like an
 outline (above). Under a state the belt refuses every one of these properties by
 name. **Cost, surveyed on every first-party sheet** (the shipped looks, the starters,
 the harness's fixture look, the tracked private fixture, the canary): nil. The three
@@ -9931,8 +9980,9 @@ gradient's `at`, a conic gradient's `from` or `in` — five shapes, all confirme
 Chrome (the critic's page: each row clear while the host's ink is clear and fully
 painted once it is not). The reader of a position cannot tell, so the
 closure is at the declaration: **in a first-party sheet no custom property holds
-`currentColor` or `inherit` anywhere in its value, and none is `revert` or
-`revert-layer` as its whole value.** That closes the class the pseudo-element mask
+`currentColor` or `inherit` anywhere in its value, and none is `revert`, `revert-layer`
+or `unset` as its whole value** (`unset` on a custom property is `inherit`, which is
+inherited; the sixth review's smaller item). That closes the class the pseudo-element mask
 reader left as a stated gap (`c1:8`), backs up the pseudo-element reader's
 palette-role-only rule for a colour, and closes the belt's own `var(--s-…)` road: a
 state rule accepts `var(--s-…)` as a ground or an edge colour with no look at what a
@@ -9941,11 +9991,13 @@ the belt on its own. **Cost, surveyed**: nil. No stylesheet the app loads declar
 one (stall.css, `window.css`, `broadcast.css`, `obsGuide.css`, the shipped looks, the
 kit's skeleton, the harness's fixture look, the tracked private fixture; 91 custom
 properties read), the starters and the canary neither, the theme table's `--s-*`
-(every shipped look, bare and under every mood: 200 and more variables) holds none,
-and no `setProperty` in `src/` writes the ink. The test holds it
-(`costs nothing: no served stylesheet the app loads declares such a custom property,
-and the theme table emits none`), so the claim that a `var()` brings in only a colour
-of the sheet's own is a test and not a sentence.
+(every shipped look, bare and under every mood: 200 and more variables) holds none.
+The test holds those two halves (`costs nothing: no served stylesheet the app loads
+declares such a custom property, and the theme table emits none`). **It does not hold
+the third: no `setProperty` in `src/` writes the ink is a grep** (the calls are in
+`wallFit.ts`, `broadcast.ts` and `render.ts`, each a size, a duration or a
+percentage), and no test reads them. A custom property set from script is not seen by
+this lint at all.
 
 **A rule runs only the keyframes its own sheet declares** (the fifth review's B3;
 `a-rule-runs-only-the-keyframes-its-own-sheet-declares`, first party only).
@@ -9956,17 +10008,48 @@ removed for most of a cycle the pass reads one instant of); `animation: sel-bump
 infinite` on a money node scales it by 1.18, which the size lint refuses in a look's
 own keyframes and never reads in a base sheet's; `animation-name: var(--an)` does the
 same through a custom property. So **each rule's `animation` and `animation-name` name
-`none` or a keyframe the same sheet declares (`@keyframes` anywhere in it, a media
-block included), and never through a `var()`**: the keyframes a look runs are the
-keyframes the look lint reads. The shorthand is read single by single
-(`parseSingleAnimation`, the flash rule's reader; case-sensitive, as CSS is). `inherit`,
-`revert` and `revert-layer` take the parent's or the cascade's name and are refused;
-`initial` and `unset` are `none`. A longhand that names no keyframe
-(`animation-duration`) runs nothing. Under a state the belt refuses `animation*` by
-name. **Cost, surveyed**: nil — every shipped look, the fixture look, the tracked
+`none` or a keyframe the same sheet declares at its top level, and never through a
+`var()`**: the keyframes a look runs are the keyframes the look lint reads. The
+shorthand is read single by single (`parseSingleAnimation`, the flash rule's reader;
+case-sensitive, as CSS is). `inherit`, `revert` and `revert-layer` take the parent's or
+the cascade's name and are refused; `initial` and `unset` are `none`. Under a state the
+belt refuses `animation*` by name. **Only a top-level keyframes block counts as the
+sheet's own, and one inside an at-rule is refused** (the sixth review's M2): inside
+`@media` a keyframe applies only while the condition does, so below it a base sheet's
+keyframe of the same name is the one a rule runs, and a quoted twin
+(`@keyframes "pin-demo-land"`) inside a media block ran the base keyframe below 680px
+while the lint counted it as the sheet's own (Chrome, the critic's page). A statement
+(`@keyframes x;`) is no keyframes and counts as none. **The cross-sheet rule reads
+names without their quotes** (`declaredNames`): at the top level a quoted twin
+replaces the base keyframe everywhere, and `wornSheetProblems` compared the raw
+prelude and missed it. No first-party sheet declares a keyframe inside an at-rule
+(surveyed: the three looks, the fixtures, the canary, the starters). **Not read,
+stated**: a longhand that names no keyframe (`animation-duration`, `animation-delay`)
+is not harmless. It re-times what the cascade already runs on its element, a base
+keyframe included (`.bc-ext { animation-delay: 120s; animation-fill-mode: backwards }`
+re-times `.bc-ext.in`'s `bc-in`), and nothing here reads it (the critic's sixth-review
+plants N3 and N4; `h1` pins the first as accepted). **Cost, surveyed**: nil — every shipped look, the fixture look, the tracked
 private fixture and the canary run only their own keyframes (Modern two, Neo three,
 Rural two), and so does every starter (`workshop:start` renames the keyframes `wk-…`
 and the rules with them).
+
+**A blur is capped** (the sixth review's judgement on `filter: blur()`, decided by
+the window; `a-blur-is-capped`, first party only). `filter: blur(40px)` spreads the
+paint of a box, its ink included, far past the box, and a colour under a state then
+shows it with no move; the fifth review stated it as a gap. So wherever a `filter`
+stands in a first-party sheet (at rest, in a media block and in a keyframe;
+`-webkit-filter` is read as `filter`): **a `blur()` is a length in px, or a bare `0`,
+of at most `FILTER_BLUR_MAX_PX` (4px), with no `var()`, `calc()` or other function in
+it; a filter list holds at most one `blur()`; and no `var()`, `env()` or `attr()`
+stands in the list outside a `drop-shadow()`**, because a custom property can hold a
+whole `blur(80px)` (the colour readers read a `drop-shadow()`'s own arguments).
+`backdrop-filter` is left alone: it blurs what lies behind the box, not its paint. A
+CSS-wide keyword takes a value the cascade already holds. Under a state the belt
+refuses `filter` by name. **Cost, surveyed**: nil. The looks' filters are `sepia()`,
+`saturate()`, `brightness()`, `contrast()` and `drop-shadow()` (Rural two, Neo three,
+the starters the same), no first-party sheet writes a `blur()` in a `filter`, and none
+writes a `var()` in one; their `blur()` is a `backdrop-filter`. Plants `f2:32` (now
+refused) and `h1`. Not read, stated: `filter: url()`, above.
 
 **The OS colour scheme is not a look's to paint** (the fifth review's ranked item 3,
 older than this branch; `the-os-colour-scheme-is-not-a-looks-to-paint`, first party
@@ -9995,9 +10078,9 @@ rule (the four are the two staged screens at the phone and the desk), read 94 mo
 figure boxes, and passed. **Red**: the same run with the CSSOM reader made to find
 nothing stops in the contrast pass with `the-plan-follows-the-sheets-that-name-data-copied:
 the served sheets name it on [t-workshop], the page reads it on [] and the plan samples
-addr-shown and addr-copied for []`. **Not run**: a `pnpm test:layout` with the private
-look at 0x04 selected (the variables are the window's); its sheet names `[data-copied]`,
-so that run plans the two screens for it. The stream tiers print on the canvas pass's
+addr-shown and addr-copied for []`. **Not run**: a `pnpm test:layout` with a private
+look selected (the variables are the window's); the jobs are planned for any carried
+look whose sheet names `[data-copied]`, so such a run plans the two screens for it. The stream tiers print on the canvas pass's
 `compared:` line (the kit's probe printed `stream card tiers read: t-workshop
 0:1/1:1/2:1/3:4`; that one print was added after the full run and is checked by the
 kit's probe and a unit test).
@@ -10022,9 +10105,12 @@ the window's selected check's 24 (`c1`: a `var()` in a mask), **the fifth review
 reader, the colour scheme and a custom property, the states, the underline) and the
 builder's own 158 beside them (`g1`: the caps' edges, the custom property's forms,
 every spelling of a foreign keyframe, the scheme, the formats nobody paints)**,
-1,160 in all, each with its outcome pinned: `refused`, and by which kind of
-sentence, or `accepted`, with the reason
-(`the-lint-belts-critics-plants-are-pinned`). Of the 1,160, 286 are accepted (874
+**and the sixth review's round's own 40 (`h1`: the shorthand's thickness through a
+math function, a keyframe inside an at-rule or with no block, a negated painted
+value, a blur past its cap, `unset` on a custom property, and the two sentences it
+leaves as stated gaps)**, 1,200 in all, each with its outcome pinned: `refused`, and
+by which kind of sentence, or `accepted`, with the reason
+(`the-lint-belts-critics-plants-are-pinned`). Of the 1,200, 295 are accepted (905
 refused); of the first 825, 167 were: the empty control; forms that set nothing (an alpha of 1, a
 palette role, an identity transform in each of its spellings, a declaration CSS
 drops); grounds, which paint under the ink; the shadows inside every bound;
@@ -10050,8 +10136,11 @@ custom properties of B2 (`c1:8` among them, which was accepted as a stated gap),
 foreign keyframes of B3, the colour scheme, and the two states `data-format` and
 `data-code` (`f1`–`f8` and `g1`); 13 older plants moved and are re-pinned with the
 sentence kind they now carry, `b1:12` (an underline of 4px) from accepted to
-refused. The 286 accepted are each a control, a form that sets nothing, a reach the
-caps leave or a stated gap, with the reason beside them.
+refused. Moved by the sixth review: `f2:32` (a blur of 400px), `g1:98` (`--x: unset`)
+and `g1:131` (a keyframe declared inside a media block, and run) from accepted to
+refused; `q1:28`, `m7:17` and `b1:103` gained a second sentence kind. The 295 accepted
+are each a control, a form that sets nothing, a reach the caps leave or a stated gap,
+with the reason beside them.
 
 **Not read, stated** (each a gap in the belt):
 
@@ -10065,16 +10154,13 @@ caps leave or a stated gap, with the reason beside them.
   outline-offset: -100px`, plant `w2:11`); what is left is the reach of a small one.
 - **Reach.** An outer shadow reaches at most its 8px offset and its 16px blur
   (24px), in two layers; an inset one stays inside its box.
-- **`filter: url()` and `filter: blur()`** (the fifth review, "not verified"; plants
-  `f2:7` and `f2:32`). `filter: url(art/x.svg#dilate)` names an SVG filter, whose
-  primitives (`feMorphology`, `feGaussianBlur`, an offset) this lint does not open,
-  so a filter that grows or spreads the box's paint is not read; and a blur's radius
-  is not capped (`filter: blur(400px)` spreads the box's own paint, ink included,
-  where only a `drop-shadow()`'s colour is read). Neither is checked. No shipped sheet
-  writes either in a `filter`: the looks' filters are `drop-shadow()`, `sepia()`,
-  `saturate()`, `brightness()` and `contrast()`, and their `blur()` is a
-  `backdrop-filter`. Reported to the window as a gap the fifth review's plant left
-  accepted.
+- **`filter: url()`** (the fifth review, "not verified"; plant `f2:7`).
+  `filter: url(art/x.svg#dilate)` names an SVG filter, whose primitives
+  (`feMorphology`, `feGaussianBlur`, an offset) this lint does not open, so a filter
+  that grows or spreads the box's paint is not read; only a `drop-shadow()`'s colour
+  is. Not checked. No shipped sheet writes one. **`filter: blur()` is capped since the
+  sixth review** (above, "A blur is capped"; plant `f2:32` moved from accepted to
+  refused): `backdrop-filter` is left alone.
 - **A colour a state gives an element that a rule at rest moved over a figure and
   left clear** (the fourth review's P2, restated; plants `m4`). The move is an
   offset (`position: relative; top: 40px`), a negative margin
@@ -10103,8 +10189,9 @@ caps leave or a stated gap, with the reason beside them.
   `addr-copied`, both staged), and a structural pseudo-class, which is the tree at
   rest. **A value a look may match that no screen paints and the belt does not
   name** is on `UNPAINTED` in `layout/stateAttributes.test.ts`, pinned by value:
-  the name ladder's rungs and `[data-marquee]` (written after a layout measure, in
-  Chrome). The four groups the trace found in the fourth review are closed:
+  the name ladder's six rungs (written after a layout measure, in Chrome).
+  `[data-marquee]`, a presence attribute armed by a layout measure, is not on it: it
+  is the presence test's one exception. The four groups the trace found in the fourth review are closed:
   `[data-code='false']` and `[data-format='square']`, `'story'` and `'stream'` are
   states, and `[data-tier='2']` is painted by the stream card's two fixtures.
 - A transition (read only by the size lint, on a money node).
@@ -10161,4 +10248,5 @@ for part of a cycle. The cost is nil: no first-party sheet writes `visibility` o
 `all` in a keyframe, and stall.css's pin demo is a base sheet and is not linted as a
 look. The kit is unchanged. Still accepted in a keyframe (stated, plants `m7`):
 `position`, `float`, `contain`, `overflow`, `height`, `max-height`, `order`,
-`grid-area`, `z-index`, `mix-blend-mode` and `filter`.
+`grid-area`, `z-index`, `mix-blend-mode` and `filter` (its `blur()` is capped since the
+sixth review; the rest of a filter is as it was).
