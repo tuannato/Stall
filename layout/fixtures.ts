@@ -378,6 +378,20 @@ const cycleListing = (sats: bigint): StallView =>
         readAtMs: 1_756_400_000_000 - 120_000,
     });
 
+/**
+ * One quote card on the stream's corner preset, at `price`, as the only quote
+ * so that the cursor lands on it: the quote card's money tiers (below).
+ */
+const bcQuote = (price: TokenPrice): StallView =>
+    base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, price]]),
+        genesis: GENESIS,
+        broadcast: bc('corner', 'fixed', false, 'quotes'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    });
+
 /** One quote on the wall's Cycle card, on the quotes rail, at `price`. */
 const cycleQuote = (price: TokenPrice): StallView =>
     base({
@@ -420,6 +434,22 @@ export const SCREENS: Record<string, StallView> = {
      * rows a wider sign could crowd are on the screen. Geometry only.
      */
     'addr-shown': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: QUOTES,
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+    }),
+    /*
+     * The address box in its third state (the lint-belts critic's fourth
+     * review, B3): a tap on it copied the address, so `addressLine` sets
+     * `data-copied="true"` for `ADDR_COPIED_MS` and the sign shows the word
+     * "Copied" in place of the address. A look may match `[data-copied='true']`
+     * (`STATE_ATTRIBUTES`) and no other fixture paints it, so a rule under it
+     * was a rule no pass measured. Staged like `addr-shown` (`STAGED`, below).
+     * The shop's book, so the rows the sign could crowd are on the screen.
+     * Geometry only.
+     */
+    'addr-copied': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: QUOTES,
         descriptions: QUOTE_WORDS,
@@ -2026,6 +2056,62 @@ export const SCREENS: Record<string, StallView> = {
         broadcastCursor: 3,
     }),
     /*
+     * The stream card's money tier 2, and Rural's tier 1 (the lint-belts
+     * critic's fifth review, ranked item 1). `[data-tier='2']` is a value a
+     * look may match (`STATE_ATTRIBUTES`) and it sizes the figure the stream
+     * shows, but the fixtures that painted a card painted tiers 1 and 3
+     * only: `from 1,200` and `from 100,000,000`. A look's rule under a tier
+     * no screen paints is a figure no pass measures, so the card is painted
+     * at the two lengths between, each as the only listing so the cursor
+     * lands on it. The ladder counts the figure and 2 for `from`
+     * (`priceTier`), and each look's `overlayTierCeilings` cut it:
+     *
+     *   `from 123,456`   9 characters, 2 on Modern and Neo (5, 7, 9) and 1 on Rural (8, 10, 12)
+     *   `from 1,234,567` 11 characters, 3 on Modern and Neo, 2 on Rural
+     *
+     * Together they paint tier 2 on every look and tier 1 on Rural, and the
+     * runner owes each (`STREAM_TIERS_OWED`). Geometry only, so the colour a
+     * look gives the figure at a tier is read by the dress rule's ground read
+     * alone and by no contrast job (`broadcast` is sampled, at tier 3).
+     */
+    'broadcast-from-123456': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 12_345_600n)] },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    }),
+    'broadcast-from-1234567': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 123_456_700n)] },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    }),
+    /*
+     * The quote card's money tiers (the lint-belts critic's sixth review,
+     * ranked item 1). The quote card wears the same ladder as the listing
+     * card (`priceTier` against the look's `overlayTierCeilings`, over the
+     * whole figure with its unit and no `from`), and `[data-tier]` sizes the
+     * seller's own figure under `[data-role='seller-price']`, which a look may
+     * match: but every quote fixture painted tier 0 (`$5.00`), so a rule under
+     * `[data-tier='1']`, `'2'` or `'3'` for that role was read by no pass. An
+     * XEC quote at exponent 0 prints as `N XEC`, so the figure's length is the
+     * number's plus four, and four cards put tiers 1, 2 and 3 on every look:
+     *
+     *   `123 XEC`        7 characters: tier 1 on Modern, Neo and the skeleton (5, 7, 9), 0 on Rural (8, 10, 12)
+     *   `1,234 XEC`      9: tier 2, and tier 1 on Rural
+     *   `123,456 XEC`   11: tier 3, and tier 2 on Rural
+     *   `1,234,567 XEC` 13: tier 3 on every look, Rural's included
+     *
+     * Each is the only quote on the stall, so the cursor lands on it. The
+     * runner owes each look the tiers in `STREAM_TIERS_OWED`, per rail.
+     * Geometry only, as above: the colour at a tier is the dress rule's
+     * ground read alone, and `broadcast-quotes` is the sampled quote card.
+     */
+    'broadcast-quote-7': bcQuote({ code: 'xec', exponent: 0, amount: 123n }),
+    'broadcast-quote-9': bcQuote({ code: 'xec', exponent: 0, amount: 1_234n }),
+    'broadcast-quote-11': bcQuote({ code: 'xec', exponent: 0, amount: 123_456n }),
+    'broadcast-quote-13': bcQuote({ code: 'xec', exponent: 0, amount: 1_234_567n }),
+    /*
      * The other rail's card, on the same plate: `cards=quotes`.
      *
      * `broadcastCursor: 0` lands on the USD quote (`QUOTES` is insertion
@@ -2226,15 +2312,22 @@ export const SCREENS: Record<string, StallView> = {
  * - `addr-shown`: the clipboard refused a tap on the address, and
  *   `addressLine` set `data-copied="shown"` on it — the whole string at
  *   every width, until the next paint (the 8g1 critic's P1-1).
+ * - `addr-copied`: a tap copied the address, and `addressLine` set
+ *   `data-copied="true"` on it — the word "Copied" in place of the address,
+ *   for `ADDR_COPIED_MS` (the lint-belts critic's fourth review, B3).
  */
-export const STAGED: Readonly<Record<string, (root: ParentNode) => number>> = Object.freeze({
-    'addr-shown': (root: ParentNode) => {
+const stageAddress =
+    (state: string) =>
+    (root: ParentNode): number => {
         const boxes = root.querySelectorAll('[data-role="addr-copy"]');
         for (const addr of boxes) {
-            addr.setAttribute('data-copied', 'shown');
+            addr.setAttribute('data-copied', state);
         }
         return boxes.length;
-    },
+    };
+export const STAGED: Readonly<Record<string, (root: ParentNode) => number>> = Object.freeze({
+    'addr-shown': stageAddress('shown'),
+    'addr-copied': stageAddress('true'),
 });
 
 /**
@@ -2380,6 +2473,8 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     // The address in its refused-copy state (the 8g1 critic's P1-1): the
     // decoration interactions it could stage are `offers`'.
     'addr-shown',
+    // The address in its copied state (the fourth review's B3): the same.
+    'addr-copied',
     // The empty stall a seller pasted (the 8g1 critic's P2-4): it exists
     // for the sign's cells, not for decoration interactions.
     'empty-pasted',
@@ -2443,6 +2538,14 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'embed-sheet',
     'stream-sheet',
     'broadcast-hero',
+    // The stream card's tiers 1 and 2: `broadcast`'s plate with a figure of another length.
+    'broadcast-from-123456',
+    'broadcast-from-1234567',
+    // The quote card's tiers 1, 2 and 3: `broadcast-quotes`' plate with a figure of another length.
+    'broadcast-quote-7',
+    'broadcast-quote-9',
+    'broadcast-quote-11',
+    'broadcast-quote-13',
     // The remove question in place of a stepper: two words in the row's own
     // ink, on the ground `pay-several-strip` already samples.
     'pay-several-ask',
@@ -2585,6 +2688,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // `offers`' ground with the sign's other span on it, and `.addr-full`
     // is sampled at the desk. It is here for the sign's width.
     'addr-shown',
+    // The address saying "Copied" (the fourth review's B3): `offers`' ground
+    // with the sign's `.addr-said` span on it. Here for the sign's cells.
+    'addr-copied',
     // The empty stall a seller pasted (the 8g1 critic's P2-4): `empty`'s
     // ground with the invites on it (the notice invite's words sampled on
     // `sparse-pasted` under the rain). It is here for the sign's cells.
@@ -2664,6 +2770,12 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-hero',
     'broadcast-clear',
+    'broadcast-from-123456',
+    'broadcast-from-1234567',
+    'broadcast-quote-7',
+    'broadcast-quote-9',
+    'broadcast-quote-11',
+    'broadcast-quote-13',
     'broadcast-quotes',
     'broadcast-quotes-clear',
     'broadcast-quotes-long-name',
@@ -2739,6 +2851,12 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-hero',
     'broadcast-clear',
+    'broadcast-from-123456',
+    'broadcast-from-1234567',
+    'broadcast-quote-7',
+    'broadcast-quote-9',
+    'broadcast-quote-11',
+    'broadcast-quote-13',
     'broadcast-quotes',
     'broadcast-quotes-clear',
     'broadcast-quotes-long-name',

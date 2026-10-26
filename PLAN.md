@@ -265,6 +265,37 @@ working accept, and there is no accept.
   1000x1112). Against that, about 1,280 cells gain a first price that is
   clear of the controls. Landscape walls under about 870 wide and
   near-square portrait walls are not supported yet (§ Open).
+- **A first-party look's state rules set only what a state may (owner,
+  2026-10-20 and 2026-10-26: D-2026-10-20-08, -10, -11 and -13 (3), all as
+  recommended).** The probe measures every screen at rest. It paints no
+  hover, focus, press or turned wall, and no closed fold. So a first-party
+  look sheet's rule under any of these states sets only an allow-list:
+  - the ink, as a literal or an opaque palette role;
+  - a ground or gradient;
+  - an edge colour (colour only; no border or outline style or width);
+  - a shadow (each layer coloured, at most two outer layers, blur at most
+    16px, no spread, offset at most 8px);
+  - a cursor keyword;
+  - an identity transform, a transition, or a transparent tap highlight.
+
+  The states are every pseudo-class but the structural ones, plus `[open]`,
+  `[hidden]`, `[data-turn]`, `[data-state]`, `[aria-disabled]`,
+  `[data-over]`, and the `data-format` and `data-code` values no screen
+  paints. A pseudo-element under a state sets less still. Beside the belt,
+  at rest:
+  - a pseudo-element's paint is its own;
+  - a paint that reaches past its box names its own colour;
+  - outlines, underlines, strokes and blurs are capped per declaration;
+  - no custom property holds the ink;
+  - a rule runs only its own sheet's top-level keyframes;
+  - no keyframe sets `display`, `content-visibility`, `visibility` or
+    `all`;
+  - no `light-dark()` and no dark colour scheme.
+
+  **Cost:** a first-party look cannot change type, spacing, padding or an
+  underline on hover. The kit lint is unchanged; a pointer's hover is checked
+  at intake. Probe and lint cannot be a complete fence against a look written
+  to cheat; what they leave is stated and checked at intake.
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
@@ -1337,6 +1368,19 @@ money path this app can have, because nothing on it is derived.
 - **A Cashtab patch** that preselects a maker on the token market is not on
   Stall's buy path. It remains optional help for people who buy in Cashtab
   from somewhere else, never a blocker.
+- **Three gaps in the first-party look lint and the probe, stated and not
+  closed** (the lint-belts critic's sixth review, 2026-10-26; the window asked
+  for the entry, not the fixes). (1) A longhand that names no keyframe
+  (`animation-delay`, `animation-duration`) re-times what the cascade already
+  runs on its element, a base sheet's keyframe included: `.bc-ext { animation-delay:
+  120s }` re-times `bc-in`. The lint reads names, not timings. (2) The poster's
+  print, square, story and stream formats are painted by no fixture, so a rule
+  that reaches one is read by no pass (the `data-format` values `square`, `story`
+  and `stream` are belt states for that reason; the print page is measured by
+  hand, `scripts/print-measure.mjs`). (3)
+  `stroke-miterlimit` is uncapped: a miter join with a large limit reaches that
+  many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
+  and the plants: `layout/PROBE-RULES.md`, "The state belt".
 
 ---
 
