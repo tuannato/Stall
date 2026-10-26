@@ -1294,25 +1294,28 @@ const COVER_COUNTS = ['nodes', 'points', 'checked', 'below', 'offSide', 'above',
 
 /**
  * The read on a geometry pass's paint, into the measuring look's tally; its
- * failures. `end` names the animations the end-state read seeked to their
- * ends (`coverAtEnd`): its points and failures join the tally, and it is not
- * a paint of its own.
+ * failures. `end` is the end-state read's (`coverAtEnd`): the animations it
+ * seeked to their ends, by name, and the read at rest's failures, which it
+ * does not say again — a cover that stands at rest and at the end is one
+ * failure, said by the read at rest. Its points and its new failures join
+ * the tally, and it is not a paint of its own.
  */
-function coverRead(screen: string, label: string, end?: string): Failure[] {
+function coverRead(screen: string, label: string, end?: { names: string; atRest: ReadonlySet<string> }): Failure[] {
     const t0 = performance.now();
     const scan = coverScan();
+    const faults = end === undefined ? scan.faults : scan.faults.filter((detail) => !end.atRest.has(detail));
     const tally = (coverByClass[measuringClass] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, above: 0, clipSkips: 0, wallScroll: 0, appHidden: 0, failed: 0 });
     if (end === undefined) tally.paints += 1;
     for (const key of COVER_COUNTS) tally[key] += scan[key];
-    tally.failed += scan.faults.length;
+    tally.failed += faults.length;
     const spent = performance.now() - t0;
     coverMs += spent;
     if (end !== undefined) {
         coverEnd.reads += 1;
-        coverEnd.failed += scan.faults.length;
+        coverEnd.failed += faults.length;
         coverEndMs += spent;
     }
-    return scan.faults.map((detail) => ({ screen, theme: label, check: COVER_CHECK, detail: end === undefined ? detail : `at the end of ${end}: ${detail}` }));
+    return faults.map((detail) => ({ screen, theme: label, check: COVER_CHECK, detail: end === undefined ? detail : `at the end of ${end.names}: ${detail}` }));
 }
 
 /** The end-state read's own counts (`coverAtEnd`): paints that paid for it, the failures it found, and the animations it seeked to their ends by name; and its time, inside `coverMs` (a clock). */
@@ -1346,7 +1349,8 @@ function keepsItsEnd(anim: Animation): boolean {
  * `forwards` or `both`, a pseudo-element's included), after the read at
  * rest, each such animation is seeked to its end (its `endTime`, its delay
  * zeroed at rest) and 1a reads the paint again (`coverRead` with the names
- * it seeked): a failure says "at the end of …". The other animations stand
+ * it seeked): a failure says "at the end of …", and one the read at rest
+ * found already, word for word, is not said again. The other animations stand
  * where the read at rest left them. Only those paints pay for the read
  * (`coverEnd`), and nothing is put back: 1a is the last read of a paint, and
  * the next paint throws its tree away.
@@ -1363,7 +1367,7 @@ function keepsItsEnd(anim: Animation): boolean {
  * its end alone); and the contrast pass's one read a job, which stays at the
  * frozen instant.
  */
-function coverAtEnd(screen: string, label: string): Failure[] {
+function coverAtEnd(screen: string, label: string, atRest: readonly Failure[]): Failure[] {
     const lasting = document.getAnimations().filter(keepsItsEnd);
     if (lasting.length === 0) return [];
     const names = new Set<string>();
@@ -1378,7 +1382,7 @@ function coverAtEnd(screen: string, label: string): Failure[] {
         }
     }
     if (names.size === 0) return [];
-    return coverRead(screen, label, [...names].sort().join(', '));
+    return coverRead(screen, label, { names: [...names].sort().join(', '), atRest: new Set(atRest.map((f) => f.detail)) });
 }
 
 /**
@@ -1427,7 +1431,7 @@ function coverAtRest(screen: string, label: string): Failure[] {
     coverRest = [];
     const atRest = coverRead(screen, label);
     // And once more at the end of every animation that keeps it (`coverAtEnd`).
-    return [...atRest, ...coverAtEnd(screen, label)];
+    return [...atRest, ...coverAtEnd(screen, label, atRest)];
 }
 
 /** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
