@@ -992,14 +992,17 @@ money path this app can have, because nothing on it is derived.
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,
   `private/design/workshop-2026-09-23/touch-wall/CRITIC.md`, item 3). The
-  wall's floor is 680 wide (`WINDOW_MIN_PX`) and a portrait wall holds from
-  there, but a landscape touch wall is held only from 870: its quote row is
-  264–266px wide at 800 and 306px at 840, beside the code's 400px column, and
-  a stepper of two 72px buttons and a count (218px at the least) does not fit
-  it. Measured on every touch screen, every look bare and worn (the
-  showroom, Chrome, `shop-window-touch-quotes`, `-16`, `-long-figures`,
-  `-pay`, `-pay-3`, `-pay-35`): the "+" button runs past the row by 58.4px at
-  800, 41.1 at 820, 23.9 at 840 and 6.6 at 860 with a one-digit count, and
+  wall's floor is 680 on the screen's short side, not on its width
+  (`WINDOW_MIN_PX`; `wallWidth` in `src/app.ts` asks
+  `Math.min(innerWidth, innerHeight) >= WINDOW_MIN_PX`). A tall portrait wall
+  holds from 680 wide, but a landscape touch wall is held only from 870: its
+  quote row is 264–266px wide at 800 and 306px at 840, beside the code's
+  400px column, and a stepper of two 72px buttons and a count (218px at the
+  least) does not fit it. Measured on every touch screen, every look bare
+  and worn (the showroom, Chrome, `shop-window-touch-quotes`, `-16`,
+  `-long-figures`, `-pay`, `-pay-3`, `-pay-35`): the "+" button runs past
+  the row by 58.4px at 800, 41.1 at 820, 23.9 at 840 and 6.6 at 860 with a
+  one-digit count, and
   with a three-digit count by 76.6px at 800, 42.1 at 840, 24.8 at 860, 16.2
   at 870 and 7.6 at 880 (clear from 890); a figure runs past its row by
   8–30.9px on Neo and Rural at 800, by up to 17.1px at 820 and by 3.2px on
@@ -1008,7 +1011,17 @@ money path this app can have, because nothing on it is derived.
   row at 800, 57.5 at 840, 41 at 860, 24.6 at 880 and 9 at 900, and the
   controls stand on the figure and the name up to 1,200 wide (the same
   sweep over 150 landscape sizes from 880 up: 1,573 of 12,888 rows red on 66
-  of them, 0 after). So nothing got worse, and nothing below 870 is claimed.
+  of them, 0 after; the critic counts 24 of those 150 sizes at 600 tall,
+  below the floor, which the showroom paints and the app does not, and the
+  counts were not redone for wall sizes only, the size list being gone).
+  **A near-square portrait wall under about 880 wide is not held either.**
+  Its list is almost nothing, 0–37px at 700x701 and 760x761 (0–124px at
+  880x881), since the list is what the sign and the code leave; and under the
+  Awning the frame reads as landscape (the canopy takes its height) and takes
+  the landscape limit: the stepper runs 154px past its row at 700x701 and 96px
+  at 760x761 (the critic's second review, `touch-wall/critic2/`). Main behaves
+  the same (182 and 127px past). So nothing got worse, and nothing below 870
+  is claimed.
   The owner's decision was to leave it, and the window.css block that holds
   the touch row says so. To hold it, options (not built, not priced): a floor
   of about 900 for a landscape wall with `touch=on` (below it the wall falls
@@ -1016,8 +1029,9 @@ money path this app can have, because nothing on it is derived.
   or the code above the list and not beside it.
 
 - **The first price of a touch wall is cut at rest where the list is shorter
-  than a row, on main as well, and no row shape fixes it** (D-2026-10-20-12;
-  the touch-wall critic, item 2). At 768x1024 the list a touch wall leaves
+  than a row: on main at 768x1024 and 680x1000, and in 25 cells of this
+  branch's own** (D-2026-10-20-12; the touch-wall critic, item 2, and its
+  second review, item A). At 768x1024 the list a touch wall leaves
   is 261, 238 and 223px on Modern, Neo and Rural, and **129px under the
   Awning and 123px under Rural's yard** (the canopy and the yard's row take
   their height from it); at 680x1000 it is 276, 252 and 238px, and 144 and
@@ -1038,16 +1052,41 @@ money path this app can have, because nothing on it is derived.
   at these widths (about 200px more list, by the critic's estimate and
   unmeasured), or the list scrolled to its first figure at rest (not
   recommended: it fights the wall's self-scroll and the heartbeat).
-  Over portrait walls under 1080 wide (2,379 cells with a list on
-  screen) the first price is whole at rest in 2,216 cells, against 2,186 on
-  main and 2,097 on this branch's first version; 43 cells gain against main
-  and 13 lose (lists of 154–191px under a payment's band, the Awning or the
-  yard: a figure under the picture ends 185–195px down its row, and main's,
-  beside it, ended 154–156px down). In landscape under 1280 (880 to 1279
-  wide) it is whole in 1,364 of 1,404 cells against main's 1,377: the 13
-  that lose are payment screens 1,080 and 1,200 tall, with lists of 177–223px
-  beside rows 45–50px taller, and the plain touch screens are whole in every
-  cell. Browse scrolls itself one step every `WINDOW_SCROLL_MS` once
+  The Awning's 129px and the yard's 123px lists at 768x1024 (144px and 138px
+  at 680x1000) are the older cuts: main had them, and this branch leaves
+  them as they were. **This branch adds cuts of its own**, counted below.
+  Counted **whole and clear** (the first price inside the list at rest, and
+  none of the stepper's controls on it; the critic's recount, second review)
+  over every touch screen with a list on screen. "Whole" alone flatters main,
+  whose price stood under the controls in most cells under 1280:
+  - landscape 880–1279 wide, 1,404 cells: 1,364 here, 536 on main; 841 gain
+    and 13 lose;
+  - portrait under 1080 wide, 2,379 cells: 2,216 here, 1,791 on main; 437
+    gain and 12 lose.
+
+  (By "whole" alone, the builder's count: 1,364 here against main's 1,377 in
+  landscape, and 2,216 against 2,186 in portrait. The cell lists behind these
+  counts are gone, so they were not recounted; they agree with each other:
+  gain less lose is here less main in both rows.)
+
+  **The 25 that lose are new cuts, not older ones.** On main each had a first
+  price that was whole and clear of the controls ("$5.00" in 22 of them).
+  They are: payment screens 1,080–1,200 tall and 1,100–1,279 wide in
+  landscape; payment screens 1,501–1,600 tall in portrait; the yard or the
+  Awning at 1,000–1,079x1,112; and 1000x1001 Rural bare. **Six are at 1279
+  wide, which is the cost of moving the cut to 1280** (the owner's call: the
+  1280–1919 band is main's row). The cause is the one above, a taller row in
+  a short list: under 1280 a row with a stepper is 42–51px taller, and a
+  payment's band leaves a list of 155–223px; in portrait under 1080 a figure
+  under the picture ends 185–209px down its row, and main's, beside it, ended
+  152–162px down. These ranges are those of the sweep's sizes, not edges: the
+  critic's own spot sizes lose the same way at payment screens of 960x950,
+  1000x999, 1024x1000 and 1240x1230 (lists of 155–219px). A rerun on
+  2026-10-26 over seventeen sizes picked inside the named ranges (Chrome 156)
+  lost 26 cells and gained 65: it confirms where the cuts fall, not how many.
+  For the owner, the critic's judgement: accept the 25 for the 1,278 cells
+  (841 + 437) that gain a first price clear of the controls.
+  Browse scrolls itself one step every `WINDOW_SCROLL_MS` once
   `WINDOW_IDLE_MS` (45 s) has passed with no touch, so a customer who waits
   sees the price and one who stops at the screen at rest does not.
 
