@@ -533,9 +533,16 @@ export function decodeEscapes(text) {
     );
 }
 
-/** The inside of every `[…]` in a selector, outside strings, at any depth — inside `:has()` and `:not()` too. */
-function attributeBlocks(selector) {
+/**
+ * The inside of every `[…]` in a selector, outside strings, at any depth —
+ * inside `:has()` and `:not()` too — each with whether it stands inside a
+ * `:not(…)` at any depth (`negated`: the sixth review's P3, a painted value
+ * under a negation matches every value but that one).
+ */
+function attributeBlocksNegated(selector) {
     const out = [];
+    // One entry per open parenthesis outside a string and a bracket: whether it opened a `:not(`.
+    const open = [];
     let i = 0;
     while (i < selector.length) {
         const c = selector[i];
@@ -543,18 +550,27 @@ function attributeBlocks(selector) {
             i = skipString(selector, i);
             continue;
         }
-        if (c === '[') {
+        if (c === '(') {
+            open.push(/:\s*not\s*$/i.test(selector.slice(0, i)));
+        } else if (c === ')') {
+            open.pop();
+        } else if (c === '[') {
             let j = i + 1;
             while (j < selector.length && selector[j] !== ']') {
                 j = selector[j] === '"' || selector[j] === "'" ? skipString(selector, j) : j + 1;
             }
-            out.push(selector.slice(i + 1, j));
+            out.push({ inner: selector.slice(i + 1, j), negated: open.includes(true) });
             i = j + 1;
             continue;
         }
         i += 1;
     }
     return out;
+}
+
+/** The inside of every `[…]` in a selector, outside strings, at any depth — inside `:has()` and `:not()` too. */
+function attributeBlocks(selector) {
+    return attributeBlocksNegated(selector).map((block) => block.inner);
 }
 
 /**
@@ -1481,11 +1497,17 @@ function attributeNameOf(inner) {
     return m === null ? '' : m[1].toLowerCase();
 }
 
-/** Whether one attribute selector names a state: one of the six, or a partly painted one by any form but an exact match on a painted value. */
-function attributeIsAState(inner) {
+/**
+ * Whether one attribute selector names a state: one of the six, or a partly
+ * painted one by any form but an exact match on a painted value — and a
+ * painted value under `:not()` is a state too (`:not([data-format='tag'])`
+ * matches the other three formats, which no screen paints).
+ */
+function attributeIsAState(inner, negated = false) {
     const name = attributeNameOf(inner);
     if (STATE_ATTRIBUTE_NAMES.has(name)) return true;
     if (!Object.hasOwn(STATE_EXCEPT_PAINTED, name)) return false;
+    if (negated) return true;
     const m = ATTRIBUTE_SELECTOR.exec(inner);
     if (m === null || m[2] !== '=' || m[4] !== undefined) return true;
     const value = /^["']/.test(m[3]) ? decodeEscapes(m[3].slice(1, -1)) : decodeEscapes(m[3]);
@@ -1496,7 +1518,7 @@ function attributeIsAState(inner) {
 export function namesAState(selector) {
     return (
         pseudoTokens(selector, true).some((token) => !token.element && !STRUCTURAL.has(token.name)) ||
-        attributeBlocks(selector).some(attributeIsAState)
+        attributeBlocksNegated(selector).some(({ inner, negated }) => attributeIsAState(inner, negated))
     );
 }
 
@@ -2548,12 +2570,26 @@ function reachLengthWhy(token, { low, high, keywords, bare }) {
     return length.n < low || length.n > high ? `${echo(token, 32)} is outside ${low}px to ${high}px` : undefined;
 }
 
-/** Why one token of a `text-decoration` shorthand may not stand: a length or percentage is its thickness, a var() that is not a palette role may hold one. */
+/** The keywords a `text-decoration` shorthand may carry: a line, a style, and the two a thickness may be (`auto`, `from-font`). */
+const DECORATION_KEYWORD = /^(?:none|underline|overline|line-through|blink|solid|double|dotted|dashed|wavy|auto|from-font)$/i;
+
+/**
+ * Why one token of a `text-decoration` shorthand may not stand, or undefined.
+ * **Read by an allow-list** (the sixth review's M1): a token is a line or a
+ * style keyword, `auto`, `from-font`, a colour this lint reads
+ * (`literalColour`) or a palette role standing alone, or a length within the
+ * thickness cap. Every other token is refused, a function of any name
+ * included: a reader that refused the functions it knew (`calc()`, `min()`,
+ * `max()`, `clamp()`) let `abs(60px)`, `round(60px, 1px)` and `hypot(60px)`
+ * through, and Chrome draws a 30px bar for each.
+ */
 function decorationTokenWhy(token) {
+    if (DECORATION_KEYWORD.test(token)) return undefined;
     if (lengthToken(token) !== undefined) return reachLengthWhy(token, INK_REACH_THICKNESS);
     const role = VAR_TOKEN.exec(token);
     if (role !== null && STATE_OPAQUE_ROLES.includes(role[1])) return undefined;
-    return /^(?:var|env|attr)\s*\(/i.test(token) || SHAPE_FUNCTION.test(token) ? `${echo(token, 32)} is a var() or calc() that this lint cannot size` : undefined;
+    if (literalColour(token) !== undefined) return undefined;
+    return `${echo(token, 32)} is not a line or style keyword, a colour this lint reads, a palette role or a px thickness within the cap`;
 }
 
 function inkReachProblems(decls) {
@@ -2585,6 +2621,70 @@ function inkReachProblems(decls) {
 }
 
 /*
+ * **A blur is capped** (the sixth review's judgement on `filter: blur()`,
+ * decided by the window). `filter: blur(40px)` spreads the paint of a box,
+ * its ink included, far past the box, and a colour under a state then shows
+ * it with no move; the fifth review stated it as a gap. So in a first-party
+ * sheet, wherever a `filter` stands (at rest, in a media block and in a
+ * keyframe, `-webkit-filter` read as `filter`):
+ *
+ * - a `blur()` is a length in px (or a bare `0`) of at most
+ *   `FILTER_BLUR_MAX_PX` (4px), with no `var()`, `calc()` or other function
+ *   in it;
+ * - a filter list holds at most one `blur()` (two blurs of 4px are 8px);
+ * - the list takes no `var()`, `env()` or `attr()` outside a `drop-shadow()`
+ *   (which the colour readers above read): a custom property can hold a
+ *   whole `blur(80px)`, and the cap would then be read of nothing.
+ *
+ * `backdrop-filter` blurs what lies behind the box, not its own paint, and
+ * is not read. A CSS-wide keyword takes a value the cascade already holds.
+ * Under a state the belt refuses `filter` by name. Not read, stated: a
+ * `filter: url()`, an SVG filter whose primitives this lint does not open.
+ * Cost, surveyed: nil — the looks' filters are `sepia()`, `saturate()`,
+ * `brightness()`, `contrast()` and `drop-shadow()`, and no sheet blurs its
+ * own paint.
+ */
+export const FILTER_BLUR_MAX_PX = 4;
+
+function blurCapProblems(decls) {
+    const out = [];
+    const say = (decl, why) =>
+        out.push(
+            `${decl.prop}: ${echo(decl.value, 48)} — ${why}; a blur() spreads the box's paint, its ink included, past the box, where a state that changes the ink shows it (a blur() in a filter is px only and at most ${FILTER_BLUR_MAX_PX}px, one to a list, with no var() or calc(), and no var() stands elsewhere in the list)`,
+        );
+    for (const decl of decls) {
+        if (decl.prop.replace(VENDOR_PREFIX, '') !== 'filter') continue;
+        const clean = decl.value.replace(/\s*!\s*important\s*$/i, '').trim();
+        if (/^(?:none|initial|unset|inherit|revert|revert-layer)$/i.test(clean)) continue;
+        let bare = withoutStrings(clean);
+        // A drop-shadow()'s colour is the colour readers'; take each call out and read the rest of the list.
+        for (const m of [...bare.matchAll(/drop-shadow\s*\(/gi)].reverse()) {
+            const open = m.index + m[0].length - 1;
+            const close = closingParen(bare, open);
+            bare = bare.slice(0, m.index) + ' ' + (close < 0 ? '' : bare.slice(close + 1));
+        }
+        if (/(?<![\w-])(?:var|env|attr)\s*\(/i.test(bare)) {
+            say(decl, 'a var() in a filter may hold a blur this lint never reads');
+            continue;
+        }
+        const calls = [...bare.matchAll(/(?<![\w-])blur\s*\(/gi)];
+        if (calls.length > 1) {
+            say(decl, `${calls.length} blur() calls in one filter list: two blurs add`);
+            continue;
+        }
+        for (const m of calls) {
+            const open = m.index + m[0].length - 1;
+            const close = closingParen(bare, open);
+            const arg = bare.slice(open + 1, close < 0 ? bare.length : close).trim();
+            if (arg === '') continue;
+            const why = reachLengthWhy(arg, { low: 0, high: FILTER_BLUR_MAX_PX, keywords: [], bare: false });
+            if (why !== undefined) say(decl, why);
+        }
+    }
+    return out;
+}
+
+/*
  * **A rule runs only a keyframe its own sheet declares** (the fifth review's
  * B3). `@keyframes` names are global, and stall.css ships keyframes of its
  * own: `animation: pin-demo-land 1s 120s reverse forwards` on a quote's
@@ -2607,14 +2707,12 @@ function inkReachProblems(decls) {
  */
 function keyframeNamesOf(nodes) {
     const out = new Set();
-    const walk = (list) => {
-        for (const node of list) {
-            if (node.kind === 'rule') continue;
-            if (node.name === 'keyframes') out.add(unquoted(node.prelude.replace(/^@keyframes\s*/i, '').trim()));
-            else if (node.children !== undefined) walk(node.children);
-        }
-    };
-    walk(nodes);
+    // Top level only (the sixth review's M2): a keyframe inside `@media` applies only while the condition does, so below it
+    // a base sheet's keyframe of the same name is the one that runs. A nested keyframe is refused where it is written (`lintLook`).
+    // A block only: `@keyframes x;` is no keyframes at all, and a browser drops it.
+    for (const node of nodes) {
+        if (node.kind === 'at' && node.name === 'keyframes' && !node.statement) out.add(unquoted(node.prelude.replace(/^@keyframes\s*/i, '').trim()));
+    }
     return out;
 }
 
@@ -3128,7 +3226,8 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * in can tell, and the property is read by a rule this lint never
          * pairs with it. So in a first-party sheet no custom property holds
          * `currentColor` or `inherit` (anywhere in its value), and none is
-         * `revert` or `revert-layer` as its whole value. That closes the
+         * `revert`, `revert-layer` or `unset` as its whole value (`unset` on a
+         * custom property is `inherit`, which is inherited). That closes the
          * class the pseudo-element's mask reader left as a stated gap
          * (`c1:8`), backs up the pseudo-element reader's palette-role-only
          * rule for a colour, and closes the belt's `var(--s-…)` road (a state
@@ -3141,10 +3240,11 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          */
         if (firstParty && prop.startsWith('--') && (selectors === undefined || !selectors.some(namesAState))) {
             const keyword = /(?<![\w-])(?:currentcolor|inherit)(?![\w-])/i.exec(bare);
-            const wholeValue = /^(?:revert|revert-layer)$/i.test(value.replace(/\s*!\s*important\s*$/i, '').trim());
-            if (keyword !== null || wholeValue) {
+            // `unset` on a custom property is `inherit`: a custom property is inherited, so it takes the parent's tokens (the sixth review's smaller item).
+            const whole = /^(?:revert|revert-layer|unset)$/i.exec(value.replace(/\s*!\s*important\s*$/i, '').trim());
+            if (keyword !== null || whole !== null) {
                 out.push(
-                    `${shown} — a custom property that holds ${keyword !== null ? keyword[0].toLowerCase() : 'revert'}: a var() is substituted as tokens, so it brings the ink of the box that reads it (or the cascade's) into a stop, a layer or a value, wherever the var() stands`,
+                    `${shown} — a custom property that holds ${keyword !== null ? keyword[0].toLowerCase() : whole[0].toLowerCase()}: a var() is substituted as tokens, so it brings the ink of the box that reads it (or the cascade's) into a stop, a layer or a value, wherever the var() stands`,
                 );
             }
         }
@@ -3561,7 +3661,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
     // The keyframes this sheet declares: the only ones a first-party rule may run (`animationNameProblems`).
     const ownKeyframes = kit ? undefined : keyframeNamesOf(nodes);
 
-    const walk = (list) => {
+    const walk = (list, nested = false) => {
         for (const node of list) {
             if (node.kind === 'rule') {
                 if (braceOutsideStrings(node.body)) {
@@ -3584,6 +3684,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 if (!kit && !selectors.some(namesAState)) {
                     for (const why of outlineCapProblems(declarationsOf(node.body))) at(node.start, why);
                     for (const why of inkReachProblems(declarationsOf(node.body))) at(node.start, why);
+                    for (const why of blurCapProblems(declarationsOf(node.body))) at(node.start, why);
                     for (const why of animationNameProblems(declarationsOf(node.body), ownKeyframes)) at(node.start, why);
                     if (!selectors.some(isPseudoElementSelector)) {
                         for (const why of pastTheBoxProblems(declarationsOf(node.body))) at(node.start, why);
@@ -3596,6 +3697,13 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 if (kit && !/^wk-[\w-]+$/.test(name)) {
                     at(node.start, `@keyframes "${echo(name)}" must be named wk-… (keyframes are global)`);
                 }
+                // The sixth review's M2: inside a media block a keyframe applies only while the condition does, below it a base sheet's keyframe of the same name runs.
+                if (nested && !kit) {
+                    at(
+                        node.start,
+                        `@keyframes "${echo(name)}" stands inside another at-rule — a keyframe applies only while the condition does, and below it a base sheet's keyframe of the same name is the one a rule runs (write it at the top level of the sheet)`,
+                    );
+                }
                 const stopErrors = [];
                 const sizeMotionSaid = new Set();
                 for (const stop of parseList(node.body ?? '', 0, (node.body ?? '').length, stopErrors)) {
@@ -3605,6 +3713,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                         if (!kit) {
                             for (const why of outlineCapProblems(declarationsOf(stop.body))) at(node.start, why);
                             for (const why of inkReachProblems(declarationsOf(stop.body))) at(node.start, why);
+                            for (const why of blurCapProblems(declarationsOf(stop.body))) at(node.start, why);
                             for (const why of pastTheBoxProblems(declarationsOf(stop.body))) at(node.start, why);
                             for (const { prop, why } of keyframeSizeMotion(declarationsOf(stop.body))) {
                                 const message =
@@ -3628,13 +3737,13 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                         `@media ${echo(condition)} is not a condition the probe enters — a look may use ${LOOK_MEDIA.join(', ')}`,
                     );
                 }
-                walk(node.children ?? []);
+                walk(node.children ?? [], true);
             } else {
                 const why = Object.hasOwn(REFUSED_AT_RULES, node.name)
                     ? REFUSED_AT_RULES[node.name]
                     : `@${echo(node.name)} is not allowed in a look sheet — @media and @keyframes are`;
                 at(node.start, node.name === 'container' && /style\s*\(/i.test(node.prelude) ? `${why} (here: style())` : why);
-                walk(node.children ?? []);
+                walk(node.children ?? [], true);
             }
         }
     };
@@ -3918,7 +4027,7 @@ function declaredNames(css) {
     const visit = (list) => {
         for (const node of list) {
             if (node.kind !== 'at') continue;
-            if (node.name === 'keyframes') keyframes.push(node.prelude.replace(/^@keyframes\s*/i, '').trim());
+            if (node.name === 'keyframes') keyframes.push(unquoted(node.prelude.replace(/^@keyframes\s*/i, '').trim()));
             else if (node.name === 'font-face') families.push(...fontFamiliesOf(node.body ?? ''));
             else if (node.children !== undefined) visit(node.children);
         }

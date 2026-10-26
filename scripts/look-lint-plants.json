@@ -1211,6 +1211,7 @@
       "rule": ".$C .item:hover .item-x { animation: $C-fade 1s; }\n@media (min-width: 680px) { @keyframes $C-fade { to { opacity: 0; } } }",
       "expect": "refused",
       "by": [
+        "keyframe:nested",
         "state:property"
       ]
     },
@@ -4684,7 +4685,8 @@
       "rule": "@media (min-width: 680px) { @keyframes $C-gone { to { display: none; } } }",
       "expect": "refused",
       "by": [
-        "keyframe:display"
+        "keyframe:display",
+        "keyframe:nested"
       ]
     },
     {
@@ -5567,7 +5569,8 @@
       "rule": "@media (min-width: 680px) { @keyframes $C-pt { to { visibility: hidden; } } }",
       "expect": "refused",
       "by": [
-        "keyframe:display"
+        "keyframe:display",
+        "keyframe:nested"
       ]
     },
     {
@@ -6185,8 +6188,10 @@
     },
     {
       "rule": ".$C .stall-sub { filter: blur(400px); }",
-      "expect": "accepted",
-      "why": "stated gap: a blur's radius is not capped, and a blur spreads the box's own paint, ink included; only a drop-shadow()'s colour is read (reported to the window)"
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
     }
   ],
   "f3": [
@@ -7347,8 +7352,10 @@
     },
     {
       "rule": ".$C .item-p { --x: unset; }",
-      "expect": "accepted",
-      "why": "initial and unset are not the host's ink"
+      "expect": "refused",
+      "by": [
+        "custom-property:ink"
+      ]
     },
     {
       "rule": ".$C .item-a { animation: t-neo-cur 1s infinite; }",
@@ -7558,8 +7565,11 @@
     },
     {
       "rule": "@media (min-width: 680px) { @keyframes $C-m { to { color: red; } } }\n.$C .item-a { animation: $C-m 1s; }",
-      "expect": "accepted",
-      "why": "a keyframe declared in a media block of this sheet is this sheet's"
+      "expect": "refused",
+      "by": [
+        "keyframe:foreign",
+        "keyframe:nested"
+      ]
     },
     {
       "rule": ".$C .item-a { animation: ease 1s ease; }",
@@ -7732,6 +7742,267 @@
         "other",
         "state:property"
       ]
+    }
+  ],
+  "h1": [
+    {
+      "rule": ".$C .guide-link { text-decoration: underline abs(60px); }",
+      "expect": "refused",
+      "by": [
+        "ink-reach"
+      ]
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline round(60px, 1px); }",
+      "expect": "refused",
+      "by": [
+        "ink-reach"
+      ]
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline hypot(60px); }",
+      "expect": "refused",
+      "by": [
+        "ink-reach"
+      ]
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline exp(4px); }",
+      "expect": "refused",
+      "by": [
+        "ink-reach"
+      ]
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline CanvasText 2px; }",
+      "expect": "refused",
+      "by": [
+        "ink-reach"
+      ]
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline 1e3px; }",
+      "expect": "refused",
+      "by": [
+        "ink-reach"
+      ]
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline rgb(1 2 3) 2px; }",
+      "expect": "accepted",
+      "why": "the allow-list takes a colour this lint reads, a function of a colour included, within the 3px cap"
+    },
+    {
+      "rule": ".$C .guide-link { text-decoration: underline wavy 3px var(--s-accent); }",
+      "expect": "accepted",
+      "why": "a line and a style keyword, a thickness at its cap and a palette role: each token is on the allow-list"
+    },
+    {
+      "rule": "@media (min-width: 680px) { @keyframes \"sel-bump\" { 0% { transform: scale(1); } 50% { transform: scale(1.18); } } }\n.$C .item-x { animation: sel-bump 1s infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:foreign",
+        "keyframe:nested",
+        "size:keyframe"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { @keyframes $C-here { to { color: red; } } }\n.$C .item-a { animation: $C-here 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:foreign",
+        "keyframe:nested"
+      ]
+    },
+    {
+      "rule": "@keyframes pin-demo-land;\n.$C .item-a { animation: pin-demo-land 1s 120s reverse forwards; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:foreign"
+      ]
+    },
+    {
+      "rule": "@keyframes \"sel-bump\" { to { opacity: 1; } }\n.$C .item-a { animation: sel-bump 1s; }",
+      "expect": "accepted",
+      "why": "a top-level quoted twin of a base keyframe: this lint reads one sheet and the twin is its own; the cross-sheet rule (wornSheetProblems) reads the quotes off since the sixth review"
+    },
+    {
+      "rule": ".$C .poster-box:not([data-format='tag']) .poster-png { width: 2000px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C :not([data-format='tag']) > .poster-png { display: none; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .poster-box:not(:not([data-format='tag'])) .poster-png { width: 2000px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .poster-box:not(.x, [data-code='false']) { width: 2000px; }",
+      "expect": "refused",
+      "by": [
+        "state:property"
+      ]
+    },
+    {
+      "rule": ".$C .poster-box:is([data-format='tag']) .poster-png { width: 2000px; }",
+      "expect": "accepted",
+      "why": "a painted value under :is() is a positive match: the tag format is painted by the poster fixtures, so the rule is read at rest"
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(40px); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-filter: blur(80px); filter: blur(80px); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: BLUR(40PX); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(4.01px); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(2px) blur(2px); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(var(--b)); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(calc(2px)); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(abs(2px)); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(1em); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: var(--f); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-bl { to { filter: blur(40px); } }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { .$C .item-n { filter: blur(40px); } }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n::after { content: ''; filter: blur(40px); }",
+      "expect": "refused",
+      "by": [
+        "blur-cap"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(4px); }",
+      "expect": "accepted",
+      "why": "a blur at its cap: px, 4px, the only one in the list"
+    },
+    {
+      "rule": ".$C .item-n { filter: blur(0); }",
+      "expect": "accepted",
+      "why": "a zero blur draws nothing; a bare 0 is a length"
+    },
+    {
+      "rule": ".$C .item-n { filter: sepia(0.35) saturate(0.75) drop-shadow(0 1px 0 rgba(255, 246, 230, 0.4)) blur(2px); }",
+      "expect": "accepted",
+      "why": "the looks' own filter functions, a drop-shadow() whose colour is read by its own reader, and a blur within the cap"
+    },
+    {
+      "rule": ".$C .item-n { filter: drop-shadow(0 0 4px var(--s-accent)); }",
+      "expect": "accepted",
+      "why": "a palette role standing as a drop-shadow()'s colour is a colour and not a blur: the colour readers' ground"
+    },
+    {
+      "rule": ".$C .item-n { backdrop-filter: blur(40px); }",
+      "expect": "accepted",
+      "why": "stated: backdrop-filter blurs what lies behind the box and not its own paint; it is left alone (the shipped sheets blur there)"
+    },
+    {
+      "rule": ".$C .item-p { --x: unset; }",
+      "expect": "refused",
+      "by": [
+        "custom-property:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item-p { --x: UNSET; }",
+      "expect": "refused",
+      "by": [
+        "custom-property:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item-p { --x: initial; }",
+      "expect": "accepted",
+      "why": "initial on a custom property is the guaranteed-invalid value: it takes no ink from anywhere"
+    },
+    {
+      "rule": ".$C .bc-ext { animation-delay: 120s; animation-fill-mode: backwards; }",
+      "expect": "accepted",
+      "why": "stated gap: a longhand that names no keyframe re-times what the cascade already runs on the element, a base keyframe included (PLAN § Open)"
+    },
+    {
+      "rule": ".$C .ic { stroke-linejoin: miter; stroke-miterlimit: 1000; }",
+      "expect": "accepted",
+      "why": "stated gap: stroke-miterlimit is uncapped, a miter join reaches that many stroke widths from a vertex (PLAN § Open)"
     }
   ]
 }
