@@ -6558,11 +6558,12 @@ nor the name's cell or the picture; and the stepper's box and the figure's
 characters stay inside the row. **Landscape, 880 to 2560 wide** (150 sizes,
 the ones main fails are 880 to 1200 wide): main 1,573 of 12,888 rows red on
 66 sizes, here 0 of 12,888, and the rows from 1280 up identical to main's on
-all 77 sizes there. **Portrait, 680 to 1440 wide up to 2560 tall** (123
-sizes): main 750 of 16,752 rows red on 57 sizes (the critic's run of the same
-tool), here 0 of 16,752. At the first set of 16 sizes (the nine wall sizes,
-834x1112, 1152x864, 1279x800, 1279x768, 1200x800, 1100x800 and 960x720): main
-138 of 1,044 rows red, here 0.
+all 77 sizes there. **Portrait, 680 to 1440 wide up to 2560 tall** (115
+sizes): main 746 of 15,567 rows red on 56 sizes, here 0 of 15,567. At the
+first set of 16 sizes (the nine wall sizes, 834x1112, 1152x864, 1279x800,
+1279x768, 1200x800, 1100x800 and 960x720): main 138 of 1,044 rows red, here
+0. Run twice, on Chrome 155 and again on Chrome 156 (2026-10-26, from the
+committed tree): the landscape and first-set numbers are the same to the row.
 
 **What is not claimed: a landscape wall under 870 wide** (D-2026-10-20-12,
 PLAN § Open). The row is 266px wide at 800 and 306px at 840, and there the

@@ -1038,7 +1038,7 @@ money path this app can have, because nothing on it is derived.
   at these widths (about 200px more list, by the critic's estimate and
   unmeasured), or the list scrolled to its first figure at rest (not
   recommended: it fights the wall's self-scroll and the heartbeat).
-  Over portrait walls under 1080 wide (123 sizes, 2,379 cells with a list on
+  Over portrait walls under 1080 wide (2,379 cells with a list on
   screen) the first price is whole at rest in 2,216 cells, against 2,186 on
   main and 2,097 on this branch's first version; 43 cells gain against main
   and 13 lose (lists of 154–191px under a payment's band, the Awning or the
