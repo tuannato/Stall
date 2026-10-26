@@ -6557,8 +6557,8 @@ const OFFSET_GEOMETRY: ReadonlySet<string> = new Set([
  */
 const OFFSET_HELD_OWN: readonly string[] = [...DRESS_HELD].filter((prop) => !OFFSET_GEOMETRY.has(prop));
 
-/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), those seeked for the self-clip read alone (`layout`: off every figure's walk, or needless there, and setting a longhand `MOVES_NO_OTHER_BOX` does not name), seeks, subjects read at a seek, their grounds read again where a seek changed them (`offsetGroundFaults`), the self-clip reads made at a seek (`selfClipSentences`), failures found there; and its own time. */
-const dressSeek = { anims: 0, needless: 0, layout: 0, seeks: 0, reads: 0, grounds: 0, clips: 0, faults: 0, names: {} as Record<string, number> };
+/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), those seeked for the self-clip read alone (`layout`: off every figure's walk, or needless there, and setting a longhand `MOVES_NO_OTHER_BOX` does not name), those counted as moving another box only because an anchor can follow what they move (`anchored`, `ANCHOR_FOLLOWED`), seeks, subjects read at a seek, their grounds read again where a seek changed them (`offsetGroundFaults`), the self-clip reads made at a seek (`selfClipSentences`), failures found there; and its own time. */
+const dressSeek = { anims: 0, needless: 0, layout: 0, anchored: 0, seeks: 0, reads: 0, grounds: 0, clips: 0, faults: 0, names: {} as Record<string, number> };
 let dressSeekMs = 0;
 
 /**
@@ -6749,49 +6749,72 @@ const GROUND_ONLY: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Every property each `@keyframes` rule of the page's sheets declares, by
+ * What the page's sheets say, read once a page and again when a sheet is
+ * added (`sheetKey`): every property each `@keyframes` rule declares, by
  * name, custom properties included (`getKeyframes()` lists none of them for
- * a CSS animation: the critic's PT2 reads as four empty keyframes there).
- * Read once a page, again when a sheet is added.
+ * a CSS animation: the critic's PT2 reads as four empty keyframes there);
+ * and whether an anchor can stand anywhere on the page (`anchors`): some
+ * rule, keyframe or nested rule of a sheet declares `anchor-name` at a value
+ * other than `none` (`@import`ed sheets read too), or a sheet this page
+ * cannot read (which may), the seventh review's B1.
  */
-let keyframeDecls: { key: string; byName: Map<string, Set<string>> } | undefined;
-function keyframesDeclare(name: string): ReadonlySet<string> | undefined {
-    const key = `${document.styleSheets.length}:${document.adoptedStyleSheets.length}`;
-    if (keyframeDecls?.key !== key) {
+let sheetFactsRead: { key: string; byName: Map<string, Set<string>>; anchors: boolean } | undefined;
+const sheetKey = (): string => `${document.styleSheets.length}:${document.adoptedStyleSheets.length}`;
+function sheetFacts(): { byName: Map<string, Set<string>>; anchors: boolean } {
+    const key = sheetKey();
+    if (sheetFactsRead?.key !== key) {
         const byName = new Map<string, Set<string>>();
+        let anchors = false;
+        const names = (style: CSSStyleDeclaration): void => {
+            const value = style.getPropertyValue('anchor-name').trim();
+            if (value !== '' && value !== 'none') anchors = true;
+        };
         const walk = (rules: CSSRuleList): void => {
             for (const rule of rules) {
                 if (rule instanceof CSSKeyframesRule) {
                     const props = byName.get(rule.name) ?? new Set<string>();
                     for (const frame of rule.cssRules) {
                         const style = (frame as CSSKeyframeRule).style;
+                        names(style);
                         for (let i = 0; i < style.length; i += 1) props.add(style.item(i));
                     }
                     byName.set(rule.name, props);
-                } else if ('cssRules' in rule) {
-                    walk((rule as CSSGroupingRule).cssRules);
+                    continue;
                 }
+                if ('style' in rule && (rule as CSSStyleRule).style instanceof CSSStyleDeclaration) names((rule as CSSStyleRule).style);
+                if (rule instanceof CSSImportRule) {
+                    try {
+                        if (rule.styleSheet !== null) walk(rule.styleSheet.cssRules);
+                    } catch {
+                        anchors = true;
+                    }
+                }
+                if ('cssRules' in rule) walk((rule as CSSGroupingRule).cssRules);
             }
         };
         for (const sheet of [...document.styleSheets, ...document.adoptedStyleSheets]) {
             try {
                 walk(sheet.cssRules);
             } catch {
-                // A sheet this page cannot read: its keyframes are not known, and an animation that runs one is seeked.
+                // A sheet this page cannot read: its keyframes are not known, and an animation that runs one is seeked; an anchor may stand in it.
+                anchors = true;
             }
         }
-        keyframeDecls = { key, byName };
+        sheetFactsRead = { key, byName, anchors };
     }
-    return keyframeDecls.byName.get(name);
+    return sheetFactsRead;
 }
+/** Every property the `@keyframes` rule of that name declares (`sheetFacts`), or undefined for a name no sheet this page can read declares. */
+const keyframesDeclare = (name: string): ReadonlySet<string> | undefined => sheetFacts().byName.get(name);
 
 /** Whether one longhand a keyframe sets is needless to seek (`SEEK_NEEDLESS`), on one of a figure's own elements (`own`, where `SEEK_ON_OWN` is seeked) or on a box above. */
 const needlessHere = (prop: string, own: boolean): boolean => SEEK_NEEDLESS.has(prop) && !(own && SEEK_ON_OWN.has(prop));
 
 /**
  * The longhands a keyframe may set and leave every box that does not hold
- * the animated one where it stands, at its size (`movesOtherBoxes`; before
- * 8g2, the sixth review's P1-a and its PSQ2):
+ * the animated one where it stands, at its size — **with no anchor to
+ * follow them** (`movesOtherBoxes`; before 8g2, the sixth review's P1-a and
+ * its PSQ2, and the seventh review's B1):
  *
  * - **the paints**: an ink and its fill and stroke, a caret's and an
  *   accent's colour, a background and its tile, a border's colour, a box
@@ -6800,31 +6823,50 @@ const needlessHere = (prop: string, own: boolean): boolean => SEEK_NEEDLESS.has(
  *   emphasis mark's colour, an SVG paint;
  * - **the compositing**: an opacity, a filter, a backdrop filter, a blend,
  *   an isolation, a `clip`, a `clip-path`, a mask and its parts, a mask
- *   border, `visibility`, a stacking order, a cursor and `pointer-events`;
- * - **what moves or turns the animated box and what it holds, and no other
- *   box**: a transform, its parts, its origin, its box and its style, a
- *   perspective and its origin, `backface-visibility`, a motion path and
- *   its parts, and a box's offsets (`left`, `top`, `right`, `bottom` and
- *   `inset`'s longhands: a relatively positioned box is offset after the
- *   layout, an absolutely positioned one stands out of the flow).
+ *   border, a stacking order, a cursor and `pointer-events`;
+ * - **what moves or turns the animated box and what it holds**: a
+ *   transform, its parts, its origin, its box and its style, a perspective
+ *   and its origin, `backface-visibility`, a motion path and its parts, and
+ *   a box's offsets (`left`, `top`, `right`, `bottom` and `inset`'s
+ *   longhands: a relatively positioned box is offset after the layout, an
+ *   absolutely positioned one stands out of the flow) — **and every box
+ *   positioned against an anchor they carry**: in Chrome 156 a box placed
+ *   by `anchor()` and sized by `anchor-size()` follows its anchor's
+ *   transform, `rotate`, `scale` (its size too), `translate`, origin, box, a
+ *   host's perspective and its origin, motion path and its parts and
+ *   offsets (`ANCHOR_FOLLOWED`, measured one longhand at a time: the
+ *   seventh review's PAN, the figure the wallet signs anchored to its unit,
+ *   which a keyframe `translate` carried out of its row's clip). So where an
+ *   anchor can follow them (`anchorCanFollow`: a sheet that declares
+ *   `anchor-name`, or one this page cannot read, an animation that sets it,
+ *   or an anchor name the animated box or a box under it computes), an
+ *   animation that sets one of `ANCHOR_FOLLOWED` counts as moving another
+ *   box.
+ *
+ * **Not `visibility`**: a table row's or a table column's `visibility`
+ * from `collapse` to `visible` lays the row out and moves the next one
+ * (the seventh review's PVC: a collapsed `::before` row before the pay
+ * figure, made visible by a keyframe, pushed the figure out of a 52px
+ * clip; measured in Chrome 156, a flex or grid item's does not move its
+ * neighbour), so an animation that sets it can move another box.
  *
  * The self-clip read (`selfClipSentences`) reads a figure's text against
- * the figure's own box and the boxes above it up to its surface, and none
- * of these moves one that does not hold the animated box: so an animation
- * that sets only these cuts no figure but one it holds, and a figure it
- * holds is on its walk, where the offset read reads it already (with the
- * turns held off, as the self-clip read always reads). **Anything else** —
- * a size, a margin, a padding, a border's width or style, a font, a
- * spacing, an indent, a line height, a grid or flex track, an order,
- * `display`, `zoom`, `content-visibility`, a custom property (which can
- * feed any of them through `var()`), a property this list does not name, a
- * keyframe rule this page cannot read — can move another box, and its
- * animation is seeked for the self-clip read of every money figure on the
- * paint, wherever it runs (`offsetDressFaults`). PSQ2: a keyframe
- * `margin-inline-start: calc(100% - 70px)` on the pay figure's unit
- * sibling, `.item-u`, from 30% to 40% of a 100s loop, squeezed the figure
- * the wallet signs inside its own `overflow-x: clip` at desk width, and
- * nothing seeked it: it ran on no box of the figure's walk.
+ * the figure's own box and the boxes above it up to its surface, and, with
+ * no anchor to follow them, none of these moves one that does not hold the
+ * animated box: so an animation that sets only these cuts no figure but one
+ * it holds, and a figure it holds is on its walk, where the offset read
+ * reads it already (with the turns held off, as the self-clip read always
+ * reads). **Anything else** — a size, a margin, a padding, a border's width
+ * or style, a font, a spacing, an indent, a line height, a grid or flex
+ * track, an order, `display`, `visibility`, `zoom`, `content-visibility`, a
+ * custom property (which can feed any of them through `var()`), a property
+ * this list does not name, a keyframe rule this page cannot read — can move
+ * another box, and its animation is seeked for the self-clip read of every
+ * money figure on the paint, wherever it runs (`offsetDressFaults`). PSQ2: a
+ * keyframe `margin-inline-start: calc(100% - 70px)` on the pay figure's
+ * unit sibling, `.item-u`, from 30% to 40% of a 100s loop, squeezed the
+ * figure the wallet signs inside its own `overflow-x: clip` at desk width,
+ * and nothing seeked it: it ran on no box of the figure's walk.
  */
 const MOVES_NO_OTHER_BOX: ReadonlySet<string> = new Set([
     'color',
@@ -6917,7 +6959,6 @@ const MOVES_NO_OTHER_BOX: ReadonlySet<string> = new Set([
     '-webkit-mask-box-image-width',
     '-webkit-mask-box-image-outset',
     '-webkit-mask-box-image-repeat',
-    'visibility',
     'z-index',
     'cursor',
     'pointer-events',
@@ -6946,13 +6987,79 @@ const MOVES_NO_OTHER_BOX: ReadonlySet<string> = new Set([
     'inset-inline-end',
 ]);
 
-/** `movesOtherBoxes` of each CSS animation by name, while the page's sheets stand (the key `keyframesDeclare` reads them by). */
-let movesByName: { key: string; byName: Map<string, boolean> } = { key: '', byName: new Map() };
+/**
+ * The longhands of `MOVES_NO_OTHER_BOX` that move a box an anchor can be:
+ * set on the anchor, or on a box above it, each moves the anchor's box as
+ * the page draws it, and a box positioned against the anchor with
+ * `anchor()` follows it — measured in Chrome 156 one longhand at a time
+ * (before 8g2, the seventh review's B1;
+ * `private/design/workshop-2026-09-23/before-8g2/critic7-fixes/pages/anchor-follows.html`
+ * and `anchor-3d.html`): the transform and its parts (`scale` resizes what
+ * `anchor-size()` reads), the origin and the transform box (under a turn
+ * at rest), a host's perspective and its origin (over a 3D child), the
+ * motion path and its parts, and the offsets. `transform-style` on a host
+ * moves the anchor's drawn box and Chrome 156's anchored box did not follow
+ * it; it is counted anyway, the anchor having moved. Measured to move
+ * neither: `backface-visibility`, and every paint and compositing longhand
+ * of the list. `perspective` on the anchor itself moves nothing (it shapes
+ * its children); on a host it moves the anchor, which is why it is here.
+ */
+const ANCHOR_FOLLOWED: ReadonlySet<string> = new Set([
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+    'transform-origin',
+    'transform-box',
+    'transform-style',
+    'perspective',
+    'perspective-origin',
+    'offset-path',
+    'offset-distance',
+    'offset-rotate',
+    'offset-anchor',
+    'offset-position',
+    'left',
+    'top',
+    'right',
+    'bottom',
+    'inset-block-start',
+    'inset-block-end',
+    'inset-inline-start',
+    'inset-inline-end',
+]);
 
-/** Whether an animation's keyframes can move a box other than the one it runs on (`MOVES_NO_OTHER_BOX`): true unless every longhand they set is on that list, and true for a keyframe rule this page cannot read. */
-function movesOtherBoxes(anim: Animation, effect: KeyframeEffect): boolean {
+/** `movesOtherBoxes` of each CSS animation by name, while the page's sheets stand (`sheetKey`). */
+let movesByName: { key: string; byName: Map<string, { others: boolean; follows: boolean }> } = { key: '', byName: new Map() };
+
+/**
+ * What an animation's keyframes can move: `others` — a box other than the
+ * one it runs on, with no anchor to follow it — unless every longhand they
+ * set is on `MOVES_NO_OTHER_BOX`, and true for a keyframe rule this page
+ * cannot read; `follows` where one of them is on `ANCHOR_FOLLOWED`, which
+ * an anchored box follows (`anchorCanFollow` decides whether one can).
+ */
+function movesOtherBoxes(anim: Animation, effect: KeyframeEffect): { others: boolean; follows: boolean } {
     const props = keyframeProps(anim, effect);
-    return props === undefined || ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop));
+    if (props === undefined) return { others: true, follows: true };
+    return { others: ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop)), follows: [...props].some((prop) => ANCHOR_FOLLOWED.has(prop)) };
+}
+
+/**
+ * Whether an anchor can follow what an animation moves (`ANCHOR_FOLLOWED`;
+ * before 8g2, the seventh review's B1): a sheet of the page declares
+ * `anchor-name` or cannot be read (`sheetFacts`), or an animation on the
+ * page sets it (`pageAnchors`), or the animated box — a pseudo-element
+ * included — or an element under it computes an `anchor-name` other than
+ * `none` (one set by script, which no sheet declares). Read before any
+ * animation is seeked, while the style is the pass's last instant's.
+ */
+function anchorCanFollow(target: Element, pseudo: string | null, pageAnchors: boolean): boolean {
+    if (pageAnchors) return true;
+    if (getComputedStyle(target, pseudo).getPropertyValue('anchor-name') !== 'none') return true;
+    if (pseudo !== null) return false;
+    for (const el of target.querySelectorAll('*')) if (getComputedStyle(el).getPropertyValue('anchor-name') !== 'none') return true;
+    return false;
 }
 
 /**
@@ -7173,8 +7280,13 @@ function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHer
  * unit sibling squeezed the figure inside its own clip at desk width, and
  * the read seeked only animations on a figure's walk): every animation,
  * a pseudo-element's included, whose keyframes set a longhand that can move
- * a box other than its own (`movesOtherBoxes`, `MOVES_NO_OTHER_BOX`) is
- * seeked the same way, and at each offset the self-clip read is made for
+ * a box other than its own (`movesOtherBoxes`, `MOVES_NO_OTHER_BOX`; a
+ * `visibility` among them, the seventh review's PVC), or a transform or an
+ * offset where an anchor can follow it (`ANCHOR_FOLLOWED`,
+ * `anchorCanFollow`; the seventh review's PAN, the figure the wallet signs
+ * anchored to its unit and carried out of its row's clip by a keyframe
+ * `translate` on the unit), is seeked the same way, and at each offset the
+ * self-clip read is made for
  * every money figure on the paint, not only those it holds; one on a
  * figure's walk does both reads at the same seeks. A figure the dress rule
  * does not read (one not rendered at rest) is answered to the caller.
@@ -7206,9 +7318,15 @@ function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHer
  * button's breathing (a shadow on a money node itself, read for the ground
  * alone); Neo's card pulse on every row head is an outer shadow on a box
  * above (`outerShadowOnly`) and is not seeked; no shipped keyframe off a
- * figure's walk sets a longhand that moves another box, so the layout-wide
- * read seeks nothing more there (`dressSeek.layout`) — and each pays a style
- * recalc a seek (`dressSeek`, `dressSeekMs`). Without the skip, every Rural tag's sway and every sign's
+ * figure's walk on a paint with a money figure sets a longhand that moves
+ * another box (the door's pin demo sets `visibility`, and the door paints no
+ * money figure), and no served sheet declares `anchor-name`, so the
+ * layout-wide read seeks nothing more there (`dressSeek.layout`,
+ * `dressSeek.anchored`) — and each pays a style recalc a seek (`dressSeek`,
+ * `dressSeekMs`). The anchor read (`anchorCanFollow`) reads the computed
+ * `anchor-name` of each box an animation that sets a transform or an offset
+ * and nothing else that moves another box runs on, and of every element
+ * under it, once a paint, before any seek. Without the skip, every Rural tag's sway and every sign's
  * swing and sweep was seeked: about ten times the time (3.1s against 0.44s
  * over the desk pass's screens, in a session).
  */
@@ -7255,9 +7373,32 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
     // every animation is put back before the next is read.
     restGround = new Map();
     restInk = new Map();
-    const sheets = `${document.styleSheets.length}:${document.adoptedStyleSheets.length}`;
+    const sheets = sheetKey();
     if (movesByName.key !== sheets) movesByName = { key: sheets, byName: new Map() };
-    for (const anim of document.getAnimations()) {
+    const animations = document.getAnimations();
+    // What each animation can move, decided before any is seeked (the style
+    // is the pass's last instant's): a CSS animation's longhands are its
+    // `@keyframes` rule's, one per name, read once while the page's sheets
+    // stand (`movesOtherBoxes`); and a transform or an offset counts as
+    // moving another box where an anchor can follow it (`anchorCanFollow`,
+    // the seventh review's PAN). An animation that sets `anchor-name` is an
+    // anchor on the page as a sheet that declares it is.
+    const pageAnchors =
+        sheetFacts().anchors || animations.some((a) => a.effect instanceof KeyframeEffect && !(a instanceof CSSAnimation) && (keyframeProps(a, a.effect)?.has('anchor-name') ?? false));
+    const movesOf = new Map<Animation, boolean>();
+    for (const anim of animations) {
+        const effect = anim.effect;
+        if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;
+        let moves = anim instanceof CSSAnimation ? movesByName.byName.get(anim.animationName) : undefined;
+        if (moves === undefined) {
+            moves = movesOtherBoxes(anim, effect);
+            if (anim instanceof CSSAnimation) movesByName.byName.set(anim.animationName, moves);
+        }
+        const anchored = !moves.others && moves.follows && anchorCanFollow(effect.target, effect.pseudoElement, pageAnchors);
+        if (anchored) dressSeek.anchored += 1;
+        movesOf.set(anim, moves.others || anchored);
+    }
+    for (const anim of animations) {
         const effect = anim.effect;
         if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;
         const target = effect.target;
@@ -7272,14 +7413,10 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
             reads = undefined;
         }
         // Wherever it runs: a keyframe that can move a box other than its
-        // own (`movesOtherBoxes`) can cut any figure's text — a sibling's
-        // margin squeezing it inside its own clip, the sixth review's PSQ2.
-        // A CSS animation's longhands are its `@keyframes` rule's, one per name: read once while the page's sheets stand (`keyframesDeclare`'s key).
-        let movesOthers = anim instanceof CSSAnimation ? movesByName.byName.get(anim.animationName) : undefined;
-        if (movesOthers === undefined) {
-            movesOthers = movesOtherBoxes(anim, effect);
-            if (anim instanceof CSSAnimation) movesByName.byName.set(anim.animationName, movesOthers);
-        }
+        // own (`movesOf`, above) can cut any figure's text — a sibling's
+        // margin squeezing it inside its own clip, the sixth review's PSQ2;
+        // an anchor's translate carrying the figure out of its row's, PAN.
+        const movesOthers = movesOf.get(anim) ?? true;
         // Off every figure's walk it is seeked for the self-clip read alone: not on a paint with no figure to read.
         if (reads === undefined && (!movesOthers || figuresOnThePaint().length === 0)) continue;
         const duration = effect.getComputedTiming().duration;

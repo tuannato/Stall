@@ -237,10 +237,45 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         }
     });
 
-    it('seeks for the self-clip read every keyframe that can move another box, and calls none of the layout longhands paint-only', () => {
-        // The sixth review's PSQ2: a sibling's keyframe margin cut the pay figure, and nothing off the figure's walk was seeked.
-        expect(flatBody('movesOtherBoxes')).toContain('const props = keyframeProps(anim, effect); return props === undefined || ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop));');
-        expect(offsetReadBody()).toContain('movesOthers = movesOtherBoxes(anim, effect);');
+    /*
+     * The sixth review's PSQ2 (a sibling's keyframe margin cut the pay
+     * figure, and nothing off the figure's walk was seeked) and the seventh
+     * review's B1: `MOVES_NO_OTHER_BOX` held `visibility` (a table row's
+     * `collapse` to `visible` moves the next row, PVC) and said a transform
+     * or an offset moves only the animated box and what it holds (a box
+     * placed by `anchor()` follows its anchor's, PAN). The list holds no
+     * longhand that moves another box with no anchor to follow it; the ones
+     * an anchored box follows are `ANCHOR_FOLLOWED`, and each of them counts
+     * as moving another box where an anchor can follow it.
+     */
+    it('seeks for the self-clip read every keyframe that can move another box: no layout longhand or visibility on the still list, and a transform or an offset where an anchor can follow it', () => {
+        expect(flatBody('movesOtherBoxes')).toContain(
+            'const props = keyframeProps(anim, effect); if (props === undefined) return { others: true, follows: true }; return { others: ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop)), follows: [...props].some((prop) => ANCHOR_FOLLOWED.has(prop)) };',
+        );
+        const body = offsetReadBody();
+        for (const block of [
+            'moves = movesOtherBoxes(anim, effect);',
+            'const anchored = !moves.others && moves.follows && anchorCanFollow(effect.target, effect.pseudoElement, pageAnchors); if (anchored) dressSeek.anchored += 1; movesOf.set(anim, moves.others || anchored);',
+            "const pageAnchors = sheetFacts().anchors || animations.some((a) => a.effect instanceof KeyframeEffect && !(a instanceof CSSAnimation) && (keyframeProps(a, a.effect)?.has('anchor-name') ?? false));",
+            'const movesOthers = movesOf.get(anim) ?? true;',
+        ]) {
+            expect(body, block).toContain(block);
+        }
+        // An anchor can follow: a sheet that declares it or cannot be read, an animation that sets it, or one the animated box or a box under it computes.
+        expect(flatBody('anchorCanFollow')).toContain(
+            "if (pageAnchors) return true; if (getComputedStyle(target, pseudo).getPropertyValue('anchor-name') !== 'none') return true; if (pseudo !== null) return false; for (const el of target.querySelectorAll('*')) if (getComputedStyle(el).getPropertyValue('anchor-name') !== 'none') return true; return false;",
+        );
+        const facts = flatBody('sheetFacts');
+        for (const block of [
+            "const value = style.getPropertyValue('anchor-name').trim(); if (value !== '' && value !== 'none') anchors = true;",
+            'names(style); for (let i = 0; i < style.length; i += 1) props.add(style.item(i));',
+            "if ('style' in rule && (rule as CSSStyleRule).style instanceof CSSStyleDeclaration) names((rule as CSSStyleRule).style);",
+            'if (rule instanceof CSSImportRule) { try { if (rule.styleSheet !== null) walk(rule.styleSheet.cssRules); } catch { anchors = true; } }',
+            "if ('cssRules' in rule) walk((rule as CSSGroupingRule).cssRules);",
+            'try { walk(sheet.cssRules); } catch { anchors = true; }',
+        ]) {
+            expect(facts, block).toContain(block);
+        }
         const still = setOf('MOVES_NO_OTHER_BOX');
         expect(still.length).toBeGreaterThan(60);
         const layout = [
@@ -251,9 +286,18 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
             'letter-spacing', 'word-spacing', 'text-indent', 'line-height', 'white-space', 'text-transform', 'writing-mode', 'direction',
             'display', 'position', 'float', 'zoom', 'content-visibility', 'contain', 'order', 'flex-grow', 'flex-shrink', 'grid-area', 'gap', 'row-gap', 'column-gap',
             'box-sizing', 'aspect-ratio', 'overflow-x', 'overflow-y', 'justify-content', 'align-items', 'align-self', 'flex-direction', 'flex-wrap', 'content',
+            // The seventh review's PVC: a table row's visibility moves the next row.
+            'visibility',
+            // And anchor positioning's own longhands, which move the anchored box.
+            'anchor-name', 'anchor-scope', 'position-anchor', 'position-area', 'inset-area', 'position-try', 'position-try-fallbacks', 'position-try-order', 'position-visibility',
         ];
-        for (const prop of layout) expect(still, `MOVES_NO_OTHER_BOX calls ${prop}, which moves other boxes, paint-only`).not.toContain(prop);
+        for (const prop of layout) expect(still, `MOVES_NO_OTHER_BOX names ${prop}, which can move another box, as still`).not.toContain(prop);
         for (const prop of still) expect(prop.startsWith('--'), `MOVES_NO_OTHER_BOX names ${prop}, a custom property, which can feed any longhand`).toBe(false);
+        // Every transform, motion-path and offset longhand of the still list is one an anchored box is counted as following (measured in Chrome 156).
+        const followed = setOf('ANCHOR_FOLLOWED');
+        for (const prop of followed) expect(still, `ANCHOR_FOLLOWED names ${prop}, which MOVES_NO_OTHER_BOX does not`).toContain(prop);
+        const moving = still.filter((prop) => /^(?:transform|rotate|scale|translate|perspective|offset-|left$|top$|right$|bottom$|inset-)/.test(prop));
+        expect([...moving].sort()).toEqual([...followed].sort());
     });
 
     it('reads at the offsets every longhand the fourth review found left out, PFA among them', () => {

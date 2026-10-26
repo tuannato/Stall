@@ -10941,17 +10941,24 @@ all of them), its log opening with an uptime line.
   seeked at its keyframe offsets, and the self-clip read is made there for
   every money figure on the paint (`movesOtherBoxes`, read from the
   `@keyframes` rule as the offset read reads it). The list of longhands that
-  move no other box is `MOVES_NO_OTHER_BOX`, with its reason: the paints,
-  the compositing, and a transform, a motion path or a box's offsets, which
-  move only the animated box and what it holds — and a figure the animated
-  box holds is on its walk, read already. Anything else — a size, a margin,
-  a padding, a border's width or style, a font, a spacing, an indent,
-  `zoom`, `content-visibility`, a custom property, a property the list does
-  not name, a rule the page cannot read — is seeked. **Not strictly
-  "paint-only"**: the brief's word; transforms and offsets are on the list
-  because they move no box but the animated one's own subtree, which the
-  walk's read covers (and the self-clip read holds the turns off). One on a
-  figure's walk does both reads at the same seeks.
+  move no other box with no anchor to follow them is `MOVES_NO_OTHER_BOX`,
+  with its reason: the paints, the compositing, and a transform, a motion
+  path or a box's offsets, which move the animated box and what it holds —
+  and a figure the animated box holds is on its walk, read already — **and,
+  the seventh review found, every box positioned with `anchor()` against an
+  anchor they carry** (PAN); since that review a transform, a motion path
+  or an offset counts as moving another box wherever an anchor can follow
+  it (`ANCHOR_FOLLOWED`, `anchorCanFollow`), and `visibility` is off the
+  list (a table row's `collapse` to `visible` moves the next row: PVC;
+  "Before 8g2: the seventh review's fixes", below). Anything else — a size,
+  a margin, a padding, a border's width or style, a font, a spacing, an
+  indent, `zoom`, `content-visibility`, a custom property, a property the
+  list does not name, a rule the page cannot read — is seeked. **Not
+  strictly "paint-only"**: the brief's word; transforms and offsets are on
+  the list because, with no anchor to follow them, they move no box but the
+  animated one's own subtree, which the walk's read covers (and the
+  self-clip read holds the turns off). One on a figure's walk does both
+  reads at the same seeks.
 - **The cost, measured.** The first version gathered every money figure and
   decided every animation's rule on every paint: the offset read's page
   time rose about 0.1s a page pass (quick reads of every screen, commit 1
