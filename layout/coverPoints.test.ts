@@ -6,7 +6,10 @@ import {
     INK_MAX_COLUMNS,
     INK_MAX_ROWS,
     INK_ROW_PITCH,
+    RUNNING_RIBBON,
     SQUARE,
+    WALL_SCROLLERS,
+    clipVerdict,
     columnExcuses,
     columnPlace,
     cornerInset,
@@ -17,8 +20,11 @@ import {
     insideRounded,
     movedBy,
     radiusOf,
+    reachWithin,
+    type ClipBox,
     type Placement,
     type Radii,
+    type Reach,
 } from './coverPoints';
 
 const round = (r: number): Radii => ({ tl: [r, r], tr: [r, r], br: [r, r], bl: [r, r] });
@@ -280,5 +286,77 @@ describe('nothing-covers-money-or-a-protected-box: the price column', () => {
         expect(columnExcuses('grid', 'inside', undefined)).toBe(false);
         expect(columnExcuses('corner', 'inside', 'top -60px (position relative)')).toBe(false);
         expect(columnExcuses('corner', 'outside', undefined)).toBe(false);
+    });
+});
+
+describe('nothing-covers-money-or-a-protected-box: a point behind a clip', () => {
+    /*
+     * 7a (the critic's third review, its item 3 and checklist item 8). A
+     * shelf 100px tall at y 100–200, cut or scrolled; its content runs to
+     * y 500. `reach` scrolls it by 300px down.
+     */
+    const shelf = { left: 0, top: 100, right: 400, bottom: 200 };
+    const box = (overflowY: string, wall = false, rect = shelf): ClipBox => ({ rect, overflowX: 'visible', overflowY, wall });
+    const scrolls: Reach = { x0: 0, x1: 400, y0: 100, y1: 500, pad: shelf };
+    const still: Reach = { x0: 0, x1: 400, y0: 100, y1: 200, pad: shelf };
+
+    it('hit-tests a point inside every clip', () => {
+        expect(clipVerdict(50, 150, [box('hidden')], () => still)).toEqual({ kind: 'clear' });
+    });
+
+    it('counts a point a scroller brings into view, and fails one past its reach', () => {
+        expect(clipVerdict(50, 300, [box('auto')], () => scrolls)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 600, [box('auto')], () => scrolls)).toEqual({ kind: 'unreached', at: 0 });
+    });
+
+    it('fails a point past a clip that cuts and does not scroll (the critic’s PH), and never one flush with its edge', () => {
+        expect(clipVerdict(50, 300, [box('hidden')], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        expect(clipVerdict(50, 300, [box('clip')], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        // Within a pixel inside the edge it is behind, as it always counted; within a pixel past it, not cut.
+        expect(clipVerdict(50, 199.5, [box('hidden')], () => still)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 200.8, [box('hidden')], () => still)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 201.5, [box('hidden')], () => still).kind).toBe('cut');
+        // A box that clips the other axis only does not cut this one.
+        expect(clipVerdict(50, 300, [box('visible')], () => still)).toEqual({ kind: 'behind', wall: false });
+    });
+
+    it('counts a point past a cutter that a scroller inside it brings in', () => {
+        // A scroller inside the cutter, scrolling the point up into the cutter's window.
+        const outer = box('hidden', false, { left: 0, top: 50, right: 400, bottom: 250 });
+        expect(clipVerdict(50, 300, [box('auto'), outer], (i) => (i === 0 ? scrolls : still))).toEqual({ kind: 'behind', wall: false });
+        // A scroller that scrolls the other axis only brings nothing in.
+        const sideways: ClipBox = { rect: shelf, overflowX: 'auto', overflowY: 'hidden', wall: false };
+        expect(clipVerdict(50, 300, [sideways, outer], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        // Inside the scroller's reach, past what it can bring into a narrower cutter's window (150–180, so up to 480): cut there.
+        expect(clipVerdict(50, 490, [box('auto'), box('hidden', false, { left: 0, top: 150, right: 400, bottom: 180 })], (i) => (i === 0 ? scrolls : still))).toEqual({
+            kind: 'cut',
+            at: 1,
+            axis: 'y',
+        });
+    });
+
+    it('reads a running ticker ribbon’s figure as cut sideways by design, and never from above or below', () => {
+        const cell: ClipBox = { rect: shelf, overflowX: 'hidden', overflowY: 'hidden', wall: false };
+        const bar: ClipBox = { ...cell, rect: { left: 0, top: 0, right: 420, bottom: 400 } };
+        const ribbon = { sidewaysByDesign: true };
+        expect(clipVerdict(450, 150, [cell, bar], () => still, ribbon)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 300, [cell, bar], () => still, ribbon)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        // Off the ribbon the same point is cut, by the cell first.
+        expect(clipVerdict(450, 150, [cell, bar], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'x' });
+        expect(RUNNING_RIBBON).toBe('[data-ribbon]:not([data-ribbon="still"])');
+    });
+
+    it('names a point apart where its innermost clip is a wall scroller', () => {
+        expect(clipVerdict(50, 300, [box('auto', true), box('hidden', false, { left: 0, top: 0, right: 400, bottom: 900 })], () => scrolls)).toEqual({ kind: 'behind', wall: true });
+        expect(clipVerdict(50, 300, [box('auto', false), box('auto', true, { left: 0, top: 0, right: 400, bottom: 150 })], () => scrolls)).toEqual({ kind: 'behind', wall: false });
+    });
+
+    it('names the two wall scrollers by value', () => {
+        expect(WALL_SCROLLERS).toBe('div.items.sw-strip, dl.sw-pay-lines');
+    });
+
+    it('brings content into a window as far as the box scrolls', () => {
+        expect(reachWithin(scrolls, 'y', 50, 250)).toEqual([100, 500]);
+        expect(reachWithin(scrolls, 'y', 120, 180)).toEqual([120, 480]);
     });
 });

@@ -1,6 +1,7 @@
 /**
- * **Where a box over money is hit-tested** (before 8g2, 1a; the pure half of
- * `coverFaults` in `layout/probe.ts`). The hit test asks the page what stands
+ * **Where a box over money is hit-tested** (before 8g2, 1a,
+ * `nothing-covers-money-or-a-protected-box`, bound since 7a; the pure half of
+ * `coverScan` and `coverOf` in `layout/probe.ts`). The hit test asks the page what stands
  * at a point with `pointer-events` (and `interactivity`) forced on everywhere,
  * so a cover a look laid over a figure answers wherever it has a hit area;
  * this module says which points to ask, and which hits on the figure's own
@@ -25,7 +26,9 @@
  *   shaped around them — a `clip-path` with holes where the points stand —
  *   is asked nowhere. A band at least `INK_LINE_PITCH` tall across a glyph's
  *   centre column, or as wide across its middle row, meets a point; a cover
- *   that reaches neither line, or that is thinner, is the paint reads'.
+ *   that reaches neither line, or that is thinner, is read by nothing else
+ *   off the screens the contrast pass samples, and there only as the
+ *   figure's ground (1c, a per-character read of the pixels, is not built).
  * - **A box's points.** A node with no text — a code — is asked at its
  *   centre and its four corners, each corner taken **inside the box's
  *   rounded shape** (`cornerInset`): a corner point two pixels in from a
@@ -46,6 +49,12 @@
  *   item 7) — only at a corner point, which only a node with no text has
  *   (a glyph's points are never excused), and never a sibling moved by an
  *   offset, a transform or a negative margin (`movedBy`).
+ * - **A point behind a clip** (`clipVerdict`, 7a): counted where a scroller
+ *   brings it into view — apart where its innermost clip is one of the two
+ *   wall scrollers (`WALL_SCROLLERS`) — and failed past a scroller's reach,
+ *   or past a clip that cuts and does not scroll with no scroller inside it
+ *   to bring it in. A running ticker ribbon's figure is cut sideways by
+ *   design (`RUNNING_RIBBON`).
  *
  * Pure: no DOM, no browser. Tested in `coverPoints.test.ts`.
  */
@@ -332,4 +341,136 @@ export function columnPlace(inColumn: boolean, holdsNode: boolean): 'column' | '
  */
 export function columnExcuses(kind: PointKind, hit: 'column' | 'inside' | 'outside', moved: string | undefined): boolean {
     return hit === 'inside' && kind === 'corner' && moved === undefined;
+}
+
+/**
+ * **The two wall scrollers, by value** (before 8g2, 7a; the critic's third
+ * review, its checklist item 8): the touch wall's list (`div.items.sw-strip`)
+ * and a standing payment's lines (`dl.sw-pay-lines`). Each scrolls by design
+ * inside a wall that does not, and a wall's quote rows past the strip's end,
+ * and the lines of a 35-item payment past the plate's, stand behind one of
+ * them: on the clean tree every point counted behind a clip on the counter
+ * tablet, the narrow wall and the tall tablet was behind one of these two
+ * (the critic's census, the innermost clip of each point), and they took
+ * the counter tablet's ratio to 34% and the narrow wall's to 33%. A point
+ * whose innermost clip is one of them is counted apart (`ClipVerdict`'s
+ * `wall`), outside `CLIP_SKIP_CEILING`'s ratio, and printed beside it; every
+ * other point behind a clip is held to the ceiling.
+ */
+export const WALL_SCROLLERS = 'div.items.sw-strip, dl.sw-pay-lines';
+
+/** A clip above a point as the read sees it: its box, its two `overflow` values, and whether it is a wall scroller (`WALL_SCROLLERS`). */
+export type ClipBox = { rect: Box; overflowX: string; overflowY: string; wall: boolean };
+
+/**
+ * The ticker's ribbon cell while the ribbon moves or is pinned
+ * (`[data-ribbon]` but `still`): the ribbon runs through the cell and the
+ * bar, and every figure spends most of a pass past their sides, so a figure
+ * inside it is cut sideways by design — `cutSideways`' one exception, by the
+ * same value. Its points past a side are read as behind, never as cut
+ * (`clipVerdict`'s `sidewaysByDesign`); a still page is a layout, read as
+ * one.
+ */
+export const RUNNING_RIBBON = '[data-ribbon]:not([data-ribbon="still"])';
+
+/**
+ * Where a scroller can show its content: its padding box (`pad`), widened on
+ * each axis by how far it scrolls each way from where it stands (`x0`–`x1`,
+ * `y0`–`y1`, page px). Measured by the probe (`scrollReach`).
+ */
+export type Reach = { x0: number; x1: number; y0: number; y1: number; pad: Box };
+
+/** Whether an `overflow` value scrolls. */
+export const scrollsOn = (mode: string): boolean => mode === 'auto' || mode === 'scroll';
+
+/** Whether an `overflow` value cuts what lies past the box's edge, with no scroll to bring it back. */
+export const cutsOn = (mode: string): boolean => mode === 'hidden' || mode === 'clip';
+
+/**
+ * **Where a scroller can bring its content into a window** (before 8g2,
+ * the window's item 3): on one axis, the span of content positions that
+ * some scroll position of `reach`'s box puts inside both the box and the
+ * window `[lo, hi]` — the box's padding box cut to the window, widened by
+ * how far the box scrolls each way. Content inside it is shown at some
+ * scroll position; content outside it at none.
+ */
+export function reachWithin(reach: Reach, axis: 'x' | 'y', lo: number, hi: number): [number, number] {
+    const [padLo, padHi, r0, r1] = axis === 'x' ? [reach.pad.left, reach.pad.right, reach.x0, reach.x1] : [reach.pad.top, reach.pad.bottom, reach.y0, reach.y1];
+    return [Math.max(padLo, lo) - (padLo - r0), Math.min(padHi, hi) + (r1 - padHi)];
+}
+
+/**
+ * What a point inside the viewport is, against the clips above it
+ * (`clips`, the innermost first):
+ *
+ * - `clear`: inside every one — hit-tested;
+ * - `behind`: past one or more, and every one it is past either scrolls on
+ *   that axis with the point inside its reach, or cuts there with a scroller
+ *   inside it that brings the point into its window, or does not clip on
+ *   that axis at all (`visible`: a box that clips only the other axis, or
+ *   the shell, named by its class) — counted, not asked; `wall` when the
+ *   innermost clip it is past is a wall scroller (`WALL_SCROLLERS`);
+ * - `unreached`: past a scroller on an axis it scrolls on, outside its reach
+ *   (`scrollReach`): money no scroll position shows (before 8g2 item 3);
+ * - `cut`: past a clip that cuts on that axis (`hidden` or `clip`) by more
+ *   than a pixel, with no scroller inside it that brings the point into its
+ *   window (`reachWithin`): money behind a clip nothing scrolls (7a; the
+ *   critic's third review, its item 3). Until then such a point was counted
+ *   as one behind a scroller, and a shelf cut to its first row by `overflow:
+ *   hidden` (the critic's PH) hid every other row's price while 1a read
+ *   nothing of it. A figure in a running ticker ribbon is cut sideways by
+ *   design (`RUNNING_RIBBON`, `sidewaysByDesign`): a point of it past a
+ *   side is behind, not cut.
+ *
+ * A point within a pixel inside a clip's top or bottom counts as behind it,
+ * as the read has always counted it; it is cut only past the edge by more
+ * than a pixel, so a glyph flush with a card's edge is not failed. `at` is
+ * the index of the clip the verdict names. `reachOf(i)` is the reach of
+ * `clips[i]`, asked only of a scroller (the caller keeps one a scroller).
+ */
+export type ClipVerdict =
+    | { kind: 'clear' }
+    | { kind: 'behind'; wall: boolean }
+    | { kind: 'unreached'; at: number }
+    | { kind: 'cut'; at: number; axis: 'x' | 'y' };
+export function clipVerdict(
+    x: number,
+    y: number,
+    clips: readonly ClipBox[],
+    reachOf: (i: number) => Reach,
+    { sidewaysByDesign = false }: { sidewaysByDesign?: boolean } = {},
+): ClipVerdict {
+    let behind = false;
+    let wall = false;
+    for (let i = 0; i < clips.length; i += 1) {
+        const clip = clips[i]!;
+        const c = clip.rect;
+        const pastX = x < c.left || x > c.right;
+        const pastY = y < c.top + 1 || y > c.bottom - 1;
+        if (!pastX && !pastY) continue;
+        if (!behind) wall = clip.wall;
+        behind = true;
+        for (const axis of ['x', 'y'] as const) {
+            if (axis === 'x' ? !pastX : !pastY) continue;
+            const mode = axis === 'x' ? clip.overflowX : clip.overflowY;
+            const at = axis === 'x' ? x : y;
+            if (scrollsOn(mode)) {
+                const r = reachOf(i);
+                const [lo, hi] = axis === 'x' ? [r.x0, r.x1] : [r.y0, r.y1];
+                if (at < lo - 1 || at > hi + 1) return { kind: 'unreached', at: i };
+            } else if (cutsOn(mode) && !(axis === 'x' && sidewaysByDesign)) {
+                const [lo, hi] = axis === 'x' ? [c.left, c.right] : [c.top, c.bottom];
+                if (at >= lo - 1 && at <= hi + 1) continue;
+                let brought = false;
+                for (let j = 0; j < i && !brought; j += 1) {
+                    const inner = clips[j]!;
+                    if (!scrollsOn(axis === 'x' ? inner.overflowX : inner.overflowY)) continue;
+                    const [from, to] = reachWithin(reachOf(j), axis, lo, hi);
+                    brought = at >= from - 1 && at <= to + 1;
+                }
+                if (!brought) return { kind: 'cut', at: i, axis };
+            }
+        }
+    }
+    return behind ? { kind: 'behind', wall } : { kind: 'clear' };
 }
