@@ -90,6 +90,8 @@ const REDUCE_AT = NEO_CSS.lastIndexOf('@media (prefers-reduced-motion: reduce)')
  */
 const PLANTS = JSON.parse(read('scripts/look-lint-plants.json'));
 const PLANT_SETS = Object.entries(PLANTS);
+/** The critic's PAN (`a1:0`, the seventh review's B1) on a copy of Neo, for `a-look-never-positions-against-an-anchor`. */
+const ANCHOR_PAN = PLANTS.a1[0].rule.replaceAll('$C', 't-neo');
 
 /** A copy of theme-neo.css with `rule` planted before its reduce block, as `.t-neo` wrote it. */
 const plantedNeo = (rule) => `${NEO_CSS.slice(0, REDUCE_AT)}${rule}\n\n${NEO_CSS.slice(REDUCE_AT)}`;
@@ -4209,16 +4211,23 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         // A prefixed property whose name less the prefix is no property (before 8g2, the fifth review's PQM: `mask-box-image` stood as `-webkit-mask-box-image`'s twin).
         ['twin:none', /names no property Chrome reads, and .* has no unprefixed twin there/],
         ['twin', /a prefixed property paints only in the engines/],
+        // Anchor positioning (before 8g2, the seventh review's B1, PAN; D-2026-10-27-01).
+        ['anchor', /— anchor positioning: a box placed against an anchor follows/],
         ['other', /./],
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt), 16 (`j1`, the ground belt), 20 (`k1`, the SVG paint belt) and 9 (`l1`, a twin that exists) and the selected check\'s 24, with an outcome each', () => {
+    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt), 16 (`j1`, the ground belt), 20 (`k1`, the SVG paint belt), 9 (`l1`, a twin that exists) and 34 (`a1`, anchor positioning) and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1', 'k1', 'l1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1', 'k1', 'l1', 'a1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 1267);
+        assert.equal(Object.values(PLANTS).flat().length, 1301);
+        // `a1`: anchor positioning (the seventh review's B1): thirty refused, PAN's sheet first, and four controls. It moved no older plant.
+        assert.equal(PLANTS.a1.length, 34);
+        assert.equal(PLANTS.a1.filter((entry) => entry.expect === 'accepted').length, 4);
+        assert.match(PLANTS.a1[0].rule, /anchor-name: --\$C-pan; animation: \$C-pan 100s linear infinite;/);
+        assert.match(PLANTS.a1[0].rule, /translate: -600px 0;/);
         // `l1`: a prefixed property's twin is a property that exists (five refused, PQM's shape first, and four accepted: the mask border's standard twin, a logical twin,
         // a prefixed property Chrome does not list, and the stated gap of a `-moz-` property's twin).
         assert.equal(PLANTS.l1.length, 9);
@@ -4303,10 +4312,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 1,267, only the 304 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 1,301, only the 308 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
-        assert.equal(accepted.length, 304);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 963, 'and refuses the other 963');
+        assert.equal(accepted.length, 308);
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 993, 'and refuses the other 993');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);
@@ -5416,6 +5425,103 @@ describe('a-look-names-no-container-of-its-own', () => {
         // The kit keeps the rules its README states: a line there is the owner's to write.
         for (const rule of ['.t-neo .item { container-type: size; }', '.t-neo .item { container-name: sw; }', '.t-neo .item { container: sw / size; }']) {
             assert.ok(!lintSheet(plantedKit(rule)).some((p) => WHY.test(p)), `the kit, ${rule}`);
+        }
+    });
+});
+
+describe('a-look-never-positions-against-an-anchor', () => {
+    /**
+     * Before 8g2, the seventh review's B1 (D-2026-10-27-01, "Probe đọc +
+     * chặn trong lint"): a box placed by `anchor()` follows its anchor's
+     * transform, motion path and offsets in Chrome 156, and the critic's PAN
+     * — the pay figure the wallet signs anchored to its unit sibling, which a
+     * keyframe `translate` from 30% to 40% of a 100s loop carried 600px out
+     * of its row's clip — passed the first-party lint with no problem and the
+     * whole runner green. The probe reads the road since (`anchorCanFollow`
+     * in `layout/probe.ts`), on the kit's side; a first-party look sheet
+     * writes no anchor positioning at all (`ANCHOR_PROPERTIES`, the
+     * `anchor()` and `anchor-size()` functions in any value, `anchor-center`;
+     * `@position-try` is an at-rule G4 refuses). The kit is unchanged.
+     */
+    const WHY = /— anchor positioning: a box placed against an anchor follows the anchor's transform/;
+
+    it('refuses PAN, and each anchor property, function and keyword, in every case, with !important, in a media block, in a keyframe and through a custom property', () => {
+        assert.match(ANCHOR_PAN, /anchor-name: --t-neo-pan;/);
+        assert.match(ANCHOR_PAN, /right: anchor\(left\);/);
+        const problems = lintLookSheet(plantedNeo(ANCHOR_PAN), { lookClass: 't-neo' });
+        assert.ok(problems.length > 0 && problems.every((p) => WHY.test(p)), problems.join('\n') || '(no problem)');
+        for (const rule of [
+            '.t-neo .item-u { anchor-name: --t-neo-a; }',
+            '.t-neo .pay-x { anchor-scope: all; }',
+            '.t-neo .pay-x-n { position-anchor: --t-neo-a; }',
+            '.t-neo .pay-x-n { position-area: top; }',
+            '.t-neo .pay-x-n { inset-area: top; }',
+            '.t-neo .pay-x-n { position-try: --t-neo-t; }',
+            '.t-neo .pay-x-n { position-try-fallbacks: flip-block; }',
+            '.t-neo .pay-x-n { position-try-order: most-height; }',
+            '.t-neo .pay-x-n { position-try-options: flip-block; }',
+            '.t-neo .pay-x-n { position-visibility: anchors-visible; }',
+            '.t-neo .pay-x-n { position-fallback: --t-neo-t; }',
+            '.t-neo .pay-x-n { position: absolute; right: anchor(left); }',
+            '.t-neo .pay-x-n { position: absolute; top: anchor(--t-neo-a top); }',
+            '.t-neo .pay-x-n { width: anchor-size(width); }',
+            '.t-neo .pay-x-n { margin-left: calc(anchor-size(width) * 2); }',
+            '.t-neo .pay-x-n { position: absolute; inset: anchor(top) auto auto anchor(left); }',
+            '.t-neo .pay-x-n { justify-self: anchor-center; }',
+            '.t-neo .pay-x { align-items: anchor-center; }',
+            '.t-neo .item-u { ANCHOR-NAME: --t-neo-a; }',
+            '.t-neo .pay-x-n { position: absolute; Right: ANCHOR(left); }',
+            '.t-neo .pay-x-n { width: Anchor-Size(Width); }',
+            '.t-neo .item-u { anchor-name: --t-neo-a !important; }',
+            '@media (min-width: 680px) { .t-neo .item-u { anchor-name: --t-neo-a; } }',
+            '@keyframes t-neo-an { to { anchor-name: --t-neo-a; } }',
+            '@keyframes t-neo-an { to { right: anchor(left); } }',
+            '.t-neo .pay-x-n { --t-neo-x: anchor(left); }',
+            '.t-neo .pay-x-n { --t-neo-x: anchor-size(width); width: var(--t-neo-x); }',
+            '.t-neo .pay-x-n { position: absolute; right: var(--t-neo-y, anchor(left)); }',
+            '.t-neo .item-u { --t-neo-n: --t-neo-a; anchor-name: var(--t-neo-n); }',
+        ]) {
+            const found = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(found.some((p) => WHY.test(p)), `${rule}:\n  ${found.join('\n  ') || '(no problem)'}`);
+        }
+        // `@position-try` is refused as an at-rule a look sheet may not hold (G4), as every at-rule but `@media` and `@keyframes` is.
+        const tried = lintLookSheet(plantedNeo('@position-try --t-neo-t { top: anchor(bottom); }'), { lookClass: 't-neo' });
+        assert.ok(tried.some((p) => /@position-try is not allowed in a look sheet/.test(p)), tried.join('\n'));
+    });
+
+    it('leaves alone what only looks like it, and the transforms and offsets with no anchor', () => {
+        accepts('.t-neo .item { --t-neo-anchor: 4px; }');
+        accepts('.t-neo .item-anchor { color: red; }');
+        accepts('.t-neo .item { position: relative; left: 4px; }');
+        accepts('.t-neo .item { translate: 0 2px; }');
+        accepts('@keyframes t-neo-move { to { translate: 0 2px; } }');
+    });
+
+    it('leaves the kit as it was: PAN and each road pass the kit lint', () => {
+        assert.deepEqual(lintSheet(plantedKit(ANCHOR_PAN)), [], 'PAN in the kit');
+        for (const rule of ['.t-neo .item-u { anchor-name: --t-neo-a; }', '.t-neo .pay-x-n { position: absolute; right: anchor(left); width: anchor-size(width); }', '.t-neo .pay-x-n { justify-self: anchor-center; }']) {
+            assert.ok(!lintSheet(plantedKit(rule)).some((p) => WHY.test(p)), `the kit, ${rule}`);
+        }
+    });
+
+    it('costs nothing: no first-party sheet a run serves, no starter and the canary writes any of it', () => {
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        const roles = new Set(lookRows(SERVED).filter((row) => row.role !== 'kit').map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        for (const { name, css, options } of sheets) {
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => WHY.test(p)), [], name);
+            // Not a lint but a grep, comments out: a comment may say "anchored", as one does.
+            assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /(?<![\w-])(?:anchor-name|anchor-scope|position-anchor|position-area|inset-area|position-try[\w-]*|position-visibility|position-fallback)\s*:|(?<![\w-])anchor(?:-size)?\s*\(|anchor-center|@position-try/i, name);
         }
     });
 });

@@ -2956,6 +2956,42 @@ const ICON_PARTS = /^(?:path|g|line|polyline|polygon|circle|ellipse|rect)$/;
 const CONTAINER_PROPERTIES = new Set(['container-name', 'container-type', 'container']);
 
 /**
+ * Anchor positioning, which a first-party look sheet may not write
+ * (`declarationProblems`; before 8g2, the seventh review's B1;
+ * D-2026-10-27-01, "Probe đọc + chặn trong lint"): a box placed by
+ * `anchor()` and sized by `anchor-size()` follows its anchor's transform,
+ * motion path and offsets in Chrome 156, so a keyframe `translate` on a box
+ * a money figure is anchored to carries the figure out of its row's clip
+ * with no longhand of the figure's own walk named (the critic's PAN, the
+ * pay figure the wallet signs anchored to its unit). The probe reads that
+ * road on the kit's side (`anchorCanFollow` in `layout/probe.ts`); a
+ * first-party look writes none of it: the properties below, the functions
+ * `anchor()` and `anchor-size()` in any value (a custom property's
+ * included, so none reaches a property through `var()`), and the
+ * `anchor-center` keyword. `@position-try` is an at-rule G4 refuses. No
+ * first-party sheet a run serves writes any of it (the shipped looks, the
+ * starters, the fixture look, the tracked private fixture, the canary);
+ * the kit keeps the rules its README states.
+ */
+const ANCHOR_PROPERTIES = new Set([
+    'anchor-name',
+    'anchor-scope',
+    'position-anchor',
+    'position-area',
+    'inset-area',
+    'position-try',
+    'position-try-fallbacks',
+    'position-try-order',
+    'position-try-options',
+    'position-visibility',
+    'position-fallback',
+]);
+/** An anchor function, `anchor()` or `anchor-size()`, in any case. */
+const ANCHOR_FUNCTION = /(?<![\w-])anchor(?:-size)?\s*\(/i;
+/** The `anchor-center` alignment keyword, which centres a box on its anchor. */
+const ANCHOR_KEYWORD = /(?<![\w-])anchor-center(?![\w-])/i;
+
+/**
  * Properties whose value these rules read for a keyword — a fixed box, a
  * right-to-left run, a list marker, a clip to the text — so a `var()` there
  * would carry the keyword past them. Written plainly in a look sheet; none of
@@ -3729,6 +3765,19 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && CONTAINER_PROPERTIES.has(prop)) {
             out.push(
                 `${shown} — ${prop} would re-point the wall's container queries (window.css's @container sw conditions and its cqw and cqh units) at a box the look picks, one the probe does not choose; @container is refused for the same reason`,
+            );
+        }
+        /*
+         * Anchor positioning (the seventh review's B1, `ANCHOR_PROPERTIES`):
+         * read on the property name, which `declarationsOf` gives lower
+         * case, and on the value with its strings blanked, in any case, so
+         * `!important`, a media block, a keyframe and a custom property
+         * that holds the function are read alike. A first-party sheet's
+         * rule; the kit keeps the rules its README states.
+         */
+        if (firstParty && (ANCHOR_PROPERTIES.has(prop) || ANCHOR_FUNCTION.test(bare) || ANCHOR_KEYWORD.test(bare))) {
+            out.push(
+                `${shown} — anchor positioning: a box placed against an anchor follows the anchor's transform, motion path and offsets, so a keyframe on another box carries it, a money figure among them, where the reads of the figure's own walk do not look; a look positions nothing against an anchor`,
             );
         }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {

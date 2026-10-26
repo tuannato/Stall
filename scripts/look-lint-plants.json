@@ -8479,5 +8479,238 @@
       "expect": "accepted",
       "why": "a stated gap: a -moz- property's twin is the name less its prefix and is not held to exist, PREFIXED_TWINS being measured in Chrome, which lists no -moz- property; it paints in no engine the probe runs"
     }
+  ],
+  "a1": [
+    {
+      "rule": "@keyframes $C-pan { 0%, 29.9% { translate: 0 0; } 30%, 40% { translate: -600px 0; } 40.1%, 100% { translate: 0 0; } }\n@media (min-width: 680px) {\n    .$C .pay-x:not([data-price-tier='1'], [data-price-tier='2'], [data-price-tier='3']) { position: relative; anchor-scope: --$C-pan; justify-content: flex-end; min-height: 40px; overflow-x: clip; }\n    .$C .pay-x:not([data-price-tier='1'], [data-price-tier='2'], [data-price-tier='3']) .item-u { anchor-name: --$C-pan; animation: $C-pan 100s linear infinite; }\n    .$C .pay-x:not([data-price-tier='1'], [data-price-tier='2'], [data-price-tier='3']) .pay-x-n { position: absolute; position-anchor: --$C-pan; right: anchor(left); top: anchor(top); margin-inline-end: 8px; }\n}",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { anchor-name: --$C-a; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x { anchor-scope: all; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-anchor: --$C-a; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-area: top; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { inset-area: top; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try: --$C-t; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try-fallbacks: flip-block; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try-order: most-height; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try-options: flip-block; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-visibility: anchors-visible; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-fallback: --$C-t; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; right: anchor(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; top: anchor(--$C-a top); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { width: anchor-size(width); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { margin-left: calc(anchor-size(width) * 2); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; inset: anchor(top) auto auto anchor(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { justify-self: anchor-center; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x { align-items: anchor-center; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { ANCHOR-NAME: --$C-a; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; Right: ANCHOR(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { anchor-name: --$C-a !important; }",
+      "expect": "refused",
+      "by": [
+        "anchor",
+        "important"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { .$C .item-u { anchor-name: --$C-a; } }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-an { to { anchor-name: --$C-a; } }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-an { to { right: anchor(left); } }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { --$C-x: anchor(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { --$C-x: anchor-size(width); width: var(--$C-x); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; right: var(--$C-y, anchor(left)); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { --$C-n: --$C-a; anchor-name: var(--$C-n); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": "@position-try --$C-t { top: anchor(bottom); }",
+      "expect": "refused",
+      "by": [
+        "at-rule"
+      ]
+    },
+    {
+      "rule": ".$C .item { --$C-anchor: 4px; }",
+      "expect": "accepted",
+      "why": "a custom property whose name says anchor and holds a length: no anchor function, property or keyword (the control)"
+    },
+    {
+      "rule": ".$C .item-anchor { color: red; }",
+      "expect": "accepted",
+      "why": "a class whose name says anchor: a selector, not anchor positioning (the control)"
+    },
+    {
+      "rule": ".$C .item { position: relative; left: 4px; }",
+      "expect": "accepted",
+      "why": "a relative offset with no anchor on the page: it moves the box and what it holds, which the walk reads (the control)"
+    },
+    {
+      "rule": "@keyframes $C-move { to { translate: 0 2px; } }",
+      "expect": "accepted",
+      "why": "a keyframe translate with no anchor to follow it: the probe's offset read seeks it where it moves another box (the control)"
+    }
   ]
 }
