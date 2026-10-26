@@ -105,6 +105,13 @@
  * - **`a-money-figure-never-clips-itself`** (CRITIC-WALL-CYCLE P2-1): every
  *   geometry pass owes, on every look it painted, money figures asked
  *   (`selfClipByClass`).
+ * - **`nothing-covers-money-or-a-protected-box`** (1a, bound since 7a):
+ *   every geometry pass owes, on every look it painted, a read of 1a on its
+ *   paints that hit-tested at least one point (`coverByClass`): a look whose
+ *   every point stood behind a clip, below the screen or past its side, or
+ *   that was never read, certified nothing about what covers its money. The
+ *   contrast pass owes a read on every job it did not refuse (the runner,
+ *   `coverUnread`), and both are held to the clip ceiling (`look-tallies.mjs`).
  * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
  *   geometry pass owes, on every look it painted, money figures held to
  *   their dress on every surface it paints one (`DRESS_SURFACES_OWED`,
@@ -510,6 +517,17 @@ export function probeCoverageGaps(
                 if (!(((dress[cls] ?? {})[surface] ?? 0) > 0)) {
                     gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall's ${surface}`);
                 }
+            }
+        }
+        // 1a (7a): every look a pass painted read, and a point hit-tested on
+        // it — a read that hit-tested nothing on a look covered nothing.
+        const cover = report.coverByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            const read = Object.hasOwn(cover, cls) ? cover[cls] : undefined;
+            if (!((read?.paints ?? 0) > 0)) {
+                gaps.push(`nothing-covers-money-or-a-protected-box read no paint of a ${cls} stall`);
+            } else if (!((read?.checked ?? 0) > 0)) {
+                gaps.push(`nothing-covers-money-or-a-protected-box hit-tested no point on a ${cls} stall`);
             }
         }
         // Rural's tag is a notched polygon on the figure's column: a pass that

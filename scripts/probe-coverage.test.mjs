@@ -77,6 +77,8 @@ const moneyRead = {
     // Rural's under its notched tag.
     dressByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_DRESS_SURFACE])),
     dressClipByClass: { 't-rural': 300 },
+    // 7a: 1a read on every look, a point hit-tested on each.
+    coverByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, nodes: 200, points: 9000, checked: 6000, clipSkips: 300, wallScroll: 0, failed: 0 }])),
 };
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
@@ -924,6 +926,48 @@ describe('the-money-rules-are-owed-on-every-look-of-every-geometry-pass', () => 
             /^wall controls read: 2 · status line asked: 3 · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40$/,
         );
         assert.match(probeCoverageLine('desktop', { ...full, ...read }), / · broken figures held to their ink: t-modern cycle:2\/wall:1, t-neo face:3 · money figures asked about a self-clip: t-modern 40/);
+    });
+});
+
+const COVER_RULE = /^nothing-covers-money-or-a-protected-box /;
+
+describe('1a-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
+    /**
+     * 7a (the critic's third review, its checklist item 9): 1a binds, so
+     * every geometry pass owes, on every look it painted, a read that
+     * hit-tested at least one point — a look never read, or whose every
+     * point stood behind a clip, past an edge or below the screen, certified
+     * nothing about what covers its money. The short, reduced-motion and
+     * contrast passes owe nothing here (the runner holds the contrast pass's
+     * jobs to their reads, `coverUnread`).
+     */
+    it('passes a geometry pass that read every look and hit-tested a point on each', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => COVER_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('names the look a pass never read, and the look it read and hit-tested nothing on', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            const { 't-neo': _neo, ...rest } = read.coverByClass;
+            const short = { ...read, coverByClass: { ...rest, 't-rural': { ...rest['t-rural'], checked: 0, clipSkips: 9000 } } };
+            assert.deepEqual(
+                probeCoverageGaps(pass, short).filter((gap) => COVER_RULE.test(gap)),
+                [
+                    'nothing-covers-money-or-a-protected-box read no paint of a t-neo stall',
+                    'nothing-covers-money-or-a-protected-box hit-tested no point on a t-rural stall',
+                ],
+                pass,
+            );
+            assert.equal(probeCoverageGaps(pass, { ...read, coverByClass: undefined }).filter((gap) => COVER_RULE.test(gap)).length, CARD_LOOKS.length, pass);
+            // A class is a key of the table, never a property it inherits.
+            assert.equal(probeCoverageGaps(pass, { ...read, sheetClasses: ['constructor'] }).filter((gap) => COVER_RULE.test(gap)).length, 1, pass);
+        }
+        for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => COVER_RULE.test(gap)), [], pass);
+        }
     });
 });
 
