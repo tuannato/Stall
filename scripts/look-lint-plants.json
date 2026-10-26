@@ -5825,8 +5825,7 @@
       "rule": ".$C .item-p::after { content: ''; -webkit-border-before: 40px solid; border-block-start: 40px solid; }",
       "expect": "refused",
       "by": [
-        "pseudo:host-paint",
-        "twin"
+        "pseudo:host-paint"
       ]
     },
     {
@@ -5968,16 +5967,14 @@
       "rule": ".$C .item-p::after { content: ''; -webkit-mask-box-image: var(--m); mask-border: var(--m); }",
       "expect": "refused",
       "by": [
-        "pseudo:host-paint",
-        "twin"
+        "pseudo:host-paint"
       ]
     },
     {
       "rule": ".$C .item-p::after { content: ''; -webkit-mask-box-image-source: var(--m); mask-border-source: var(--m); }",
       "expect": "refused",
       "by": [
-        "pseudo:host-paint",
-        "twin"
+        "pseudo:host-paint"
       ]
     },
     {
@@ -8424,6 +8421,63 @@
       "rule": ".$C .item-caret.ic { stroke-width: 1.5; }",
       "expect": "accepted",
       "why": "a drawn icon named by its own class beside .ic"
+    }
+  ],
+  "l1": [
+    {
+      "rule": ".$C .qr { mask-box-image: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }",
+      "expect": "refused",
+      "by": [
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-font-smoothing: antialiased; font-smoothing: antialiased; }",
+      "expect": "refused",
+      "by": [
+        "twin:none"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-margin-start: 4px; margin-start: 4px; }",
+      "expect": "refused",
+      "by": [
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-user-drag: none; user-drag: none; }",
+      "expect": "refused",
+      "by": [
+        "twin:none"
+      ]
+    },
+    {
+      "rule": ".$C .qr { -webkit-mask-position-x: 0; mask-position-x: 0; }",
+      "expect": "refused",
+      "by": [
+        "twin:none"
+      ]
+    },
+    {
+      "rule": ".$C .qr { mask-border: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }",
+      "expect": "accepted",
+      "why": "the prefixed mask border beside its twin, mask-border, the property CSS Masking names for it, at the same value: the lint admits it, and the probe's code hold reads every mask source on a code (a-code-is-drawn-black-on-white, the fifth review's PQM)"
+    },
+    {
+      "rule": ".$C .item-n { -webkit-margin-start: 4px; margin-inline-start: 4px; }",
+      "expect": "accepted",
+      "why": "the control: a prefixed logical side beside the logical property that is its twin, at the same value"
+    },
+    {
+      "rule": ".$C .sheet { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+      "expect": "accepted",
+      "why": "the control: a prefixed property Chrome does not list (Safari's) beside its real twin, the shape the shipped looks write"
+    },
+    {
+      "rule": ".$C .item-n { -moz-osx-font-smoothing: grayscale; osx-font-smoothing: grayscale; }",
+      "expect": "accepted",
+      "why": "a stated gap: a -moz- property's twin is the name less its prefix and is not held to exist, PREFIXED_TWINS being measured in Chrome, which lists no -moz- property; it paints in no engine the probe runs"
     }
   ]
 }

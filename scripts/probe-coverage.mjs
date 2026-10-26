@@ -125,7 +125,14 @@
  *   item 4, the critic's PFQ): every geometry pass owes, on every look it
  *   painted a code on, the colours of every code it painted read
  *   (`qrColourByClass`: painted and read, per look), and a pass whose page
- *   listed codes painted (`codesPainted`) and reported no such read owes one.
+ *   listed codes painted (`codesPainted`) and reported no such read owes one;
+ *   and, per screen (the fifth review's item 10: the per-look owe counted
+ *   painted and read under one filter, so a look that took a code's box
+ *   away owed nothing), every look whose paints of a screen built as many
+ *   codes painted as many of them with a box as the most any such look did
+ *   (`qrByScreen`: screen, look, codes built, the fewest and most over its
+ *   variants; a paid look's try-on builds no code on the name sheet), and a
+ *   report with no such count owes one.
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -549,6 +556,35 @@ export function probeCoverageGaps(
                 const read = q?.read ?? 0;
                 if (painted > 0 && read !== painted) {
                     gaps.push(`a-code-is-drawn-black-on-white read the colours of ${read} of the ${painted} codes a ${cls} stall painted`);
+                }
+            }
+            // And per screen (the fifth review's item 10): a look's owe
+            // compares its painted codes with its read ones under one filter,
+            // so a look that took a code's box away owed nothing for it.
+            // Among the looks whose paints of a screen built as many codes in
+            // the tree (the name sheet draws none for a paid look), every
+            // paint shows as many with a box as the most any of them showed
+            // (`qrByScreen`: screen, look, codes built, the fewest and most).
+            const byScreen = report.qrByScreen;
+            if (byScreen === undefined) {
+                gaps.push('a-code-is-drawn-black-on-white reported no per-screen count of the codes each look painted');
+            } else {
+                for (const screen of Object.keys(byScreen).sort()) {
+                    const looks = byScreen[screen];
+                    const classes = Object.keys(looks).sort();
+                    const builds = [...new Set(classes.flatMap((cls) => Object.keys(looks[cls])))].sort((a, b) => Number(a) - Number(b));
+                    for (const built of builds) {
+                        const these = classes.filter((cls) => Object.hasOwn(looks[cls], built));
+                        const most = Math.max(0, ...these.map((cls) => looks[cls][built].max));
+                        const top = these.find((cls) => looks[cls][built].max === most);
+                        for (const cls of these) {
+                            if (looks[cls][built].min < most) {
+                                gaps.push(
+                                    `a-code-is-drawn-black-on-white counted ${looks[cls][built].min} code(s) with a box a ${cls} stall painted on ${screen}, of the ${built} it built, where a ${top} stall painted ${most}`,
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }

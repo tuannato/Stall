@@ -3024,6 +3024,94 @@ const PREFIXED_EVERYWHERE = new Set(['-webkit-line-clamp', '-webkit-box-orient']
 const TAP_HIGHLIGHT = '-webkit-tap-highlight-color';
 
 /**
+ * The prefixed properties whose name without the prefix is no property
+ * (G4's twin; before 8g2, the fifth review's side finding to item 6): the
+ * twin rule read the twin as the name less its prefix, so the critic's PQM
+ * wrote `mask-box-image:`, which nothing reads, beside
+ * `-webkit-mask-box-image:` and stood. Measured in headless Chrome 156:
+ * every `-webkit-` property it lists whose name less the prefix it neither
+ * lists nor reads (`CSS.supports`), save the two every engine reads under
+ * the prefix (`PREFIXED_EVERYWHERE`). Each maps to the property that is its
+ * twin and takes the same value — the mask border's standard name, and the
+ * logical box sides and sizes — or to `null` where none does, and then no
+ * twin can make it paint in another engine. Read for a first-party sheet
+ * alone (`lintLookSheet`): the kit keeps the plain rule the workshop README
+ * states, and a twin there is the name less its prefix
+ * (`the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin`). A
+ * prefixed property Chrome does not list (`-webkit-backdrop-filter`, a
+ * `-moz-` one) is read as before: its twin is not held to exist.
+ */
+export const PREFIXED_TWINS = Object.freeze({
+    '-webkit-mask-box-image': 'mask-border',
+    '-webkit-mask-box-image-outset': 'mask-border-outset',
+    '-webkit-mask-box-image-repeat': 'mask-border-repeat',
+    '-webkit-mask-box-image-slice': 'mask-border-slice',
+    '-webkit-mask-box-image-source': 'mask-border-source',
+    '-webkit-mask-box-image-width': 'mask-border-width',
+    '-webkit-border-before': 'border-block-start',
+    '-webkit-border-before-color': 'border-block-start-color',
+    '-webkit-border-before-style': 'border-block-start-style',
+    '-webkit-border-before-width': 'border-block-start-width',
+    '-webkit-border-after': 'border-block-end',
+    '-webkit-border-after-color': 'border-block-end-color',
+    '-webkit-border-after-style': 'border-block-end-style',
+    '-webkit-border-after-width': 'border-block-end-width',
+    '-webkit-border-start': 'border-inline-start',
+    '-webkit-border-start-color': 'border-inline-start-color',
+    '-webkit-border-start-style': 'border-inline-start-style',
+    '-webkit-border-start-width': 'border-inline-start-width',
+    '-webkit-border-end': 'border-inline-end',
+    '-webkit-border-end-color': 'border-inline-end-color',
+    '-webkit-border-end-style': 'border-inline-end-style',
+    '-webkit-border-end-width': 'border-inline-end-width',
+    '-webkit-margin-before': 'margin-block-start',
+    '-webkit-margin-after': 'margin-block-end',
+    '-webkit-margin-start': 'margin-inline-start',
+    '-webkit-margin-end': 'margin-inline-end',
+    '-webkit-padding-before': 'padding-block-start',
+    '-webkit-padding-after': 'padding-block-end',
+    '-webkit-padding-start': 'padding-inline-start',
+    '-webkit-padding-end': 'padding-inline-end',
+    '-webkit-logical-width': 'inline-size',
+    '-webkit-logical-height': 'block-size',
+    '-webkit-min-logical-width': 'min-inline-size',
+    '-webkit-min-logical-height': 'min-block-size',
+    '-webkit-max-logical-width': 'max-inline-size',
+    '-webkit-max-logical-height': 'max-block-size',
+    '-webkit-border-horizontal-spacing': null,
+    '-webkit-border-vertical-spacing': null,
+    '-webkit-box-align': null,
+    '-webkit-box-direction': null,
+    '-webkit-box-flex': null,
+    '-webkit-box-ordinal-group': null,
+    '-webkit-box-pack': null,
+    '-webkit-box-reflect': null,
+    '-webkit-column-break-after': null,
+    '-webkit-column-break-before': null,
+    '-webkit-column-break-inside': null,
+    '-webkit-font-smoothing': null,
+    '-webkit-locale': null,
+    '-webkit-mask-position-x': null,
+    '-webkit-mask-position-y': null,
+    '-webkit-perspective-origin-x': null,
+    '-webkit-perspective-origin-y': null,
+    '-webkit-rtl-ordering': null,
+    '-webkit-tap-highlight-color': null,
+    '-webkit-text-combine': null,
+    '-webkit-text-decorations-in-effect': null,
+    '-webkit-text-fill-color': null,
+    '-webkit-text-security': null,
+    '-webkit-text-stroke': null,
+    '-webkit-text-stroke-color': null,
+    '-webkit-text-stroke-width': null,
+    '-webkit-transform-origin-x': null,
+    '-webkit-transform-origin-y': null,
+    '-webkit-transform-origin-z': null,
+    '-webkit-user-drag': null,
+    '-webkit-user-modify': null,
+});
+
+/**
  * `-webkit-mask-composite` takes the legacy compositing keywords, the
  * standard `mask-composite` the new ones, and these four pairs name the same
  * operation (step 8f1, the step-8 plan §4.2: a look that subtracts one mask
@@ -3655,8 +3743,14 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
             out.push(`${shown} — a tap highlight paints a colour over whatever is tapped, a money control among them, where no pass looks; only transparent stands`);
         }
         const prefixed = PREFIXED_EVERYWHERE.has(prop) || (firstParty && prop === TAP_HIGHLIGHT) ? null : VENDOR_PREFIX.exec(prop);
-        if (prefixed !== null) {
-            const twin = prop.slice(prefixed[0].length);
+        // In a first-party sheet the twin is a property that exists (`PREFIXED_TWINS`): `mask-box-image` is no twin of `-webkit-mask-box-image`.
+        const known = prefixed !== null && firstParty && Object.hasOwn(PREFIXED_TWINS, prop);
+        if (known && PREFIXED_TWINS[prop] === null) {
+            out.push(
+                `${shown} — ${prop.slice(prefixed[0].length)} is no CSS property, and ${prop} has no unprefixed twin: it paints only in the engines that read the prefix, and no twin beside it makes it paint in another`,
+            );
+        } else if (prefixed !== null) {
+            const twin = known ? PREFIXED_TWINS[prop] : prop.slice(prefixed[0].length);
             const same = decls.some((d) => {
                 if (d.prop !== twin) return false;
                 const theirs = d.value.replace(/\s*!\s*important\s*$/i, '');

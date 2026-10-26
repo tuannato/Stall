@@ -10489,7 +10489,9 @@ in each log's `.meta`.
   c Z`, measured) — and computes the rect `rgb(255, 255, 255)` and the path
   `rgb(0, 0, 0)`, each at a fill opacity of 1 with no stroke, the svg, the
   rect and the path at opacity 1, visible, displayed, with no filter, mask,
-  clip-path, blend or transform. Owed per look (`qrColourByClass`: painted,
+  clip-path, blend or transform (it read `mask-image` alone, and not
+  `content-visibility`: the fifth review's PQC and PQM, below, "A code drawn
+  as nothing"). Owed per look (`qrColourByClass`: painted,
   counted where the codes are listed, and read); the pass line prints them.
   On the clean tree 35 / 78 / 122 / 130 … codes a look a pass, 0 failures.
 - **Red, PFQ** (the critic's, `.t-modern .qr path { fill: #fff }`; exit 0
@@ -10706,6 +10708,55 @@ tracked fixture carried, each plant alone, the load in each log's `.meta`.
   and the offset read at every offset, and `boxHeldFault` fails any mask
   there, as 4. does at rest. At rest the box read leaves them to 4.
   (`BOX_HELD_AT_REST`), which says a mask above once.
+
+### A code drawn as nothing (items 2, 6 and 10: PQC, PQM; G4's twin)
+
+- PQC (the critic's: `.t-modern .qr { content-visibility: hidden }` at rest;
+  the first-party look lint admits it) passed the whole runner (251s): every
+  Modern code collapsed to a white strip about 336×20, its rect and path
+  skipped and its box and its hits kept. The hold read the svg, the rect and
+  the path for opacity, visibility, display, a filter, `mask-image`, a
+  clip-path, a blend and a transform, and not `content-visibility`; 1a hit
+  the svg itself; the pay code's width gate saw 336 ≥ 308; the quiet zone
+  read the collapsed box. PQM (a `-webkit-mask-box-image` on the code, its
+  "twin" `mask-box-image` beside it, which nothing reads) was red only
+  through the quiet-zone read, 31 failures where the backing is not white;
+  the bare pay, studio and record codes passed, and the hold's docblock and
+  CLAUDE.md said "no mask".
+- The hold now reads, on the svg, the rect and the path,
+  `content-visibility` (visible only) and every mask source (`QR_NONE`:
+  `mask-image` and its `-webkit-` twin, `mask-border-source`,
+  `-webkit-mask-box-image-source` and `-webkit-mask-box-image`), and holds
+  the svg's box square, its width and height within a pixel.
+- **The per-screen owe** (item 10: the per-look owe compared the codes a
+  look painted with the codes it read under one filter, so a look that took a
+  code's box away owed nothing for it): the page counts, per screen, look and
+  number of codes the app built in the tree, the fewest and most codes with
+  a box any paint of it showed (`qrByScreen`), and the coverage names a look
+  that painted fewer of the codes it built on a screen than another look
+  that built as many did there (`probe-coverage.mjs`); a report with no such
+  count owes one. Compared over the codes built because the app does not
+  build the same codes for every look: the name sheet composes no record,
+  and so draws no code, for a paid look's try-on — the first version, which
+  compared every look on a screen, failed the clean tree's desk pass on
+  `publish-name` (the tracked fixture, a paid look, built none where Modern
+  built one). On the clean tree's 82 screens at 390 every look built and
+  painted as many as every other (a quick read, the fixture not carried).
+- **G4's twin** (the side finding to item 6): in a first-party sheet the
+  twin a prefixed property stands beside is a property (`PREFIXED_TWINS`):
+  every `-webkit-` property headless Chrome 156 lists whose name less the
+  prefix it neither lists nor reads (`CSS.supports`), 67 once the two every
+  engine reads under the prefix are left out, maps to its real twin at the
+  same value — the mask border's `mask-border` family, the logical box sides
+  and sizes — or to none, and is then refused outright. A prefixed property
+  Chrome does not list (Safari's `-webkit-backdrop-filter`, a `-moz-` one)
+  keeps the name less its prefix as its twin, not held to exist. The kit
+  keeps the plain rule its README states. New plant set `l1`, 9 (five
+  refused, PQM's shape first; four accepted: the mask border beside
+  `mask-border`, a logical twin, `-webkit-backdrop-filter`, and the `-moz-`
+  gap); three older plants move (`f1:11`, `f1:33`, `f1:34`, refused before
+  for a twin nothing reads as well as for their host's paint, and for their
+  host's paint alone now). 1,267 plants: 963 refused, 304 accepted.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

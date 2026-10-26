@@ -17,6 +17,7 @@ import {
     MASK_COMPOSITE_LEGACY,
     MAX_FLASHES_PER_SECOND,
     MONEY_NODE_CLASSES,
+    PREFIXED_TWINS,
     OUTLINE_OFFSET_MAX_PX,
     OUTLINE_OFFSET_MIN_PX,
     OUTLINE_WIDTH_MAX_PX,
@@ -2052,6 +2053,46 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
             assert.ok(kit.some((p) => /a prefixed property paints only in the engines that read the prefix/.test(p)), `kit, ${value}:\n  ${kit.join('\n  ') || '(no problem)'}`);
             assert.ok(!kit.some((p) => /only transparent stands/.test(p)), kit.join('\n'));
         }
+    });
+});
+
+describe('a-prefixed-twin-is-a-property-that-exists', () => {
+    /**
+     * G4's twin, before 8g2, the fifth review's side finding to item 6: the
+     * twin rule read a prefixed property's twin as its name less the prefix,
+     * so the critic's PQM wrote `mask-box-image:`, which nothing reads,
+     * beside `-webkit-mask-box-image:` and stood. In a first-party sheet the
+     * twin is one that exists (`PREFIXED_TWINS`, measured in headless Chrome
+     * 156): the mask border's is `mask-border`, a logical side's its logical
+     * property, and a prefixed property with none is refused outright. The
+     * kit keeps the plain rule the workshop README states.
+     */
+    const PQM = '.t-neo .qr { mask-box-image: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }';
+
+    it('refuses a twin that is no property in a first-party sheet, and names the one that exists', () => {
+        const problems = lintLookSheet(plantedNeo(PQM), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => /-webkit-mask-box-image: .* write mask-border: with the same value beside it/.test(p)), problems.join('\n'));
+        accepts('.t-neo .qr { mask-border: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }');
+        const none = lintLookSheet(plantedNeo('.t-neo .item-n { -webkit-font-smoothing: antialiased; font-smoothing: antialiased; }'), { lookClass: 't-neo' });
+        assert.ok(none.some((p) => /font-smoothing is no CSS property, and -webkit-font-smoothing has no unprefixed twin/.test(p)), none.join('\n'));
+    });
+
+    it('maps every twin to a property, or to none, and leaves out the two every engine reads under the prefix', () => {
+        for (const [prop, twin] of Object.entries(PREFIXED_TWINS)) {
+            assert.match(prop, /^-webkit-/, prop);
+            assert.ok(twin === null || (typeof twin === 'string' && !twin.startsWith('-') && twin !== prop.slice('-webkit-'.length)), `${prop} → ${twin}`);
+        }
+        assert.equal(PREFIXED_TWINS['-webkit-mask-box-image'], 'mask-border');
+        assert.ok(!Object.hasOwn(PREFIXED_TWINS, '-webkit-line-clamp') && !Object.hasOwn(PREFIXED_TWINS, '-webkit-box-orient'));
+        // Every prefixed property a served first-party sheet writes has a twin that is its name less the prefix.
+        for (const sheet of LOOKS) {
+            for (const [, prop] of read(sheet.path).matchAll(/(?:^|[;{\s])(-webkit-[a-z-]+)\s*:/g)) assert.ok(!Object.hasOwn(PREFIXED_TWINS, prop), `${sheet.path} writes ${prop}`);
+        }
+    });
+
+    it('leaves the kit on the plain rule, as the README states it', () => {
+        // The kit reads the twin as the name less its prefix, a twin nothing reads included: a README line for the owner.
+        assert.deepEqual(lintSheet(plantedKit(PQM)), []);
     });
 });
 
@@ -4165,17 +4206,28 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         ['nested', /holds a nested rule/],
         ['at-rule', /is not a condition the probe enters|is not allowed in a look sheet/],
         ['escape', /a CSS escape outside a string/],
+        // A prefixed property whose name less the prefix is no property (before 8g2, the fifth review's PQM: `mask-box-image` stood as `-webkit-mask-box-image`'s twin).
+        ['twin:none', /is no CSS property, and .* has no unprefixed twin/],
         ['twin', /a prefixed property paints only in the engines/],
         ['other', /./],
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt), 16 (`j1`, the ground belt) and 20 (`k1`, the SVG paint belt) and the selected check\'s 24, with an outcome each', () => {
+    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt), 16 (`j1`, the ground belt), 20 (`k1`, the SVG paint belt) and 9 (`l1`, a twin that exists) and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1', 'k1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1', 'k1', 'l1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 1258);
+        assert.equal(Object.values(PLANTS).flat().length, 1267);
+        // `l1`: a prefixed property's twin is a property that exists (five refused, PQM's shape first, and four accepted: the mask border's standard twin, a logical twin,
+        // a prefixed property Chrome does not list, and the stated gap of a `-moz-` property's twin).
+        assert.equal(PLANTS.l1.length, 9);
+        assert.equal(PLANTS.l1.filter((entry) => entry.expect === 'accepted').length, 4);
+        assert.match(PLANTS.l1[0].rule, /mask-box-image: linear-gradient\(#0000, #0000\) 1; -webkit-mask-box-image:/);
+        // It moved three older plants, each refused before for its twin as well as for its host's paint, and for its host's paint alone now: `f1:11`, `-webkit-border-before`
+        // beside `border-block-start` (the rule asked for `border-before`, which nothing reads), and `f1:33` and `f1:34`, the mask border and its source beside
+        // `mask-border` and `mask-border-source` (it asked for `mask-box-image` and `mask-box-image-source`).
+        for (const i of [11, 33, 34]) assert.deepEqual(PLANTS.f1[i].by, ['pseudo:host-paint']);
         // `i1`: an inherited ink, shadow or mark in a keyframe (eighteen refused, PT2's shape first, and four controls). The belt moved five older plants with it: `g1:130`, the
         // sheet's own keyframe setting `color` on a quote's `.item-a`, accepted until it, and `f2:18`, `g1:131`, `g1:139` and `h1:9`, each refused by the belt as well.
         // The ground belt (`j1`, the fourth review's PG) moved three: `i1:21`, the ink belt's control, a keyframe `background-color` on `.item-a`, accepted until it, and
@@ -4251,10 +4303,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 1,258, only the 300 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 1,267, only the 304 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
-        assert.equal(accepted.length, 300);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 958, 'and refuses the other 958');
+        assert.equal(accepted.length, 304);
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 963, 'and refuses the other 963');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);

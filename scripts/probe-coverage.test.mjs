@@ -81,6 +81,13 @@ const moneyRead = {
     coverByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, nodes: 200, points: 9000, checked: 6000, clipSkips: 300, wallScroll: 0, failed: 0 }])),
     // The fourth review's PFQ: every code a pass painted, its colours read.
     qrColourByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { painted: 20, read: 20 }])),
+    // The fifth review's item 10: every look painted as many codes on a screen as any other.
+    qrByScreen: {
+        pay: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { 1: { min: 1, max: 1 } }])),
+        offers: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { 0: { min: 0, max: 0 } }])),
+        // A paid look's try-on builds no code on the name sheet: another build, not a lost code.
+        'publish-name': { ...Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { 1: { min: 1, max: 1 } }])), 't-fixture-private': { 0: { min: 0, max: 0 } } },
+    },
 };
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
@@ -1447,8 +1454,45 @@ describe('a-code-is-drawn-black-on-white-is-owed-on-every-look-of-every-geometry
                 pass,
             );
             assert.deepEqual(probeCoverageGaps(pass, { ...read, qrColourByClass: undefined }).filter((gap) => CODE_RULE.test(gap)), [], pass);
-            // A look that painted no code owes none.
+            // A look that painted no code owes none, on its own count.
             assert.deepEqual(probeCoverageGaps(pass, { ...read, qrColourByClass: { 't-modern': { painted: 0, read: 0 } } }).filter((gap) => CODE_RULE.test(gap)), [], pass);
+        }
+        for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => CODE_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('names a look that painted fewer codes on a screen than another look did, and a page with no per-screen count', () => {
+        /**
+         * The fifth review's item 10: the per-look owe counts painted and
+         * read under one filter, so the critic's PQZ (every Modern code at
+         * no size) owed nothing. Per screen, every look and variant shows
+         * as many codes as the most any look showed there (`qrByScreen`,
+         * each look's fewest and most).
+         */
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            const fewer = {
+                ...read,
+                qrByScreen: {
+                    ...read.qrByScreen,
+                    pay: { ...read.qrByScreen.pay, 't-modern': { 1: { min: 0, max: 0 } } },
+                    studio: { 't-neo': { 2: { min: 2, max: 2 } }, 't-rural': { 2: { min: 1, max: 2 } } },
+                },
+            };
+            assert.deepEqual(
+                probeCoverageGaps(pass, fewer).filter((gap) => CODE_RULE.test(gap)),
+                [
+                    'a-code-is-drawn-black-on-white counted 0 code(s) with a box a t-modern stall painted on pay, of the 1 it built, where a t-fixture-private stall painted 1',
+                    'a-code-is-drawn-black-on-white counted 1 code(s) with a box a t-rural stall painted on studio, of the 2 it built, where a t-neo stall painted 2',
+                ],
+                pass,
+            );
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, qrByScreen: undefined }).filter((gap) => CODE_RULE.test(gap)),
+                ['a-code-is-drawn-black-on-white reported no per-screen count of the codes each look painted'],
+                pass,
+            );
         }
         for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
             assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => CODE_RULE.test(gap)), [], pass);

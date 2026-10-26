@@ -7272,18 +7272,47 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  * the size of the viewBox and the path's modules the `M c r h1v1h-1z`
  * squares `qrSvg` writes, its computed `d` the same squares (a `d` property
  * re-draws them); the rect's computed fill white and the path's black,
- * each at a fill opacity of 1, with no stroke; and the svg, the rect and the
- * path each at opacity 1, visible, displayed, with no filter, mask,
- * clip-path, blend or transform. A code whose shape is not that fails: the
- * read cannot vouch for one. The first-party look lint refuses `fill` and
- * `stroke` off a drawn icon (`isIconRule`, D-2026-10-26-04 (b)); this is
- * the kit's road. Owed per look (`qrColourByClass`: painted, counted where
- * the codes are listed, and read). **Not read, stated**: a box above the
- * code (its fades are the cover rules' and the quiet zone's), the code's
- * size, and the pixels (the quiet-zone read's, on the contrast jobs).
+ * each at a fill opacity of 1, with no stroke; the svg, the rect and the
+ * path each at `opacity` 1, `visibility` visible, `display` not none and
+ * `content-visibility` visible, each computing `none` for a filter, a
+ * clip-path, every mask source (`QR_NONE`: `mask-image` and its `-webkit-`
+ * twin, `mask-border-source`, `-webkit-mask-box-image-source` and
+ * `-webkit-mask-box-image`) and every transform, and a blend of `normal`;
+ * and the svg's box square, its width and height within a pixel of each
+ * other. A code whose shape is not that fails: the read cannot vouch for
+ * one. **Since the fifth review** (items 2 and 6): the critic's PQC,
+ * `.t-modern .qr { content-visibility: hidden }`, collapsed every Modern
+ * code to a white strip about 336×20 (its rect and path skipped, its box
+ * and its hits kept) and passed the whole runner, and PQM, a
+ * `-webkit-mask-box-image` on the code, was read only by the quiet zone,
+ * where the backing is not white — this read held `mask-image` alone and
+ * said "no mask". The first-party look lint refuses `fill` and `stroke` off
+ * a drawn icon (`isIconRule`, D-2026-10-26-04 (b)); this is the kit's road.
+ * Owed per look (`qrColourByClass`: painted, counted where the codes are
+ * listed, and read) and per screen (`qrByScreen`: every look whose paint of
+ * a screen built as many codes paints as many of them with a box as any
+ * other such look, `probe-coverage.mjs`).
+ * **Not read, stated**: a box above the code (its fades are the cover
+ * rules' and the quiet zone's), the code's size beyond its squareness (the
+ * pay code's width is the gate's), and the pixels (the quiet-zone read's,
+ * on the contrast jobs).
  */
 const QR_COLOUR_CHECK = 'a-code-is-drawn-black-on-white';
 const qrColourByClass: Record<string, { painted: number; read: number }> = {};
+/** The longhands a code's svg, rect and path each compute `none` for (`qrColourFault`): a filter, a clip, every mask source and every transform. */
+const QR_NONE = [
+    'filter',
+    'clip-path',
+    'mask-image',
+    '-webkit-mask-image',
+    'mask-border-source',
+    '-webkit-mask-box-image-source',
+    '-webkit-mask-box-image',
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+] as const;
 
 /** Why a code is not the black-on-white square `qrSvg` draws, or undefined. */
 function qrColourFault(svg: Element): string | undefined {
@@ -7319,12 +7348,16 @@ function qrColourFault(svg: Element): string | undefined {
         if (Number.parseFloat(cs.opacity) < 0.999) return `${what}: opacity ${cs.opacity}`;
         if (cs.visibility !== 'visible') return `${what}: visibility ${cs.visibility}`;
         if (cs.display === 'none') return `${what}: display none`;
-        for (const prop of ['filter', 'clip-path', 'mask-image', '-webkit-mask-image', 'transform', 'rotate', 'scale', 'translate'] as const) {
+        const cv = cs.getPropertyValue('content-visibility');
+        if (cv !== 'visible' && cv !== '') return `${what}: content-visibility ${cv}, which skips what it holds`;
+        for (const prop of QR_NONE) {
             const value = cs.getPropertyValue(prop);
             if (value !== 'none' && value !== '') return `${what}: ${prop} ${value.slice(0, 40)}`;
         }
         if (cs.mixBlendMode !== 'normal') return `${what}: mix-blend-mode ${cs.mixBlendMode}`;
     }
+    const box = svg.getBoundingClientRect();
+    if (Math.abs(box.width - box.height) > 1) return `its box is ${box.width.toFixed(1)} by ${box.height.toFixed(1)}, not the square qrSvg draws`;
     return undefined;
 }
 
@@ -9610,6 +9643,20 @@ const withQuote = new Set<string>();
 /** Every code a measured screen painted, as `screen:name` (D4's not-read list). */
 const codesPainted = new Set<string>();
 /**
+ * The codes each paint showed with a box (`svg.qr`, the door's deck aside),
+ * by screen, look and the number of codes the app built in the tree, as the
+ * fewest and the most over the look's variants (before 8g2, the fifth
+ * review's item 10): the code owe per look compared the codes a look painted
+ * with the codes it read under one filter, so a look that took a code's box
+ * away owed nothing for it. Which codes a screen builds is the app's — but
+ * not always the same for every look: the name sheet composes no record, and
+ * so draws no code, for a paid look a try-on paints (the tracked fixture's,
+ * on `publish-name`) — so `probe-coverage.mjs` compares the looks that built
+ * as many codes, and names one that painted fewer of them with a box than
+ * another did.
+ */
+const qrByScreen: Record<string, Record<string, Record<string, { min: number; max: number }>>> = {};
+/**
  * Every decoration class this pass painted worn: what the coverage rules
  * owe a pass is keyed on what it wore (`probe-coverage.mjs`), so a look that
  * carries the rain owes the outline rules whatever its class.
@@ -9659,14 +9706,25 @@ for (const screen of measured) {
             // them the contrast pass reads the quiet zone of, and which it
             // does not.
             const codesHere = (qrColourByClass[measuringClass] ??= { painted: 0, read: 0 });
+            let codesInTree = 0;
+            let codesOnPaint = 0;
             for (const svg of document.querySelectorAll('svg.qr')) {
                 if (svg.closest('.deck-stall') !== null) continue;
+                codesInTree += 1;
                 const box = svg.getBoundingClientRect();
                 if (box.width > 0 && box.height > 0) {
                     codesPainted.add(`${screen}:${codeName(svg)}`);
                     codesHere.painted += 1;
+                    codesOnPaint += 1;
                 }
             }
+            // And per screen, every look's fewest and most with a box, by
+            // how many the app built (`qrByScreen`): a look that paints fewer
+            // of the codes the app built than another look does owes the read
+            // of the ones it took away.
+            const built = (((qrByScreen[screen] ??= {})[measuringClass] ??= {})[String(codesInTree)] ??= { min: codesOnPaint, max: codesOnPaint });
+            built.min = Math.min(built.min, codesOnPaint);
+            built.max = Math.max(built.max, codesOnPaint);
             // And their colours (`a-code-is-drawn-black-on-white`).
             failures.push(...qrColourFaults(screen, label));
             failures.push(...unbuyableFaults(screen, label));
@@ -12282,6 +12340,8 @@ const verdict = {
     selfClipByClass,
     /* Codes painted and codes whose colours were read, per look (`a-code-is-drawn-black-on-white`). */
     qrColourByClass,
+    /* Codes each look painted on each screen with a box, by how many the app built, its fewest and most over its variants (`qrByScreen`). */
+    qrByScreen,
     /* Money figures held to a dress that does not misstate them, per look, and those read under a clip-path or clip (`a-money-figure-is-never-misdressed`). */
     dressByClass,
     dressClipByClass,
