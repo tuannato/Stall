@@ -6970,6 +6970,91 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **A code is drawn black on white** (before 8g2, the fourth review's item
+ * 4, the critic's PFQ): `qrSvg` draws a code as an `svg.qr` holding a white
+ * `rect` the size of its viewBox and one black `path` of its modules, each
+ * coloured by a presentation attribute — and an author rule beats a
+ * presentation attribute, so `.t-modern .qr path { fill: #fff }` blanked
+ * every pay and share code on the look, its quiet zone white and its modules
+ * gone, and passed the whole runner (the quiet-zone read reads the ring
+ * inside the square, which stayed white). On every geometry pass, with no
+ * pixels, every code a paint shows (`svg.qr` with a box, the door's deck
+ * aside) is held to the shape `qrSvg` draws and to its colours computed:
+ * the svg's element children are a `rect` then a `path`, the rect at 0,0
+ * the size of the viewBox and the path's modules the `M c r h1v1h-1z`
+ * squares `qrSvg` writes, its computed `d` the same squares (a `d` property
+ * re-draws them); the rect's computed fill white and the path's black,
+ * each at a fill opacity of 1, with no stroke; and the svg, the rect and the
+ * path each at opacity 1, visible, displayed, with no filter, mask,
+ * clip-path, blend or transform. A code whose shape is not that fails: the
+ * read cannot vouch for one. The first-party look lint refuses `fill` and
+ * `stroke` off a drawn icon (`isIconRule`, D-2026-10-26-04 (b)); this is
+ * the kit's road. Owed per look (`qrColourByClass`: painted, counted where
+ * the codes are listed, and read). **Not read, stated**: a box above the
+ * code (its fades are the cover rules' and the quiet zone's), the code's
+ * size, and the pixels (the quiet-zone read's, on the contrast jobs).
+ */
+const QR_COLOUR_CHECK = 'a-code-is-drawn-black-on-white';
+const qrColourByClass: Record<string, { painted: number; read: number }> = {};
+
+/** Why a code is not the black-on-white square `qrSvg` draws, or undefined. */
+function qrColourFault(svg: Element): string | undefined {
+    const kids = [...svg.children];
+    if (kids.length !== 2 || kids[0]!.localName !== 'rect' || kids[1]!.localName !== 'path') {
+        return `its shape is not the one qrSvg draws (a rect, then a path): it holds ${kids.map((k) => k.localName).join(', ') || 'nothing'}`;
+    }
+    const [rect, path] = kids as [SVGElement, SVGElement];
+    const view = /^0 0 (\d+) \1$/.exec((svg.getAttribute('viewBox') ?? '').trim());
+    if (view === null) return `its viewBox (${svg.getAttribute('viewBox') ?? 'none'}) is not the square qrSvg draws`;
+    const size = view[1]!;
+    const d = path.getAttribute('d') ?? '';
+    const modules = [...d.matchAll(/M(\d+) (\d+)h1v1h-1z/g)];
+    if (modules.length === 0 || modules.map((m) => m[0]).join('') !== d) return 'its modules are not the squares qrSvg draws';
+    const rcs = getComputedStyle(rect);
+    const pcs = getComputedStyle(path);
+    if (rcs.x !== '0px' || rcs.y !== '0px' || rcs.width !== `${size}px` || rcs.height !== `${size}px`) {
+        return `its white rect is ${rcs.width} by ${rcs.height} at ${rcs.x}, ${rcs.y}, not the ${size} by ${size} square of its viewBox`;
+    }
+    const drawn = `path("${modules.map((m) => `M ${m[1]} ${m[2]} H ${Number(m[1]) + 1} V ${Number(m[2]) + 1} H ${m[1]} Z`).join(' ')}")`;
+    if (pcs.getPropertyValue('d') !== drawn) return `its modules are re-drawn by a d property (${pcs.getPropertyValue('d').slice(0, 60)})`;
+    const paint = (cs: CSSStyleDeclaration, want: readonly number[], what: string): string | undefined => {
+        const fill = dressSingleColour(cs.fill);
+        if (fill === undefined) return `${what} filled with ${cs.fill.slice(0, 40)}, which this read cannot take apart`;
+        if (fill.alpha < 0.999 || fill.rgb.some((v, i) => Math.abs(v - want[i]!) > 0.5)) return `${what} filled ${cs.fill}, not ${want[0] === 255 ? 'white' : 'black'}`;
+        if (Number.parseFloat(cs.fillOpacity) < 0.999) return `${what} filled at an opacity of ${cs.fillOpacity}`;
+        if (cs.stroke !== 'none' && Number.parseFloat(cs.strokeWidth) > 0) return `${what} stroked ${cs.stroke} ${cs.strokeWidth} wide`;
+        return undefined;
+    };
+    const painted = paint(rcs, [255, 255, 255], 'its ground is') ?? paint(pcs, [0, 0, 0], 'its modules are');
+    if (painted !== undefined) return painted;
+    for (const [cs, what] of [[getComputedStyle(svg), 'it'], [rcs, 'its ground'], [pcs, 'its modules']] as const) {
+        if (Number.parseFloat(cs.opacity) < 0.999) return `${what}: opacity ${cs.opacity}`;
+        if (cs.visibility !== 'visible') return `${what}: visibility ${cs.visibility}`;
+        if (cs.display === 'none') return `${what}: display none`;
+        for (const prop of ['filter', 'clip-path', 'mask-image', '-webkit-mask-image', 'transform', 'rotate', 'scale', 'translate'] as const) {
+            const value = cs.getPropertyValue(prop);
+            if (value !== 'none' && value !== '') return `${what}: ${prop} ${value.slice(0, 40)}`;
+        }
+        if (cs.mixBlendMode !== 'normal') return `${what}: mix-blend-mode ${cs.mixBlendMode}`;
+    }
+    return undefined;
+}
+
+function qrColourFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    const tally = (qrColourByClass[measuringClass] ??= { painted: 0, read: 0 });
+    for (const svg of document.querySelectorAll('svg.qr')) {
+        if (svg.closest('.deck-stall') !== null) continue;
+        const box = svg.getBoundingClientRect();
+        if (!(box.width > 0 && box.height > 0)) continue;
+        tally.read += 1;
+        const why = qrColourFault(svg);
+        if (why !== undefined) out.push({ screen, theme: label, check: QR_COLOUR_CHECK, detail: `${codeName(svg)}: ${why} — a code is drawn black on white, and a look does not paint it` });
+    }
+    return out;
+}
+
+/*
  * **A payment list that scrolls says how many lines it hides** (2026-09-24,
  * the owner's decision 4). The payment's lines scroll inside the wall's
  * plate under a cap in pixels (`window.css`), and nothing said so: a
@@ -9285,11 +9370,17 @@ for (const screen of measured) {
             // The codes this screen paints (D4): the runner lists which of
             // them the contrast pass reads the quiet zone of, and which it
             // does not.
+            const codesHere = (qrColourByClass[measuringClass] ??= { painted: 0, read: 0 });
             for (const svg of document.querySelectorAll('svg.qr')) {
                 if (svg.closest('.deck-stall') !== null) continue;
                 const box = svg.getBoundingClientRect();
-                if (box.width > 0 && box.height > 0) codesPainted.add(`${screen}:${codeName(svg)}`);
+                if (box.width > 0 && box.height > 0) {
+                    codesPainted.add(`${screen}:${codeName(svg)}`);
+                    codesHere.painted += 1;
+                }
             }
+            // And their colours (`a-code-is-drawn-black-on-white`).
+            failures.push(...qrColourFaults(screen, label));
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
             failures.push(...statusLineFaults(screen, label));
@@ -11901,6 +11992,8 @@ const verdict = {
     figureInkByClass,
     /* Money figures asked whether they clip themselves, per look (`a-money-figure-never-clips-itself`). */
     selfClipByClass,
+    /* Codes painted and codes whose colours were read, per look (`a-code-is-drawn-black-on-white`). */
+    qrColourByClass,
     /* Money figures held to a dress that does not misstate them, per look, and those read under a clip-path or clip (`a-money-figure-is-never-misdressed`). */
     dressByClass,
     dressClipByClass,

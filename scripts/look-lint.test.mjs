@@ -2369,6 +2369,89 @@ describe('a-keyframe-never-sets-a-ground-or-a-shadow', () => {
     });
 });
 
+describe('svg-paint-stands-only-on-a-drawn-icon', () => {
+    /**
+     * Before 8g2 (the fourth review's item 4, the critic's PFQ;
+     * D-2026-10-26-04 (b)): `qrSvg` colours a code by presentation
+     * attributes, which an author rule beats, so `.t-modern .qr path { fill:
+     * #fff }` blanked every code on the look and passed the whole runner and
+     * both lints. A first-party look sheet sets `fill`, `stroke` and every
+     * `fill-*` and `stroke-*` longhand only on a rule whose every selector's
+     * subject is a drawn icon — the `.ic` svg, or a shape under it by a
+     * descendant or child combinator (`isIconRule` in
+     * `scripts/workshop-css.mjs`), the shape the shipped looks write. The probe
+     * holds every code to black on white (`a-code-is-drawn-black-on-white`),
+     * the kit's road. The kit is unchanged.
+     */
+    const SVG = /SVG paint stands only on a drawn icon/;
+
+    it('refuses SVG paint on a code, on any rule that is not a drawn icon\'s, and in a keyframe', () => {
+        for (const rule of [
+            '.t-neo .qr path { fill: #fff; }',
+            '.t-neo .qr rect { fill: #000; }',
+            '.t-neo .qr { fill: #fff; }',
+            '.t-neo .qr path { fill-opacity: 0; }',
+            '.t-neo .qr path { FILL: #fff; }',
+            '.t-neo .qr path { stroke: #fff; stroke-width: 3; }',
+            '.t-neo .qr path { stroke-dasharray: 1; }',
+            '.t-neo .qr path { fill-rule: evenodd; }',
+            '.t-neo .ic, .t-neo .qr path { fill: #fff; }',
+            '.t-neo :is(.ic, .qr) path { fill: #fff; }',
+            '.t-neo .ic + path { stroke: #fff; }',
+            '.t-neo .ic ~ path { stroke: #fff; }',
+            '.t-neo .ic:hover { stroke-width: 2; }',
+            '.t-neo .ic[hidden] { stroke-width: 2; }',
+            '.t-neo .item-caret { stroke-width: 2; }',
+            ".t-neo .item-p::after { content: ''; fill: #fff; }",
+            '@keyframes t-neo-fill { to { fill: #fff; } }',
+            '@media (min-width: 680px) { .t-neo .qr path { fill: #fff; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => SVG.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('takes the shape the shipped looks write, and a drawn icon\'s own shapes under it', () => {
+        for (const rule of [
+            '.t-neo .ic { stroke-width: 2; stroke-linecap: square; }',
+            '.t-neo .pay-pointer .ic { stroke-width: 2; }',
+            '.t-neo .ic path { stroke-linejoin: round; }',
+            '.t-neo .ic > path { stroke-width: 1.5; }',
+            '.t-neo svg.ic { fill: none; }',
+            '.t-neo .item-caret.ic { stroke-width: 1.5; }',
+            '.t-neo .ic.item-caret, .t-neo .fold-caret .ic { stroke-width: 1.5; }',
+            '@media (min-width: 680px) { .t-neo .ic { stroke-width: 2; } }',
+        ]) {
+            accepts(rule);
+        }
+    });
+
+    it('is first party only, and costs nothing: every first-party sheet a run serves, every starter and the canary set SVG paint on .ic alone', () => {
+        for (const rule of ['.t-neo .qr path { fill: #fff; }', '@keyframes wk-fill { to { fill: #fff; } }']) {
+            const kit = lintSheet(plantedKit(rule));
+            assert.ok(!kit.some((p) => SVG.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
+        }
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        let painted = 0;
+        for (const { name, css, options } of sheets) {
+            painted += everyRule(css).filter((rule) => rule.decls.some((decl) => /^(?:fill|stroke)(?:-|$)/.test(decl.prop))).length;
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => SVG.test(p)), [], name);
+        }
+        // The shipped looks' `.ic` rules and the starters' copies of them, read.
+        assert.ok(painted >= 6, `${painted} rules setting SVG paint read`);
+    });
+});
+
 describe('a-pseudo-element-paints-its-own-ground-and-ink', () => {
     /**
      * D-2026-10-20-08's B3 (the lint-belts critic's third review): the probe
@@ -3273,10 +3356,14 @@ describe('a-line-and-a-stroke-are-capped-per-declaration', () => {
             'stroke-width: initial',
             'stroke-width: inherit',
         ]) {
-            accepts(`.t-neo .guide-link { ${decl}; }`);
+            // A stroke stands on a drawn icon alone (`svg-paint-stands-only-on-a-drawn-icon`): the cap is read there.
+            accepts(`${decl.startsWith('stroke') ? '.t-neo .ic' : '.t-neo .guide-link'} { ${decl}; }`);
         }
-        accepts('@keyframes t-neo-ring { from { text-underline-offset: -2px; text-decoration-thickness: 1px; stroke-width: 1; } to { text-underline-offset: 4px; text-decoration-thickness: 3px; stroke-width: 3; } }');
-        accepts('@media (min-width: 680px) { .t-neo .item-caret { stroke-width: 2; } }');
+        accepts('@keyframes t-neo-ring { from { text-underline-offset: -2px; text-decoration-thickness: 1px; } to { text-underline-offset: 4px; text-decoration-thickness: 3px; } }');
+        accepts('@media (min-width: 680px) { .t-neo .ic { stroke-width: 2; } }');
+        // A stroke within the cap in a keyframe passes the cap and is refused as SVG paint off a drawn icon.
+        const ring = lintLookSheet(plantedNeo('@keyframes t-neo-ring { from { stroke-width: 1; } to { stroke-width: 3; } }'), { lookClass: 't-neo' });
+        assert.ok(!ring.some((p) => /is drawn in the ink of its box and reaches past it/.test(p)) && ring.some((p) => /SVG paint stands only on a drawn icon/.test(p)), ring.join('\n'));
     });
 
     it('is first party only, leaves a state rule to the belt, and costs the shipped looks, the starters, the fixtures and the canary nothing: they set a stroke of 1.75 to 2 and no underline', () => {
@@ -4065,6 +4152,8 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         ['keyframe:ink', /in a keyframe is inherited: it changes how the text of every box below/],
         // The ground belt beside the probe's keyframe-offset ground read (before 8g2, the fourth review's item 2, PG; D-2026-10-26-04 (a)).
         ['keyframe:ground', /a ground or a shadow in a keyframe lays a ground under every box inside the one that runs it/],
+        // SVG paint off a drawn icon (before 8g2, the fourth review's item 4, PFQ; D-2026-10-26-04 (b)).
+        ['svg-paint', /SVG paint stands only on a drawn icon/],
         ['role-redeclared', /palette role the theme table writes on the stall/],
         ['tap-highlight', /a tap highlight paints a colour/],
         ['file-mask', /a file's mask or clip in a/],
@@ -4079,12 +4168,12 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt) and 16 (`j1`, the ground belt) and the selected check\'s 24, with an outcome each', () => {
+    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt), 16 (`j1`, the ground belt) and 20 (`k1`, the SVG paint belt) and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1', 'k1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 1238);
+        assert.equal(Object.values(PLANTS).flat().length, 1258);
         // `i1`: an inherited ink, shadow or mark in a keyframe (eighteen refused, PT2's shape first, and four controls). The belt moved five older plants with it: `g1:130`, the
         // sheet's own keyframe setting `color` on a quote's `.item-a`, accepted until it, and `f2:18`, `g1:131`, `g1:139` and `h1:9`, each refused by the belt as well.
         // The ground belt (`j1`, the fourth review's PG) moved three: `i1:21`, the ink belt's control, a keyframe `background-color` on `.item-a`, accepted until it, and
@@ -4098,6 +4187,16 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         assert.equal(PLANTS.j1.length, 16);
         assert.equal(PLANTS.j1.filter((entry) => entry.expect === 'accepted').length, 3);
         assert.match(PLANTS.j1[0].rule, /^@keyframes \$C-ground \{ 0% \{ background-color: transparent; \} 25%, 68% \{ background-color: var\(--s-text\); \}/);
+        // `k1`: SVG paint off a drawn icon (fourteen refused, PFQ's shape first, and six controls in the shape the shipped looks write). The belt moved sixteen older plants:
+        // `g1:39`–`g1:52` and `f2:5` set a stroke on `.item-caret`, a drawn icon whose rule does not name `.ic` (five of them the stroke cap's controls, accepted until it), and
+        // `f1:35` a fill and a stroke on a pseudo-element, accepted until it.
+        assert.equal(PLANTS.k1.length, 20);
+        assert.equal(PLANTS.k1.filter((entry) => entry.expect === 'accepted').length, 6);
+        assert.equal(PLANTS.k1[0].rule, '.$C .qr path { fill: #fff; }');
+        for (const i of [39, 40, 41, 42, 50]) assert.deepEqual(PLANTS.g1[i].by, ['svg-paint']);
+        for (const i of [43, 44, 45, 46, 47, 48, 49, 51, 52]) assert.deepEqual(PLANTS.g1[i].by, ['ink-reach', 'svg-paint']);
+        assert.deepEqual(PLANTS.f2[5].by, ['ink-reach', 'svg-paint']);
+        assert.deepEqual(PLANTS.f1[35].by, ['svg-paint']);
         assert.match(PLANTS.i1[0].rule, /^@keyframes \$C-ink \{ 25%, 68% \{ color: transparent; \} \}/);
         assert.deepEqual(PLANTS.g1[130].by, ['keyframe:ink']);
         // The sixth review's round: `h1`, the shorthand's thickness through a math function (M1), a keyframe inside an at-rule or a statement (M2), a negated painted value, a blur past its cap and `unset` on a custom property.
@@ -4150,10 +4249,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 1,238, only the 300 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 1,258, only the 300 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
         assert.equal(accepted.length, 300);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 938, 'and refuses the other 938');
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 958, 'and refuses the other 958');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);
@@ -4217,7 +4316,7 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
                 continue; // a rule the re-scoping cannot take (nesting): there is no kit sheet to lint
             }
             assert.ok(
-                !kit.some((p) => /is not a property a state rule may set|palette role the theme table|a custom property set under a state|may be a money node — the wall fits|a cursor that is not a keyword|in a keyframe takes a box|takes its paint from its host|prints text and states no colour|names no colour, and is drawn in currentColor|is its host's ink, which a state may change|reads a custom property that is not a palette role|all re-states every property from the host's or the initial value|names a side by the writing mode|it reaches past its box, where a state that changes the ink|an outline's ring reaches over the boxes beside its box|all in a keyframe re-states every property|a ground or a shadow in a keyframe lays a ground/.test(p)),
+                !kit.some((p) => /is not a property a state rule may set|palette role the theme table|a custom property set under a state|may be a money node — the wall fits|a cursor that is not a keyword|in a keyframe takes a box|takes its paint from its host|prints text and states no colour|names no colour, and is drawn in currentColor|is its host's ink, which a state may change|reads a custom property that is not a palette role|all re-states every property from the host's or the initial value|names a side by the writing mode|it reaches past its box, where a state that changes the ink|an outline's ring reaches over the boxes beside its box|all in a keyframe re-states every property|a ground or a shadow in a keyframe lays a ground|SVG paint stands only on a drawn icon/.test(p)),
                 `${JSON.stringify(entry.rule)}:\n  ${kit.join('\n  ')}`,
             );
         }

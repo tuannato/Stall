@@ -2924,6 +2924,12 @@ const KEYFRAME_INK = new Set([
  */
 const KEYFRAME_GROUND = new Set(['background', 'background-color', 'background-image', 'box-shadow', '-webkit-box-shadow']);
 
+/** The SVG paint longhands a first-party sheet sets on a drawn icon alone (`isIconRule`; D-2026-10-26-04 (b)). */
+const SVG_PAINT = /^(?:fill|stroke)(?:-|$)/;
+
+/** The SVG shapes a drawn icon is made of, which a rule may reach under `.ic` (`src/ui/glyphs.ts` draws one `path`). */
+const ICON_PARTS = /^(?:path|g|line|polyline|polygon|circle|ellipse|rect)$/;
+
 /**
  * The properties that make a box a query container, which a first-party look
  * sheet may not set (`declarationProblems`, the 8g0 critic's P2-2): the
@@ -3112,6 +3118,71 @@ function compoundsOf(selector) {
 /** Whether a selector's look compound keeps it off the wall: `.t-x:not(.shop-window)`. */
 function offTheWall(selector) {
     return compoundsOf(selector).some((compound) => /\.t-[a-z0-9-]+/.test(compound) && /:not\(\s*\.shop-window\s*\)/.test(compound));
+}
+
+/**
+ * A selector as its top-level compounds and the combinators between them:
+ * `['.t-x', ' ', '.ic', '>', 'path']`, a descendant combinator as `' '`.
+ */
+function compoundsAndCombinators(selector) {
+    const out = [];
+    let depth = 0;
+    let cur = '';
+    let comb = null;
+    const text = selector.trim();
+    for (let i = 0; i < text.length; i += 1) {
+        const c = text[i];
+        if (c === '"' || c === "'") {
+            const j = skipString(text, i);
+            if (comb !== null) {
+                out.push(comb);
+                comb = null;
+            }
+            cur += text.slice(i, j);
+            i = j - 1;
+            continue;
+        }
+        if (c === '(' || c === '[') depth += 1;
+        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+        if (depth === 0 && (c === '>' || c === '+' || c === '~' || /\s/.test(c))) {
+            if (cur !== '') {
+                out.push(cur);
+                cur = '';
+                comb = ' ';
+            }
+            if (!/\s/.test(c)) comb = c;
+            continue;
+        }
+        if (comb !== null) {
+            out.push(comb);
+            comb = null;
+        }
+        cur += c;
+    }
+    if (cur !== '') out.push(cur);
+    return out;
+}
+
+/** Whether a compound is the drawn icon itself: classes alone (an `svg` type before them at most), `.ic` among them, no state, attribute or id. */
+const isIconCompound = (compound) => /^(?:svg)?(?:\.[a-z_][a-z0-9_-]*)+$/i.test(compound) && compound.split('.').slice(1).includes('ic');
+
+/**
+ * Whether every selector of a rule names a drawn icon (`SVG_PAINT`'s one
+ * home): its subject is the `.ic` svg (`isIconCompound`), or a shape
+ * (`ICON_PARTS`) under one by a descendant or child combinator. A keyframe
+ * (no selectors) names none.
+ */
+function isIconRule(selectors) {
+    return (
+        selectors !== undefined &&
+        selectors.length > 0 &&
+        selectors.every((selector) => {
+            const parts = compoundsAndCombinators(selector);
+            const subject = parts[parts.length - 1] ?? '';
+            if (isIconCompound(subject)) return true;
+            return ICON_PARTS.test(subject) && parts.length >= 3 && (parts[parts.length - 2] === ' ' || parts[parts.length - 2] === '>') && isIconCompound(parts[parts.length - 3]);
+        })
+    );
 }
 
 /** Whether every selector of a rule names a box `STICKY_BOXES` admits, at rest and off the wall. */
@@ -3307,6 +3378,28 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && selectors === undefined && KEYFRAME_GROUND.has(prop)) {
             out.push(
                 `${shown} — a ground or a shadow in a keyframe lays a ground under every box inside the one that runs it, a money figure's among them, for part of a cycle; a look sets its grounds and shadows at rest`,
+            );
+        }
+        /*
+         * SVG paint off a drawn icon (before 8g2, the fourth review's item 4,
+         * the critic's PFQ; D-2026-10-26-04 (b)): an author `fill` beats the
+         * presentation attribute `qrSvg` draws a code with, so
+         * `.t-modern .qr path { fill: #fff }` blanked every pay and share
+         * code on the look, its quiet zone white and its modules gone, and
+         * passed the whole runner. In a first-party sheet `fill`, `stroke`
+         * and every `fill-*` and `stroke-*` longhand stand only on a rule
+         * whose every selector's subject is a drawn icon — the `.ic` svg
+         * (`src/ui/glyphs.ts`), or a shape under it by a descendant or child
+         * combinator (`isIconRule`) — the one shape the shipped looks write
+         * (`.t-modern .ic { stroke-width: 2 }`, Neo's, Rural's); refused in a
+         * keyframe, which has no selector. The probe holds every code's
+         * colours computed (`qrColourFaults` in `layout/probe.ts`), the
+         * kit's road. `-webkit-text-stroke` and `-webkit-text-fill-color`
+         * are refused everywhere already (`REFUSED_PROPERTIES`).
+         */
+        if (firstParty && SVG_PAINT.test(prop) && !isIconRule(selectors)) {
+            out.push(
+                `${shown} — SVG paint stands only on a drawn icon (a rule whose every selector's subject is .ic, or a shape under it): an author fill or stroke beats the colours a code is drawn with, and a code with its modules painted white scans as nothing`,
             );
         }
         /*

@@ -79,6 +79,8 @@ const moneyRead = {
     dressClipByClass: { 't-rural': 300 },
     // 7a: 1a read on every look, a point hit-tested on each.
     coverByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, nodes: 200, points: 9000, checked: 6000, clipSkips: 300, wallScroll: 0, failed: 0 }])),
+    // The fourth review's PFQ: every code a pass painted, its colours read.
+    qrColourByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { painted: 20, read: 20 }])),
 };
 const full = {
     unbuyableChecks: { row: 8, face: 8, 'wall-browse': 6 },
@@ -372,7 +374,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, qrColourByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -1407,5 +1409,54 @@ describe('every-viewport-the-runner-measures-is-a-module-pass', () => {
         const calls = [...runner.matchAll(/readVerdict\(([^)]*)/g)].map((m) => m[1]);
         assert.ok(calls.length >= 5, calls.join(' | '));
         for (const args of calls.slice(1)) assert.match(args, /^cdp, tab\.sessionId, pass, probeUrl\((?:pass\.)?vp\b/, args);
+    });
+});
+
+const CODE_RULE = /^a-code-is-drawn-black-on-white /;
+
+describe('a-code-is-drawn-black-on-white-is-owed-on-every-look-of-every-geometry-pass', () => {
+    /**
+     * Before 8g2, the fourth review's item 4 (the critic's PFQ:
+     * `.t-modern .qr path { fill: #fff }` blanked every code on the look and
+     * passed the whole runner). The probe holds every code it paints to its
+     * colours, with no pixels; every geometry pass owes, on every look it
+     * painted a code on, every code read (`qrColourByClass`, painted and
+     * read), and a page that lists codes painted and reports no read owes one.
+     */
+    it('passes a geometry pass that read the colours of every code it painted', () => {
+        for (const pass of GEOMETRY) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...full, ...painted, wallControlRolesByClass: undefined }).filter((gap) => CODE_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('names the look whose codes it read fewer of than it painted, and a pass that reported no read', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            const short = { ...read, qrColourByClass: { ...read.qrColourByClass, 't-neo': { painted: 20, read: 0 }, 't-rural': { painted: 20, read: 19 } } };
+            assert.deepEqual(
+                probeCoverageGaps(pass, short).filter((gap) => CODE_RULE.test(gap)),
+                [
+                    'a-code-is-drawn-black-on-white read the colours of 0 of the 20 codes a t-neo stall painted',
+                    'a-code-is-drawn-black-on-white read the colours of 19 of the 20 codes a t-rural stall painted',
+                ],
+                pass,
+            );
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, qrColourByClass: undefined, codesPainted: ['offers:share code'] }).filter((gap) => CODE_RULE.test(gap)),
+                ['a-code-is-drawn-black-on-white reported no read of a code on a pass that painted codes'],
+                pass,
+            );
+            assert.deepEqual(probeCoverageGaps(pass, { ...read, qrColourByClass: undefined }).filter((gap) => CODE_RULE.test(gap)), [], pass);
+            // A look that painted no code owes none.
+            assert.deepEqual(probeCoverageGaps(pass, { ...read, qrColourByClass: { 't-modern': { painted: 0, read: 0 } } }).filter((gap) => CODE_RULE.test(gap)), [], pass);
+        }
+        for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => CODE_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('prints the codes it read per look on the pass\'s line', () => {
+        assert.match(probeCoverageLine('desktop', { ...full, qrColourByClass: { 't-neo': { painted: 4, read: 4 }, 't-modern': { painted: 3, read: 3 } } }), / · codes held to black on white: t-modern 3, t-neo 4/);
+        assert.match(probeCoverageLine('tablet', { qrColourByClass: { 't-neo': { painted: 2, read: 2 } } }), / · codes held to black on white: t-neo 2/);
     });
 });

@@ -121,6 +121,11 @@
  *   Rural's notched tag is the subject, so a pass that read none stopped
  *   measuring the half of the rule that reads a clip's shape against the
  *   ink.
+ * - **`a-code-is-drawn-black-on-white`** (before 8g2, the fourth review's
+ *   item 4, the critic's PFQ): every geometry pass owes, on every look it
+ *   painted a code on, the colours of every code it painted read
+ *   (`qrColourByClass`: painted and read, per look), and a pass whose page
+ *   listed codes painted (`codesPainted`) and reported no such read owes one.
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -530,6 +535,23 @@ export function probeCoverageGaps(
                 gaps.push(`nothing-covers-money-or-a-protected-box hit-tested no point on a ${cls} stall`);
             }
         }
+        // A code drawn black on white (before 8g2's fourth review, item 4,
+        // the critic's PFQ): every code a pass painted on a look has its
+        // colours read — a pass that painted codes and read fewer read
+        // nothing about the ones it skipped.
+        const codes = report.qrColourByClass;
+        if (codes === undefined) {
+            if ((report.codesPainted ?? []).length > 0) gaps.push('a-code-is-drawn-black-on-white reported no read of a code on a pass that painted codes');
+        } else {
+            for (const cls of report.sheetClasses ?? []) {
+                const q = Object.hasOwn(codes, cls) ? codes[cls] : undefined;
+                const painted = q?.painted ?? 0;
+                const read = q?.read ?? 0;
+                if (painted > 0 && read !== painted) {
+                    gaps.push(`a-code-is-drawn-black-on-white read the colours of ${read} of the ${painted} codes a ${cls} stall painted`);
+                }
+            }
+        }
         // Rural's tag is a notched polygon on the figure's column: a pass that
         // painted Rural and read no figure under it read no clip's shape.
         if ((report.sheetClasses ?? []).includes('t-rural') && !(((report.dressClipByClass ?? {})['t-rural'] ?? 0) > 0)) {
@@ -734,7 +756,10 @@ export function probeCoverageLine(pass, report) {
         (report.dressByClass === undefined
             ? ''
             : ` · money figures held to their dress: ${perClass(report.dressByClass)}` +
-              ` · under a clip: ${perClass(report.dressClipByClass)}`);
+              ` · under a clip: ${perClass(report.dressClipByClass)}`) +
+        (report.qrColourByClass === undefined
+            ? ''
+            : ` · codes held to black on white: ${perClass(Object.fromEntries(Object.entries(report.qrColourByClass).map(([cls, q]) => [cls, q.read])))}`);
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }

@@ -5982,8 +5982,10 @@
     },
     {
       "rule": ".$C .item-p::after { content: ''; fill: currentColor; stroke: currentColor; }",
-      "expect": "accepted",
-      "why": "fill and stroke apply to SVG shapes and have no effect on an HTML pseudo-element"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     }
   ],
   "f2": [
@@ -6024,7 +6026,8 @@
       "rule": ".$C .item-caret { overflow: visible; stroke-width: 300; pointer-events: none; color: transparent; }\n.$C .item-head:hover .item-caret { color: #ff00aa; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
@@ -6980,90 +6983,109 @@
     },
     {
       "rule": ".$C .item-caret { stroke-width: 3; }",
-      "expect": "accepted",
-      "why": "at the cap: 3 (the shipped glyphs paint 1.75 to 2)"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 3px; }",
-      "expect": "accepted",
-      "why": "px is read as the bare number is"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 1.75; }",
-      "expect": "accepted",
-      "why": "the width the shipped Rural sheet paints"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 0; }",
-      "expect": "accepted",
-      "why": "a stroke of no width draws nothing"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 3.5; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 300; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 300px; overflow: visible; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 0.5em; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 10%; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: var(--w); }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: calc(1 + 1); }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: inherit; }",
-      "expect": "accepted",
-      "why": "a CSS-wide keyword takes a value the cascade already holds"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": "@media (min-width: 680px) { .$C .item-caret { stroke-width: 300; } }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": "@keyframes $C-sw { to { stroke-width: 300; } }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
@@ -8271,6 +8293,137 @@
       "rule": ".$C .item-a { background-color: var(--s-surface); }",
       "expect": "accepted",
       "why": "a ground at rest, which the belt does not read: the probe judges a ground under a figure on every pass, at rest and where a seek changed it"
+    }
+  ],
+  "k1": [
+    {
+      "rule": ".$C .qr path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr rect { fill: #000; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr path { fill-opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr path { stroke: #fff; stroke-width: 3; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr path { stroke-dasharray: 1; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C [data-role=\"pay-qr\"] path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .ic, .$C .qr path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C :is(.ic, .qr) path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .ic + path { stroke: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-caret { stroke-width: 2; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-fill { to { fill: #fff; } }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { .$C .qr path { fill: #fff; } }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .ic { stroke-width: 2; stroke-linecap: square; }",
+      "expect": "accepted",
+      "why": "the shape the shipped looks write: a drawn icon's line, on the .ic svg itself (theme-modern, theme-neo, theme-rural)"
+    },
+    {
+      "rule": ".$C .pay-pointer .ic { stroke-width: 2; }",
+      "expect": "accepted",
+      "why": "a drawn icon under another box: the subject is still the .ic svg"
+    },
+    {
+      "rule": ".$C .ic path { stroke-linejoin: round; }",
+      "expect": "accepted",
+      "why": "the drawn icon's own path, under the .ic svg by a descendant combinator"
+    },
+    {
+      "rule": ".$C .ic > path { stroke-width: 1.5; }",
+      "expect": "accepted",
+      "why": "the drawn icon's own path, under the .ic svg by a child combinator"
+    },
+    {
+      "rule": ".$C svg.ic { fill: none; }",
+      "expect": "accepted",
+      "why": "the .ic svg named with its type"
+    },
+    {
+      "rule": ".$C .item-caret.ic { stroke-width: 1.5; }",
+      "expect": "accepted",
+      "why": "a drawn icon named by its own class beside .ic"
     }
   ]
 }
