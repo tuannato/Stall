@@ -2815,7 +2815,7 @@ function coverLines(label, byClass, ms, coveredBy, end, seek) {
         (end === undefined ? '' : ` · at the end of a lasting animation: ${end.reads} read(s), ${end.failed} failure(s) in ${(end.ms / 1000).toFixed(2)}s`) +
         (seek === undefined
             ? ''
-            : ` · the dress rule's keyframe offsets: ${seek.anims} animation(s), ${seek.seeks} seek(s), ${seek.reads} figure read(s), ${seek.faults} fault(s) in ${(seek.ms / 1000).toFixed(2)}s`);
+            : ` · the dress rule's keyframe offsets: ${seek.anims} animation(s), ${seek.seeks} seek(s), ${seek.reads} figure read(s), ${seek.grounds ?? 0} ground(s) read again where a seek changed them, ${seek.faults} fault(s) in ${(seek.ms / 1000).toFixed(2)}s`);
     return [line];
 }
 /*

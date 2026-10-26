@@ -5408,6 +5408,7 @@
       "rule": "@keyframes $C-ring { to { box-shadow: 0 0 0 40px; } }",
       "expect": "refused",
       "by": [
+        "keyframe:ground",
         "paint-reach"
       ]
     },
@@ -6114,6 +6115,7 @@
       "rule": "@keyframes $C-bs { 50% { box-shadow: 0 0 0 4000px var(--g); } }",
       "expect": "refused",
       "by": [
+        "keyframe:ground",
         "paint-reach"
       ]
     },
@@ -8156,8 +8158,119 @@
     },
     {
       "rule": "@keyframes $C-ink { to { background-color: red; } }\n.$C .item-a { animation: $C-ink 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    }
+  ],
+  "j1": [
+    {
+      "rule": "@keyframes $C-ground { 0% { background-color: transparent; } 25%, 68% { background-color: var(--s-text); } 80%, 100% { background-color: transparent; } }\n.$C .item-head-q .item-a { animation: $C-ground 100s linear infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background-color: red; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { BACKGROUND-COLOR: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background-color: currentColor; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background: linear-gradient(#000, #000); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background-image: linear-gradient(var(--s-text), var(--s-text)); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background-image: none; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { box-shadow: inset 0 0 0 100px var(--s-text); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { -webkit-box-shadow: inset 0 0 0 100px #000; box-shadow: inset 0 0 0 100px #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background-color: red; } }\n.$C .item-p::after { content: ''; animation: $C-ground 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { @keyframes $C-ground { to { background-color: #000; } } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground",
+        "keyframe:nested"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 0% { opacity: 1; } 50% { background-color: #000; opacity: 1; } 100% { opacity: 1; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background-position: 100% 0; } }",
       "expect": "accepted",
-      "why": "the control for the first plant: the same rule on the same box, its keyframe setting a ground, which no box below inherits"
+      "why": "a background that moves, which lays no new ground: the belt reads a colour, an image and a shadow, and where a moving tile lands is read at rest and at the frozen instant alone (stated)"
+    },
+    {
+      "rule": "@keyframes $C-ground { from { background-size: 100% 100%; } to { background-size: 220% 100%; } }",
+      "expect": "accepted",
+      "why": "a background that grows, which lays no new ground: the belt reads a colour, an image and a shadow, and where a growing tile lands is read at rest and at the frozen instant alone (stated)"
+    },
+    {
+      "rule": ".$C .item-a { background-color: var(--s-surface); }",
+      "expect": "accepted",
+      "why": "a ground at rest, which the belt does not read: the probe judges a ground under a figure on every pass, at rest and where a seek changed it"
     }
   ]
 }

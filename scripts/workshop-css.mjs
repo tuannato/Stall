@@ -2909,6 +2909,22 @@ const KEYFRAME_INK = new Set([
 ]);
 
 /**
+ * The grounds and shadows a first-party keyframe may not set
+ * (`declarationProblems`, before 8g2, the fourth review's item 2, the
+ * critic's PG; D-2026-10-26-04 (a)): a background's colour or image, the
+ * shorthand that sets them, and a box shadow, with its prefixed twin. A
+ * keyframe that paints a ground on a box above a figure puts the figure on
+ * that ground for part of a cycle — `background-color: var(--s-text)` from
+ * 25% to 68% of a loop on Rural's quote `.item-a` sets the figure on its own
+ * ink — and the probe reads the ground at rest, at the frozen instant and,
+ * since the same review, at every keyframe offset where a seek changed it
+ * (`offsetGroundFaults` in `layout/probe.ts`, the kit's road). The shipped
+ * keyframes move a background's position, an opacity or a transform, and
+ * none of these.
+ */
+const KEYFRAME_GROUND = new Set(['background', 'background-color', 'background-image', 'box-shadow', '-webkit-box-shadow']);
+
+/**
  * The properties that make a box a query container, which a first-party look
  * sheet may not set (`declarationProblems`, the 8g0 critic's P2-2): the
  * shop window's `@container sw` conditions and `cqw` / `cqh` units are the
@@ -3267,6 +3283,30 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && selectors === undefined && KEYFRAME_INK.has(prop)) {
             out.push(
                 `${shown} — ${prop} in a keyframe is inherited: it changes how the text of every box below the one that runs it is painted, a money figure's among them, for part of a cycle; a look sets its inks, shadows and marks at rest`,
+            );
+        }
+        /*
+         * A ground or a shadow in a keyframe (before 8g2, the fourth review's
+         * item 2, the critic's PG; D-2026-10-26-04 (a), "Chặn cả hai"): a
+         * keyframe that sets a background's colour or image, or a box shadow,
+         * on a box above a money figure lays a ground under it for part of a
+         * cycle, where the probe's reads at rest and at the frozen instant do
+         * not look — PG puts Rural's quote figure on its own ink from 25% to
+         * 68% of a loop. `KEYFRAME_GROUND`, wherever a rule runs the keyframe;
+         * a background that moves (`background-position`, `background-size`)
+         * is not here. No first-party sheet a run serves sets one in a
+         * keyframe (the shipped looks, the starters, the fixture look, the
+         * tracked private fixture and the canary;
+         * `a-keyframe-never-sets-a-ground-or-a-shadow`); stall.css does (the
+         * Neo card's pulse and the door's breathing button, a box shadow; the
+         * yard's beetle and the door's pin demo, a background), and it is no
+         * look sheet. The kit keeps the rules its README states: the probe
+         * reads a kit look's keyframe ground at every offset where a seek
+         * changed it.
+         */
+        if (firstParty && selectors === undefined && KEYFRAME_GROUND.has(prop)) {
+            out.push(
+                `${shown} — a ground or a shadow in a keyframe lays a ground under every box inside the one that runs it, a money figure's among them, for part of a cycle; a look sets its grounds and shadows at rest`,
             );
         }
         /*

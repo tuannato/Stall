@@ -6336,8 +6336,8 @@ const OFFSET_GEOMETRY: ReadonlySet<string> = new Set([
  */
 const OFFSET_HELD_OWN: readonly string[] = [...DRESS_HELD].filter((prop) => !OFFSET_GEOMETRY.has(prop));
 
-/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), seeks, subjects read at a seek, failures found there; and its own time. */
-const dressSeek = { anims: 0, needless: 0, seeks: 0, reads: 0, faults: 0, names: {} as Record<string, number> };
+/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), seeks, subjects read at a seek, their grounds read again where a seek changed them (`offsetGroundFaults`), failures found there; and its own time. */
+const dressSeek = { anims: 0, needless: 0, seeks: 0, reads: 0, grounds: 0, faults: 0, names: {} as Record<string, number> };
 let dressSeekMs = 0;
 
 /**
@@ -6363,6 +6363,21 @@ let dressSeekMs = 0;
  * box. It is held on a box above now (`BOX_HELD`, at rest and at its
  * written value in a keyframe), and an animation that sets it is seeked,
  * so the figure's own `rendersAt` reads what it does at each offset.
+ *
+ * **Nor a ground or a shadow** (the same review's item 2, the critic's PG):
+ * a background's colour or image and a box shadow were here as reaching no
+ * held longhand, which is true and not enough — PG's `background-color:
+ * var(--s-text)` from 25% to 68% of a loop on Rural's quote `.item-a` sets
+ * the figure on its own ink there, and nothing read the ground but at rest
+ * and at the last instant. An animation that sets one is seeked now, and the
+ * ground under the glyphs is read at each offset where the seek changed it
+ * (`offsetGroundFaults`); one that sets only grounds, shadows and longhands
+ * on this list skips the held reads at its seeks (`GROUND_ONLY`), since it
+ * can change no held longhand, and one that sets only an outer shadow on a
+ * box every figure it reaches stands inside is not seeked at all
+ * (`outerShadowOnly`: such a shadow paints outside that box). A background
+ * that moves or grows (its position, its size) stays here: where a tile
+ * lands is read at rest and at the last instant alone.
  */
 const SEEK_NEEDLESS: ReadonlySet<string> = new Set([
     'transform',
@@ -6388,13 +6403,71 @@ const SEEK_NEEDLESS: ReadonlySet<string> = new Set([
     'background-position-x',
     'background-position-y',
     'background-size',
-    'background-color',
-    'background-image',
-    'box-shadow',
     'outline-color',
     'outline-width',
     'outline-offset',
     'outline-style',
+]);
+
+/**
+ * The longhands a box's paints are read from by the ground read
+ * (`boxPaintsOf`, `groundStackFault`), with the ink they are judged against:
+ * an element whose values of these differ at a keyframe offset from the
+ * pass's last instant has a ground, or an ink, the seek changed
+ * (`offsetGroundFaults`). A box above the figure is compared on
+ * `GROUND_ABOVE` alone: its background image is not read there (a
+ * decoration's paint, the contrast pass's), so a decoration's custom
+ * property turning a root's gradient — the aurora's tide, the sunburst's
+ * angle — changes nothing the ground read sees.
+ */
+const GROUND_SIGNATURE = [
+    'color',
+    '-webkit-text-fill-color',
+    'background-color',
+    'background-clip',
+    'box-shadow',
+    'border-top-color',
+    'border-right-color',
+    'border-bottom-color',
+    'border-left-color',
+    'border-top-style',
+    'border-right-style',
+    'border-bottom-style',
+    'border-left-style',
+    'border-top-width',
+    'border-right-width',
+    'border-bottom-width',
+    'border-left-width',
+    'border-image-source',
+    'border-image-slice',
+    'border-image-outset',
+    'background-image',
+    'background-origin',
+    'background-repeat',
+    'background-size',
+    'background-position-x',
+    'background-position-y',
+] as const;
+/** How many of `GROUND_SIGNATURE`'s longhands a box above the figure is compared on: all but its background image's (`boxPaintsOf` reads none there). */
+const GROUND_ABOVE = GROUND_SIGNATURE.indexOf('background-image');
+
+/**
+ * The longhands that change a box's paints and nothing a held read holds: a
+ * background's colour or image (the shorthand is these to a keyframe), a
+ * box shadow and its prefixed twin, a border's colour. An animation that
+ * sets only these and `SEEK_NEEDLESS` longhands is seeked for the ground
+ * read alone (`offsetGroundFaults`); the held reads, which no ground or
+ * shadow can move, are not made at its seeks.
+ */
+const GROUND_ONLY: ReadonlySet<string> = new Set([
+    'background-color',
+    'background-image',
+    'box-shadow',
+    '-webkit-box-shadow',
+    'border-top-color',
+    'border-right-color',
+    'border-bottom-color',
+    'border-left-color',
 ]);
 
 /**
@@ -6441,6 +6514,17 @@ function keyframesDeclare(name: string): ReadonlySet<string> | undefined {
  * animation, and from its keyframes for anything else.
  */
 function seekNeedless(anim: Animation, effect: KeyframeEffect): boolean {
+    const props = keyframeProps(anim, effect);
+    return props !== undefined && [...props].every((prop) => SEEK_NEEDLESS.has(prop));
+}
+
+/**
+ * Every longhand an animation's keyframes set — read from its `@keyframes`
+ * rule for a CSS animation, custom properties included, and from its
+ * keyframes for anything else — or undefined for a CSS animation whose rule
+ * this page cannot read.
+ */
+function keyframeProps(anim: Animation, effect: KeyframeEffect): ReadonlySet<string> | undefined {
     const props = new Set<string>();
     for (const frame of effect.getKeyframes()) {
         for (const key of Object.keys(frame)) {
@@ -6449,10 +6533,122 @@ function seekNeedless(anim: Animation, effect: KeyframeEffect): boolean {
     }
     if (anim instanceof CSSAnimation) {
         const declared = keyframesDeclare(anim.animationName);
-        if (declared === undefined) return false;
+        if (declared === undefined) return undefined;
         for (const prop of declared) props.add(prop);
     }
-    return [...props].every((prop) => SEEK_NEEDLESS.has(prop));
+    return props;
+}
+
+/** Whether an animation changes a box's paints and nothing a held read holds (`GROUND_ONLY`, `SEEK_NEEDLESS`). */
+function groundOnly(anim: Animation, effect: KeyframeEffect): boolean {
+    const props = keyframeProps(anim, effect);
+    return props !== undefined && [...props].every((prop) => GROUND_ONLY.has(prop) || SEEK_NEEDLESS.has(prop));
+}
+
+/** An element's ground as the ground read sees it (`GROUND_SIGNATURE`): the whole list for one of the figure's own elements, the first `GROUND_ABOVE` for a box above it. */
+function groundSignature(el: Element, own: boolean): string {
+    const cs = getComputedStyle(el);
+    return (own ? GROUND_SIGNATURE : GROUND_SIGNATURE.slice(0, GROUND_ABOVE)).map((prop) => cs.getPropertyValue(prop)).join('|');
+}
+/** The ground signatures the offset read compares against (`offsetDressFaults`), as the pass's last instant left them, by element and by whether it is a figure's own. */
+let restGround = new Map<string, string>();
+const groundKeys = new WeakMap<Element, number>();
+let groundKeyNext = 0;
+/** A key for an element's signature in `restGround`, by element and by the list it is read on. */
+function groundKey(el: Element, own: boolean): string {
+    let id = groundKeys.get(el);
+    if (id === undefined) {
+        id = groundKeyNext;
+        groundKeyNext += 1;
+        groundKeys.set(el, id);
+    }
+    return `${id}|${own ? 'own' : 'above'}`;
+}
+
+/**
+ * Whether an animation changes only a shadow outside the box above every
+ * figure it reaches (`offsetDressFaults` leaves it unseeked): it runs on a
+ * box above each of them, its keyframes set a box shadow and nothing that is
+ * not `SEEK_NEEDLESS`, every keyframe's shadow as the engine resolves it
+ * (`getKeyframes()`, its `var()`s substituted) has no inset layer, and each
+ * figure stands inside the box with a quarter of its own size to spare. An
+ * outer shadow paints outside its box's border, under no glyph of a figure
+ * that stands inside it. Neo's card pulse on every row head is the case on
+ * the clean tree.
+ */
+function outerShadowOnly(anim: Animation, effect: KeyframeEffect, target: Element, reads: readonly DressRead[]): boolean {
+    const props = keyframeProps(anim, effect);
+    if (props === undefined || ![...props].every((prop) => prop === 'box-shadow' || prop === '-webkit-box-shadow' || SEEK_NEEDLESS.has(prop))) return false;
+    for (const frame of effect.getKeyframes()) {
+        const value = (frame as Record<string, unknown>).boxShadow;
+        if (value === undefined) continue;
+        if (typeof value !== 'string' || value.includes('var(') || /\binset\b/.test(value)) return false;
+    }
+    const box = target.getBoundingClientRect();
+    return reads.every((r) => {
+        if (r.node === target || !target.contains(r.node)) return false;
+        const n = r.node.getBoundingClientRect();
+        const spare = 0.25 * (Number.parseFloat(getComputedStyle(r.node).fontSize) || 16);
+        return n.left - spare >= box.left && n.right + spare <= box.right && n.top - spare >= box.top && n.bottom + spare <= box.bottom;
+    });
+}
+
+/**
+ * The elements a keyframe on `target` can change a figure's ground from: its
+ * own elements under the animated box, and the boxes from the figure's
+ * parent up to the animated box when it stands above the figure.
+ */
+function groundWalk(r: DressRead, target: Element): [Element, boolean][] {
+    const out: [Element, boolean][] = r.own.filter((el) => el === target || target.contains(el)).map((el) => [el, true]);
+    if (target !== r.node && target.contains(r.node)) {
+        for (let box = r.node.parentElement; box !== null; box = box.parentElement) {
+            out.push([box, false]);
+            if (box === target) break;
+        }
+    }
+    return out;
+}
+
+/**
+ * **The ground under a figure's glyphs at a keyframe offset** (before 8g2,
+ * the fourth review's item 2, the critic's PG; D-2026-10-26-04): where the
+ * seek changed the ground or the ink of an element on a figure's walk — one
+ * of its own elements under the animated box, or a box from its parent up to
+ * the animated box (`groundWalk`, compared by `groundSignature` against the
+ * pass's last instant) — the ground under the glyphs of each of its own
+ * elements under the animated box is read again (`groundStackFault`), its
+ * paints read fresh at this offset (`paintsHere`). PG — `background-color:
+ * var(--s-text)` from 25% to 68% of a loop on Rural's quote `.item-a` —
+ * puts the figure on its own ink there and read clean at rest, at 400ms and
+ * at the last instant. The first-party look lint refuses a ground or a
+ * shadow in a keyframe (`a-keyframe-never-sets-a-ground-or-a-shadow`); this
+ * is the kit's road, and it reads a ground changed through a custom
+ * property or an ink too, which the lint's belt does not name. A failure
+ * says the animation, its box and the offset.
+ *
+ * **Not read, stated**: a box above's background image, here as at rest (a
+ * decoration's paint, the contrast pass's on the screens it samples); a
+ * ground that a background's position or size moves (`SEEK_NEEDLESS`); a
+ * ground between two offsets; and a pseudo-element's animation.
+ */
+function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHere: { own: Map<Element, BoxPaints>; above: Map<Element, BoxPaints> }): string[] {
+    if (!groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];
+    dressSeek.grounds += 1;
+    const out: string[] = [];
+    const kept = { own: ownPaintsSeen, above: abovePaintsSeen };
+    ownPaintsSeen = paintsHere.own;
+    abovePaintsSeen = paintsHere.above;
+    try {
+        for (const el of r.own) {
+            if (el !== target && !target.contains(el)) continue;
+            const why = groundStackFault(el, getComputedStyle(el), r.stall, () => inkLines(el));
+            if (why !== undefined) out.push(`${el === r.node ? 'it' : describe(el)}: ${why}, ${at}`);
+        }
+    } finally {
+        ownPaintsSeen = kept.own;
+        abovePaintsSeen = kept.above;
+    }
+    return out;
 }
 
 /**
@@ -6477,25 +6673,34 @@ function seekNeedless(anim: Animation, effect: KeyframeEffect): boolean {
  * `offset × duration` is that keyframe's own value, and both put back after.
  * At each offset every figure it can reach is read as the dress rule holds
  * it at rest: rendered still; each of its own elements under the animated
- * box, held on `OFFSET_HELD_OWN` by `dressHeldFault`; and every box between
- * the figure and the animated box, held on `BOX_HELD` by `boxHeldFault`. A
- * failure names the animation, the box it runs on and the offset; one the
- * instant's read already said is not said again.
+ * box, held on `OFFSET_HELD_OWN` by `dressHeldFault`; every box between
+ * the figure and the animated box, held on `BOX_HELD` by `boxHeldFault`;
+ * and, where the seek changed a ground or an ink on its walk, the ground
+ * under its glyphs (`offsetGroundFaults`; the fourth review's item 2, PG).
+ * An animation that sets only grounds, shadows and `SEEK_NEEDLESS`
+ * longhands (`groundOnly`) is read for the ground alone: it can move no
+ * held longhand. A failure names the animation, the box it runs on and the
+ * offset; one the instant's read already said is not said again.
  *
  * **Not read, stated**: a value between two offsets — a timing function
  * that overshoots (`cubic-bezier()` with a y outside 0–1, a `linear()` with
  * points outside them) can carry a value past both its keyframes; two
  * animations at once, each seeked with the others where the last instant
  * left them; a pseudo-element's animation (it is the cover rules'); the
- * reads that need the geometry (`OFFSET_GEOMETRY`); and an animation whose
- * duration is not a finite time over 0. Cost: only paints with an
- * animation on money's ancestry that sets something `SEEK_NEEDLESS` does
- * not name pay — on the clean tree the decorations' custom properties on
- * the stall's root (the aurora's `--au-tide`, the sunburst's
- * `--att-sun-angle`), two offsets each — and each pays a style recalc a
- * seek (`dressSeek`, `dressSeekMs`). Without the skip, every Rural tag's
- * sway and every sign's swing and sweep was seeked: about ten times the
- * time (3.1s against 0.44s over the desk pass's screens, in a session).
+ * reads that need the geometry but the ground (`OFFSET_GEOMETRY`: the
+ * spacing, the lines, an outline's ring); and an animation whose duration
+ * is not a finite time over 0. Cost: only paints with an animation on
+ * money's ancestry that sets something `SEEK_NEEDLESS` does not name pay —
+ * on the clean tree the decorations' custom properties on the stall's root
+ * (the aurora's `--au-tide`, the sunburst's `--att-sun-angle`), two offsets
+ * each (a root's gradient, which the ground read does not read above a
+ * figure, so no ground is read again), and, since the ground read, the door
+ * button's breathing (a shadow on a money node itself, read for the ground
+ * alone); Neo's card pulse on every row head is an outer shadow on a box
+ * above (`outerShadowOnly`) and is not seeked — and each pays a style
+ * recalc a seek (`dressSeek`, `dressSeekMs`). Without the skip, every Rural tag's sway and every sign's
+ * swing and sweep was seeked: about ten times the time (3.1s against 0.44s
+ * over the desk pass's screens, in a session).
  */
 function offsetDressFaults(read: readonly DressRead[]): void {
     if (read.length === 0) return;
@@ -6515,13 +6720,15 @@ function offsetDressFaults(read: readonly DressRead[]): void {
         }
     }
     const said = new Set<string>();
+    // The ground of each element as the pass's last instant left it (`groundSignature`): every animation is put back before the next is read.
+    restGround = new Map();
     for (const anim of document.getAnimations()) {
         const effect = anim.effect;
         if (!(effect instanceof KeyframeEffect) || effect.target === null || effect.pseudoElement !== null) continue;
         const target = effect.target;
         const reads = reach.get(target);
         if (reads === undefined) continue;
-        if (seekNeedless(anim, effect)) {
+        if (seekNeedless(anim, effect) || outerShadowOnly(anim, effect, target, reads)) {
             dressSeek.needless += 1;
             continue;
         }
@@ -6534,6 +6741,15 @@ function offsetDressFaults(read: readonly DressRead[]): void {
         const time = anim.currentTime;
         const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
         const where = describe(target);
+        const onlyGround = groundOnly(anim, effect);
+        // Before the read sets its timing: the ground of every element this
+        // animation can change, as the pass's last instant left it.
+        for (const r of reads) {
+            for (const [el, own] of groundWalk(r, target)) {
+                const key = groundKey(el, own);
+                if (!restGround.has(key)) restGround.set(key, groundSignature(el, own));
+            }
+        }
         dressSeek.anims += 1;
         dressSeek.names[name] = (dressSeek.names[name] ?? 0) + 1;
         try {
@@ -6542,29 +6758,34 @@ function offsetDressFaults(read: readonly DressRead[]): void {
                 anim.currentTime = offset * duration;
                 dressSeek.seeks += 1;
                 const at = `with ${name} on ${where} seeked to its keyframe at ${Math.round(offset * 100)}%`;
+                // The paints read at this offset, fresh: the pass's own are of its last instant.
+                const paintsHere = { own: new Map<Element, BoxPaints>(), above: new Map<Element, BoxPaints>() };
                 for (const r of reads) {
                     dressSeek.reads += 1;
                     const found: string[] = [];
-                    if (!rendersAt(r.node)) found.push(`it has no box, ${at}`);
-                    for (const el of r.own) {
-                        if (el !== target && !target.contains(el)) continue;
-                        const cs = getComputedStyle(el);
-                        const elName = el === r.node ? 'it' : describe(el);
-                        for (const prop of OFFSET_HELD_OWN) {
-                            const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs);
-                            if (why !== undefined) found.push(`${elName}: ${why}, ${at}`);
-                        }
-                    }
-                    if (target !== r.node && target.contains(r.node)) {
-                        for (let box = r.node.parentElement; box !== null; box = box.parentElement) {
-                            const cs = getComputedStyle(box);
-                            for (const prop of BOX_HELD) {
-                                const why = boxHeldFault(prop, cs.getPropertyValue(prop), box);
-                                if (why !== undefined) found.push(`${describe(box)} above it: ${why}, ${at}`);
+                    if (!onlyGround) {
+                        if (!rendersAt(r.node)) found.push(`it has no box, ${at}`);
+                        for (const el of r.own) {
+                            if (el !== target && !target.contains(el)) continue;
+                            const cs = getComputedStyle(el);
+                            const elName = el === r.node ? 'it' : describe(el);
+                            for (const prop of OFFSET_HELD_OWN) {
+                                const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs);
+                                if (why !== undefined) found.push(`${elName}: ${why}, ${at}`);
                             }
-                            if (box === target) break;
+                        }
+                        if (target !== r.node && target.contains(r.node)) {
+                            for (let box = r.node.parentElement; box !== null; box = box.parentElement) {
+                                const cs = getComputedStyle(box);
+                                for (const prop of BOX_HELD) {
+                                    const why = boxHeldFault(prop, cs.getPropertyValue(prop), box);
+                                    if (why !== undefined) found.push(`${describe(box)} above it: ${why}, ${at}`);
+                                }
+                                if (box === target) break;
+                            }
                         }
                     }
+                    found.push(...offsetGroundFaults(r, target, at, paintsHere));
                     for (const fault of found) {
                         // Said once a subject, at its first offset; and not where the instant's read said it already.
                         const key = `${read.indexOf(r)}|${fault.slice(0, fault.lastIndexOf(', with '))}`;
