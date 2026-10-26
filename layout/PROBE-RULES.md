@@ -10529,6 +10529,74 @@ in each log's `.meta`.
   animation"). No fixture paints a press. Such a fixture must land with a
   read of the entrance at its end. Not fixed.
 
+### The end read's prune (the cost item's first prune, no loss)
+
+Every end read on the clean tree, 1,816 over the geometry passes, none
+failing, was the marquee's run: a transform on a name's run (`mq-run`) inside
+the name's clipping cell (`[data-mq]`). Such an animation's end moves paint
+inside that cell alone, and a hit test there answers the cell's own subtree,
+so where the cell meets nothing 1a asks the end read reads what the read at
+rest read.
+
+- `endMoot`, general, naming no class: an animation is moot when its
+  keyframes set only `transform`, `rotate`, `scale` or `translate`
+  (`END_MOOT_PROPS`, read as the offset read reads them, `keyframeProps`);
+  its box, or a pseudo-element's owner, holds no node 1a asked; it stands
+  inside a box that clips both ways (an `overflow` but `visible` each way, or
+  a painting `contain`), no box between, itself included, absolutely or fixed
+  positioned; and that box (its border box, grown by its
+  `overflow-clip-margin` where it clips by `clip`) meets no box and no point
+  1a asked at rest (`coverAsked`, recorded by `coverOf` as it asks: each
+  node's rects and every point it asks). A paint whose every lasting
+  animation is moot is not read at its end and is counted
+  (`coverEnd.skipped`); the pass line prints it.
+- **The clean tree** (`clean4.log`, exit 0, 243.6s, load 3.7 → 4.7): 1,655
+  paints left out, 161 still read (33 at 390, 14 on the side tablet, 24 on
+  the narrow wall, 90 at 360: a marquee whose cell meets a box or a point 1a
+  asks; not traced which), 0 failures. The end read's page time 0.97s over
+  the geometry passes against 7.35s in this session's run before it
+  (`clean3.log`), and the geometry walk 119.8s against 127.8s (single runs).
+- **Red, PF2 again**: 53 / 73 / 109 / 140 / 91 / 91 / 100 / 99 / 100 / 100 / 92
+  / 29, every one "at the end of t-modern-pf", the counts of the round that
+  built the read.
+- **Red, PFC** (new: PF2 with its quote head clipping its own content,
+  `overflow: hidden`, so the pseudo stands inside a box that clips both ways
+  and holds the figure and Pay): exit 1, PF2's counts exactly, "at the end of
+  t-modern-pfc". With the prune made to ignore what the clip meets (a
+  mutation in the plant tree, not committed) PFC stays red with the same
+  counts: its owner holds the figure, so the owner check keeps it read
+  before the clip is asked. It proves that check, not the clip's.
+- **Red, PFCb** (new, for the clip check: the quote head clips its own
+  content, and its name column `.item-b`, an element that holds no money,
+  stands still until 95% of a 10s run and then grows three times and moves
+  right, filled forwards; nothing covers anything at rest or at an instant):
+  exit 1, 53 at 390, 73 at 1280, 71 at the canvas, 102 on the portrait wall,
+  46 on the tablet, 86 on desk-wall, 95 on the short wall and the hd wall, 90
+  on the side tablet, 48 on the tall tablet, 38 on the narrow wall and 29 at
+  360, every one "at the end of t-modern-pfcb" (the quote's figure covered by
+  the name's button). **With the prune made to ignore what the clip meets,
+  the whole runner passes PFCb** (exit 0, 252.0s): the clip check is all that
+  keeps it read, and nothing else in the runner reads it.
+
+### Cost of the round
+
+Two pairs back to back on this Mac, main (c1f3e97) then the branch
+(bbb0bd5), two tabs, the tracked fixture carried (796 contrast jobs), no
+other probe running:
+
+| Pair | Main | Branch | Load (main, then the branch) |
+|---|---|---|---|
+| 1 | 235.9s | 248.2s | 2.4 → 5.4, then 5.4 → 3.3 |
+| 2 | 237.6s | 253.2s | 3.3 → 3.4, then 3.4 → 6.4 |
+
+The branch is +12.3s and +15.6s (median 236.8s against 250.7s): its
+geometry walk 94.5 → 124.3s and 97.6 → 127.3s, its contrast pass 132.5 →
+115.8s and 131.7 → 117.4s. The round before measured the branch +16.8s and
++16.5s over main; this round adds the longer held list, the ground and code
+reads and takes the end read back (7.35s → 0.97s of page time, single runs),
+for about 2s of wall time less than before. 47–52s stand under the 300s
+ceiling.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

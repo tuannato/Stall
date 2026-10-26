@@ -1081,6 +1081,15 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
         }
         return by === 'look' ? 'has no box: a rule of the look takes it away, or nothing of the app’s own explains why it has none (hiddenBy)' : 'has no box at all, and nothing above it is hidden';
     }
+    // Where the node stands (`coverAsked`, read by the end read's prune), its points added below.
+    const askedHere = {
+        node,
+        reach: rects.reduce<Box>(
+            (b, r) => ({ left: Math.min(b.left, r.left), top: Math.min(b.top, r.top), right: Math.max(b.right, r.right), bottom: Math.max(b.bottom, r.bottom) }),
+            { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+        ),
+    };
+    coverAsked.push(askedHere);
     const framed = coverFrames(node, rects);
     if (framed === undefined) {
         return `stands in a frame turned ${degrees(angleOf(node))} and has no layout box of its own, which the read cannot take apart past 45°`;
@@ -1169,6 +1178,11 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
             for (const p of framePoints(f, radii)) pushPoint(p.x, p.y, KIND_OF[p.kind], nodeClips);
             if (framed.whole && node.matches('.qr')) for (const p of gridPoints(f, QR_PITCH, radii)) pushPoint(p.x, p.y, KIND_OF[p.kind], nodeClips);
         }
+    }
+    // And every point asked of it (`coverAsked`, read by the end read's prune).
+    for (let i = 0; i < ptN; i += 1) {
+        const r = askedHere.reach;
+        askedHere.reach = { left: Math.min(r.left, ptX[i]!), top: Math.min(r.top, ptY[i]!), right: Math.max(r.right, ptX[i]!), bottom: Math.max(r.bottom, ptY[i]!) };
     }
     const column = node.closest('.item-p');
     const covered = new Map<PointKind, number>();
@@ -1267,6 +1281,7 @@ function coverScan(): CoverScan {
     const surface: ParentNode = scrim ?? root;
     const nodes = [...new Set(surface.querySelectorAll(COVER_NODES()))].filter((n) => n.closest('.deck-stall') === null);
     const scan: CoverScan = { nodes: nodes.length, points: 0, checked: 0, below: 0, offSide: 0, above: 0, clipSkips: 0, wallScroll: 0, appHidden: 0, faults: [] };
+    coverAsked = [];
     coverPointers(true);
     try {
         const interactivity = CSS.supports('interactivity', 'auto');
@@ -1322,9 +1337,67 @@ function coverRead(screen: string, label: string, end?: { names: string; atRest:
     return faults.map((detail) => ({ screen, theme: label, check: COVER_CHECK, detail: end === undefined ? detail : `at the end of ${end.names}: ${detail}` }));
 }
 
-/** The end-state read's own counts (`coverAtEnd`): paints that paid for it, the failures it found, and the animations it seeked to their ends by name; and its time, inside `coverMs` (a clock). */
-const coverEnd = { reads: 0, failed: 0, names: {} as Record<string, number> };
+/** The end-state read's own counts (`coverAtEnd`): paints that paid for it, paints it left out because no lasting animation could cover anything asked (`endMoot`), the failures it found, and the animations it seeked to their ends by name; and its time, inside `coverMs` (a clock). */
+const coverEnd = { reads: 0, skipped: 0, failed: 0, names: {} as Record<string, number> };
 let coverEndMs = 0;
+
+/** Every node the last 1a read asked, and where it and its points stood (`coverOf`); the end read's prune reads the read at rest's. */
+let coverAsked: { node: Element; reach: Box }[] = [];
+
+/** The longhands an animation may set and be left out of the end read, inside a clip that holds nothing asked (`endMoot`). */
+const END_MOOT_PROPS: ReadonlySet<string> = new Set(['transform', 'rotate', 'scale', 'translate']);
+
+/**
+ * **The end read leaves out what cannot cover anything** (before 8g2, the
+ * fourth review's cost item, its first prune and no loss): every end read on
+ * the clean tree, 1,816 over the geometry passes and none failing, was the
+ * marquee's run — a transform on a name's run inside the name's clipping
+ * cell. Such an animation's end moves paint inside that cell alone, and a
+ * hit test there answers that cell's own subtree, so where the cell meets
+ * no box and no point 1a asks, the end read reads what the read at rest
+ * read. An animation is moot here (`endMoot`) when its keyframes set only a
+ * transform, a rotate, a scale or a translate (`END_MOOT_PROPS`, read as the
+ * offset read reads them, `keyframeProps`); its box, or for a
+ * pseudo-element its owner, holds no node 1a asked; it stands inside a box
+ * that clips on both axes (an `overflow` but visible each way, or a
+ * painting `contain`) with no absolutely or fixed positioned box between,
+ * itself included, whose containing block could stand outside the clip;
+ * and that box — its border box, grown by its `overflow-clip-margin` where
+ * it clips by `clip` — meets no box of a node 1a asked at rest and no point
+ * it asked there (`coverAsked`). A paint whose every lasting animation is
+ * moot is not read at its end and is counted (`coverEnd.skipped`); one with
+ * any other reads every lasting animation's end as before. General: it
+ * names no class.
+ */
+function endMoot(anim: Animation): boolean {
+    const effect = anim.effect;
+    if (!(effect instanceof KeyframeEffect) || effect.target === null) return false;
+    const props = keyframeProps(anim, effect);
+    if (props === undefined || props.size === 0 || ![...props].every((prop) => END_MOOT_PROPS.has(prop))) return false;
+    const el = effect.target;
+    const pseudo = effect.pseudoElement;
+    if (coverAsked.some((a) => el === a.node || el.contains(a.node))) return false;
+    const positioned = (cs: CSSStyleDeclaration): boolean => cs.position === 'absolute' || cs.position === 'fixed';
+    if (pseudo !== null && positioned(getComputedStyle(el, pseudo))) return false;
+    // The innermost box that clips it both ways: for a pseudo-element its owner may be that box.
+    for (let at: Element | null = pseudo !== null ? el : el.parentElement, below: Element = el; at !== null && at.id !== 'app'; below = at, at = at.parentElement) {
+        if (!(pseudo !== null && at === el) && positioned(getComputedStyle(below))) return false;
+        const cs = getComputedStyle(at);
+        const clipsBoth = (cs.overflowX !== 'visible' && cs.overflowY !== 'visible') || /\b(?:paint|strict|content)\b/.test(cs.contain);
+        if (!clipsBoth) continue;
+        const r = at.getBoundingClientRect();
+        let margin = 0;
+        if (cs.overflowX === 'clip' || cs.overflowY === 'clip' || /\b(?:paint|strict|content)\b/.test(cs.contain)) {
+            const m = cs.getPropertyValue('overflow-clip-margin').trim();
+            if (m !== '' && m !== '0px' && !/^-?[\d.]+px$/.test(m)) return false;
+            margin = Number.parseFloat(m) || 0;
+        }
+        const clip: Box = { left: r.left - margin, top: r.top - margin, right: r.right + margin, bottom: r.bottom + margin };
+        const meetsAny = (b: Box): boolean => Math.min(clip.right, b.right) - Math.max(clip.left, b.left) > 0 && Math.min(clip.bottom, b.bottom) - Math.max(clip.top, b.top) > 0;
+        return !coverAsked.some((a) => meetsAny(a.reach));
+    }
+    return false;
+}
 
 /**
  * Whether an animation keeps its end once it has run (`coverAtEnd`): a
@@ -1359,8 +1432,14 @@ function keepsItsEnd(anim: Animation): boolean {
  * (`coverEnd`), and nothing is put back: 1a is the last read of a paint, and
  * the next paint throws its tree away.
  *
+ * **What cannot cover anything is left out** (`endMoot`, the fourth
+ * review's first prune): a paint whose every lasting animation sets only a
+ * transform inside a box that clips both ways and meets nothing 1a asked is
+ * not read at its end, and is counted (`coverEnd.skipped`).
+ *
  * **The app's own**, measured: the marquee's runs (`mq-run`, filled
- * both, the only finite one the clean tree paints on money's screens) and,
+ * both, the only finite one the clean tree paints on money's screens, each
+ * inside its name's clipping cell, so left out) and,
  * on a press staged for the read (a strip with `selectionEntered`, which no
  * fixture paints), the selection's entrance (`sel-unfold`, `sel-fade`,
  * `sel-line-in`, filled both) read at their ends with no failure: the
@@ -1374,6 +1453,11 @@ function keepsItsEnd(anim: Animation): boolean {
 function coverAtEnd(screen: string, label: string, atRest: readonly Failure[]): Failure[] {
     const lasting = document.getAnimations().filter(keepsItsEnd);
     if (lasting.length === 0) return [];
+    // No lasting animation can cover anything asked (`endMoot`): the end reads what rest read.
+    if (lasting.every(endMoot)) {
+        coverEnd.skipped += 1;
+        return [];
+    }
     const names = new Set<string>();
     for (const anim of lasting) {
         try {
