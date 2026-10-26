@@ -561,19 +561,35 @@ function coveredBy(node: Element): string | undefined {
  * `pointer-events: none` by none at all (the critic's PC2, PC3, PC3′, SVs,
  * PQ). This asks every money node (`MONEY_FIGURES`) and every protected box
  * (`PROTECTED`) in the open surface, with `pointer-events` and
- * `interactivity` forced on everywhere by one sheet adopted once a page,
- * switched on for the read and left on until the next paint
- * (`coverPointers`, `releaseCover`): points over every
- * glyph's ink, at several heights and across a wide glyph (`inkPoints`),
- * for a node with text, and for one with none — a code — the box's centre,
- * its corners inside its rounded shape and a grid over the code
- * (`layout/coverPoints.ts`), each in its own frame. A paint with no hit
- * area — a shadow, an outline, a neighbour's underline — is not
- * hit-testable whatever the forcing, and is 1b's (C-1).
+ * `interactivity` forced on by one sheet adopted once a page, over every
+ * element the app's root holds, switched on for the read and left on until
+ * the next paint throws its tree away (`coverPointers`, `releaseCover`,
+ * `dropCoverForPaint`): for a node with text, points over every glyph's ink,
+ * at several heights and across a wide glyph (`eachInkPoint`); for one with
+ * none — a code — the box's centre, its corners inside its rounded shape and
+ * a grid over the code (`layout/coverPoints.ts`), each in its own frame. A
+ * paint with no hit area — a shadow, an outline, a neighbour's underline —
+ * is not hit-testable whatever the forcing, and is 1b's (C-1).
+ *
+ * **What a lattice of points cannot see, stated** (the critic's item 7):
+ * any fixed set of points can be dodged. A cover thinner than the pitch
+ * between two points, or one cut around them — a `clip-path` with holes
+ * where the points stand, a mask — is asked nowhere. On a glyph under 12px
+ * of ink the lattice's two rows stand at a quarter and three quarters of it,
+ * and a band over its middle half meets neither: the critic's PB, a band
+ * over 46% of the ink of "15,750.00 XEC" at 360px, which every bound rule
+ * passes too. Points no more than 3px apart down each glyph's centre column
+ * and along its middle row close that band (the owner's D-2026-10-20-13),
+ * and cost more wall time than the owner's line for them; they are held for
+ * the owner. What a cover does to a glyph's own pixels is the paint reads'.
+ * **And the other way, a class of false red** (the
+ * critic's item 8): a box that paints nothing — a transparent wrapper — has
+ * a hit area all the same, and where it meets a glyph's ink box it reads as
+ * a cover; the touch wall's `span.sw-step` over a quote's figure did.
  *
  * **At rest, once a paint, on every geometry pass — last, after every other
- * read of the paint, with every animation its instants moved put back where
- * it stood (`coverAtRest`) — and once a contrast job at its full height**
+ * read of the paint, with every animation on the page put back at rest, its
+ * delay zeroed (`coverAtRest`) — and once a contrast job at its full height**
  * (`window.__coverFaults`): the job's page is grown to the height it asks
  * (`pageHeight`), so below its first screen stands only what a surface that
  * is not the reader's to scroll holds past it — a wall, shot at its own
@@ -591,26 +607,29 @@ function coveredBy(node: Element): string | undefined {
  *
  * Fails closed (as would-be failures while it reports): an element still
  * computing `pointer-events` or `interactivity` other than `auto` (only a
- * declaration that outranks the forcing can, an inline `!important`), an
- * inert subtree or a modal dialog, which no sheet makes hit-testable, a point
- * inside the viewport with nothing under it, a node turned past 45° with no
- * box of its own, and a node with no box that a look takes away, or that
- * nothing of the app's own explains (`hiddenBy`). One the app hides itself — the address twin a width does not
- * paint, a desk-only fold on a phone, the wall's list while a payment stands
- * — is skipped and counted. A point below the first screen is counted and
- * not asked (D3); one past a side edge or above the top is asked whether a
- * scroller brings it into view (`offScreenReach`), counted where one does
- * and failed where none does; one behind a clip, the node's own scroller's
- * included for the text inside it, is counted beside the points asked, the
- * ratio `CLIP_SKIP_CEILING` holds `coveredBy`'s to, unless it stands past
- * the scroll origin no position shows (`scrollReach`), which fails.
+ * declaration that outranks the forcing can: an inline `!important`, or an
+ * `!important` rule more specific than `[data-probe-cover] *`, which no
+ * served sheet writes on either property), an inert subtree or a modal
+ * dialog, which no sheet makes hit-testable, a point inside the viewport
+ * with nothing under it, a node turned past 45° with no box of its own, and
+ * a node with no box that a look takes away — by an animation
+ * (`animatedAway`) or a rule (`hiddenBy`, which also fails a box nothing of
+ * the app's own explains). One the app hides itself — the address twin a
+ * width does not paint, a desk-only fold on a phone, the wall's list while
+ * a payment stands — is skipped and counted.
  *
- * The column is excused as `columnExcuses` says: never a hit on a box of
- * the column that holds the figure — `.item-p` itself, `.item-a`, or any box
- * between them (`columnPlace`; a pseudo of any of them moved over the figure
- * reports as that box, the critic's P1-1 and item 7) — a true sibling inside
- * it at a corner point alone, which only a node with no text has, and never
- * a sibling an offset, a transform or a negative margin moved.
+ * **Where a point is asked.** Inside the viewport it is hit-tested, unless
+ * it stands behind a clip: one a scroller above it can bring into view is
+ * counted beside the points asked (the ratio `CLIP_SKIP_CEILING` holds
+ * `coveredBy`'s to), and one past the scroll origin no position shows fails
+ * (`scrollReach`, before 8g2 item 3) — the node's own scroller included for
+ * the text inside it. Past the viewport's side edges or above its top it is
+ * asked whether a scroller brings it into view (`offScreenReach`, the
+ * window's item 3): counted where one does, failed where none does — until
+ * then it was counted and never asked, and a shelf's prices past the right
+ * edge out of every scroll's reach (the critic's PC) passed. **Below the
+ * bottom it is counted and not asked** (D3): out-of-reach is read there by
+ * the self-clip rule for the node's own text, and by nothing for a cover.
  */
 const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
 /**
@@ -1175,10 +1194,11 @@ function coverOf(node: Element, scan: CoverScan, asked: ReadonlySet<Element>, re
 }
 
 /**
- * The read over the open surface, the forcing on for its length alone. It
- * also asks that the forcing took: every element of the app computes
- * `pointer-events` and `interactivity` `auto`, and no inert subtree or modal
- * dialog stands anywhere.
+ * The read over the open surface, the forcing switched on for it and left
+ * on until the next paint (`releaseCover`). It also asks that the forcing
+ * took: every element of the app computes `pointer-events` and
+ * `interactivity` `auto`, and no inert subtree or modal dialog stands
+ * anywhere.
  */
 function coverScan(): CoverScan {
     const root = document.getElementById('app')!;

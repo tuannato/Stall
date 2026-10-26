@@ -9468,3 +9468,236 @@ air than 0.5px is the owner's, and not asked.
   critic's item 2 named), and the fit with its own `holdStill`; the section
   above that says `holdStill` is shared with this rule is history. The
   probe's reads stay apart from the fit's, as the unit rule's do.
+
+## Before 8g2: 1a's second fix round (2026-10-20, D-2026-10-20-13)
+
+1a, `nothing-covers-money-or-a-protected-box`, stays report-only, and
+`coveredBy` still binds under its own check names. This round carries the
+owner's decisions D-2026-10-20-13 (denser points over a glyph; the horizon's
+worst pruned to its pinned jobs) and the window's rule fixes for the
+critic's review of the first fix round. The plants are the critic's.
+
+### The horizon's worst on its three jobs (the owner's D2(a))
+
+A shipped run reads the sign at Grid horizon's worst on `HORIZON_WORST`'s
+three jobs alone (`readsHorizonWorst`, `HORIZON_PINNED_JOBS` in
+`layout-check.mjs`): `desktop/unreachable/2/65535`,
+`desktop/shop-window-cycle/2/65535` and `mobile/item-listing/2/65535`. It
+read every job that wore the horizon, 94 on the default plan, to hold that
+no other job read lower. **What is lost**: that guard. A change that lowers
+the name, the tagline or the state line at the horizon's worst on any other
+job — another screen, width or variant — passes the run. The ring read over
+the horizon as painted, on every job that wears it, is the failing guard and
+is unchanged. The three jobs are owed both ways: the runner requires each to
+have been read (`HORIZON_REQUIRED`), and `horizonWorstVerdict` holds each to
+its number within 0.01, lower and higher. A read on any other job now fails
+the verdict, so the prune is held rather than assumed
+(`horizon-worst.test.mjs`, red with the check taken out). A kit run pins
+nothing and still reads every job the page owes (`__contrastOwed`).
+
+The pins read the same on the branch: name 2.7589, tagline 1.9153, state
+line 9.2974. The phase went from 95 calls and 35.1s of tab time on main to
+4 calls and 1.3s (the three jobs and the cross-tab canary's read again),
+about 17s of wall time on two tabs.
+
+### Past a side edge, above the top: asked for reach (the window's item 3)
+
+The critic's PC: a centred, reversed sideways shelf on Neo puts each row's
+price past the screen's right edge, past the scroll origin no position
+reaches ("1,200" at x 563–643 at 360px). Every bound rule passed.
+
+- `cutSideways` took any sideways scroller above a box as reaching all of
+  it. Now every edge the box runs past — a box above it that cuts or scrolls
+  sideways, then the viewport — is asked whether a scroller inside that edge
+  brings every part of the box within it (`scrollReach`, cut to the edge's
+  window by `reachWithin`): the edge's own scroller for its own side, any
+  scroller below it for a cutter or the viewport. A box past the side of an
+  `overflow-x: auto` box with nothing to scroll is cut, where it was not
+  read. One scroller at a time, stated: a box only two nested scrollers
+  together could bring in reads as out of reach.
+- 1a only counted a point past a side edge, and counted one above the top
+  as below the screen. Both are now asked whether a scroller, or the page,
+  brings them into view (`offScreenReach`), and fail where none does. A
+  point below the bottom is still counted, not asked (D3): out of reach
+  there is read by the self-clip rule for a node's own text, and by nothing
+  for a cover.
+- A figure in a moving or pinned ticker ribbon keeps its one exception, by
+  value, in both. The clean tree is green on every pass, the ticker ribbon
+  and the marquee cells included.
+Red, the whole runner on the branch (2026-10-26): `a protected box is cut
+sideways` 1,344 failures at 390, 1,316 at 1280 and 616 at 360, and `asked
+amount is covered` 868, 868 and 224 (`coveredBy` asks `cutSideways` first);
+1a would fail 192, 176 and 88 lines, every one Neo's price past the right
+edge with no scroll position that brings it in. On cba463b the critic's
+whole-runner log has every money rule green at both widths (its one red at
+390, a marquee check, is not money).
+
+### A keyframe on a box above money (the window's item 4)
+
+The critic's PT: a keyframe `visibility: hidden` on the quote row's price
+column, 120s after the paint, filled forwards. Pay stood over an empty tag,
+and every pass read 0.
+
+- `BOX_HELD` holds `visibility` (anything but `visible` fails, at rest and
+  at every keyframe) and names `translate`. Every keyframe on a box above a
+  money node is held as the box is held at rest (`keyframeHeld`), and what
+  the geometry reads only at rest may not move between the instants: a
+  `clip-path`, a `translate`, a transform's translation and a size
+  (`KEYFRAME_SIZES`: the width and height families, `flex-basis` and the
+  grid tracks), each against the value the box computes at rest. A moving
+  ticker ribbon moves by design, by value.
+- `checkOverTime` zeroes every animation's delay before its six instants,
+  as the contrast freeze does (`freezeAnimations`). With its delay, PT's
+  animation stood before its first keyframe at every instant. The per-paint
+  rules that run after the instants read the last instant, so they read PT
+  hidden too.
+- Not read, stated: a keyframe on a box above that changes a property these
+  lists do not name. The look lint's refusal of `visibility` in first-party
+  keyframes is the lint-belts branch's.
+Red, the whole runner on the branch: `a-money-figure-is-never-misdressed`
+76 failures at 390, 94 at 1280, 64 at 360, 333 at the canvas and 78 on
+each wall pass, on every Rural quote figure (`span.item-a above it:
+visibility hidden, at 100% of t-rural-later`, and the figure itself hidden
+at the last instant). On cba463b, 0 at 390 (a session).
+
+### Who takes a box away (the window's item 5)
+
+The critic's PV: a look's `content-visibility: var(--h)` on the quote row's
+price column. `lookHides` read rules by their written value, saw no
+`hidden`, and called it the app's doing; 1a skipped the node and the dress
+rule skipped it silently.
+
+`hiddenBy` reads every rule that declares `display` or
+`content-visibility` on each box that hides the node (the node itself for
+`display`, the boxes above it for either), in force. The hide is the look's
+when a look's rule could set the hiding value — the value itself, a `var()`,
+or a keyword that defers to another value. It is the app's only when
+something of the app's own explains it: the `hidden` attribute, an inline
+style (a look writes none), or an app rule declaring the hiding value as
+written. Anything else fails closed. 1a uses it in place of `lookHides`, and
+the dress rule now fails a money node a look takes away by a rule, as it did
+one taken away by an animation. Stated: rules are found by the first class
+or id of their selector's last compound (`*` where it has none or holds a
+functional pseudo-class), and a rule under a container query counts as in
+force, which for an app rule errs toward excusing. The clean tree's counts
+of nodes the app hides are unchanged on every pass (744 on the phone pass,
+1,872 on each wall pass).
+Red, the whole runner on the branch: the dress rule 76 failures at 390, 94
+at 1280, 64 at 360, 333 at the canvas and 351 on the tall wall passes (`has
+no box: a rule of the look takes it away …`), beside the clip and spill
+rules PV already turned red. On cba463b the dress rule read 0 at 390 (a
+session).
+
+### At rest: every animation put back, its delay zeroed (the critic's item 9)
+
+`coverAtRest` put back only the animations the instants had moved, each
+with its own delay. The ticker continues a pass across repaints through a
+negative delay as long as the wall-clock time since its pass began
+(`armTicker`), so at rest the ribbon stood a few pixels further on in one
+run than another, and four of its points flipped between past the screen's
+side and behind its cell. Now every animation on the page is put back at
+rest with its delay zeroed: one the instants moved where it stood before
+them, any other at its start. Five runs of `broadcast-ticker-live` at the
+canvas read the same tallies on every look (Neo: 288 points, 54
+hit-tested, 218 past a side, 16 behind a clip).
+
+### Where the time outside 1a's own timer went (the window's item 7)
+
+V8's sampling profiler over an unminified probe build of the phone pass,
+two pairs back to back (load 5–16), main against cba463b:
+
+- `renderStall` 0.6–1.0s slower a pass. The forcing sat on `<html>` and was
+  taken off before the next paint; `renderStall` reads the old scroller's
+  offset before it replaces the tree, which restyled the whole old tree.
+  Chrome's `RecalcStyleCount` over the phone pass: main 10,748, cba463b
+  12,473 — two more a read (886 reads), one to put the forcing on and one to
+  take it off.
+- Garbage collection 0.07–0.10s more a pass. The point objects were not the
+  cost.
+- `scrollReach`: 7ms over the narrow pass.
+- `measure` 0.4–0.85s slower, which moved with the load and is not
+  explained.
+
+**Cut**: the forcing now sits on the painted tree's own root elements
+(`#app`'s children), so a paint takes it off by throwing that tree away
+(`dropCoverForPaint`) and nothing is restyled for it; `releaseCover`, for
+`coveredBy`, still restyles, since its tree stays. `RecalcStyleCount` on
+the phone pass is 11,683 now, about one more a read than main (side tablet:
+main 23,954, cba463b 25,131, now 24,553). And the points live in flat typed
+arrays reused node to node (`pushPoint`), the glyph points handed to a
+callback (`eachInkPoint`): asked for first, and worth little, since
+collection was small.
+
+### Denser points over a glyph: measured, held for the owner (D-2026-10-20-13 item 1)
+
+The owner asked for points no more than 3px apart down each glyph's centre
+column and along its middle row, on top of the lattice, and to stop and
+report if that added more than 5s of wall time. It does, so it is held out
+of the rule as a patch.
+
+- **The rule as written**: the centre column and the middle row each at
+  `ceil(extent / 3)` points, at the middles of their bands; a lattice point
+  on either line not asked again; on a phone glyph of about 9 by 6px of ink,
+  five points where the lattice asks two.
+- **Red proof** (sessions, the plant on the branch's code with the patch):
+  PB reads 10 would-be lines at 360 and 10 at 390, every one Modern's
+  `selection-total` under `div.sel-tray-in`; `pay-several-strip-xec`, the
+  "15,750.00 XEC" PB was calibrated on, 54 ink points covered at 360. On
+  cba463b (the critic's whole-runner log) 8 lines at each width, and not
+  that one.
+- **Cost** (the less of two interleaved session runs of each of the twelve
+  geometry passes, load 4–11): 1a's own time 23.2s → 34.2s (+11.0s, +47%),
+  its hit tests 2.17M → 4.66M, about 4.4µs a hit test added. On two tabs
+  that is about +5.5s of the geometry walk, and the contrast pass's one
+  read a job (4.6–6.8s of tab time) grows by about half again, +1–1.5s of
+  wall time: about +6.5–7s in all, over the 5s line. Of 1a's own time the
+  hit tests are the cost: on five prepared paints (load about 40) the
+  forcing's restyle took 0.3–1.3ms a read and the check that it took
+  0.05–0.2ms, a hit test 3.7–4.8µs, and the rest scales with the points.
+
+### What a lattice cannot see, and a false red (the critic's items 7 and 8)
+
+Any fixed set of points can be dodged: a cover thinner than the pitch
+between two points, or one cut around them — a `clip-path` with holes where
+the points stand, a mask — is asked nowhere. On the lattice this round
+keeps, a phone glyph's two rows stand at a quarter and three quarters of
+its ink, and a band over its middle half meets neither (PB). And the other
+way: a box that paints nothing — a transparent wrapper — has a hit area all
+the same, and where it meets a glyph's ink box it reads as a cover. The
+touch wall's `span.sw-step` over a quote's figure does, on the clean run. It
+is a class of false red, not a one-off.
+
+### The clean run's would-be list
+
+35 lines, all on the touch wall's quote rows (`shop-window-touch-quotes-16`
+and `-long-figures`), as at cba463b: 7 at 768x1024, 14 at 1024x768 and 14 at
+800x1280; contrast 0.
+
+- 33 are the stepper's "−" (`button.sw-step-b`) painting over part of the
+  figure's glyphs: real, the layout defect the touch-wall branch fixes.
+- 2 are `span.sw-step`, the stepper's transparent wrapper, 1 ink point at
+  the top of a "9" on Modern and the skeleton at 1024x768: the false-red
+  class above.
+- No line is out of reach past a side or above the top, and none is a box a
+  look takes away.
+
+### Cost and the contrast dump
+Two pairs back to back, main (0a34999) then the branch, two tabs, the
+tracked fixture carried (796 contrast jobs), 2026-10-20:
+
+| Pair | Main | Branch | Load (main → branch) |
+|---|---|---|---|
+| 1 | 275s | 273s | 3.2→5.7, then 5.7→6.9 |
+| 2 | stopped by the 300s watchdog | 264s | 5.1→10.6 (another builder's run started), then 10.6→3.9 |
+
+- The geometry walk: 110.7 → 119.6s (+8.9s) and 135.6 → 134.4s. At cba463b
+  it was +22.7s and +21.5s over main; the forcing's restyle cut is the
+  likely part of the difference, within noise of this size.
+- 1a's own time: 26.9s and 29.9s over the geometry passes, and 6.8s and
+  4.6s of tab time in the contrast pass.
+- The horizon's worst: 35.1s of tab time on main, 1.3s on the branch.
+- The contrast dump, the branch's first run against cba463b's three runs:
+  all 15,018 boxes the same as two of them (the third differs from both in
+  two boxes of `mobile/publish-name`, 5.49 against 6.15:1, a difference
+  between cba463b's own runs), and every job record the same but for
+  `horizonWorst`, gone from the 91 jobs the prune no longer reads.
