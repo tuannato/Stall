@@ -627,20 +627,15 @@ function coveredByRead(node: Element): string | undefined {
  * (`coveredByCalls`, `coveredByMs`). A cover that moves into place between
  * frames is read by neither (the critic's P3-1). Stated.
  *
- * **Pending for the owner, stated** (the critic's third review, items 1
- * and 2): a cover that arrives at the end of a finite animation and stays
+ * **Pending for the owner, stated** (the critic's third review, item 2):
+ * a cover that arrives at the end of a finite animation and stays
  * (`forwards`; the critic's PF2, a one-shot `scaleY` from 0 at 95% of 10s)
  * is read by no probe rule — 1a reads at rest, the instants stop at six
  * sevenths of the longest animation — and an end-state read (each such
- * animation seeked to its end, on the paints that have one) is not built;
- * and a keyframe on a custom property or an inherited ink on a box above a
- * figure (the critic's PT2, `--s-text: transparent` at 25–68% of a 100s
- * loop over Rural's quote figure) hides it from every probe read, and
- * seeking each animation to each keyframe offset is not built. The
- * first-party look lint refuses both plants as written since lint-belts (a
- * custom property in a keyframe; a scale to 0) and admits an inherited ink
- * in one (`color: transparent` at the same offsets, measured): that belt is
- * the owner's too.
+ * animation seeked to its end, on the paints that have one) is not built.
+ * A keyframe on a custom property or an inherited ink on a box above a
+ * figure (the critic's PT2) is the dress rule's, which reads the held dress
+ * at every keyframe offset (`offsetDressFaults`).
  *
  * Fails closed: an element still computing `pointer-events` or
  * `interactivity` other than `auto` (only a declaration that outranks the
@@ -4096,7 +4091,21 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  * - an animation it runs is read at every keyframe (`animationFaults`): each
  *   held longhand a keyframe sets is resolved and held to its condition, so
  *   a figure is not dressed at the instants the pass does not freeze; a
- *   transition is read the same way while one runs;
+ *   transition is read the same way while one runs; **and its held dress is
+ *   read again at every keyframe offset** of every animation on it, on an
+ *   element under it with text, or on a box above it up to and with its
+ *   stall (`offsetDressFaults`; the critic's third review, item 1, PT2:
+ *   `--s-text: transparent` from 25% to 68% of a 100s loop on the quote
+ *   row's `.item-a`, which names no held longhand and clears Rural's figure,
+ *   whose ink is `var(--s-text)`, from 12.5% to 84%): each such animation
+ *   seeked alone to each of its offsets, its timing set for the read to one
+ *   normal linear iteration filled both ways and put back after, the figure
+ *   held rendered, its own elements under the animated box on
+ *   `OFFSET_HELD_OWN` and the boxes between on `BOX_HELD` — save an
+ *   animation whose keyframes set only longhands the declared read already
+ *   holds or that reach no held longhand (`SEEK_NEEDLESS`, read from the
+ *   `@keyframes` rule itself, where a custom property is listed and
+ *   `getKeyframes()` lists none);
  * - it and every element under it with text generate no `::before` or
  *   `::after`: a generated glyph or block beside the digits is not the
  *   figure.
@@ -4352,6 +4361,14 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   ring, offset or stroke reaches, an outline's 4px in the box's own pixels
  *   included; a blur's radius (`filter: blur()`, not capped), and
  *   `filter: url()`, an SVG filter whose primitives the lint does not open;
+ * - a moving dress between two keyframe offsets (`offsetDressFaults`): a
+ *   timing function that overshoots (`cubic-bezier()` with a y outside
+ *   0–1, a `linear()` with points outside them) can carry a value past both
+ *   its keyframes; two animations at once (each is seeked with the others
+ *   where the pass's last instant left them); at an offset, the grounds
+ *   under the glyphs, the lines, the spacing and an outline's ring (read at
+ *   that instant alone); and an animation on a pseudo-element, which
+ *   nothing inherits from (the cover rules');
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
@@ -5842,7 +5859,7 @@ const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode'
  * the window's item 4): a box that shrinks, or whose tracks close, between
  * the instants can cut the figure where no reading at rest stood.
  */
-const KEYFRAME_SIZES: ReadonlySet<string> = new Set([
+const KEYFRAME_SIZES_LIST = [
     'width',
     'height',
     'min-width',
@@ -5858,7 +5875,8 @@ const KEYFRAME_SIZES: ReadonlySet<string> = new Set([
     'flex-basis',
     'grid-template-rows',
     'grid-template-columns',
-]);
+] as const;
+const KEYFRAME_SIZES: ReadonlySet<string> = new Set(KEYFRAME_SIZES_LIST);
 
 /** A computed transform's translation, or undefined for one this read cannot take apart. */
 function shiftOf(value: string): [number, number] | undefined {
@@ -6178,6 +6196,287 @@ function boxFaults(at: HTMLElement): string[] {
     return out;
 }
 
+/** One money subject the dress rule reads: its own elements (`own`, the subject and every element under it with text but a broken figure's pieces) and the clips above it (`chain`). */
+type DressRead = { node: HTMLElement; stall: Element; faults: string[]; chain: HTMLElement[] | undefined; own: HTMLElement[] };
+
+/**
+ * The held longhands of a figure's own elements read again at each keyframe
+ * offset (`offsetDressFaults`): those `dressHeldFault` decides from the value
+ * alone — the ink, its fill and its stroke; the fades (an opacity, a filter,
+ * a blend, `visibility`, `content-visibility`); the transforms; a clip-path
+ * or a mask; a zoom; a text shadow. The reads that need the geometry — the
+ * grounds under the glyphs, the lines, the spacing, an outline's ring — are
+ * read at the pass's last instant alone.
+ */
+const OFFSET_HELD_OWN = [
+    'color',
+    '-webkit-text-fill-color',
+    '-webkit-text-stroke-width',
+    'opacity',
+    'visibility',
+    'content-visibility',
+    'filter',
+    'mix-blend-mode',
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+    'zoom',
+    'clip-path',
+    'mask-image',
+    '-webkit-mask-image',
+    'text-shadow',
+] as const;
+
+/** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), seeks, subjects read at a seek, failures found there; and its own time. */
+const dressSeek = { anims: 0, needless: 0, seeks: 0, reads: 0, faults: 0, names: {} as Record<string, number> };
+let dressSeekMs = 0;
+
+/**
+ * The longhands a keyframe may set and leave a figure's held dress
+ * (`OFFSET_HELD_OWN`, `BOX_HELD`) as the pass's instant read it, at every
+ * offset, but where the keyframe names it: none is inherited — or, where it
+ * is (`visibility`), the declared value is held where it is written — and
+ * each is either held at its written value by `animationFaults` and
+ * `keyframeHeld` (a transform and its parts, an opacity, a filter, a blend,
+ * a clip, a motion path, a zoom, `visibility`, `content-visibility`, a
+ * size) or reaches no held longhand at all (where a box stands, its
+ * paints: a background, a shadow, an outline, a border's colour). An
+ * animation that sets only these is not seeked: the seek would read the
+ * values the declared read already holds. Anything else a keyframe sets — a
+ * custom property, an inherited ink or shadow, a font, a property this
+ * list does not name — is seeked.
+ */
+const SEEK_NEEDLESS: ReadonlySet<string> = new Set([
+    'transform',
+    'rotate',
+    'scale',
+    'translate',
+    'opacity',
+    'filter',
+    'backdrop-filter',
+    'mix-blend-mode',
+    'clip-path',
+    'offset-path',
+    'offset-distance',
+    'offset-rotate',
+    'zoom',
+    'visibility',
+    'content-visibility',
+    ...KEYFRAME_SIZES_LIST,
+    'left',
+    'top',
+    'right',
+    'bottom',
+    'background-position',
+    'background-position-x',
+    'background-position-y',
+    'background-size',
+    'background-color',
+    'background-image',
+    'box-shadow',
+    'outline-color',
+    'outline-width',
+    'outline-offset',
+    'outline-style',
+]);
+
+/**
+ * Every property each `@keyframes` rule of the page's sheets declares, by
+ * name, custom properties included (`getKeyframes()` lists none of them for
+ * a CSS animation: the critic's PT2 reads as four empty keyframes there).
+ * Read once a page, again when a sheet is added.
+ */
+let keyframeDecls: { key: string; byName: Map<string, Set<string>> } | undefined;
+function keyframesDeclare(name: string): ReadonlySet<string> | undefined {
+    const key = `${document.styleSheets.length}:${document.adoptedStyleSheets.length}`;
+    if (keyframeDecls?.key !== key) {
+        const byName = new Map<string, Set<string>>();
+        const walk = (rules: CSSRuleList): void => {
+            for (const rule of rules) {
+                if (rule instanceof CSSKeyframesRule) {
+                    const props = byName.get(rule.name) ?? new Set<string>();
+                    for (const frame of rule.cssRules) {
+                        const style = (frame as CSSKeyframeRule).style;
+                        for (let i = 0; i < style.length; i += 1) props.add(style.item(i));
+                    }
+                    byName.set(rule.name, props);
+                } else if ('cssRules' in rule) {
+                    walk((rule as CSSGroupingRule).cssRules);
+                }
+            }
+        };
+        for (const sheet of [...document.styleSheets, ...document.adoptedStyleSheets]) {
+            try {
+                walk(sheet.cssRules);
+            } catch {
+                // A sheet this page cannot read: its keyframes are not known, and an animation that runs one is seeked.
+            }
+        }
+        keyframeDecls = { key, byName };
+    }
+    return keyframeDecls.byName.get(name);
+}
+
+/**
+ * Whether seeking an animation could show the held dress anything the
+ * declared reads did not (`SEEK_NEEDLESS`): false only when every property
+ * it sets is on that list — read from its `@keyframes` rule for a CSS
+ * animation, and from its keyframes for anything else.
+ */
+function seekNeedless(anim: Animation, effect: KeyframeEffect): boolean {
+    const props = new Set<string>();
+    for (const frame of effect.getKeyframes()) {
+        for (const key of Object.keys(frame)) {
+            if (!['offset', 'computedOffset', 'easing', 'composite'].includes(key)) props.add(kebab(key));
+        }
+    }
+    if (anim instanceof CSSAnimation) {
+        const declared = keyframesDeclare(anim.animationName);
+        if (declared === undefined) return false;
+        for (const prop of declared) props.add(prop);
+    }
+    return [...props].every((prop) => SEEK_NEEDLESS.has(prop));
+}
+
+/**
+ * **The held dress at every keyframe offset** (before 8g2, the critic's
+ * third review, item 1: PT2; D-2026-10-26-03). `animationFaults` and
+ * `keyframeHeld` read the longhands a keyframe NAMES, at their written
+ * values; a keyframe that sets a custom property (`--s-text: transparent`)
+ * or an inherited ink on a box above names none of them, and changes the
+ * figure's dress through the cascade, so the critic's PT2 — Rural's quote
+ * figure, whose ink is `var(--s-text)`, made clear by a keyframe on the
+ * custom property on its `.item-a`, from 12.5% to 84% of a 100s loop — read
+ * clean at rest, at 400ms and at the last of the six instants, under every
+ * rule. Here every animation whose target is a figure, an element under it
+ * with text (`own`), or a box above it up to and with its stall — the
+ * animations of `document.getAnimations()` on an element, not a
+ * pseudo-element, which nothing inherits from — save one whose keyframes
+ * set only longhands the declared reads hold already or that reach no held
+ * longhand (`seekNeedless`, `SEEK_NEEDLESS`), is seeked to each of its own
+ * keyframe offsets (and 0 and 1), alone, every other animation standing
+ * where the pass's last instant left it: its timing set for the read to one
+ * normal, linear iteration filled both ways with no delay, so the time
+ * `offset × duration` is that keyframe's own value, and both put back after.
+ * At each offset every figure it can reach is read as the dress rule holds
+ * it at rest: rendered still; each of its own elements under the animated
+ * box, held on `OFFSET_HELD_OWN` by `dressHeldFault`; and every box between
+ * the figure and the animated box, held on `BOX_HELD` by `boxHeldFault`. A
+ * failure names the animation, the box it runs on and the offset; one the
+ * instant's read already said is not said again.
+ *
+ * **Not read, stated**: a value between two offsets — a timing function
+ * that overshoots (`cubic-bezier()` with a y outside 0–1, a `linear()` with
+ * points outside them) can carry a value past both its keyframes; two
+ * animations at once, each seeked with the others where the last instant
+ * left them; a pseudo-element's animation (it is the cover rules'); the
+ * reads that need the geometry (`OFFSET_HELD_OWN`); and an animation whose
+ * duration is not a finite time over 0. Cost: only paints with an
+ * animation on money's ancestry that sets something `SEEK_NEEDLESS` does
+ * not name pay — on the clean tree the decorations' custom properties on
+ * the stall's root (the aurora's `--au-tide`, the sunburst's
+ * `--att-sun-angle`), two offsets each — and each pays a style recalc a
+ * seek (`dressSeek`, `dressSeekMs`). Without the skip, every Rural tag's
+ * sway and every sign's swing and sweep was seeked: about ten times the
+ * time (3.1s against 0.44s over the desk pass's screens, in a session).
+ */
+function offsetDressFaults(read: readonly DressRead[]): void {
+    if (read.length === 0) return;
+    const t0 = performance.now();
+    // Every element an animation could change a figure's dress from: its own elements and the boxes above it, up to and with its stall.
+    const reach = new Map<Element, DressRead[]>();
+    const add = (el: Element, r: DressRead): void => {
+        const list = reach.get(el);
+        if (list === undefined) reach.set(el, [r]);
+        else if (!list.includes(r)) list.push(r);
+    };
+    for (const r of read) {
+        for (const el of r.own) add(el, r);
+        for (let at = r.node.parentElement; at !== null && at.id !== 'app'; at = at.parentElement) {
+            add(at, r);
+            if (at === r.stall) break;
+        }
+    }
+    const said = new Set<string>();
+    for (const anim of document.getAnimations()) {
+        const effect = anim.effect;
+        if (!(effect instanceof KeyframeEffect) || effect.target === null || effect.pseudoElement !== null) continue;
+        const target = effect.target;
+        const reads = reach.get(target);
+        if (reads === undefined) continue;
+        if (seekNeedless(anim, effect)) {
+            dressSeek.needless += 1;
+            continue;
+        }
+        const duration = effect.getComputedTiming().duration;
+        if (typeof duration !== 'number' || !Number.isFinite(duration) || !(duration > 0)) continue;
+        const offsets = [...new Set([0, 1, ...effect.getKeyframes().map((k) => k.computedOffset ?? 0)])].filter((o) => o >= 0 && o <= 1).sort((a, b) => a - b);
+        // What the read sets, to put back after it (the duration it leaves alone).
+        const { delay, endDelay, iterations, iterationStart, direction, fill, easing } = effect.getTiming();
+        const kept = { delay, endDelay, iterations, iterationStart, direction, fill, easing };
+        const time = anim.currentTime;
+        const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
+        const where = describe(target);
+        dressSeek.anims += 1;
+        dressSeek.names[name] = (dressSeek.names[name] ?? 0) + 1;
+        try {
+            effect.updateTiming({ delay: 0, endDelay: 0, iterations: 1, iterationStart: 0, direction: 'normal', fill: 'both', easing: 'linear' });
+            for (const offset of offsets) {
+                anim.currentTime = offset * duration;
+                dressSeek.seeks += 1;
+                const at = `with ${name} on ${where} seeked to its keyframe at ${Math.round(offset * 100)}%`;
+                for (const r of reads) {
+                    dressSeek.reads += 1;
+                    const found: string[] = [];
+                    if (!rendersAt(r.node)) found.push(`it has no box, ${at}`);
+                    for (const el of r.own) {
+                        if (el !== target && !target.contains(el)) continue;
+                        const cs = getComputedStyle(el);
+                        const elName = el === r.node ? 'it' : describe(el);
+                        for (const prop of OFFSET_HELD_OWN) {
+                            const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs);
+                            if (why !== undefined) found.push(`${elName}: ${why}, ${at}`);
+                        }
+                    }
+                    if (target !== r.node && target.contains(r.node)) {
+                        for (let box = r.node.parentElement; box !== null; box = box.parentElement) {
+                            const cs = getComputedStyle(box);
+                            for (const prop of BOX_HELD) {
+                                const why = boxHeldFault(prop, cs.getPropertyValue(prop), box);
+                                if (why !== undefined) found.push(`${describe(box)} above it: ${why}, ${at}`);
+                            }
+                            if (box === target) break;
+                        }
+                    }
+                    for (const fault of found) {
+                        // Said once a subject, at its first offset; and not where the instant's read said it already.
+                        const key = `${read.indexOf(r)}|${fault.slice(0, fault.lastIndexOf(', with '))}`;
+                        if (said.has(key) || r.faults.some((f) => f === fault.slice(0, fault.lastIndexOf(', with ')))) continue;
+                        said.add(key);
+                        r.faults.push(fault);
+                        dressSeek.faults += 1;
+                    }
+                }
+            }
+        } catch {
+            // Not ours to time: an animation this read cannot seek is read at the instants alone.
+        } finally {
+            try {
+                effect.updateTiming(kept);
+            } catch {
+                // Put back as it can be.
+            }
+            try {
+                anim.currentTime = time;
+            } catch {
+                // A finished or unseekable animation stands where it stands.
+            }
+        }
+    }
+    dressSeekMs += performance.now() - t0;
+}
+
 function moneyDressFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
     boxFaultsSeen = new Map();
@@ -6185,7 +6484,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
     shadowersSeen = new Map();
     ownPaintsSeen = new Map();
     abovePaintsSeen = new Map();
-    const read: { node: HTMLElement; stall: Element; faults: string[]; chain: HTMLElement[] | undefined }[] = [];
+    const read: DressRead[] = [];
     const subjects = new Set<HTMLElement>(document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`));
     for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
         if (say.parentElement !== null) subjects.add(say.parentElement);
@@ -6284,7 +6583,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
             faults.push(...boxFaults(at));
             if (at === stall) break;
         }
-        read.push({ node, stall, faults, chain: clipChainOf(node) });
+        read.push({ node, stall, faults, chain: clipChainOf(node), own });
     }
     // In each figure's own frame — one hold of every transform from every
     // figure up to its stall (Rural's tag sways and its rows tilt, so a line
@@ -6316,6 +6615,9 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
             }
         });
     }
+    // 5. The held dress at every keyframe offset of every animation on the
+    // figure or a box above it (`offsetDressFaults`), each put back after.
+    offsetDressFaults(read);
     for (const { node, faults } of read) {
         if (faults.length === 0) continue;
         out.push({
@@ -11211,6 +11513,9 @@ const verdict = {
     coverMs,
     coveredByCalls,
     coveredByMs,
+    /* The dress rule's keyframe-offset read (`offsetDressFaults`): its counts, and its own time (a clock). */
+    dressSeek,
+    dressSeekMs,
     screensWithQuote: [...withQuote],
     codesPainted: [...codesPainted].sort(),
     /*
