@@ -6106,6 +6106,7 @@
       "rule": "@keyframes $C-ts { 50% { text-shadow: 0 4000px 0; } }",
       "expect": "refused",
       "by": [
+        "keyframe:ink",
         "paint-reach"
       ]
     },
@@ -7560,14 +7561,17 @@
     },
     {
       "rule": "@keyframes $C-m { to { color: red; } }\n.$C .item-a { animation: $C-m 1s; }",
-      "expect": "accepted",
-      "why": "the keyframe is declared in this sheet"
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
     },
     {
       "rule": "@media (min-width: 680px) { @keyframes $C-m { to { color: red; } } }\n.$C .item-a { animation: $C-m 1s; }",
       "expect": "refused",
       "by": [
         "keyframe:foreign",
+        "keyframe:ink",
         "keyframe:nested"
       ]
     },
@@ -7625,7 +7629,8 @@
       "rule": "@keyframes $C-ld { to { color: light-dark(#fff, #000); } }",
       "expect": "refused",
       "by": [
-        "colour-scheme"
+        "colour-scheme",
+        "keyframe:ink"
       ]
     },
     {
@@ -7811,6 +7816,7 @@
       "expect": "refused",
       "by": [
         "keyframe:foreign",
+        "keyframe:ink",
         "keyframe:nested"
       ]
     },
@@ -8003,6 +8009,155 @@
       "rule": ".$C .ic { stroke-linejoin: miter; stroke-miterlimit: 1000; }",
       "expect": "accepted",
       "why": "stated gap: stroke-miterlimit is uncapped, a miter join reaches that many stroke widths from a vertex (PLAN § Open)"
+    }
+  ],
+  "i1": [
+    {
+      "rule": "@keyframes $C-ink { 25%, 68% { color: transparent; } }\n.$C .item-head-q .item-a { animation: $C-ink 100s linear infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { color: transparent; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { COLOR: rgba(0, 0, 0, 0.05); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { color: var(--s-bg); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { color: currentColor; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { from { color: #fff; } to { color: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { text-shadow: 0 0 0 #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { text-shadow: 0 0 2px var(--s-bg), 0 0 2px var(--s-bg); } }\n.$C .item-a { animation: $C-ink 4s infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { caret-color: transparent; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { text-emphasis-color: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { -webkit-text-emphasis-color: #000; text-emphasis-color: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { text-emphasis: none; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { text-emphasis-position: under right; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { paint-order: stroke; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { font-palette: dark; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { color: red; } }\n.$C .item-p::after { content: ''; animation: $C-ink 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { @keyframes $C-ink { to { color: transparent; } } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink",
+        "keyframe:nested"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 0% { opacity: 1; } 50% { color: transparent; opacity: 1; } 100% { opacity: 1; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { color: #fff; }",
+      "expect": "accepted",
+      "why": "an ink at rest: the belt reads keyframes alone, and a look sets its inks at rest"
+    },
+    {
+      "rule": "@keyframes $C-ink { from { opacity: 0.5; } to { opacity: 1; } }",
+      "expect": "accepted",
+      "why": "a keyframe that sets no inherited ink: an opacity is the probe's dress rule's at every keyframe, not this belt's"
+    },
+    {
+      "rule": "@keyframes $C-ink { to { background-position: 100% 0; } }",
+      "expect": "accepted",
+      "why": "a keyframe that moves a background, which no box below inherits"
+    },
+    {
+      "rule": "@keyframes $C-ink { to { background-color: red; } }\n.$C .item-a { animation: $C-ink 1s; }",
+      "expect": "accepted",
+      "why": "the control for the first plant: the same rule on the same box, its keyframe setting a ground, which no box below inherits"
     }
   ]
 }

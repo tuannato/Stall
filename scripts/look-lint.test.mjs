@@ -2202,6 +2202,95 @@ describe('a-keyframe-never-takes-a-box-out-of-the-layout', () => {
     });
 });
 
+describe('a-keyframe-never-sets-an-inherited-ink', () => {
+    /**
+     * Before 8g2 (the critic's third review, item 1, the belt beside PT2;
+     * D-2026-10-26-03): a first-party look's keyframes may not set an
+     * inherited longhand that paints text — the ink, a text shadow, the
+     * caret, the emphasis marks and their prefixed twins, the paint order, a
+     * colour font's palette (`KEYFRAME_INK` in `scripts/workshop-css.mjs`).
+     * A keyframe that sets one on a box changes how the text of every box
+     * below it is painted, a money figure's among them, for part of a cycle:
+     * PT2's shape with a real property, `color: transparent` from 25% to 68%
+     * of a loop on a quote's `.item-a`, was accepted until this belt (the
+     * plant `g1:130`, `color: red`, with it), since the custom-property
+     * refusal reads only `--` names. The probe reads the held dress at every
+     * keyframe offset (`offsetDressFaults`, `layout/probe.ts`); this refuses
+     * the road where it is written. The fill colour and the stroke are
+     * refused everywhere already, the tap highlight is `transparent`
+     * everywhere. The kit is unchanged.
+     */
+    const INK = /in a keyframe is inherited: it changes how the text of every box below the one that runs it is painted, a money figure's among them, for part of a cycle/;
+
+    it('refuses every inherited ink, shadow and mark in a keyframe, on PT2\'s shape and in every position the keyframe refusals read', () => {
+        for (const rule of [
+            '@keyframes t-neo-ink { 25%, 68% { color: transparent; } }\n.t-neo .item-head-q .item-a { animation: t-neo-ink 100s linear infinite; }',
+            '@keyframes t-neo-ink { to { color: transparent; } }',
+            '@keyframes t-neo-ink { from { color: #fff; } to { color: #000; } }',
+            '@keyframes t-neo-ink { 50% { COLOR: rgba(0, 0, 0, 0.05); } }',
+            '@keyframes t-neo-ink { 50% { color: var(--s-bg); } }',
+            '@keyframes t-neo-ink { 50% { color: currentColor; } }',
+            '@keyframes t-neo-ink { 50% { color: transparent !important; } }',
+            '@keyframes t-neo-ink { 50% { text-shadow: 0 0 0 #000; } }',
+            '@keyframes t-neo-ink { 50% { caret-color: transparent; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis: none; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis-color: #000; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis-style: none; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis-position: under right; } }',
+            '@keyframes t-neo-ink { 50% { -webkit-text-emphasis-color: #000; text-emphasis-color: #000; } }',
+            '@keyframes t-neo-ink { 50% { paint-order: stroke; } }',
+            '@keyframes t-neo-ink { 50% { font-palette: dark; } }',
+            // A pseudo-element runs it: the keyframe is refused wherever a rule runs it.
+            "@keyframes t-neo-ink { to { color: red; } }\n.t-neo .item-p::after { content: ''; animation: t-neo-ink 1s; }",
+            // Inside a media block (refused there on its own too) and beside a longhand a keyframe may set.
+            '@media (min-width: 680px) { @keyframes t-neo-ink { to { color: transparent; } } }',
+            '@keyframes t-neo-ink { 0% { opacity: 1; } 50% { color: transparent; opacity: 1; } 100% { opacity: 1; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => INK.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        // The fill colour and the stroke stay refused everywhere, by their own rule.
+        for (const stop of ['-webkit-text-fill-color: transparent', '-webkit-text-stroke-color: #000', '-webkit-text-stroke-width: 1px']) {
+            const problems = lintLookSheet(plantedNeo(`@keyframes t-neo-ink { 50% { ${stop}; } }`), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => /contrast pass never reads/.test(p)) && !problems.some((p) => INK.test(p)), `${stop}:\n  ${problems.join('\n  ')}`);
+        }
+    });
+
+    it('leaves an ink at rest, a keyframe that sets none, and the kit as they were', () => {
+        accepts('.t-neo .item-x { color: #fff; }');
+        accepts('@keyframes t-neo-ink { from { opacity: 0.5; } to { opacity: 1; } }');
+        accepts('@keyframes t-neo-ink { to { background-position: 100% 0; } }');
+        accepts('@keyframes t-neo-ink { to { background-color: red; } }\n.t-neo .item-a { animation: t-neo-ink 1s; }');
+        for (const stop of ['25%, 68% { color: transparent; }', '50% { text-shadow: 0 0 0 #000; }', '50% { caret-color: transparent; }']) {
+            const kit = lintSheet(plantedKit(`@keyframes wk-ink { ${stop} }`));
+            assert.ok(!kit.some((p) => INK.test(p)), kit.join('\n'));
+        }
+    });
+
+    it('costs nothing: no first-party sheet a run serves, no starter and the canary sets one in a keyframe', () => {
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        const roles = new Set(lookRows(SERVED).filter((row) => row.role !== 'kit').map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        let stops = 0;
+        for (const { name, css, options } of sheets) {
+            stops += everyRule(css).filter((rule) => rule.selectors === undefined).length;
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => INK.test(p)), [], name);
+        }
+        // The shipped looks' keyframes and the starters' renamed copies, read stop by stop.
+        assert.ok(stops >= 30, `${stops} keyframe stops read`);
+    });
+});
+
 describe('a-pseudo-element-paints-its-own-ground-and-ink', () => {
     /**
      * D-2026-10-20-08's B3 (the lint-belts critic's third review): the probe
@@ -3507,8 +3596,9 @@ describe('a-rule-runs-only-the-keyframes-its-own-sheet-declares', () => {
         ]) {
             accepts(`.t-neo .item-a { ${decl}; }`);
         }
-        accepts('@keyframes t-neo-here { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
-        accepts('@keyframes t-neo-here { to { color: red; } }\n@media (min-width: 680px) { .t-neo .item-a { animation: t-neo-here 1s; } }');
+        // A ground and not an ink: an inherited ink in a keyframe is the ink belt's (`a-keyframe-never-sets-an-inherited-ink`).
+        accepts('@keyframes t-neo-here { to { background-color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
+        accepts('@keyframes t-neo-here { to { background-color: red; } }\n@media (min-width: 680px) { .t-neo .item-a { animation: t-neo-here 1s; } }');
     });
 
     it('counts only a top-level keyframe as the sheet\'s own, and refuses one inside a media block, quoted or not, or with no block (the sixth review\'s M2)', () => {
@@ -3528,8 +3618,8 @@ describe('a-rule-runs-only-the-keyframes-its-own-sheet-declares', () => {
         // A statement is no keyframes at all: a browser drops it, and the base sheet's keyframe of the name is the one that runs.
         refusedName('@keyframes pin-demo-land;\n.t-neo .item-a { animation: pin-demo-land 1s 120s reverse forwards; }');
         // A top-level keyframe stands, quoted or not, and the rule that runs it is the sheet's own.
-        accepts('@keyframes "t-neo-here" { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
-        accepts("@keyframes 't-neo-here' { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }");
+        accepts('@keyframes "t-neo-here" { to { background-color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
+        accepts("@keyframes 't-neo-here' { to { background-color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }");
         // The kit keeps its own reading: its keyframes are `wk-…` and the README states the rest.
         const kit = lintSheet(plantedKit('@media (min-width: 680px) { @keyframes wk-here { to { color: red; } } }'));
         assert.ok(!kit.some((p) => NESTED.test(p)), kit.join('\n'));
@@ -3891,6 +3981,8 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         ['size:transition', /which may be a money node — the wall fits its figure by its size/],
         ['size:keyframe', /animates .* — any box a rule runs it on, a money node among them/],
         ['keyframe:custom-property', /a custom property in a keyframe/],
+        // The ink belt beside the probe's keyframe-offset read (before 8g2, the critic's third review, item 1; D-2026-10-26-03).
+        ['keyframe:ink', /in a keyframe is inherited: it changes how the text of every box below/],
         ['role-redeclared', /palette role the theme table writes on the stall/],
         ['tap-highlight', /a tap highlight paints a colour/],
         ['file-mask', /a file's mask or clip in a/],
@@ -3905,12 +3997,18 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158 and 40 (`h1`, the sixth round) and the selected check\'s 24, with an outcome each', () => {
+    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round) and 22 (`i1`, the ink belt) and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 1200);
+        assert.equal(Object.values(PLANTS).flat().length, 1222);
+        // `i1`: an inherited ink, shadow or mark in a keyframe (eighteen refused, PT2's shape first, and four controls). The belt moved five older plants with it: `g1:130`, the
+        // sheet's own keyframe setting `color` on a quote's `.item-a`, accepted until it, and `f2:18`, `g1:131`, `g1:139` and `h1:9`, each refused by the belt as well.
+        assert.equal(PLANTS.i1.length, 22);
+        assert.equal(PLANTS.i1.filter((entry) => entry.expect === 'accepted').length, 4);
+        assert.match(PLANTS.i1[0].rule, /^@keyframes \$C-ink \{ 25%, 68% \{ color: transparent; \} \}/);
+        assert.deepEqual(PLANTS.g1[130].by, ['keyframe:ink']);
         // The sixth review's round: `h1`, the shorthand's thickness through a math function (M1), a keyframe inside an at-rule or a statement (M2), a negated painted value, a blur past its cap and `unset` on a custom property.
         assert.equal(PLANTS.h1.length, 40);
         // The fifth review's eight plant files (`f1`–`f8`: per-side colours, past the box, the outline cap, keyframes, the mask reader, the colour scheme and a custom property, the states, the underline) and the builder's own (`g1`).
@@ -3961,10 +4059,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 1,200, only the 295 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 1,222, only the 298 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
-        assert.equal(accepted.length, 295);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 905, 'and refuses the other 905');
+        assert.equal(accepted.length, 298);
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 924, 'and refuses the other 924');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);

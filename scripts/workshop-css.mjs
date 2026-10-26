@@ -2887,6 +2887,28 @@ const REFUSED_PROPERTIES = Object.freeze({
 });
 
 /**
+ * The inherited longhands that paint text, which a first-party keyframe may
+ * not set (`declarationProblems`, the inherited-ink belt beside the probe's
+ * keyframe-offset read). The fill colour and the stroke are not here: they
+ * are refused everywhere (`REFUSED_PROPERTIES`).
+ */
+const KEYFRAME_INK = new Set([
+    'color',
+    'text-shadow',
+    'caret-color',
+    'text-emphasis',
+    'text-emphasis-color',
+    'text-emphasis-style',
+    'text-emphasis-position',
+    '-webkit-text-emphasis',
+    '-webkit-text-emphasis-color',
+    '-webkit-text-emphasis-style',
+    '-webkit-text-emphasis-position',
+    'paint-order',
+    'font-palette',
+]);
+
+/**
  * The properties that make a box a query container, which a first-party look
  * sheet may not set (`declarationProblems`, the 8g0 critic's P2-2): the
  * shop window's `@container sw` conditions and `cqw` / `cqh` units are the
@@ -3216,6 +3238,35 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && selectors === undefined && prop.startsWith('--')) {
             out.push(
                 `${shown} — a custom property in a keyframe: it animates a value under no property name, so a rule that reads it as a letter-spacing, a clip or a size moves a money node past every check that reads the names a keyframe sets`,
+            );
+        }
+        /*
+         * An inherited ink in a keyframe (before 8g2; the critic's third
+         * review, item 1, the belt beside PT2; D-2026-10-26-03): a keyframe
+         * that sets `color`, a shadow or an emphasis mark on a box repaints
+         * the text of every box below it, a money figure's among them, for
+         * part of a cycle — `color: transparent` from 25% to 68% of a loop on
+         * a quote's `.item-a` clears the figure under it, which the
+         * custom-property refusal above does not see, since the keyframe
+         * names a real property. The probe reads a figure's held dress at
+         * every keyframe offset of every animation on its ancestry
+         * (`offsetDressFaults` in `layout/probe.ts`); this refuses the road
+         * where it is written, in a first-party sheet, wherever a rule runs
+         * the keyframe. `KEYFRAME_INK`: the inherited longhands that paint
+         * text — the ink, a text shadow, the caret, the emphasis marks (each
+         * prefixed twin too), the order a stroke and a fill are painted in,
+         * a colour font's palette. The fill colour and the stroke are
+         * refused everywhere already (`REFUSED_PROPERTIES`), and the tap
+         * highlight is `transparent` everywhere. No first-party sheet a run
+         * serves sets one in a keyframe (the shipped looks, the starters, the
+         * fixture look, the tracked private fixture and the canary;
+         * `refuses-an-inherited-ink-in-a-keyframe`); stall.css does (the
+         * sign's failing lamp, `att-hum-gutter`, and the door's pin demo),
+         * and it is no look sheet. The kit keeps the rules its README states.
+         */
+        if (firstParty && selectors === undefined && KEYFRAME_INK.has(prop)) {
+            out.push(
+                `${shown} — ${prop} in a keyframe is inherited: it changes how the text of every box below the one that runs it is painted, a money figure's among them, for part of a cycle; a look sets its inks, shadows and marks at rest`,
             );
         }
         /*
