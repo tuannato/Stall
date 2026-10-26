@@ -14,7 +14,7 @@
  */
 // First: it listens for the policy's refusals from the page's first module statement.
 import { cspRefusals, type CspRefusal } from './cspWatch';
-import { PAY_QR_NARROWEST_PX, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
+import { PAY_QR_NARROWEST_PX, QR_SVG_QUIET_MODULES, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
 import { wallFigureTier } from '../src/ui/window';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
@@ -6331,16 +6331,21 @@ function withTransformsHeldOff<T>(els: Iterable<HTMLElement>, read: () => T): T 
         const cs = getComputedStyle(el);
         return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
     });
-    const kept = turned.map((el) => HELD_OFF.map((p) => [el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const));
-    const bare = turned.map((el) => !el.hasAttribute('style'));
-    for (const el of turned) {
-        for (const p of HELD_OFF) el.style.setProperty(p, 'none', 'important');
+    return withHeldOff(turned, HELD_OFF, read);
+}
+
+/** Hold `props` at `none !important` on `els` while `read` runs, through the CSSOM, and put each back as it was (`withTransformsHeldOff`'s mechanism). */
+function withHeldOff<T>(els: readonly HTMLElement[], props: readonly string[], read: () => T): T {
+    const kept = els.map((el) => props.map((p) => [el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const));
+    const bare = els.map((el) => !el.hasAttribute('style'));
+    for (const el of els) {
+        for (const p of props) el.style.setProperty(p, 'none', 'important');
     }
     try {
         return read();
     } finally {
-        turned.forEach((el, i) => {
-            HELD_OFF.forEach((p, j) => {
+        els.forEach((el, i) => {
+            props.forEach((p, j) => {
                 const [value, priority] = kept[i]![j]!;
                 if (value === '') el.style.removeProperty(p);
                 else el.style.setProperty(p, value, priority);
@@ -7287,10 +7292,16 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  * `content-visibility` visible, each computing `none` for a filter, a
  * clip-path, every mask source (`QR_NONE`: `mask-image` and its `-webkit-`
  * twin, `mask-border-source`, `-webkit-mask-box-image-source` and
- * `-webkit-mask-box-image`) and every transform, and a blend of `normal`;
- * and the svg's box square, its width and height within a pixel of each
- * other. A code whose shape is not that fails: the read cannot vouch for
- * one. **Since the fifth review** (items 2 and 6): the critic's PQC,
+ * `-webkit-mask-box-image`), every transform (`transform`, `rotate`,
+ * `scale`, `translate`) and a motion path (`offset-path`), and a blend of
+ * `normal`; the svg's box square, its width and height within a pixel of
+ * each other; and the path's modules where `qrSvg` puts them, inside the
+ * svg's box and on the matrix area its viewBox and quiet zone make, each
+ * edge within a pixel (`qrPlaceFault`; the sixth review's item 1, the
+ * critic's PQP: an `offset-path` on the path carried every Modern code's
+ * modules off its square while the transform computed `none`). A code whose
+ * shape is not that fails: the read cannot vouch for one. **Since the fifth
+ * review** (items 2 and 6): the critic's PQC,
  * `.t-modern .qr { content-visibility: hidden }`, collapsed every Modern
  * code to a white strip about 336×20 (its rect and path skipped, its box
  * and its hits kept) and passed the whole runner, and PQM, a
@@ -7309,7 +7320,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  */
 const QR_COLOUR_CHECK = 'a-code-is-drawn-black-on-white';
 const qrColourByClass: Record<string, { painted: number; read: number }> = {};
-/** The longhands a code's svg, rect and path each compute `none` for (`qrColourFault`): a filter, a clip, every mask source and every transform. */
+/** The longhands a code's svg, rect and path each compute `none` for (`qrColourFault`): a filter, a clip, every mask source, every transform and a motion path. */
 const QR_NONE = [
     'filter',
     'clip-path',
@@ -7322,7 +7333,79 @@ const QR_NONE = [
     'rotate',
     'scale',
     'translate',
+    'offset-path',
 ] as const;
+
+/** The longhands held off the boxes above a code while its modules' place is read (`qrPlaceFault`): every transform and a motion path, which turn or move the svg and its path together. */
+const QR_FRAME_HELD = ['transform', 'rotate', 'scale', 'translate', 'offset-path'] as const;
+
+/**
+ * **Where a code's modules land** (before 8g2, the sixth review's item 1: the
+ * critic's PQP). `.t-modern .qr path { offset-path: ray(0deg);
+ * offset-distance: 400px }` carried every Modern code's modules off the code
+ * along a motion path, the svg clipping them, so each code painted as its
+ * white square — and the hold, which read a list of properties and not
+ * where the modules land, passed it: `offset-path` leaves the computed
+ * `transform` `none`. So beside the list (which names `offset-path` now) the
+ * path's box is held to the matrix area its own viewBox and `qrSvg`'s quiet
+ * zone put it in: the modules' extent in the path's `d` must be the matrix
+ * (`QR_SVG_QUIET_MODULES` in from each edge of the viewBox: a code's finder
+ * patterns fill three of its corners), and on screen the path's box must
+ * stand inside the svg's box and on that area of the square the svg draws
+ * into — its content box, less its own letterboxing (`xMidYMid meet`), as
+ * the quiet-zone read reads it — each edge within a pixel. Read with every
+ * transform and motion path of the boxes above held off (`QR_FRAME_HELD`,
+ * through the CSSOM) where one is set, since an axis-aligned box of a turned
+ * frame (Rural tilts every third wall card) is wider than the frame, and its
+ * insets scaled by the code's own zoom (`currentCSSZoom`). It reads where
+ * the modules are, whatever moved them: a property this list does not name
+ * that carries the path off the matrix fails here too.
+ */
+function qrPlaceFault(svg: SVGSVGElement, path: SVGElement, size: number, modules: readonly RegExpMatchArray[]): string | undefined {
+    const q = QR_SVG_QUIET_MODULES;
+    const cols = modules.map((m) => Number(m[1]));
+    const rows = modules.map((m) => Number(m[2]));
+    const span = [Math.min(...cols), Math.max(...cols) + 1, Math.min(...rows), Math.max(...rows) + 1];
+    if (span[0] !== q || span[1] !== size - q || span[2] !== q || span[3] !== size - q) {
+        return `its modules span columns ${span[0]}–${span[1]} and rows ${span[2]}–${span[3]}, not the matrix ${q}–${size - q} that its viewBox and qrSvg's quiet zone of ${q} make`;
+    }
+    const frame: HTMLElement[] = [];
+    for (let at = svg.parentElement; at !== null; at = at.parentElement) frame.push(at);
+    const moved = frame.filter((el) => {
+        const cs = getComputedStyle(el);
+        return QR_FRAME_HELD.some((p) => cs.getPropertyValue(p) !== 'none' && cs.getPropertyValue(p) !== '');
+    });
+    const read = (): string | undefined => {
+        const r = svg.getBoundingClientRect();
+        const cs = getComputedStyle(svg);
+        const zoom = (svg as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+        const px = (v: string): number => (Number.parseFloat(v) || 0) * zoom;
+        const left = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+        const top = px(cs.borderTopWidth) + px(cs.paddingTop);
+        const cw = r.width - left - px(cs.borderRightWidth) - px(cs.paddingRight);
+        const ch = r.height - top - px(cs.borderBottomWidth) - px(cs.paddingBottom);
+        const side = Math.min(cw, ch);
+        if (!(side > 0)) return `it draws into a square of ${side.toFixed(1)}px, which holds no matrix`;
+        const x = r.x + left + (cw - side) / 2;
+        const y = r.y + top + (ch - side) / 2;
+        const m = side / size;
+        const want = { left: x + m * q, top: y + m * q, right: x + side - m * q, bottom: y + side - m * q };
+        const p = path.getBoundingClientRect();
+        const at = `${Math.round(p.left)},${Math.round(p.top)} ${Math.round(p.width)}×${Math.round(p.height)}`;
+        if (p.left < r.left - 1 || p.top < r.top - 1 || p.right > r.right + 1 || p.bottom > r.bottom + 1) {
+            return `its modules stand at ${at}, outside its own box at ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)}, which clips them`;
+        }
+        const off = Math.max(Math.abs(p.left - want.left), Math.abs(p.top - want.top), Math.abs(p.right - want.right), Math.abs(p.bottom - want.bottom));
+        if (off > 1) {
+            return (
+                `its modules stand at ${at}, ${off.toFixed(1)}px off the matrix at ${Math.round(want.left)},${Math.round(want.top)} ` +
+                `${Math.round(want.right - want.left)}×${Math.round(want.bottom - want.top)} that its viewBox and quiet zone put them in`
+            );
+        }
+        return undefined;
+    };
+    return moved.length === 0 ? read() : withHeldOff(moved, QR_FRAME_HELD, read);
+}
 
 /** Why a code is not the black-on-white square `qrSvg` draws, or undefined. */
 function qrColourFault(svg: Element): string | undefined {
@@ -7368,7 +7451,7 @@ function qrColourFault(svg: Element): string | undefined {
     }
     const box = svg.getBoundingClientRect();
     if (Math.abs(box.width - box.height) > 1) return `its box is ${box.width.toFixed(1)} by ${box.height.toFixed(1)}, not the square qrSvg draws`;
-    return undefined;
+    return qrPlaceFault(svg as SVGSVGElement, path, Number(size), modules);
 }
 
 function qrColourFaults(screen: string, label: string): Failure[] {
