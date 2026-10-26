@@ -6921,6 +6921,9 @@ const MOVES_NO_OTHER_BOX: ReadonlySet<string> = new Set([
     'inset-inline-end',
 ]);
 
+/** `movesOtherBoxes` of each CSS animation by name, while the page's sheets stand (the key `keyframesDeclare` reads them by). */
+let movesByName: { key: string; byName: Map<string, boolean> } = { key: '', byName: new Map() };
+
 /** Whether an animation's keyframes can move a box other than the one it runs on (`MOVES_NO_OTHER_BOX`): true unless every longhand they set is on that list, and true for a keyframe rule this page cannot read. */
 function movesOtherBoxes(anim: Animation, effect: KeyframeEffect): boolean {
     const props = keyframeProps(anim, effect);
@@ -7159,21 +7162,28 @@ function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHer
  * over the desk pass's screens, in a session).
  */
 function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[]> {
-    // The figures the self-clip read reads at an offset (`MONEY_FIGURES`, off
-    // the door's deck), each with the list its cut goes to: its dress
-    // subject's, or one of its own for a figure the dress rule does not read
-    // (answered to the caller).
-    const figures = new Map<HTMLElement, string[]>();
-    const unread = new Map<HTMLElement, string[]>();
-    for (const r of read) if (r.node.matches(MONEY_FIGURES)) figures.set(r.node, r.clip);
-    for (const node of document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`)) {
-        if (figures.has(node) || node.closest('.deck-stall') !== null) continue;
-        const list: string[] = [];
-        figures.set(node, list);
-        unread.set(node, list);
-    }
-    if (figures.size === 0 && read.length === 0) return unread;
     const t0 = performance.now();
+    // The figures the self-clip read reads at an offset of an animation that
+    // can move another box: every money figure on the paint
+    // (`MONEY_FIGURES`, read where the rule reads them at the pass's last
+    // instant, `selfClipReads`), each with the list its cut goes to — its
+    // dress subject's, or one of its own for a figure the dress rule does not
+    // read (answered to the caller). Gathered the first time one is needed.
+    const unread = new Map<HTMLElement, string[]>();
+    let everyFigure: [HTMLElement, string[]][] | undefined;
+    const figuresOnThePaint = (): [HTMLElement, string[]][] => {
+        if (everyFigure !== undefined) return everyFigure;
+        const lists = new Map<HTMLElement, string[]>();
+        for (const r of read) if (r.node.matches(MONEY_FIGURES) && selfClipReads(r.node)) lists.set(r.node, r.clip);
+        for (const node of document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`)) {
+            if (lists.has(node) || !selfClipReads(node)) continue;
+            const list: string[] = [];
+            lists.set(node, list);
+            unread.set(node, list);
+        }
+        everyFigure = [...lists];
+        return everyFigure;
+    };
     // Every element an animation could change a figure's dress from: its own elements and the boxes above it, up to and with its stall.
     const reach = new Map<Element, DressRead[]>();
     const add = (el: Element, r: DressRead): void => {
@@ -7191,6 +7201,8 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
     const said = new Set<string>();
     // The ground of each element as the pass's last instant left it (`groundSignature`): every animation is put back before the next is read.
     restGround = new Map();
+    const sheets = `${document.styleSheets.length}:${document.adoptedStyleSheets.length}`;
+    if (movesByName.key !== sheets) movesByName = { key: sheets, byName: new Map() };
     for (const anim of document.getAnimations()) {
         const effect = anim.effect;
         if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;
@@ -7208,8 +7220,14 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
         // Wherever it runs: a keyframe that can move a box other than its
         // own (`movesOtherBoxes`) can cut any figure's text — a sibling's
         // margin squeezing it inside its own clip, the sixth review's PSQ2.
-        const movesOthers = movesOtherBoxes(anim, effect);
-        if (reads === undefined && !movesOthers) continue;
+        // A CSS animation's longhands are its `@keyframes` rule's, one per name: read once while the page's sheets stand (`keyframesDeclare`'s key).
+        let movesOthers = anim instanceof CSSAnimation ? movesByName.byName.get(anim.animationName) : undefined;
+        if (movesOthers === undefined) {
+            movesOthers = movesOtherBoxes(anim, effect);
+            if (anim instanceof CSSAnimation) movesByName.byName.set(anim.animationName, movesOthers);
+        }
+        // Off every figure's walk it is seeked for the self-clip read alone: not on a paint with no figure to read.
+        if (reads === undefined && (!movesOthers || figuresOnThePaint().length === 0)) continue;
         const duration = effect.getComputedTiming().duration;
         if (typeof duration !== 'number' || !Number.isFinite(duration) || !(duration > 0)) continue;
         const offsets = [...new Set([0, 1, ...effect.getKeyframes().map((k) => k.computedOffset ?? 0)])].filter((o) => o >= 0 && o <= 1).sort((a, b) => a - b);
@@ -7231,7 +7249,9 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
         // The figures whose text the self-clip read reads at each offset:
         // every one on the paint where the keyframes can move another box;
         // else those on the animation's walk, unless it sets only grounds.
-        const clipped = movesOthers ? [...figures.keys()] : (reads ?? []).filter((r) => !onlyGround && figures.has(r.node)).map((r) => r.node);
+        const clipped: [HTMLElement, string[]][] = movesOthers
+            ? figuresOnThePaint()
+            : (reads ?? []).filter((r) => !onlyGround && r.node.matches(MONEY_FIGURES)).map((r) => [r.node, r.clip]);
         dressSeek.anims += 1;
         if (reads === undefined) dressSeek.layout += 1;
         dressSeek.names[name] = (dressSeek.names[name] ?? 0) + 1;
@@ -7288,8 +7308,7 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
                 // The self-clip read (`a-money-figure-never-clips-itself`) at
                 // this offset: a figure the pass's last instant found whole,
                 // said once, at its first offset that cuts it.
-                for (const node of clipped) {
-                    const list = figures.get(node)!;
+                for (const [node, list] of clipped) {
                     if (list.length > 0 || selfClipCutNow.has(node) || !selfClipReads(node)) continue;
                     dressSeek.clips += 1;
                     const cut = selfClipSentences(node);
