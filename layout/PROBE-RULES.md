@@ -10529,14 +10529,16 @@ in each log's `.meta`.
   animation"). No fixture paints a press. Such a fixture must land with a
   read of the entrance at its end. Not fixed.
 
-### The end read's prune (the cost item's first prune, no loss)
+### The end read's prune (the cost item's first prune)
 
 Every end read on the clean tree, 1,816 over the geometry passes, none
 failing, was the marquee's run: a transform on a name's run (`mq-run`) inside
 the name's clipping cell (`[data-mq]`). Such an animation's end moves paint
 inside that cell alone, and a hit test there answers the cell's own subtree,
 so where the cell meets nothing 1a asks the end read reads what the read at
-rest read.
+rest read. This section called it "no loss"; it was not: a box that computes
+a clip and clips nothing was taken for the clip (the fifth review's PFCd3,
+below, "The prune's clip test").
 
 - `endMoot`, general, naming no class: an animation is moot when its
   keyframes set only `transform`, `rotate`, `scale` or `translate`
@@ -10596,6 +10598,46 @@ geometry walk 94.5 → 124.3s and 97.6 → 127.3s, its contrast pass 132.5 →
 reads and takes the end read back (7.35s → 0.97s of page time, single runs),
 for about 2s of wall time less than before. 47–52s stand under the 300s
 ceiling.
+
+## Before 8g2: the fifth review's fixes (2026-10-26; CRITIC-5)
+
+The critic's fifth review on before-8g2 (`private/design/workshop-2026-09-23/before-8g2/CRITIC-5.md`,
+its plants in `critic5/plants/`), decided by the window on the critic's
+recommendations. The plants, logs and tools of this round are in
+`before-8g2/critic5-fixes/`. Every run is the whole runner, two tabs, the
+tracked fixture carried, each plant alone, the load in each log's `.meta`.
+
+### The prune's clip test (item 1: PFCd, PFCd2, PFCd3)
+
+- `endMoot` took a box for the clip when its computed `overflow` (but
+  `visible` each way) or its `contain` said so. A box with `display:
+  contents`, or a non-replaced inline box, computes `overflow: hidden` and
+  clips nothing, and its rect is 0×0 at the origin, or its line: it "met
+  nothing asked". The critic's PFCd3 (the quote head's labels line,
+  `.item-labels`, made `display: contents; overflow: hidden`, off the wall;
+  its rail label, an inline-block that holds no money, translated over the
+  quote's figure and Pay at 95–100% of a 10s run, filled forwards; the
+  first-party look lint admits it) passed the whole runner, and with the
+  prune forced off it failed 16 at 390 and 13 at 360.
+- Measured in headless Chrome 156 before the fix, a child
+  translated 300px past a 100×40 box and hit-tested where it was painted,
+  under `overflow: hidden`, `overflow: clip` and `contain: paint` alike: the
+  box clips it under `block`, `inline-block`, `flex`, `inline-flex`, `grid`,
+  `inline-grid`, `flow-root`, `list-item`, `table`, `inline-table`,
+  `table-caption` and `table-cell`, and does not under `inline`, `contents`,
+  `ruby`, `ruby-text`, `table-row`, `table-row-group`, `table-header-group`
+  and `table-footer-group` (a `table-column` holds nothing). A table cell
+  clips: the critic's "not a table-internal box" is narrowed to the internal
+  boxes that do not.
+- The fix: a box counts as the clip only when it can (`boxClips`): an HTML
+  element of a listed display (`CLIPPING_DISPLAYS`; a display not listed
+  fails closed) whose border box is not empty. A box that computes a clip
+  and clips nothing is passed over, and the walk goes on to the box above
+  (for PFCd3, the quote's row card, which holds the figure). Beside it, by
+  reading and not planted: nothing under the animated box, nor a `::before`
+  or `::after` of it or of an element under it, may be absolutely or fixed
+  positioned, whose containing block could stand outside the clip once a
+  transform ends at `none`.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

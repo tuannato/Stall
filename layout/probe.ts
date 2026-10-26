@@ -1348,26 +1348,85 @@ let coverAsked: { node: Element; reach: Box }[] = [];
 const END_MOOT_PROPS: ReadonlySet<string> = new Set(['transform', 'rotate', 'scale', 'translate']);
 
 /**
- * **The end read leaves out what cannot cover anything** (before 8g2, the
- * fourth review's cost item, its first prune and no loss): every end read on
- * the clean tree, 1,816 over the geometry passes and none failing, was the
- * marquee's run — a transform on a name's run inside the name's clipping
- * cell. Such an animation's end moves paint inside that cell alone, and a
- * hit test there answers that cell's own subtree, so where the cell meets
- * no box and no point 1a asks, the end read reads what the read at rest
- * read. An animation is moot here (`endMoot`) when its keyframes set only a
- * transform, a rotate, a scale or a translate (`END_MOOT_PROPS`, read as the
- * offset read reads them, `keyframeProps`); its box, or for a
- * pseudo-element its owner, holds no node 1a asked; it stands inside a box
- * that clips on both axes (an `overflow` but visible each way, or a
- * painting `contain`) with no absolutely or fixed positioned box between,
- * itself included, whose containing block could stand outside the clip;
- * and that box — its border box, grown by its `overflow-clip-margin` where
- * it clips by `clip` — meets no box of a node 1a asked at rest and no point
- * it asked there (`coverAsked`). A paint whose every lasting animation is
- * moot is not read at its end and is counted (`coverEnd.skipped`); one with
- * any other reads every lasting animation's end as before. General: it
- * names no class.
+ * The computed displays whose box clips what it holds under an `overflow`
+ * but `visible` or a painting `contain`, as Chrome reads them (`endMoot`;
+ * before 8g2, the fifth review's item 1, the critic's PFCd). Measured in
+ * headless Chrome 156, a child translated 300px past a 100×40
+ * box, hit-tested where it was painted, under `overflow: hidden`,
+ * `overflow: clip` and `contain: paint` alike: every display listed here
+ * clips it, `table-cell`, `table` and `table-caption` among them; `inline`,
+ * `contents`, `ruby`, `ruby-text` and the table rows, row groups, header and
+ * footer groups and columns compute the overflow and clip nothing (a
+ * `display: contents` box's rect is 0×0 at the origin, an inline box's its
+ * line). A display not listed — one a newer engine adds — clips nothing
+ * here, so the end read is made: it fails closed.
+ */
+const CLIPPING_DISPLAYS: ReadonlySet<string> = new Set([
+    'block',
+    'inline-block',
+    'flex',
+    'inline-flex',
+    'grid',
+    'inline-grid',
+    'flow-root',
+    'list-item',
+    'table',
+    'inline-table',
+    'table-caption',
+    'table-cell',
+]);
+
+/**
+ * Whether a box that computes a clip on both axes clips what it holds
+ * (`endMoot`): an HTML element (an SVG or MathML element's `overflow` is not
+ * the CSS box's, and fails closed here) of a display that clips
+ * (`CLIPPING_DISPLAYS`) whose border box is not empty.
+ */
+function boxClips(at: Element, cs: CSSStyleDeclaration): boolean {
+    if (!(at instanceof HTMLElement) || !CLIPPING_DISPLAYS.has(cs.display)) return false;
+    const r = at.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+}
+
+/**
+ * **The end read leaves out what cannot cover anything asked** (before 8g2,
+ * the fourth review's cost item, its first prune; its clip test since the
+ * fifth review): every end read on the clean tree, 1,816 over the geometry
+ * passes and none failing, was the marquee's run — a transform on a name's
+ * run inside the name's clipping cell. Such an animation's end moves paint
+ * inside that cell alone, and a hit test there answers that cell's own
+ * subtree, so where the cell meets no box and no point 1a asks, the end read
+ * reads what the read at rest read. An animation is moot here (`endMoot`)
+ * when its keyframes set only a transform, a rotate, a scale or a translate
+ * (`END_MOOT_PROPS`, read as the offset read reads them, `keyframeProps`);
+ * its box, or for a pseudo-element its owner, holds no node 1a asked; no
+ * element under it, and no `::before` or `::after` of it or of one of them,
+ * is absolutely or fixed positioned (its containing block could stand
+ * outside the clip once the transform ends at `none`; added by reading, not
+ * planted); it stands inside a box that clips on both axes — an `overflow`
+ * but visible each way, or a painting `contain`, **on a box that clips**
+ * (`boxClips`: an HTML element of a display Chrome clips by,
+ * `CLIPPING_DISPLAYS`, with a box that is not empty) — with no absolutely or
+ * fixed positioned box between, itself included; and that box — its border
+ * box, grown by its `overflow-clip-margin` where it clips by `clip` — meets
+ * no box of a node 1a asked at rest and no point it asked there
+ * (`coverAsked`). A box that computes a clip and clips nothing is passed
+ * over, and the walk goes on to the box above it: before the fifth review it
+ * was taken for the clip, and the critic's PFCd3 — the quote head's labels
+ * line made `display: contents` with `overflow: hidden`, its rail label
+ * translated over the quote's figure and Pay at the end of a 10s run, filled
+ * forwards — was left out of the end read on its 0×0 rect and passed the
+ * whole runner. A paint whose every lasting animation is moot is not read at
+ * its end and is counted (`coverEnd.skipped`); one with any other reads
+ * every lasting animation's end as before. General: it names no class.
+ *
+ * **What it rests on, stated**: Chrome's clipping, measured per display
+ * (`CLIPPING_DISPLAYS`); the asked nodes' boxes and points as 1a read them
+ * at rest, in viewport coordinates, which ignores stacking — a clip box
+ * behind an open sheet that overlaps the sheet's controls on screen is read,
+ * though the sheet stands over it (conservative: the clean tree's 161 end
+ * reads are such paints); and the end of each animation alone, every other
+ * standing where the read at rest left it.
  */
 function endMoot(anim: Animation): boolean {
     const effect = anim.effect;
@@ -1379,12 +1438,20 @@ function endMoot(anim: Animation): boolean {
     if (coverAsked.some((a) => el === a.node || el.contains(a.node))) return false;
     const positioned = (cs: CSSStyleDeclaration): boolean => cs.position === 'absolute' || cs.position === 'fixed';
     if (pseudo !== null && positioned(getComputedStyle(el, pseudo))) return false;
+    // Nothing under the animated box that a containing block outside the clip could carry past it.
+    if (pseudo === null) {
+        for (const e of [el, ...el.querySelectorAll('*')]) {
+            if (e !== el && positioned(getComputedStyle(e))) return false;
+            if (positioned(getComputedStyle(e, '::before')) || positioned(getComputedStyle(e, '::after'))) return false;
+        }
+    }
     // The innermost box that clips it both ways: for a pseudo-element its owner may be that box.
     for (let at: Element | null = pseudo !== null ? el : el.parentElement, below: Element = el; at !== null && at.id !== 'app'; below = at, at = at.parentElement) {
         if (!(pseudo !== null && at === el) && positioned(getComputedStyle(below))) return false;
         const cs = getComputedStyle(at);
         const clipsBoth = (cs.overflowX !== 'visible' && cs.overflowY !== 'visible') || /\b(?:paint|strict|content)\b/.test(cs.contain);
-        if (!clipsBoth) continue;
+        // A box that computes a clip and clips nothing (`display: contents`, an inline box, a table row) is passed over.
+        if (!clipsBoth || !boxClips(at, cs)) continue;
         const r = at.getBoundingClientRect();
         let margin = 0;
         if (cs.overflowX === 'clip' || cs.overflowY === 'clip' || /\b(?:paint|strict|content)\b/.test(cs.contain)) {
