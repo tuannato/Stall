@@ -4185,7 +4185,8 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   seeked alone to each of its offsets, its timing set for the read to one
  *   normal linear iteration filled both ways and put back after, the figure
  *   held rendered, its own elements under the animated box on
- *   `OFFSET_HELD_OWN` and the boxes between on `BOX_HELD` — save an
+ *   `OFFSET_HELD_OWN` (every held longhand but the reads that need the
+ *   geometry, `OFFSET_GEOMETRY`) and the boxes between on `BOX_HELD` — save an
  *   animation whose keyframes set only longhands the declared read already
  *   holds or that reach no held longhand (`SEEK_NEEDLESS`, read from the
  *   `@keyframes` rule itself, where a custom property is listed and
@@ -5925,6 +5926,14 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             // again; held like opacity (before 8g2, the window's item 4,
             // the critic's PT). The keyframes are what PT ran it through.
             return value === 'visible' ? undefined : `visibility ${value}`;
+        case 'content-visibility':
+            // A box above the figure that skips its contents (`hidden`) does
+            // not render the figure; one that skips them off-screen (`auto`)
+            // is size- and paint-contained there, a clip `contain` does not
+            // report and no clip read sees. Held to `visible`, at rest and
+            // at its written value in a keyframe (before 8g2, the fourth
+            // review's item 3, the critic's PCV): no served sheet sets it.
+            return value === 'visible' || value === '' ? undefined : `content-visibility ${value}`;
         case 'translate':
             // A box moves where it stands, and the geometry reads at rest
             // see where; a translate that moves between them is
@@ -5937,7 +5946,7 @@ function boxHeldFault(prop: string, value: string, el: Element): string | undefi
             return undefined;
     }
 }
-const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'translate', 'visibility', 'backdrop-filter'] as const;
+const BOX_HELD = ['opacity', 'filter', 'mix-blend-mode', 'background-blend-mode', '-webkit-box-reflect', 'offset-path', 'zoom', 'transform', 'rotate', 'scale', 'translate', 'visibility', 'content-visibility', 'backdrop-filter'] as const;
 
 /**
  * The sizes a keyframe may not move on a box holding a figure (before 8g2,
@@ -6285,33 +6294,47 @@ function boxFaults(at: HTMLElement): string[] {
 type DressRead = { node: HTMLElement; stall: Element; faults: string[]; chain: HTMLElement[] | undefined; own: HTMLElement[] };
 
 /**
- * The held longhands of a figure's own elements read again at each keyframe
- * offset (`offsetDressFaults`): those `dressHeldFault` decides from the value
- * alone — the ink, its fill and its stroke; the fades (an opacity, a filter,
- * a blend, `visibility`, `content-visibility`); the transforms; a clip-path
- * or a mask; a zoom; a text shadow. The reads that need the geometry — the
- * grounds under the glyphs, the lines, the spacing, an outline's ring — are
- * read at the pass's last instant alone.
+ * The held longhands whose read needs the geometry (`dressHeldFault` answers
+ * nothing for them, by design): the spacing (`letter-spacing`, read per text
+ * run by `spacingPiles`), the grounds under the glyphs (`groundStackFault`),
+ * an outline's ring (`outlineFault`), the decoration line with its thickness
+ * and offset (`decorationFault`), and `animation-name` (read keyframe by
+ * keyframe by `animationFaults`).
  */
-const OFFSET_HELD_OWN = [
-    'color',
-    '-webkit-text-fill-color',
-    '-webkit-text-stroke-width',
-    'opacity',
-    'visibility',
-    'content-visibility',
-    'filter',
-    'mix-blend-mode',
-    'transform',
-    'rotate',
-    'scale',
-    'translate',
-    'zoom',
-    'clip-path',
-    'mask-image',
-    '-webkit-mask-image',
-    'text-shadow',
-] as const;
+const OFFSET_GEOMETRY: ReadonlySet<string> = new Set([
+    'letter-spacing',
+    'background-color',
+    'background-image',
+    'outline-style',
+    'outline-width',
+    'outline-offset',
+    'text-decoration-line',
+    'text-decoration-thickness',
+    'text-underline-offset',
+    'animation-name',
+]);
+
+/**
+ * The held longhands of a figure's own elements read again at each keyframe
+ * offset (`offsetDressFaults`): every one of `DRESS_HELD` but the reads that
+ * need the geometry (`OFFSET_GEOMETRY`), so every longhand `dressHeldFault`
+ * decides from the value alone — the ink, its fill and its stroke; the fades
+ * (an opacity, a filter, a blend, `visibility`, `content-visibility`); the
+ * transforms; a clip-path, a clip or a mask; a zoom and `font-size-adjust`;
+ * `word-spacing` and `text-indent`; a text shadow and an emphasis mark; the
+ * order (`direction`, `unicode-bidi`, `writing-mode`); `display`, `content`,
+ * an ellipsis and a line clamp; the lines a box above draws through it
+ * (`-webkit-text-decorations-in-effect`). Derived, never copied: a longhand
+ * added to `DRESS_HELD` is read at the offsets the day it is held
+ * (`the-keyframe-offset-read-holds-every-held-longhand-the-value-decides`,
+ * `layout/offsetHeld.test.ts`, which holds `OFFSET_GEOMETRY` to the
+ * longhands `dressHeldFault` answers nothing for). Until before 8g2's fourth
+ * review it was a list of 17 copied by hand, and a keyframe
+ * `font-size-adjust: 0.05` on Rural's quote `.item-a` — the figure a 4.9px
+ * speck from 12.5% to 74% of its loop — passed the whole runner (the
+ * critic's PFA).
+ */
+const OFFSET_HELD_OWN: readonly string[] = [...DRESS_HELD].filter((prop) => !OFFSET_GEOMETRY.has(prop));
 
 /** The keyframe-offset read's own counts (`offsetDressFaults`): animations seeked (and by name), those on money's ancestry left unseeked (`seekNeedless`), seeks, subjects read at a seek, failures found there; and its own time. */
 const dressSeek = { anims: 0, needless: 0, seeks: 0, reads: 0, faults: 0, names: {} as Record<string, number> };
@@ -6324,13 +6347,22 @@ let dressSeekMs = 0;
  * is (`visibility`), the declared value is held where it is written — and
  * each is either held at its written value by `animationFaults` and
  * `keyframeHeld` (a transform and its parts, an opacity, a filter, a blend,
- * a clip, a motion path, a zoom, `visibility`, `content-visibility`, a
- * size) or reaches no held longhand at all (where a box stands, its
- * paints: a background, a shadow, an outline, a border's colour). An
- * animation that sets only these is not seeked: the seek would read the
- * values the declared read already holds. Anything else a keyframe sets — a
- * custom property, an inherited ink or shadow, a font, a property this
- * list does not name — is seeked.
+ * a clip, a motion path, a zoom, `visibility`, a size) or reaches no held
+ * longhand at all (where a box stands, its paints: a background, a shadow,
+ * an outline, a border's colour). An animation that sets only these is not
+ * seeked: the seek would read the values the declared read already holds.
+ * Anything else a keyframe sets — a custom property, an inherited ink or
+ * shadow, a font, a property this list does not name — is seeked.
+ *
+ * **`content-visibility` is not here** (before 8g2, the fourth review's
+ * item 3): this list said it was held at its written value, and on a box
+ * above the figure nothing held it (`BOX_HELD` did not name it), so the
+ * critic's PCV — a keyframe `content-visibility: hidden` from 25% to 68% of
+ * a loop on Rural's quote `.item-a` — was skipped by the offset read and
+ * red only by accident, through the size containment that collapsed the
+ * box. It is held on a box above now (`BOX_HELD`, at rest and at its
+ * written value in a keyframe), and an animation that sets it is seeked,
+ * so the figure's own `rendersAt` reads what it does at each offset.
  */
 const SEEK_NEEDLESS: ReadonlySet<string> = new Set([
     'transform',
@@ -6347,7 +6379,6 @@ const SEEK_NEEDLESS: ReadonlySet<string> = new Set([
     'offset-rotate',
     'zoom',
     'visibility',
-    'content-visibility',
     ...KEYFRAME_SIZES_LIST,
     'left',
     'top',
@@ -6456,7 +6487,7 @@ function seekNeedless(anim: Animation, effect: KeyframeEffect): boolean {
  * points outside them) can carry a value past both its keyframes; two
  * animations at once, each seeked with the others where the last instant
  * left them; a pseudo-element's animation (it is the cover rules'); the
- * reads that need the geometry (`OFFSET_HELD_OWN`); and an animation whose
+ * reads that need the geometry (`OFFSET_GEOMETRY`); and an animation whose
  * duration is not a finite time over 0. Cost: only paints with an
  * animation on money's ancestry that sets something `SEEK_NEEDLESS` does
  * not name pay — on the clean tree the decorations' custom properties on
