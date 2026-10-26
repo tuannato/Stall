@@ -739,8 +739,10 @@ export function probeCoverageLine(pass, report) {
         .map(([surface, n]) => `${surface} ${n}`)
         .join(', ');
     const skipped = (SKIP_SURFACES[pass] ?? []).length === 0 ? '' : ` · skips seen: ${skips || 'none'}`;
+    // The stream card's money tiers the canvas pass read, per look and tier (`STREAM_TIERS_OWED`).
+    const streamTiers = Object.keys(report.streamTierByClass ?? {}).length === 0 ? '' : ` · stream card tiers read: ${perClass(report.streamTierByClass)}`;
     if (!PAGE_PASSES.has(pass)) {
-        return [`unbuyable labels read: ${read || 'none'}${skipped}`, wall || (money + hiddenSmall + marks).replace(/^ · /, '')]
+        return [`unbuyable labels read: ${read || 'none'}${skipped}${streamTiers}`, wall || (money + hiddenSmall + marks).replace(/^ · /, '')]
             .filter(Boolean)
             .join(' · ');
     }

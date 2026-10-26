@@ -193,6 +193,12 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         assert.deepEqual(tierGaps('mobile', { ...painted, streamTierByClass: {} }), []);
     });
 
+    it('says the stream card\'s tiers a canvas pass read, per look, in its line', () => {
+        const line = probeCoverageLine('canvas', { ...full, streamTierByClass: { 't-modern': { 0: 6, 2: 3 }, 't-rural': { 1: 3, 2: 3, 3: 2 } } });
+        assert.match(line, /stream card tiers read: t-modern 0:6\/2:3, t-rural 1:3\/2:3\/3:2/);
+        assert.doesNotMatch(probeCoverageLine('canvas', { ...full, streamTierByClass: undefined }), /stream card tiers/);
+    });
+
     it('owes a mark read on every look a pass painted but a private one (step 8f1)', () => {
         const painted = { sheetClasses: [...SHIPPED, 't-skeleton', 't-fixture-private'] };
         const marks = { 't-modern': 40, 't-neo': 40, 't-rural': 40, 't-skeleton': 40 };
@@ -341,7 +347,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
