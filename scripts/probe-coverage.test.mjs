@@ -14,6 +14,7 @@ import {
     GEOMETRY_PASSES,
     PAGE_PASSES,
     PASSES_OWING_NO_GEOMETRY,
+    STREAM_TIERS_OWED,
     WALL_PASSES,
     WALL_PASS_NAMES,
     owedFaults,
@@ -119,6 +120,8 @@ const full = {
     ),
     // Round 2: the phone pass owes every step of the card figures too.
     ...cardRead,
+    // The fifth review's ranked item 1: the stream card's money tiers, read on every look the canvas pass may paint.
+    streamTierByClass: Object.fromEntries(['t-modern', 't-neo', 't-rural', 't-skeleton'].map((cls) => [cls, { 1: 2, 2: 2, 3: 2 }])),
     // The Cycle card's ladder (2026-10-13): every step read on every look a
     // wall pass may paint.
     cycleFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, Object.fromEntries(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((step) => [step, 3]))])),
@@ -160,6 +163,34 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             skeleton: true,
         });
         assert.deepEqual(phone, ['the-skeletons-ladder-steps-the-rows-size read no tier-1 figure']);
+    });
+
+    it('owes the canvas pass the stream card\'s money tiers on every look it painted: tier 2 on all four, and tier 1 on Rural (the fifth review)', () => {
+        // Pinned by value: the two ladders `overlayTierCeilings` states, and what the two new fixtures paint with them.
+        assert.deepEqual(
+            Object.fromEntries(Object.entries(STREAM_TIERS_OWED).map(([cls, tiers]) => [cls, [...tiers]])),
+            { 't-modern': ['2'], 't-neo': ['2'], 't-rural': ['1', '2'], 't-skeleton': ['2'] },
+        );
+        const painted = { ...full, sheetClasses: [...SHIPPED, 't-skeleton'] };
+        const options = { shippedClasses: SHIPPED, skeleton: true };
+        // Only this rule's sentences: a pass that lists its classes owes a good deal else.
+        const tierGaps = (pass, report, opts = options) => probeCoverageGaps(pass, report, opts).filter((gap) => /money tier/.test(gap));
+        assert.deepEqual(tierGaps('canvas', painted), []);
+        // A look that read no tier 2, and Rural without a tier 1, each name the tier and the look.
+        const without = (cls, tiers) => ({ ...painted, streamTierByClass: { ...painted.streamTierByClass, [cls]: tiers } });
+        for (const cls of ['t-modern', 't-neo', 't-rural', 't-skeleton']) {
+            const gaps = tierGaps('canvas', without(cls, { 1: 2, 3: 2 }));
+            assert.equal(gaps.length, 1, cls);
+            assert.match(gaps[0], new RegExp(`money tier 2 was painted by no fixture on a ${cls} stall`));
+        }
+        const rural = tierGaps('canvas', without('t-rural', { 2: 1, 3: 1 }));
+        assert.equal(rural.length, 1);
+        assert.match(rural[0], /money tier 1 was painted by no fixture on a t-rural stall/);
+        // Modern, Neo and the skeleton owe no tier 1: their ladder (5, 7, 9) puts `from 123,456` at 2 and `from 1,234,567` at 3.
+        assert.deepEqual(tierGaps('canvas', without('t-neo', { 2: 1 })), []);
+        // A look the table does not name (a carried private look, the kit's) owes nothing, and a page pass owes none of it.
+        assert.deepEqual(tierGaps('canvas', { ...painted, sheetClasses: ['t-fixture-private'], streamTierByClass: {} }, { ...options, privateClasses: ['t-fixture-private'] }), []);
+        assert.deepEqual(tierGaps('mobile', { ...painted, streamTierByClass: {} }), []);
     });
 
     it('owes a mark read on every look a pass painted but a private one (step 8f1)', () => {

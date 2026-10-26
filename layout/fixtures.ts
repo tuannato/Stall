@@ -2042,6 +2042,36 @@ export const SCREENS: Record<string, StallView> = {
         broadcastCursor: 3,
     }),
     /*
+     * The stream card's money tier 2, and Rural's tier 1 (the lint-belts
+     * critic's fifth review, ranked item 1). `[data-tier='2']` is a value a
+     * look may match (`STATE_ATTRIBUTES`) and it sizes the figure the stream
+     * shows, but the fixtures that painted a card painted tiers 1 and 3
+     * only: `from 1,200` and `from 100,000,000`. A look's rule under a tier
+     * no screen paints is a figure no pass measures, so the card is painted
+     * at the two lengths between, each as the only listing so the cursor
+     * lands on it. The ladder counts the figure and 2 for `from`
+     * (`priceTier`), and each look's `overlayTierCeilings` cut it:
+     *
+     *   `from 123,456`   9 characters, 2 on Modern and Neo (5, 7, 9) and 1 on Rural (8, 10, 12)
+     *   `from 1,234,567` 11 characters, 3 on Modern and Neo, 2 on Rural
+     *
+     * Together they paint tier 2 on every look and tier 1 on Rural, and the
+     * runner owes each (`STREAM_TIERS_OWED`). Geometry only: the ink and the
+     * ground are `broadcast`'s, already sampled there.
+     */
+    'broadcast-from-123456': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 12_345_600n)] },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    }),
+    'broadcast-from-1234567': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 123_456_700n)] },
+        broadcast: bc('corner', 'fixed'),
+        broadcastState: 'live',
+        broadcastCursor: 0,
+    }),
+    /*
      * The other rail's card, on the same plate: `cards=quotes`.
      *
      * `broadcastCursor: 0` lands on the USD quote (`QUOTES` is insertion
@@ -2468,6 +2498,9 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'embed-sheet',
     'stream-sheet',
     'broadcast-hero',
+    // The stream card's tiers 1 and 2: `broadcast`'s plate and ink with a figure of another length.
+    'broadcast-from-123456',
+    'broadcast-from-1234567',
     // The remove question in place of a stepper: two words in the row's own
     // ink, on the ground `pay-several-strip` already samples.
     'pay-several-ask',
@@ -2692,6 +2725,8 @@ export const CANVAS_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-hero',
     'broadcast-clear',
+    'broadcast-from-123456',
+    'broadcast-from-1234567',
     'broadcast-quotes',
     'broadcast-quotes-clear',
     'broadcast-quotes-long-name',
@@ -2767,6 +2802,8 @@ export const NO_DECOR_SCREENS: ReadonlySet<string> = new Set([
     'broadcast',
     'broadcast-hero',
     'broadcast-clear',
+    'broadcast-from-123456',
+    'broadcast-from-1234567',
     'broadcast-quotes',
     'broadcast-quotes-clear',
     'broadcast-quotes-long-name',

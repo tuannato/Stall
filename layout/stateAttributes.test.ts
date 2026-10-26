@@ -16,30 +16,43 @@
  *   value the fixtures start to paint, or a state the belt starts to name,
  *   makes the entry stale and turns this red.
  *
- * The paint is happy-dom's, on the default look: attributes the app writes
- * with `setAttribute` are there, and attributes written after a layout
- * measure are not (the name ladder's rungs, the marquee's arming).
+ * The paint is happy-dom's, on every look the vitest run measures (Modern,
+ * Neo, Rural and the skeleton: the stream card's `data-tier` differs by
+ * look, since each states its own `overlayTierCeilings`): attributes the app
+ * writes with `setAttribute` are there, and attributes written after a
+ * layout measure are not (the name ladder's rungs, the marquee's arming).
+ *
+ * The fifth review made `data-format` (but `tag`) and `data-code` states
+ * (`STATE_EXCEPT_PAINTED`: no fixture paints `square`, `story`, `stream` or
+ * a pay code switched off), and painted `data-tier='2'` instead of naming it
+ * a state: it sizes the figure the stream shows, and a state may not size a
+ * figure. `broadcast-from-123456` and `broadcast-from-1234567` paint it.
  */
 import { describe, expect, it } from 'vitest';
 import { renderStall } from '../src/ui/render';
-import { PRESENCE_ATTRIBUTES, STATE_ATTRIBUTES, namesAState } from '../scripts/workshop-css.mjs';
+import { PRESENCE_ATTRIBUTES, STATE_ATTRIBUTES, STATE_EXCEPT_PAINTED, namesAState } from '../scripts/workshop-css.mjs';
 import { SCREENS, STAGED, handlers, stageScreen } from './fixtures';
 import { measuredLooks, paintView } from './looks';
 
-/** Every `name=value` and every `name` any probe screen paints on the default look, bare, with its staged state. */
+/** The looks a vitest run measures: the three shipped looks and the skeleton. */
+const MEASURED_CLASSES = ['t-modern', 't-neo', 't-rural', 't-skeleton'];
+
+/** Every `name=value` and every `name` any probe screen paints on any measured look, bare, with its staged state. */
 function paintedAttributes(): Set<string> {
-    const look = measuredLooks().find((l) => l.theme.sheetClass === 't-modern')!;
+    const looks = measuredLooks().filter((l) => MEASURED_CLASSES.includes(l.theme.sheetClass));
     const root = document.createElement('div');
     root.id = 'app';
     document.body.append(root);
     const seen = new Set<string>();
-    for (const [screen, view] of Object.entries(SCREENS)) {
-        renderStall(root, paintView(view, look, []), handlers);
-        stageScreen(screen, root);
-        for (const el of root.querySelectorAll('*')) {
-            for (const name of el.getAttributeNames()) {
-                seen.add(name);
-                seen.add(`${name}=${el.getAttribute(name)}`);
+    for (const look of looks) {
+        for (const [screen, view] of Object.entries(SCREENS)) {
+            renderStall(root, paintView(view, look, []), handlers);
+            stageScreen(screen, root);
+            for (const el of root.querySelectorAll('*')) {
+                for (const name of el.getAttributeNames()) {
+                    seen.add(name);
+                    seen.add(`${name}=${el.getAttribute(name)}`);
+                }
             }
         }
     }
@@ -49,9 +62,9 @@ function paintedAttributes(): Set<string> {
 
 /**
  * The values a look may match that no fixture paints and the belt does not
- * name, each with why. Pinned by value (`holds the gaps by value`). The first
- * two are painted by the probe in Chrome and by nothing in happy-dom; the
- * rest are fixtures the probe does not have, stated for the window.
+ * name, each with why. Pinned by value (`holds the gaps by value`). These are
+ * painted by the probe in Chrome and by nothing in happy-dom: the name
+ * ladder's rungs, written after a layout measure.
  */
 const UNPAINTED: Readonly<Record<string, string>> = Object.freeze({
     'data-name-tier=1': 'written after a layout measure (applyNameTiers), for a look that states --name-rungs: the tracked fixture look, in Chrome',
@@ -60,11 +73,6 @@ const UNPAINTED: Readonly<Record<string, string>> = Object.freeze({
     'data-name-tier=4': 'as data-name-tier=1',
     'data-name-tier=5': 'as data-name-tier=1',
     'data-name-tier=6': 'as data-name-tier=1',
-    'data-code=false': 'the shop window sheet with its pay code off: no fixture sets paycode=off',
-    'data-format=square': "the poster sheet's format: the fixtures paint print and tag only",
-    'data-format=story': 'as data-format=square',
-    'data-format=stream': 'as data-format=square',
-    'data-tier=2': "the stream card's price tier 2: the fixtures paint tiers 1 and 3",
 });
 
 describe('every-attribute-value-a-look-may-match-is-painted-or-is-a-state', () => {
@@ -83,17 +91,12 @@ describe('every-attribute-value-a-look-may-match-is-painted-or-is-a-state', () =
 
     it('holds the gaps by value, and none is stale: each is matchable, unpainted and not a state', () => {
         expect(Object.keys(UNPAINTED).sort()).toEqual([
-            'data-code=false',
-            'data-format=square',
-            'data-format=story',
-            'data-format=stream',
             'data-name-tier=1',
             'data-name-tier=2',
             'data-name-tier=3',
             'data-name-tier=4',
             'data-name-tier=5',
             'data-name-tier=6',
-            'data-tier=2',
         ]);
         for (const key of Object.keys(UNPAINTED)) {
             const [name, value] = [key.slice(0, key.indexOf('=')), key.slice(key.indexOf('=') + 1)];
@@ -101,6 +104,30 @@ describe('every-attribute-value-a-look-may-match-is-painted-or-is-a-state', () =
             expect(painted.has(key), `${key} is painted now: take it off UNPAINTED`).toBe(false);
             expect(namesAState(`[${name}='${value}']`), `${key} is a belt state now: take it off UNPAINTED`).toBe(false);
         }
+    });
+
+    it('paints every tier of the stream card a look may match, and makes the poster formats no fixture paints, and a pay code switched off, states (the fifth review)', () => {
+        // data-tier=2 is a money tier: painted, never a state (a state may not size a figure).
+        for (const tier of ['1', '2', '3']) expect(painted.has(`data-tier=${tier}`), `a probe screen paints data-tier=${tier}`).toBe(true);
+        expect(namesAState("[data-tier='2']"), "[data-tier='2'] is read at rest").toBe(false);
+        // The formats no fixture paints and the pay code off are states; the format that is painted is not.
+        for (const [name, value] of [
+            ['data-format', 'square'],
+            ['data-format', 'story'],
+            ['data-format', 'stream'],
+            ['data-code', 'false'],
+        ]) {
+            expect(painted.has(`${name}=${value}`), `no fixture paints [${name}='${value}']`).toBe(false);
+            expect(namesAState(`[${name}='${value}']`), `[${name}='${value}'] is a state`).toBe(true);
+            expect(namesAState(`.t-x:has([${name}='${value}'])`), `[${name}='${value}'] inside :has() is a state`).toBe(true);
+        }
+        expect(painted.has('data-format=tag'), 'a probe screen paints data-format=tag').toBe(true);
+        expect(namesAState("[data-format='tag']"), "[data-format='tag'] is read at rest").toBe(false);
+        // Fail closed on the partly painted names: presence, a flag, another operator and an unlisted value are states.
+        for (const selector of ['[data-format]', "[data-format='tag' i]", "[data-format*='tag']", "[data-format~='tag']", '[data-code]', "[data-FORMAT='story']"]) {
+            expect(namesAState(selector), `${selector} is a state`).toBe(true);
+        }
+        expect(STATE_EXCEPT_PAINTED).toEqual({ 'data-code': [], 'data-format': ['tag'] });
     });
 
     it('names the three states no fixture paints, and paints data-copied both ways (B3)', () => {

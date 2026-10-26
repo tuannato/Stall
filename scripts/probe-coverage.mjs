@@ -62,6 +62,10 @@
  * - **`small-text-is-at-least-11px`** reads the raised small-text nodes on
  *   the phone and desk passes; what it only reports (text under 11px inside
  *   an aria-hidden subtree) is printed on the pass's `compared:` line.
+ * - **The stream card's money tiers** (the fifth review's ranked item 1)
+ *   are counted per look (`streamTierByClass`) and the canvas pass owes
+ *   each look the tiers in `STREAM_TIERS_OWED`: tier 2 on every look, tier 1
+ *   on Rural.
  * - **`the-skeletons-ladder-steps-the-rows-size`** reads a tier-1, a tier-2
  *   and a tier-3 figure on the skeleton, at a phone, where the ladder applies.
  *
@@ -284,6 +288,23 @@ export const CARD_FIGURES_OWED = Object.freeze([
  * never counted, so a fifth figure can never stand in for a missing one.
  */
 export const CARD_LADDERS_OWED = Object.freeze(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
+/**
+ * The money tiers the stream card's price row (`data-tier` on `.bc-p`) is
+ * owed on each look the canvas pass paints (the lint-belts critic's fifth
+ * review, ranked item 1): tier 2 on every look and tier 1 on Rural, which
+ * `broadcast-from-123456` (`from 123,456`) and `broadcast-from-1234567`
+ * (`from 1,234,567`) paint with the older cards' tiers 1 and 3. Keyed by the
+ * ladder the look's row states (`overlayTierCeilings`: Modern, Neo and the
+ * skeleton 5, 7, 9; Rural 8, 10, 12) and pinned by value. A look not named
+ * here (the kit's, a carried private look's, whose ceilings are its own)
+ * owes nothing.
+ */
+export const STREAM_TIERS_OWED = Object.freeze({
+    't-modern': Object.freeze(['2']),
+    't-neo': Object.freeze(['2']),
+    't-rural': Object.freeze(['1', '2']),
+    't-skeleton': Object.freeze(['2']),
+});
 /** The touch wall's controls and held lines, by role: a pass that read none of one read nothing of it. */
 const WALL_ROLES = [
     'window-back',
@@ -510,6 +531,17 @@ export function probeCoverageGaps(
                     gaps.push(
                         `a-card-figure-steps-down-on-every-look compared the ${figure} ladder over ${tiers === '' ? 'no tier' : `tiers ${tiers.split('').join(', ')}`} on a ${cls} stall, not all four`,
                     );
+                }
+            }
+        }
+    }
+    // The stream card's money tiers (the fifth review): the canvas pass owes each look the tiers its ladder is painted at.
+    if (pass === 'canvas') {
+        const read = report.streamTierByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            for (const tier of STREAM_TIERS_OWED[cls] ?? []) {
+                if (!(((read[cls] ?? {})[tier] ?? 0) > 0)) {
+                    gaps.push(`the stream card's money tier ${tier} was painted by no fixture on a ${cls} stall: a look's rule under [data-tier='${tier}'] would be measured by no pass`);
                 }
             }
         }

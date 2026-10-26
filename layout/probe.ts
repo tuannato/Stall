@@ -52,7 +52,8 @@ import {
     wornOf,
     type Look,
 } from './looks';
-import { contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { COPIED_JOBS, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
@@ -2267,6 +2268,32 @@ type LadderTiers = Record<string, { min: number; max: number }>;
 const cardLadderSizes: Record<string, Record<string, Record<string, LadderTiers>>> = {};
 const cardLadderByClass: Record<string, Record<string, string>> = {};
 
+/*
+ * **The stream card's money tiers are read** (the lint-belts critic's fifth
+ * review, ranked item 1). A look may size the stream's figure under
+ * `[data-tier='2']` (it is a value of `STATE_ATTRIBUTES`), and the fixtures
+ * that painted a card painted tiers 1 and 3 only, so a rule under tier 2 was
+ * read by no pass. `broadcast-from-123456` and `broadcast-from-1234567` paint
+ * the two lengths between (`from 123,456` and `from 1,234,567`), which with
+ * the older cards put tier 2 on every shipped look and tier 1 on Rural. The
+ * tier each listing card's price row wore is counted per look
+ * (`streamTierByClass`, `"2"` for a row on the ladder's second step, `"0"`
+ * for a row with none); the runner owes the canvas pass the tiers in
+ * `STREAM_TIERS_OWED`, so a fixture that stopped painting one, or a ceiling
+ * that moved it, fails the run rather than leaving a rule under the tier
+ * unmeasured. Counting only: the card's figure is held by every other rule
+ * of the canvas pass (the dress, the spill, the cover and the self-clip).
+ */
+const streamTierByClass: Record<string, Record<string, number>> = {};
+function streamTierRead(): void {
+    const byLook = (streamTierByClass[measuringClass] ??= {});
+    for (const row of document.querySelectorAll<HTMLElement>('#app .bc-item .bc-p')) {
+        if (row.querySelector('[data-role="price"]') === null) continue;
+        const tier = row.getAttribute('data-tier') ?? '0';
+        byLook[tier] = (byLook[tier] ?? 0) + 1;
+    }
+}
+
 function cardFigureFaults(screen: string, label: string): Failure[] {
     const out: Failure[] = [];
     const byLook = (cardFigureByClass[measuringClass] ??= {});
@@ -3386,7 +3413,9 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   state — **any pseudo-class but sixteen structural ones, so `:placeholder-shown`
  *   and `:checked` and a name the lint has never met (`:--open` among them),
  *   and `[open]`, `[hidden]`, `[data-turn]`, `[data-state]`, `[aria-disabled]`
- *   and `[data-over]`** — sets colour, ground, border and outline colour (colour
+ *   and `[data-over]`, and `data-format` and `data-code` except for the one
+ *   value some screen paints (`data-format='tag'`; `STATE_EXCEPT_PAINTED`)**
+ *   — sets colour, ground, border and outline colour (colour
  *   only: no style, no width, no offset, no shorthand), a shadow of at most two
  *   outer layers and 16px of blur, a keyword cursor, transitions and the
  *   no-transform values, and nothing else, and the tap highlight is
@@ -3405,16 +3434,30 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   or `all`, masks read, a `var()` only as a palette role where it stands as a
  *   colour or as a mask's picture, never where it is a length). At rest, in
  *   a media block and in a keyframe, an outer shadow, a text shadow, a drop
- *   shadow, an outline and a border image name their own colour, and an
- *   outline is at most 4px wide and sits from -8px to 4px, per declaration
- *   (the fourth review's B2 and ranked item 1), so a colour under a state
- *   cannot reveal a ring or a shadow written in `currentColor`. Still unread
- *   under a state, in the first-party lint too: an ink's or a ground's
- *   contrast against what it stands on; the small ring the cap leaves (this
- *   pass reads an outline across the glyphs of its own box and of the boxes
- *   above a figure, never one on a box beside it); and a colour a state
- *   gives an element (not a pseudo-element) that a rule at rest moved over a
- *   figure with an offset, a negative margin or a transform and left clear;
+ *   shadow, an outline, a column rule and a border image name their own
+ *   colour, and an outline is at most 4px wide and sits from -8px to 4px, per
+ *   declaration (the fourth review's B2 and ranked item 1), so a colour under
+ *   a state cannot reveal a ring or a shadow written in `currentColor`. The
+ *   fifth review's B1–B3 and colour scheme add, in a first-party sheet: an
+ *   underline sits within 4px of its line and is at most 3px thick, a stroke
+ *   is at most 3 wide, and `d` is not written (an underline and a stroke are
+ *   drawn in the ink of their box and reach past it); no custom property
+ *   holds `currentColor` or `inherit` (a `var()` is substituted as tokens, so
+ *   it can bring the ink into a stop, a layer or a value wherever it stands);
+ *   a rule's `animation` names `none` or a keyframe its own sheet declares,
+ *   never through a `var()` (a base sheet's keyframes are global); and
+ *   `light-dark()` is not written and `color-scheme` is `normal` or `light`
+ *   (this pass paints one scheme). Still unread under a state, in the
+ *   first-party lint too: an ink's or a ground's contrast against what it
+ *   stands on; the small ring the cap leaves (this pass reads an outline
+ *   across the glyphs of its own box and of the boxes above a figure, never
+ *   one on a box beside it); a colour a state gives an element (not a
+ *   pseudo-element) that a rule at rest moved over a figure with an offset, a
+ *   negative margin or a transform and left clear; **an element that grows**
+ *   (its `width`, `height`, `zoom` or `scale`), which multiplies what a capped
+ *   ring, offset or stroke reaches, an outline's 4px in the box's own pixels
+ *   included; a blur's radius (`filter: blur()`, not capped), and
+ *   `filter: url()`, an SVG filter whose primitives the lint does not open;
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
@@ -7616,6 +7659,7 @@ for (const screen of measured) {
             failures.push(...statusLineFaults(screen, label));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...cardFigureFaults(screen, label));
+            streamTierRead();
             failures.push(...cycleFigureFaults(screen, label));
             failures.push(...figureInkFaults(screen, label));
             failures.push(...moneySelfClipFaults(screen, label));
@@ -8206,6 +8250,10 @@ declare global {
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
         __contrastPlan: () => ContrastJob[];
+        /** The measured looks whose sheet names `[data-copied]`, by class (`layout/sheetNaming.ts`). */
+        __namesCopied: () => string[];
+        /** The screens the plan samples for those looks (`COPIED_JOBS`). */
+        __copiedScreens: string[];
         /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
         __contrastOwed: () => { rain: string[]; horizon: string[] };
         /** The honest-display roles each sampled sheet screen owes, per viewport (`layout/honestDisplay.ts`). */
@@ -8262,10 +8310,19 @@ declare global {
  * judgement written down for the page screens. The rule itself is
  * `contrastScreens` in `contrastPlan.ts`, shared with the plan below.
  */
+/*
+ * Whether a measured look's sheet names `[data-copied]`, from the stylesheets
+ * this page loaded (`loadedSheetNames`): the staged address screens are
+ * sampled for contrast for those looks alone (`COPIED_JOBS`). The worn-only
+ * sheets are on the page by now (above); the runner holds the answer to the
+ * served sheets' text (`__namesCopied`).
+ */
+const namesCopied = (look: Look): boolean => loadedSheetNames('data-copied', look.theme.sheetClass);
 window.__contrastScreens = contrastScreens(
     window.innerWidth,
     new URLSearchParams(location.search).get('viewport') === 'canvas',
     measuredLooks(),
+    namesCopied,
 );
 /*
  * The whole pass as a list of jobs (step 3a, the step-3 critic's item 7):
@@ -8273,7 +8330,10 @@ window.__contrastScreens = contrastScreens(
  * it at the end. The screens at this page's own width are `__contrastScreens`
  * above, which the runner compares with the plan's at every viewport.
  */
-window.__contrastPlan = () => contrastPlan(measuredLooks());
+window.__contrastPlan = () => contrastPlan(measuredLooks(), namesCopied);
+/* The classes of the measured looks whose sheet names `[data-copied]`, as this page reads them, and the screens sampled for them. */
+window.__namesCopied = () => measuredLooks().filter(namesCopied).map((look) => look.theme.sheetClass).sort();
+window.__copiedScreens = [...COPIED_JOBS];
 /*
  * The jobs the runner holds to having worn the rain and Grid horizon at
  * their worst, for every measured look whose rows carry them
@@ -10160,6 +10220,8 @@ const verdict = {
     cardFigureByClass,
     /* The tiers each figure's painted ladder was compared over, per look (`a-card-figure-steps-down-on-every-look`). */
     cardLadderByClass,
+    /* The stream card's price rows read, per look and per money tier (`streamTierRead`). */
+    streamTierByClass,
     /* Cycle figures read per look and per step (`a-cycle-card-shows-every-digit-at-every-wall-size`). */
     cycleFigureByClass,
     /* Broken figures whose pieces were held to the figure's own ink, per look (`a-broken-figure-wears-the-figures-own-ink`). */

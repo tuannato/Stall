@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CONTRAST_VIEWPORTS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, type ContrastJob } from './contrastPlan';
+import { CONTRAST_VIEWPORTS, COPIED_JOBS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
@@ -231,5 +231,71 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
             jobs.filter((job) => job.look === SKELETON_LOOK_ID).map((job) => `${job.viewport}/${job.screen}`),
         );
         expect(shippedLooks().length).toBe(3);
+    });
+});
+
+/**
+ * The fifth review's ranked item 4: `addr-shown` and `addr-copied` are
+ * geometry only, so a custom property a rule under `[data-copied='true']`
+ * sets, if it feeds a paint, was read by no contrast job. They are sampled,
+ * at the phone and the desk, for each measured look whose sheet names the
+ * attribute (`NamesCopied`: the probe answers it from the loaded sheets,
+ * `layout/sheetNaming.ts`) — and for no other look, so the plan of a run
+ * that measures none is unchanged.
+ */
+describe('the-staged-address-screens-are-sampled-for-the-looks-that-name-them', () => {
+    const looks = measuredLooks();
+    const neo = looks.find((look) => look.id === NEO_CITY_THEME_ID)!;
+    const rural = looks.find((look) => look.id === 3)!;
+    const named = (...ids: number[]) => (look: Look): boolean => ids.includes(look.id);
+
+    it('is two geometry-only page screens, and plans nothing when no look names the attribute', () => {
+        expect([...COPIED_JOBS]).toEqual(['addr-shown', 'addr-copied']);
+        for (const screen of COPIED_JOBS) {
+            expect(GEOMETRY_ONLY_SCREENS.has(screen), `${screen} is geometry only`).toBe(true);
+            expect(CANVAS_SCREENS.has(screen), `${screen} is a page screen`).toBe(false);
+        }
+        const none = contrastPlan(looks);
+        expect(none.some((job) => COPIED_JOBS.includes(job.screen))).toBe(false);
+        // Nothing named, nothing different: the screens and the plan are the plan the ordinary run has.
+        expect(contrastPlan(looks, () => false)).toEqual(none);
+        for (const vp of CONTRAST_VIEWPORTS) {
+            expect(contrastScreens(vp.width, vp.canvas, looks, () => false)).toEqual(contrastScreens(vp.width, vp.canvas, looks));
+        }
+    });
+
+    it('plans both screens, bare and fully worn, at the phone and the desk, for a look that names it and for no other', () => {
+        const jobs = contrastPlan(looks, named(NEO_CITY_THEME_ID));
+        const copied = jobs.filter((job) => COPIED_JOBS.includes(job.screen));
+        expect(copied.map((job) => job.key)).toEqual(
+            ['mobile', 'desktop'].flatMap((vp) => COPIED_JOBS.flatMap((screen) => [0, WORN_ALL].map((flags) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${flags}`))),
+        );
+        expect(copied.every((job) => job.look === neo.id && job.sheetClass === neo.theme.sheetClass && job.reduced === undefined && job.tide === undefined)).toBe(true);
+        // Everything else is the plan it was, in its order: the new jobs are appended after the rain's, before the tide's.
+        expect(jobs.filter((job) => !COPIED_JOBS.includes(job.screen))).toEqual(contrastPlan(looks));
+        expect(new Set(jobs.map((job) => job.key)).size).toBe(jobs.length);
+        // Two looks naming it are each planned; a look that does not is not.
+        const two = contrastPlan(looks, named(NEO_CITY_THEME_ID, 3)).filter((job) => COPIED_JOBS.includes(job.screen));
+        expect(new Set(two.map((job) => job.look))).toEqual(new Set([NEO_CITY_THEME_ID, rural.id]));
+        expect(two.length).toBe(copied.length * 2);
+    });
+
+    it('lists the screens the page samples at each width, in the order the plan walks them', () => {
+        const names = named(NEO_CITY_THEME_ID);
+        const jobs = contrastPlan(looks, names);
+        for (const vp of CONTRAST_VIEWPORTS) {
+            const planned = [...new Set(jobs.filter((job) => job.viewport === vp.name).map((job) => job.screen))];
+            expect(contrastScreens(vp.width, vp.canvas, looks, names), vp.name).toEqual(planned);
+        }
+        // The canvas paints no page screen: nothing is added there.
+        expect(contrastScreens(1920, true, looks, names)).toEqual(contrastScreens(1920, true, looks));
+    });
+
+    it('adds the rain\'s all-worn jobs on its own screens only, though a look names the attribute and carries the rain', () => {
+        // Neo carries the rain and names [data-copied] in this case: its rain jobs are RAIN_JOBS' alone.
+        const jobs = contrastPlan(looks, named(NEO_CITY_THEME_ID));
+        expect(jobs.filter((job) => RAIN_JOBS.includes(job.screen) && job.tide === undefined).map((job) => job.key)).toEqual(
+            ['mobile', 'desktop'].flatMap((vp) => RAIN_JOBS.map((screen) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${WORN_ALL}`)),
+        );
     });
 });
