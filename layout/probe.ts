@@ -6552,8 +6552,11 @@ let dressSeekMs = 0;
  * can change no held longhand, and one that sets only an outer shadow on a
  * box every figure it reaches stands inside is not seeked at all
  * (`outerShadowOnly`: such a shadow paints outside that box). A background
- * that moves or grows (its position, its size) stays here: where a tile
- * lands is read at rest and at the last instant alone.
+ * that moves or grows (its position, its size) stays here for a box above
+ * the figure, whose background image the ground read does not read; on the
+ * figure or one of its own elements it is seeked (`SEEK_ON_OWN`, the fifth
+ * review's item 4: the critic's PGpos), and the ground read reads where its
+ * tile lands at each offset.
  *
  * **Nor a box's offsets, nor a size on a figure's own element** (the fifth
  * review's item 3, the critic's PTI; D (2)(a), the self-clip read at each
@@ -6596,9 +6599,24 @@ const SEEK_NEEDLESS: ReadonlySet<string> = new Set([
  * The `SEEK_NEEDLESS` longhands seeked all the same when the animated box is
  * one of a figure's own elements (`seekNeedless`): a size, which on a box
  * above is refused at its written value (`keyframeHeld`) and on the figure
- * itself is held by nothing but the self-clip read at the offset.
+ * itself is held by nothing but the self-clip read at the offset; and a
+ * background's position and size (before 8g2, the fifth review's item 4),
+ * which on a box above move a background image the ground read does not
+ * read there, and on the figure's own elements move the tile the ground read
+ * reads under its glyphs (`GROUND_SIGNATURE` names them, `layerCovers` reads
+ * where a tile lands). The critic's PGpos — Rural's quote `.item-x` on its
+ * own ink, `var(--s-text)`, under one tile of the page's ground, and a
+ * keyframe moving the tile 400px off the box from 25% to 68% of a loop —
+ * was never seeked, and passed the whole runner; the same paint at rest
+ * failed 28 times at 1.00:1.
  */
-const SEEK_ON_OWN: ReadonlySet<string> = new Set(KEYFRAME_SIZES_LIST);
+const SEEK_ON_OWN: ReadonlySet<string> = new Set([
+    ...KEYFRAME_SIZES_LIST,
+    'background-position',
+    'background-position-x',
+    'background-position-y',
+    'background-size',
+]);
 
 /**
  * The longhands a box's paints are read from by the ground read
@@ -6644,15 +6662,20 @@ const GROUND_ABOVE = GROUND_SIGNATURE.indexOf('background-image');
 
 /**
  * The longhands that change a box's paints and nothing a held read holds: a
- * background's colour or image (the shorthand is these to a keyframe), a
- * box shadow and its prefixed twin, a border's colour. An animation that
- * sets only these and `SEEK_NEEDLESS` longhands is seeked for the ground
- * read alone (`offsetGroundFaults`); the held reads, which no ground or
- * shadow can move, are not made at its seeks.
+ * background's colour or image (the shorthand is these to a keyframe), where
+ * its tile stands and how large (the fifth review's item 4), a box shadow
+ * and its prefixed twin, a border's colour. An animation that sets only
+ * these and `SEEK_NEEDLESS` longhands is seeked for the ground read alone
+ * (`offsetGroundFaults`); the held reads, which no ground or shadow can
+ * move, are not made at its seeks.
  */
 const GROUND_ONLY: ReadonlySet<string> = new Set([
     'background-color',
     'background-image',
+    'background-position',
+    'background-position-x',
+    'background-position-y',
+    'background-size',
     'box-shadow',
     '-webkit-box-shadow',
     'border-top-color',
@@ -6822,9 +6845,10 @@ function groundWalk(r: DressRead, target: Element): [Element, boolean][] {
  * says the animation, its box and the offset.
  *
  * **Not read, stated**: a box above's background image, here as at rest (a
- * decoration's paint, the contrast pass's on the screens it samples); a
- * ground that a background's position or size moves (`SEEK_NEEDLESS`); a
- * ground between two offsets; and a pseudo-element's animation.
+ * decoration's paint, the contrast pass's on the screens it samples), and so
+ * a ground its position or size moves (`SEEK_NEEDLESS` there; on the
+ * figure's own elements they are seeked, `SEEK_ON_OWN`); a ground between
+ * two offsets; and a pseudo-element's animation.
  */
 function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHere: { own: Map<Element, BoxPaints>; above: Map<Element, BoxPaints> }): string[] {
     if (!groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];

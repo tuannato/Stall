@@ -10668,6 +10668,28 @@ tracked fixture carried, each plant alone, the load in each log's `.meta`.
   needless there). No shipped keyframe sets an offset or a size on a box on a
   figure's walk (the beetle's `left` and `bottom` run on no box above money).
 
+### A moving background on the figure's own layer (item 4: PGpos)
+
+- PGpos (the critic's: Rural's quote `.item-x` takes `var(--s-text)`, its
+  own ink, as its background colour under one opaque tile of `var(--s-bg)`
+  that covers its box, and a keyframe sets `background-position: 0 -400px`
+  from 25% to 68% of a 100s loop, the figure on its own ink there; the
+  first-party look lint admits it, `KEYFRAME_GROUND` naming neither the
+  position nor the size) passed the whole runner (268s, load 4.9): the
+  animation was never seeked, `background-position` and `background-size`
+  being `SEEK_NEEDLESS`, though the figure's own `GROUND_SIGNATURE` already
+  holds both. The same paint at rest failed 28 times at 1.00:1.
+- The fix: the four longhands (`background-position`, its `-x` and `-y`, and
+  `background-size`) are seeked where the animated box is the figure or one
+  of its own elements (`SEEK_ON_OWN`), and read for the ground alone there
+  (`GROUND_ONLY` names them: they change a paint and no held longhand). On a
+  box above they stay needless: the ground read does not read a box above's
+  background image. On the clean tree no keyframe sets either on a figure's
+  own element: Modern's two sweeps run on the sign (`.stall-head`) and on
+  `.sparse-motif`, Neo's sheen and the Pinstripe run on boxes above
+  (`.item-head`, `.item`), and the rain, the aurora and the confetti on the
+  stall's root.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
