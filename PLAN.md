@@ -1104,8 +1104,48 @@ money path this app can have, because nothing on it is derived.
      under another box (1a); a `.fig-say` parent that is no money node (the
      self-clip rule's own subjects); a value between two offsets; two
      animations at once. And the end read's prune rests on Chrome's clipping
-     as measured per display (`CLIPPING_DISPLAYS`, Chrome 156 only) and, for
-     a positioned box under the animated one, on reading alone (not planted).
+     as measured per display (`CLIPPING_DISPLAYS`, Chrome 156 only). Its
+     positioned-descendant condition bears no load there: the sixth review
+     measured that a transform animation filled forwards keeps its box the
+     containing block at a computed `none`, and its PPD read the same with
+     and without it; it stands as a belt for another engine.
+
+- **Before 8g2, the sixth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-6.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  sixth review's fixes"). Not built:
+  1. **`mask-position-x` as a twin** (the critic's P3): `PREFIXED_TWINS`
+     maps `-webkit-mask-position-x` and `-y` to no twin, measured in Chrome
+     156 alone; Firefox may read `mask-position-x` and `-y` (not checked:
+     no network). The refusal now says the name less the prefix "names no
+     property Chrome reads", true either way; whether a first-party sheet
+     should instead be held to write `mask-position-x` beside it is open. No
+     served sheet writes either.
+  2. **The `offsetHeld` pins hold text, not choice**: they pin the blocks
+     that make the offset reads, guards and style reads included, and
+     `movesOtherBoxes`, not which animations on a figure's walk reach them
+     (`seekNeedless`, `outerShadowOnly`, `groundOnly`, the timing set for
+     the seek) nor the helpers they call. A mutation there is caught by the
+     probe's red proofs alone.
+  3. **What a keyframe off a figure's walk does to it, but cut its text**:
+     such an animation is seeked for the self-clip read alone, so one that
+     spills the figure over another box, lays a box over it or changes its
+     ground between the instants is read by nothing.
+  4. **A ground box above that moves while the glyphs stand still**: its
+     offsets or a margin over a figure positioned against a box above it
+     (a size there is refused at its written value) changes no
+     `GROUND_SIGNATURE` longhand and no text rect, and the ground is not
+     read again.
+  5. **`MOVES_NO_OTHER_BOX` rests on reading**: that the paints, the
+     compositing, a transform, a motion path and a box's offsets move no box
+     but the animated one and what it holds was read from CSS, not planted
+     property by property; a figure not rendered at the pass's last instant
+     is not read at an offset (a keyframe that renders it is refused in a
+     first-party sheet; the kit's road is unread).
+  6. **A code's modules between instants**: the code hold, its place read
+     included, reads a code at the pass's last instant; a keyframe that
+     carries the modules off the matrix between the instants is read by
+     nothing (not planted).
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

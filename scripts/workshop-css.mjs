@@ -3046,8 +3046,11 @@ const TAP_HIGHLIGHT = '-webkit-tap-highlight-color';
  * lists nor reads (`CSS.supports`), save the two every engine reads under
  * the prefix (`PREFIXED_EVERYWHERE`). Each maps to the property that is its
  * twin and takes the same value — the mask border's standard name, and the
- * logical box sides and sizes — or to `null` where none does, and then no
- * twin can make it paint in another engine. Read for a first-party sheet
+ * logical box sides and sizes — or to `null` where none does, and then the
+ * property is refused outright: its sentence says the name less the prefix
+ * is none Chrome reads, which is what was measured — another engine may
+ * read one (Firefox's `mask-position-x` and `-y` were not checked, with no
+ * network; PLAN § Open). Read for a first-party sheet
  * alone (`lintLookSheet`): the kit keeps the plain rule the workshop README
  * states, and a twin there is the name less its prefix
  * (`the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin`). A
@@ -3760,7 +3763,7 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         const known = prefixed !== null && firstParty && Object.hasOwn(PREFIXED_TWINS, prop);
         if (known && PREFIXED_TWINS[prop] === null) {
             out.push(
-                `${shown} — ${prop.slice(prefixed[0].length)} is no CSS property, and ${prop} has no unprefixed twin: it paints only in the engines that read the prefix, and no twin beside it makes it paint in another`,
+                `${shown} — ${prop.slice(prefixed[0].length)} names no property Chrome reads, and ${prop} has no unprefixed twin there: it paints only in the engines that read the prefix, and this lint holds it to no twin`,
             );
         } else if (prefixed !== null) {
             const twin = known ? PREFIXED_TWINS[prop] : prop.slice(prefixed[0].length);

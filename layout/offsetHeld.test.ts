@@ -63,10 +63,10 @@ function heldCases(): { labels: string[]; body: string }[] {
     return groups;
 }
 
-/** `offsetDressFaults`'s body, comments out and whitespace flattened to one space: the loops are pinned on it. */
-function offsetReadBody(): string {
-    const start = PROBE.indexOf('function offsetDressFaults(');
-    expect(start, 'layout/probe.ts declares offsetDressFaults').toBeGreaterThanOrEqual(0);
+/** A function's body in the probe, comments out and whitespace flattened to one space: the loops are pinned on it. */
+function flatBody(name: string): string {
+    const start = PROBE.indexOf(`function ${name}(`);
+    expect(start, `layout/probe.ts declares ${name}`).toBeGreaterThanOrEqual(0);
     const end = PROBE.indexOf('\n}\n', start);
     return PROBE.slice(start, end)
         .split('\n')
@@ -74,6 +74,7 @@ function offsetReadBody(): string {
         .join('\n')
         .replace(/\s+/g, ' ');
 }
+const offsetReadBody = (): string => flatBody('offsetDressFaults');
 
 /** A function's body in the probe, by name, from its head to its closing line. */
 function bodyOf(name: string): string {
@@ -185,21 +186,74 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         expect([...geometry].sort()).toEqual([...nothing].sort());
     });
 
-    it('asks every longhand of OFFSET_HELD_OWN, BOX_HELD and the rest at each offset: the loops are pinned whole, not only the lists', () => {
-        // The fifth review's item 8: a loop over `OFFSET_HELD_OWN.filter(p => p !== 'font-size-adjust' && p !== 'text-indent')`
-        // left the definition the test held and read neither longhand. The loops that ask the lists are held here as written.
+    /*
+     * The fifth review's item 8: a loop over `OFFSET_HELD_OWN.filter(p => p !==
+     * 'font-size-adjust' && p !== 'text-indent')` left the definition the test
+     * held and read neither longhand; and the sixth review's three mutations
+     * of the guards around the loops (m1: the own-element guard `el !== target
+     * && !target.contains(el)` cut to `el !== target`, which reads no own
+     * element under the animated box; m2: the held loop's style read off the
+     * stall, `getComputedStyle(r.stall)`; m3: the box loop started at the
+     * target, which skips every box between the figure and it) left all six
+     * tests green. So each block is pinned whole, from its loop head to the
+     * end of the reads it makes, guards and style reads included. **The
+     * limit, stated**: these pin the text of the blocks that make the reads
+     * (and `movesOtherBoxes`, below), not which animations on a figure's walk
+     * reach them (the walk, `seekNeedless`, `outerShadowOnly`, `groundOnly`,
+     * the timing set for the seek) nor the helpers they call
+     * (`dressHeldFault`, `boxHeldFault`, `selfClipSentences`,
+     * `groundStackFault`, `figuresOnThePaint`); a mutation there is the
+     * probe's red proofs' to catch (`layout/PROBE-RULES.md`). An equivalent
+     * rewrite fails the pin, and the pin is rewritten with it.
+     */
+    it('asks every longhand of OFFSET_HELD_OWN, BOX_HELD and the rest at each offset: the blocks are pinned whole, guards included', () => {
         const body = offsetReadBody();
-        for (const loop of [
-            'for (const prop of OFFSET_HELD_OWN) { const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs); if (why !== undefined) found.push(`${elName}: ${why}, ${at}`); }',
-            'for (const prop of dressReadList().rest) { const value = cs.getPropertyValue(prop); if (value !== (ref.get(prop) ?? \'\')) found.push(',
-            'for (const prop of BOX_HELD) { const why = boxHeldFault(prop, cs.getPropertyValue(prop), box); if (why !== undefined) found.push(`${describe(box)} above it: ${why}, ${at}`); }',
+        for (const block of [
+            // The figure's own elements under the animated box: the held longhands, then the rest against the reference.
+            'for (const el of r.own) { if (el !== target && !target.contains(el)) continue; const cs = getComputedStyle(el); const elName = el === r.node ? \'it\' : describe(el); ' +
+                'for (const prop of OFFSET_HELD_OWN) { const why = dressHeldFault(prop, cs.getPropertyValue(prop), cs); if (why !== undefined) found.push(`${elName}: ${why}, ${at}`); } ' +
+                'const ref = dressReference(r.stall); for (const prop of dressReadList().rest) { const value = cs.getPropertyValue(prop); if (value !== (ref.get(prop) ?? \'\')) found.push(',
+            // Every box from the figure's parent up to the animated box.
+            'if (target !== r.node && target.contains(r.node)) { for (let box = r.node.parentElement; box !== null; box = box.parentElement) { const cs = getComputedStyle(box); ' +
+                'for (const prop of BOX_HELD) { const why = boxHeldFault(prop, cs.getPropertyValue(prop), box); if (why !== undefined) found.push(`${describe(box)} above it: ${why}, ${at}`); } ' +
+                'if (box === target) break; } }',
+            // The self-clip read: whose figures, and the read at each offset.
+            "const clipped: [HTMLElement, string[]][] = movesOthers ? figuresOnThePaint() : (reads ?? []).filter((r) => !onlyGround && r.node.matches(MONEY_FIGURES)).map((r) => [r.node, r.clip]);",
+            'for (const [node, list] of clipped) { if (list.length > 0 || selfClipCutNow.has(node) || !selfClipReads(node)) continue; dressSeek.clips += 1; const cut = selfClipSentences(node); if (cut.length > 0) { list.push(`${cut[0]}, ${at}`); dressSeek.faults += 1; } }',
         ]) {
-            expect(body, loop).toContain(loop);
+            expect(body, block).toContain(block);
         }
-        // Each list is asked in the read exactly once, and only through its pinned loop.
-        for (const list of ['OFFSET_HELD_OWN', 'BOX_HELD', 'dressReadList()']) {
+        // Each list is asked in the read exactly once, and only through its pinned block.
+        for (const list of ['OFFSET_HELD_OWN', 'BOX_HELD', 'dressReadList()', 'selfClipSentences(']) {
             expect(body.split(list).length - 1, list).toBe(1);
         }
+        // And the ground read at an offset: its trigger (a signature changed on the walk, or the text moved) and the own elements it reads.
+        const ground = flatBody('offsetGroundFaults');
+        for (const block of [
+            'const inkMoved = inkSignature(r.node) !== restInk.get(r.node); if (!inkMoved && !groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];',
+            'for (const el of r.own) { if (el !== target && !target.contains(el)) continue; const why = groundStackFault(el, getComputedStyle(el), r.stall, () => inkLines(el));',
+        ]) {
+            expect(ground, block).toContain(block);
+        }
+    });
+
+    it('seeks for the self-clip read every keyframe that can move another box, and calls none of the layout longhands paint-only', () => {
+        // The sixth review's PSQ2: a sibling's keyframe margin cut the pay figure, and nothing off the figure's walk was seeked.
+        expect(flatBody('movesOtherBoxes')).toContain('const props = keyframeProps(anim, effect); return props === undefined || ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop));');
+        expect(offsetReadBody()).toContain('movesOthers = movesOtherBoxes(anim, effect);');
+        const still = setOf('MOVES_NO_OTHER_BOX');
+        expect(still.length).toBeGreaterThan(60);
+        const layout = [
+            ...setOf('KEYFRAME_SIZES_LIST'),
+            ...['top', 'right', 'bottom', 'left'].flatMap((side) => [`margin-${side}`, `padding-${side}`, `border-${side}-width`, `border-${side}-style`]),
+            ...['margin', 'padding'].flatMap((box) => ['block-start', 'block-end', 'inline-start', 'inline-end'].map((side) => `${box}-${side}`)),
+            'font-size', 'font-family', 'font-weight', 'font-style', 'font-stretch', 'font-size-adjust', 'font-variation-settings', 'font-feature-settings',
+            'letter-spacing', 'word-spacing', 'text-indent', 'line-height', 'white-space', 'text-transform', 'writing-mode', 'direction',
+            'display', 'position', 'float', 'zoom', 'content-visibility', 'contain', 'order', 'flex-grow', 'flex-shrink', 'grid-area', 'gap', 'row-gap', 'column-gap',
+            'box-sizing', 'aspect-ratio', 'overflow-x', 'overflow-y', 'justify-content', 'align-items', 'align-self', 'flex-direction', 'flex-wrap', 'content',
+        ];
+        for (const prop of layout) expect(still, `MOVES_NO_OTHER_BOX calls ${prop}, which moves other boxes, paint-only`).not.toContain(prop);
+        for (const prop of still) expect(prop.startsWith('--'), `MOVES_NO_OTHER_BOX names ${prop}, a custom property, which can feed any longhand`).toBe(false);
     });
 
     it('reads at the offsets every longhand the fourth review found left out, PFA among them', () => {

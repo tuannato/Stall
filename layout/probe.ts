@@ -1401,9 +1401,13 @@ function boxClips(at: Element, cs: CSSStyleDeclaration): boolean {
  * (`END_MOOT_PROPS`, read as the offset read reads them, `keyframeProps`);
  * its box, or for a pseudo-element its owner, holds no node 1a asked; no
  * element under it, and no `::before` or `::after` of it or of one of them,
- * is absolutely or fixed positioned (its containing block could stand
- * outside the clip once the transform ends at `none`; added by reading, not
- * planted); it stands inside a box that clips on both axes — an `overflow`
+ * is absolutely or fixed positioned — a conservative belt, not one this read
+ * rests on: added by reading for a containing block that would stand outside
+ * the clip once the transform ended at `none`, and in Chrome 156 a transform
+ * animation filled forwards keeps its box the containing block of what it
+ * positions even at a computed `none` (the sixth review measured it, and its
+ * PPD read the same with and without this condition), so it has no effect
+ * there; kept for an engine that drops the containing block; it stands inside a box that clips on both axes — an `overflow`
  * but visible each way, or a painting `contain`, **on a box that clips**
  * (`boxClips`: an HTML element of a display Chrome clips by,
  * `CLIPPING_DISPLAYS`, with a box that is not empty) — with no absolutely or
@@ -1438,7 +1442,9 @@ function endMoot(anim: Animation): boolean {
     if (coverAsked.some((a) => el === a.node || el.contains(a.node))) return false;
     const positioned = (cs: CSSStyleDeclaration): boolean => cs.position === 'absolute' || cs.position === 'fixed';
     if (pseudo !== null && positioned(getComputedStyle(el, pseudo))) return false;
-    // Nothing under the animated box that a containing block outside the clip could carry past it.
+    // Nothing under the animated box positioned against a containing block that
+    // could stand outside the clip: a belt (Chrome 156 keeps a forwards-filled
+    // transform's containing block at a computed none).
     if (pseudo === null) {
         for (const e of [el, ...el.querySelectorAll('*')]) {
             if (e !== el && positioned(getComputedStyle(e))) return false;
@@ -7604,8 +7610,11 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  * other such look, `probe-coverage.mjs`).
  * **Not read, stated**: a box above the code (its fades are the cover
  * rules' and the quiet zone's), the code's size beyond its squareness (the
- * pay code's width is the gate's), and the pixels (the quiet-zone read's,
- * on the contrast jobs).
+ * pay code's width is the gate's), the pixels (the quiet-zone read's, on
+ * the contrast jobs), and a code between the pass's instants: the hold and
+ * its place read read a code where the pass's last instant left it, so a
+ * keyframe that carries its modules off the matrix there is read by nothing
+ * (not planted).
  */
 const QR_COLOUR_CHECK = 'a-code-is-drawn-black-on-white';
 const qrColourByClass: Record<string, { painted: number; read: number }> = {};

@@ -10882,6 +10882,221 @@ masks above (6.44–6.57s over three runs), the end read's from 0.99s to
 the branch +10.3s (the critic's matched pair) and +12.3s and +15.6s (the
 builder's). 57–60s stand under the 300s ceiling.
 
+## Before 8g2: the sixth review's fixes (2026-10-27; CRITIC-6)
+
+The critic's sixth review on before-8g2 (`private/design/workshop-2026-09-23/before-8g2/CRITIC-6.md`,
+its plants in `critic6/plants/`), decided by the window on the critic's
+recommendations: every item a probe read or a statement, no new look
+restriction. The plants, logs and tools of this round are in
+`before-8g2/critic6-fixes/`. A whole-runner count is the whole runner, two
+tabs, the tracked fixture carried, each plant alone, the load in each log's
+`.meta`; a quick read is one probe page at one size over named screens (or
+all of them), its log opening with an uptime line.
+
+### Where a code's modules land (item 1: PQP)
+
+- PQP (the critic's: `.t-modern .qr path { offset-path: ray(0deg);
+  offset-distance: 400px }`; the first-party look lint admits it) passed the
+  whole runner (250s): every Modern code painted as its white square, the
+  path carried off the svg, which clips it, while its computed `transform`
+  stayed `none`. The hold read a list of properties (`QR_NONE`), and not
+  `offset-path`; 1a hit the white rect, the code's own; the square check,
+  the per-screen owe and the quiet zone all held.
+- The fix: `offset-path` joins `QR_NONE`, and the hold reads where the
+  modules land (`qrPlaceFault`): the path's `d` must span the matrix its
+  viewBox and `qrSvg`'s quiet zone make (`QR_SVG_QUIET_MODULES`, exported by
+  `render.ts`, which draws the code with it), and on screen the path's box
+  must stand inside the svg's box and on that matrix area of the square the
+  svg draws into (its content box, letterboxed `xMidYMid meet`, as the
+  quiet-zone read reads it), each edge within a pixel. Where a box above the
+  code is turned, scaled, moved or on a motion path, those are held off for
+  the read through the CSSOM (`QR_FRAME_HELD`, `withHeldOff`, the mechanism
+  `withTransformsHeldOff` uses). The svg's own transforms are held `none` by
+  the list before the place is read.
+- Proved two ways. **PQP** whole runner, exit 1, the hold alone: 35 / 78 /
+  122 / 130 / 130 / 97 / 130 ×5 / 29, and 5 and 3 under reduced motion
+  ("its modules: offset-path ray(0deg)"), PQC's counts. With `offset-path`
+  taken out of `QR_NONE` (a quick read at 390, all 82 screens), the place
+  read alone failed the same 35 ("its modules stand at 58,-1609 275×275,
+  outside its own box at 27,748 336×336, which clips them"). **PQPs** (new:
+  the same motion path, `ray(90deg)` at `offset-distance: 2px`, two of the
+  path's own units: the modules 10px right, inside the svg's box and off
+  its matrix), with `offset-path` out of the list, a quick read at 390: 35
+  ("10.4px off the matrix at 58,779 275×275 that its viewBox and quiet zone
+  put them in"). The clean tree read 0 at 390, 1280 and on the canvas
+  (quick reads of every screen).
+
+### A keyframe off the figure's walk (item 2 and P1-a: PSQ2)
+
+- PSQ2 (the critic's: at desk width `.pay-x` nowrap, `.pay-x-n` at
+  `min-width: 0; overflow-x: clip`, whole at rest; a keyframe
+  `margin-inline-start: calc(100% - 70px)` on its unit sibling `.item-u`
+  from 30% to 40% of a 100s loop; at 35% 62px of "5,250" cut; the
+  first-party look lint admits it) passed the whole runner (244s): the
+  offset read seeked only animations on a figure's walk (its own elements
+  and the boxes above it), and the money size lint's docblock and CLAUDE.md
+  said the probe reads what a keyframe margin does to a money figure.
+- The fix (the window's 2b): every animation, a pseudo-element's included,
+  whose keyframes set a longhand that can move a box other than its own is
+  seeked at its keyframe offsets, and the self-clip read is made there for
+  every money figure on the paint (`movesOtherBoxes`, read from the
+  `@keyframes` rule as the offset read reads it). The list of longhands that
+  move no other box is `MOVES_NO_OTHER_BOX`, with its reason: the paints,
+  the compositing, and a transform, a motion path or a box's offsets, which
+  move only the animated box and what it holds — and a figure the animated
+  box holds is on its walk, read already. Anything else — a size, a margin,
+  a padding, a border's width or style, a font, a spacing, an indent,
+  `zoom`, `content-visibility`, a custom property, a property the list does
+  not name, a rule the page cannot read — is seeked. **Not strictly
+  "paint-only"**: the brief's word; transforms and offsets are on the list
+  because they move no box but the animated one's own subtree, which the
+  walk's read covers (and the self-clip read holds the turns off). One on a
+  figure's walk does both reads at the same seeks.
+- **The cost, measured.** The first version gathered every money figure and
+  decided every animation's rule on every paint: the offset read's page
+  time rose about 0.1s a page pass (quick reads of every screen, commit 1
+  against commit 2, two rounds: 390 543–584 → 688–694ms, 1280 677–680 →
+  809–812ms), with nothing more seeked. It now gathers the paint's figures
+  the first time an animation that can move another box needs them, reads
+  only those the self-clip rule reads at the pass's last instant, decides a
+  CSS animation's rule once a name while the sheets stand, and seeks
+  nothing for the self-clip read alone on a paint with no figure: the same
+  A/B against the gathered-lazily version read 542–586 → 586–590ms at 390
+  and 658–664 → 674–698ms at 1280 (two rounds), and with the no-figure skip
+  565ms and 675ms (one read), within the noise of commit 1; the clean run's
+  counts are those of `35a33bd` exactly (177 animations, 355 seeks, 2,047
+  figure reads, 2,044 self-clip reads at 390; 0 seeked for the self-clip
+  read alone on any pass). Under the brief's 3s stop line.
+- Proved: **PSQ2** whole runner, exit 1, the self-clip rule 23 at 1280 and
+  none elsewhere (the plant is desk-only, and no wall paints a pay sheet),
+  every one "with t-modern-sq2 on span.item-u seeked to its keyframe at
+  30%". A quick read of five pay screens at 1280 read 11.
+- The money size lint's "not named" docblock (`scripts/workshop-css.mjs`)
+  and CLAUDE.md §6 now say where each read is made: `font-size-adjust` and
+  a negative indent held on the figure or a box above it, a cut wherever
+  the keyframe runs, a spill, a cover and a value between offsets by
+  nothing.
+
+### The ground read's trigger (P1-b and P1-c: PGatt3, PGpad)
+
+- PGatt3 (the critic's: Modern's quote `.item-x` on its own ink,
+  `currentColor`, under one 1000×100 tile of `var(--s-bg)`, and a keyframe
+  `background-attachment: fixed` from 30% to 40% of a 100s loop, off the
+  wall) passed the whole runner (246s): the animation was seeked and its
+  ground never read again, `GROUND_SIGNATURE` not naming the attachment.
+  PGpad (the critic's: the same figure under a 100%×60px tile and a
+  keyframe `padding-top: 80px`, the glyphs 80px down on the ink) passed
+  too: no signature longhand changes when the glyphs move over a ground that
+  stays.
+- The fix: `background-attachment` joins the signature after
+  `background-image` (so a box above keeps `GROUND_ABOVE`), and the four
+  paddings join it before (they place a box's content box, where a
+  background may be clipped or placed); `background-attachment` joins
+  `GROUND_ONLY`. And the ground is read again where a seek moved the
+  figure's text (`inkSignature`: its text's client rects to a hundredth of
+  a pixel, against the pass's last instant), which reads PGpad and an
+  indent or a margin that moves the glyphs off their ground.
+- **The static pin**:
+  `the-ground-signature-names-every-longhand-the-ground-read-reads`
+  (`layout/offsetHeld.test.ts`) parses `boxPaintsOf` and the one helper it
+  hands its style to (`borderImageReach`, and no other: held), and holds
+  every longhand read of any box to the signature before `GROUND_ABOVE`
+  (pinned, with `groundSignature`'s slice) and every one read of a figure's
+  own elements alone to the whole list; no longhand is excluded today, and
+  an exclusion must be read. Red by three mutations, each alone, restored:
+  the attachment out, `padding-top` out, `padding-left` moved after
+  `background-image` (1 of 8 failing each).
+- Proved, whole runner, each exit 1, at 390 / 1280 / 360 (the plants are off
+  the wall): **PGatt3** the dress rule 76 / 76 / 64; **PGpad** 76 / 76 / 64;
+  **PGind** (new: the same figure under a 600px-wide tile and a keyframe
+  `text-indent: 1000px`) the dress rule 44 / 66 / 38, beside the self-clip
+  rule's 76 / 120 / 64, which the commit before already read; **PGmar** (new:
+  the figure in a 60px row with a 100px bottom border in its own ink, and a
+  keyframe `margin-top: 80px` on the figure, its own paints moving with it)
+  the dress rule 66 / 66 / 54. Quick reads on three quote screens at 390,
+  on the commit before as the control: PGatt3 0 → 16, PGpad 0 → 16, PGind
+  ground 0 → 14 (self-clip 28 both), PGmar 0 → 16.
+
+### Pins and statements (the P3s)
+
+- **The offset read's blocks are pinned whole** (`layout/offsetHeld.test.ts`):
+  the own-element block from its loop head through its guard, its style
+  read and both loops; the box block from its guard through the walk up to
+  the target; the self-clip read's figures and its loop; the ground read's
+  trigger and its own-element loop; and `movesOtherBoxes`, with
+  `MOVES_NO_OTHER_BOX` held to name no layout longhand and no custom
+  property. Red, each mutation alone, restored: the critic's m1 (the
+  own-element guard cut to `el !== target`), m2 (the held loop reading the
+  stall's style) and m3 (the box loop started at the target), green on
+  `35a33bd`, now 1 of 8 failing each; and m5 (the layout-wide read handed no
+  figures), m6 (the ink trigger off), m7 (the self-clip loop skipping the
+  pay figure), m8 (`movesOtherBoxes` answering false) and m9
+  (`margin-inline-start` called paint-only), each 1 failing. **The limit,
+  stated in the test**: the pins hold the blocks' text and
+  `movesOtherBoxes`, not which animations on a figure's walk reach them
+  (`seekNeedless`, `outerShadowOnly`, `groundOnly`, the seek's timing) nor
+  the helpers they call; those are the probe's red proofs'.
+- **The prune's positioned-descendant condition** (`endMoot`): its docblock
+  said a containing block "could stand outside the clip once a transform
+  ends at `none`". The critic measured in Chrome 156 that a transform
+  animation filled forwards keeps its box the containing block of what it
+  positions even at a computed `none`, and PPD read the same with and
+  without the condition: it is a belt, said so, and kept.
+- **`PREFIXED_TWINS`' `null` entries**: the refusal said the name less the
+  prefix "is no CSS property"; Firefox may read `mask-position-x` and `-y`
+  (not checked: no network). It says "names no property Chrome reads" now,
+  true either way, and PLAN § Open carries the question.
+- PLAN § Open gains the sixth review's list.
+- The code hold's docblock and CLAUDE.md §6 now say it reads a code where
+  the pass's last instant left it: a keyframe that carries the modules off
+  the matrix between the instants is read by nothing (not planted; PLAN §
+  Open).
+
+### Red proofs on the final tree, the whole runner, each plant alone
+
+Counts per pass: 390 / 1280 / canvas / portrait / tablet / desk-wall /
+short-wall / side-tablet / hd-wall / tall-tablet / narrow-wall / 360, where a
+pass is not named. Every one exit 1, on `48de815` (whose probe is the
+ground fix's, `197de12`, but for comments), the load 3.3–7.3 at the ends:
+
+- **PTI** the self-clip rule 23 / 23 / 23 (390 / 1280 / 360).
+- **PQC** the hold 35 / 78 / 122 / 130 / 130 / 97 / 130 ×5 / 29, and 5 and 3
+  under reduced motion; **PQM** the same, and the quiet zone's 31; **PQP**
+  the same as PQC.
+- **PF2** and **PFC** 1a 53 / 73 / 109 / 140 / 91 / 91 / 100 / 99 / 100 / 100 /
+  92 / 29; **PFCb** 53 / 73 / 71 / 102 / 46 / 86 / 95 / 90 / 95 / 48 / 38 / 29.
+- **PGpos** and **PMk** the dress rule 76 / 94 / 333 / 351 / 78 / 60 / 78 ×5 /
+  64.
+- **PSQ2** the self-clip rule 23 at 1280.
+
+Each is the count the round before reported (PTI, PQC, PQM, PF2, PFC,
+PFCb, PGpos, PMk) or this round's own commit reported (PQP, PSQ2): nothing
+the fixes touched moved a count. The clean tree, `197de12`: exit 0, 250.0s
+(load 4.7 at the end), 0 failures; the offset read's counts those of
+`35a33bd` exactly, 0 seeked for the self-clip read alone on any pass.
+
+### Cost of the round
+
+Two pairs back to back on this Mac, main (`c1f3e97`) then the branch
+(`6cbb85a`), two tabs, the tracked fixture carried (796 contrast jobs), no
+other probe running, each run started once the one-minute load was under 2.5
+(2.36–2.47 at the starts, 3.6–4.6 at the ends):
+
+| Pair | Main | Branch | Load at start (main, the branch) |
+|---|---|---|---|
+| 1 | 228.1s | 238.1s | 2.40, 2.36 |
+| 2 | 223.5s | 244.0s | 2.45, 2.47 |
+
+The branch is +10.0s and +20.5s (median 225.8s against 241.1s): its geometry
+walk 91.7 → 118.0s and 90.5 → 119.9s, its contrast pass 127.9 → 112.5s and
+125.6 → 116.5s. Against the round before's own figures — the branch at
+`35a33bd` 233.6s in the critic's pair (geometry 113.4s), 240.2–243.2s in the
+builder's (geometry 117.6–120.4s) — this round adds no more than the noise
+between pairs. The offset read's page time, summed over the geometry passes
+on two tabs, is 6.80s and 6.85s, against 6.08s in the critic's run of
+`35a33bd` at a load of 1.7 and 6.44–6.57s in the builder's: under 1s summed,
+under the brief's 3s stop line. 56–62s stand under the 300s ceiling.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

@@ -2074,7 +2074,7 @@ describe('a-prefixed-twin-is-a-property-that-exists', () => {
         assert.ok(problems.some((p) => /-webkit-mask-box-image: .* write mask-border: with the same value beside it/.test(p)), problems.join('\n'));
         accepts('.t-neo .qr { mask-border: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }');
         const none = lintLookSheet(plantedNeo('.t-neo .item-n { -webkit-font-smoothing: antialiased; font-smoothing: antialiased; }'), { lookClass: 't-neo' });
-        assert.ok(none.some((p) => /font-smoothing is no CSS property, and -webkit-font-smoothing has no unprefixed twin/.test(p)), none.join('\n'));
+        assert.ok(none.some((p) => /font-smoothing names no property Chrome reads, and -webkit-font-smoothing has no unprefixed twin there/.test(p)), none.join('\n'));
     });
 
     it('maps every twin to a property, or to none, and leaves out the two every engine reads under the prefix', () => {
@@ -4207,7 +4207,7 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         ['at-rule', /is not a condition the probe enters|is not allowed in a look sheet/],
         ['escape', /a CSS escape outside a string/],
         // A prefixed property whose name less the prefix is no property (before 8g2, the fifth review's PQM: `mask-box-image` stood as `-webkit-mask-box-image`'s twin).
-        ['twin:none', /is no CSS property, and .* has no unprefixed twin/],
+        ['twin:none', /names no property Chrome reads, and .* has no unprefixed twin there/],
         ['twin', /a prefixed property paints only in the engines/],
         ['other', /./],
     ];
