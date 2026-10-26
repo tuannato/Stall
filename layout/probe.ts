@@ -627,15 +627,16 @@ function coveredByRead(node: Element): string | undefined {
  * (`coveredByCalls`, `coveredByMs`). A cover that moves into place between
  * frames is read by neither (the critic's P3-1). Stated.
  *
- * **Pending for the owner, stated** (the critic's third review, item 2):
- * a cover that arrives at the end of a finite animation and stays
- * (`forwards`; the critic's PF2, a one-shot `scaleY` from 0 at 95% of 10s)
- * is read by no probe rule — 1a reads at rest, the instants stop at six
- * sevenths of the longest animation — and an end-state read (each such
- * animation seeked to its end, on the paints that have one) is not built.
- * A keyframe on a custom property or an inherited ink on a box above a
- * figure (the critic's PT2) is the dress rule's, which reads the held dress
- * at every keyframe offset (`offsetDressFaults`).
+ * **And once more at the end of every animation that keeps its end**
+ * (`coverAtEnd`; the critic's third review, item 2, PF2; D-2026-10-26-03):
+ * on a paint with a finite run filled `forwards` or `both`, after the read
+ * at rest, each such animation is seeked to its end and 1a reads the paint
+ * again — a cover that arrives at the end of a one-shot and stays (PF2, a
+ * `scaleY` from 0 at 95% of 10s, filled forwards) had no area at rest, at
+ * 400ms or at any instant, the instants stopping at six sevenths of the
+ * longest animation. A keyframe on a custom property or an inherited ink on
+ * a box above a figure (the critic's PT2) is the dress rule's, which reads
+ * the held dress at every keyframe offset (`offsetDressFaults`).
  *
  * Fails closed: an element still computing `pointer-events` or
  * `interactivity` other than `auto` (only a declaration that outranks the
@@ -1291,16 +1292,93 @@ function coverScan(): CoverScan {
 /** The counts a look's tally sums, read by read. */
 const COVER_COUNTS = ['nodes', 'points', 'checked', 'below', 'offSide', 'above', 'clipSkips', 'wallScroll', 'appHidden'] as const;
 
-/** The read on a geometry pass's paint at rest, into the measuring look's tally; its failures. */
-function coverRead(screen: string, label: string): Failure[] {
+/**
+ * The read on a geometry pass's paint, into the measuring look's tally; its
+ * failures. `end` names the animations the end-state read seeked to their
+ * ends (`coverAtEnd`): its points and failures join the tally, and it is not
+ * a paint of its own.
+ */
+function coverRead(screen: string, label: string, end?: string): Failure[] {
     const t0 = performance.now();
     const scan = coverScan();
     const tally = (coverByClass[measuringClass] ??= { paints: 0, nodes: 0, points: 0, checked: 0, below: 0, offSide: 0, above: 0, clipSkips: 0, wallScroll: 0, appHidden: 0, failed: 0 });
-    tally.paints += 1;
+    if (end === undefined) tally.paints += 1;
     for (const key of COVER_COUNTS) tally[key] += scan[key];
     tally.failed += scan.faults.length;
-    coverMs += performance.now() - t0;
-    return scan.faults.map((detail) => ({ screen, theme: label, check: COVER_CHECK, detail }));
+    const spent = performance.now() - t0;
+    coverMs += spent;
+    if (end !== undefined) {
+        coverEnd.reads += 1;
+        coverEnd.failed += scan.faults.length;
+        coverEndMs += spent;
+    }
+    return scan.faults.map((detail) => ({ screen, theme: label, check: COVER_CHECK, detail: end === undefined ? detail : `at the end of ${end}: ${detail}` }));
+}
+
+/** The end-state read's own counts (`coverAtEnd`): paints that paid for it, the failures it found, and the animations it seeked to their ends by name; and its time, inside `coverMs` (a clock). */
+const coverEnd = { reads: 0, failed: 0, names: {} as Record<string, number> };
+let coverEndMs = 0;
+
+/**
+ * Whether an animation keeps its end once it has run (`coverAtEnd`): a
+ * finite run longer than nothing, filled forwards (`forwards` or `both`).
+ */
+function keepsItsEnd(anim: Animation): boolean {
+    const effect = anim.effect;
+    if (!(effect instanceof KeyframeEffect)) return false;
+    const fill = effect.getTiming().fill;
+    if (fill !== 'forwards' && fill !== 'both') return false;
+    const { activeDuration, endTime } = effect.getComputedTiming();
+    return typeof activeDuration === 'number' && Number.isFinite(activeDuration) && activeDuration > 0 && typeof endTime === 'number' && Number.isFinite(endTime);
+}
+
+/**
+ * **1a at the end of every animation that keeps its end** (before 8g2, the
+ * critic's third review, item 2: PF2; D-2026-10-26-03). 1a reads a paint at
+ * rest, every animation at its rest time with its delay zeroed, and the
+ * instants stop at six sevenths of the longest animation on the page; a
+ * cover that arrives at the end of a finite run and stays there — the
+ * critic's PF2, the quote head's own `::after` laid over every cell of its
+ * grid in the card's ground, a `scaleY` from 0 at 95% of a 10s run filled
+ * forwards — had no area at rest, at 400ms or at any instant, and stood over
+ * the figure and Pay for good from 9.5s on, under every rule. So on a paint
+ * with any animation that keeps its end (`keepsItsEnd`: a finite run filled
+ * `forwards` or `both`, a pseudo-element's included), after the read at
+ * rest, each such animation is seeked to its end (its `endTime`, its delay
+ * zeroed at rest) and 1a reads the paint again (`coverRead` with the names
+ * it seeked): a failure says "at the end of …". The other animations stand
+ * where the read at rest left them. Only those paints pay for the read
+ * (`coverEnd`), and nothing is put back: 1a is the last read of a paint, and
+ * the next paint throws its tree away.
+ *
+ * **The app's own**, measured: the marquee's runs (`mq-run`, filled
+ * both, the only finite one the clean tree paints on money's screens) and,
+ * on a press staged for the read (a strip with `selectionEntered`, which no
+ * fixture paints), the selection's entrance (`sel-unfold`, `sel-fade`,
+ * `sel-line-in`, filled both) read at their ends with no failure: the
+ * tray open and the lines in place. Not read, stated: one animation's end
+ * beside another's (each lasting one is seeked to its end together, every
+ * other where the read at rest left it); a run that keeps its end but whose
+ * end is not its latest frame (a timing function that overshoots, read at
+ * its end alone); and the contrast pass's one read a job, which stays at the
+ * frozen instant.
+ */
+function coverAtEnd(screen: string, label: string): Failure[] {
+    const lasting = document.getAnimations().filter(keepsItsEnd);
+    if (lasting.length === 0) return [];
+    const names = new Set<string>();
+    for (const anim of lasting) {
+        try {
+            anim.currentTime = (anim.effect as KeyframeEffect).getComputedTiming().endTime as number;
+            const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
+            names.add(name);
+            coverEnd.names[name] = (coverEnd.names[name] ?? 0) + 1;
+        } catch {
+            // An unseekable animation is read at rest alone.
+        }
+    }
+    if (names.size === 0) return [];
+    return coverRead(screen, label, [...names].sort().join(', '));
 }
 
 /**
@@ -1347,7 +1425,9 @@ function coverAtRest(screen: string, label: string): Failure[] {
         }
     }
     coverRest = [];
-    return coverRead(screen, label);
+    const atRest = coverRead(screen, label);
+    // And once more at the end of every animation that keeps it (`coverAtEnd`).
+    return [...atRest, ...coverAtEnd(screen, label)];
 }
 
 /** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
@@ -4368,7 +4448,8 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   where the pass's last instant left them); at an offset, the grounds
  *   under the glyphs, the lines, the spacing and an outline's ring (read at
  *   that instant alone); and an animation on a pseudo-element, which
- *   nothing inherits from (the cover rules');
+ *   nothing inherits from (the cover rules' — 1a reads the end of one that
+ *   keeps its end, `coverAtEnd`);
  * - a box above the stall (`#app`, the body): a look's sheet is scoped
  *   under its class, which stands on the stall; on a screen hung sideways
  *   a quarter turn of the stall either way passes, and no pass paints a
@@ -11511,6 +11592,9 @@ const verdict = {
     coverCheck: COVER_CHECK,
     coverByClass,
     coverMs,
+    /* The end-state read (`coverAtEnd`): its reads and failures, and its time (a clock, inside `coverMs`). */
+    coverEnd,
+    coverEndMs,
     coveredByCalls,
     coveredByMs,
     /* The dress rule's keyframe-offset read (`offsetDressFaults`): its counts, and its own time (a clock). */

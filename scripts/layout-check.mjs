@@ -2589,8 +2589,8 @@ function geometryRecordDiffers(walked, again) {
     // font wait took (`faces.waitedMs`), which is a clock, not a reading.
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
-        // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a) and the dress rule's keyframe-offset read's.
-        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, dressSeekMs: undefined };
+        // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -2798,7 +2798,7 @@ const coverGeometry = [];
 const coverContrast = {};
 const coverFailed = [];
 const coverUnread = [];
-function coverLines(label, byClass, ms, coveredBy, seek) {
+function coverLines(label, byClass, ms, coveredBy, end, seek) {
     const classes = Object.keys(byClass).sort();
     const sum = (key) => classes.reduce((n, cls) => n + (byClass[cls][key] ?? 0), 0);
     const tally = coverTally(byClass);
@@ -2812,6 +2812,7 @@ function coverLines(label, byClass, ms, coveredBy, seek) {
             : ` · coveredBy ${['rest', 'instants', 'label']
                   .map((phase) => `${phase} ${coveredBy.calls[phase] ?? 0} in ${((coveredBy.ms?.[phase] ?? 0) / 1000).toFixed(2)}s`)
                   .join(', ')}`) +
+        (end === undefined ? '' : ` · at the end of a lasting animation: ${end.reads} read(s), ${end.failed} failure(s) in ${(end.ms / 1000).toFixed(2)}s`) +
         (seek === undefined
             ? ''
             : ` · the dress rule's keyframe offsets: ${seek.anims} animation(s), ${seek.seeks} seek(s), ${seek.reads} figure read(s), ${seek.faults} fault(s) in ${(seek.ms / 1000).toFixed(2)}s`);
@@ -3504,6 +3505,7 @@ try {
                 byClass: g.report.coverByClass,
                 ms: g.report.coverMs ?? 0,
                 coveredBy: { calls: g.report.coveredByCalls, ms: g.report.coveredByMs },
+                end: g.report.coverEnd === undefined ? undefined : { ...g.report.coverEnd, ms: g.report.coverEndMs ?? 0 },
                 seek: g.report.dressSeek === undefined ? undefined : { ...g.report.dressSeek, ms: g.report.dressSeekMs ?? 0 },
             });
             if (coverTally(g.report.coverByClass).paints > 0) coverSeen[g.key] = g.report.coverByClass;
@@ -3692,7 +3694,7 @@ try {
         `  1a (nothing-covers-money-or-a-protected-box), bound: what it read on each geometry pass, its failures in the pass's own list; ` +
             `coveredBy (asked amount is covered, you-pay figure is covered, and the unbuyable label's) bound beside it, its calls and time per phase`,
     );
-    for (const { pass, byClass, ms, coveredBy, seek } of coverGeometry) for (const line of coverLines(pass, byClass, ms, coveredBy, seek)) console.log(line);
+    for (const { pass, byClass, ms, coveredBy, end, seek } of coverGeometry) for (const line of coverLines(pass, byClass, ms, coveredBy, end, seek)) console.log(line);
     took();
 
     /*
