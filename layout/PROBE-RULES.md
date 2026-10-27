@@ -11655,6 +11655,11 @@ swap-outs in 16 KiB pages since the start, swap used, free percentage):
 | 2 | 3 | 0 | 231.6s | 115.5s | 107.6s | 2.24, 7.03 | 11 of 17 | 14,444, 30,812 | 33% |
 | 3 | 2 | 0 | 253.4s | 128.3s | 117.2s | 2.42, 5.70 | 9 of 18 | 1,261, 0 | 39% |
 | 4 | 3 | 0 | 231.4s | 114.7s | 108.5s | 2.42, 6.18 | 10 of 17 | 2,561, 10,284 | 34% |
+| 5, unasked, on `599fc61` | 3 | 0 | 231.0s | 114.5s | 107.8s | 2.16, 6.89 | 12 of 17 | 7,983, 18,064 | 37% |
+
+Run 5 is the default itself, after the change: the runner printed "3 tab(s)
+(the default on 6 cores or more and 8 GiB, here 6 cores, 8.0 GiB)", and its
+verdicts are the other four's byte for byte.
 
 Every check passed at both counts, and **the verdicts are the same at both**
 (`tools/verdicts.sh`: every check's mark, every pass's failure counts, 1b's
