@@ -11323,6 +11323,203 @@ every screen at 390 read 581.6 and 598.6ms against `41fd3c1`'s 535.6 and
 589.7ms, within the noise of a round. 59.8–63.1s stand under the 300s
 ceiling.
 
+## Before 8g2, 1b: paints with no hit area (2026-10-27; the plan's item 1b, the critic's C-1 and P2-5; report-only)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/1b/`
+(`runs/`, `plants/`, `tools/`, `shots/`); the paths below are relative to it.
+
+**The incident.** 1a hit-tests every money node with `pointer-events`
+forced on, so a box laid over a figure answers wherever it has a hit area.
+A paint that has none answers nowhere (the plan's C-1, confirmed in Chrome
+155): a box-shadow, an outline, a `border-image-outset` band, a text-shadow,
+a drop shadow or a blur in a `filter`, a decoration line, and a
+pseudo-element's glyphs outside its own box. The critic's PW — Neo's price
+column's `::after` at `height: 0`, moved up 60px, painting `box-shadow: 0 0
+0 60px #05060d` — hides the figure while every point 1a asks returns the
+figure; both lints admit it, and before this round it was caught only by the
+contrast pass, on the screens it samples.
+
+**The rule** (`a-paint-with-no-hit-area-reaches-no-money`, report-only;
+`layout/paintReach.ts`, and `reachAtRest` and its reads in
+`layout/probe.ts`). On every geometry pass, once a paint, at rest (just
+before 1a's read, every animation reset as 1a resets it), it reads every
+element on the open surface and every
+look pseudo-element (its hosts from the CSSOM rule walk once a page,
+`lookPseudoHosts`; a look pseudo of a box above the surface, up to the app's
+root, included), and measures how far each paint reaches past the box it is
+drawn from: an outer `box-shadow` (offset and spread in full; its blur under
+the policy below), an `outline` (width plus offset), a
+`border-image-outset`, a `text-shadow` (each copy off its line's measured
+ink box, `textInk`), a `drop-shadow()` or `blur()` in a `filter` (`url()`
+and more than `MAX_DROP_SHADOWS` (4) drop shadows fail closed), a decoration
+line's band (an underline from the baseline at its offset and thickness),
+and a look pseudo's region (its own resolved size, grown by its font size
+when it holds text, anywhere in its host's box, moved by its offsets and
+margins; a transform, `translate`, `rotate`, `scale`, a motion path, an
+absolute, fixed or sticky position, or a size that does not resolve, fails
+closed). A reach that meets a money node's line boxes (`MONEY_FIGURES`) or a
+protected box, the node neither its ancestor nor its descendant, past its own
+box, by more than `MEET_TOL` (1px) on both axes, is a would-be failure — one
+per pair of boxes and kind.
+
+**Animations.** An animation of a box-shadow, a text-shadow, a filter or a
+colour alone is read from its keyframes' own computed values (`getKeyframes`)
+with no seek; any other that sets a reach, runs on a look pseudo, or moves a
+reacher or a target is seeked to each keyframe offset and put back; one of a
+ground, an opacity, a clip, a mask or a custom property only those read is
+left alone (`reachNeedless`, `reachVarsRead`).
+
+### Clips are held per pair
+
+The first wiring (amended before it was kept) cut each box to what its
+clipping ancestors can show, a scroller cut at its whole scroll reach rather
+than its window, so content below the fold inside the stall's region was
+read where it stands. On the walls that read list cards inside
+`div.items.sw-strip` reaching the payment band and the shop's code outside
+the strip, by 1–3px on Rural's and Neo's card shadows, and Neo's figure glow
+(0.20–0.38) reaching the shop's code below the list: 423 of the 565 would-be
+failures of that wiring's whole-runner run (`runs/ab1-branch.log`: 128 on
+the canvas, 113 portrait, 59 tablet, 52 tall-tablet, 71 narrow-wall; the
+other 142 are the Rural board at 1280, below). All false: a scroller clips
+its content's paint at its padding box at every scroll position, so a paint
+inside it never reaches a box outside it.
+
+Now clips are a question about a pair (`reachClipChain`, `pairClip`,
+`ClipLink`): a clipping ancestor that holds the other box too and scrolls on
+an axis clips neither on that axis (they move together as it scrolls), and
+every other clipping ancestor cuts at its padding box; a box's own clip
+(`reachOwnClip`) cuts its text's paints and a look pseudo's, at its padding
+box. Which targets a reacher can meet at all is found from a superset
+(`cutClip`: the axes that cut and do not scroll). Quick reads on the final
+probe, no plant: the three touch-wall pay screens on the canvas 0 (was 128
+on the canvas pass), every wall screen at 768x1024, 800x1280, 680x1000 and
+1080x1920 0 each — the Neo glow over the code included — 390 0, 1280 the
+Rural board's 142 alone (`runs/quick/qr-*.log`). N6 at 390 read the same
+6 as before the change.
+
+### The blur policy (`BLUR_OPACITY` = 0.2)
+
+0.2 is a ground-coloured layer that takes a 4.5:1 figure to about 3:1. A
+blurred layer counts where the composite of every blurred layer the reacher
+paints, each at its most over the target past the reacher's own box,
+reaches it (`compositeOverAny`; an upper bound, each layer at its own most).
+A literal reading — a blurred layer's offset and spread counted in full, as
+a sharp one's is — is measured beside it and not counted. The most each soft
+paint reached over a target, on the final clean run:
+
+| Soft paint | Most over a target past its own box |
+|---|---|
+| Rural's board, `div.stall-sign`, `0 18px 40px` at 0.32 (1280) | 0.229 |
+| Neo's figure glow, a `span`'s text-shadow, blur 12 at 0.6 | 0.163 |
+| `button.item-head`'s box-shadow | 0.120 |
+| `span.item-x`'s text-shadow | 0.084 |
+| `header.stall-head`'s box-shadow | 0.070 |
+| the dock, `nav.tabs` | 0.051 |
+| every other | under 0.03 |
+
+Thirty copies of `0 0 40px` composite to 0.98 (N6s, below); the docks' glows
+stay under the policy (a unit test, `paintReach.test.ts`).
+
+### The clean tree
+
+Whole runner, on the final commit, four runs (`runs/c-final1.log` to
+`c-final4.log`), each the same: **142 would-be failures, all at 1280 and all
+the Rural board** — `div.stall-sign`'s `0 18px 40px` at 0.32 over
+`button.addr`, composite 0.23: 130 on the sign with its pin (`offers` and
+every screen that paints it), 12 without (`unresolvable`). The overlap is
+real: the board's swing makes it paint after the in-flow content, and the
+plate's top is darkened (`shots/rural-board-1280-crop.png`); the plate
+stays legible. **It is the owner's call at 7b**: raise `BLUR_OPACITY` to
+about 0.25 (every soft paint on the clean tree is then under it), accept the
+board by name, or restyle its shadow. Every other pass reads 0: the 423 wall
+false reds are gone, and with them Neo's figure glow over the wall's code
+(0.20–0.38 at the tablet, the tall tablet and the narrow wall, whose only
+road to the code was a scroller's scroll reach) and the rain outline's 1px
+meet with `span.sw-cap` at the tall tablet.
+
+A literal reading would add 274, none of which composites to 0.2 over its
+target: 142 at 390 and 68 at 360 (the board's phone shadow, `0 12px 28px` at
+0.30, its core over the address), 17, 19 and 19 on the short, side-tablet and
+hd walls (`header.stall-head`'s `0 18px 44px` at 0.078 over the shop's code
+and the payment's rate), 9 under reduced motion.
+
+### Red proofs, the whole runner, each plant alone
+
+On the final 1b code (its comments aside), each plant put before its look's
+reduce block by `tools/apply.mjs` and run by `tools/plants-whole.sh`, the
+one-minute load under 2.5 at each start (1.28–2.40), 248–266s. The
+would-be counts per pass, 390 / 1280 / canvas / portrait / tablet /
+desk-wall / short-wall / side-tablet / hd-wall / tall-tablet / narrow-wall /
+360 / reduced motion at 390, beyond the clean tree's 142 at 1280; every pass
+not named read 0. 1b moves no verdict, so the exit code is the other
+rules':
+
+| Plant | Lints (first party, kit) | 1b would-be | Exit, and what failed it |
+|---|---|---|---|
+| PW, Neo `.item-head .item-p::after` (`height: 0; position: relative; top: -60px; box-shadow: 0 0 0 60px #05060d`) | admit, admit | 294 / 368 / 148 / 244 / 166 / 160 / 216 / 216 / 204 / 184 / 156 / 134 / 38 | 1: the contrast pass, 314 figures |
+| N6, 121 sharp copies of Neo's `.face-nm` in its ground (phone and desk blocks) over "You pay" | admit, admit | 6 / 6 / 0 … / 6 at 360 | 1: `an-outline-where-the-text-has-its-own-ground` 15 / 15 / 12, the rain-worn variants |
+| N6s, 30 × `0 0 40px var(--s-bg)` on Neo's row above "You pay" | admit, admit | 32 / 32 / 0 … / 32 at 360 (0.98 over "You pay", 0.22 over the rate line) | 1: the contrast pass, 2 figures |
+| Outline 4px at +4px on Modern's unit, at the lint's cap | admit, admit | 173 / 218 / 45 / 109 / 83 / 44 / 85 / 78 / 83 / 98 / 80 / 43 / 25 (3px over the figure) | 1: the contrast pass, 41 |
+| A border image outset 160px to the right of Modern's name block | admit, admit | 224 / 291 / 61 / 0 / 0 / 74 / 125 / 79 / 125 / 0 / 0 / 88 / 26 (none where the price stands under the name) | 1: the contrast pass, 64 |
+| UL1, Modern's row under "You pay" underlined 3px, raised 4px (within the cap) | admit, admit | 0 everywhere | 0 |
+| UL2, Modern's row over "You pay" underlined 3px, lowered 4px (within the cap) | admit, admit | 15 / 15 / 0 … / 15 at 360 (a 2px band over the figure) | 1: the contrast pass, 12 ("You pay" on paint at 1.00:1) |
+| UL3, the row under "You pay" raised 24px (past the cap) | refuse, admit | 15 / 15 / 0 … / 15 at 360 | 1: the contrast pass, 12 |
+
+What 1b adds: the contrast pass reads 390, 1280 and 1920 alone, less the
+geometry-only screens; 1b reads PW, the outline and the border image on
+every wall size and at 360, where nothing else does. UL2 is a finding: the
+look lint's underline caps (`UNDERLINE_OFFSET_MAX_PX` 4px,
+`DECORATION_THICKNESS_MAX_PX` 3px) admit a band 2px over the next row's
+figure on Modern's listing face; it is in PLAN § Open.
+
+### Cost
+
+Back to back on this Mac, two tabs, the tracked fixture carried, no other
+probe running, each run started once the one-minute load was under 2.5
+(`tools/run.sh`), the trees scratch clones: `4d54c91` (the branch before
+1b), the final 1b commit, and main (`c1f3e97`).
+
+| Pair | Before | After | Load at start | Geometry walk | Contrast pass |
+|---|---|---|---|---|---|
+| direct 1 (`4d54c91`, 1b) | 256.0s | 252.7s | 2.09, 2.14 | 131.2 → 130.7s | 107.2 → 104.7s |
+| direct 2 (`4d54c91`, 1b) | 255.8s | 257.2s | 2.47, 2.28 | 125.1 → 131.6s | 112.1 → 107.9s |
+| main 1 (`c1f3e97`, 1b) | 230.2s | 257.7s | 2.15, 2.33 | 92.6 → 132.1s | 120.3 → 108.0s |
+| main 2 (`c1f3e97`, 1b) | 229.6s | 256.7s | 2.41, 2.13 | 92.8 → 132.7s | 119.6 → 107.5s |
+
+**1b adds −3.3s and +1.4s on the matched pairs**, under the 8s the plan
+allowed it; the walk −0.5s and +6.5s. Its own clock is 12.74–13.00s of page
+time summed over the geometry passes (5.50–5.62s of it keyframe seeks; 2.20s
+at 1280, 1.62s at 390, 0.5–1.1s on each other pass), and 1a's own time falls
+by 1.6–3.8s beside it (39.65s and 38.00s before, 35.89–36.88s after): 1b's
+first style and layout reads after the reset take a flush 1a used to pay, and
+the passes run on two tabs. The branch against main is +27.5s and +27.1s,
+nearly all of it already in `4d54c91` (255.8–256.0s against main's
+229.6–230.2s). The seventh review's pairs read that round's final probe at
+240.2s and 236.9s with a walk of about 117s, against today's 125–131s for
+`4d54c91`, while main's walk moved only from 89–91s to 93s: the branch's
+walk is slower on this machine today by about 8–14s without 1b, unexplained,
+and the branch against main is about 12s further apart than it was then.
+The final commit stands at 252.7–257.7s over four runs, under the 300s
+ceiling and past the 240s sharding line.
+
+### Not read, stated
+
+- Paint order: a meet is a meet whichever paints last; a paint under a
+  neighbour's opaque ground is a false red, and one over it is real (the
+  Rural board).
+- Several reachers' blurs together: each reacher's layers are composited
+  alone.
+- A pseudo-element's exact box (no DOM API gives it; its region is read),
+  and a decoration line on a pseudo's text.
+- A reach between two keyframe offsets, and two animations at once.
+- A box inside a scroller held to one outside it at any scroll but the one
+  the paint stands at.
+- A column rule; an SVG element's own overflow; a glyph's shape (a
+  text-shadow is blurred off its line's ink box, an upper bound); text over
+  several lines (its line boxes).
+- The contrast pass's paints: 1b runs on the geometry passes alone.
+- The private look at 0x04 was not run under 1b.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

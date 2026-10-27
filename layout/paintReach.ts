@@ -1,6 +1,7 @@
 /**
  * **Paints with no hit area that reach over money** (before 8g2, 1b,
- * report-only; the pure half of `paintReachScan` in `layout/probe.ts`).
+ * report-only; the pure half of `reachAtRest` and its reads in
+ * `layout/probe.ts`).
  *
  * 1a (`nothing-covers-money-or-a-protected-box`) asks the page what stands at
  * points over every money node with `pointer-events` forced on, so a box laid

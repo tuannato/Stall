@@ -1019,7 +1019,8 @@ money path this app can have, because nothing on it is derived.
   3. **Round 4's P2s:** a box above's background image off the sampled
      screens and the walk's stop at an invisible or `display: contents`
      box; a static belt in the look lint for clips scoped to hover, focus,
-     the tap highlight or a turned wall; a neighbour's far shadow.
+     the tap highlight or a turned wall; a neighbour's far shadow (read
+     since 1b, report-only: N6, "Before 8g2, 1b's open list" below).
   4. **Smaller, stated:** a look pseudo animated invisible at the frozen
      instant (PSa2); a gradient between its stops off the sampled screens
      and at a device pixel ratio over 1 (G2); `markLookPseudos` never
@@ -1199,6 +1200,38 @@ money path this app can have, because nothing on it is derived.
      rules change without the count changing is not read again. Neither is
      reachable today (both lints refuse `@import`, and the probe's own
      `replaceSync` sheets set no `anchor-name`); not planted.
+
+- **Before 8g2, 1b's open list** (paints with no hit area, read
+  report-only; `layout/PROBE-RULES.md`, "Before 8g2, 1b"). 1b fails
+  nothing until step 7b binds it. Open:
+  1. **Rural's board over the address plate** (the owner's call at 7b):
+     `.stall-sign`'s `0 18px 40px` at 0.32 composites to 0.23 over
+     `button.addr` at 1280, the clean tree's only source (142 would-be
+     failures). The overlap is real — the board's swing makes it paint after
+     the in-flow content and darkens the plate's top
+     (`private/design/workshop-2026-09-23/before-8g2/1b/shots/rural-board-1280-crop.png`)
+     — and the plate stays legible. Options: raise `BLUR_OPACITY` to about
+     0.25 (every soft paint on the clean tree is then under it; the next is
+     Neo's figure glow at 0.163), accept the board by name, or restyle its
+     shadow.
+  2. **The lint's underline cap admits a reach onto a neighbour's figure**:
+     Modern's row over "You pay" underlined 3px thick and lowered 4px, both
+     at their caps (`DECORATION_THICKNESS_MAX_PX`,
+     `UNDERLINE_OFFSET_MAX_PX`), lays a 2px band over the figure — 1b 15 at
+     390, 1280 and 360, and the contrast pass reads "You pay" at 1.00:1.
+     Tighten the cap, hold the band to its own line box, or let 1b's
+     binding carry it.
+  3. **Not read by 1b, stated:** paint order (a meet is a meet whichever
+     paints last); several reachers' blurs together (each reacher's layers
+     are composited alone); a pseudo-element's exact box, and a decoration
+     line on a pseudo's text; a reach between two keyframe offsets, and two
+     animations at once; a box inside a scroller held to one outside it at
+     any scroll but the one the paint stands at; a column rule; an SVG
+     element's own overflow; a glyph's shape and text over several lines
+     (its line boxes, an ink box an upper bound); the contrast pass's paints
+     (1b runs on the geometry passes alone).
+  4. **A run under the private look at 0x04's selection** with 1b in it
+     (the money guards' item 2 still stands).
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,
