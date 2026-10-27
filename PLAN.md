@@ -1293,7 +1293,8 @@ money path this app can have, because nothing on it is derived.
      the DOM the pay sheets keep out of it on purpose). **Not added**
      (CRITIC-10's judgement 2, decided by the window): it would catch only
      an app bug that hands `qrSvg` the wrong text, which the composers'
-     tests hold, and a look cannot change the `d` attribute.
+     tests hold, and a look cannot change the `d` attribute; the owner's
+     to reopen.
   5. **A paint that misses every centre** (a line thinner than half a module
      along the seams, a cover smaller than a module between centres) is not
      read; whether a camera reads through it is not measured.

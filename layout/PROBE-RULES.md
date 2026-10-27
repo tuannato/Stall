@@ -11872,7 +11872,9 @@ included.
 
 The review is `private/design/workshop-2026-09-23/before-8g2/CRITIC-10.md`;
 this round's evidence is under `before-8g2/critic10-fixes/` (`runs/`,
-`plants/`, `tools/`), and the paths below are relative to it. Labels as in
+`plants/`, `tools/`), and the paths below are relative to it, but for a
+path that opens with another round's folder (`critic10/`, `critic4-fixes/`
+and the like), which is relative to `before-8g2/`. Labels as in
 1d's section: **quick** is the real runner in a scratch tree with the
 geometry walk skipped and the contrast queue cut (`tools/q1d.sh`,
 `tools/q1d-mutate.py`), or one probe page read (`tools/qp.sh`); **whole** is
@@ -12165,6 +12167,29 @@ each of the three tabs, and 2 on the canary's reads again, for the quiet
 zone and 1d alike. **Step 7c reads these counts before it binds 1d**
 (PLAN § Open): a flake that hits both captures is a false red once 1d is
 bound, as it would be for the quiet zone today.
+
+### The round's whole run
+
+**Clean, whole** (`runs/w-clean-default.log`, `.mem`, `.meta`; the scratch
+tree at `4cc29a8`, the three-tab default, the tracked fixture carried, 796
+contrast jobs; started once the one-minute load was under 2.5, at 2.43):
+exit 0, 237.0s of 300 (242s wall), the geometry walk 110.8s and the contrast
+pass 118.7s. Every check passed. The verdict extract (`tools/verdicts.sh`:
+every check's mark, every pass's failure counts, 1b's would-be counts and
+grouped sentences; `tools/cmp-verdicts.sh`) is byte for byte the tenth
+critic's clean run on `78c7deb`, so 1b still reads only Rural's board, 142
+times at 1280, and its work counts on every pass (paints, elements, pairs,
+seeks) are that run's too. 1d: 0 would-be failures, no read-again, nothing
+thrown. `holds-out-of-flow-agrees-with-this-chrome`: 57 wrappers on 15
+pages, agreed, 76.2ms over the passes. `the-module-read-agrees-with-this-chrome`:
+126 codes, agreed, 0.3s. No quiet-zone sighting. Memory: the kernel's
+pressure level at warn on 10 of 17 samples, never critical; the load peaked
+at 7.23. The round's first whole run (`runs/w-clean-default-1.log`, on
+`a3972b8`) failed on one line, the containing-block check owed on the
+worn-only pass (above), and was otherwise the same extract.
+
+No A/B was made: the two checks this round adds cost 76ms and 0.3s, under
+the 2s the brief set for one.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
