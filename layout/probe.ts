@@ -55,7 +55,23 @@ import {
 import { COPIED_JOBS, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
-import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
+import {
+    STACK_CHOICES_CAP,
+    colourTokens,
+    byScroller,
+    cutsBelowScroller,
+    everyMixReads,
+    layerCovers,
+    mostOpaque,
+    paintsNothing,
+    picturesShowing,
+    shiftFor,
+    srgbColour,
+    tileArea,
+    worstGround,
+    type ScrollMove,
+    type StackPaint,
+} from './groundStack';
 import { lineOfCharacter } from './charLines';
 import { MODULE_SNAP_OFFSETS, MODULE_SNAP_SIZES, matrixBits, matrixOfPath, moduleSnapText, type CodeMatrix } from './codeMatrix';
 import { qrMatrix } from '../src/domain/qr';
@@ -6507,20 +6523,24 @@ function borderImageReach(cs: CSSStyleDeclaration): number {
  * background image's layers (the element's own only, the last listed lowest:
  * a gradient by its stops where its tiles are proved to paint, and as absent
  * too over the rest of its clip area, `layerCovers`; a picture by its
- * place), its inset shadows, every
+ * place — and a box above's too, read the same way and tagged `layer`, in
+ * 3a's report-only walk to the stall alone, `layersAbove`), its inset
+ * shadows, every
  * border side that has a width, and a border image (over the padding box
  * where its slice says `fill`, over its bands and outset otherwise) — each
  * with where it paints, read only when asked; whether its background colour
  * is opaque; or why one of its colours cannot be read.
  */
-type BoxPaint = { what: string; candidates: Colour[]; picture?: string; above?: Element; rects: () => Box[] };
+type BoxPaint = { what: string; candidates: Colour[]; picture?: string; above?: Element; layer?: true; rects: () => Box[] };
 /** The candidate a paint that may leave a pixel bare is tried at: nothing at all. */
 const MAY_BE_ABSENT: Colour = { rgb: [0, 0, 0], alpha: 0 };
 type BoxPaints = { paints: BoxPaint[]; opaque: boolean; unread?: string };
 let ownPaintsSeen = new Map<Element, BoxPaints>();
 let abovePaintsSeen = new Map<Element, BoxPaints>();
-function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPaints {
-    const seen = own ? ownPaintsSeen : abovePaintsSeen;
+/** A box above read with its background image's layers too (`layersAbove`, 3a's report-only walk). */
+let walkPaintsSeen = new Map<Element, BoxPaints>();
+function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean, layersAbove = false): BoxPaints {
+    const seen = own ? ownPaintsSeen : layersAbove ? walkPaintsSeen : abovePaintsSeen;
     const known = seen.get(at);
     if (known !== undefined) return known;
     const done = (out: BoxPaints): BoxPaints => {
@@ -6569,10 +6589,11 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
     if (bg === undefined) return unread('a background colour', cs.backgroundColor);
     paints.push({ what: `${whose}ground`, candidates: [bg], rects: () => clipRects(clips[clips.length - 1] ?? 'border-box') });
     // A box above paints its decoration in its background image (the rain's
-    // tiles, the aurora's washes, Neo's brackets and scanlines), placed and
-    // sized by a position and a size this read does not resolve: not read
-    // there (the contrast pass's, on the screens it samples).
-    if (own && cs.backgroundImage !== 'none') {
+    // tiles, the aurora's washes, Neo's brackets and scanlines): the bound
+    // walk does not read it there (the contrast pass's, on the screens it
+    // samples); 3a's report-only walk to the stall reads its gradients as a
+    // figure's own are read, and names its pictures (`layersAbove`).
+    if ((own || layersAbove) && cs.backgroundImage !== 'none') {
         const layers = splitLayers(cs.backgroundImage);
         const repeats = splitLayers(cs.backgroundRepeat);
         const sizes = splitLayers(cs.backgroundSize);
@@ -6585,7 +6606,7 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
             const clip = clips[i % clips.length] ?? 'border-box';
             if (layer === 'none') continue;
             if (picture(layer)) {
-                paints.push({ what: 'a picture', candidates: [], picture: layer, rects: () => clipRects(clip) });
+                paints.push(own ? { what: 'a picture', candidates: [], picture: layer, rects: () => clipRects(clip) } : { what: `${whose}picture`, candidates: [], picture: layer, above, layer: true, rects: () => clipRects(clip) });
                 continue;
             }
             const stops = dressColoursIn(layer, current);
@@ -6640,11 +6661,12 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
                 parts = { inside, outside };
                 return parts;
             };
-            if (proved) paints.push({ what: 'its gradient', candidates: stops, rects: () => part().inside });
+            const tag = own ? {} : { layer: true as const };
+            if (proved) paints.push({ what: `${whose}gradient`, candidates: stops, rects: () => part().inside, ...tag });
             // A layer whose tiles repeat over its whole clip area leaves none
             // of it bare, and is one paint as before.
             if (!proved || coverX === 'positioning-area' || coverY === 'positioning-area') {
-                paints.push({ what: 'its gradient, where its tiles fall', candidates: [...stops, MAY_BE_ABSENT], rects: () => part().outside });
+                paints.push({ what: `${whose}gradient, where its tiles fall`, candidates: [...stops, MAY_BE_ABSENT], rects: () => part().outside, ...tag });
             }
         }
     }
@@ -6778,6 +6800,244 @@ function groundStackFault(el: HTMLElement, cs: CSSStyleDeclaration, stall: Eleme
         );
     }
     return undefined;
+}
+
+/*
+ * **3a, the walk to the stall** (before 8g2, item 3a;
+ * `the-ground-walk-reaches-the-stall`, **report-only**; the pure half is in
+ * `layout/groundStack.ts`). `groundStackFault` stops at the first box whose
+ * background colour is opaque, whether or not that colour is under the
+ * glyphs or painted at all, and reads no box above's background image: the
+ * critic's N2 (`.item-a` opaque white clipped to its content box, the figure
+ * moved out of it onto `.item-p`'s dark ground), V (the opaque white on an
+ * `.item-a` set `visibility: hidden`) and DC (on a `.pay-x` set `display:
+ * contents`) and N1 (a gradient in the ink's own colour on `.item-a`) each
+ * read clean here and are refused by the contrast pass alone, where it
+ * samples. This reads the same figure's ground another way, beside it:
+ * - **to the stall**, every box from the element up to and with its stall,
+ *   each paint where it paints (its own `background-clip` and area), every
+ *   cell read from its topmost paint that hides what is below it
+ *   (`fromTopmostOpaque`) — so an opaque ground still hides every paint
+ *   above it in the tree, but only where it covers;
+ * - **skipping a box that paints nothing** (`paintsNothing`: a `visibility`
+ *   that is not `visible`, or `display: contents`, which has no box): its
+ *   paints are none, and it ends nothing;
+ * - **a box above's gradient layers** read as the figure's own are
+ *   (`boxPaintsOf`'s `layersAbove`, `layerCovers`): at every stop where its
+ *   tiles are proved to paint, and absent too over the rest of its clip area;
+ * - **a box above's pictures** (a `url()` layer) are named where one shows
+ *   under the glyphs (`picturesShowing`) and composited as absent — not
+ *   judged: the contrast pass's, on the screens it samples;
+ * - cut by the boxes that clip below the nearest scroller
+ *   (`cutsBelowScroller`), and split by the scrollers above it, each part
+ *   read where it stands once scrolled into view (`byScroller`): a row below
+ *   the fold is read over the stall's own paints where it will stand, the
+ *   paints that move with it moved with it, and never over the scroller's
+ *   own edge, which no content stands over.
+ * It fails nothing: its verdict beside the bound one is tallied per look
+ * (`walkByClass`: would-be failures the bound read does not make, failures
+ * both make, failures the bound read makes and this one does not), its
+ * would-be failures kept with the paints new to this read that made them
+ * (`sources`), and what it could not read (`walkUnread`). A throw is
+ * counted and said and fails nothing (`walkThrown`). Not read, stated: a
+ * part of a figure out of its scroller's view at any scroll but the one that
+ * brings it to the nearest edge of the view (under a gradient the stop-wise
+ * read is the same anywhere; a paint that covers only part of the view is
+ * read where that scroll puts the part); a clip above a scroller; the
+ * keyframe offsets
+ * (`offsetGroundFaults` reads the bound ground alone); a box above's
+ * in-flow pseudo-element; rounded corners; a gradient between its stops.
+ */
+const WALK_CHECK = 'the-ground-walk-reaches-the-stall';
+/** One look's 3a tallies on a pass: figures' elements read, would-be failures, failures the bound read makes too, failures it makes that this read does not, elements with something unread, walks that skipped a box that paints nothing, walks that read a paint past the bound stop, walks that read a box above's gradient or picture, stacks of too many choices. */
+type WalkTally = {
+    elements: number;
+    would: number;
+    both: number;
+    dropped: number;
+    unread: number;
+    skipped: number;
+    past: number;
+    layers: number;
+    pictures: number;
+    tooMany: number;
+};
+const walkByClass: Record<string, WalkTally> = {};
+const walkTally = (): WalkTally =>
+    (walkByClass[measuringClass] ??= { elements: 0, would: 0, both: 0, dropped: 0, unread: 0, skipped: 0, past: 0, layers: 0, pictures: 0, tooMany: 0 });
+/** A would-be failure: where, the element, its fault, and the paints new to 3a that made it (`sources`, top first). */
+type WalkWould = { screen: string; look: string; cls: string; el: string; text: string; fault: string; sources: string[] };
+const walkWould: WalkWould[] = [];
+/** A failure of the bound read this one does not make. */
+const walkDropped: { screen: string; look: string; cls: string; el: string; text: string; bound: string }[] = [];
+/** What this read could not read under a figure: a box above's picture where it shows, a layer whose colours it cannot take, a stack of too many choices. */
+const walkUnread: { screen: string; look: string; cls: string; el: string; what: string }[] = [];
+const WALK_KEPT = 4000;
+/** 3a's throws, word for word up to `WALK_THROWN_KEPT`. */
+const walkThrown: string[] = [];
+const WALK_THROWN_KEPT = 40;
+/** 3a's own time (a clock). */
+let walkMs = 0;
+
+/** Whether a box scrolls what it holds on either axis. */
+function scrollsContent(cs: CSSStyleDeclaration): boolean {
+    return /^(?:auto|scroll)$/.test(cs.overflowX) || /^(?:auto|scroll)$/.test(cs.overflowY);
+}
+
+type WalkRead = { fault?: string; sources: string[]; unread: string[]; tooMany: boolean; skipped: boolean; past: boolean; layers: boolean; pictures: boolean };
+
+/** 3a's read of the ground under one element's glyphs (the walk to the stall), beside `groundStackFault`'s. */
+function groundWalkRead(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element, inks: () => readonly Box[]): WalkRead {
+    const out: WalkRead = { sources: [], unread: [], tooMany: false, skipped: false, past: false, layers: false, pictures: false };
+    const ink = dressInk(cs);
+    if (ink === undefined) {
+        out.fault = `an ink this rule cannot read (${cs.color.slice(0, 60)})`;
+        return out;
+    }
+    type Link = { at: Element; cs: CSSStyleDeclaration; paints: BoxPaint[]; skip?: 'invisible' | 'no box'; past: boolean };
+    const chain: Link[] = [];
+    // Where the bound walk stops, and the boxes it reads that paint nothing.
+    let inBound = true;
+    let stop = '';
+    const skippedInBound: string[] = [];
+    for (let at: Element | null = el; at !== null && at.id !== 'app'; at = at.parentElement) {
+        const own = at === el;
+        const acs = own ? cs : getComputedStyle(at);
+        const bound = boxPaintsOf(at, acs, own);
+        if (bound.unread !== undefined) {
+            // The bound read's own refusal, word for word (a box past where it stops is one it never read).
+            out.fault = own ? bound.unread : `${describe(at)} above it: ${bound.unread}`;
+            if (!inBound) out.sources = [`${describe(at)}'s paints, past where the bound walk stops (${stop})`];
+            return out;
+        }
+        let paints = bound.paints;
+        if (!own) {
+            const read = boxPaintsOf(at, acs, false, true);
+            if (read.unread !== undefined) out.unread.push(`${describe(at)}'s background image: ${read.unread}`);
+            else paints = read.paints;
+        }
+        const skip = paintsNothing(acs.visibility, acs.display);
+        if (skip !== undefined) {
+            out.skipped = true;
+            if (inBound) skippedInBound.push(`${describe(at)} (${skip === 'no box' ? 'display: contents' : `visibility: ${acs.visibility}`})`);
+        }
+        chain.push({ at, cs: acs, paints: skip === undefined ? paints : [], ...(skip === undefined ? {} : { skip }), past: !inBound });
+        if (inBound && (bound.opaque || at === stall)) {
+            inBound = false;
+            stop = `${describe(at)}${skip === undefined ? '' : `, which paints nothing (${skip === 'no box' ? 'display: contents' : `visibility: ${acs.visibility}`})`}`;
+        }
+        if (at === stall) break;
+    }
+    const source = (l: Link, p: BoxPaint): string | undefined =>
+        l.past ? `${p.what}, past where the bound walk stops (${stop})` : p.layer === true ? `${p.what} (a box above's background image)` : undefined;
+    // Bottom first: the stall, then each box below it, each paint with its box's place on the walk.
+    const stack = [...chain].reverse().flatMap((l) => l.paints.map((p) => ({ p, source: source(l, p), depth: chain.indexOf(l) })));
+    out.past = chain.some((l) => l.past && l.paints.length > 0);
+    out.layers = stack.some((s) => s.p.layer === true && s.p.picture === undefined);
+    out.pictures = stack.some((s) => s.p.layer === true && s.p.picture !== undefined);
+    // The figure's own picture and any border image that is one fail, as the bound read fails them; a box above's background picture is named, not judged.
+    const failing = stack.filter((s) => s.p.picture !== undefined && s.p.layer !== true);
+    const above = stack.filter((s) => s.p.picture !== undefined && s.p.layer === true);
+    const coloured = stack.filter((s) => s.p.picture === undefined);
+    let colourPasses = false;
+    if (failing.length === 0) {
+        const candidates = coloured.map((s) => s.p.candidates);
+        colourPasses = mostOpaque(candidates) < DRESS_GROUND_ALPHA || everyMixReads(candidates, ink.rgb, DRESS_GROUND_CONTRAST, DRESS_GROUND_ALPHA);
+        if (colourPasses && above.length === 0) return out;
+    }
+    const boxed = chain.filter((l) => l.skip !== 'no box');
+    const cuts = cutsBelowScroller(boxed.map((l) => ({ clips: clipsContent(l.cs), scrolls: scrollsContent(l.cs), box: () => paddingBoxOf(l.at, l.cs) })));
+    const scrollers = boxed.filter((l) => scrollsContent(l.cs)).map((l) => ({ at: chain.indexOf(l), box: paddingBoxOf(l.at, l.cs) }));
+    const shown = inks()
+        .map((i) => cuts.reduce<Box>((b, c) => ({ left: Math.max(b.left, c.left), right: Math.min(b.right, c.right), top: Math.max(b.top, c.top), bottom: Math.min(b.bottom, c.bottom) }), i))
+        .filter((b) => b.right - b.left > 0.5 && b.bottom - b.top > 0.5);
+    // Each part of the ink where it stands once scrolled into view (`byScroller`).
+    const parts = shown.flatMap((i) => byScroller(i, scrollers));
+    const moved = (rects: readonly Box[], depth: number, moves: readonly ScrollMove[]): Box[] => {
+        if (moves.length === 0) return [...rects];
+        const { dx, dy } = shiftFor(depth, moves);
+        return dx === 0 && dy === 0 ? [...rects] : rects.map((r) => ({ left: r.left + dx, right: r.right + dx, top: r.top + dy, bottom: r.bottom + dy }));
+    };
+    for (const { p, depth } of failing) {
+        if (parts.some(({ part, moves }) => moved(p.rects(), depth, moves).some((r) => meets(part, r)))) {
+            const pic = p.picture!.slice(0, 60);
+            out.fault =
+                p.what === 'a picture'
+                    ? `a picture under its glyphs (${pic}), a ground this rule cannot read`
+                    : `${p.above === undefined ? '' : `${describe(p.above)} above it: `}a border image that is a picture (${pic}) under its glyphs, a ground this rule cannot read`;
+            return out;
+        }
+    }
+    // Bottom first, as the stack is.
+    const kept = stack.filter((s) => s.p.picture === undefined || s.p.layer === true);
+    const judged: StackPaint[] = kept.map(({ p, source: why }) => ({
+        what: p.what,
+        candidates: p.candidates,
+        rects: p.rects(),
+        ...(why === undefined ? {} : { source: why }),
+        ...(p.picture === undefined ? {} : { picture: true }),
+    }));
+    const at = (moves: readonly ScrollMove[]): StackPaint[] =>
+        moves.length === 0 ? judged : judged.map((j, k) => ({ ...j, rects: moved(j.rects, kept[k]!.depth, moves) }));
+    const rgbText = (rgb: readonly number[]): string => rgb.map((v) => Math.round(v)).join(', ');
+    const pictures = new Set<string>();
+    for (const { part: i, moves } of parts) {
+        const here = at(moves);
+        if (above.length > 0) for (const what of picturesShowing(here, i)) pictures.add(what);
+        if (colourPasses || out.fault !== undefined) continue;
+        const v = worstGround(here, i, ink.rgb, DRESS_GROUND_CONTRAST, DRESS_GROUND_ALPHA, { fromOpaque: true });
+        if (v === undefined) continue;
+        if ('tooMany' in v) {
+            if (!out.tooMany) out.unread.push(`${v.tooMany} ways of choosing the gradient stops under its glyphs, more than this rule reads (${STACK_CHOICES_CAP})`);
+            out.tooMany = true;
+            continue;
+        }
+        out.fault =
+            `the ground under its glyphs (${v.paints.slice(0, 4).join(' over ')}${v.paints.length > 4 ? ` and ${v.paints.length - 4} more` : ''}) ` +
+            `reads at ${v.ratio.toFixed(2)}:1 on its ink, ${v.ground.alpha.toFixed(2)} opaque together (rgb(${rgbText(v.ground.rgb)}) under ink rgb(${rgbText(ink.rgb)}))`;
+        out.sources =
+            v.sources.length > 0
+                ? v.sources
+                : skippedInBound.length > 0
+                  ? [`the bound walk's own paints, read without ${skippedInBound.join(', ')}, which paint nothing`]
+                  : ['the bound walk\'s own paints, on an ink it cuts away at a scroller or a clip above one'];
+    }
+    for (const what of pictures) out.unread.push(`${what} under its glyphs, a picture this read does not take`);
+    return out;
+}
+
+/** 3a beside the bound read, for one element of a figure: tallied and kept, never a failure. */
+function groundWalkReport(screen: string, label: string, el: HTMLElement, cs: CSSStyleDeclaration, stall: Element, inks: () => readonly Box[], bound: string | undefined, figure: HTMLElement): void {
+    const t0 = performance.now();
+    try {
+        const tally = walkTally();
+        tally.elements += 1;
+        const read = groundWalkRead(el, cs, stall, inks);
+        const name = `${describe(figure)}${el === figure ? '' : ` › ${describe(el)}`}`;
+        const text = (figure.textContent ?? '').trim().slice(0, 32);
+        if (read.skipped) tally.skipped += 1;
+        if (read.past) tally.past += 1;
+        if (read.layers) tally.layers += 1;
+        if (read.pictures) tally.pictures += 1;
+        if (read.tooMany) tally.tooMany += 1;
+        if (read.unread.length > 0) {
+            tally.unread += 1;
+            for (const what of read.unread) if (walkUnread.length < WALK_KEPT) walkUnread.push({ screen, look: label, cls: measuringClass, el: name, what });
+        }
+        if (read.fault !== undefined && bound === undefined) {
+            tally.would += 1;
+            if (walkWould.length < WALK_KEPT) walkWould.push({ screen, look: label, cls: measuringClass, el: name, text, fault: read.fault, sources: read.sources });
+        } else if (read.fault !== undefined) {
+            tally.both += 1;
+        } else if (bound !== undefined) {
+            tally.dropped += 1;
+            if (walkDropped.length < WALK_KEPT) walkDropped.push({ screen, look: label, cls: measuringClass, el: name, text, bound });
+        }
+    } catch (e) {
+        if (walkThrown.length < WALK_THROWN_KEPT) walkThrown.push(`${screen} ${label}: ${describe(el)}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+        walkMs += performance.now() - t0;
+    }
 }
 
 /** Why a decoration line is drawn across or over the text, or undefined. */
@@ -8962,6 +9222,7 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
     shadowersSeen = new Map();
     ownPaintsSeen = new Map();
     abovePaintsSeen = new Map();
+    walkPaintsSeen = new Map();
     const read: DressRead[] = [];
     const subjects = new Set<HTMLElement>(document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`));
     for (const say of document.querySelectorAll<HTMLElement>('#app .fig-say')) {
@@ -9016,7 +9277,10 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
             }
             let inks: readonly Box[] | undefined;
             const elInks = (): readonly Box[] => (inks ??= inkLines(el));
-            for (const why of [groundStackFault(el, cs, stall, elInks), outlineFault(el, cs), decorationFault(cs)]) {
+            const ground = groundStackFault(el, cs, stall, elInks);
+            // 3a, report-only: the walk to the stall beside the bound read (`groundWalkReport`).
+            groundWalkReport(screen, label, el, cs, stall, elInks, ground, node);
+            for (const why of [ground, outlineFault(el, cs), decorationFault(cs)]) {
                 if (why !== undefined) faults.push(`${name}: ${why}`);
             }
             if (pxOf(cs.letterSpacing) < 0) {
@@ -15017,6 +15281,19 @@ const verdict = {
     /* Money figures held to a dress that does not misstate them, per look, and those read under a clip-path or clip (`a-money-figure-is-never-misdressed`). */
     dressByClass,
     dressClipByClass,
+    /*
+     * 3a (`the-ground-walk-reaches-the-stall`, report-only): its tallies per
+     * look, its would-be failures with their sources, the bound read's
+     * failures it would drop, what it could not read (each up to
+     * `WALK_KEPT`), its throws, and its own time (a clock).
+     */
+    walkCheck: WALK_CHECK,
+    walkByClass,
+    walkWould,
+    walkDropped,
+    walkUnread,
+    walkThrown,
+    walkMs,
     failures,
 };
 result.textContent = JSON.stringify(verdict, null, 1);

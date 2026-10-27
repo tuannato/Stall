@@ -128,14 +128,18 @@ function readsOf(body: string): Set<string> {
  * the ground read itself, also reads a box's `overflow-x`, `overflow-y` and
  * `contain` (where a box clips the ink it reads under) and the ink's own
  * lines; a clip only narrows what is read, and where the glyphs stand is
- * `inkSignature`'s.
+ * `inkSignature`'s. The background image's block also runs for a box above
+ * in 3a's report-only walk to the stall (`layersAbove`, before 8g2), which
+ * no keyframe offset reads (`offsetGroundFaults` reads the bound ground
+ * alone): the day 3a binds, a box above is compared on the whole list, and
+ * `GROUND_ABOVE`'s pin moves with it.
  */
 const GROUND_EXCLUDED: Record<string, string> = {};
 
 describe('the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read', () => {
     const signature = setOf('GROUND_SIGNATURE');
     const paints = bodyOf('boxPaintsOf');
-    const ownBlock = blockOf(paints, "if (own && cs.backgroundImage !== 'none') {");
+    const ownBlock = blockOf(paints, "if ((own || layersAbove) && cs.backgroundImage !== 'none') {");
 
     it('hands its style to no helper but borderImageReach, and reads that one too', () => {
         const helpers = new Set([...paints.matchAll(/\b(\w+)\((?:[^()]*,\s*)?cs\s*[,)]/g)].map((m) => m[1]!));

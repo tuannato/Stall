@@ -2856,7 +2856,7 @@ function geometryRecordDiffers(walked, again) {
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
         // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
-        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined };
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined, walkMs: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -3139,6 +3139,61 @@ function reachLines(pass, r) {
     if (sum('throws') > 0) {
         lines.push(`      1b threw on ${sum('throws')} paint(s) and stopped there (it fails nothing):`);
         for (const w of (r.thrown ?? []).slice(0, 8)) lines.push(`        ${w}`);
+    }
+    return lines;
+}
+/*
+ * **3a, `the-ground-walk-reaches-the-stall`, report-only** (before 8g2;
+ * `groundWalkRead` in the probe, the pure half in `layout/groundStack.ts`):
+ * the ground under every money figure's glyphs read to the stall — a box
+ * that paints nothing (`visibility` not `visible`, `display: contents`)
+ * skipped, a box above's gradient layers read as the figure's own are, its
+ * pictures named where one shows — beside the bound read
+ * (`groundStackFault`), which stops at the first opaque background colour.
+ * Printed per pass and per look: its would-be failures grouped by the paints
+ * new to it that made them (`sources`), up to `WALK_PRINTED` groups a pass
+ * with the first sentence of each; the bound read's failures it would not
+ * make; and what it could not read, grouped. It moves no verdict.
+ */
+const WALK_CHECK = 'the-ground-walk-reaches-the-stall';
+const walkGeometry = [];
+/** How many grouped sources, unread kinds and dropped sentences a pass prints. */
+const WALK_PRINTED = 40;
+function walkLines(pass, r) {
+    const classes = Object.keys(r.byClass).sort();
+    const sum = (key) => classes.reduce((n, cls) => n + (r.byClass[cls][key] ?? 0), 0);
+    const lines = [
+        `    ${pass}: ${sum('would')} would-be failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'}), ` +
+            `${sum('both')} failing in both, ${sum('dropped')} the bound read makes and this one would not · ` +
+            `${sum('elements')} element(s) read: ${sum('past')} reading a paint past the bound stop, ${sum('layers')} a box above's gradient, ${sum('pictures')} a box above's picture, ` +
+            `${sum('skipped')} skipping a box that paints nothing; ${sum('unread')} with something unread (${sum('tooMany')} of too many choices) · ${(r.ms / 1000).toFixed(2)}s`,
+    ];
+    const group = (items, keyOf) => {
+        const out = new Map();
+        for (const it of items) {
+            const key = keyOf(it);
+            const g = out.get(key) ?? { n: 0, first: it, screens: new Set() };
+            g.n += 1;
+            g.screens.add(it.screen);
+            out.set(key, g);
+        }
+        return [...out].sort((a, b) => b[1].n - a[1].n || (a[0] < b[0] ? -1 : 1));
+    };
+    const print = (title, groups, say) => {
+        if (groups.length === 0) return;
+        lines.push(`      ${title}:`);
+        for (const [key, g] of groups.slice(0, WALK_PRINTED)) lines.push(`        ${say(key, g)}`);
+        if (groups.length > WALK_PRINTED) lines.push(`        … and ${groups.length - WALK_PRINTED} more`);
+    };
+    print('would-be, by look and source', group(r.would, (w) => `${w.cls} · ${w.sources.join(' + ')}`), (key, g) =>
+        `${key} ×${g.n} on ${g.screens.size} screen(s) — first: ${g.first.screen} ${g.first.look}: ${g.first.el} "${g.first.text}": ${g.first.fault}`,
+    );
+    print('unread, by look and what', group(r.unread, (u) => `${u.cls} · ${u.what}`), (key, g) => `${key} ×${g.n} on ${g.screens.size} screen(s) — first: ${g.first.screen} ${g.first.look}: ${g.first.el}`);
+    print('the bound read fails and this one would not', group(r.dropped, (d) => `${d.cls} · ${d.bound}`), (key, g) => `${key} ×${g.n} — first: ${g.first.screen} ${g.first.look}: ${g.first.el} "${g.first.text}"`);
+    if (r.would.length < sum('would')) lines.push(`      (${sum('would') - r.would.length} more would-be counted and not kept)`);
+    if (r.thrown.length > 0) {
+        lines.push(`      3a threw on ${r.thrown.length} element(s) (it fails nothing):`);
+        for (const w of r.thrown.slice(0, 8)) lines.push(`        ${w}`);
     }
     return lines;
 }
@@ -3849,6 +3904,17 @@ try {
                 policy: g.report.reachBlurOpacity,
             });
         }
+        if (g.report?.walkByClass !== undefined) {
+            walkGeometry.push({
+                pass: g.key,
+                byClass: g.report.walkByClass,
+                would: g.report.walkWould ?? [],
+                dropped: g.report.walkDropped ?? [],
+                unread: g.report.walkUnread ?? [],
+                thrown: g.report.walkThrown ?? [],
+                ms: g.report.walkMs ?? 0,
+            });
+        }
         for (const { err, text } of g.lines) (err ? console.error : console.log)(text);
         if (g.failed) failed = true;
         for (const kind of g.outlined) outlinedTargetsSeen.add(kind);
@@ -4039,6 +4105,11 @@ try {
             `a text-shadow, a drop shadow or a blur, a decoration line, a look pseudo's region) reaching a money node's line boxes or a protected box; it fails nothing`,
     );
     for (const r of reachGeometry) for (const line of reachLines(r.pass, r)) console.log(line);
+    console.log(
+        `  3a (${WALK_CHECK}), report-only: the ground under a money figure's glyphs read to the stall on each geometry pass — a box that paints nothing skipped, ` +
+            `a box above's gradients read, its pictures named — beside the bound read, which stops at the first opaque ground; it fails nothing`,
+    );
+    for (const r of walkGeometry) for (const line of walkLines(r.pass, r)) console.log(line);
     {
         /*
          * `holds-out-of-flow-agrees-with-this-chrome` (the tenth critic's item
