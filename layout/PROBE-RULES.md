@@ -11679,6 +11679,187 @@ CI's `layout` job sets two tabs itself (`ci.yml`) and is unchanged. Not
 measured: three tabs on another machine, or under a carried private look's
 selection.
 
+## Before 8g2, 1d: the code's modules (2026-10-27; the plan's item 1d, the critic's P2-7 and P3-7 item 7; report-only)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/1d/`
+(`runs/`, `plants/`, `tools/`); the paths below are relative to it.
+
+**The incident.** Three reads hold a code and none read its matrix. The
+quiet-zone read holds the white ring around it in pixels; the code hold
+(`a-code-is-drawn-black-on-white`) holds the svg, its rect and its path to
+the paint `qrSvg` gives them, and where its modules land; 1a hit-tests a
+grid over it. A box moved over a pay code's modules (the money-guards
+critic's PQ) passed the whole runner until 1a's grid; a box above the code
+faded (PQO) leaves every property the hold reads as it was, and the quiet
+zone reads it only where the ground under the code is dark; a shadow ring
+with no hit area, or a look pseudo painted in the code's own black, is read
+by other rules only by what it is (1b, the look-pseudo frames), never by
+what it does to the code.
+
+**The rule** (report-only until step 7c; `scripts/code-modules.mjs`,
+`layout/codeMatrix.ts`, `__codeMatrices` in `layout/probe.ts`; tests
+`a-codes-modules-read-as-its-matrix`,
+`a-codes-modules-pair-with-their-zones-by-place-and-name`,
+`a-codes-modules-that-read-wrong-are-read-again-on-a-fresh-pair`,
+`1d-says-what-it-read-and-would-fail`,
+`a-codes-path-is-the-matrix-qrmatrix-gave-it`). On every contrast job, for
+every code the quiet-zone read reads (`__quietZones`; the same list, paired
+by place and held to the same name), the centre pixel of each module is read
+on the job's own capture, the one the quiet zone reads, and held to the
+matrix the code was drawn from: a dark module's centre wrong when any
+channel is over `MODULE_DARK_MAX` (10), a light module's when any channel
+is under `MODULE_LIGHT_MIN` (245). The centre is the pixel under the
+module's middle; from `MODULE_MIN_PX` (2) device pixels a module up that
+pixel lies wholly inside the module, at any offset (tested over eight sizes
+and six offsets), so it is the module's own paint and never an edge's
+antialiasing. A smaller module fails closed. The centre is read only inside
+every clipping ancestor and the shot, the quiet zone's rule.
+
+**Where the matrix comes from.** The brief asked for the code's payload,
+from a `data-*` attribute or the string `qrSvg` was given, and `qrMatrix`
+of it. The app hands that string over nowhere in the DOM but one place:
+`qrSvg` puts no copy of its text on the svg, and the pay sheets keep the
+composed link in their closure on purpose (`CLAUDE.md` §8). So the matrix is
+read off the path's `d` attribute, which `qrSvg` writes from
+`qrMatrix(text)` and nothing else (`matrixOfPath`; held to `qrSvg` and
+`qrMatrix` themselves by `a-codes-path-is-the-matrix-qrmatrix-gave-it`), and
+which a stylesheet cannot change (a `d` property can redraw the path, and
+the code hold refuses one). Where the DOM does carry the text — the touch
+wall's payment plate, `data-pay-uri` — the matrix is also held to
+`qrMatrix` of that text: 18 code reads on the clean tree, all equal. A path
+that is not `qrSvg`'s squares, a module outside the matrix, a viewBox that
+is not the matrix and its quiet zone, or a list of matrices that does not
+line up with the zones fails the read closed for that code, and the run
+says so. **Not built, the owner's to weigh**: a `data-*` attribute on
+every code carrying its text, which would let 1d hold every code to its
+payload; it is an app change (every visitor's bundle, the DOM the pay sheets
+keep the link out of) for a read whose threat is a look, which cannot move
+an attribute.
+
+**The cuts, measured first** (`runs/w-measure-1.log`, the whole runner on
+the 1d code with the cuts provisional, the extremes printed whatever the
+cut). Every dark centre read exactly 0 and every light centre exactly 255,
+on every channel, on all 256 code reads (507,960 centres) at 390, 1280 and
+1920, by look and variant:
+
+| Look | Variant | Dark centres, lo–hi | Light centres, lo–hi |
+|---|---|---|---|
+| Modern | bare, worn | 0–0 (29,574; 28,202) | 255–255 (29,888; 28,522) |
+| Neo | bare, worn, solo flags 16 | 0–0 (29,548; 28,176; 1,638) | 255–255 (29,914; 28,548; 1,724) |
+| Rural | bare, worn | 0–0 (27,071; 25,699) | 255–255 (27,348; 25,982) |
+| skeleton | bare | 0–0 (29,574) | 255–255 (29,888) |
+| tracked fixture | bare, worn | 0–0 (27,174; 25,802) | 255–255 (27,527; 26,161) |
+
+Every shipped look wears at most one mood, and its all-worn variant wears
+it; 21 screens carry a code read here (30 at a viewport), the pay sheets', the record sheets', the share
+code's, the overlay's and the wall's among them. **The transparent
+overlays** (`broadcast-clear`, `broadcast-quotes-clear`,
+`broadcast-ticker-clear`, geometry only in the contrast pass) were sampled
+in a scratch run by adding them to `OVERLAY_SAMPLED` there
+(`tools/clear-mutate.py`, never committed; `runs/q-clear.log`): 0–0 and
+255–255 on every look. So the margin is the whole range up to the cut, and
+the cuts mirror the quiet zone's floor (`QUIET_ZONE_FLOOR` 245): ten levels
+either way of a paint that never moved off 0 or 255, pinned by value.
+
+**The read-again** (the critic's P3-7 item 7: the quiet-zone flake's four
+sightings were all on phone pay sheets, where 1d reads too). It is the quiet
+zone's own, shared rather than copied: `readQuietZones` is now
+`readAgainOnFreshPair(first, again, readQuietZone)`, and 1d's
+`readCodeModules` is the same function over `readModules`, its unit "module
+centres", with one condition more — the matrix the fresh pair's zone carries
+is the first's (`sameMatrix`). A code read wrong is read again on the job's
+one fresh pair (made once a job, `pair ??=`, whichever read asks first, and
+each read decides by its own rule): believed only when the code stood still
+from the job's own zone read through the pair, the pair read at least the
+centres the first did, and its matrix is the same; otherwise the first
+reading stands and both are said. On the clean tree: no read-again, on the
+walk or on the canary's reads again (`meta.codeModules` in the dump).
+
+**The clean tree** (the measuring run, exit 0, 230.8s): 0 would-be failures.
+By viewport and look, code reads and centres:
+
+| Viewport | Modern | Neo | Rural | skeleton | tracked fixture |
+|---|---|---|---|---|---|
+| 390 | 18, 37,938 | 18, 37,938 | 18, 37,938 | 9, 18,969 | 18, 37,938 |
+| 1280 | 32, 66,672 | 34, 70,034 | 28, 59,948 (4 not read) | 16, 33,336 | 30, 57,150 |
+| 1920 | 8, 11,576 | 8, 11,576 | 6, 8,214 (2 not read) | 5, 7,157 | 8, 11,576 |
+
+The 6 not read are Rural's turned frames (`canvas/shop-window-wall`,
+`desktop/shop-window-cycle` and `-cycle-longest-figure`: Rural tilts every
+third wall card), which the quiet zone does not read either. **Codes painted
+and not read**: 507 `pass/screen:code` pairs a geometry pass painted, the
+quiet zone's own list — every code on a geometry-only screen (the other
+overlay screens, the touch wall's `-quotes` and `-pay-3`, the Cycle
+fixtures), and every wall code at the other wall sizes. The least module read is
+3.62px (the after side of both cost pairs, which print it), so no code on
+the clean tree came near the 2px a centre read needs. The same report, word
+for word but the times, on the docs commit's own run in the worktree
+(`runs/w-final.log`): exit 0, 234.0s.
+
+**Red proofs, each plant alone.** Each plant put before Modern's reduce
+block by `tools/apply.mjs`. *Quick reads* (`tools/q1d.sh`, label **quick**):
+the real runner in a scratch tree with the geometry walk skipped and the
+contrast queue cut to `pay` and `pay-several` at 390 and 1280
+(`tools/q1d-mutate.py`, never committed). *Whole runner* (`tools/plants-whole.sh`,
+label **whole**): the committed 1d code, every pass, the one-minute load
+under 2.5 at each start (1.45–2.42), 241–256s. 1d's would-be failures are
+code reads: one per job a code is read on.
+
+| Plant (Modern) | Lints (first party, kit) | 1d, quick | 1d, whole | Exit, and what else failed (whole) |
+|---|---|---|---|---|
+| PQ, the pay code's fold summary moved down 200px over the modules (`position: relative`, at 390) | admit, admit | 4 | 12: the six pay screens bare and worn at 390, 555–624 of 2,401–2,809 centres each, both kinds | 1: 1a, 16 at 390 and 12 once a contrast job |
+| PQT, the same summary carried by `transform: translateY(200px)` | admit, admit | 4 | 12, as PQ | 1: 1a, 16 at 390 and 12 once a contrast job |
+| PQO, `opacity: 0.4` on `.pay-qr`, the box that wraps the code and its lede | admit, admit | 8 | 24: every pay screen at both widths; bare, the dark centres read 0–149 (1,224–1,459 wrong); worn, every centre | 1: the quiet zone, the 12 worn reads alone (After hours' dark ground under the faded ring); the 12 bare reads are 1d's alone |
+| PRS, the lede's `::after`, 0×0, moved up over the modules, `box-shadow: 0 0 0 40px #fff` | admit, admit | 8 | 24: 48–122 dark centres read white a read | 1: the look-pseudo frame, 24; 1b reports 27 at 390 and 27 at 1280 |
+| PPB, the lede's `::before`, a 64px black block over the modules, `visibility: visible; pointer-events: none` | admit, admit | 8 | 24: 37–75 light centres read black a read | 1: 1a, 2 at 390 and 24 once a contrast job; the look-pseudo frame, 24 |
+| Control, the clean tree | — | 0 | 0 | 0 |
+
+Every plant was read wrong on the fresh pair too, so none was let off; no
+read-again was taken on the clean tree. **A stated gap, proved**: PQG, the
+code's own lede (a contrast target) moved up over the modules with no ground,
+its glyphs 44px and black, reads **0** on 1d (quick, `runs/q-PQG.log`)
+while 1a fails it, 8 jobs: the contrast prepare blanks a target's glyphs,
+and 1d reads the blanked capture the quiet zone reads. Both lints admit it.
+
+**Cost** (`tools/ab.sh`, `runs/ab*`). 1d's own clock, from the phase
+table (time summed over the three tabs): `modules-dom` (the page's
+`__codeMatrices`) 1.3s over 263 calls, `modules` (the pixel read) 0.1s —
+1.4s of tab time, about 0.5s of wall time at three tabs; the fresh pair it
+shares is never taken on the clean tree. Two A/B pairs back to back on this
+Mac, three tabs (the default), the tracked fixture carried, scratch clones
+at `3389ec2` (before 1d) and `c0dbe1d` (the 1d code; the docs commit after
+it changes no file the runner reads), each run started once the one-minute
+load was under 2.5:
+
+| Pair | Before | After | Load at start | Geometry walk | Contrast pass |
+|---|---|---|---|---|---|
+| 1 | 239.4s | 232.8s | 2.49, 2.36 | 120.7 → 112.5s | 110.7 → 112.1s |
+| 2 | 237.8s | 237.9s | 2.03, 2.20 | 117.2 → 113.7s | 112.5 → 115.7s |
+
+**1d adds −6.6s and +0.1s on the matched pairs**, and +1.4s and +3.2s to
+the contrast pass, under the 10s the brief allowed it; 1d touches no
+geometry pass, so the walk's −8.2s and −3.5s are the machine (the load
+peaked at 7.3–10.6 during every run). Every check passed on all four runs,
+and the two contrast dumps of pair 2 are identical (`scripts/contrast-dump.mjs`:
+15,018 boxes, 0 moved). The 1a point totals on the geometry passes' lines
+differ by a few dozen points between any two runs, the two `3389ec2` runs
+included.
+
+**Not read, stated.**
+- Every code on a geometry-only screen, at the wall sizes the contrast pass
+  does not paint, and in a turned frame: the quiet zone's own gaps, above
+  (the critic's P2-7: a pay code below the first screen at 390 is read here,
+  on the sampled screens, because the contrast shot is grown to hold the
+  page; at 360 and off the sampled screens it is read by nothing in pixels).
+- A target's glyphs laid over a code (PQG): blanked on the capture 1d reads.
+- A paint that misses every centre: a line or a stroke thinner than half a
+  module laid along the seams, or a cover smaller than a module that falls
+  between centres. A camera may still read through either; 1d does not say.
+- The code at any device pixel ratio but 1, and between the pass's instants.
+- The text a code encodes, except on the wall's plate: the matrix is the one
+  `qrSvg` drew, so a code drawn for the wrong text by the app reads right
+  here (the app's own tests hold its texts).
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

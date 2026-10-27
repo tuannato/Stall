@@ -1258,6 +1258,35 @@ money path this app can have, because nothing on it is derived.
   7. **A run under the private look at 0x04's selection** with 1b in it
      (the money guards' item 2 still stands).
 
+- **Before 8g2, 1d's open list** (a code's modules read in pixels, read
+  report-only; `layout/PROBE-RULES.md`, "Before 8g2, 1d: the code's
+  modules"). 1d fails nothing until step 7c binds it. Open:
+  1. **Bind it at 7c**, with its own red proof on the bound read (PQO's bare
+     reads are 1d's alone), the codes it owes by name (the quiet zone's
+     `CODES_REQUIRED`), and each carried look held to its own reads.
+  2. **A contrast target's glyphs laid over a code are not read** (PQG: the
+     code's own lede moved up over the modules, 44px black glyphs and no
+     ground, reads 0; 1a fails it, both lints admit it): the prepare blanks a
+     target's glyphs on the capture 1d and the quiet zone read. Reading the
+     code on a capture with no glyph blanked would close it; its cost is not
+     measured.
+  3. **Codes not read in pixels**: every code on a geometry-only screen, at
+     the wall sizes the contrast pass does not paint, at 360, and in a turned
+     frame (Rural's wall code at 1920 and two Cycle screens at 1280) — the
+     quiet zone's own list, 507 painted codes on the clean tree. So the QR
+     paragraph's "most" stands (D4, the critic's P2-7) unless a pay code below
+     the first screen is read at scroll stops too (D3(b)).
+  4. **The payload is held only on the wall's plate.** 1d reads the matrix
+     off the path's `d`, the one `qrSvg` drew from `qrMatrix(text)`; the app
+     carries a code's text in the DOM only on the touch wall's plate
+     (`data-pay-uri`). A `data-*` attribute on every code would let 1d hold
+     each to its payload: an app change (every visitor's bundle, and a link in
+     the DOM the pay sheets keep out of it on purpose), the owner's to weigh.
+  5. **A paint that misses every centre** (a line thinner than half a module
+     along the seams, a cover smaller than a module between centres) is not
+     read; whether a camera reads through it is not measured.
+  6. **A run under the private look at 0x04's selection** with 1d in it.
+
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,
   `private/design/workshop-2026-09-23/touch-wall/CRITIC.md`, item 3). The
