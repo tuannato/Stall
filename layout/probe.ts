@@ -90,6 +90,30 @@ import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
 import { reachesAnything, spillReach } from './spillReach';
+import {
+    ANYWHERE,
+    BLUR_OPACITY,
+    blurMeet,
+    borderImageBox,
+    boxShadowLayers,
+    compositeOverAny,
+    filterLayers,
+    intersect,
+    layerBound,
+    outlineBox,
+    parseFilter,
+    parseShadows,
+    pseudoRegion,
+    sharpMeet,
+    targetPast,
+    textShadowLayers,
+    underlineBand,
+    union,
+    type Layer,
+    type Meet,
+    type ReachKind,
+    type Shadow as ReachShadow,
+} from './paintReach';
 import { CARD_LADDER_LAST_STEP } from './cardLadder';
 import { inkLines, measurePainted, paddingBox, painted, paintClips, type Box } from '../src/ui/signInk';
 import {
@@ -581,7 +605,8 @@ function coveredByRead(node: Element): string | undefined {
  * the box's centre, its corners inside its rounded shape and a grid over the
  * code (`layout/coverPoints.ts`), each in its own frame. A paint with no hit
  * area — a shadow, an outline, a neighbour's underline — is not
- * hit-testable whatever the forcing, and is 1b's (C-1, not built).
+ * hit-testable whatever the forcing, and is 1b's
+ * (`a-paint-with-no-hit-area-reaches-no-money`, report-only, below).
  *
  * **What a lattice of points cannot see, stated** (the critic's item 7):
  * any fixed set of points can be dodged. A cover thinner than the pitch
@@ -1590,6 +1615,8 @@ function coverAtRest(screen: string, label: string): Failure[] {
         }
     }
     coverRest = [];
+    // 1b, report-only, at rest and at its keyframes, before 1a forces the hit test on (`reachAtRest`).
+    reachAtRest(screen, label);
     const atRest = coverRead(screen, label);
     // And once more at the end of every animation that keeps it (`coverAtEnd`).
     return [...atRest, ...coverAtEnd(screen, label, atRest)];
@@ -1597,6 +1624,1078 @@ function coverAtRest(screen: string, label: string): Failure[] {
 
 /** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
 window.__coverFaults = () => coverScan();
+
+/*
+ * **Paints with no hit area that reach over money** (before 8g2, 1b,
+ * `a-paint-with-no-hit-area-reaches-no-money`, **report-only**; the pure
+ * half is `layout/paintReach.ts`). 1a hit-tests money with `pointer-events`
+ * forced on, so a cover answers wherever it has a hit area — and a paint
+ * that has none answers nowhere (the plan's C-1): the critic's PW, the price
+ * column's `::after` at `height: 0` moved up 60px with `box-shadow: 0 0 0
+ * 60px` in a literal colour, hides the figure while every point 1a asks
+ * returns the figure. This reads every element and every look pseudo-element
+ * (`markLookPseudos`' kind, its hosts found from the CSSOM rule walk once a
+ * page) on the open surface — and a look pseudo of a box above the surface,
+ * up to the app's root — and, for each that is neither an ancestor nor a
+ * descendant of the node it is held to, the reach past the box it is drawn
+ * from of an outer `box-shadow` (its offset and spread in full, its blur
+ * under the policy), an `outline` (its width plus its offset), a
+ * `border-image-outset`, a `text-shadow` (from the text's own line boxes:
+ * each copy past the line it copies), a `drop-shadow()` and a `blur()` in a
+ * `filter` (`url()` fails closed), a decoration line's band (an underline
+ * from the baseline at its offset and thickness, past its own line), and a
+ * look pseudo-element's own region where it holds text (`pseudoRegion`:
+ * anywhere in its host's box, moved by its offsets and margins and grown by
+ * its text's size; a pseudo a transform moves, out of flow, or whose size or
+ * place does not resolve reaches anywhere where it paints at all). Any reach
+ * that meets a money node's line boxes (`MONEY_FIGURES`, its text's own) or
+ * a protected box (`PROTECTED`, its border boxes), each cut to what its
+ * clipping boxes show — the reach cut to what the reacher's show — past the
+ * box it is drawn from (a pseudo's region is not inside its box, so nothing
+ * is excluded), by more than a pixel on both axes, is a would-be failure.
+ *
+ * **The blur policy** (`BLUR_OPACITY`, measured first; `PROBE-RULES.md`,
+ * "Before 8g2, 1b"): a blurred tail counts where the composite of every
+ * blurred layer the reacher paints, each at its most over the target past
+ * the reacher's own box, reaches it. The most each soft paint reaches over
+ * any target it comes within reach of is kept per source (`reachSoft`), the
+ * policy's measurement, and printed.
+ *
+ * **When**: on every geometry pass, once a paint, at rest — every animation
+ * reset as 1a resets it, just before 1a's read (`coverAtRest`) — and at the
+ * keyframes of the animations that can move or change a paint that reaches
+ * (`reachSeek`): an animation of a box-shadow, a text-shadow, a filter or a
+ * colour alone is read from its keyframes' own computed values, with no
+ * seek (`reachKeyframes`); every other animation whose keyframes set a
+ * paint that reaches (`REACH_PROPS`), that runs on a look pseudo, or that
+ * runs on or above a box holding a reacher or a target is seeked to each
+ * keyframe offset, and the boxes it runs on and under read again, the
+ * targets it moves held to every reacher standing still; an animation of
+ * nothing that reaches or moves (`reachNeedless`: a ground, an opacity, a
+ * clip or a mask, and a custom property only those read) is left alone.
+ * Clips are held per pair (`pairClip`): a scroller that holds both boxes
+ * clips neither on the axis it scrolls (below the fold they move together),
+ * every other clip cuts at its padding box. Fails nothing: its would-be
+ * failures — one a pair of boxes and a kind — are counted per look and per
+ * kind and printed per pass. Not read, stated: a reach between two keyframes, and two animations
+ * at once; a value a keyframe read from its values does not set, read as it
+ * computes at rest; an element's paint stacked under a neighbour's opaque
+ * ground (paint order is not modelled: a meet is a meet whichever paints
+ * last); several reachers' blurs together (each reacher's layers are
+ * composited alone); a glyph's own shape (a text-shadow is blurred off its
+ * line's measured ink box, an upper bound; a line over several lines, its
+ * line boxes); a target inside a scroller against a reacher outside it at any
+ * scroll but the one the paint stands at; a column rule; an SVG element's
+ * own overflow; a decoration line on a pseudo's text; and where in its
+ * region a pseudo actually stands.
+ */
+const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
+/** One look's 1b tallies on a pass: paints read at rest, elements and pseudos read, reachers with a paint that reaches, targets held, pairs judged, keyframe seeks, would-be failures by kind. */
+type ReachTally = {
+    paints: number;
+    elements: number;
+    pseudos: number;
+    reachers: number;
+    targets: number;
+    pairs: number;
+    seeks: number;
+    /** Animations left out of the keyframe read: they set nothing that reaches or moves (`reachNeedless`). */
+    needless: number;
+    /** Animations read at their keyframes from the keyframes' own values, with no seek (`reachKeyframes`). */
+    fromValues: number;
+    would: number;
+    byKind: Partial<Record<ReachKind, number>>;
+    /** Pairs met by a blurred layer's offset and spread alone, which the policy does not count (`reachLiteral`). */
+    softCore: number;
+};
+const reachByClass: Record<string, ReachTally> = {};
+const reachTally = (): ReachTally =>
+    (reachByClass[measuringClass] ??= { paints: 0, elements: 0, pseudos: 0, reachers: 0, targets: 0, pairs: 0, seeks: 0, needless: 0, fromValues: 0, would: 0, byKind: {}, softCore: 0 });
+/** The would-be failures, word for word, up to `REACH_KEPT` a pass (the rest counted in the tallies). */
+const reachWould: string[] = [];
+const REACH_KEPT = 4000;
+/**
+ * The pairs a literal reading of "offset and spread in full" would add — a blurred layer's offset
+ * and spread counted in full, as a sharp one's is — measured and not counted:
+ * the policy judges a blurred layer whole, its core included
+ * (`softCore` in the tallies; up to `REACH_LITERAL_KEPT` word for word).
+ */
+const reachLiteral: string[] = [];
+const REACH_LITERAL_KEPT = 400;
+/** 1b's own time (a clock), and of it the keyframe seeks'. */
+let reachMs = 0;
+let reachSeekMs = 0;
+/** The most composite coverage each soft paint reached over any target past its own box, per source (`describe` and kind): the blur policy's measurement. */
+const reachSoft: Record<string, number> = {};
+
+/** A colour's alpha as the browser resolves it (a 1×1 canvas, as `boxShadowsOf` reads one), once a colour a page. */
+const alphaSeen = new Map<string, number | undefined>();
+let alphaCtx: CanvasRenderingContext2D | undefined;
+function alphaOfColour(colour: string, current?: string): number | undefined {
+    const text = colour.trim().toLowerCase() === 'currentcolor' && current !== undefined ? current : colour.trim();
+    if (alphaSeen.has(text)) return alphaSeen.get(text);
+    alphaCtx ??= (() => {
+        const c = document.createElement('canvas');
+        c.width = 1;
+        c.height = 1;
+        return c.getContext('2d', { willReadFrequently: true })!;
+    })();
+    let alpha: number | undefined;
+    if (CSS.supports('color', text)) {
+        alphaCtx.clearRect(0, 0, 1, 1);
+        alphaCtx.fillStyle = 'transparent';
+        alphaCtx.fillStyle = text;
+        alphaCtx.fillRect(0, 0, 1, 1);
+        alpha = alphaCtx.getImageData(0, 0, 1, 1).data[3]! / 255;
+        // A colour too faint for a byte still paints something: never 0 unless it is nothing.
+        if (alpha === 0 && (colourOf(text)?.alpha ?? 0) > 0) alpha = 1 / 255;
+    }
+    alphaSeen.set(text, alpha);
+    return alpha;
+}
+
+/**
+ * The look pseudos a page's sheets generate, as the selector of the box
+ * that hosts each and which pseudo (`lookPseudoOf`, the look-pseudo
+ * reading's own), read once while the page's sheets stand.
+ */
+let reachPseudoRules: { key: number; list: { which: 'before' | 'after'; host: string }[] } | undefined;
+function lookPseudoHosts(): { which: 'before' | 'after'; host: string }[] {
+    const key = document.styleSheets.length;
+    if (reachPseudoRules?.key === key) return reachPseudoRules.list;
+    const seen = new Set<string>();
+    const list: { which: 'before' | 'after'; host: string }[] = [];
+    for (const rule of styleRules()) {
+        for (const one of selectorList(rule.selectorText)) {
+            const look = lookPseudoOf(one);
+            if (look === undefined) continue;
+            const k = `${look.which}|${look.host}`;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            list.push(look);
+        }
+    }
+    reachPseudoRules = { key, list };
+    return list;
+}
+
+/**
+ * **A box's clipping ancestors** (`overflow` on either axis, `contain:
+ * paint`), nearest first, each with its padding box, the axes it clips on
+ * and the axes it scrolls on; once an element a read. What clips a paint is
+ * a question about a pair (`pairClip`): an ancestor that holds the other box
+ * too and scrolls on an axis clips neither on that axis — they move together
+ * as it scrolls, so what stands below the fold inside the stall's scroll
+ * region is read where it stands — and every other ancestor clips at its
+ * padding box: a paint inside a scroller never leaves its window, at any
+ * scroll, for a box outside it.
+ */
+type ClipLink = { el: Element; box: Box; cx: boolean; cy: boolean; sx: boolean; sy: boolean };
+function reachClipChain(el: Element, seen: Map<Element, ClipLink[]>): ClipLink[] {
+    const known = seen.get(el);
+    if (known !== undefined) return known;
+    const parent = el.parentElement;
+    let chain: ClipLink[] = [];
+    if (parent !== null && parent !== document.documentElement) {
+        chain = reachClipChain(parent, seen);
+        const cs = getComputedStyle(parent);
+        const paint = /\b(?:paint|strict|content)\b/.test(cs.contain);
+        const cx = paint || cs.overflowX !== 'visible';
+        const cy = paint || cs.overflowY !== 'visible';
+        if (cx || cy) chain = [{ el: parent, box: paddingBox(parent), cx, cy, sx: !paint && scrollsOn(cs.overflowX), sy: !paint && scrollsOn(cs.overflowY) }, ...chain];
+    }
+    seen.set(el, chain);
+    return chain;
+}
+
+/** What a chain of clips shows of a paint held to `other` (`reachClipChain`): every link, but on an axis a link that holds `other` scrolls. */
+function pairClip(chain: readonly ClipLink[], other: Element): Box {
+    let b: Box = ANYWHERE;
+    for (const l of chain) {
+        const holds = l.el.contains(other);
+        if (l.cx && !(holds && l.sx)) b = { ...b, left: Math.max(b.left, l.box.left), right: Math.min(b.right, l.box.right) };
+        if (l.cy && !(holds && l.sy)) b = { ...b, top: Math.max(b.top, l.box.top), bottom: Math.min(b.bottom, l.box.bottom) };
+    }
+    return b;
+}
+
+/** What a chain of clips shows whatever the other box: its links on the axes they cut and do not scroll (a superset of every `pairClip`). */
+function cutClip(chain: readonly ClipLink[]): Box {
+    let b: Box = ANYWHERE;
+    for (const l of chain) {
+        if (l.cx && !l.sx) b = { ...b, left: Math.max(b.left, l.box.left), right: Math.min(b.right, l.box.right) };
+        if (l.cy && !l.sy) b = { ...b, top: Math.max(b.top, l.box.top), bottom: Math.min(b.bottom, l.box.bottom) };
+    }
+    return b;
+}
+
+/** How much a box's transforms (its own and its ancestors') magnify a length: its painted size over its layout size, at least 1. */
+function reachScale(el: Element, r: DOMRect): number {
+    if (!(el instanceof HTMLElement) || el.offsetWidth === 0 || el.offsetHeight === 0) return 1;
+    return Math.max(1, r.width / el.offsetWidth, r.height / el.offsetHeight);
+}
+
+/** A pseudo's generated text, from its computed `content`: a quoted string's text, '' for none, and a placeholder for anything else that may print. */
+function pseudoText(content: string): string {
+    const c = content.trim();
+    if (c === 'none' || c === 'normal' || c === '""' || c === "''") return '';
+    const m = /^(["'])(.*)\1$/s.exec(c);
+    if (m !== null) return m[2]!.replace(/\\(.)/g, '$1');
+    return 'x';
+}
+
+/** Whether a box paints an area of its own: a background colour with any alpha, a background image, or a visible border. */
+function paintsOwnArea(cs: CSSStyleDeclaration): boolean {
+    if ((alphaOfColour(cs.backgroundColor) ?? 1) > 0) return true;
+    if (cs.backgroundImage !== 'none' && cs.backgroundImage !== '') return true;
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+        const w = Number.parseFloat(cs.getPropertyValue(`border-${side}-width`)) || 0;
+        const style = cs.getPropertyValue(`border-${side}-style`);
+        if (w > 0 && style !== 'none' && style !== 'hidden' && (alphaOfColour(cs.getPropertyValue(`border-${side}-color`), cs.color) ?? 1) > 0) return true;
+    }
+    return false;
+}
+
+/** A sharp reach: a rect painted in full, the box it is drawn from (past which it reaches; undefined for a pseudo's region), and whether it is a blurred layer's core. */
+type SharpReach = { kind: ReachKind; rect: Box; base: Box | undefined; what: string; soft: boolean };
+/** One reacher's paints that reach: its sharp rects and its blurred layers, each family named; where any of it may land; and why it reaches anywhere. */
+type ReachPaints = {
+    /** The box its blurs are judged past, or undefined for a pseudo's region. */
+    base: Box | undefined;
+    bound: Box;
+    sharp: SharpReach[];
+    soft: { kind: ReachKind; layer: Layer; what: string }[];
+    anywhere?: string;
+    /** Its clipping ancestors, its own window, and whether that window cuts all of it (a pseudo's); set by `cutToClips`. */
+    chain?: ClipLink[];
+    own?: Box;
+    ownAll?: boolean;
+};
+
+const shadowText = (s: ReachShadow): string => `${s.x}px ${s.y}px, blur ${s.blur}, spread ${s.spread}, alpha ${Number(s.alpha.toFixed(3))}`;
+
+/** The box paints a reacher's computed style holds (box-shadow, outline, border image, filter), as plain values. */
+type BoxPaintFacts = {
+    boxShadow: string;
+    outlineStyle: string;
+    outlineWidth: string;
+    outlineOffset: string;
+    outlineColor: string;
+    borderImageSource: string;
+    borderImageOutset: string;
+    borderWidths: [number, number, number, number];
+    filter: string;
+    color: string;
+};
+function boxPaintFacts(cs: CSSStyleDeclaration, svgInner: boolean): BoxPaintFacts {
+    return {
+        boxShadow: svgInner ? 'none' : cs.boxShadow,
+        outlineStyle: svgInner ? 'none' : cs.outlineStyle,
+        outlineWidth: cs.outlineWidth,
+        outlineOffset: cs.outlineOffset,
+        outlineColor: cs.outlineColor,
+        borderImageSource: svgInner ? 'none' : cs.borderImageSource,
+        borderImageOutset: cs.borderImageOutset,
+        borderWidths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth].map((v) => Number.parseFloat(v) || 0) as [number, number, number, number],
+        filter: cs.filter,
+        color: cs.color,
+    };
+}
+
+/** The box paints off `base` (`base` undefined: a pseudo's region, drawn from `region`), scaled by `k`, into `out`. */
+function boxReaches(f: BoxPaintFacts, region: Box, base: Box | undefined, k: number, out: ReachPaints): void {
+    const alphaOf = (c: string): number | undefined => alphaOfColour(c, f.color);
+    if (f.boxShadow !== 'none' && f.boxShadow !== '') {
+        const shadows = parseShadows(f.boxShadow, alphaOf);
+        if (shadows === undefined) out.anywhere ??= `a box-shadow this read cannot take apart (${f.boxShadow.slice(0, 60)})`;
+        else {
+            const outer = shadows.filter((sh) => !sh.inset && sh.alpha > 0);
+            for (const [i, layer] of boxShadowLayers(region, outer, k).entries()) {
+                const what = shadowText(outer[i]!);
+                out.sharp.push({ kind: 'box-shadow', rect: layer.rect, base, what, soft: layer.sigma > 0 });
+                if (layer.sigma > 0) out.soft.push({ kind: 'box-shadow blur', layer, what });
+            }
+        }
+    }
+    if (f.outlineStyle !== 'none') {
+        const o = outlineBox(region, f.outlineStyle, Number.parseFloat(f.outlineWidth) || 0, Number.parseFloat(f.outlineOffset) || 0, k);
+        if (o !== undefined && (alphaOf(f.outlineColor) ?? 1) > 0) out.sharp.push({ kind: 'outline', rect: o, base, what: `${f.outlineWidth} ${f.outlineStyle} at ${f.outlineOffset}`, soft: false });
+    }
+    if (f.borderImageSource !== 'none' && f.borderImageSource !== '') {
+        const parts = f.borderImageOutset.trim().split(/\s+/);
+        const side = (i: number): number => {
+            const v = parts[i] ?? parts[i - 2] ?? parts[0] ?? '0';
+            return v.endsWith('px') ? Number.parseFloat(v) : (Number.parseFloat(v) || 0) * f.borderWidths[i]!;
+        };
+        const b = borderImageBox(region, [side(0), side(1), side(2), side(3)], k);
+        if (b !== undefined) out.sharp.push({ kind: 'border-image', rect: b, base, what: `outset ${f.borderImageOutset}`, soft: false });
+    }
+    if (f.filter !== 'none' && f.filter !== '') {
+        const parsed = parseFilter(f.filter, alphaOf);
+        if (parsed.unread !== undefined) out.anywhere ??= parsed.unread;
+        else {
+            const { drops, blur } = filterLayers(region, parsed, k);
+            const what = f.filter.slice(0, 60);
+            for (const layer of drops) {
+                out.sharp.push({ kind: 'drop-shadow', rect: layer.rect, base, what, soft: layer.sigma > 0 });
+                if (layer.sigma > 0) out.soft.push({ kind: 'drop-shadow blur', layer, what });
+            }
+            if (blur !== undefined) out.soft.push({ kind: 'blur', layer: blur, what });
+        }
+    }
+}
+
+/** A face's ascent above its baseline, once a face a page (the ink model's own measure). */
+const ascentSeen = new Map<string, number>();
+function faceAscent(cs: CSSStyleDeclaration): number {
+    const key = faceKey(cs);
+    let a = ascentSeen.get(key);
+    if (a === undefined) {
+        const m = measurePainted('x', cs);
+        a = m === undefined ? (Number.parseFloat(cs.fontSize) || 16) * 0.9 : m.fontBoundingBoxAscent;
+        ascentSeen.set(key, a);
+    }
+    return a;
+}
+
+/** The decorating box of a text owner's line: itself, or the nearest box above it that declares that line. */
+function decoratingBox(el: Element, kind: string): Element {
+    for (let at: Element | null = el; at !== null && at.id !== 'app'; at = at.parentElement) {
+        if (getComputedStyle(at).textDecorationLine.includes(kind)) return at;
+    }
+    return el;
+}
+
+/**
+ * Where a text node's glyphs ink, line by line: on one line, the measured
+ * ink (the ink model's measure, `measurePainted`: the reach above and below
+ * the baseline, and the first glyph's left and the last glyph's right side
+ * bearings; a negative letter-spacing's pull added back), placed by its line box — an
+ * upper bound of every glyph, so a shadow blurred off it covers at least as
+ * much as the glyphs' own; over several lines, or in a vertical or
+ * right-to-left line, the line boxes themselves (which stacked marks can
+ * run past, stated).
+ */
+function textInk(text: Text, cs: CSSStyleDeclaration, rects: readonly Box[]): Box[] {
+    if (rects.length !== 1 || !cs.writingMode.startsWith('horizontal') || cs.direction !== 'ltr') return [...rects];
+    const r = rects[0]!;
+    const m = measurePainted(painted(text.data.trim(), cs.textTransform), cs);
+    if (m === undefined || !(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent > 0)) return [r];
+    // A negative letter-spacing may pull the line box's end in past the last glyph's advance; a positive one is never taken off (whether the
+    // line box holds the trailing spacing is the engine's): the right edge errs out, never in.
+    const pulled = Math.max(0, -(Number.parseFloat(cs.letterSpacing) || 0));
+    const base = r.top + m.fontBoundingBoxAscent;
+    // Never clamped to the line box: a glyph's ink may stand past its advance (an overhang), and past the content area across the line.
+    const left = r.left - m.actualBoundingBoxLeft;
+    const right = r.right + pulled - (m.width - m.actualBoundingBoxRight);
+    const top = base - m.actualBoundingBoxAscent;
+    const bottom = base + m.actualBoundingBoxDescent;
+    return right > left && bottom > top ? [{ left, top, right, bottom }] : [r];
+}
+
+/** A text owner's text paints: a text-shadow off its lines' ink (`inks`; each sharp copy past the ink it copies), decoration lines along its line boxes; into `out`. */
+function textReaches(
+    el: Element,
+    cs: CSSStyleDeclaration,
+    lines: readonly Box[],
+    inks: readonly Box[],
+    k: number,
+    out: ReachPaints,
+    pseudo: boolean,
+    textShadow = cs.textShadow,
+    decorations = !pseudo,
+    colour = cs.color,
+): void {
+    if (textShadow !== 'none') {
+        const shadows = parseShadows(textShadow, (c) => alphaOfColour(c, colour));
+        if (shadows === undefined) out.anywhere ??= `a text-shadow this read cannot take apart (${textShadow.slice(0, 60)})`;
+        else {
+            for (const s of shadows) {
+                if (s.alpha <= 0) continue;
+                const what = shadowText(s);
+                for (const ink of inks) {
+                    const [layer] = textShadowLayers([ink], [s], k);
+                    out.sharp.push({ kind: 'text-shadow', rect: layer!.rect, base: pseudo ? undefined : ink, what, soft: layer!.sigma > 0 });
+                    if (layer!.sigma > 0) out.soft.push({ kind: 'text-shadow blur', layer: layer!, what });
+                }
+            }
+        }
+    }
+    if (!decorations) return;
+    const inEffect = cs.getPropertyValue('-webkit-text-decorations-in-effect');
+    if (inEffect === '' || inEffect === 'none') return;
+    for (const kind of ['underline', 'overline'] as const) {
+        if (!inEffect.includes(kind)) continue;
+        const deco = getComputedStyle(decoratingBox(el, kind));
+        const ascent = faceAscent(cs);
+        const size = Number.parseFloat(cs.fontSize) || 16;
+        for (const line of lines) {
+            const band = underlineBand(line, kind, ascent, size, cs.textUnderlineOffset, deco.textDecorationThickness, cs.textUnderlinePosition);
+            if (band !== undefined) out.sharp.push({ kind: 'decoration', rect: band, base: line, what: `${kind} ${deco.textDecorationThickness} at ${cs.textUnderlineOffset}`, soft: false });
+        }
+    }
+}
+
+/** Where a reacher's paints may land at all. */
+function reachBound(p: ReachPaints): Box {
+    let b: Box | undefined;
+    for (const s of p.sharp) b = b === undefined ? s.rect : union(b, s.rect);
+    for (const s of p.soft) b = b === undefined ? layerBound(s.layer) : union(b, layerBound(s.layer));
+    return b ?? { left: 0, top: 0, right: 0, bottom: 0 };
+}
+
+/**
+ * A reacher's clips (`reachClipChain`, held per pair in `judgeReacher`), and
+ * its own window where it clips its own content (`reachOwnClip`): its text's
+ * paints — and a look pseudo's, all of them — never leave it (a text and a
+ * pseudo-element are their box's content, a shadow of the box is not); and
+ * where any of its paints may land at all, for finding the targets it can
+ * meet (`cutClip`, a superset of every pair's clip).
+ */
+function cutToClips(el: Element, p: ReachPaints, chainSeen: Map<Element, ClipLink[]>, pseudo = false): void {
+    p.chain = reachClipChain(el, chainSeen);
+    p.own = reachOwnClip(el);
+    p.ownAll = pseudo;
+    p.bound = p.anywhere !== undefined ? ANYWHERE : (intersect(reachBound(p), cutClip(p.chain)) ?? NO_BOX);
+}
+
+/** Where a box clips its own content: its padding box on the axes it clips, or undefined where it clips none. */
+function reachOwnClip(el: Element): Box | undefined {
+    const cs = getComputedStyle(el);
+    const paint = /\b(?:paint|strict|content)\b/.test(cs.contain);
+    const cx = paint || cs.overflowX !== 'visible';
+    const cy = paint || cs.overflowY !== 'visible';
+    if (!cx && !cy) return undefined;
+    const r = paddingBox(el);
+    return { left: cx ? r.left : -Infinity, right: cx ? r.right : Infinity, top: cy ? r.top : -Infinity, bottom: cy ? r.bottom : Infinity };
+}
+
+/** A target 1b holds a reach to: the node, its boxes, its clips (held per pair, `pairClip`), and its name. */
+type ReachTarget = { node: Element; boxes: Box[]; chain: ClipLink[]; name: string };
+
+/** The targets on a surface: every money node's text line boxes, every protected box's border boxes; a target its clips cut away whatever is held to it is none. */
+function reachTargets(surface: ParentNode, clipSeen: Map<Element, ClipLink[]>, nodes?: readonly Element[]): ReachTarget[] {
+    const out: ReachTarget[] = [];
+    const range = document.createRange();
+    for (const node of nodes ?? [...new Set(surface.querySelectorAll(`${MONEY_FIGURES}, ${PROTECTED}`))].filter((n) => n.closest('.deck-stall') === null)) {
+        const raw: Box[] = [];
+        if (node.matches(PROTECTED)) {
+            for (const r of node.getClientRects()) if (r.width > 0 && r.height > 0) raw.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+        } else {
+            const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+            for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+                if ((t.textContent ?? '').trim() === '') continue;
+                range.selectNodeContents(t);
+                for (const r of range.getClientRects()) if (r.width > 0 && r.height > 0) raw.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+            }
+        }
+        const chain = reachClipChain(node, clipSeen);
+        const cut = cutClip(chain);
+        const boxes = raw.filter((b) => intersect(b, cut) !== undefined);
+        if (boxes.length > 0) out.push({ node, boxes, chain, name: named(node) });
+    }
+    return out;
+}
+
+/** The paint's read at rest's targets, clips, surface and element reachers (`reachRead`), for its keyframe reads. */
+let reachRest: { targets: ReachTarget[]; clipSeen: Map<Element, ClipLink[]>; surface: ParentNode; reachers: Map<Element, Reacher>; all: Reacher[] } | undefined;
+
+/** A reacher: an element, or a look pseudo-element (its host and which), and its paints that reach. */
+type Reacher = { el: Element; pseudo: '::before' | '::after' | null; paints: ReachPaints };
+
+const NO_BOX: Box = { left: 0, top: 0, right: 0, bottom: 0 };
+
+/** The reachers on `surface` (`only`: of these elements alone), each with the paints that reach; tallies into `t` where `rest`. */
+function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined, clipSeen: Map<Element, ClipLink[]>, t: ReachTally, rest: boolean): Reacher[] {
+    const out: Reacher[] = [];
+    const root = document.getElementById('app')!;
+    const scope: Element = surface instanceof Element ? surface : root;
+    const range = document.createRange();
+    const els = only === undefined ? scope.querySelectorAll('*') : [...only].filter((el) => scope.contains(el));
+    const cut = (el: Element, p: ReachPaints): void => cutToClips(el, p, clipSeen);
+    for (const el of els) {
+        if (rest) t.elements += 1;
+        if (el.getClientRects().length === 0 || el.closest('.deck-stall') !== null) continue;
+        const cs = getComputedStyle(el);
+        if (cs.visibility !== 'visible') continue;
+        const r = el.getBoundingClientRect();
+        const base: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        const k = reachScale(el, r);
+        const paints: ReachPaints = { base, bound: base, sharp: [], soft: [] };
+        boxReaches(boxPaintFacts(cs, el instanceof SVGElement && !(el instanceof SVGSVGElement)), base, base, k, paints);
+        // Its own text's paints, off its own text's lines: the shadow from each line's ink, a decoration line along each line box.
+        const shadowed = cs.textShadow !== 'none';
+        const decorated = (cs.getPropertyValue('-webkit-text-decorations-in-effect') || 'none') !== 'none';
+        if (shadowed || decorated) {
+            const lines: Box[] = [];
+            const inks: Box[] = [];
+            for (const c of el.childNodes) {
+                if (c.nodeType !== Node.TEXT_NODE || (c.textContent ?? '').trim() === '') continue;
+                range.selectNodeContents(c);
+                const rects = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => ({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }));
+                lines.push(...rects);
+                if (shadowed) inks.push(...textInk(c as Text, cs, rects));
+            }
+            if (lines.length > 0) textReaches(el, cs, lines, inks, k, paints, false);
+        }
+        if (paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined) continue;
+        cut(el, paints);
+        out.push({ el, pseudo: null, paints });
+    }
+    // Look pseudos: of hosts on the surface, and of the boxes above it up to the app's root (the critic's T6 shape).
+    const hosts = new Map<Element, Set<'before' | 'after'>>();
+    for (const { which, host } of lookPseudoHosts()) {
+        let found: Element[];
+        try {
+            if (only !== undefined) {
+                found = [...only].filter((el) => el.matches(host));
+            } else {
+                found = [...(scope.matches(host) ? [scope] : []), ...scope.querySelectorAll(host)];
+                if (scope !== root) for (let up = scope.parentElement; up !== null; up = up.parentElement) {
+                    if (up.matches(host)) found.push(up);
+                    if (up === root) break;
+                }
+            }
+        } catch {
+            continue;
+        }
+        for (const el of found) {
+            if (el.closest('.deck-stall') !== null || (only !== undefined && !only.has(el))) continue;
+            let set = hosts.get(el);
+            if (set === undefined) hosts.set(el, (set = new Set()));
+            set.add(which);
+        }
+    }
+    for (const [el, whiches] of hosts) {
+        if (el.getClientRects().length === 0) continue;
+        const hr = el.getBoundingClientRect();
+        for (const which of whiches) {
+            const pseudo = `::${which}` as const;
+            const cs = getComputedStyle(el, pseudo);
+            if (cs.content === 'none' || cs.content === 'normal' || cs.display === 'none' || cs.visibility !== 'visible') continue;
+            if (rest) t.pseudos += 1;
+            const text = pseudoText(cs.content);
+            const px = (v: string): number => Number.parseFloat(v) || 0;
+            const region = pseudoRegion({
+                host: { left: hr.left, top: hr.top, right: hr.right, bottom: hr.bottom },
+                display: cs.display,
+                position: cs.position,
+                width: cs.width,
+                height: cs.height,
+                top: cs.top,
+                right: cs.right,
+                bottom: cs.bottom,
+                left: cs.left,
+                marginTop: cs.marginTop,
+                marginRight: cs.marginRight,
+                marginBottom: cs.marginBottom,
+                marginLeft: cs.marginLeft,
+                paddingX: px(cs.paddingLeft) + px(cs.paddingRight),
+                paddingY: px(cs.paddingTop) + px(cs.paddingBottom),
+                borderX: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
+                borderY: px(cs.borderTopWidth) + px(cs.borderBottomWidth),
+                fontSize: px(cs.fontSize) || 16,
+                lineHeight: cs.lineHeight,
+                text,
+                transform: cs.transform,
+                translate: cs.translate,
+                rotate: cs.rotate,
+                scale: cs.scale,
+                offsetPath: cs.getPropertyValue('offset-path') || 'none',
+            });
+            const k = reachScale(el, hr);
+            const paints: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
+            const holdsText = text.trim() !== '';
+            if ('anywhere' in region) {
+                // It fails closed where it paints at all: its text, its own area, or a paint that reaches.
+                const probe: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
+                boxReaches(boxPaintFacts(cs, false), NO_BOX, undefined, k, probe);
+                if (holdsText || paintsOwnArea(cs) || probe.sharp.length > 0 || probe.soft.length > 0 || probe.anywhere !== undefined) paints.anywhere = region.anywhere;
+            } else {
+                boxReaches(boxPaintFacts(cs, false), region.box, undefined, k, paints);
+                if (holdsText) {
+                    paints.sharp.push({ kind: 'pseudo box', rect: region.box, base: undefined, what: `its text ${JSON.stringify(text.slice(0, 8))} at ${cs.fontSize}`, soft: false });
+                    textReaches(el, cs, [region.box], [region.box], k, paints, true);
+                }
+            }
+            if (paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined) continue;
+            cutToClips(el, paints, clipSeen, true);
+            out.push({ el, pseudo, paints });
+        }
+    }
+    if (rest) t.reachers += out.length;
+    return out;
+}
+
+/** An element's number on this page, for keys that must tell two boxes of one name apart (`judgeReacher`). */
+const reachIds = new WeakMap<Element, number>();
+let reachIdNext = 0;
+function reachId(el: Element): number {
+    let id = reachIds.get(el);
+    if (id === undefined) reachIds.set(el, (id = (reachIdNext += 1)));
+    return id;
+}
+
+/**
+ * One reacher held to every target it can meet: its would-be failures said
+ * (`said` holds what is not said again: one a pair of boxes and a kind) and
+ * tallied under the measuring look, `at` saying where it read. A sharp
+ * reach meets past the box it is drawn from; a blurred layer counts under
+ * the policy, its core included — its offset and spread met in full is the
+ * literal reading of "offset and spread in full", measured and not counted (`softCore`,
+ * `reachLiteral`).
+ */
+function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTally, screen: string, label: string, at: string | undefined, said: Set<string>): void {
+    const p = rc.paints;
+    const who = `${named(rc.el)}${rc.pseudo ?? ''}`;
+    const whoKey = `${reachId(rc.el)}${rc.pseudo ?? ''}`;
+    for (const target of targets) {
+        const tn = target.node;
+        // Neither the node's ancestor nor its descendant: a pseudo stands inside its host, so it is held unless its host is the node or inside it.
+        if (rc.pseudo === null ? rc.el === tn || rc.el.contains(tn) || tn.contains(rc.el) : rc.el === tn || tn.contains(rc.el)) continue;
+        if (!target.boxes.some((b) => intersect(p.bound, b) !== undefined)) continue;
+        // What each side's clips show of it, held to the other (`pairClip`).
+        const tClip = pairClip(target.chain, rc.el);
+        const boxes = target.boxes.map((b) => intersect(b, tClip)).filter((b): b is Box => b !== undefined);
+        if (boxes.length === 0) continue;
+        const rClip = pairClip(p.chain ?? [], tn);
+        const textual = (kind: ReachKind): boolean => p.ownAll === true || kind.startsWith('text-shadow') || kind === 'decoration';
+        const clipFor = (kind: ReachKind): Box => (p.own !== undefined && textual(kind) ? (intersect(rClip, p.own) ?? NO_BOX) : rClip);
+        t.pairs += 1;
+        let meet: Meet | undefined;
+        // A blurred layer's core (its offset and spread) met in full: the literal reading, measured beside the policy and not counted (`softCore`).
+        let core: Meet | undefined;
+        if (p.anywhere !== undefined) {
+            meet = { kind: 'unresolved', at: boxes[0]!, what: p.anywhere };
+        } else {
+            outer: for (const b of boxes) {
+                for (const s of p.sharp) {
+                    const rect = intersect(s.rect, clipFor(s.kind));
+                    if (rect === undefined) continue;
+                    const m = sharpMeet(s.kind, [rect], b, s.base, s.what);
+                    if (m === undefined) continue;
+                    if (s.soft) {
+                        core ??= m;
+                        continue;
+                    }
+                    meet = m;
+                    break outer;
+                }
+            }
+            if (meet === undefined && p.soft.length > 0) {
+                // The policy: every blurred layer the reacher paints, composited over the target past its own box, each cut by its clips.
+                const layers = p.soft.map((s) => ({ ...s.layer, clip: clipFor(s.kind) }));
+                const kinds = [...new Set(p.soft.map((s) => s.kind))];
+                let most = 0;
+                for (const b of boxes) {
+                    const c = compositeOverAny(layers, targetPast(b, p.base));
+                    most = Math.max(most, c);
+                    const m = blurMeet(kinds.length === 1 ? kinds[0]! : 'box-shadow blur', layers, b, p.base, [...new Set(p.soft.map((s) => s.what))].join('; ').slice(0, 120));
+                    if (m !== undefined && meet === undefined) meet = m;
+                }
+                const source = `${describe(rc.el)}${rc.pseudo ?? ''} ${kinds.join('+')}`;
+                if (most > 0.001) reachSoft[source] = Math.max(reachSoft[source] ?? 0, Number(most.toFixed(4)));
+            }
+        }
+        const placed = (m: Meet): string => `${Math.round(m.at.left)},${Math.round(m.at.top)} (${Math.round(m.at.right - m.at.left)}x${Math.round(m.at.bottom - m.at.top)})`;
+        if (meet === undefined) {
+            if (core !== undefined) {
+                const key = `${whoKey}|core|${reachId(tn)}`;
+                if (said.has(key)) continue;
+                said.add(key);
+                t.softCore += 1;
+                if (reachLiteral.length < REACH_LITERAL_KEPT) {
+                    reachLiteral.push(`${screen} / ${label}: ${who}'s ${core.kind} (${core.what}) core reaches ${target.name} at ${placed(core)}${at === undefined ? '' : `, ${at}`}`);
+                }
+            }
+            continue;
+        }
+        // One would-be failure a pair (a reacher and a target, each its own box) and a kind, whatever it is read at.
+        const key = `${whoKey}|${meet.kind}|${reachId(tn)}`;
+        if (said.has(key)) continue;
+        said.add(key);
+        const sentence =
+            `${who}'s ${meet.kind}${meet.kind === 'unresolved' ? '' : ` (${meet.what})`} reaches ${target.name} at ${placed(meet)}` +
+            (meet.coverage === undefined ? '' : `, composite ${meet.coverage.toFixed(2)}`) +
+            (meet.kind === 'unresolved' ? ` — ${meet.what}: it reaches anywhere` : '') +
+            (at === undefined ? '' : `, ${at}`);
+        t.would += 1;
+        t.byKind[meet.kind] = (t.byKind[meet.kind] ?? 0) + 1;
+        if (reachWould.length < REACH_KEPT) reachWould.push(`${screen} / ${label}: ${sentence}`);
+    }
+}
+
+/**
+ * 1b on the paint as it stands: its would-be failures said and tallied under
+ * the measuring look; `only` limits it to some elements (a keyframe read's),
+ * `at` says where it read, and `said` holds what is not said again. A read
+ * at rest keeps its targets, its clips and its reachers (`reachRest`) for the
+ * keyframe reads after it; a keyframe read of paints alone (`still`) moves no
+ * box, and reads the targets and clips at rest again as they stood.
+ */
+function reachRead(screen: string, label: string, only: ReadonlySet<Element> | undefined, at: string | undefined, said: Set<string>, still = false): Reacher[] {
+    const t = reachTally();
+    const rest = only === undefined;
+    if (rest) t.paints += 1;
+    const root = document.getElementById('app')!;
+    const scrim = root.querySelector('[data-role="sheet-scrim"], [data-role="poster"], [data-role="zoom"]');
+    const surface: ParentNode = scrim ?? root;
+    const clipSeen = still && reachRest !== undefined ? reachRest.clipSeen : new Map<Element, ClipLink[]>();
+    const targets = still && reachRest !== undefined ? reachRest.targets : reachTargets(surface, clipSeen, rest ? undefined : reachRest?.targets.map((tg) => tg.node));
+    if (rest) {
+        t.targets += targets.length;
+        reachRest = { targets, clipSeen, surface, reachers: new Map(), all: [] };
+    }
+    if (targets.length === 0) return [];
+    const reachers = reachersOn(surface, only, clipSeen, t, rest);
+    if (rest) {
+        reachRest!.all = reachers;
+        for (const rc of reachers) if (rc.pseudo === null) reachRest!.reachers.set(rc.el, rc);
+    }
+    for (const rc of reachers) judgeReacher(rc, targets, t, screen, label, at, said);
+    return reachers;
+}
+
+/**
+ * The keyframes that can move or change a paint that reaches (`reachSeek`):
+ * a paint a keyframe sets (`REACH_PROPS`), on any box.
+ */
+const REACH_PROPS: ReadonlySet<string> = new Set([
+    'box-shadow',
+    'text-shadow',
+    'outline',
+    'outline-width',
+    'outline-offset',
+    'outline-style',
+    'outline-color',
+    'border-image',
+    'border-image-source',
+    'border-image-outset',
+    'border-image-width',
+    'filter',
+    '-webkit-filter',
+    'text-decoration',
+    'text-decoration-line',
+    'text-decoration-thickness',
+    'text-underline-offset',
+    'text-underline-position',
+]);
+
+/** The paints that reach and pass to the boxes below (a text-shadow is inherited; a decoration line is drawn on the text under its box). */
+const REACH_INHERITED = /^(?:text-shadow|text-decoration(?:-.*)?|text-underline-(?:offset|position))$/;
+
+/**
+ * The keyframe longhands that change no paint that reaches and move no box
+ * (`reachSeek` leaves an animation of these alone): a ground, an opacity, a
+ * clip or a mask — 1b reads at rest whatever their values, an element at any
+ * opacity and any paint unclipped by its own clip-path or mask — and a custom
+ * property no declaration that is not one of these reads, directly or through
+ * another custom property (`reachVarsRead`).
+ */
+const REACH_NEEDLESS = /^(?:background(?:-.*)?|opacity|clip-path|mask(?:-.*)?|-webkit-mask(?:-.*)?)$/;
+/** A declaration block's declarations, split at its top-level semicolons (never inside parentheses or a string). */
+function declarationsOf(css: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let quote = '';
+    let start = 0;
+    for (let i = 0; i < css.length; i += 1) {
+        const c = css[i]!;
+        if (quote !== '') {
+            if (c === '\\') i += 1;
+            else if (c === quote) quote = '';
+        } else if (c === '"' || c === "'") quote = c;
+        else if (c === '(') depth += 1;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (c === ';' && depth === 0) {
+            out.push(css.slice(start, i));
+            start = i + 1;
+        }
+    }
+    out.push(css.slice(start));
+    return out.map((d) => d.trim()).filter((d) => d !== '');
+}
+let reachVarsSeen: { key: string; relevant: Set<string> } | undefined;
+function reachVarsRead(): Set<string> {
+    const key = sheetKey();
+    if (reachVarsSeen?.key === key) return reachVarsSeen.relevant;
+    // Which declarations read each custom property, from every rule's declarations as written (keyframes and groups opened).
+    const readers = new Map<string, Set<string>>();
+    const walk = (rules: CSSRuleList): void => {
+        for (const rule of rules) {
+            if ('style' in rule && (rule as CSSStyleRule).style instanceof CSSStyleDeclaration) {
+                for (const decl of declarationsOf((rule as CSSStyleRule).style.cssText)) {
+                    const colon = decl.indexOf(':');
+                    if (colon < 0) continue;
+                    const prop = decl.slice(0, colon).trim();
+                    for (const m of decl.slice(colon + 1).matchAll(/var\(\s*(--[\w-]+)/g)) {
+                        let set = readers.get(m[1]!);
+                        if (set === undefined) readers.set(m[1]!, (set = new Set()));
+                        set.add(prop);
+                    }
+                }
+            }
+            if ('cssRules' in rule) {
+                try {
+                    walk((rule as CSSGroupingRule).cssRules);
+                } catch {
+                    // An unreadable group reads nothing more.
+                }
+            }
+        }
+    };
+    let unread = false;
+    for (const sheet of [...document.styleSheets, ...document.adoptedStyleSheets]) {
+        try {
+            walk(sheet.cssRules);
+        } catch {
+            unread = true;
+        }
+    }
+    const relevant = new Set<string>();
+    let grew = true;
+    while (grew) {
+        grew = false;
+        for (const [v, props] of readers) {
+            if (relevant.has(v)) continue;
+            if ([...props].some((prop) => (prop.startsWith('--') ? relevant.has(prop) : !REACH_NEEDLESS.test(prop)))) {
+                relevant.add(v);
+                grew = true;
+            }
+        }
+    }
+    // A sheet this page cannot read may read any of them: every custom property is relevant then.
+    if (unread) for (const v of readers.keys()) relevant.add(v);
+    reachVarsSeen = { key, relevant: unread ? new Set(['*', ...relevant]) : relevant };
+    return reachVarsSeen.relevant;
+}
+function reachNeedless(prop: string): boolean {
+    if (prop.startsWith('--')) {
+        const relevant = reachVarsRead();
+        return !relevant.has('*') && !relevant.has(prop);
+    }
+    return REACH_NEEDLESS.test(prop);
+}
+
+/**
+ * 1b at each keyframe offset: every animation whose keyframes set a paint
+ * that reaches (`REACH_PROPS`, or a keyframes rule this page cannot read),
+ * that runs on a look pseudo-element, or that runs on or above a box the read
+ * at rest found holding a reacher (`held`) is seeked to each of its keyframe
+ * offsets — its timing one normal, linear iteration, filled both ways, no
+ * delay — and the boxes it runs on and under read again; then put back. A
+ * would-be failure the read at rest said, or an earlier offset, is not said
+ * again.
+ */
+function reachSeek(screen: string, label: string, said: Set<string>, held: ReadonlySet<Element>): void {
+    const t = reachTally();
+    const root = document.getElementById('app')!;
+    const pseudoHosts = new Set<Element>();
+    for (const { host } of lookPseudoHosts()) {
+        try {
+            for (const el of root.querySelectorAll(host)) pseudoHosts.add(el);
+        } catch {
+            // A selector this page cannot match marks nothing.
+        }
+    }
+    const sheets = sheetKey();
+    if (reachPropsByName.key !== sheets) reachPropsByName = { key: sheets, byName: new Map() };
+    for (const anim of document.getAnimations()) {
+        const effect = anim.effect;
+        if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;
+        const target = effect.target;
+        if (!root.contains(target) || target.closest('.deck-stall') !== null) continue;
+        // What a CSS animation's keyframes set is its rule's, one per name while the page's sheets stand.
+        const byName = anim instanceof CSSAnimation ? anim.animationName : undefined;
+        let props = byName === undefined ? undefined : reachPropsByName.byName.get(byName);
+        if (props === undefined) {
+            props = keyframeProps(anim, effect) ?? null;
+            if (byName !== undefined) reachPropsByName.byName.set(byName, props);
+        }
+        const known = props ?? undefined;
+        // An animation of nothing that reaches or moves is left alone (`reachNeedless`).
+        if (known !== undefined && [...known].every(reachNeedless)) {
+            t.needless += 1;
+            continue;
+        }
+        const name = byName ?? 'a transition';
+        const where = effect.pseudoElement === null ? describe(target) : `${describe(target)}${effect.pseudoElement}`;
+        // Paints alone, of a kind read from the keyframes' own values (`REACH_FROM_VALUES`), on a box: read with no seek (`reachKeyframes`).
+        if (
+            known !== undefined &&
+            effect.pseudoElement === null &&
+            [...known].every((p) => REACH_FROM_VALUES.has(p) || reachNeedless(p)) &&
+            reachKeyframes(screen, label, effect, target, known, name, where, said, pseudoHosts)
+        ) {
+            continue;
+        }
+        const names = known === undefined || [...known].some((p) => REACH_PROPS.has(p));
+        const onPseudo = effect.pseudoElement !== null && pseudoHosts.has(target);
+        const subtree: Element[] = effect.pseudoElement === null ? [target, ...target.querySelectorAll('*')] : [target];
+        const inSubtree = new Set(subtree);
+        // A box it moves that a paint reaches from (`held`), or a target it moves into one standing still.
+        const holdsReacher = subtree.some((el) => held.has(el));
+        const moved = effect.pseudoElement === null && reachRest !== undefined ? reachRest.targets.filter((tg) => inSubtree.has(tg.node)) : [];
+        if (!names && !onPseudo && !holdsReacher && moved.length === 0) continue;
+        const duration = effect.getComputedTiming().duration;
+        if (typeof duration !== 'number' || !Number.isFinite(duration) || !(duration > 0)) continue;
+        const offsets = [...new Set([0, 1, ...effect.getKeyframes().map((k) => k.computedOffset ?? 0)])].filter((o) => o >= 0 && o <= 1).sort((a, b) => a - b);
+        const { delay, endDelay, iterations, iterationStart, direction, fill, easing } = effect.getTiming();
+        const kept = { delay, endDelay, iterations, iterationStart, direction, fill, easing };
+        const time = anim.currentTime;
+        // Paints alone (and what changes nothing): no box moves, the targets and clips at rest stand;
+        // and where none of those paints is inherited, the animated box alone is read (`REACH_INHERITED`).
+        const still = known !== undefined && [...known].every((p) => REACH_PROPS.has(p) || reachNeedless(p));
+        const only = new Set<Element>(still && ![...known!].some((p) => REACH_INHERITED.test(p)) ? [target] : subtree);
+        const s0 = performance.now();
+        try {
+            effect.updateTiming({ delay: 0, endDelay: 0, iterations: 1, iterationStart: 0, direction: 'normal', fill: 'both', easing: 'linear' });
+            for (const offset of offsets) {
+                anim.currentTime = offset * duration;
+                t.seeks += 1;
+                const at = `with ${name} on ${where} seeked to its keyframe at ${Math.round(offset * 100)}%`;
+                if (names || onPseudo || holdsReacher) reachRead(screen, label, only, at, said, still);
+                // The targets it moves, held to every reacher the read at rest found outside it, standing where it stood.
+                if (moved.length > 0 && reachRest !== undefined) {
+                    const fresh = reachTargets(reachRest.surface, new Map(), moved.map((tg) => tg.node));
+                    for (const rc of reachRest.all) if (!inSubtree.has(rc.el)) judgeReacher(rc, fresh, t, screen, label, at, said);
+                }
+            }
+            const n = (reachSeekNames[name] ??= { anims: 0, seeks: 0, els: 0, ms: 0 });
+            n.anims += 1;
+            n.seeks += offsets.length;
+            n.els += only.size * offsets.length;
+            n.ms += performance.now() - s0;
+        } catch {
+            // Not ours to time: read at rest alone.
+        } finally {
+            try {
+                effect.updateTiming(kept);
+            } catch {
+                // Put back as it can be.
+            }
+            try {
+                anim.currentTime = time;
+            } catch {
+                // A finished animation stands where it stands.
+            }
+        }
+    }
+}
+
+/** What each CSS animation's keyframes set, by name, while the page's sheets stand (`reachSeek`); `null` for a rule this page cannot read. */
+let reachPropsByName: { key: string; byName: Map<string, ReadonlySet<string> | null> } = { key: '', byName: new Map() };
+
+/**
+ * The keyframe longhands a keyframe read takes from the keyframes' own
+ * computed values, with no seek (`reachKeyframes`): three paints that reach,
+ * and the colour a `currentcolor` in one of them is read in.
+ */
+const REACH_FROM_VALUES: ReadonlySet<string> = new Set(['box-shadow', 'text-shadow', 'filter', '-webkit-filter', 'color']);
+
+/**
+ * **A keyframe read from the keyframes' own values** (`reachSeek`): an
+ * animation of a box-shadow, a text-shadow, a filter or a colour alone (and
+ * what changes nothing, `reachNeedless`) moves no box, and its keyframes carry
+ * their values computed in the box's own context (`getKeyframes()`: var()s
+ * and colours resolved) — so each keyframe is read where it stands, as a seek
+ * to it would read it, with no seek: the animated box's paints read again
+ * with the values the keyframe sets in place of the ones it computes at rest,
+ * and, for a text-shadow, every text owner under the box that inherits the
+ * box's own (its text-shadow computes the box's at rest). A value a keyframe
+ * does not set is read as it computes at rest, not as it interpolates there,
+ * stated. False — the caller seeks instead — for a box that hosts a look
+ * pseudo (its pseudo inherits what the box animates), and for a colour on a
+ * box with boxes under it (a `currentcolor` anywhere below would follow it).
+ */
+function reachKeyframes(
+    screen: string,
+    label: string,
+    effect: KeyframeEffect,
+    target: Element,
+    props: ReadonlySet<string>,
+    name: string,
+    where: string,
+    said: Set<string>,
+    pseudoHosts: ReadonlySet<Element>,
+): boolean {
+    const rest = reachRest;
+    if (rest === undefined || pseudoHosts.has(target) || (props.has('color') && target.children.length > 0)) return false;
+    const t = reachTally();
+    const t0 = performance.now();
+    const frames = effect.getKeyframes();
+    const range = document.createRange();
+    const csT = getComputedStyle(target);
+    const inheriting: Element[] = props.has('text-shadow')
+        ? [...target.querySelectorAll('*')].filter((el) => el.getClientRects().length > 0 && getComputedStyle(el).textShadow === csT.textShadow)
+        : [];
+    let reads = 0;
+    for (const frame of frames) {
+        const value = (prop: string): string | undefined => {
+            const v = (frame as Record<string, unknown>)[prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())];
+            return typeof v === 'string' ? v : undefined;
+        };
+        const set = { boxShadow: value('box-shadow'), textShadow: value('text-shadow'), filter: value('filter') ?? value('-webkit-filter'), color: value('color') };
+        if (Object.values(set).every((v) => v === undefined)) continue;
+        const at = `with ${name} on ${where} at its keyframe at ${Math.round((frame.computedOffset ?? 0) * 100)}% (read from the keyframe's values)`;
+        const owners = [target, ...(set.textShadow === undefined ? [] : inheriting)];
+        for (const el of owners) {
+            if (el.getClientRects().length === 0) continue;
+            const cs = getComputedStyle(el);
+            const own = el === target;
+            const r = el.getBoundingClientRect();
+            const base: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+            const k = reachScale(el, r);
+            const paints: ReachPaints = { base, bound: base, sharp: [], soft: [] };
+            const facts = boxPaintFacts(cs, el instanceof SVGElement && !(el instanceof SVGSVGElement));
+            const colour = own ? (set.color ?? facts.color) : facts.color;
+            boxReaches(
+                { ...facts, color: colour, boxShadow: own ? (set.boxShadow ?? facts.boxShadow) : facts.boxShadow, filter: own ? (set.filter ?? facts.filter) : facts.filter },
+                base,
+                base,
+                k,
+                paints,
+            );
+            const lines: Box[] = [];
+            const inks: Box[] = [];
+            for (const c of el.childNodes) {
+                if (c.nodeType !== Node.TEXT_NODE || (c.textContent ?? '').trim() === '') continue;
+                range.selectNodeContents(c);
+                const rects = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => ({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }));
+                lines.push(...rects);
+                inks.push(...textInk(c as Text, cs, rects));
+            }
+            if (lines.length > 0) textReaches(el, cs, lines, inks, k, paints, false, set.textShadow ?? cs.textShadow, true, colour);
+            if (paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined) continue;
+            cutToClips(el, paints, rest.clipSeen);
+            judgeReacher({ el, pseudo: null, paints }, rest.targets, t, screen, label, at, said);
+            reads += 1;
+        }
+    }
+    const n = (reachSeekNames[`${name} (from its values)`] ??= { anims: 0, seeks: 0, els: 0, ms: 0 });
+    n.anims += 1;
+    n.seeks += frames.length;
+    n.els += reads;
+    n.ms += performance.now() - t0;
+    t.fromValues += 1;
+    return true;
+}
+
+/** The keyframe seeks per animation name: animations seeked, seeks, elements read, time (a clock). */
+const reachSeekNames: Record<string, { anims: number; seeks: number; els: number; ms: number }> = {};
+
+/** 1b on a geometry pass's paint, at rest and at the keyframes (`coverAtRest` calls it once every animation is reset). */
+function reachAtRest(screen: string, label: string): void {
+    const t0 = performance.now();
+    const said = new Set<string>();
+    const held = new Set(reachRead(screen, label, undefined, undefined, said).map((rc) => rc.el));
+    const t1 = performance.now();
+    reachSeek(screen, label, said, held);
+    reachRest = undefined;
+    const t2 = performance.now();
+    reachMs += t2 - t0;
+    reachSeekMs += t2 - t1;
+}
 
 /**
  * Resolve a computed `polygon(...)` into pixel vertices for one box. Handles
@@ -12818,6 +13917,21 @@ const verdict = {
     coverEndMs,
     coveredByCalls,
     coveredByMs,
+    /*
+     * 1b (`a-paint-with-no-hit-area-reaches-no-money`, report-only): its
+     * tallies per look, its would-be failures word for word (up to
+     * `REACH_KEPT`), the most each soft paint reached over a target (the blur
+     * policy's measurement), and its own time and its keyframe seeks' (clocks).
+     */
+    reachCheck: REACH_CHECK,
+    reachBlurOpacity: BLUR_OPACITY,
+    reachByClass,
+    reachWould,
+    reachLiteral,
+    reachSoft,
+    reachMs,
+    reachSeekMs,
+    reachSeekNames,
     /* The dress rule's keyframe-offset read (`offsetDressFaults`): its counts, and its own time (a clock). */
     dressSeek,
     dressSeekMs,

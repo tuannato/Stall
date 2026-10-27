@@ -2590,7 +2590,7 @@ function geometryRecordDiffers(walked, again) {
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
         // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
-        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined };
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -2817,6 +2817,57 @@ function coverLines(label, byClass, ms, coveredBy, end, seek) {
             ? ''
             : ` · the dress rule's keyframe offsets: ${seek.anims} animation(s) (${seek.layout ?? 0} for the self-clip read alone; ${seek.anchored ?? 0} counted as moving another box because an anchor can follow them), ${seek.seeks} seek(s), ${seek.reads} figure read(s), ${seek.grounds ?? 0} ground(s) read again where a seek changed them, ${seek.clips ?? 0} self-clip read(s), ${seek.faults} fault(s) in ${(seek.ms / 1000).toFixed(2)}s`);
     return [line];
+}
+/*
+ * **1b, `a-paint-with-no-hit-area-reaches-no-money`, report-only** (before
+ * 8g2; `reachAtRest` in the probe, the pure half `layout/paintReach.ts`):
+ * the reach of every paint with no hit area — an outer box-shadow, an
+ * outline, a border image's outset, a text-shadow, a drop shadow or a blur
+ * in a filter, a decoration line, a look pseudo's region — held to every
+ * money node's line boxes and every protected box, on every geometry pass,
+ * once a paint at rest and at the keyframes of the animations that can move
+ * or change one. What it would fail is printed per pass, per look and per
+ * kind, word for word up to `REACH_PRINTED` sentences a pass grouped by
+ * source; the blur policy's measurement — the most each soft paint reached
+ * over a target — and what a blurred layer would add with its offset and
+ * spread counted in full, as a sharp one's is, beside them. It moves no
+ * verdict.
+ */
+const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
+const reachGeometry = [];
+/** How many grouped would-be sentences a pass prints word for word. */
+const REACH_PRINTED = 60;
+function reachLines(pass, r) {
+    const classes = Object.keys(r.byClass).sort();
+    const sum = (key) => classes.reduce((n, cls) => n + (r.byClass[cls][key] ?? 0), 0);
+    const kinds = {};
+    for (const cls of classes) for (const [kind, n] of Object.entries(r.byClass[cls].byKind ?? {})) kinds[kind] = (kinds[kind] ?? 0) + n;
+    const lines = [
+        `    ${pass}: ${sum('would')} would-be failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'})` +
+            `${Object.keys(kinds).length === 0 ? '' : `, by kind ${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}`} · ` +
+            `${sum('paints')} paint(s), ${sum('elements')} element(s) and ${sum('pseudos')} look pseudo(s) read, ${sum('reachers')} with a paint that reaches, ` +
+            `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('needless')} animation(s) left out: nothing that reaches or moves) · ` +
+            `a blurred layer's offset and spread counted in full would add ${sum('softCore')} · ${(r.ms / 1000).toFixed(2)}s (seeks ${(r.seekMs / 1000).toFixed(2)}s)`,
+    ];
+    // A source said on many screens is one line: the sentence less its screen, its look and its place.
+    const grouped = new Map();
+    for (const w of r.would) {
+        const key = w.replace(/^[^:]*: /, '').replace(/ at -?\d+,-?\d+ \(\d+x\d+\)/, '').replace(/, composite [\d.]+/, '');
+        const g = grouped.get(key) ?? { n: 0, first: w };
+        g.n += 1;
+        grouped.set(key, g);
+    }
+    let printed = 0;
+    for (const [, g] of [...grouped].sort((a, b) => b[1].n - a[1].n)) {
+        if (printed === REACH_PRINTED) {
+            lines.push(`      … and ${grouped.size - printed} more source(s)`);
+            break;
+        }
+        lines.push(`      ${g.first}${g.n > 1 ? ` (×${g.n} on this pass)` : ''}`);
+        printed += 1;
+    }
+    if (r.would.length < sum('would')) lines.push(`      (${sum('would') - r.would.length} more counted and not kept word for word)`);
+    return lines;
 }
 /*
  * How the contrast pass was walked, for the dump's `meta` and never its
@@ -3510,6 +3561,18 @@ try {
             });
             if (coverTally(g.report.coverByClass).paints > 0) coverSeen[g.key] = g.report.coverByClass;
         }
+        if (g.report?.reachByClass !== undefined) {
+            reachGeometry.push({
+                pass: g.key,
+                byClass: g.report.reachByClass,
+                would: g.report.reachWould ?? [],
+                literal: g.report.reachLiteral ?? [],
+                soft: g.report.reachSoft ?? {},
+                ms: g.report.reachMs ?? 0,
+                seekMs: g.report.reachSeekMs ?? 0,
+                policy: g.report.reachBlurOpacity,
+            });
+        }
         for (const { err, text } of g.lines) (err ? console.error : console.log)(text);
         if (g.failed) failed = true;
         for (const kind of g.outlined) outlinedTargetsSeen.add(kind);
@@ -3695,6 +3758,32 @@ try {
             `coveredBy (asked amount is covered, you-pay figure is covered, and the unbuyable label's) bound beside it, its calls and time per phase`,
     );
     for (const { pass, byClass, ms, coveredBy, end, seek } of coverGeometry) for (const line of coverLines(pass, byClass, ms, coveredBy, end, seek)) console.log(line);
+    console.log(
+        `  1b (${REACH_CHECK}), report-only: what it would fail on each geometry pass — a paint with no hit area (a box-shadow, an outline, a border image's outset, ` +
+            `a text-shadow, a drop shadow or a blur, a decoration line, a look pseudo's region) reaching a money node's line boxes or a protected box; it fails nothing`,
+    );
+    for (const r of reachGeometry) for (const line of reachLines(r.pass, r)) console.log(line);
+    {
+        // The blur policy's measurement: the most each soft paint reached over a target past its own box, over every pass.
+        const soft = {};
+        for (const r of reachGeometry) for (const [source, c] of Object.entries(r.soft)) soft[source] = Math.max(soft[source] ?? 0, c);
+        const top = Object.entries(soft).sort((a, b) => b[1] - a[1]);
+        console.log(
+            `    the blur policy (a blurred tail counts at a composite of ${reachGeometry[0]?.policy ?? '?'} or more): the most each soft paint reached over a target past its own box, over every pass — ` +
+                (top.length === 0 ? 'none came within reach of a target' : top.slice(0, 16).map(([source, c]) => `${source} ${c.toFixed(3)}`).join('; ')),
+        );
+        const literal = new Map();
+        for (const r of reachGeometry) {
+            for (const l of r.literal) {
+                const key = l.replace(/^[^:]*: /, '').replace(/ at -?\d+,-?\d+ \(\d+x\d+\)/, '');
+                literal.set(key, (literal.get(key) ?? 0) + 1);
+            }
+        }
+        if (literal.size > 0) {
+            console.log(`    what a blurred layer's offset and spread counted in full (the literal reading, not the policy) would add, by source, not counted:`);
+            for (const [key, n] of [...literal].sort((a, b) => b[1] - a[1]).slice(0, 12)) console.log(`      ${key} (×${n} kept)`);
+        }
+    }
     took();
 
     /*

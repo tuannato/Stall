@@ -110,7 +110,7 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
     });
 
     /*
-     * The brief's two cases for the policy: thirty stacked copies of
+     * The two cases the policy was set against: thirty stacked copies of
      * `0 0 40px` composite near opaque well past the box; the dock's glows
      * (Modern's `0 8px 30px rgba(20, 23, 26, 0.18)` on the dock bar, Neo's
      * `0 0 24px rgba(44, 233, 224, 0.25)`) stay under the policy over a row
