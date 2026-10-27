@@ -11606,6 +11606,25 @@ each before the fix and after):
 | LT, the row over "You pay" struck through 60px (kit only) | item-listing, 390 | 0 | 5 | — |
 | a throw planted at the top of `reachKeyframes` (a scratch mutation) | offers, 390 | no verdict in 600s | a verdict; Neo's 6 paints counted as throws, nothing failed | — |
 
+**Red proofs, the whole runner** on the round's final code (`f93309f`, a
+scratch clone, two tabs, each plant alone and started once the one-minute
+load was under 2.5; `runs/w-*.log`). The 1b would-be counts per pass, 390 /
+1280 / canvas / portrait / tablet / desk-wall / short-wall / side-tablet /
+hd-wall / tall-tablet / narrow-wall / 360 / reduced motion at 390, beyond
+the clean tree's 142 at 1280; 1b moves no verdict, so the exit is the other
+rules':
+
+| Plant | 1b would-be | Exit, and what failed it |
+|---|---|---|
+| PW (the 1b entry's) | 294 / 368 / 148 / 244 / 166 / 160 / 216 / 216 / 204 / 184 / 156 / 134 / 38, the 1b entry's counts exactly | 1: the contrast pass, 314 figures |
+| N6 (the 1b entry's) | 6 / 6 / 0 … / 6 at 360, the 1b entry's | 1: the outline rule, 15 / 15 / 12 |
+| C1 | 242 / 26 / 6 / 0 / 0 / 6 / 22 / 82 / 22 / 0 / 0 / 92 / 30 | 1: the outline rule on the rain-worn variants, every pass |
+| CB2 | 148 / 22 / 42 / 18 / 0 / 6 / 22 / 72 / 22 / 0 / 0 / 40 / 24 | 1: the outline rule, the dress rule (58 at 390), and the contrast pass (29 figures) |
+
+Before the fixes C1 and CB2 read 0 at the quick read of offers at 390 (the
+critic's, and the table above); no whole run of them was made on the code
+before the fixes.
+
 CB2's control read 24 before the fix and 18 after: its absolute label's
 containing block is above the stall's scroll region (no box between is
 positioned), so the region neither clips nor carries it, and the one price
@@ -11614,6 +11633,46 @@ below the fold is now read at the scroll it stands at — the stated gap
 the rows. The lints admit C1, Z1 and CB2 (first party and kit); UP and LT
 are kit only (`runs/lint-plants.log`, and the critic's
 `critic9/runs/lint-my-plants.log`).
+
+## Three tabs as the default on six cores (2026-10-27, D-2026-10-27-04)
+
+The ninth review measured three tabs once (222.8s, 30–38s faster than two,
+the load reaching 7.0 on 8 GiB) and ranked it the cheapest prune. The owner:
+two more runs, and if both pass, the canaries are green and memory holds,
+three tabs become the default on a machine of at least six cores and 8 GiB.
+
+**Measured** on the final code of the round (`f93309f`, a scratch clone, the
+tracked fixture carried, 796 contrast jobs), back to back on this Mac (6
+cores: two performance, four efficiency; 8 GiB), two tabs then three, twice,
+each run started once the one-minute load was under 2.5
+(`before-8g2/critic9-fixes/tools/run3.sh`, `runs/w-clean-*`; memory sampled
+every 15s into each log's `.mem`: the kernel's pressure level, swap-ins and
+swap-outs in 16 KiB pages since the start, swap used, free percentage):
+
+| Run | Tabs | Exit | Runtime | Geometry walk | Contrast pass | Load at start, peak | Pressure (samples at warn) | Swap-ins, swap-outs | Least free |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2 | 0 | 255.5s | 132.2s | 115.1s | 1.87, 4.41 | 9 of 18 | 4,105, 6,548 | 39% |
+| 2 | 3 | 0 | 231.6s | 115.5s | 107.6s | 2.24, 7.03 | 11 of 17 | 14,444, 30,812 | 33% |
+| 3 | 2 | 0 | 253.4s | 128.3s | 117.2s | 2.42, 5.70 | 9 of 18 | 1,261, 0 | 39% |
+| 4 | 3 | 0 | 231.4s | 114.7s | 108.5s | 2.42, 6.18 | 10 of 17 | 2,561, 10,284 | 34% |
+
+Every check passed at both counts, and **the verdicts are the same at both**
+(`tools/verdicts.sh`: every check's mark, every pass's failure counts, 1b's
+would-be counts and its grouped sentences; the four extracts are byte for
+byte one file). Both canaries were green on all four:
+`the-contrast-pass-reads-the-same-on-every-tab` 6 of 6 jobs and
+`the-geometry-passes-read-the-same-on-every-tab` 2 of 2 passes. Three tabs
+take 22–24s off: the walk 13.6–16.7s, the contrast pass 7.5–8.7s. **Memory, stated whole:** the kernel's pressure level
+reached warn on about half the samples at both counts and never critical;
+three tabs swapped more (up to 30,812 pages out, about 480 MiB, against
+6,548), and free memory never fell under 33%. That is read as memory
+holding — the level no worse than two tabs', no run slowed, nothing
+thrashed — and the default moved: `CONTRAST_TABS` is 3 unasked on six cores
+or more and 8 GiB, 2 on four or five, 1 elsewhere, the reason printed. A
+machine short of memory gets back the old count with `LAYOUT_CONTRAST_TABS`.
+CI's `layout` job sets two tabs itself (`ci.yml`) and is unchanged. Not
+measured: three tabs on another machine, or under a carried private look's
+selection.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

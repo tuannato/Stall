@@ -2517,14 +2517,19 @@ function coverClip(byClass) {
  * (`the-geometry-passes-read-the-same-on-every-tab`,
  * `the-contrast-pass-reads-the-same-on-every-tab`).
  *
- * Unasked, it is 2 only where the overlap is there to take — at least
- * `CONTRAST_TABS_MIN_CORES` cores and `CONTRAST_TABS_MIN_MEMORY` of memory —
- * and 1 elsewhere (the critic's P3-7: on two cores the gain is not there,
- * and no machine smaller than this Mac has run two tabs). The count and why
- * are printed with the pass. `workshop:probe` runs this file, so the kit's
- * probe takes the same count by the same rule.
+ * Unasked, it is 3 on a machine of at least `CONTRAST_TABS_THREE_CORES`
+ * cores and `CONTRAST_TABS_MIN_MEMORY` of memory (D-2026-10-27-04: three tabs
+ * measured twice more on this Mac, 6 cores and 8 GiB, every canary green and
+ * memory pressure normal; `PROBE-RULES.md`, "Three tabs as the default"),
+ * 2 on at least `CONTRAST_TABS_MIN_CORES` cores and that memory, and 1
+ * elsewhere (the critic's P3-7: on two cores the gain is not there, and no
+ * machine smaller than this Mac has run two tabs). The count and why are
+ * printed with the pass. `workshop:probe` runs this file, so the kit's probe
+ * takes the same count by the same rule; CI's layout job sets its own
+ * (`ci.yml`).
  */
 const CONTRAST_TABS_MIN_CORES = 4;
+const CONTRAST_TABS_THREE_CORES = 6;
 const CONTRAST_TABS_MIN_MEMORY = 8 * 1024 ** 3;
 const { count: CONTRAST_TABS, why: CONTRAST_TABS_WHY } = (() => {
     const asked = process.env.LAYOUT_CONTRAST_TABS;
@@ -2541,7 +2546,8 @@ const { count: CONTRAST_TABS, why: CONTRAST_TABS_WHY } = (() => {
     if (cores < CONTRAST_TABS_MIN_CORES || memory < CONTRAST_TABS_MIN_MEMORY) {
         return { count: 1, why: `the default under ${CONTRAST_TABS_MIN_CORES} cores or ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
     }
-    return { count: 2, why: `the default, on ${machine}` };
+    if (cores >= CONTRAST_TABS_THREE_CORES) return { count: 3, why: `the default on ${CONTRAST_TABS_THREE_CORES} cores or more and ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
+    return { count: 2, why: `the default on ${CONTRAST_TABS_MIN_CORES} to ${CONTRAST_TABS_THREE_CORES - 1} cores and ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
 })();
 
 /*
