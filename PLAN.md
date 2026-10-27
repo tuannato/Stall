@@ -1008,9 +1008,11 @@ money path this app can have, because nothing on it is derived.
      critic's PC2, PC3′, SVs, PW; PQ over a pay code). The fix to measure
      first: a hit test with `pointer-events` forced on over every money
      node and every protected box, on every pass, false reds counted
-     before it binds; and the digit read on every money node on the
-     sampled screens. Then whether the README's "most" can go is the
-     owner's (D-2026-10-20-02, -03).
+     before it binds (1a, bound since 7a); and the digit read on every
+     money node on the sampled screens (1c(c), report-only, on the jobs
+     where a mover is near: "Before 8g2, 1c(c)'s open list" below). Then
+     whether the README's "most" can go is the owner's (D-2026-10-20-02,
+     -03).
   2. **A run under the private look at 0x04's selection** (`pnpm test` and
      the whole runner), with its sheet grepped first for a `fixed` or
      `local` background attachment near money (now read as possibly
@@ -1299,6 +1301,44 @@ money path this app can have, because nothing on it is derived.
      along the seams, a cover smaller than a module between centres) is not
      read; whether a camera reads through it is not measured.
   6. **A run under the private look at 0x04's selection** with 1d in it.
+
+- **Before 8g2, 1c(c)'s open list** (every money character read on its own,
+  only on a contrast job where a mover is near money, read report-only; the
+  owner's D-2026-10-20-06 D1 (c); `layout/PROBE-RULES.md`, "Before 8g2,
+  1c(c): every digit, where a mover is near"). 1c fails nothing until step
+  7d binds it. Open:
+  1. **Bind it at 7d**, as D1 decides, with its own red proofs on the bound
+     read (PL, a box over one digit, is 1c's alone among the contrast reads:
+     the broken-figure read passes it) and the jobs it owes held to their
+     reads. On the clean tree it triggers on no job, so binding it moves no
+     verdict there.
+  2. **D1 (a), every money job, is measured and not built.** From 1c's own
+     clock in a scratch run that read every one of the 697 jobs holding
+     money: 80.4–111.8s of tab time over four such runs, so about +27 to
+     +37s of wall time at three tabs (the contrast pass 110.5–127.1s a tab
+     against 84.5s with the trigger alone). It is the owner's
+     to add if a later round leaves that room; it would also read the
+     covers the trigger does not see (3, below).
+  3. **What the trigger does not see** (stated, not fixed): a box placed
+     over money by stacking alone — `position: relative` and a `z-index` with
+     no offset, its content overflowing a zero-height box — unless 1a fails
+     it (P1A, read by 1a's failures; MISS, a spread shadow with no hit area,
+     read by no contrast rule at all, 1b's on the geometry passes); an unmoved
+     box's paint that reaches past it (1b's); an app sheet's pseudo-element
+     (only a look's are read); a contrast target's own glyphs moved over money
+     (blanked in both captures, SVs, 1a's); a mover whose painted boxes meet
+     money only through a descendant's own overflow or reach (each held box is
+     read by its border box; its own reach is not grown).
+  4. **What the read does not read**: the geometry-only screens, the wall
+     sizes the contrast pass does not paint, 360 and a turned wall; a frame
+     turned past 2°; a character behind a scroller or past the shot; a cover
+     of less than half a glyph (it keeps half its reference); a character with
+     a reference under six pixels (counted by kind, never held; on the clean
+     measurement run 2,212 of 62,318 characters: 2,098 punctuation and
+     symbols, 109 letters and 5 digits, which were not found);
+     a turned frame's reference is the least of sixteen phases, so a partial
+     cover there passes more easily than on an upright one. Chrome only, DPR 1.
+  5. **A run under the private look at 0x04's selection** with 1c in it.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

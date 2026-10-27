@@ -12191,6 +12191,202 @@ worn-only pass (above), and was otherwise the same extract.
 No A/B was made: the two checks this round adds cost 76ms and 0.3s, under
 the 2s the brief set for one.
 
+## Before 8g2, 1c(c): every digit, where a mover is near (2026-10-27; the plan's item 1c, the owner's D-2026-10-20-06 D1 (c), the plan critic's C-2 and P2-3; report-only)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/1c/`
+(`runs/`, `plants/`, `tools/`); the paths below are relative to it. A
+**quick** read is the contrast pass alone on the screens it names
+(`tools/q1c.sh`: the runner mutated in the scratch tree, never committed, to
+skip the geometry walk and filter the contrast queue); a **whole** read is
+the whole runner (`tools/run.sh`, the load under 2.5 at each start).
+
+**The incident.** The broken-figure read (`digitRead`) counts a line's glyph
+pixels: one digit wholly covered leaves the line's others to make up its
+count (C-2, arithmetic: a piece of three digits needs 30 pixels and two
+digits hold 34–50). And a money node that is not broken was read by its box
+alone, its computed ink against the blanked ground, so a cover laid over it
+with its own contrasting ground passed the contrast pass (PC2, PC3′) wherever
+1a's hit test did not stand in.
+
+**The rule** (report-only until step 7d; `scripts/char-read.mjs`,
+`layout/digitTrigger.ts`, `digitTrigger` and `__moneyChars` in
+`layout/probe.ts`; tests `1c(c): what moves a box (moverKinds)`, `1c(c): when
+what a mover paints meets money`, `a character is held to its own reference`,
+`what the page’s characters must add up to`, `the read-again on a fresh
+pair`, `the shares and the report`). On a contrast job its trigger finds,
+every character of every money node in scope (`MONEY_SET`, any node with a
+box) is read alone: the pixels of its own box (`Range` over the one code
+point, `floor(x)` to `ceil(x + w)`) that moved at least halfway
+(`CHAR_MASK_ALPHA`, the ring read's 0.5) from the job's own capture toward its
+ink on the shown frame, held to its **reference**: the same glyph (its
+`text-transform` applied), in its face, weight, size, small caps, width and
+letter-spacing, drawn black on a canvas in the page at the same subpixel
+offset and counted in the same pixel box (`charReference`: its baseline is the
+box's top plus the face's ascent, rounded where the box is the rounded ascent
+and descent, Chrome's content area). A character under `CHAR_KEEP_CUT` (0.5)
+of its reference is a would-be failure. One whose reference is under
+`CHAR_REF_MIN` (6) pixels is counted by kind and not held. Fails closed: a
+character with no box, or whose box runs past the shot; a page whose
+characters do not add up to those it prepared (read, or left out by reason:
+behind a scroller that scrolls, `clipped`; a frame turned past 2°,
+`turned`; a box past the 512px canvas, `too big`); a live money target the
+page answered no character of; a shown frame of another size or that showed
+another count of money nodes. A would-be failure is read again on a fresh pair
+(a fresh blank and a fresh money frame, after 250ms) and stands only where the
+pair, believed, fails it too; the pair is believed only where every character
+stands in the same box with the same reference (`readCharsAgain`,
+`charsMoved`: the quiet zone's rule, for characters).
+
+**The trigger** (`digitTrigger`; read off the prepared paint before anything
+is blanked; no capture). A **mover**: a box placed by 1a's moves (`movedBy`:
+an offset of a relative or sticky box, a transform, `translate`, `rotate`,
+`scale`, a negative margin); a sticky box with any inset, `0` included; an
+absolute or fixed box; a motion path; an animation whose keyframes
+(`getKeyframes()`) set anything but an ink, a ground, a ground's pattern or an
+opacity (`PAINT_ONLY_ANIMATION`), or set nothing this page can read (a custom
+property, which Chrome leaves out: it fails closed). What it **paints**: its
+own border box and every box it holds, cut to the clips above it (and its own,
+for what it holds), and its own sharp reach (an outline, a box shadow's
+offset and spread, a border image's outset: 1b's `boxReaches`). It triggers
+where that meets a money node's line boxes — the node's own text's `Range`
+rects, cut to the node's own clips — by more than `MEET_TOL` (0.5px) on both
+axes, and is neither the node nor a box that holds it (those carry the money
+with them; a box that holds every money node is skipped whole). A **look's
+pseudo-element** (marked by `markLookPseudos`) so placed is read in 1b's region
+(`pseudoRegion`) grown by its sharp reach; one whose region cannot be read (a
+transform, an out-of-flow position) triggers the job outright. And **1a's own
+failures** on the job trigger it after 1a's read, on a frame of its own.
+
+**The frame.** The money glyphs join the job's one shown frame (`__contrastGlyphs`'
+third argument), unless a money box that is neither outlined nor broken meets
+an outlined line (grown by its ring and a pixel) or another target's broken
+piece: then they take a frame of their own (`moneyApart`), as the ring and the
+broken-figure reads do; a job with neither read takes one frame of its own. A
+job that triggers nothing shows no money glyph and is captured as it was, so
+its record and boxes in the dump are unchanged (a triggered job's record gains
+`digits`).
+
+**Two corrections the measurement forced.**
+
+- **A money node inside another target** inherits that target's blanked fill
+  once its own is put back: the studio's quote (`span.sp`, inside its state
+  line) read 0 of every reference pixel, 52 a width. The prepare keeps a
+  money node's own fill (`probeFill`), and the shown frame puts it on.
+- **A turned frame** (Rural's swaying tag and every third row's tilt) is
+  rastered upright and resampled into the turn by the compositor: on Rural's
+  selection line at 390 a 0.5° turn spread an "=" bar over two rows at 0.33
+  to 0.46 of its ink (`runs/q-dbg-rural.log`), where a glyph drawn turned on a
+  canvas stays sharp. With an upright reference Rural's thin glyphs read under
+  the cut on the clean tree — a "+" 0.44 and an "=" 0.00 and 0.33, 130 would-be
+  characters in all (`runs/q-clean-all.log`); with the glyph drawn turned, a
+  digit's least share was 0.60 and the "=" still 0.00 (`runs/q-rural-all.log`);
+  drawn upright and resampled into the frame's linear transform (bilinear),
+  0.60 and 0.556 (`runs/q-rural-all2.log`); and as the least count of sixteen
+  subpixel phases a quarter pixel apart (where the upright raster put the
+  glyph inside its pixels is not known), 0.91 for a digit and 0.98 for a
+  letter on the screens that read least (`runs/q-rural-phase.log`). So a
+  turned frame's reference is the least of the sixteen. Cost, stated: a
+  partial cover there passes more easily than on an upright frame.
+
+And `CHAR_REF_MIN` went from 4 to 6: at 4, a full stop of four reference
+pixels on Rural's pay sheet kept two, 0.50, on the cut itself.
+
+**The reference distribution and the cut** (quick, `runs/q-final-all.log`:
+the scratch runner forced to read every job holding money, 697 of the 796
+contrast jobs, the tracked fixture carried). 62,318 characters
+answered, 60,106 held, 2,212 too small (2,098 punctuation and symbols, 109
+letters, 5 digits), 36,862 left out (behind a scroller that scrolls: the
+wall's 35-item payment and its list, mostly), and **none under the cut**.
+The least share kept, by kind, and where:
+
+| Kind | Least | Where | On the upright looks | On Neo |
+|---|---|---|---|---|
+| Digit | 0.784 | Pay several's lines on Rural at 1280, a "1" of 37 reference pixels | 0.84 | 1.00 |
+| Letter | 0.979 | the quote row's longest figure on Rural at 390, an "X" of 96 | 1.00 | 1.00 |
+| Other | 0.667 | the wall's rate line at 1920, an "=" of 24 | 0.67 | 1.00 |
+
+The 0.1% quantile (read off 0.05-wide bins, so an upper edge) is 0.70 at the
+least, "other" on the canvas walls and on Rural, and 0.80 or more for every
+digit and letter; the median share is 1.05–1.30 (the page counts a little more
+than the canvas: a light ink on a dark ground most). The cut stays the plan's
+0.5, with a margin of 0.167 at the least and 0.284 for a digit; a covered
+character keeps 0.00–0.30 of its reference in every plant below. Two such
+reads of the same tree (`runs/q-clean-all4.log`, `runs/q-final-all.log`)
+read the same shares to the character.
+
+**The clean tree.** The trigger finds nothing on any job: 0 of 796, quick
+(`runs/q-clean-trigger2.log`) and whole (`runs/w-clean.log`: exit 0, 232.0s
+of 300, every check passed, the 1c report printed: no triggered job, no
+would-be failure, nothing read again, nothing that could not be read). The
+trigger read 3,339 movers over 72,023 elements in 0.74s of tab time. Before
+the money line boxes were cut to their own clips, the touch wall's payment
+plate (its frame drawn by a negative margin) met the list rows' figures
+behind the list's scroller on the 18 canvas payment jobs
+(`runs/q-clean-trigger.log`), and the 35-item payment's lines read 1,950
+would-be failures for the characters its own scroller hides.
+
+**Red proofs** (each plant alone, Modern's or Neo's look sheet before its
+reduce block, `tools/apply.mjs`; whole: `tools/plants-whole.sh`). Counts are
+1c's would-be characters, then the jobs it triggered on.
+
+| Plant | Quick | Whole | Beside it |
+|---|---|---|---|
+| PC2 (7a's: the no-escrow note moved up over the pay figure, 390 media block) | 86 on 4 jobs at 390 | 286 on 8 jobs at 390 (pay, pay-moved, Pay several and its longest figure, bare and worn) | 1a 44 at 390, 59 at 360, 10 under reduced motion, 20 in contrast; contrast 12 figures under 3:1, the broken-figure read 2 |
+| PC3′ on Neo (7a's offsets on Neo's sheet: Modern's quote face is sampled by no contrast job, `RAIN_JOBS` reads it on the looks that carry the rain alone) | 30 on 6 jobs at 390 and 1280 | 30 on 6 jobs, 15 a width | 1a 8 at 390, 10 at 1280, 8 at 360, 6 in contrast; contrast 6 figures under 3:1; `text-spills` 8 a page pass |
+| N3 (the money-guards critic's round-4 set N: a block of `currentColor` under Neo's face figure by a negative margin) | 104 on 22 jobs, all on its long face, 52 a width | 104 on 22 jobs | contrast: 12 figures under 3:1, the broken-figure read 4, the look-pseudo frame 4; no geometry rule |
+| PL (a box over the last digit of the selection total alone, before its " XEC") | 4 on 4 jobs: the "5", one a job | 4 on 4 jobs, the same "5", one a job | `a-broken-figure-wears-the-figures-own-ink` 6 a page pass (a pseudo on a piece), the look-pseudo frame 2, contrast 4 figures under 3:1; **not** `a-broken-figure-paints-every-digit`, the per-line read |
+| P1A (the pay caption at zero height, stacked over the figure by a `z-index` with no offset, its `::after` an 80px block: no move) | 508 on 8 jobs, every one by 1a's failures | 1,570 on 24 jobs, every one by 1a's failures (12 at 390, 12 at 1280) | 1a 85 at 390, 75 at 1280, 85 at 360, 15 under reduced motion, 70 in contrast; the look-pseudo frame 34, contrast 73 figures under 3:1, the broken-figure read 6 |
+| MISS (the no-escrow note stacked above the pay figure by a `z-index` with no offset, a 140px spread shadow over it: no move, no hit area) | 0, no job triggered; with every job read, 1,348 | 0, no job triggered | `a-halo-never-reaches-a-neighbours-text` 29 a page pass and 5 under reduced motion, contrast 92 figures under 3:1, the broken-figure read 16; 1a and 1b none |
+| The clean tree | 0, no job triggered | 0 | — |
+
+**N3 is the money-guards critic's** (`CRITIC-MONEY-GUARDS.md`, round 4's set
+N: "where it paints over the figure (the long face)"), the plan's "N3 where it
+paints over the figure". The N3 in "The geometry passes walk on two tabs"
+above is the probe-shard critic's focus belt (P1d, a tab whose
+`document.hasFocus` answers false), another plant that paints nothing.
+
+**Cost.** 1c's own clock on the clean tree is the trigger alone: 0.74–0.84s
+of tab time over the contrast pass's 796 jobs (3,339 movers read over 72,023
+elements), about 0.25s of wall time at three tabs; nothing is captured, since
+no job triggers. Two A/B pairs back to back at the three-tab default with the
+tracked fixture carried, `c1e707e` against the 1c code (`7e8a2bc`; the docs
+commit after it changes no file a run reads), each started once the one-minute
+load was under 2.5 (2.21–2.40), `tools/ab.sh`:
+
+| Pair | `c1e707e` | 1c | Change |
+|---|---|---|---|
+| 1 | 219.8s | 223.7s | +3.9s |
+| 2 | 221.4s | 221.1s | −0.3s |
+
+Within the ≤5s the brief set on both. The contrast pass's prepare phase moved
++1.8s and +2.8s of tab time (the trigger, and the money nodes' fill kept), the
+contrast pass's tab 0 +0.8s and +3.1s. Pair 2's dumps are identical: 15,018
+boxes, 0 moved, and all 823 job records the same, since no job triggered.
+
+**What D1 (a) would cost** (every money job read; measured, not built): from
+1c's own clock in four scratch runs that forced every job holding money, the
+read took 80.4–111.8s of tab time (`runs/q-clean-all2.log`, `-all4`,
+`q-final-all.log`; the last two after the turned frames' sixteen phases), so
+about +27 to +37s of wall time at three tabs; the contrast pass read
+110.5–127.1s a tab against 84.5s with the trigger alone (quick runs, the
+geometry walk skipped). Of it, the 539 jobs with no shown frame of their own
+take one more capture each (the shown frame 212ms on average), the rest is the
+read and the references.
+
+**Not read, stated.** The trigger's blind spots: a cover placed by stacking
+alone — `position: relative` and a `z-index` with no offset, content
+overflowing a zero-height box — unless 1a fails it (P1A is read; MISS, with
+no hit area, is not, and is 1b's on the geometry passes); an unmoved box's
+paint that reaches past it (1b's); an app sheet's pseudo-element (only a
+look's are read); a held box's own reach and overflow (each held box is read
+by its border box); a contrast target's own glyphs moved over money (they are
+blanked in both captures, SVs: 1a's). The read's: a cover of under half a
+glyph; a character with a reference under six pixels; a turned frame's partial
+cover (its reference is the least of sixteen phases); the geometry-only
+screens, the wall sizes the contrast pass does not paint, 360 and a turned
+wall; a frame turned past 2°; a character behind a scroller or past the shot;
+DPR 1 and Chrome only. D1 (a), every money job, is measured and not built.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
