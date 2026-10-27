@@ -22,8 +22,11 @@ import {
     underlineBand,
     zoomOf,
     emLength,
+    acceptedReach,
+    REACH_ACCEPTED,
     type Box,
     type PseudoFacts,
+    type ReachFact,
 } from './paintReach';
 
 const box = (left: number, top: number, right: number, bottom: number): Box => ({ left, top, right, bottom });
@@ -276,5 +279,77 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
     it('says a meet in the kind that met', () => {
         expect(sharpMeet('outline', [box(0, 0, 10, 10)], box(5, 5, 20, 20), box(0, 0, 4, 4), 'x')).toMatchObject({ kind: 'outline', at: box(5, 5, 10, 10) });
         expect(sharpMeet('outline', [box(0, 0, 10, 10)], box(50, 50, 60, 60), undefined, 'x')).toBeUndefined();
+    });
+});
+
+describe('the-reach-1b-accepts-by-name', () => {
+    // Rural's board over the address plate as the page paints it at the desk
+    // (D-2026-10-27-03): the fact the probe builds for each of the 142.
+    const board: ReachFact = {
+        kind: 'box-shadow blur',
+        coverage: 0.229,
+        reacher: { tag: 'div', classes: ['stall-sign', 'has-pin'], pseudo: null, boxShadow: 'rgba(58, 42, 24, 0.32) 0px 18px 40px 0px' },
+        target: { tag: 'button', classes: ['addr'], role: 'addr-copy', background: 'rgb(255, 253, 244)', color: 'rgb(107, 89, 66)' },
+    };
+
+    it('pins the one entry by value', () => {
+        expect(REACH_ACCEPTED).toEqual([
+            {
+                name: "Rural's sign board over the address plate (D-2026-10-27-03)",
+                kind: 'box-shadow blur',
+                reacher: { tag: 'div', cls: 'stall-sign', pseudo: null, boxShadow: 'rgba(58, 42, 24, 0.32) 0px 18px 40px 0px' },
+                target: {
+                    tag: 'button',
+                    cls: 'addr',
+                    role: 'addr-copy',
+                    plates: [
+                        { background: 'rgb(255, 253, 244)', color: 'rgb(107, 89, 66)' },
+                        { background: 'rgb(247, 244, 238)', color: 'rgb(108, 95, 77)' },
+                    ],
+                },
+                ceiling: 0.23,
+            },
+        ]);
+        expect(Object.isFrozen(REACH_ACCEPTED)).toBe(true);
+        expect(Object.isFrozen(REACH_ACCEPTED[0])).toBe(true);
+        expect(Object.isFrozen(REACH_ACCEPTED[0]!.target.plates)).toBe(true);
+        // A look's class is no key: the board is named by what it paints.
+        expect(JSON.stringify(REACH_ACCEPTED)).not.toMatch(/\bt-[a-z]/);
+    });
+
+    it('accepts the board over the plate, with the pin and without, bare and under the mood', () => {
+        expect(acceptedReach(board)?.name).toBe("Rural's sign board over the address plate (D-2026-10-27-03)");
+        expect(acceptedReach({ ...board, target: { ...board.target, background: 'rgb(247, 244, 238)', color: 'rgb(108, 95, 77)' } })).toBeDefined();
+        expect(acceptedReach({ ...board, reacher: { ...board.reacher, classes: ['stall-sign'] } })).toBeDefined();
+        expect(acceptedReach({ ...board, coverage: 0.23 })).toBeDefined();
+    });
+
+    it('fails the board when its shadow is darker: an alpha of 0.40 is another string, and a composite past the ceiling', () => {
+        expect(acceptedReach({ ...board, reacher: { ...board.reacher, boxShadow: 'rgba(58, 42, 24, 0.4) 0px 18px 40px 0px' } })).toBeUndefined();
+        expect(acceptedReach({ ...board, coverage: 0.231 })).toBeUndefined();
+        expect(acceptedReach({ ...board, coverage: undefined })).toBeUndefined();
+        expect(acceptedReach({ ...board, reacher: { ...board.reacher, boxShadow: 'rgba(58, 42, 24, 0.32) 0px 18px 40px 2px' } })).toBeUndefined();
+    });
+
+    it('fails the same shadow on any other target: a money node, another protected box, or the plate of another colour', () => {
+        const target = (t: Partial<ReachFact['target']>): ReachFact => ({ ...board, target: { ...board.target, ...t } });
+        // A money node: the figure under the board.
+        expect(acceptedReach(target({ tag: 'span', classes: ['item-x'], role: null, background: 'rgba(0, 0, 0, 0)', color: 'rgb(58, 42, 24)' }))).toBeUndefined();
+        // Another protected box, the plate's own role gone, another tag.
+        expect(acceptedReach(target({ classes: ['buy'], role: null }))).toBeUndefined();
+        expect(acceptedReach(target({ role: null }))).toBeUndefined();
+        expect(acceptedReach(target({ tag: 'div' }))).toBeUndefined();
+        // Another look's plate under the same shadow, or one plate's ground under the other's ink.
+        expect(acceptedReach(target({ background: 'rgb(255, 255, 255)' }))).toBeUndefined();
+        expect(acceptedReach(target({ color: 'rgb(20, 23, 26)' }))).toBeUndefined();
+        expect(acceptedReach(target({ background: 'rgb(247, 244, 238)' }))).toBeUndefined();
+    });
+
+    it('fails another reacher, another kind, or the shadow drawn by a pseudo-element', () => {
+        expect(acceptedReach({ ...board, reacher: { ...board.reacher, classes: ['stall-head'] } })).toBeUndefined();
+        expect(acceptedReach({ ...board, reacher: { ...board.reacher, tag: 'header' } })).toBeUndefined();
+        expect(acceptedReach({ ...board, reacher: { ...board.reacher, pseudo: '::after' } })).toBeUndefined();
+        expect(acceptedReach({ ...board, kind: 'box-shadow' })).toBeUndefined();
+        expect(acceptedReach({ ...board, kind: 'drop-shadow blur' })).toBeUndefined();
     });
 });

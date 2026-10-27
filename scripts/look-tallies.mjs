@@ -66,6 +66,48 @@ export function coverTally(byClass, classes = Object.keys(byClass ?? {})) {
 }
 
 /**
+ * **1b's tallies, summed** (7b): a look's 1b reads on a pass
+ * (`reachByClass` in the page's verdict, `ReachTally` in the probe) — its
+ * paints read, elements and look pseudos read, reachers with a paint that
+ * reaches, targets held, pairs judged, keyframe seeks (`wide`: those that read
+ * every reacher against every target), animations left out (`needless`, and
+ * `unmoved`: a move of a box that holds nothing 1b reads) or
+ * read from their keyframes' own values (`fromValues`), failures (`would`),
+ * meets accepted by name (`accepted`), a blurred layer's core alone
+ * (`softCore`, not counted), and the paints it threw on (`throws`, each a
+ * failure).
+ */
+export const REACH_TALLY_KEYS = Object.freeze([
+    'paints',
+    'elements',
+    'contents',
+    'pseudos',
+    'reachers',
+    'targets',
+    'pairs',
+    'seeks',
+    'wide',
+    'unmoved',
+    'needless',
+    'fromValues',
+    'would',
+    'accepted',
+    'softCore',
+    'throws',
+]);
+
+/** 1b's tallies of `classes` (or every class) on one pass, summed. */
+export function reachTally(byClass, classes = Object.keys(byClass ?? {})) {
+    const sum = Object.fromEntries(REACH_TALLY_KEYS.map((key) => [key, 0]));
+    for (const cls of classes) {
+        const at = Object.hasOwn(byClass ?? {}, cls) ? byClass[cls] : undefined;
+        if (at === undefined) continue;
+        for (const key of REACH_TALLY_KEYS) sum[key] += at[key] ?? 0;
+    }
+    return sum;
+}
+
+/**
  * Why a tally breaks the clip ceiling, as a sentence, or undefined: a tally
  * that read but hit-tested no point ran over nothing; one whose points
  * behind a clip (the wall scrollers' apart) are more than `ceiling` of
@@ -205,6 +247,9 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  * - `lineSkips`: `{ [cls]: { [viewport]: { 'clipped-away', 'not-rendered' } } }`;
  * - `cover`: `{ [pass]: coverByClass }`, 1a's tallies per look on every pass
  *   that read it (`coverTally`'s shape);
+ * - `reach`: `{ [pass]: reachByClass }`, 1b's tallies per look on every
+ *   geometry pass that owes it (`reachTally`'s shape): a carried look owes a
+ *   read that held a target on each (7b);
  * - `clipCeiling`: the ratio the public looks are held to (`CLIP_SKIP_CEILING`);
  * - `codesRead`: `{ [cls]: Set<'viewport/screen:code'> }`, the quiet-zone reads;
  * - `codesRequired`: the codes owed by name (`CODES_REQUIRED`);
@@ -214,6 +259,7 @@ export function carriedTallyFaults({
     carried,
     lineSkips = {},
     cover = {},
+    reach = {},
     clipCeiling,
     codesRead = {},
     codesRequired = [],
@@ -252,6 +298,11 @@ export function carriedTallyFaults({
         for (const pass of Object.keys(cover)) {
             const why = clipCeilingFault(coverTally(cover[pass], [cls]), clipCeiling);
             if (why !== undefined) faults.push(`${cls} at ${pass}: ${why}`);
+        }
+        for (const pass of Object.keys(reach)) {
+            const t = reachTally(reach[pass], [cls]);
+            if (t.paints === 0) faults.push(`${cls} at ${pass}: a-paint-with-no-hit-area-reaches-no-money read no paint of it`);
+            else if (t.targets === 0) faults.push(`${cls} at ${pass}: a-paint-with-no-hit-area-reaches-no-money held no target on it`);
         }
         const owed = codesRequired.filter((code) => !(paid && PAID_LOOK_UNPAINTED_CODES.includes(code)));
         const read = own(codesRead, cls) ?? new Set();

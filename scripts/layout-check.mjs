@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { TRACKED_FIXTURE_CLASS, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { GEOMETRY_PASSES as OWING_GEOMETRY, TRACKED_FIXTURE_CLASS, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
@@ -62,7 +62,7 @@ import {
     runnerPasses,
     viewportOffPlan,
 } from './probe-passes.mjs';
-import { COVER_TALLY_KEYS, carriedTallyFaults, clipCeilingFault, clipLine, coverTally, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
+import { COVER_TALLY_KEYS, carriedTallyFaults, clipCeilingFault, clipLine, coverTally, reachTally, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
@@ -3085,36 +3085,41 @@ function coverLines(label, byClass, ms, coveredBy, end, seek) {
     return [line];
 }
 /*
- * **1b, `a-paint-with-no-hit-area-reaches-no-money`, report-only** (before
- * 8g2; `reachAtRest` in the probe, the pure half `layout/paintReach.ts`):
- * the reach of every paint with no hit area — an outer box-shadow, an
- * outline, a border image's outset, a text-shadow, a drop shadow or a blur
- * in a filter, a decoration line, a look pseudo's region — held to every
- * money node's line boxes and every protected box, on every geometry pass,
- * once a paint at rest and at the keyframes of the animations that can move
- * or change one. What it would fail is printed per pass, per look and per
- * kind, word for word up to `REACH_PRINTED` sentences a pass grouped by
- * source; the blur policy's measurement — the most each soft paint reached
- * over a target — and what a blurred layer would add with its offset and
- * spread counted in full, as a sharp one's is, beside them. It moves no
- * verdict.
+ * **1b, `a-paint-with-no-hit-area-reaches-no-money`, bound since step 7b**
+ * (before 8g2; `reachAtRest` in the probe, the pure half
+ * `layout/paintReach.ts`): the reach of every paint with no hit area — an
+ * outer box-shadow, an outline, a border image's outset, a text-shadow, a
+ * drop shadow or a blur in a filter, a decoration line, a look pseudo's
+ * region — held to every money node's line boxes and every protected box,
+ * on every geometry pass, once a paint at rest and at the keyframes of every
+ * animation that is not needless. Its failures are in the pass's own list
+ * (a throw that stopped it on a paint is one); here they are printed per
+ * pass, per look and per kind, grouped by source up to `REACH_PRINTED`, and
+ * beside them the meets the owner accepted by name (`REACH_ACCEPTED`, counted
+ * and never failed), the blur policy's measurement — the most each soft
+ * paint reached over a target — and what a blurred layer would add with its
+ * offset and spread counted in full, as a sharp one's is (not counted).
  */
 const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
 const reachGeometry = [];
+/** 1b's tallies per look on every geometry pass that owes it (`OWING_GEOMETRY`), for each carried look's own (`carriedTallyFaults`). */
+const reachSeen = {};
 /** `holds-out-of-flow-agrees-with-this-chrome`, per geometry pass: the page's record of it (`outOfFlowCheck`) and its time. */
 const outOfFlowGeometry = [];
 /** How many grouped would-be sentences a pass prints word for word. */
 const REACH_PRINTED = 60;
 function reachLines(pass, r) {
     const classes = Object.keys(r.byClass).sort();
-    const sum = (key) => classes.reduce((n, cls) => n + (r.byClass[cls][key] ?? 0), 0);
+    const total = reachTally(r.byClass, classes);
+    const sum = (key) => total[key];
     const kinds = {};
     for (const cls of classes) for (const [kind, n] of Object.entries(r.byClass[cls].byKind ?? {})) kinds[kind] = (kinds[kind] ?? 0) + n;
     const lines = [
-        `    ${pass}: ${sum('would')} would-be failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'})` +
-            `${Object.keys(kinds).length === 0 ? '' : `, by kind ${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}`} · ` +
+        `    ${pass}: ${sum('would')} failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'})` +
+            `${Object.keys(kinds).length === 0 ? '' : `, by kind ${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}`}, ` +
+            `${sum('accepted')} accepted by name (${classes.filter((cls) => (r.byClass[cls].accepted ?? 0) > 0).map((cls) => `${cls} ${r.byClass[cls].accepted}`).join(', ') || 'none'}) · ` +
             `${sum('paints')} paint(s), ${sum('elements')} element(s) (${sum('contents')} a display: contents text owner) and ${sum('pseudos')} look pseudo(s) read, ${sum('reachers')} with a paint that reaches, ` +
-            `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('needless')} animation(s) left out: nothing that reaches or moves) · ` +
+            `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('wide')} reading every reacher against every target; ${sum('needless')} animation(s) left out: nothing that reaches or moves; ${sum('unmoved')} more: a move of a box that holds nothing 1b reads) · ` +
             `a blurred layer's offset and spread counted in full would add ${sum('softCore')} · ${(r.ms / 1000).toFixed(2)}s (seeks ${(r.seekMs / 1000).toFixed(2)}s)`,
     ];
     // A source said on many screens is one line: the sentence less its screen, its look and its place.
@@ -3135,9 +3140,18 @@ function reachLines(pass, r) {
         printed += 1;
     }
     if (r.would.length < sum('would')) lines.push(`      (${sum('would') - r.would.length} more counted and not kept word for word)`);
-    // A throw ends 1b on its paint and fails nothing: said, so a 1b that read nothing is not read as a 1b that found nothing.
+    // The meets accepted by name (`REACH_ACCEPTED`): grouped as the failures are, each with the entry that accepted it.
+    const accepted = new Map();
+    for (const w of r.accepted ?? []) {
+        const key = w.replace(/^[^:]*: /, '').replace(/ at -?\d+,-?\d+ \(\d+x\d+\)/, '').replace(/, composite [\d.]+/, '');
+        const g = accepted.get(key) ?? { n: 0, first: w };
+        g.n += 1;
+        accepted.set(key, g);
+    }
+    for (const [, g] of [...accepted].sort((a, b) => b[1].n - a[1].n).slice(0, REACH_PRINTED)) lines.push(`      accepted: ${g.first}${g.n > 1 ? ` (×${g.n} on this pass)` : ''}`);
+    // A throw ends 1b on its paint and fails the paint: said here too, so a 1b that read nothing is not read as a 1b that found nothing.
     if (sum('throws') > 0) {
-        lines.push(`      1b threw on ${sum('throws')} paint(s) and stopped there (it fails nothing):`);
+        lines.push(`      1b threw on ${sum('throws')} paint(s) and stopped there (each a failure):`);
         for (const w of (r.thrown ?? []).slice(0, 8)) lines.push(`        ${w}`);
     }
     return lines;
@@ -3896,6 +3910,7 @@ try {
                 pass: g.key,
                 byClass: g.report.reachByClass,
                 would: g.report.reachWould ?? [],
+                accepted: g.report.reachAccepted ?? [],
                 literal: g.report.reachLiteral ?? [],
                 thrown: g.report.reachThrown ?? [],
                 soft: g.report.reachSoft ?? {},
@@ -3903,6 +3918,7 @@ try {
                 seekMs: g.report.reachSeekMs ?? 0,
                 policy: g.report.reachBlurOpacity,
             });
+            if (OWING_GEOMETRY.has(g.key)) reachSeen[g.key] = g.report.reachByClass;
         }
         if (g.report?.walkByClass !== undefined) {
             walkGeometry.push({
@@ -4101,8 +4117,9 @@ try {
     );
     for (const { pass, byClass, ms, coveredBy, end, seek } of coverGeometry) for (const line of coverLines(pass, byClass, ms, coveredBy, end, seek)) console.log(line);
     console.log(
-        `  1b (${REACH_CHECK}), report-only: what it would fail on each geometry pass — a paint with no hit area (a box-shadow, an outline, a border image's outset, ` +
-            `a text-shadow, a drop shadow or a blur, a decoration line, a look pseudo's region) reaching a money node's line boxes or a protected box; it fails nothing`,
+        `  1b (${REACH_CHECK}), bound: what it read on each geometry pass — a paint with no hit area (a box-shadow, an outline, a border image's outset, ` +
+            `a text-shadow, a drop shadow or a blur, a decoration line, a look pseudo's region) reaching a money node's line boxes or a protected box; its failures in the pass's own list, ` +
+            `the meets accepted by name (REACH_ACCEPTED) counted apart`,
     );
     for (const r of reachGeometry) for (const line of reachLines(r.pass, r)) console.log(line);
     console.log(
@@ -5076,13 +5093,15 @@ try {
         if (PRIVATE_SHEET_CLASSES.length > 0) {
             // Every carried look on its own tallies (8e2, the 8e2 critic's
             // item 1): its line skips against its own ceiling, its points
-            // of 1a behind a clip on every pass that read it (7a), the codes
+            // of 1a behind a clip on every pass that read it (7a), a read of
+            // 1b that held a target on every geometry pass (7b), the codes
             // owed by name on its own jobs. A carried look with no ceiling
             // of its own fails here.
             const { faults, notes } = carriedTallyFaults({
                 carried: CARRIED.looks,
                 lineSkips: privateLineSkips,
                 cover: coverSeen,
+                reach: reachSeen,
                 clipCeiling: CLIP_SKIP_CEILING,
                 codesRead: codesReadByClass,
                 codesRequired: CODES_REQUIRED,

@@ -43,8 +43,13 @@ function code(file: string): string {
     return ts.createPrinter({ removeComments: true }).printFile(parsed);
 }
 
-/** The harness files that decide what a look owes and what is set aside for it. */
-const DECIDING = ['layout/probe.ts', 'layout/contrastPlan.ts', 'layout/atRest.ts'];
+/**
+ * The harness files that decide what a look owes and what is set aside for
+ * it — and, since 7b, which reaches 1b accepts by name (`REACH_ACCEPTED` in
+ * `layout/paintReach.ts`: keyed on what the page paints, so Rural's starter
+ * is accepted where Rural is).
+ */
+const DECIDING = ['layout/probe.ts', 'layout/contrastPlan.ts', 'layout/atRest.ts', 'layout/paintReach.ts'];
 
 /** The kit's look as `pnpm workshop:start <base>` writes it, read back the way the kit's pages read it. */
 function starter(base: KitBase): Look {
@@ -179,7 +184,7 @@ describe('every-starter-is-measured-as-its-shipped-look', () => {
         // runner names (`__contrastPrepare`); nothing else asks by id.
         expect(code('layout/probe.ts').match(/\blookById\(/g)).toEqual(['lookById(']);
         expect(code('layout/probe.ts')).toContain('lookById(themeId)');
-        for (const file of ['layout/contrastPlan.ts', 'layout/atRest.ts']) {
+        for (const file of ['layout/contrastPlan.ts', 'layout/atRest.ts', 'layout/paintReach.ts']) {
             expect(code(file).includes('lookById('), file).toBe(false);
         }
     });

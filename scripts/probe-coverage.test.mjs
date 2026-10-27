@@ -79,6 +79,8 @@ const moneyRead = {
     dressClipByClass: { 't-rural': 300 },
     // 7a: 1a read on every look, a point hit-tested on each.
     coverByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, nodes: 200, points: 9000, checked: 6000, clipSkips: 300, wallScroll: 0, failed: 0 }])),
+    // 7b: 1b read on every look, a target held on each.
+    reachByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, elements: 3000, reachers: 200, targets: 180, pairs: 90, would: 0, accepted: 0, throws: 0 }])),
     // The fourth review's PFQ: every code a pass painted, its colours read.
     qrColourByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { painted: 20, read: 20 }])),
     // The fifth review's item 10: every look painted as many codes on a screen as any other.
@@ -976,6 +978,47 @@ describe('1a-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
         }
         for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
             assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => COVER_RULE.test(gap)), [], pass);
+        }
+    });
+});
+
+const REACH_RULE = /^a-paint-with-no-hit-area-reaches-no-money /;
+
+describe('1b-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
+    /**
+     * 7b: 1b binds, so every geometry pass owes, on every look it painted, a
+     * read of 1b that held at least one target — a look never read, or read
+     * with every target cut away, reached nothing it could fail. The short,
+     * reduced-motion and contrast passes owe nothing here (1b does not run on
+     * the short passes or the contrast pass; the reduced-motion pass runs it
+     * and its failures fail, as 1a's do).
+     */
+    it('passes a geometry pass that read every look and held a target on each', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => REACH_RULE.test(gap)), [], pass);
+        }
+    });
+
+    it('names the look a pass never read, and the look it read and held no target on', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            const { 't-neo': _neo, ...rest } = read.reachByClass;
+            const short = { ...read, reachByClass: { ...rest, 't-rural': { ...rest['t-rural'], targets: 0, pairs: 0 } } };
+            assert.deepEqual(
+                probeCoverageGaps(pass, short).filter((gap) => REACH_RULE.test(gap)),
+                [
+                    'a-paint-with-no-hit-area-reaches-no-money read no paint of a t-neo stall',
+                    'a-paint-with-no-hit-area-reaches-no-money held no target on a t-rural stall',
+                ],
+                pass,
+            );
+            // A pass whose page ran no 1b at all owes every look it painted.
+            assert.equal(probeCoverageGaps(pass, { ...read, reachByClass: undefined }).filter((gap) => REACH_RULE.test(gap)).length, CARD_LOOKS.length, pass);
+            assert.equal(probeCoverageGaps(pass, { ...read, sheetClasses: ['constructor'] }).filter((gap) => REACH_RULE.test(gap)).length, 1, pass);
+        }
+        for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => REACH_RULE.test(gap)), [], pass);
         }
     });
 });

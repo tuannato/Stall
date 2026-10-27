@@ -7,6 +7,7 @@ import {
     clipCeilingFault,
     clipLine,
     coverTally,
+    reachTally,
     skipsByScreen,
     skipsByScreenLine,
 } from './look-tallies.mjs';
@@ -43,6 +44,10 @@ function measured() {
             canvas: { [FIXTURE]: tally({ clipSkips: 20, checked: 400, wallScroll: 900 }) },
             tablet: { [FIXTURE]: tally({ clipSkips: 0, checked: 3000, wallScroll: 2500 }) },
         },
+        reach: {
+            mobile: { [FIXTURE]: { paints: 90, targets: 400, pairs: 120 } },
+            tablet: { [FIXTURE]: { paints: 60, targets: 200, pairs: 0 } },
+        },
         clipCeiling: 0.3,
         codesRead: { [FIXTURE]: new Set(CODES.filter((code) => !PAID_LOOK_UNPAINTED_CODES.includes(code))) },
         codesRequired: CODES,
@@ -72,7 +77,7 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
     });
 
     it('fails a carried look with no ceiling of its own, naming what it measured', () => {
-        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] } });
+        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), reach: Object.fromEntries(Object.entries(measured().reach).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] } });
         assert.equal(faults.length, 1);
         assert.match(faults[0], /^t-planted-look is carried and has no line-skip ceiling of its own \(CARRIED_LINE_SKIP_CEILING/);
         assert.match(faults[0], /mobile 3\/1, desktop 0\/0, canvas 0\/0/);
@@ -90,6 +95,18 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
             't-fixture-private at canvas: every one of its 40 points inside the viewport was behind a clip — the cover check ran over nothing',
             't-fixture-private at tablet: it hit-tested no point — the cover check ran over nothing',
         ]);
+    });
+
+    it('owes a read of 1b that held a target on every geometry pass that ran it (7b)', () => {
+        const unread = measured();
+        unread.reach.mobile = { 't-modern': { paints: 9, targets: 9 } };
+        unread.reach.tablet[FIXTURE] = { paints: 60, targets: 0 };
+        assert.deepEqual(carriedTallyFaults(unread).faults, [
+            't-fixture-private at mobile: a-paint-with-no-hit-area-reaches-no-money read no paint of it',
+            't-fixture-private at tablet: a-paint-with-no-hit-area-reaches-no-money held no target on it',
+        ]);
+        assert.equal(reachTally({ a: { paints: 2, targets: 3, would: 1 }, b: { paints: 1, accepted: 4 } }, ['a', 'b', 'constructor']).accepted, 4);
+        assert.equal(reachTally({ a: { paints: 2, targets: 3, would: 1 } }).would, 1);
     });
 
     it('owes every code by name on its own jobs, the record sheet’s excused under a paid look alone', () => {

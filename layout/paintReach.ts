@@ -1,7 +1,8 @@
 /**
- * **Paints with no hit area that reach over money** (before 8g2, 1b,
- * report-only; the pure half of `reachAtRest` and its reads in
- * `layout/probe.ts`).
+ * **Paints with no hit area that reach over money** (before 8g2, 1b, bound
+ * since step 7b; the pure half of `reachAtRest` and its reads in
+ * `layout/probe.ts`, and the reaches the owner accepted by name,
+ * `REACH_ACCEPTED`).
  *
  * 1a (`nothing-covers-money-or-a-protected-box`) asks the page what stands at
  * points over every money node with `pointer-events` forced on, so a box laid
@@ -629,4 +630,95 @@ export function blurMeet(kind: ReachKind, layers: readonly Layer[], target: Box,
     if (pieces.length === 0) return undefined;
     const c = compositeOverAny(soft, pieces);
     return c >= threshold ? { kind, at: pieces[0]!, coverage: c, what } : undefined;
+}
+
+/**
+ * What a would-be failure of 1b is, as the accepted list reads it: the kind
+ * of paint and the composite it reached, the reacher as the page paints it
+ * (its tag, its classes, which pseudo-element, its computed `box-shadow`) and
+ * the target as the page paints it (its tag, its classes, its `data-role`,
+ * its computed background and ink).
+ */
+export type ReachFact = {
+    kind: ReachKind;
+    coverage: number | undefined;
+    reacher: { tag: string; classes: readonly string[]; pseudo: string | null; boxShadow: string };
+    target: { tag: string; classes: readonly string[]; role: string | null; background: string; color: string };
+};
+
+/** One reach the owner accepted by name, and what it is keyed on. */
+export type AcceptedReach = {
+    /** Who decided it, and what it is, as the run prints it. */
+    readonly name: string;
+    readonly kind: ReachKind;
+    /** The reacher: an element (`pseudo` null) of this tag carrying this class, whose computed `box-shadow` is exactly this. */
+    readonly reacher: { readonly tag: string; readonly cls: string; readonly pseudo: null; readonly boxShadow: string };
+    /** The target: an element of this tag carrying this class and `data-role`, whose computed background and ink are exactly one of these pairs. */
+    readonly target: {
+        readonly tag: string;
+        readonly cls: string;
+        readonly role: string;
+        readonly plates: readonly { readonly background: string; readonly color: string }[];
+    };
+    /** The most composite the reach may reach over the target and stay accepted. */
+    readonly ceiling: number;
+};
+
+/**
+ * **The reaches 1b accepts by name** (step 7b; the owner's D-2026-10-27-03,
+ * option (b)). One entry: Rural's sign board at the desk, `0 18px 40px` in
+ * its ink at 0.32, over the address plate under it — a real overlap (the
+ * board swings, so it paints after the content in flow and darkens the
+ * plate's top) that composites to 0.229 over the plate, which stays legible;
+ * the clean tree's only 1b failure, 130 on `offers`' paints with the pin and
+ * 12 on `unresolvable`'s without, all at 1280. Raising `BLUR_OPACITY` to 0.25
+ * for it would admit a 4.5:1 figure taken to 2.9:1, under the 3:1 floor, on
+ * every look.
+ *
+ * **Keyed on what the page paints, never on a look's class**: the look is
+ * named by its board's computed shadow and its plate's computed ground and
+ * ink — bare (`rgb(255, 253, 244)` under `rgb(107, 89, 66)`, 6.9:1) and under
+ * Rural's one mood, Sun-faded (`rgb(247, 244, 238)` under
+ * `rgb(108, 95, 77)`, 5.7:1), the two plates the 142 stand on — so
+ * `pnpm workshop:start rural`'s starter (the same sheet and rows under
+ * `t-workshop`) is judged as Rural is (`layout/starterParity.test.ts`), and
+ * another look's sign carrying the same shadow over a plate of another
+ * colour is not accepted. Any other kind, reacher, shadow (an alpha of 0.40
+ * is another string), target, plate, or a composite past `ceiling` fails as
+ * before. Pinned by value in `paintReach.test.ts`.
+ */
+export const REACH_ACCEPTED: readonly AcceptedReach[] = Object.freeze([
+    Object.freeze({
+        name: "Rural's sign board over the address plate (D-2026-10-27-03)",
+        kind: 'box-shadow blur' as const,
+        reacher: Object.freeze({ tag: 'div', cls: 'stall-sign', pseudo: null, boxShadow: 'rgba(58, 42, 24, 0.32) 0px 18px 40px 0px' }),
+        target: Object.freeze({
+            tag: 'button',
+            cls: 'addr',
+            role: 'addr-copy',
+            plates: Object.freeze([
+                Object.freeze({ background: 'rgb(255, 253, 244)', color: 'rgb(107, 89, 66)' }),
+                Object.freeze({ background: 'rgb(247, 244, 238)', color: 'rgb(108, 95, 77)' }),
+            ]),
+        }),
+        ceiling: 0.23,
+    }),
+]);
+
+/** The accepted reach a would-be failure is, or undefined: every key equal, the composite known and at most the entry's ceiling. */
+export function acceptedReach(fact: ReachFact, table: readonly AcceptedReach[] = REACH_ACCEPTED): AcceptedReach | undefined {
+    return table.find(
+        (a) =>
+            fact.kind === a.kind &&
+            fact.coverage !== undefined &&
+            fact.coverage <= a.ceiling &&
+            fact.reacher.pseudo === a.reacher.pseudo &&
+            fact.reacher.tag === a.reacher.tag &&
+            fact.reacher.classes.includes(a.reacher.cls) &&
+            fact.reacher.boxShadow === a.reacher.boxShadow &&
+            fact.target.tag === a.target.tag &&
+            fact.target.classes.includes(a.target.cls) &&
+            fact.target.role === a.target.role &&
+            a.target.plates.some((plate) => plate.background === fact.target.background && plate.color === fact.target.color),
+    );
 }

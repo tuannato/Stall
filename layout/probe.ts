@@ -129,8 +129,10 @@ import {
     underlineBand,
     union,
     zoomOf,
+    acceptedReach,
     type Layer,
     type Meet,
+    type ReachFact,
     type ReachKind,
     type Shadow as ReachShadow,
 } from './paintReach';
@@ -626,7 +628,7 @@ function coveredByRead(node: Element): string | undefined {
  * code (`layout/coverPoints.ts`), each in its own frame. A paint with no hit
  * area — a shadow, an outline, a neighbour's underline — is not
  * hit-testable whatever the forcing, and is 1b's
- * (`a-paint-with-no-hit-area-reaches-no-money`, report-only, below).
+ * (`a-paint-with-no-hit-area-reaches-no-money`, bound since 7b, below).
  *
  * **What a lattice of points cannot see, stated** (the critic's item 7):
  * any fixed set of points can be dodged. A cover thinner than the pitch
@@ -1635,11 +1637,11 @@ function coverAtRest(screen: string, label: string): Failure[] {
         }
     }
     coverRest = [];
-    // 1b, report-only, at rest and at its keyframes, before 1a forces the hit test on (`reachAtRest`).
-    reachAtRest(screen, label);
+    // 1b, bound since 7b, at rest and at its keyframes, before 1a forces the hit test on (`reachAtRest`).
+    const reach = reachAtRest(screen, label);
     const atRest = coverRead(screen, label);
     // And once more at the end of every animation that keeps it (`coverAtEnd`).
-    return [...atRest, ...coverAtEnd(screen, label, atRest)];
+    return [...reach, ...atRest, ...coverAtEnd(screen, label, atRest)];
 }
 
 /** The read once on a contrast job's prepared paint, at its full height (the runner tags it with the job). */
@@ -1647,8 +1649,8 @@ window.__coverFaults = () => coverScan();
 
 /*
  * **Paints with no hit area that reach over money** (before 8g2, 1b,
- * `a-paint-with-no-hit-area-reaches-no-money`, **report-only**; the pure
- * half is `layout/paintReach.ts`). 1a hit-tests money with `pointer-events`
+ * `a-paint-with-no-hit-area-reaches-no-money`, **bound since step 7b**; the
+ * pure half is `layout/paintReach.ts`). 1a hit-tests money with `pointer-events`
  * forced on, so a cover answers wherever it has a hit area — and a paint
  * that has none answers nowhere (the plan's C-1): the critic's PW, the price
  * column's `::after` at `height: 0` moved up 60px with `box-shadow: 0 0 0
@@ -1677,7 +1679,12 @@ window.__coverFaults = () => coverScan();
  * (`PROTECTED`, its border boxes), each cut to what its clipping boxes show
  * — the reach cut to what the reacher's show — past the box it is drawn from
  * (a pseudo's region is not inside its box, so nothing is excluded), by more
- * than a pixel on both axes, is a would-be failure.
+ * than a pixel on both axes, fails — unless the owner accepted it by name
+ * (`REACH_ACCEPTED`, `acceptedReach`: one entry, Rural's sign board over the
+ * address plate at the desk, D-2026-10-27-03, keyed on the reacher's tag,
+ * class and computed shadow and the target's tag, class, role, ground and
+ * ink, never a look's class, under a composite ceiling), counted and printed
+ * apart.
  *
  * **The blur policy** (`BLUR_OPACITY`, measured first; `PROBE-RULES.md`,
  * "Before 8g2, 1b"): a blurred tail counts where the composite of every
@@ -1688,29 +1695,30 @@ window.__coverFaults = () => coverScan();
  *
  * **When**: on every geometry pass, once a paint, at rest — every animation
  * reset as 1a resets it, just before 1a's read (`coverAtRest`) — and at the
- * keyframes of some animations (`reachSeek`): an animation of a box-shadow,
- * a text-shadow, a filter or a colour alone is read from its keyframes' own
- * computed values, with no seek (`reachKeyframes`); every other animation
- * whose keyframes name a paint that reaches (`REACH_PROPS`), that runs on a
- * look pseudo, or whose own subtree holds a reacher or a target at rest is
- * seeked to each keyframe offset, and the boxes it runs on and under read
- * again, the targets inside it held to every reacher outside it standing
- * still; an animation of nothing that reaches or moves (`reachNeedless`: a
- * ground, an opacity, a clip or a mask, and a custom property only those
- * read) is left alone. So two are not seeked (the ninth critic's L1 and K1,
- * PLAN § Open): an animation that moves a target by layout from outside the
- * target's and the reacher's subtrees (a margin on a sibling), and one that
- * sets a custom property feeding a reach on a box that paints nothing that
- * reaches at rest. Guarded whole: a throw ends 1b on its paint, is counted
- * and said (`reachThrown`), and fails nothing. Clips are held per pair
+ * keyframes of every animation that is not needless (`reachSeek`, widened
+ * at 7b after the ninth critic's L1 and K1): an animation of a box-shadow, a
+ * text-shadow, a filter or a colour alone on a box is read from its
+ * keyframes' own computed values, with no seek (`reachKeyframes`); every
+ * other is seeked to each keyframe offset, and every reacher that can have
+ * changed held to every target that can have changed — all of them, read
+ * again, where it sets something that can move or change another box (a
+ * size, a margin, a custom property a reach or a layout reads, a move an
+ * anchor can follow: `MOVES_NO_OTHER_BOX`, `ANCHOR_FOLLOWED`, 1a's
+ * reading); what its own box holds against every target where it moves its
+ * own box; the box itself where it changes paints alone. An animation of
+ * nothing that reaches or moves (`reachNeedless`: a ground, an opacity, a
+ * clip or a mask, and a custom property only those read) is left alone.
+ * Guarded whole: a throw ends 1b on its paint, is counted and said
+ * (`reachThrown`), and fails the paint. Clips are held per pair
  * (`pairClip`, `reachClipChain`): a box is clipped by what clips the box
  * whose content it is — its parent, or an absolute or fixed box's
  * containing block (the ninth critic's CB2) — and a link that scrolls both
  * boxes, neither standing sticky under it, clips neither on the axis it
  * scrolls (they keep their places as it scrolls); every other link cuts at
- * its padding box. Fails nothing: its would-be failures — one a pair of
- * boxes and a kind — are counted per look and per kind and printed per pass.
- * Not read, stated: a reach between two keyframes, and two animations at
+ * its padding box. Its failures — one a pair of boxes and a kind — go in
+ * the pass's own list, and are counted per look and per kind and printed
+ * per pass; every geometry pass owes a read of 1b, a target held, on every
+ * look it painted (`probe-coverage.mjs`). Not read, stated: a reach between two keyframes, and two animations at
  * once; a value a keyframe read from its values does not set, read as it
  * computes at rest; an element's paint stacked under a neighbour's opaque
  * ground (paint order is not modelled: a meet is a meet whichever paints
@@ -1725,7 +1733,7 @@ window.__coverFaults = () => coverScan();
  * stands.
  */
 const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
-/** One look's 1b tallies on a pass: paints read at rest, elements and pseudos read, reachers with a paint that reaches, targets held, pairs judged, keyframe seeks, would-be failures by kind. */
+/** One look's 1b tallies on a pass: paints read at rest, elements and pseudos read, reachers with a paint that reaches, targets held, pairs judged, keyframe seeks, failures by kind, meets accepted by name. */
 type ReachTally = {
     paints: number;
     elements: number;
@@ -1740,19 +1748,48 @@ type ReachTally = {
     needless: number;
     /** Animations read at their keyframes from the keyframes' own values, with no seek (`reachKeyframes`). */
     fromValues: number;
+    /** Of the seeks, those that read every reacher on the surface against every target (`wide`: the animation can move or change a box outside its own). */
+    wide: number;
+    /** Animations that move their own box and what it holds, left out: it holds no reacher and no target, and runs on no look pseudo. */
+    unmoved: number;
+    /** Failures (one a pair of boxes and a kind). */
     would: number;
     byKind: Partial<Record<ReachKind, number>>;
+    /** Meets the owner accepted by name (`REACH_ACCEPTED`), not failed. */
+    accepted: number;
     /** Pairs met by a blurred layer's offset and spread alone, which the policy does not count (`reachLiteral`). */
     softCore: number;
-    /** Paints on which 1b threw and stopped (`reachThrown`). */
+    /** Paints on which 1b threw and stopped (`reachThrown`): each a failure. */
     throws: number;
 };
 const reachByClass: Record<string, ReachTally> = {};
 const reachTally = (): ReachTally =>
-    (reachByClass[measuringClass] ??= { paints: 0, elements: 0, contents: 0, pseudos: 0, reachers: 0, targets: 0, pairs: 0, seeks: 0, needless: 0, fromValues: 0, would: 0, byKind: {}, softCore: 0, throws: 0 });
-/** The would-be failures, word for word, up to `REACH_KEPT` a pass (the rest counted in the tallies). */
+    (reachByClass[measuringClass] ??= {
+        paints: 0,
+        elements: 0,
+        contents: 0,
+        pseudos: 0,
+        reachers: 0,
+        targets: 0,
+        pairs: 0,
+        seeks: 0,
+        wide: 0,
+        unmoved: 0,
+        needless: 0,
+        fromValues: 0,
+        would: 0,
+        byKind: {},
+        accepted: 0,
+        softCore: 0,
+        throws: 0,
+    });
+/** The failures, word for word, up to `REACH_KEPT` a pass (the rest counted in the tallies), for the runner's grouped lines. */
 const reachWould: string[] = [];
 const REACH_KEPT = 4000;
+/** The meets accepted by name (`REACH_ACCEPTED`), word for word up to `REACH_KEPT` a pass, each with the entry that accepted it. */
+const reachAcceptedSaid: string[] = [];
+/** The paint's own failures, gathered while 1b reads it (`reachAtRest` hands them to the pass). */
+let reachFailures: Failure[] = [];
 /**
  * The pairs a literal reading of "offset and spread in full" would add — a blurred layer's offset
  * and spread counted in full, as a sharp one's is — measured and not counted:
@@ -2360,8 +2397,8 @@ function reachTargets(surface: ParentNode, clipSeen: Map<Element, ClipLink[]>, n
     return out;
 }
 
-/** The paint's read at rest's targets, clips, surface and element reachers (`reachRead`), for its keyframe reads. */
-let reachRest: { targets: ReachTarget[]; clipSeen: Map<Element, ClipLink[]>; surface: ParentNode; reachers: Map<Element, Reacher>; all: Reacher[] } | undefined;
+/** The paint's read at rest's targets, clips, surface and reachers (`reachRead`), for its keyframe reads. */
+let reachRest: { targets: ReachTarget[]; clipSeen: Map<Element, ClipLink[]>; surface: ParentNode; all: Reacher[] } | undefined;
 
 /** A reacher: an element, or a look pseudo-element (its host and which), and its paints that reach. */
 type Reacher = { el: Element; pseudo: '::before' | '::after' | null; paints: ReachPaints };
@@ -2653,7 +2690,7 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
             }
             continue;
         }
-        // One would-be failure a pair (a reacher and a target, each its own box) and a kind, whatever it is read at.
+        // One failure a pair (a reacher and a target, each its own box) and a kind, whatever it is read at.
         const key = `${whoKey}|${meet.kind}|${reachId(tn)}`;
         if (said.has(key)) continue;
         said.add(key);
@@ -2662,70 +2699,57 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
             (meet.coverage === undefined ? '' : `, composite ${meet.coverage.toFixed(2)}`) +
             (meet.kind === 'unresolved' ? ` — ${meet.what}: it reaches anywhere` : '') +
             (at === undefined ? '' : `, ${at}`);
+        // A meet the owner accepted by name (`REACH_ACCEPTED`), keyed on what the page paints: counted and said, not failed.
+        const accepted = acceptedReach(reachFact(rc, meet, tn));
+        if (accepted !== undefined) {
+            t.accepted += 1;
+            if (reachAcceptedSaid.length < REACH_KEPT) reachAcceptedSaid.push(`${screen} / ${label}: ${sentence} — accepted: ${accepted.name}`);
+            continue;
+        }
         t.would += 1;
         t.byKind[meet.kind] = (t.byKind[meet.kind] ?? 0) + 1;
         if (reachWould.length < REACH_KEPT) reachWould.push(`${screen} / ${label}: ${sentence}`);
+        reachFailures.push({ screen, theme: label, check: REACH_CHECK, detail: sentence });
     }
 }
 
+/** A meet as the accepted list reads it (`acceptedReach`): the reacher and the target as the page paints them. */
+function reachFact(rc: Reacher, meet: Meet, target: Element): ReachFact {
+    const rs = getComputedStyle(rc.el, rc.pseudo);
+    const ts = getComputedStyle(target);
+    return {
+        kind: meet.kind,
+        coverage: meet.coverage,
+        reacher: { tag: rc.el.tagName.toLowerCase(), classes: [...rc.el.classList], pseudo: rc.pseudo, boxShadow: rs.boxShadow },
+        target: { tag: target.tagName.toLowerCase(), classes: [...target.classList], role: target.getAttribute('data-role'), background: ts.backgroundColor, color: ts.color },
+    };
+}
+
 /**
- * 1b on the paint as it stands: its would-be failures said and tallied under
- * the measuring look; `only` limits it to some elements (a keyframe read's),
- * `at` says where it read, and `said` holds what is not said again. A read
- * at rest keeps its targets, its clips and its reachers (`reachRest`) for the
- * keyframe reads after it; a keyframe read of paints alone (`still`) moves no
- * box, and reads the targets and clips at rest again as they stood.
+ * 1b on the paint at rest: its failures said and tallied under the measuring
+ * look, `said` holding what is not said again. It keeps its targets, its
+ * clips and its reachers (`reachRest`) for the keyframe reads after it —
+ * the reachers read even where no target stands at rest, since a move at a
+ * keyframe can carry a target out from behind its clips under one.
  */
-function reachRead(screen: string, label: string, only: ReadonlySet<Element> | undefined, at: string | undefined, said: Set<string>, still = false): Reacher[] {
+function reachRead(screen: string, label: string, said: Set<string>): Reacher[] {
     const t = reachTally();
-    const rest = only === undefined;
-    if (rest) t.paints += 1;
+    t.paints += 1;
     const root = document.getElementById('app')!;
     const scrim = root.querySelector('[data-role="sheet-scrim"], [data-role="poster"], [data-role="zoom"]');
     const surface: ParentNode = scrim ?? root;
-    const clipSeen = still && reachRest !== undefined ? reachRest.clipSeen : new Map<Element, ClipLink[]>();
-    const targets = still && reachRest !== undefined ? reachRest.targets : reachTargets(surface, clipSeen, rest ? undefined : reachRest?.targets.map((tg) => tg.node));
-    if (rest) {
-        t.targets += targets.length;
-        reachRest = { targets, clipSeen, surface, reachers: new Map(), all: [] };
-    }
-    if (targets.length === 0) return [];
-    const reachers = reachersOn(surface, only, clipSeen, t, rest);
-    if (rest) {
-        reachRest!.all = reachers;
-        for (const rc of reachers) if (rc.pseudo === null) reachRest!.reachers.set(rc.el, rc);
-    }
-    for (const rc of reachers) judgeReacher(rc, targets, t, screen, label, at, said);
+    const clipSeen = new Map<Element, ClipLink[]>();
+    const targets = reachTargets(surface, clipSeen);
+    t.targets += targets.length;
+    reachRest = { targets, clipSeen, surface, all: [] };
+    const reachers = reachersOn(surface, undefined, clipSeen, t, true);
+    reachRest.all = reachers;
+    for (const rc of reachers) judgeReacher(rc, targets, t, screen, label, undefined, said);
     return reachers;
 }
 
-/**
- * The keyframes that can move or change a paint that reaches (`reachSeek`):
- * a paint a keyframe sets (`REACH_PROPS`), on any box.
- */
-const REACH_PROPS: ReadonlySet<string> = new Set([
-    'box-shadow',
-    'text-shadow',
-    'outline',
-    'outline-width',
-    'outline-offset',
-    'outline-style',
-    'outline-color',
-    'border-image',
-    'border-image-source',
-    'border-image-outset',
-    'border-image-width',
-    'filter',
-    '-webkit-filter',
-    'text-decoration',
-    'text-decoration-line',
-    'text-decoration-thickness',
-    'text-underline-offset',
-    'text-underline-position',
-]);
-
-/** The paints that reach and pass to the boxes below (a text-shadow is inherited; a decoration line is drawn on the text under its box). */
-const REACH_INHERITED = /^(?:text-shadow|text-decoration(?:-.*)?|text-underline-(?:offset|position))$/;
+/** The paints that reach and pass to the boxes below (a text-shadow and the colour a `currentcolor` reads are inherited; a decoration line is drawn on the text under its box). */
+const REACH_INHERITED = /^(?:color|text-shadow|text-decoration(?:-.*)?|text-underline-(?:offset|position))$/;
 
 /**
  * The keyframe longhands that change no paint that reaches and move no box
@@ -2821,22 +2845,45 @@ function reachNeedless(prop: string): boolean {
 }
 
 /**
- * 1b at each keyframe offset: every animation whose keyframes set a paint
- * that reaches by name (`REACH_PROPS`, or a keyframes rule this page cannot
- * read), that runs on a look pseudo-element, or that runs on or above a box
- * the read at rest found holding a reacher (`held`) or a target is seeked to
- * each of its keyframe offsets — its timing one normal, linear iteration,
- * filled both ways, no delay — and the boxes it runs on and under read
- * again, and the targets under it held to the reachers outside it; then put
- * back. A would-be failure the read at rest said, or an earlier offset, is
- * not said again. Not seeked, stated (the ninth critic's L1 and K1): an
- * animation on a box that holds neither a reacher nor a target and moves
- * targets by layout (a margin on their sibling), and a custom property a
- * keyframe sets that feeds a reach on a box painting nothing that reaches at
- * rest (its name is not a paint's).
+ * 1b at each keyframe offset (widened at step 7b, after the ninth critic's L1
+ * and K1): every animation on the surface that is not needless
+ * (`reachNeedless`: it sets nothing that reaches or moves) and not read from
+ * its keyframes' own values (`reachKeyframes`) is seeked to each of its
+ * keyframe offsets — its timing one normal, linear iteration, filled both
+ * ways, no delay — and at each offset every reacher that can have changed is
+ * held to every target that can have changed; then put back. Which ones
+ * follows from what its keyframes set, read as 1a's offset read reads them
+ * (`MOVES_NO_OTHER_BOX`, `ANCHOR_FOLLOWED`):
+ *
+ * - **wide**: a longhand `MOVES_NO_OTHER_BOX` does not name — a size, a
+ *   margin, a padding, a font, a track, `display`, `visibility`, a custom
+ *   property a reach or a layout reads (K1: `box-shadow: var(--x)` with
+ *   `--x` set in a keyframe), or a keyframe rule this page cannot read — or a
+ *   move an anchor can follow (`anchorCanFollow`) can move or change any box
+ *   on the page (L1: a heading's `margin-bottom` pulled the rows up under the
+ *   tabs' band). Every reacher on the surface is read again and held to every
+ *   target read again (`wide` in the tallies).
+ * - **a move of its own box** (a transform, its parts, its origin, a motion
+ *   path, a box's offsets, with no anchor to follow them): only the box and
+ *   what it holds move. The reachers it holds are read again and held to
+ *   every target (those it holds read again, the rest as they stood), and the
+ *   targets it holds on the open surface, read again (those its clips hid at
+ *   rest included), to every reacher outside it as it stood. A move of a
+ *   pseudo-element carries none of its host's targets. One that holds no
+ *   reacher and no target at rest, and runs on no look pseudo, moves nothing
+ *   1b reads and is left out (`unmoved` in the tallies).
+ * - **paints alone** (the rest of `MOVES_NO_OTHER_BOX`): no box moves, so the
+ *   targets and the clips stand; the animated box is read again — and what it
+ *   holds, where a paint it sets is inherited (`REACH_INHERITED`) — and held
+ *   to every target as it stood.
+ *
+ * A failure the read at rest said, or an earlier offset, is not said again.
+ * Not read, stated: a reach between two offsets, and two animations at once.
  */
-function reachSeek(screen: string, label: string, said: Set<string>, held: ReadonlySet<Element>): void {
+function reachSeek(screen: string, label: string, said: Set<string>): void {
     const t = reachTally();
+    const rest = reachRest;
+    if (rest === undefined) return;
     const root = document.getElementById('app')!;
     const pseudoHosts = new Set<Element>();
     for (const { host } of lookPseudoHosts()) {
@@ -2848,7 +2895,13 @@ function reachSeek(screen: string, label: string, said: Set<string>, held: Reado
     }
     const sheets = sheetKey();
     if (reachPropsByName.key !== sheets) reachPropsByName = { key: sheets, byName: new Map() };
-    for (const anim of document.getAnimations()) {
+    const animations = document.getAnimations();
+    // The boxes that hold a reacher at rest (a look pseudo's, its host).
+    const held = new Set(rest.all.map((rc) => rc.el));
+    // Whether an anchor can follow what a move carries (`anchorCanFollow`, 1a's reading).
+    const pageAnchors =
+        sheetFacts().anchors || animations.some((a) => a.effect instanceof KeyframeEffect && !(a instanceof CSSAnimation) && (keyframeProps(a, a.effect)?.has('anchor-name') ?? false));
+    for (const anim of animations) {
         const effect = anim.effect;
         if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;
         const target = effect.target;
@@ -2867,55 +2920,90 @@ function reachSeek(screen: string, label: string, said: Set<string>, held: Reado
             continue;
         }
         const name = byName ?? 'a transition';
-        const where = effect.pseudoElement === null ? describe(target) : `${describe(target)}${effect.pseudoElement}`;
+        const pseudo = effect.pseudoElement;
+        const where = pseudo === null ? describe(target) : `${describe(target)}${pseudo}`;
         // Paints alone, of a kind read from the keyframes' own values (`REACH_FROM_VALUES`), on a box: read with no seek (`reachKeyframes`).
         if (
             known !== undefined &&
-            effect.pseudoElement === null &&
+            pseudo === null &&
             [...known].every((p) => REACH_FROM_VALUES.has(p) || reachNeedless(p)) &&
             reachKeyframes(screen, label, effect, target, known, name, where, said, pseudoHosts)
         ) {
             continue;
         }
-        const names = known === undefined || [...known].some((p) => REACH_PROPS.has(p));
-        const onPseudo = effect.pseudoElement !== null && pseudoHosts.has(target);
-        const subtree: Element[] = effect.pseudoElement === null ? [target, ...target.querySelectorAll('*')] : [target];
+        // What it can move or change (see above): any box (`wide`), its own box and what it holds, or its paints alone (`still`).
+        const others = known === undefined || ![...known].every((p) => MOVES_NO_OTHER_BOX.has(p) || reachNeedless(p));
+        const follows = known === undefined || [...known].some((p) => ANCHOR_FOLLOWED.has(p));
+        const wide = others || (follows && anchorCanFollow(target, pseudo, pageAnchors));
+        const still = !wide && !follows;
+        const subtree: Element[] = pseudo === null ? [target, ...target.querySelectorAll('*')] : [target];
         const inSubtree = new Set(subtree);
-        // A box it moves that a paint reaches from (`held`), or a target it moves into one standing still.
-        const holdsReacher = subtree.some((el) => held.has(el));
-        const moved = effect.pseudoElement === null && reachRest !== undefined ? reachRest.targets.filter((tg) => inSubtree.has(tg.node)) : [];
-        if (!names && !onPseudo && !holdsReacher && moved.length === 0) continue;
+        const only = new Set<Element>(still && ![...known!].some((p) => REACH_INHERITED.test(p)) ? [target] : subtree);
+        // The targets a move of its own box carries: every money node and protected box it holds on the open surface, those its clips hid at rest included.
+        const scope: Element = rest.surface instanceof Element ? rest.surface : root;
+        const carried =
+            wide || still || pseudo !== null
+                ? []
+                : subtree.filter((el) => scope.contains(el) && el.matches(`${MONEY_FIGURES}, ${PROTECTED}`) && el.closest('.deck-stall') === null);
+        const carriedSet = new Set<Element>(carried);
+        // A move of its own box that holds no reacher and no target, and runs on no look pseudo, moves nothing 1b reads: left out.
+        if (!wide && !still && carried.length === 0 && !(pseudo !== null && pseudoHosts.has(target)) && !subtree.some((el) => held.has(el))) {
+            t.unmoved += 1;
+            continue;
+        }
         const duration = effect.getComputedTiming().duration;
         if (typeof duration !== 'number' || !Number.isFinite(duration) || !(duration > 0)) continue;
         const offsets = [...new Set([0, 1, ...effect.getKeyframes().map((k) => k.computedOffset ?? 0)])].filter((o) => o >= 0 && o <= 1).sort((a, b) => a - b);
         const { delay, endDelay, iterations, iterationStart, direction, fill, easing } = effect.getTiming();
         const kept = { delay, endDelay, iterations, iterationStart, direction, fill, easing };
         const time = anim.currentTime;
-        // Paints alone (and what changes nothing): no box moves, the targets and clips at rest stand;
-        // and where none of those paints is inherited, the animated box alone is read (`REACH_INHERITED`).
-        const still = known !== undefined && [...known].every((p) => REACH_PROPS.has(p) || reachNeedless(p));
-        const only = new Set<Element>(still && ![...known!].some((p) => REACH_INHERITED.test(p)) ? [target] : subtree);
         const s0 = performance.now();
+        let els = 0;
+        // Not ours to time: read at rest alone. A throw in a read is not swallowed here: it ends 1b on the paint and fails it (`reachAtRest`).
+        let timed = true;
         try {
             effect.updateTiming({ delay: 0, endDelay: 0, iterations: 1, iterationStart: 0, direction: 'normal', fill: 'both', easing: 'linear' });
-            for (const offset of offsets) {
-                anim.currentTime = offset * duration;
+        } catch {
+            timed = false;
+        }
+        try {
+            for (const offset of timed ? offsets : []) {
+                try {
+                    anim.currentTime = offset * duration;
+                } catch {
+                    break;
+                }
                 t.seeks += 1;
                 const at = `with ${name} on ${where} seeked to its keyframe at ${Math.round(offset * 100)}%`;
-                if (names || onPseudo || holdsReacher) reachRead(screen, label, only, at, said, still);
-                // The targets it moves, held to every reacher the read at rest found outside it, standing where it stood.
-                if (moved.length > 0 && reachRest !== undefined) {
-                    const fresh = reachTargets(reachRest.surface, new Map(), moved.map((tg) => tg.node));
-                    for (const rc of reachRest.all) if (!inSubtree.has(rc.el)) judgeReacher(rc, fresh, t, screen, label, at, said);
+                if (wide) {
+                    // Any box can have moved or changed: every reacher on the surface, read again, held to every target read again.
+                    t.wide += 1;
+                    const clip = new Map<Element, ClipLink[]>();
+                    const targets = reachTargets(rest.surface, clip);
+                    const reachers = reachersOn(rest.surface, undefined, clip, t, false);
+                    els += reachers.length;
+                    for (const rc of reachers) judgeReacher(rc, targets, t, screen, label, at, said);
+                } else if (still) {
+                    // No box moves: the box (and what inherits its paints) read again, held to every target as it stood.
+                    const reachers = reachersOn(rest.surface, only, rest.clipSeen, t, false);
+                    els += only.size;
+                    for (const rc of reachers) judgeReacher(rc, rest.targets, t, screen, label, at, said);
+                } else {
+                    // Its own box moves and carries what it holds: the reachers it holds to every target, and the targets it holds to every reacher outside it.
+                    const clip = new Map<Element, ClipLink[]>();
+                    const fresh = carried.length === 0 ? [] : reachTargets(rest.surface, clip, carried);
+                    const targets = [...rest.targets.filter((tg) => !carriedSet.has(tg.node)), ...fresh];
+                    const reachers = reachersOn(rest.surface, only, clip, t, false);
+                    els += only.size;
+                    for (const rc of reachers) judgeReacher(rc, targets, t, screen, label, at, said);
+                    if (fresh.length > 0) for (const rc of rest.all) if (!inSubtree.has(rc.el)) judgeReacher(rc, fresh, t, screen, label, at, said);
                 }
             }
-            const n = (reachSeekNames[name] ??= { anims: 0, seeks: 0, els: 0, ms: 0 });
+            const n = (reachSeekNames[wide ? `${name} (wide)` : name] ??= { anims: 0, seeks: 0, els: 0, ms: 0 });
             n.anims += 1;
             n.seeks += offsets.length;
-            n.els += only.size * offsets.length;
+            n.els += els;
             n.ms += performance.now() - s0;
-        } catch {
-            // Not ours to time: read at rest alone.
         } finally {
             try {
                 effect.updateTiming(kept);
@@ -3010,34 +3098,42 @@ function reachKeyframes(
 /** The keyframe seeks per animation name: animations seeked, seeks, elements read, time (a clock). */
 const reachSeekNames: Record<string, { anims: number; seeks: number; els: number; ms: number }> = {};
 
-/** 1b's throws, word for word up to `REACH_THROWN_KEPT` (a throw is counted in the measuring look's tally): 1b is report-only, so a throw fails no pass. */
+/** 1b's throws, word for word up to `REACH_THROWN_KEPT` (a throw is counted in the measuring look's tally, and fails its paint). */
 const reachThrown: string[] = [];
 const REACH_THROWN_KEPT = 40;
 
 /**
  * 1b on a geometry pass's paint, at rest and at the keyframes (`coverAtRest`
- * calls it once every animation is reset). Guarded whole: a throw anywhere in
- * it — the read at rest, the keyframe reads from values, a seek — ends 1b on
- * this paint, is counted and said (`reachThrown`), and fails nothing (the
- * ninth critic's P2: `reachKeyframes` stood outside the seek's own `try`).
+ * calls it once every animation is reset), and its failures: one a pair of
+ * boxes and a kind, the meets `REACH_ACCEPTED` names counted apart. Guarded
+ * whole: a throw anywhere in it — the read at rest, the keyframe reads from
+ * values, a read at a seek — ends 1b on this paint, is counted and said
+ * (`reachThrown`), and fails the paint (step 7b; until then it failed
+ * nothing): a paint 1b stopped reading is a paint nothing held.
  */
-function reachAtRest(screen: string, label: string): void {
+function reachAtRest(screen: string, label: string): Failure[] {
     const t0 = performance.now();
     let t1: number | undefined;
+    reachFailures = [];
     try {
         const said = new Set<string>();
-        const held = new Set(reachRead(screen, label, undefined, undefined, said).map((rc) => rc.el));
+        reachRead(screen, label, said);
         t1 = performance.now();
-        reachSeek(screen, label, said, held);
+        reachSeek(screen, label, said);
     } catch (e) {
+        const why = (e instanceof Error ? e.message : String(e)).slice(0, 200);
         reachTally().throws += 1;
-        if (reachThrown.length < REACH_THROWN_KEPT) reachThrown.push(`${screen} / ${label}: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+        if (reachThrown.length < REACH_THROWN_KEPT) reachThrown.push(`${screen} / ${label}: ${why}`);
+        reachFailures.push({ screen, theme: label, check: REACH_CHECK, detail: `1b threw on this paint and read no further: ${why}` });
     } finally {
         reachRest = undefined;
         const t2 = performance.now();
         reachMs += t2 - t0;
         if (t1 !== undefined) reachSeekMs += t2 - t1;
     }
+    const out = reachFailures;
+    reachFailures = [];
+    return out;
 }
 
 /**
@@ -15208,15 +15304,17 @@ const verdict = {
     coveredByCalls,
     coveredByMs,
     /*
-     * 1b (`a-paint-with-no-hit-area-reaches-no-money`, report-only): its
-     * tallies per look, its would-be failures word for word (up to
-     * `REACH_KEPT`), the most each soft paint reached over a target (the blur
-     * policy's measurement), and its own time and its keyframe seeks' (clocks).
+     * 1b (`a-paint-with-no-hit-area-reaches-no-money`, bound since 7b): its
+     * tallies per look, its failures word for word (up to `REACH_KEPT`; they
+     * are also in `failures`), the meets accepted by name (`REACH_ACCEPTED`),
+     * the most each soft paint reached over a target (the blur policy's
+     * measurement), and its own time and its keyframe seeks' (clocks).
      */
     reachCheck: REACH_CHECK,
     reachBlurOpacity: BLUR_OPACITY,
     reachByClass,
     reachWould,
+    reachAccepted: reachAcceptedSaid,
     reachLiteral,
     reachSoft,
     reachThrown,

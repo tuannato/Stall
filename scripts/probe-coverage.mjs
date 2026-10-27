@@ -112,6 +112,12 @@
  *   that was never read, certified nothing about what covers its money. The
  *   contrast pass owes a read on every job it did not refuse (the runner,
  *   `coverUnread`), and both are held to the clip ceiling (`look-tallies.mjs`).
+ * - **`a-paint-with-no-hit-area-reaches-no-money`** (1b, bound since 7b):
+ *   every geometry pass owes, on every look it painted, a read of 1b on its
+ *   paints that held at least one target (`reachByClass`: a money node's line
+ *   boxes or a protected box, read past its clips): a look never read, or
+ *   read with every target cut away, certified nothing about what reaches its
+ *   money. A paint on which 1b threw is a failure of its own (`reachAtRest`).
  * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
  *   geometry pass owes, on every look it painted, money figures held to
  *   their dress on every surface it paints one (`DRESS_SURFACES_OWED`,
@@ -540,6 +546,17 @@ export function probeCoverageGaps(
                 gaps.push(`nothing-covers-money-or-a-protected-box read no paint of a ${cls} stall`);
             } else if (!((read?.checked ?? 0) > 0)) {
                 gaps.push(`nothing-covers-money-or-a-protected-box hit-tested no point on a ${cls} stall`);
+            }
+        }
+        // 1b (7b): every look a pass painted read, and a target held on it —
+        // a read that held no target on a look reached nothing it could fail.
+        const reach = report.reachByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            const read = Object.hasOwn(reach, cls) ? reach[cls] : undefined;
+            if (!((read?.paints ?? 0) > 0)) {
+                gaps.push(`a-paint-with-no-hit-area-reaches-no-money read no paint of a ${cls} stall`);
+            } else if (!((read?.targets ?? 0) > 0)) {
+                gaps.push(`a-paint-with-no-hit-area-reaches-no-money held no target on a ${cls} stall`);
             }
         }
         // A code drawn black on white (before 8g2's fourth review, item 4,
