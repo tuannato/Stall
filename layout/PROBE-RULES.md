@@ -11933,6 +11933,103 @@ pixels and the passes run at 1), WebKit and Firefox, and the snap's own
 mechanism (the edges' rounding is the model the numbers fit, inferred, not
 read out of Chrome).
 
+### Containing blocks, held to this Chrome (item 2: `holdsOutOfFlow`)
+
+**The incident.** 1b holds an absolute or fixed box's paints to the clips
+of its containing block (CB2, above), and `holdsOutOfFlow` decided which
+ancestor that is from its computed style. The critic found it wrong in both
+directions in Chrome 156 (`critic10/runs/cb.log`): it missed
+`transform-style: preserve-3d`, `offset-path` and `will-change: offset-path`
+(the plants MT2 and MT read 18 where their control, `will-change: transform`,
+reads 24 — the six lost reads are the price below the fold), caught
+`will-change: transform-style` only through `\btransform\b`, and counted
+`container-type` (`inline-size`, `size`, `scroll-state`), which is no
+containing block: CB2 with the name column made a size container (FT) read
+0 against 18, the label cut to a clip Chrome does not apply. Both lints
+admit MT, MT2 and FT's `will-change` and `transform-style`; the first-party
+lint refuses `container-type`, the kit admits it.
+
+**What Chrome holds by, measured** (`tools/cbsweep.mjs`, `runs/cbsweep.log`;
+on an inline box `tools/cbsweep-inline.mjs`, `runs/cbsweep-inline.log`;
+Chrome 156, DPR 1, each wrapper alone with an absolute and a fixed child at
+`top: 0; left: 0`). A block box holds both by a transform, `translate`,
+`rotate`, `scale`, `perspective`, `transform-style: preserve-3d`, any filter
+(`opacity(1)` included), a backdrop filter, `contain` with `layout` or
+`paint` (`strict` and `content` too), `content-visibility` other than
+`visible`, `offset-path` other than `none`, and `offset-position` other than
+`normal` or `auto` (the last not named by the critic), and by `will-change`
+on exactly `transform`, `translate`, `rotate`, `scale`, `perspective`,
+`transform-style`, `filter`, `backdrop-filter`, `contain`, `offset-path`,
+`offset-position` and `offset`, read without regard to case (`TRANSFORM`
+holds); its absolute children also by a position other than `static` and
+`will-change: position`. It holds neither by any `container-type`, `contain:
+size`, `inline-size` or `style`, a mask, a clip path, a zoom, an opacity, a
+blend, isolation, a `z-index`, or `will-change` on anything else —
+`-webkit-backdrop-filter` and `transform-origin` among them, which the old
+word match read as holding. A non-replaced inline box holds by its position,
+a filter, a backdrop filter and `will-change` on those alone: a transform,
+containment, `content-visibility` and an offset do not apply to it, and the
+old list counted them.
+
+**`container-type: size`, the critic's open contradiction, settled**: it is
+no containing block and it does not clip an absolute child. The critic's
+`clipcheck.mjs` read its capture with a stride of 4 bytes a pixel where
+`decodePng` answers RGB at 3 (`img.bpp`), so its counts were of the wrong
+pixels (168 red, 84 and 0 where 900, 900 and 900 stood); with the stride
+right its own page reads 900 red pixels outside the clip for
+`container-type: size` as for no style at all (`tools/clipcheck-stride.mjs`,
+the one changed line; both runs in `runs/clipcheck.log`). `tools/ctcheck.mjs`
+(`runs/ctcheck.log`) reads it whole: across fourteen wrapper styles, an
+`overflow: hidden` box clips an absolute child at its static place exactly
+where it is that child's containing block (`position: relative`, `contain:
+layout` or `paint`, `preserve-3d`, `will-change: offset-path`), and every
+`container-type` neither holds nor clips. (A first `offsetcheck.mjs` run
+broke its own style attributes on a double quote and read nothing; the run
+kept sets every style by script.)
+
+**The list now** (`holdsOutOfFlow`, `WILL_CHANGE_HOLDS`,
+`WILL_CHANGE_HOLDS_INLINE` in `layout/probe.ts`) is that measurement:
+`container-type` dropped, `preserve-3d`, `offset-path` and `offset-position`
+added, `will-change` split on its commas and each value matched exactly and
+lower-cased, and an inline box read by its own short list.
+
+**`holds-out-of-flow-agrees-with-this-chrome`** (`outOfFlowSelfCheck`): the
+list held to the Chrome every run uses, on every probe page, once, after
+every paint and before the verdict. 57 wrappers — one per trigger the
+function reads (every `WILL_CHANGE_HOLDS` value among them, so a value added
+there is tried), and one per near miss it must not read (each
+`container-type`, `contain: size`, `inline-size` and `style`,
+`offset-position: auto`, `will-change` on `opacity`,
+`-webkit-backdrop-filter`, `offset-distance`, `transform-origin` and
+`container-type`, an inline box's transform, containment, offset and
+`will-change: transform`, a `display: contents` box with a transform) — each
+with a 5px absolute and a 5px fixed child at `top: 0; left: 0`, laid out
+unseen at the viewport's corner and taken away in the same task. A child at
+its wrapper's corner is held by it, one where the bare wrapper's child lands
+is not, anything else cannot be told; any disagreement is one of the pass's
+failures, and a geometry pass whose page ran no check fails the run. The
+runner prints the count and the agreement once over the geometry passes.
+
+| Read | Before | After | Control |
+|---|---|---|---|
+| quick, MT2: Neo's row head `transform-style: preserve-3d`, CB2's absolute label with its copies (`runs/qp-MT2-preserve3d-neo.log`) | 18 | 24 | MTc, `will-change: transform`: 24 |
+| quick, MT: the same by `will-change: offset-path` (`runs/qp-MT-willchange-offsetpath-neo.log`) | 18 | 24 | 24 |
+| quick, FT: CB2 with the name column `container-type: inline-size` (`runs/qp-FT-containertype-neo.log`) | 0 | 18 | CB2: 18 (`runs/qp-CB2-abstext-neo.log`) |
+| quick, the self-check over the list as it was at `78c7deb` (`tools/oldhof-mutate.py`, `runs/qp-oof-oldfunction-390.log`; through the runner on the narrow pass, `tools/qpass-mutate.py`, `runs/q1d-oof-narrow-oldfunction.log`: the pass fails with the 29) | — | 29 disagreements, each a failure: `preserve-3d`, the three `container-type`s, `offset-path`, `offset-position`, `will-change` on `offset-path`, `offset-position`, `offset`, `-webkit-backdrop-filter`, `transform-origin` and `opacity, TRANSFORM`, and an inline box's transform, `contain: layout` and `will-change: transform` | the list now: 57 cases, 0 disagreements (`runs/qp-oof-clean-390.log`; the runner's line, `runs/q1d-oof-narrow.log`) |
+
+All five at offers, 390, each plant alone; the before figures are the
+critic's on `78c7deb` (`critic10/runs/q-*.log`). Its cost is 5.1ms a page
+(the verdict's `outOfFlowMs`), under a tenth of a second over a run's
+geometry passes.
+
+**Not read, stated.** A table part's box (`table-row` and the rest, where a
+transform applies and a column's does not), an SVG element, and a replaced
+inline box: no out-of-flow box the app paints stands under one. The
+self-check holds only the triggers it lists: a property Chrome makes a
+containing block by and the list never names is missed by both (the
+critic's sweep and `cbsweep.mjs` are the evidence that none is left among
+the ones tried).
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

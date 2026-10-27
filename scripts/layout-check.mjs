@@ -2687,7 +2687,7 @@ function geometryRecordDiffers(walked, again) {
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
         // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
-        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined };
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -2932,6 +2932,8 @@ function coverLines(label, byClass, ms, coveredBy, end, seek) {
  */
 const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
 const reachGeometry = [];
+/** `holds-out-of-flow-agrees-with-this-chrome`, per geometry pass: the page's record of it (`outOfFlowCheck`) and its time. */
+const outOfFlowGeometry = [];
 /** How many grouped would-be sentences a pass prints word for word. */
 const REACH_PRINTED = 60;
 function reachLines(pass, r) {
@@ -3663,6 +3665,7 @@ try {
             });
             if (coverTally(g.report.coverByClass).paints > 0) coverSeen[g.key] = g.report.coverByClass;
         }
+        if (g.report !== undefined) outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0 });
         if (g.report?.reachByClass !== undefined) {
             reachGeometry.push({
                 pass: g.key,
@@ -3866,6 +3869,33 @@ try {
             `a text-shadow, a drop shadow or a blur, a decoration line, a look pseudo's region) reaching a money node's line boxes or a protected box; it fails nothing`,
     );
     for (const r of reachGeometry) for (const line of reachLines(r.pass, r)) console.log(line);
+    {
+        /*
+         * `holds-out-of-flow-agrees-with-this-chrome` (the tenth critic's item
+         * 2): every geometry pass's page held 1b's containing-block list to
+         * where this Chrome places an absolute and a fixed child. A
+         * disagreement is already one of that pass's failures; a page that
+         * ran no check at all is a failure here, since 1b would then read
+         * its out-of-flow boxes' clips on a list nothing held.
+         */
+        const unchecked = outOfFlowGeometry.filter((o) => o.check === undefined || typeof o.check.cases !== 'number' || o.check.cases === 0).map((o) => o.pass);
+        const disagreed = outOfFlowGeometry.filter((o) => (o.check?.disagree?.length ?? 0) > 0);
+        const ms = outOfFlowGeometry.reduce((n, o) => n + o.ms, 0);
+        const first = outOfFlowGeometry.find((o) => o.check !== undefined)?.check;
+        if (unchecked.length > 0) {
+            failed = true;
+            console.error(`✗ holds-out-of-flow-agrees-with-this-chrome: no check on the page of ${unchecked.join(', ')}`);
+        }
+        console.log(
+            `    1b's containing blocks held to this Chrome (holds-out-of-flow-agrees-with-this-chrome): ` +
+                (first === undefined
+                    ? 'no page ran the check'
+                    : `${first.cases} wrapper(s), each with an absolute and a fixed child, on ${outOfFlowGeometry.length - unchecked.length} page(s); ` +
+                      `Chrome held ${first.held.absolute} absolute and ${first.held.fixed} fixed child(ren) a page; ` +
+                      (disagreed.length === 0 ? 'holdsOutOfFlow agreed on every one' : `disagreed on ${disagreed.map((o) => `${o.pass} (${o.check.disagree.length})`).join(', ')}`)) +
+                ` · ${ms.toFixed(1)}ms over the passes`,
+        );
+    }
     {
         // The blur policy's measurement: the most each soft paint reached over a target past its own box, over every pass.
         const soft = {};

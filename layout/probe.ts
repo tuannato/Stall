@@ -1821,27 +1821,187 @@ function lookPseudoHosts(): { which: 'before' | 'after'; host: string }[] {
  */
 type ClipLink = { el: Element; box: Box; cx: boolean; cy: boolean; sx: boolean; sy: boolean; pinned: boolean };
 
-/** Whether a box is the containing block of its `absolute` descendants (`fixed`: of its `fixed` ones), from its computed style. */
+/**
+ * The `will-change` values that make a box the containing block of its
+ * out-of-flow descendants in Chrome, matched against each value exactly and
+ * without regard to case (the tenth critic's item 2: `\btransform\b` caught
+ * `transform-style` by accident and `-webkit-backdrop-filter` wrongly; Chrome
+ * reads `TRANSFORM` as `transform`); `position` holds the absolute ones alone.
+ * Measured in Chrome 156 (`critic10-fixes/runs/cbsweep.log`) and held to the
+ * Chrome every run uses by `holds-out-of-flow-agrees-with-this-chrome`.
+ */
+const WILL_CHANGE_HOLDS: ReadonlySet<string> = new Set([
+    'transform',
+    'translate',
+    'rotate',
+    'scale',
+    'perspective',
+    'transform-style',
+    'filter',
+    'backdrop-filter',
+    'contain',
+    'offset-path',
+    'offset-position',
+    'offset',
+]);
+/** Of those, what still holds on a non-replaced inline box, where transforms, containment and offsets do not apply. */
+const WILL_CHANGE_HOLDS_INLINE: ReadonlySet<string> = new Set(['filter', 'backdrop-filter']);
+
+/**
+ * Whether a box is the containing block of its `absolute` descendants
+ * (`fixed`: of its `fixed` ones), from its computed style, as Chrome decides
+ * it (the tenth critic's item 2; `holds-out-of-flow-agrees-with-this-chrome`
+ * holds this function to where this Chrome places an absolute and a fixed
+ * child on every probe page). A `display: contents` element has no box; a
+ * non-replaced inline box holds by its position, a filter or a backdrop
+ * filter alone. Not read, stated: a table part's box and an SVG element.
+ */
 function holdsOutOfFlow(cs: CSSStyleDeclaration, fixed: boolean): boolean {
     if (cs.display === 'contents') return false;
     if (!fixed && cs.position !== 'static') return true;
+    const willChange = cs.willChange.split(',').map((v) => v.trim().toLowerCase());
+    if (!fixed && willChange.includes('position')) return true;
     const backdrop = cs.getPropertyValue('backdrop-filter') || cs.getPropertyValue('-webkit-backdrop-filter') || 'none';
-    const container = cs.getPropertyValue('container-type') || 'normal';
+    const filtered = cs.filter !== 'none' || backdrop !== 'none';
+    if (cs.display === 'inline') return filtered || willChange.some((v) => WILL_CHANGE_HOLDS_INLINE.has(v));
+    const offsetPath = cs.getPropertyValue('offset-path') || 'none';
+    const offsetPosition = cs.getPropertyValue('offset-position') || 'normal';
     const visibility = cs.getPropertyValue('content-visibility') || 'visible';
     return (
+        filtered ||
         cs.transform !== 'none' ||
         cs.translate !== 'none' ||
         cs.rotate !== 'none' ||
         cs.scale !== 'none' ||
         cs.perspective !== 'none' ||
-        cs.filter !== 'none' ||
-        backdrop !== 'none' ||
+        cs.transformStyle === 'preserve-3d' ||
         /\b(?:layout|paint|strict|content)\b/.test(cs.contain) ||
-        /\b(?:transform|perspective|filter|backdrop-filter|translate|rotate|scale|contain)\b/.test(cs.willChange) ||
-        (!fixed && /\bposition\b/.test(cs.willChange)) ||
-        container !== 'normal' ||
-        visibility !== 'visible'
+        visibility !== 'visible' ||
+        offsetPath !== 'none' ||
+        (offsetPosition !== 'normal' && offsetPosition !== 'auto') ||
+        willChange.some((v) => WILL_CHANGE_HOLDS.has(v))
     );
+}
+
+/**
+ * **`holds-out-of-flow-agrees-with-this-chrome`** (the tenth critic's item 2,
+ * decided by the window): `holdsOutOfFlow` held to where this Chrome actually
+ * places an absolute and a fixed child, on every probe page. One tiny wrapper
+ * per trigger the function reads and per near miss it must not read (each
+ * `container-type`, `contain: size`, `inline-size` and `style`, an inline
+ * box's transform, containment and offset, `will-change` on a value that
+ * holds nothing, a `display: contents` box with a transform), each holding a
+ * 5px absolute child and a 5px fixed child at `top: 0; left: 0`: a child
+ * that lands at its wrapper's corner is held by it, one that lands where a
+ * child of the bare wrapper lands is not, and anything else cannot be told.
+ * The wrappers are laid out unseen at the viewport's corner and taken away in
+ * the same task, before anything paints. A disagreement fails the pass.
+ */
+const OUT_OF_FLOW_CASES: readonly { css: string; display?: 'inline' | 'contents' }[] = [
+    { css: '' },
+    { css: 'position: relative' },
+    { css: 'position: sticky' },
+    { css: 'transform: translate(0)' },
+    { css: 'translate: 0 0' },
+    { css: 'rotate: 0deg' },
+    { css: 'scale: 1' },
+    { css: 'perspective: 10px' },
+    { css: 'transform-style: preserve-3d' },
+    { css: 'transform-style: flat' },
+    { css: 'filter: opacity(1)' },
+    { css: 'backdrop-filter: blur(0px)' },
+    { css: 'contain: layout' },
+    { css: 'contain: paint' },
+    { css: 'contain: strict' },
+    { css: 'contain: content' },
+    { css: 'contain: size' },
+    { css: 'contain: inline-size' },
+    { css: 'contain: style' },
+    { css: 'content-visibility: auto' },
+    { css: 'content-visibility: hidden' },
+    { css: 'container-type: inline-size' },
+    { css: 'container-type: size' },
+    { css: 'container-type: scroll-state' },
+    { css: "offset-path: path('M 0 0'); offset-rotate: 0deg" },
+    { css: 'offset-position: 0px 0px' },
+    { css: 'offset-position: auto' },
+    { css: 'clip-path: inset(0px)' },
+    { css: 'opacity: 0.5' },
+    ...[...WILL_CHANGE_HOLDS, 'position', 'opacity', '-webkit-backdrop-filter', 'offset-distance', 'transform-origin', 'container-type'].map((v) => ({ css: `will-change: ${v}` })),
+    { css: 'will-change: opacity, TRANSFORM' },
+    { css: 'position: relative', display: 'inline' },
+    { css: 'filter: opacity(1)', display: 'inline' },
+    { css: 'transform: translate(0)', display: 'inline' },
+    { css: 'contain: layout', display: 'inline' },
+    { css: "offset-path: path('M 0 0'); offset-rotate: 0deg", display: 'inline' },
+    { css: 'will-change: transform', display: 'inline' },
+    { css: 'will-change: filter', display: 'inline' },
+    { css: 'will-change: position', display: 'inline' },
+    { css: 'transform: translate(0)', display: 'contents' },
+];
+function outOfFlowSelfCheck(): { cases: number; held: { absolute: number; fixed: number }; disagree: string[] } {
+    const disagree: string[] = [];
+    const held = { absolute: 0, fixed: 0 };
+    const sheet = document.createElement('div');
+    const set = (el: HTMLElement, css: string) => {
+        for (const decl of css.split(';')) {
+            const at = decl.indexOf(':');
+            if (at > 0) el.style.setProperty(decl.slice(0, at).trim(), decl.slice(at + 1).trim(), 'important');
+        }
+    };
+    // Fixed at the viewport's corner, so every wrapper is on screen (`content-visibility: auto` keeps a skipped box's place, but
+    // nothing is skipped here); a fixed box holds its absolute descendants and not its fixed ones, and the bare wrapper says where each lands.
+    set(sheet, 'position: fixed; top: 0px; left: 0px; display: block; visibility: hidden; margin: 0; padding: 0; width: 100vw; transform: none; filter: none; contain: none; z-index: auto');
+    try {
+        const built = OUT_OF_FLOW_CASES.map(({ css, display }) => {
+            const row = document.createElement('div');
+            set(row, 'display: inline-block; vertical-align: top; position: static; width: 64px; height: 50px; margin: 0; padding: 6px 0 0 17px');
+            const wrapper = document.createElement(display === 'inline' ? 'span' : 'div');
+            set(wrapper, display === 'inline' ? 'display: inline; font: 16px/16px monospace' : display === 'contents' ? 'display: contents' : 'display: block; width: 40px; height: 40px');
+            if (display === 'inline') wrapper.append('xxxx');
+            set(wrapper, css);
+            const children = (['absolute', 'fixed'] as const).map((position) => {
+                const child = document.createElement('div');
+                set(child, `position: ${position}; top: 0px; left: 0px; width: 5px; height: 5px; margin: 0`);
+                wrapper.prepend(child);
+                return child;
+            });
+            row.append(wrapper);
+            sheet.append(row);
+            return { css, display: display ?? 'block', wrapper, children };
+        });
+        document.body.append(sheet);
+        const at = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { x: r.x, y: r.y };
+        };
+        const near = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
+        // Where a child no wrapper holds lands: the bare wrapper's (the first case, which holds nothing).
+        const free = built[0]!.children.map(at);
+        for (const { css, display, wrapper, children } of built) {
+            const corner = at(wrapper);
+            const cs = getComputedStyle(wrapper);
+            children.forEach((child, k) => {
+                const kind = k === 0 ? 'absolute' : 'fixed';
+                const landed = at(child);
+                const chrome = display !== 'contents' && near(landed, corner) && !near(corner, free[k]!) ? true : near(landed, free[k]!) ? false : undefined;
+                const said = holdsOutOfFlow(cs, kind === 'fixed');
+                const label = `${display === 'block' ? '' : `display: ${display}; `}${css || 'nothing'}`;
+                if (chrome === undefined) {
+                    disagree.push(`${label}: its ${kind} child landed at ${landed.x.toFixed(1)},${landed.y.toFixed(1)}, neither at its wrapper's corner (${corner.x.toFixed(1)},${corner.y.toFixed(1)}) nor where a child no box holds lands (${free[k]!.x.toFixed(1)},${free[k]!.y.toFixed(1)})`);
+                } else if (chrome !== said) {
+                    disagree.push(`${label}: Chrome ${chrome ? 'makes' : 'does not make'} it the containing block of its ${kind} child, and holdsOutOfFlow says it ${said ? 'does' : 'does not'}`);
+                } else if (chrome) {
+                    held[kind] += 1;
+                }
+            });
+        }
+    } catch (e) {
+        disagree.push(`the self-check threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+    } finally {
+        sheet.remove();
+    }
+    return { cases: OUT_OF_FLOW_CASES.length, held, disagree };
 }
 
 /** A box's own clip as a link of its content's chain, or undefined where it clips nothing (a `display: contents` box has no box to clip with). */
@@ -14081,6 +14241,15 @@ const result = document.createElement('pre');
 result.id = 'layout-result';
 result.hidden = true;
 document.body.append(result);
+/*
+ * `holds-out-of-flow-agrees-with-this-chrome`: 1b's containing blocks held to
+ * this Chrome, once a page, after every paint and before the verdict
+ * (`outOfFlowSelfCheck`); each disagreement is one of the page's failures.
+ */
+const outOfFlowStart = performance.now();
+const outOfFlowCheck = outOfFlowSelfCheck();
+const outOfFlowMs = performance.now() - outOfFlowStart;
+for (const detail of outOfFlowCheck.disagree) failures.push({ screen: 'probe page', theme: '-', check: 'holds-out-of-flow-agrees-with-this-chrome', detail });
 const verdict = {
     viewport: window.innerWidth,
     reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -14192,6 +14361,9 @@ const verdict = {
     reachSoft,
     reachThrown,
     reachMs,
+    /* `holds-out-of-flow-agrees-with-this-chrome`: the cases read and how many of each kind of child Chrome held, its disagreements (also failures), and its own time (a clock). */
+    outOfFlowCheck,
+    outOfFlowMs,
     reachSeekMs,
     reachSeekNames,
     /* The dress rule's keyframe-offset read (`offsetDressFaults`): its counts, and its own time (a clock). */
