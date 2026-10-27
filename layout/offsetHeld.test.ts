@@ -111,23 +111,28 @@ function readsOf(body: string): Set<string> {
 }
 
 /**
- * `the-ground-signature-names-every-longhand-the-ground-read-reads`: the
- * offset read reads a figure's ground again only where a seek changed a
+ * `the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read`:
+ * the offset read reads a figure's ground again only where a seek changed a
  * longhand of `GROUND_SIGNATURE` on its walk (or moved its text,
- * `inkSignature`), so a longhand the ground read reads (`boxPaintsOf`, and
- * `borderImageReach`, the one helper it hands its style to) and the
- * signature leaves out is a ground a keyframe can change unread — the sixth
+ * `inkSignature`), so a longhand the paint read reads — `boxPaintsOf`, and
+ * `borderImageReach`, the one helper it hands its style to — that the
+ * signature leaves out is a ground a keyframe can change unread: the sixth
  * review's PGatt3, `background-attachment: fixed` in a keyframe on Modern's
  * quote figure over a tile of the page's ground, seeked and never read
- * again. Every longhand it reads of any box is held to the part a box above
- * is compared on (before `GROUND_ABOVE`, which is pinned), and every one it
- * reads of a figure's own elements alone to the whole list. No longhand is
- * left out today; one left out is named in `GROUND_EXCLUDED` with its
- * reason, and an exclusion the read does not read fails.
+ * again. Every longhand those two read of any box is held to the part a box
+ * above is compared on (before `GROUND_ABOVE`, which is pinned), and every
+ * one they read of a figure's own elements alone to the whole list. No
+ * longhand is left out today; one left out is named in `GROUND_EXCLUDED`
+ * with its reason, and an exclusion they do not read fails. **What this
+ * does not parse, stated** (the seventh review's P3): `groundStackFault`,
+ * the ground read itself, also reads a box's `overflow-x`, `overflow-y` and
+ * `contain` (where a box clips the ink it reads under) and the ink's own
+ * lines; a clip only narrows what is read, and where the glyphs stand is
+ * `inkSignature`'s.
  */
 const GROUND_EXCLUDED: Record<string, string> = {};
 
-describe('the-ground-signature-names-every-longhand-the-ground-read-reads', () => {
+describe('the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read', () => {
     const signature = setOf('GROUND_SIGNATURE');
     const paints = bodyOf('boxPaintsOf');
     const ownBlock = blockOf(paints, "if (own && cs.backgroundImage !== 'none') {");
@@ -196,15 +201,22 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
      * stall, `getComputedStyle(r.stall)`; m3: the box loop started at the
      * target, which skips every box between the figure and it) left all six
      * tests green. So each block is pinned whole, from its loop head to the
-     * end of the reads it makes, guards and style reads included. **The
-     * limit, stated**: these pin the text of the blocks that make the reads
-     * (and `movesOtherBoxes`, below), not which animations on a figure's walk
-     * reach them (the walk, `seekNeedless`, `outerShadowOnly`, `groundOnly`,
-     * the timing set for the seek) nor the helpers they call
-     * (`dressHeldFault`, `boxHeldFault`, `selfClipSentences`,
-     * `groundStackFault`, `figuresOnThePaint`); a mutation there is the
-     * probe's red proofs' to catch (`layout/PROBE-RULES.md`). An equivalent
-     * rewrite fails the pin, and the pin is rewritten with it.
+     * end of the reads it makes, guards and style reads included; and, since
+     * the seventh review's mutations m10–m16 (each left this file green), so
+     * are the lines that decide which animations reach the reads — the guard
+     * that takes a pseudo-element's animation in (m12: put back to skip
+     * pseudo-elements, PSQ2p, the pay figure squeezed by a margin on
+     * `.pay-x::before`, read 0), the walk's own pseudo-element test, the
+     * off-walk gate (m10), the moves cache (m11) — and `inkSignature` (m13),
+     * the gather of the figures the dress rule does not read (m16) and their
+     * report (m14), below. **The limit, stated**: these pin text, not which
+     * animations on a figure's walk reach the reads by `seekNeedless`,
+     * `outerShadowOnly`, `groundOnly` or the timing set for the seek, nor
+     * the helpers the reads call (`dressHeldFault`, `boxHeldFault`,
+     * `selfClipSentences`, `groundStackFault`); a mutation of those is caught
+     * only where a red proof of `layout/PROBE-RULES.md` exercises the branch
+     * it breaks, and not every branch has one. An equivalent rewrite fails
+     * the pin, and the pin is rewritten with it.
      */
     it('asks every longhand of OFFSET_HELD_OWN, BOX_HELD and the rest at each offset: the blocks are pinned whole, guards included', () => {
         const body = offsetReadBody();
@@ -223,6 +235,32 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         ]) {
             expect(body, block).toContain(block);
         }
+        // Which animations reach the reads (the seventh review's m10–m12): every animation with a target is
+        // taken in, a pseudo-element's included, in the decision and in the read; the walk is an element's
+        // alone; and an animation off every walk is read for the self-clip read only where it can move another box.
+        const guard = 'if (!(effect instanceof KeyframeEffect) || effect.target === null) continue;';
+        expect(body.split(guard).length - 1, 'the guard, in the decision and in the read').toBe(2);
+        expect(body, 'no animation is skipped for running on a pseudo-element').not.toMatch(/pseudoElement\s*!==\s*null[^;{]*\)\s*continue/);
+        for (const block of [
+            'const walk = effect.pseudoElement === null ? reach.get(target) : undefined;',
+            'if (reads === undefined && (!movesOthers || figuresOnThePaint().length === 0)) continue;',
+            'if (movesByName.key !== sheets) movesByName = { key: sheets, byName: new Map() };',
+            'let moves = anim instanceof CSSAnimation ? movesByName.byName.get(anim.animationName) : undefined; if (moves === undefined) { moves = movesOtherBoxes(anim, effect); if (anim instanceof CSSAnimation) movesByName.byName.set(anim.animationName, moves); }',
+            // The figures the self-clip read reads off the walk (m16), each the dress subject's list or one of its own, answered to the caller.
+            'for (const r of read) if (r.node.matches(MONEY_FIGURES) && selfClipReads(r.node)) lists.set(r.node, r.clip); for (const node of document.querySelectorAll<HTMLElement>(`#app :is(${MONEY_FIGURES})`)) { if (lists.has(node) || !selfClipReads(node)) continue; const list: string[] = []; lists.set(node, list); unread.set(node, list); }',
+            'restInk = new Map();',
+            'if (!restInk.has(r.node)) restInk.set(r.node, inkSignature(r.node));',
+        ]) {
+            expect(body, block).toContain(block);
+        }
+        // Where a figure's text stands (m13), and the report of the figures the dress rule does not read (m14).
+        // Whole, so a line added in front of the read (`return '';`, m13) fails too.
+        expect(flatBody('inkSignature').trim()).toBe(
+            'function inkSignature(node: Element): string { const range = document.createRange(); range.selectNodeContents(node); return [...range.getClientRects()] .filter((r) => r.width > 0 && r.height > 0) .map((r) => `${r.left.toFixed(2)},${r.top.toFixed(2)},${r.width.toFixed(2)},${r.height.toFixed(2)}`) .join(\';\');',
+        );
+        expect(flatBody('moneyDressFaults')).toContain(
+            'const unread = offsetDressFaults(read); for (const [node, clip] of unread) { for (const detail of clip) { out.push({ screen, theme: label, check: SELF_CLIP_CHECK, detail:',
+        );
         // Each list is asked in the read exactly once, and only through its pinned block.
         for (const list of ['OFFSET_HELD_OWN', 'BOX_HELD', 'dressReadList()', 'selfClipSentences(']) {
             expect(body.split(list).length - 1, list).toBe(1);
@@ -249,8 +287,9 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
      * as moving another box where an anchor can follow it.
      */
     it('seeks for the self-clip read every keyframe that can move another box: no layout longhand or visibility on the still list, and a transform or an offset where an anchor can follow it', () => {
-        expect(flatBody('movesOtherBoxes')).toContain(
-            'const props = keyframeProps(anim, effect); if (props === undefined) return { others: true, follows: true }; return { others: ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop)), follows: [...props].some((prop) => ANCHOR_FOLLOWED.has(prop)) };',
+        // The two small helpers whole, so a line added in front of what they read fails too.
+        expect(flatBody('movesOtherBoxes').trim()).toBe(
+            'function movesOtherBoxes(anim: Animation, effect: KeyframeEffect): { others: boolean; follows: boolean } { const props = keyframeProps(anim, effect); if (props === undefined) return { others: true, follows: true }; return { others: ![...props].every((prop) => MOVES_NO_OTHER_BOX.has(prop)), follows: [...props].some((prop) => ANCHOR_FOLLOWED.has(prop)) };',
         );
         const body = offsetReadBody();
         for (const block of [
@@ -262,8 +301,8 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
             expect(body, block).toContain(block);
         }
         // An anchor can follow: a sheet that declares it or cannot be read, an animation that sets it, or one the animated box or a box under it computes.
-        expect(flatBody('anchorCanFollow')).toContain(
-            "if (pageAnchors) return true; if (getComputedStyle(target, pseudo).getPropertyValue('anchor-name') !== 'none') return true; if (pseudo !== null) return false; for (const el of target.querySelectorAll('*')) if (getComputedStyle(el).getPropertyValue('anchor-name') !== 'none') return true; return false;",
+        expect(flatBody('anchorCanFollow').trim()).toBe(
+            "function anchorCanFollow(target: Element, pseudo: string | null, pageAnchors: boolean): boolean { if (pageAnchors) return true; if (getComputedStyle(target, pseudo).getPropertyValue('anchor-name') !== 'none') return true; if (pseudo !== null) return false; for (const el of target.querySelectorAll('*')) if (getComputedStyle(el).getPropertyValue('anchor-name') !== 'none') return true; return false;",
         );
         const facts = flatBody('sheetFacts');
         for (const block of [
@@ -342,5 +381,28 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         ]) {
             expect(own, prop).toContain(prop);
         }
+    });
+});
+
+/**
+ * `the-code-hold-reads-where-a-codes-modules-land`, its static half (before
+ * 8g2, the seventh review's m15): the code hold (`qrColourFault` in
+ * `layout/probe.ts`, `a-code-is-drawn-black-on-white`) ends in the place
+ * read (`qrPlaceFault`), which holds a code's modules to the matrix its
+ * viewBox and `qrSvg`'s quiet zone make. No whole-runner red proof reaches
+ * the place read alone — the critic's PQP, an `offset-path` on the path, is
+ * refused first by `QR_NONE` — so unwired it left every proof red and the
+ * runner as it was; the call is pinned here, and so is the list's
+ * `offset-path`. The place read alone was proved by quick reads (PQP and
+ * PQPs with `offset-path` out of `QR_NONE`, `layout/PROBE-RULES.md`).
+ */
+describe('the-code-hold-reads-where-a-codes-modules-land', () => {
+    it('ends the hold in the place read, and holds a motion path among the none longhands', () => {
+        const hold = flatBody('qrColourFault');
+        expect(hold.trim().endsWith('return qrPlaceFault(svg as SVGSVGElement, path, Number(size), modules);'), 'qrColourFault returns the place read last').toBe(true);
+        expect(hold.split('qrPlaceFault(').length - 1).toBe(1);
+        expect(setOf('QR_NONE')).toContain('offset-path');
+        // The place read derives the matrix from qrSvg's own quiet zone.
+        expect(flatBody('qrPlaceFault')).toContain('const q = QR_SVG_QUIET_MODULES;');
     });
 });

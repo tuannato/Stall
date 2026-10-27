@@ -1122,11 +1122,15 @@ money path this app can have, because nothing on it is derived.
      should instead be held to write `mask-position-x` beside it is open. No
      served sheet writes either.
   2. **The `offsetHeld` pins hold text, not choice**: they pin the blocks
-     that make the offset reads, guards and style reads included, and
-     `movesOtherBoxes`, not which animations on a figure's walk reach them
-     (`seekNeedless`, `outerShadowOnly`, `groundOnly`, the timing set for
-     the seek) nor the helpers they call. A mutation there is caught by the
-     probe's red proofs alone.
+     that make the offset reads, guards and style reads included,
+     `movesOtherBoxes`, and since the seventh review the lines that take an
+     animation in (a pseudo-element's among them), the off-walk gate, the
+     moves cache, `inkSignature` and the gather and report of the figures
+     the dress rule does not read; not which animations on a figure's walk
+     reach the reads by `seekNeedless`, `outerShadowOnly`, `groundOnly` or
+     the timing set for the seek, nor the helpers the reads call. A
+     mutation there is caught only where a red proof exercises the branch
+     it breaks.
   3. **What a keyframe off a figure's walk does to it, but cut its text**:
      such an animation is seeked for the self-clip read alone, so one that
      spills the figure over another box, lays a box over it or changes its
@@ -1136,16 +1140,47 @@ money path this app can have, because nothing on it is derived.
      (a size there is refused at its written value) changes no
      `GROUND_SIGNATURE` longhand and no text rect, and the ground is not
      read again.
-  5. **`MOVES_NO_OTHER_BOX` rests on reading**: that the paints, the
-     compositing, a transform, a motion path and a box's offsets move no box
-     but the animated one and what it holds was read from CSS, not planted
-     property by property; a figure not rendered at the pass's last instant
-     is not read at an offset (a keyframe that renders it is refused in a
-     first-party sheet; the kit's road is unread).
+  5. **`MOVES_NO_OTHER_BOX` rests on one engine's measurement**: the
+     seventh review found it false twice (a table row's `visibility`, PVC;
+     an anchor's transform carrying a box placed by `anchor()`, PAN), and
+     since then every longhand on it was measured one at a time in Chrome
+     156 on a page of its own (with an anchor, and on a flex, block and grid
+     item with no anchor), not in the probe and not in another engine; a
+     figure not rendered at the pass's last instant is not read at an
+     offset (a keyframe that renders it is refused in a first-party sheet;
+     the kit's road is unread).
   6. **A code's modules between instants**: the code hold, its place read
      included, reads a code at the pass's last instant; a keyframe that
      carries the modules off the matrix between the instants is read by
      nothing (not planted).
+
+- **Before 8g2, the seventh review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-7.md`; its
+  B1 and its pins are built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  seventh review's fixes"). Not built:
+  1. **The older reads that assume a transform or an offset moves only its
+     own subtree**: `endMoot`'s prune (a lasting transform inside a clip
+     that meets nothing 1a asked is left out of the end read), the
+     transforms `SEEK_NEEDLESS` leaves unseeked on a box above (where the
+     dress reads are not made at an offset; the self-clip read is, where an
+     anchor can follow them), the turns `BOX_HELD` lets a box above keep,
+     and the end read itself. A box placed by `anchor()` elsewhere on the
+     page follows them. **Closed for first-party looks by the lint** (they
+     write no anchor positioning, `a-look-never-positions-against-an-anchor`)
+     **and open on the kit's road**: only the offset read's self-clip read
+     follows an anchor, nothing else does. Not planted.
+  2. **The probe's hidden scrollbars**: the probe's Chrome runs with
+     scrollbars hidden, so a scrollbar a transform's or a keyframe's
+     overflow adds where scrollbars take room (a classic scrollbar) — which
+     narrows the box it scrolls and can squeeze a figure in it — is
+     measured by no pass. An older assumption of the environment, not of a
+     read.
+  3. **What an anchored box does that the self-clip read does not read**: a
+     figure an anchor carries over another box or off screen, with no clip
+     to cut it, and a figure `position-visibility` hides when its anchor is
+     clipped (measured once in Chrome 156, a box whose anchor was carried
+     out of an `overflow: hidden` box stayed visible; not planted). The
+     kit's road; first-party looks write no anchor positioning.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

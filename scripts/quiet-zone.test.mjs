@@ -5,6 +5,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { QUIET_MODULES, QUIET_ZONE_FLOOR, STILL_PX, quietReadingLine, quietZonePixels, readQuietZone, readQuietZones } from './quiet-zone.mjs';
 
 const OPEN = { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity };
@@ -20,6 +23,14 @@ function shot(w, h, paint = () => undefined) {
     }
     return { width: w, height: h, bpp: 3, data };
 }
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+/** A `export const NAME = <digits>;` line of a file, as its number (`the-quiet-zone-is-one-number`). */
+const literal = (path, name) => {
+    const m = new RegExp(`^export const ${name} = (\\d+);$`, 'm').exec(readFileSync(join(ROOT, path), 'utf8'));
+    assert.ok(m !== null, `${path} states ${name} as a number`);
+    return Number(m[1]);
+};
 
 /** A 45-module code (37 data + 8 quiet) drawn at 5px a module, from 10,10. */
 const CODE = { x: 10, y: 10, side: 225, module: 5, corner: 0, clip: OPEN };
@@ -296,3 +307,27 @@ describe('a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair', () => {
     });
 });
 
+
+/**
+ * `the-quiet-zone-is-one-number`: the four modules of white `qrSvg` draws
+ * around a matrix are stated three times — `QR_SVG_QUIET_MODULES` in
+ * `src/ui/render.ts` (what `qrSvg` draws, and what the probe's place read
+ * derives the matrix from), `QR_QUIET_MODULES` in `src/domain/qr.ts` (a
+ * code's span for the density gate) and `QUIET_MODULES` here (the ring the
+ * contrast pass reads) — and nothing tied them (before 8g2, the seventh
+ * review's P3). Each is read from its file as a literal, `qrSvg` is held to
+ * draw with its own, and the three are one number.
+ */
+describe('the-quiet-zone-is-one-number', () => {
+
+    it('reads the same quiet zone in the drawer, the density gate and the contrast pass, and the drawer draws with it', () => {
+        const drawn = literal('src/ui/render.ts', 'QR_SVG_QUIET_MODULES');
+        const span = literal('src/domain/qr.ts', 'QR_QUIET_MODULES');
+        assert.equal(drawn, QUIET_MODULES, 'qrSvg draws the quiet zone the contrast pass reads');
+        assert.equal(span, QUIET_MODULES, 'the density gate counts the quiet zone qrSvg draws');
+        const render = readFileSync(join(ROOT, 'src/ui/render.ts'), 'utf8');
+        const qrSvg = render.slice(render.indexOf('export function qrSvg('), render.indexOf('\n}\n', render.indexOf('export function qrSvg(')));
+        assert.match(qrSvg, /const quiet = QR_SVG_QUIET_MODULES;/);
+        assert.match(qrSvg, /const size = n \+ quiet \* 2;/);
+    });
+});

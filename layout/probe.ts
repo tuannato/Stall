@@ -6675,7 +6675,7 @@ const SEEK_ON_OWN: ReadonlySet<string> = new Set([
  * angle — changes nothing the ground read sees. Every longhand
  * `boxPaintsOf` reads is here, those it reads of a box above before
  * `GROUND_ABOVE` and those it reads of a figure's own elements alone after
- * it (`the-ground-signature-names-every-longhand-the-ground-read-reads`,
+ * it (`the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read`,
  * `layout/offsetHeld.test.ts`): the sixth review's PGatt3 — a keyframe
  * `background-attachment: fixed` from 30% to 40% of a loop on Modern's
  * quote `.item-x`, painted on its own ink under one tile of the page's

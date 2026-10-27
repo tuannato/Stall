@@ -11004,7 +11004,7 @@ all of them), its log opening with an uptime line.
   a pixel, against the pass's last instant), which reads PGpad and an
   indent or a margin that moves the glyphs off their ground.
 - **The static pin**:
-  `the-ground-signature-names-every-longhand-the-ground-read-reads`
+  `the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read`
   (`layout/offsetHeld.test.ts`) parses `boxPaintsOf` and the one helper it
   hands its style to (`borderImageReach`, and no other: held), and holds
   every longhand read of any box to the signature before `GROUND_ABOVE`
@@ -11103,6 +11103,219 @@ between pairs. The offset read's page time, summed over the geometry passes
 on two tabs, is 6.80s and 6.85s, against 6.08s in the critic's run of
 `35a33bd` at a load of 1.7 and 6.44–6.57s in the builder's: under 1s summed,
 under the brief's 3s stop line. 56–62s stand under the 300s ceiling.
+
+## Before 8g2: the seventh review's fixes (2026-10-27; CRITIC-7)
+
+The critic's seventh review on before-8g2 (`private/design/workshop-2026-09-23/before-8g2/CRITIC-7.md`,
+its plants in `critic7/plants/`), decided by the owner (D-2026-10-27-01,
+"Probe đọc + chặn trong lint": the probe reads the hole on the kit's road
+and the first-party road alike, and the first-party look lint refuses
+anchor positioning). The plants, logs, measurement pages and tools of this
+round are in `before-8g2/critic7-fixes/`. A whole-runner count is the whole
+runner, two tabs, the tracked fixture carried, each plant alone, the load in
+each log's `.meta`; a quick read is one probe page at one size over named
+screens (or all of them), its log opening with an uptime line.
+
+### `MOVES_NO_OTHER_BOX` is true (B1, the probe half: PAN, PVC)
+
+- PAN (the critic's: at desk width Modern's `.pay-x-n`, the figure the
+  wallet signs, placed by `anchor()` just left of its unit `.item-u`, the
+  anchor; `.pay-x` at `overflow-x: clip; justify-content: flex-end`; a
+  keyframe `translate: -600px 0` on the unit from 30% to 40% of a 100s loop)
+  passed the whole runner (251.1s, the critic's): the figure stood at
+  759–858 in its row at rest and at 159–258 at 35%, out of the row's clip,
+  and `translate` was on `MOVES_NO_OTHER_BOX`, so the offset read never
+  seeked it. PVC (the critic's: a collapsed `::before` table row before the
+  figure made `visibility: visible` by a keyframe, pushing the figure out of
+  a 52px clip) passed it too (243.1s): `visibility` was on the list.
+- **Measured first, one longhand at a time** (Chrome 156,
+  `critic7-fixes/pages/anchor-follows.html`, `anchor-3d.html`,
+  `visibility-collapse.html`, logs `runs/eval-*.log`): each of the list's
+  longhands set by a paused keyframe on a 50×20 anchor, or on its host, with
+  a box placed by `anchor()` and sized by `anchor-size()` against it, and the
+  same keyframe on a flex, a block and a grid item with the box after it
+  measured. The anchored box followed 22 of 120 cases: `transform`,
+  `rotate`, `scale` (its `anchor-size()` too, 50 → 100), `translate`,
+  `transform-origin` and `transform-box` under a turn at rest, a host's
+  `perspective` and `perspective-origin` over a 3D child, `offset-path`,
+  `offset-distance`, `offset-rotate`, `offset-anchor`, `offset-position`,
+  the four offsets and the four logical insets, and a transform on the
+  anchor's host. `transform-style: preserve-3d` on a host moved the
+  anchor's drawn box and the anchored box did not follow; `perspective` on
+  the anchor itself, `backface-visibility`, `visibility: hidden` and every
+  paint and compositing longhand moved neither. No case moved the box after
+  a flex, block or grid item. A table row's and a table column's
+  `visibility` from `collapse` to `visible` moved the next row (50px) and
+  column; a flex item's and a grid item's did not.
+- The fix: `visibility` is off the list; the transform, motion-path and
+  offset longhands are `ANCHOR_FOLLOWED` (the 22 cases' longhands, and
+  `transform-style`, which moved the anchor), and an animation that sets one
+  of them and nothing else that moves another box counts as moving another
+  box where an anchor can follow it (`anchorCanFollow`): a sheet of the page
+  declares `anchor-name` at a value other than `none` (any rule, keyframe,
+  nested or imported rule) or cannot be read, read once a sheet key with the
+  keyframes (`sheetFacts`, which replaced the keyframe cache); an animation
+  that is no CSS animation sets `anchor-name`; or the animated box (a
+  pseudo-element included) or an element under it computes one. Each
+  animation's moves are decided before any seek, while the style is the
+  pass's last instant's. The pass line counts the animations counted so
+  ("… because an anchor can follow them").
+- The three statements and the test name that said a transform or an offset
+  moves only the animated box and what it holds — the list's docblock, this
+  ledger's sixth-review entry, CLAUDE.md §6, and the still-list test — are
+  corrected; the test is
+  "seeks for the self-clip read every keyframe that can move another box: no
+  layout longhand or visibility on the still list, and a transform or an
+  offset where an anchor can follow it", which holds `visibility` and the
+  anchor positioning properties off the list, `ANCHOR_FOLLOWED` inside it,
+  every transform, motion-path and offset longhand of the list in
+  `ANCHOR_FOLLOWED`, and the decision's lines.
+- Proved, quick reads at 1280 over the six pay screens: PAN 0 on `41fd3c1`,
+  13 with the fix; PVC 0 and 13. Each half of the anchor read alone (the
+  sheet half switched off, the computed half switched off) reads PAN's 13,
+  and both off read 0. **Whole runner**: see "Red proofs on the final
+  tree", below. The runner and the probe build run no look lint (the lint
+  reads a private look's sheet at build alone), so a shipped-look plant
+  reaches the probe whatever the lint says: PAN's probe half stands on its
+  own, beside the lint half's refusal.
+- **What a sheet that declares an anchor costs**: under PAN every transform
+  and offset animation on the page is counted as moving another box (on the
+  phone pass 1,134 of 1,295 seeked animations, the Rural tags' sway and the
+  signs' swing among them, at every width, the declaration being inside a
+  desk-only media block): the offset read's page time summed over the
+  geometry passes rose from 7.2s on the clean tree that hour to 28.0s, and
+  PAN's whole run took 259.7s against the clean tree's 251.4s. On the kit's
+  road only; no first-party sheet declares one (the lint half, below).
+
+### The first-party lint refuses anchor positioning (B1, the lint half)
+
+- `lintLookSheet` refuses `ANCHOR_PROPERTIES` (`anchor-name`,
+  `anchor-scope`, `position-anchor`, `position-area` and its old name
+  `inset-area`, `position-try`, `position-try-fallbacks`,
+  `position-try-order` and its old name `position-try-options`,
+  `position-visibility`, `position-fallback`), `anchor()` and
+  `anchor-size()` in any value, and `anchor-center`, read on the lower-cased
+  property name and on the value with its strings blanked, in any case: so
+  with `!important`, in a media block, in a keyframe and in a custom
+  property (no custom property holds the function, so none reaches a
+  property through `var()`). `@position-try` was already refused as an
+  at-rule (G4). `a-look-never-positions-against-an-anchor`; the plant set
+  `a1` (34: PAN's sheet first, 29 more refused, four controls), pinned with
+  the others in `the-lint-belts-critics-plants-are-pinned` (1,301 plants:
+  993 refused, 308 accepted).
+- Red: the rule switched off, `a1`'s pin and the describe's first test fail
+  (2 of 259; `runs/lint-rule-off.log`).
+- Costs nothing: no first-party sheet a run serves (the shipped looks, the
+  fixture look, the tracked private fixture), no starter and the canary
+  writes any of it, by the lint and by a grep with comments stripped; under
+  the private look's selection the selected check reads it too (270 of
+  270). The kit's `lintSheet` admits PAN whole (the kit is unchanged).
+- Beyond the brief's list, stated: `anchor-scope`, the two old names and
+  `position-fallback`, and `anchor-center`, each part of anchor positioning
+  and written by no sheet.
+
+### Pins and statements (P2, P3)
+
+- **PSQ2p** (the critic's: PSQ2 through `.pay-x::before`, a margin of the
+  row less 70px from 30% to 40% of a loop, the figure squeezed in its own
+  clip) is a red proof now: see below.
+- **The lines that decide which animations reach the reads are pinned**
+  (`layout/offsetHeld.test.ts`): the guard that takes every animation with a
+  target in, a pseudo-element's included, in the decision and in the read
+  (exactly twice, and no `continue` on a pseudo-element), the walk's own
+  pseudo-element test, the off-walk gate, the moves cache and its key, the
+  gather of the figures the dress rule does not read and their report, the
+  ink signature's rest, and `inkSignature`, `movesOtherBoxes` and
+  `anchorCanFollow` whole. Red, each mutation alone on a copy, restored
+  (`runs/pin-mutations.log`): the critic's m10 (no off-walk seek), m11 (the
+  cache answers still), m12 (pseudo-elements skipped in the read, and in the
+  decision), m13 (`inkSignature` answering nothing), m14 (the unread figures
+  not reported), m15 (the place read unwired) and m16 (the gather reading
+  the dress subjects alone), each green on `41fd3c1`, and seven of the
+  anchor read's (it off, `visibility` back, the sheets never anchoring, the
+  anchored animations not counted, an early answer in `anchorCanFollow` and
+  in `movesOtherBoxes`, `translate` off `ANCHOR_FOLLOWED`): each 1 of 10
+  failing.
+- The test's sentence that a mutation of the helpers "is the probe's red
+  proofs' to catch" was false for m12; it says now that such a mutation is
+  caught only where a red proof exercises the branch it breaks, and not
+  every branch has one.
+- **m15**: no whole-runner proof reaches the place read alone (PQP is
+  refused first by `QR_NONE`), so the call is pinned:
+  `the-code-hold-reads-where-a-codes-modules-land` holds `qrColourFault` to
+  end in `qrPlaceFault`, called once, `QR_NONE` to hold `offset-path`, and
+  the place read to derive the matrix from `QR_SVG_QUIET_MODULES`.
+- **The ground-signature test claims what it reads**: renamed
+  `the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read`,
+  its docblock stating that `groundStackFault` also reads `overflow-x`,
+  `overflow-y`, `contain` and the ink's lines, which it does not parse (a
+  clip only narrows the ink read, and the glyphs' place is `inkSignature`'s).
+- **The quiet zone is one number**: `QR_SVG_QUIET_MODULES` (`render.ts`),
+  `QR_QUIET_MODULES` (`src/domain/qr.ts`, a third copy the critic did not
+  name) and the quiet-zone read's `QUIET_MODULES` are read as literals and
+  held equal, and `qrSvg` to draw with its own
+  (`the-quiet-zone-is-one-number`, `scripts/quiet-zone.test.mjs`); red with
+  either source copy moved (`runs/quiet-tie-mutation.log`).
+- PLAN § Open gains the seventh review's list: the older reads that assume a
+  transform or an offset moves only its own subtree (closed for first-party
+  looks by the lint, open on the kit's road), the probe's hidden scrollbars,
+  and what an anchored box does that the self-clip read does not read; and
+  its sixth-review items 2 and 5 say what is pinned and measured now.
+
+### Red proofs on the final tree, the whole runner, each plant alone
+
+Counts per pass: 390 / 1280 / canvas / portrait / tablet / desk-wall /
+short-wall / side-tablet / hd-wall / tall-tablet / narrow-wall / 360, where a
+pass is not named. Every plant exit 1, on `29d1b36`'s tree with this
+round's last commit's probe and tests (its probe differs from `29d1b36`'s
+in one comment; the logs name the dirty files), the one-minute load
+1.5–6.3 at the starts and the ends:
+
+- **PSQ2p** the self-clip rule 23 at 1280 and none elsewhere, every one
+  "with t-modern-sq2p on div.pay-x::before seeked to its keyframe at 30%"
+  (242s). A quick read of the six pay screens at 1280 read 13, and 0 with
+  the critic's m12 applied to this probe (`runs/quick/`).
+- **PAN** the self-clip rule 19 at 1280 and none elsewhere (260s; on
+  `3745b4b`, the probe half's commit, 253s and the same 19), every one
+  "with t-modern-pan on span.item-u seeked to its keyframe at 30%": the
+  figure "has 275.2px of its text cut sideways by div.pay-x". The critic's
+  run of it on `41fd3c1` exited 0.
+- **PVC** the self-clip rule 19 at 1280 and none elsewhere (244s; on
+  `3745b4b` 257s and the same 19), "cut from above or below by div.pay-x …
+  with t-modern-pvc on div.pay-x::before". The critic's run on `41fd3c1`
+  exited 0.
+- **PSQ2** the self-clip rule 23 at 1280; **PQP** the hold 35 / 78 / 122 /
+  130 / 130 / 97 / 130 ×5 / 29, and 5 and 3 under reduced motion; **PF2** 1a
+  53 / 73 / 109 / 140 / 91 / 91 / 100 / 99 / 100 / 100 / 92 / 29: each the
+  count the round before reported.
+
+The clean tree: exit 0, 251.4s (load 3.5 at the start, 3.7 at the end), 0
+failures; the offset read's counts those of `35a33bd` and `41fd3c1`
+exactly (177 animations, 355 seeks, 2,047 figure reads, 2,044 self-clip
+reads at 390), 0 seeked for the self-clip read alone and 0 counted as
+moving another box because an anchor can follow them, on every pass.
+
+### Cost of the round
+
+Two pairs back to back on this Mac, main (`c1f3e97`, a clone) then the
+branch (this round's final probe), two tabs, the tracked fixture carried
+(796 contrast jobs), no other probe running, each run started once the
+one-minute load was under 2.5:
+
+| Pair | Main | Branch | Load at start (main, the branch) | Geometry walk | Contrast pass |
+|---|---|---|---|---|---|
+| 1 | 224.3s | 240.2s | 2.43, 2.46 | 91.1 → 117.4s | 125.2 → 115.3s |
+| 2 | 223.5s | 236.9s | 2.27, 2.41 | 89.2 → 116.3s | 126.6 → 113.0s |
+
+The branch is +15.9s and +13.4s (median 223.9s against 238.6s), against the
+critic's pair of `41fd3c1` (main 225.3s, the branch 240.9s, +15.6s) and the
+builder's of `6cbb85a` (median 225.8s against 241.1s): this round adds
+nothing measurable. The offset read's page time, summed over the geometry
+passes on two tabs, is 6.77s and 6.68s (6.74s in the critic's run of
+`41fd3c1`, 6.80–6.85s in the builder's of `6cbb85a`); two quick reads of
+every screen at 390 read 581.6 and 598.6ms against `41fd3c1`'s 535.6 and
+589.7ms, within the noise of a round. 59.8–63.1s stand under the 300s
+ceiling.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
