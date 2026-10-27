@@ -41,7 +41,7 @@ import {
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
-import { MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, withMatrices } from './code-modules.mjs';
+import { MODULE_CHECK, MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, withMatrices } from './code-modules.mjs';
 import { charReport, charsFault, foldShares, mergeShares, readCharsAgain, readMoneyChars } from './char-read.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
@@ -1365,16 +1365,26 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     const codesReadByClass = {};
     let quietPixels = 0;
     const quietReadAgain = [];
-    // 1d (report-only): the module read's tallies, by viewport and look.
+    // 1d (bound since 7c): the module read's tallies, by viewport and look, and its failures.
     const modules = {
         byVpClass: {},
         stats: {},
         would: [],
+        // Its failures, each a line (a code read wrong after the fresh pair, a code its read failed closed on, a throw).
+        failures: [],
         readAgain: [],
         faults: [],
-        // Throws caught in 1d's own read, said and counted (it fails nothing).
+        // Throws caught in 1d's own read, said, counted, and each a failure.
         thrown: [],
         read: new Map(),
+        // The codes it read by look (`vp/screen:name`), for the codes owed by name.
+        readByClass: {},
+        // The codes it failed closed on by look: already failures, not owed again.
+        faultedByClass: {},
+        // The codes in a turned frame it could not read, by look: stated, never passed in silence.
+        turnedByClass: {},
+        // The codes none of whose module centres was on screen, by look (the quiet zone's rule for a code it cannot see).
+        offScreenByClass: {},
         unread: new Map(),
         payloadChecked: 0,
         leastModule: Infinity,
@@ -1773,16 +1783,18 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      * and before anything else asks the page (the tenth
                      * critic's item 5: they were read after the quiet zone's
                      * read, so after its fresh pair whenever a ring read dark).
-                     * Guarded (item 6): 1d is report-only, so a page that throws
-                     * answering for its matrices fails each code closed for 1d
-                     * alone (`withMatrices`' `thrown`), is counted and said,
-                     * and never takes the quiet zone's read or the job with it —
-                     * in the fresh pair below as here.
+                     * Guarded (item 6): a page that throws answering for its
+                     * matrices fails each code closed for 1d alone
+                     * (`withMatrices`' `thrown`; each a failure of 1d since
+                     * 7c), is counted and said, and never takes the quiet
+                     * zone's read or the job with it — in the fresh pair below
+                     * as here.
                      */
                     const codeMatrices = async () => {
                         try {
                             return await evalJson(cdp, sessionId, 'window.__codeMatrices()');
                         } catch (err) {
+                            // Every code then fails closed for 1d (`withMatrices`' `thrown`), each a failure of its own below.
                             modules.thrown.push(`${screen} @${vp.name} / theme ${theme}${wornLabel}: the page threw answering for the codes' matrices: ${err.message.slice(0, 200)}`);
                             return { thrown: err.message.slice(0, 200) };
                         }
@@ -1849,21 +1861,30 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         }
                     }
                     /*
-                     * 1d (before 8g2, report-only; `code-modules.mjs`): every
-                     * code the quiet-zone read reads, each module's centre on
-                     * the same capture held to the matrix the code was drawn
-                     * from (`__codeMatrices`, off the path's `d`), and a code
-                     * read wrong read again on the job's one fresh pair by the
-                     * quiet zone's own rule. Fails nothing: what it would fail
-                     * is said under the pass, by viewport and look.
+                     * 1d (before 8g2, bound since step 7c; `code-modules.mjs`,
+                     * `a-codes-modules-read-as-its-matrix`): every code the
+                     * quiet-zone read reads, each module's centre on the same
+                     * capture held to the matrix the code was drawn from
+                     * (`__codeMatrices`, off the path's `d`), and a code read
+                     * wrong read again on the job's one fresh pair by the quiet
+                     * zone's own rule: it fails where the decided reading — the
+                     * fresh pair's where the pair is believed, the first where it
+                     * cannot be — reads wrong, where the read fails closed (a
+                     * module under `MODULE_MIN_PX`, a matrix it cannot read or
+                     * pair), and where 1d throws. A code in a turned frame is not
+                     * read, and is said by name under the pass, never passed in
+                     * silence; a code wholly off screen or clipped away is not
+                     * read, the quiet zone's rule.
                      */
                     if (zones.length > 0) {
-                        // Guarded whole (item 6): a throw in 1d's own read is counted and said, and fails nothing.
+                        // Guarded whole (item 6): a throw in 1d's own read is counted, said, and fails the job; the quiet zone's read stands.
                         let moduleReads = [];
                         try {
                             moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
                         } catch (err) {
-                            modules.thrown.push(`${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`);
+                            const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`;
+                            modules.thrown.push(line);
+                            modules.failures.push(`${line} — ${MODULE_CHECK}`);
                         }
                         const variant = flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
                         const tally = (modules.byVpClass[`${vp.name} ${plannedJob.sheetClass}`] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
@@ -1873,22 +1894,28 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
                             if (turned) {
                                 modules.unread.set(code, 'its frame is turned');
+                                (modules.turnedByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                                 tally.unread += 1;
                                 continue;
                             }
                             if (r.fault !== undefined) {
+                                // Fails closed: a module too small to read, a matrix it cannot read or pair.
                                 modules.faults.push(`${at} — ${r.fault}`);
+                                modules.failures.push(`${at} — ${r.fault} — ${MODULE_CHECK}`);
                                 modules.unread.set(code, r.fault);
+                                (modules.faultedByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                                 tally.unread += 1;
                                 continue;
                             }
                             if (r.px === 0) {
                                 modules.unread.set(code, 'no module centre of it is on screen');
+                                (modules.offScreenByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                                 tally.unread += 1;
                                 continue;
                             }
                             if (z.payload === 'checked') modules.payloadChecked += 1;
                             modules.read.set(code, (modules.read.get(code) ?? 0) + 1);
+                            (modules.readByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                             tally.codes += 1;
                             tally.modules += r.px;
                             modules.leastModule = Math.min(modules.leastModule, z.module);
@@ -1905,13 +1932,13 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             if (r.bad > 0) {
                                 tally.wrong += r.bad;
                                 tally.wouldCodes += 1;
-                                modules.would.push(
+                                const line =
                                     `${at} has ${r.bad} of ${r.px} module centre(s) wrong (${r.wrongDark} dark read light past ${MODULE_DARK_MAX}, ` +
-                                        `${r.wrongLight} light read dark under ${MODULE_LIGHT_MIN}; the first at row ${r.first.r} column ${r.first.c}, ` +
-                                        `${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}))` +
-                                        (retry?.again === undefined ? '' : ' on the fresh pair too') +
-                                        readings,
-                                );
+                                    `${r.wrongLight} light read dark under ${MODULE_LIGHT_MIN}; the first at row ${r.first.r} column ${r.first.c}, ` +
+                                    `${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}))` +
+                                    (retry?.again === undefined ? '' : ' on the fresh pair too');
+                                modules.would.push(`${line}${readings}`);
+                                modules.failures.push(`${line} — ${MODULE_CHECK}${readings}`);
                             } else if (retry !== undefined) {
                                 modules.readAgain.push(`${at}: wrong on the first capture, right on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})${readings}`);
                             }
@@ -4351,9 +4378,29 @@ try {
     // critic's N6): those reads are compared and never folded, so their
     // sightings were lost.
     const canaryQuietReadAgain = [];
-    // 1d (before 8g2, report-only; `code-modules.mjs`): every job's module
-    // read folded, and the canary's reads again of it, said under the pass.
-    const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], readAgainByTab: {}, tabs: CONTRAST_TABS, faults: [], thrown: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
+    // 1d (before 8g2, bound since 7c; `code-modules.mjs`): every job's
+    // module read folded — its failures fail the pass — and the canary's
+    // reads again of it, said under the pass and never failed (the walk's
+    // read of each job decides).
+    const modulesRun = {
+        byVpClass: {},
+        stats: {},
+        would: [],
+        failures: [],
+        readAgain: [],
+        readAgainByTab: {},
+        tabs: CONTRAST_TABS,
+        faults: [],
+        thrown: [],
+        read: new Map(),
+        readByClass: {},
+        faultedByClass: {},
+        turnedByClass: {},
+        offScreenByClass: {},
+        unread: new Map(),
+        payloadChecked: 0,
+        leastModule: Infinity,
+    };
     // 1c(c) (report-only): every job's `digits`, folded (`char-read.mjs`'s `charReport` says it).
     const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
     const canaryModules = { would: [], readAgain: [], readAgainByTab: {}, thrown: [] };
@@ -4503,10 +4550,17 @@ try {
             }
             for (const [key, st] of Object.entries(out.modules.stats)) foldStats((modulesRun.stats[key] ??= {}), st);
             modulesRun.would.push(...out.modules.would);
+            modulesRun.failures.push(...out.modules.failures);
             modulesRun.readAgain.push(...out.modules.readAgain);
             modulesRun.faults.push(...out.modules.faults);
             modulesRun.thrown.push(...out.modules.thrown);
             countInto(modulesRun.read, out.modules.read);
+            for (const key of ['readByClass', 'faultedByClass', 'turnedByClass', 'offScreenByClass']) {
+                for (const [cls, codes] of Object.entries(out.modules[key])) {
+                    const into = (modulesRun[key][cls] ??= new Set());
+                    for (const code of codes) into.add(code);
+                }
+            }
             for (const [code, why] of out.modules.unread) modulesRun.unread.set(code, why);
             modulesRun.payloadChecked += out.modules.payloadChecked;
             modulesRun.leastModule = Math.min(modulesRun.leastModule, out.modules.leastModule);
@@ -4794,7 +4848,7 @@ try {
          * read again once on a fresh capture after 250ms, the quiet zone's
          * flake in mind, and believed only when the fresh capture reads every
          * code as the cut says; otherwise the run fails, with both readings.
-         * It fails the run though 1d is report-only: it holds the instrument,
+         * It fails the run as 1d's own failures do: it holds the instrument,
          * not a look.
          */
         currentStep = 'contrast: 1d held to this Chrome';
@@ -5075,6 +5129,30 @@ try {
             if (unreadCodes.length > 0) {
                 verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
             }
+            // 1d owes the same codes by name on the public looks' own jobs (7c).
+            const publicModules = new Set(
+                Object.entries(modulesRun.readByClass)
+                    .filter(([cls]) => !PRIVATE_SHEET_CLASSES.includes(cls))
+                    .flatMap(([, codes]) => [...codes]),
+            );
+            const unreadModules = CODES_REQUIRED.filter((code) => !publicModules.has(code));
+            if (unreadModules.length > 0) verdicts.push(`${MODULE_CHECK} read no module of ${unreadModules.join(', ')}`);
+        }
+        /*
+         * 1d once a contrast job (7c): every failure fails the pass; and on
+         * every look, every code whose quiet zone was read on its jobs has its
+         * modules read there too — save one it failed closed on (a failure
+         * already) and one none of whose module centres was on screen (the
+         * quiet zone's rule; said by name below). A code in a turned frame is
+         * read by neither, and is said by name in 1d's lines below
+         * (`moduleReport`).
+         */
+        if (modulesRun.failures.length > 0) verdicts.push(`${modulesRun.failures.length} failure(s) of ${MODULE_CHECK}`);
+        for (const [cls, codes] of Object.entries(codesReadByClass)) {
+            const owed = [...codes]
+                .filter((code) => !['readByClass', 'faultedByClass', 'offScreenByClass'].some((key) => modulesRun[key][cls]?.has(code) ?? false))
+                .sort();
+            if (owed.length > 0) verdicts.push(`${MODULE_CHECK} read no module centre of ${owed.join(', ')} on a ${cls} stall, where its quiet zone was read`);
         }
         /*
          * 1a once a contrast job (7a): every failure fails the pass; every
@@ -5095,8 +5173,8 @@ try {
             // item 1): its line skips against its own ceiling, its points
             // of 1a behind a clip on every pass that read it (7a), a read of
             // 1b that held a target on every geometry pass (7b), the codes
-            // owed by name on its own jobs. A carried look with no ceiling
-            // of its own fails here.
+            // owed by name on its own jobs, their quiet zones and (7c) their
+            // modules. A carried look with no ceiling of its own fails here.
             const { faults, notes } = carriedTallyFaults({
                 carried: CARRIED.looks,
                 lineSkips: privateLineSkips,
@@ -5104,6 +5182,7 @@ try {
                 reach: reachSeen,
                 clipCeiling: CLIP_SKIP_CEILING,
                 codesRead: codesReadByClass,
+                moduleCodesRead: modulesRun.readByClass,
                 codesRequired: CODES_REQUIRED,
             });
             verdicts.push(...faults);
@@ -5187,6 +5266,9 @@ try {
             for (const line of coverFailed) {
                 console.error(`    ${line}`);
             }
+            for (const line of modulesRun.failures) {
+                console.error(`    ${line}`);
+            }
         }
     } catch (err) {
         failed = true;
@@ -5265,8 +5347,8 @@ try {
                     : `; on the canary's reads again: ${canaryQuietReadAgain.length} (by tab: ${byTabSaid(canaryQuietByTab)})${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
         );
     }
-    // 1d (report-only): what the module read read and would fail, whatever
-    // the verdict; it fails nothing until step 7c binds it.
+    // 1d (bound since 7c): what the module read read and failed, whatever
+    // the verdict; its failures are the contrast pass's too.
     if (Object.keys(modulesRun.byVpClass).length > 0 || codesPaintedSeen.size > 0) {
         for (const line of moduleReport(modulesRun, canaryModules, codesPaintedSeen)) console.log(`  ${line}`);
     }
@@ -5580,12 +5662,12 @@ try {
                     // canary's reads again: how many, and which (each
                     // sighting's first line), so a reader comparing runs can
                     // find a code that recurs (the probe-shard critic's N6).
-                    // 1d (report-only): how many codes would fail the module
-                    // read, and how many read wrong and then right on a fresh
-                    // pair, on the walk and on the canary's reads again.
+                    // 1d (bound since 7c): how many code reads failed the
+                    // module read, and how many read wrong and then right on a
+                    // fresh pair, on the walk and on the canary's reads again.
                     // Both counted by the run's tab count and by the tab that read
                     // each (the tenth critic's item 4: a flake that hits both
-                    // captures is a false red once 1d binds, so step 7c reads
+                    // captures is a false red now 1d is bound, so step 7c read
                     // these counts first).
                     codeModules: {
                         tabs: CONTRAST_TABS,

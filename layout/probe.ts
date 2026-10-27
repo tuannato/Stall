@@ -9533,8 +9533,8 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  * other such look, `probe-coverage.mjs`).
  * **Not read, stated**: a box above the code (its fades are the cover
  * rules' and the quiet zone's), the code's size beyond its squareness (the
- * pay code's width is the gate's), the pixels (the quiet-zone read's and,
- * report-only, 1d's module read, on the contrast jobs), and a code between
+ * pay code's width is the gate's), the pixels (the quiet-zone read's and
+ * 1d's module read, bound since 7c, on the contrast jobs), and a code between
  * the pass's instants: the hold and
  * its place read read a code where the pass's last instant left it, so a
  * keyframe that carries its modules off the matrix there is read by nothing
@@ -12647,7 +12647,7 @@ declare global {
         __opaqueBoxes: () => { x: number; y: number; w: number; h: number }[];
         /** Every painted code in the last prepare's scope, for the quiet-zone read (D4). */
         __quietZones: () => QuietZone[];
-        /** The matrix every one of those codes was drawn from, in their order, for 1d (report-only). */
+        /** The matrix every one of those codes was drawn from, in their order, for 1d (bound since 7c). */
         __codeMatrices: () => CodeMatrixRead[];
         __moduleSnap: (on: boolean) => { codes: number; bottom: number; width: number };
         __contrastScreens: string[];
@@ -14115,12 +14115,12 @@ function codeZones(): { svg: SVGSVGElement; zone: QuietZone }[] {
 window.__quietZones = () => codeZones().map(({ zone }) => zone);
 
 /**
- * **1d: the matrix each code was drawn from** (before 8g2, 1d, report-only;
+ * **1d: the matrix each code was drawn from** (before 8g2, 1d, bound since 7c;
  * `layout/codeMatrix.ts`). One entry per zone `__quietZones` answers, in its
  * order and with its name: the matrix `qrSvg` wrote into the path's `d`
  * attribute from `qrMatrix(text)` — never read off the pixels 1d then reads
- * — or why it cannot be read, which 1d says and counts as a code it could
- * not read. Where the DOM carries the code's text (the touch wall's plate,
+ * — or why it cannot be read, which 1d says and fails closed on (a failure
+ * since 7c). Where the DOM carries the code's text (the touch wall's plate,
  * `data-pay-uri`), the attribute's matrix is also held to `qrMatrix` of that
  * text (`payload: 'checked'`), and a code that does not encode it is a
  * fault.

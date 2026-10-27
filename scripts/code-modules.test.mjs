@@ -1,5 +1,5 @@
 /**
- * 1d: a code's modules read in pixels (before 8g2; report-only until step 7c;
+ * 1d: a code's modules read in pixels (before 8g2; bound since step 7c;
  * `code-modules.mjs`, `PROBE-RULES.md`, "Before 8g2, 1d: the code's
  * modules"). The pure half: where each module's centre pixel is, what reads
  * wrong, and the read-again it shares with the quiet zone.
@@ -7,6 +7,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    MODULE_CHECK,
     MODULE_DARK_MAX,
     MODULE_LIGHT_MIN,
     MODULE_MIN_PX,
@@ -314,22 +315,26 @@ const RUN = {
     faults: [],
     read: new Map([['mobile/pay:pay-qr', 2]]),
     unread: new Map([['mobile/pay-moved:pay-qr', 'its frame is turned']]),
+    turnedByClass: { 't-rural': new Set(['mobile/pay-moved:pay-qr']) },
     payloadChecked: 0,
     leastModule: 4.4567,
 };
 
 describe('1d-says-what-it-read-and-would-fail', () => {
-    it('says the tallies, the extremes, the would-be failures by code, and what it did not read', () => {
+    it('says the tallies, the extremes, the failures by code, and what it did not read', () => {
         const lines = moduleReport(RUN, { would: [], readAgain: [] }, new Set(['mobile/pay:pay-qr', 'portrait/shop-window-wall:shop-window', 'mobile/pay-moved:pay-qr']));
-        assert.match(lines[0], /^1d, a code's modules \(report-only.*\), by viewport and look: mobile t-modern 2 job\(s\), 2 code read\(s\), 5618 centres, 3 wrong on 1 code read\(s\)$/);
+        assert.match(lines[0], /^1d, a code's modules \(a-codes-modules-read-as-its-matrix, bound.*\), by viewport and look: mobile t-modern 2 job\(s\), 2 code read\(s\), 5618 centres, 3 wrong on 1 code read\(s\)$/);
         assert.match(lines[1], /t-modern bare dark 0–0 \(2\) light 255–255 \(3\); t-modern flags 7 dark 0–0 \(1\) light none read/);
         assert.match(lines[2], /broadcast @canvas dark 0–0 \(1\) light none read; pay @mobile dark 0–0 \(2\) light 255–255 \(3\)/);
-        assert.equal(lines[3], '1d, would-be failures: 1 code read(s); by code (reads): mobile/pay:pay-qr 1');
+        assert.equal(lines[3], '1d, codes read wrong (failures): 1 code read(s); by code (reads): mobile/pay:pay-qr 1');
         assert.ok(lines.includes('1d, codes a contrast job painted and could not read: mobile/pay-moved:pay-qr (its frame is turned)'));
         assert.ok(lines.includes('1d, codes a geometry pass painted and no contrast job read: 1: portrait/shop-window-wall:shop-window'));
         assert.ok(lines.includes('1d, matrices also held to the text their plate carries (data-pay-uri): 0 code read(s); the least module read: 4.46px'));
         assert.ok(lines.includes('1d, read again on a fresh pair and right there: none; on the canary\'s reads again: none'));
-        assert.ok(lines.includes('1d, threw and was caught (it fails nothing): none'));
+        assert.ok(lines.includes('1d, threw (each a failure on the walk; on the canary\'s reads, said): none'));
+        assert.ok(lines.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair): none'));
+        // A turned frame's code is said by look and name (7c), never passed in silence.
+        assert.ok(lines.includes('1d, codes not read because their frame is turned (not held by 1d or by the quiet zone; stated): t-rural mobile/pay-moved:pay-qr'));
         // Sightings at the run's tab count and by the tab that read each (the tenth critic's item 4).
         const sighted = moduleReport(
             { ...RUN, tabs: 3, readAgain: ['pay @mobile / theme 3: the code pay-qr at 41,819: wrong on the first capture, right on a fresh pair (on tab 1 of 3)'], readAgainByTab: { 1: 1 } },
@@ -338,11 +343,17 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         );
         assert.ok(sighted.includes('1d, read again on a fresh pair and right there, at 3 tab(s): 1 (by tab: tab 1 1)\n    pay @mobile / theme 3: the code pay-qr at 41,819: wrong on the first capture, right on a fresh pair (on tab 1 of 3); on the canary\'s reads again: none'));
         const thrown = moduleReport({ ...RUN, thrown: ['pay @mobile / theme 1: the page threw answering for the codes\' matrices: planted'] }, { would: [], readAgain: [], thrown: ['(the canary) x'] }, new Set());
-        assert.ok(thrown.includes("1d, threw and was caught (it fails nothing): 2\n    pay @mobile / theme 1: the page threw answering for the codes' matrices: planted\n    (the canary) x"));
+        assert.ok(thrown.includes("1d, threw (each a failure on the walk; on the canary's reads, said): 2\n    pay @mobile / theme 1: the page threw answering for the codes' matrices: planted\n    (the canary) x"));
+        const closed = moduleReport({ ...RUN, faults: ['pay @mobile / theme 1: the code pay-qr at 37,815 — a module is 2.10px, under the 3 device pixels a centre read needs'] }, { would: [], readAgain: [] }, new Set());
+        assert.ok(closed.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair): 1\n    pay @mobile / theme 1: the code pay-qr at 37,815 — a module is 2.10px, under the 3 device pixels a centre read needs'));
     });
-    it('says none where nothing would fail', () => {
-        const lines = moduleReport({ ...RUN, would: [] }, { would: [], readAgain: [] }, new Set());
-        assert.ok(lines.includes('1d, would-be failures: none'));
+    it('says none where nothing fails', () => {
+        const lines = moduleReport({ ...RUN, would: [], turnedByClass: {} }, { would: [], readAgain: [] }, new Set());
+        assert.ok(lines.includes('1d, codes read wrong: none'));
+        assert.ok(lines.includes('1d, codes not read because their frame is turned (not held by 1d or by the quiet zone; stated): none'));
+    });
+    it('pins the rule’s name', () => {
+        assert.equal(MODULE_CHECK, 'a-codes-modules-read-as-its-matrix');
     });
 });
 

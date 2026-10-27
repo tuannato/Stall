@@ -50,6 +50,7 @@ function measured() {
         },
         clipCeiling: 0.3,
         codesRead: { [FIXTURE]: new Set(CODES.filter((code) => !PAID_LOOK_UNPAINTED_CODES.includes(code))) },
+        moduleCodesRead: { [FIXTURE]: new Set(CODES.filter((code) => !PAID_LOOK_UNPAINTED_CODES.includes(code))) },
         codesRequired: CODES,
     };
 }
@@ -77,7 +78,7 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
     });
 
     it('fails a carried look with no ceiling of its own, naming what it measured', () => {
-        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), reach: Object.fromEntries(Object.entries(measured().reach).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] } });
+        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), reach: Object.fromEntries(Object.entries(measured().reach).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] }, moduleCodesRead: { 't-planted-look': measured().moduleCodesRead[FIXTURE] } });
         assert.equal(faults.length, 1);
         assert.match(faults[0], /^t-planted-look is carried and has no line-skip ceiling of its own \(CARRIED_LINE_SKIP_CEILING/);
         assert.match(faults[0], /mobile 3\/1, desktop 0\/0, canvas 0\/0/);
@@ -113,6 +114,13 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
         const free = { ...measured(), carried: [{ cls: FIXTURE, paid: false }] };
         assert.deepEqual(carriedTallyFaults(free).faults, [
             't-fixture-private: a-code-keeps-its-quiet-zone-white read no quiet zone on desktop/publish-name:publish-qr under it',
+            't-fixture-private: a-codes-modules-read-as-its-matrix read no module of desktop/publish-name:publish-qr under it',
+        ]);
+        // 1d (7c) owes its modules read on the same codes, on its own jobs.
+        const modulesUnread = measured();
+        modulesUnread.moduleCodesRead[FIXTURE].delete('canvas/broadcast:broadcast');
+        assert.deepEqual(carriedTallyFaults(modulesUnread).faults, [
+            't-fixture-private: a-codes-modules-read-as-its-matrix read no module of canvas/broadcast:broadcast under it',
         ]);
         const unread = measured();
         unread.codesRead[FIXTURE].delete('mobile/pay:pay-qr');

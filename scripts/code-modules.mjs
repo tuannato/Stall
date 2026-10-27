@@ -1,7 +1,7 @@
 /**
- * **1d: a code's modules read in pixels** (before 8g2, item 1d; report-only
- * until step 7c binds it; `PROBE-RULES.md`, "Before 8g2, 1d: the code's
- * modules"). The quiet-zone read (`quiet-zone.mjs`) holds the white ring
+ * **1d: a code's modules read in pixels** (before 8g2, item 1d; bound since
+ * step 7c, `a-codes-modules-read-as-its-matrix`; `PROBE-RULES.md`, "Before
+ * 8g2, 1d: the code's modules" and "Before 8g2, 7c: 1d binds"). The quiet-zone read (`quiet-zone.mjs`) holds the white ring
  * around a code's matrix; nothing read the matrix itself. A box moved over a
  * pay code by a relative offset or a transform (the critic's PQ), a box
  * above it faded (PQO), a shadow ring with no hit area laid across it, or a
@@ -44,6 +44,8 @@ import { QUIET_MODULES, readAgainOnFreshPair, readingContext } from './quiet-zon
  * ten levels either way of a paint that never moved off 0 or 255.
  */
 export const MODULE_DARK_MAX = 10;
+/** The rule's name, as its failures and the codes it owes name it (bound since step 7c). */
+export const MODULE_CHECK = 'a-codes-modules-read-as-its-matrix';
 export const MODULE_LIGHT_MIN = 245;
 
 /**
@@ -312,7 +314,7 @@ export function moduleSnapLines({ first, again }) {
     return lines;
 }
 
-/** How many would-be failures `moduleReport` says in full; the rest are counted by code. */
+/** How many failures `moduleReport` says in full; the rest are counted by code. */
 export const MODULE_WOULD_PRINTED = 30;
 
 /** `lo–hi` of one kind of centre, or that none was read. */
@@ -320,16 +322,18 @@ const range = (s) => (s === undefined || s.n === 0 ? 'none read' : `${s.lo}–${
 
 /**
  * What 1d says under the contrast pass, line by line, whatever the verdict
- * (report-only: it fails nothing until step 7c). `run` is the walk's fold of
- * every job's `modules` (the runner's `modulesRun`), `canary` the canary's
- * reads again (`{ would, readAgain }`), `painted` every code a geometry pass
- * painted (`pass/screen:name`). Pure.
+ * (bound since 7c: its failures — `run.would`, the codes read wrong, beside
+ * the codes it failed closed on and its throws — fail the pass, and are said
+ * there too). `run` is the walk's fold of every job's `modules` (the
+ * runner's `modulesRun`), `canary` the canary's reads again (`{ would,
+ * readAgain }`: said, not failed — the walk's read of each job decides), and
+ * `painted` every code a geometry pass painted (`pass/screen:name`). Pure.
  */
 export function moduleReport(run, canary, painted) {
     const lines = [];
     const byVp = Object.entries(run.byVpClass).sort(([a], [b]) => a.localeCompare(b));
     lines.push(
-        `1d, a code's modules (report-only; code-modules.mjs; a centre wrong past ${MODULE_DARK_MAX} on a dark module or under ${MODULE_LIGHT_MIN} on a light one, on any channel), ` +
+        `1d, a code's modules (${MODULE_CHECK}, bound; code-modules.mjs; a centre wrong past ${MODULE_DARK_MAX} on a dark module or under ${MODULE_LIGHT_MIN} on a light one, on any channel), ` +
             `by viewport and look: ` +
             (byVp.length === 0
                 ? 'no job painted a code'
@@ -363,7 +367,7 @@ export function moduleReport(run, canary, painted) {
             (fold((_cls, rest) => screenOf(rest)).map(([k, st]) => `${k} dark ${range(st.dark)} light ${range(st.light)}`).join('; ') || 'none'),
     );
     if (run.would.length === 0) {
-        lines.push('1d, would-be failures: none');
+        lines.push('1d, codes read wrong: none');
     } else {
         const byCode = new Map();
         for (const line of run.would) {
@@ -372,7 +376,7 @@ export function moduleReport(run, canary, painted) {
             byCode.set(code, (byCode.get(code) ?? 0) + 1);
         }
         lines.push(
-            `1d, would-be failures: ${run.would.length} code read(s); by code (reads): ` +
+            `1d, codes read wrong (failures): ${run.would.length} code read(s); by code (reads): ` +
                 [...byCode]
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([code, n]) => `${code} ${n}`)
@@ -392,10 +396,20 @@ export function moduleReport(run, canary, painted) {
             (run.readAgain.length === 0 ? 'none' : `${run.readAgain.length} (by tab: ${byTab(run.readAgainByTab)})${run.readAgain.map((line) => `\n    ${line}`).join('')}`) +
             `; on the canary's reads again: ` +
             (canary.readAgain.length === 0 ? 'none' : `${canary.readAgain.length} (by tab: ${byTab(canary.readAgainByTab)})${canary.readAgain.map((line) => `\n    ${line}`).join('')}`) +
-            (canary.would.length === 0 ? '' : `; would-be on the canary's reads again: ${canary.would.length}${canary.would.map((line) => `\n    ${line}`).join('')}`),
+            (canary.would.length === 0 ? '' : `; read wrong on the canary's reads again (said, not failed: the walk's read decides): ${canary.would.length}${canary.would.map((line) => `\n    ${line}`).join('')}`),
     );
+    const faults = run.faults ?? [];
+    lines.push(`1d, failed closed (failures: a module under ${MODULE_MIN_PX}px, a matrix it cannot read or pair): ${faults.length === 0 ? 'none' : `${faults.length}${faults.slice(0, 12).map((line) => `\n    ${line}`).join('')}${faults.length > 12 ? `\n    … and ${faults.length - 12} more` : ''}`}`);
     const thrown = [...(run.thrown ?? []), ...(canary.thrown ?? [])];
-    lines.push(`1d, threw and was caught (it fails nothing): ${thrown.length === 0 ? 'none' : `${thrown.length}${thrown.slice(0, 12).map((line) => `\n    ${line}`).join('')}${thrown.length > 12 ? `\n    … and ${thrown.length - 12} more` : ''}`}`);
+    lines.push(`1d, threw (each a failure on the walk; on the canary's reads, said): ${thrown.length === 0 ? 'none' : `${thrown.length}${thrown.slice(0, 12).map((line) => `\n    ${line}`).join('')}${thrown.length > 12 ? `\n    … and ${thrown.length - 12} more` : ''}`}`);
+    // A turned frame's codes are read by neither 1d nor the quiet zone: said by look and code, never passed in silence.
+    const turned = Object.entries(run.turnedByClass ?? {})
+        .filter(([, codes]) => codes.size > 0)
+        .sort(([a], [b]) => a.localeCompare(b));
+    lines.push(
+        `1d, codes not read because their frame is turned (not held by 1d or by the quiet zone; stated): ` +
+            (turned.length === 0 ? 'none' : turned.map(([cls, codes]) => `${cls} ${[...codes].sort().join(', ')}`).join('; ')),
+    );
     const unread = [...run.unread].sort(([a], [b]) => a.localeCompare(b));
     lines.push(`1d, codes a contrast job painted and could not read: ${unread.length === 0 ? 'none' : unread.map(([code, why]) => `${code} (${why})`).join(', ')}`);
     const notRead = [...painted].filter((code) => !run.read.has(code) && !run.unread.has(code)).sort();

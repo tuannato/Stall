@@ -252,6 +252,8 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  *   read that held a target on each (7b);
  * - `clipCeiling`: the ratio the public looks are held to (`CLIP_SKIP_CEILING`);
  * - `codesRead`: `{ [cls]: Set<'viewport/screen:code'> }`, the quiet-zone reads;
+ * - `moduleCodesRead`: the same, 1d's reads (`a-codes-modules-read-as-its-matrix`,
+ *   7c), owed on the same codes;
  * - `codesRequired`: the codes owed by name (`CODES_REQUIRED`);
  * - `ceilings`: the table (`CARRIED_LINE_SKIP_CEILING` by default).
  */
@@ -262,6 +264,7 @@ export function carriedTallyFaults({
     reach = {},
     clipCeiling,
     codesRead = {},
+    moduleCodesRead = {},
     codesRequired = [],
     ceilings = CARRIED_LINE_SKIP_CEILING,
 }) {
@@ -309,6 +312,11 @@ export function carriedTallyFaults({
         const unread = owed.filter((code) => !read.has(code));
         if (unread.length > 0) {
             faults.push(`${cls}: a-code-keeps-its-quiet-zone-white read no quiet zone on ${unread.join(', ')} under it`);
+        }
+        const modulesRead = own(moduleCodesRead, cls) ?? new Set();
+        const modulesUnread = owed.filter((code) => !modulesRead.has(code));
+        if (modulesUnread.length > 0) {
+            faults.push(`${cls}: a-codes-modules-read-as-its-matrix read no module of ${modulesUnread.join(', ')} under it`);
         }
     }
     return { faults, notes };
