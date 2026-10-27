@@ -424,6 +424,16 @@ export const GEOMETRY_CANARY = Object.freeze([
 /** Pass 4, the rendered-pixel contrast pass, at the page passes' viewports, on its own plan (`layout/contrastPlan.ts`). */
 export const CONTRAST_PASS = Object.freeze({ key: 'contrast', kind: 'contrast', coverage: 'contrast', viewports: ALL_VIEWPORTS });
 
+/**
+ * **Not a pass**: the one viewport the runner sets outside the plan, for the
+ * sheet `the-module-read-agrees-with-this-chrome` draws once a run, after the
+ * contrast walk (`__moduleSnap` in `layout/probe.ts`, `moduleSnapVerdict` in
+ * `scripts/code-modules.mjs`). One of the contrast pass's widths, and tall
+ * enough for the sheet (the page says how far down it reaches, and a sheet
+ * past the bottom is refused). It measures no screen and owes no table.
+ */
+export const MODULE_SNAP_VIEWPORT = Object.freeze({ name: 'module snap', width: 1280, height: 2200 });
+
 /** Pass 5, the transparent wire, at the canvas over the clear screens. */
 export const TRANSPARENCY_PASS = Object.freeze({
     key: 'transparency',

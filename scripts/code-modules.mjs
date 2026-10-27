@@ -16,9 +16,10 @@
  * probe off the path's `d` attribute (`__codeMatrices`,
  * `layout/codeMatrix.ts`), never off these pixels. A centre is the pixel
  * under the module's middle; from `MODULE_MIN_PX` a module up, that pixel
- * lies wholly inside the module, so it is the module's own paint and never
- * an edge's antialiasing. It is read only where the code is on screen:
- * inside every clipping ancestor and the shot, the quiet-zone read's rule.
+ * lies wholly inside the module as Chrome paints it — the svg snapped by up
+ * to half a pixel — so it is the module's own paint and never an edge's
+ * antialiasing. It is read only where the code is on screen: inside every
+ * clipping ancestor and the shot, the quiet-zone read's rule.
  *
  * A code read wrong is read again on a fresh pair by the quiet-zone read's
  * own rule (`readAgainOnFreshPair`): the code stood still from the job's own
@@ -47,19 +48,32 @@ export const MODULE_LIGHT_MIN = 245;
 
 /**
  * A module this many device pixels wide or more has a centre pixel wholly
- * inside it (the pixel under its middle starts past its left edge and ends
- * before its right one exactly when the module is two pixels or more). A
- * smaller module is a fault: its centre would read its neighbours' edges.
+ * inside it as Chrome paints it. The pixel under a module's middle (`floor`
+ * of it) stands at least m/2 − 1 inside the module's edges as the box's
+ * geometry puts them, on either side. Chrome does not paint the svg there:
+ * it snaps it to whole pixels, so a module's edges land up to half a pixel
+ * from where `getBoundingClientRect` and the viewBox put them (the tenth
+ * critic's snap read, DPR 1: 742 of 5,887 centres wrong at 2.1px a module,
+ * 335 at 2.25, 237 at 2.4, 74–90 at 2.6, 36 at 2.7, 7 at 2.85, none from
+ * 2.9 to 4). So the centre pixel stays wholly inside its module, a half
+ * pixel's snap either way, exactly when m/2 − 1 ≥ 0.5: from three pixels a
+ * module. A smaller module is a fault: its centre would read its
+ * neighbours' paint. The cut is held to this Chrome on every run
+ * (`the-module-read-agrees-with-this-chrome`, `moduleSnapVerdict`): codes
+ * drawn by `qrSvg` at fractional sizes and offsets, under the cut each
+ * refused, from it every centre read right.
  */
-export const MODULE_MIN_PX = 2;
+export const MODULE_MIN_PX = 3;
 
 /**
  * The centre pixel of every module of one code that is on screen, as `{ r,
  * c, x, y, dark }` (whole device pixels; `dark` the matrix's word), and the
  * fault that stops the read, if any. `z` is a quiet zone (`quiet-zone.mjs`)
- * with the code's `matrix` (`{ n, bits }`) or its `matrixFault`.
+ * with the code's `matrix` (`{ n, bits }`) or its `matrixFault`. `minPx` is
+ * the least module read (`MODULE_MIN_PX`; the check that measures the cut
+ * reads under it too).
  */
-export function moduleCentres(z, width, height) {
+export function moduleCentres(z, width, height, minPx = MODULE_MIN_PX) {
     if ([z.clip.x0, z.clip.y0, z.clip.x1, z.clip.y1].some((v) => typeof v !== 'number' || Number.isNaN(v))) {
         return { centres: [], fault: `its clip did not arrive as numbers (${JSON.stringify(z.clip)})` };
     }
@@ -76,8 +90,8 @@ export function moduleCentres(z, width, height) {
             fault: `it draws ${(z.side / z.module).toFixed(2)} modules a side where its matrix of ${n} and a quiet zone of ${QUIET_MODULES} make ${n + 2 * QUIET_MODULES}`,
         };
     }
-    if (z.module < MODULE_MIN_PX) {
-        return { centres: [], fault: `a module is ${z.module.toFixed(2)}px, under the ${MODULE_MIN_PX} device pixels a centre read needs` };
+    if (z.module < minPx) {
+        return { centres: [], fault: `a module is ${z.module.toFixed(2)}px, under the ${minPx} device pixels a centre read needs` };
     }
     const x0 = Math.max(Math.ceil(z.clip.x0), 0);
     const y0 = Math.max(Math.ceil(z.clip.y0), 0);
@@ -105,8 +119,8 @@ export function moduleCentres(z, width, height) {
  * channel's extremes over the dark and the light centres (`stats`, the
  * measurement the cuts were set from) — or the fault that stopped the read.
  */
-export function readModules(img, z) {
-    const { centres, fault } = moduleCentres(z, img.width, img.height);
+export function readModules(img, z, minPx = MODULE_MIN_PX) {
+    const { centres, fault } = moduleCentres(z, img.width, img.height, minPx);
     if (fault !== undefined) return { px: 0, bad: 0, fault };
     let wrongDark = 0;
     let wrongLight = 0;
@@ -199,6 +213,93 @@ export function withMatrices(zones, matrices) {
         if (typeof m.fault === 'string') return { ...z, matrixFault: m.fault };
         return { ...z, matrix: { n: m.n, bits: m.bits }, ...(m.payload === 'checked' ? { payload: 'checked' } : {}) };
     });
+}
+
+/**
+ * **`the-module-read-agrees-with-this-chrome`**: the cut held to the Chrome
+ * the probe runs (the tenth critic's item 1, decided by the window). The
+ * probe page draws a sheet of codes with `qrSvg` at fractional module sizes,
+ * under the cut and over it, each at several sub-pixel offsets
+ * (`__moduleSnap`, `MODULE_SNAP_SIZES` and `MODULE_SNAP_OFFSETS` in
+ * `layout/codeMatrix.ts`); the runner captures it as it captures a job and
+ * hands the capture and the sheet's zones, with their matrices, here. Every
+ * code under `MODULE_MIN_PX` must be refused (the read fails closed there),
+ * and every code from it up must have every one of its centres on screen and
+ * read right. Anything else is a fault and fails the run: it says the cut
+ * does not hold in this Chrome, which is 1d's own ground and not a look's.
+ * Under the cut the codes are read anyway, at no floor, and counted (`below`),
+ * the measurement the cut rests on — printed, never judged. Pure.
+ */
+export function moduleSnapVerdict(img, zones) {
+    const faults = [];
+    let under = 0;
+    let over = 0;
+    let centres = 0;
+    const below = { codes: 0, centres: 0, wrong: 0 };
+    const at = (z) => `the ${z.module.toFixed(3)}px code at ${z.x.toFixed(2)},${z.y.toFixed(2)}`;
+    for (const z of zones) {
+        if (z.turned) {
+            faults.push(`${at(z)} is in a turned frame`);
+            continue;
+        }
+        const r = readModules(img, z);
+        if (z.module < MODULE_MIN_PX) {
+            under += 1;
+            if (!/^a module is .* under the /.test(r.fault ?? '')) {
+                faults.push(`${at(z)} is under the ${MODULE_MIN_PX}px cut and was not refused (${r.fault ?? `read, ${r.bad} of ${r.px} centres wrong`})`);
+                continue;
+            }
+            const anyway = readModules(img, z, 0);
+            if (anyway.fault === undefined) {
+                below.codes += 1;
+                below.centres += anyway.px;
+                below.wrong += anyway.bad;
+            }
+            continue;
+        }
+        over += 1;
+        if (r.fault !== undefined) {
+            faults.push(`${at(z)} could not be read: ${r.fault}`);
+            continue;
+        }
+        const whole = z.matrix.n * z.matrix.n;
+        if (r.px !== whole) faults.push(`${at(z)} had ${r.px} of its ${whole} centres on screen`);
+        else if (r.bad > 0) {
+            faults.push(
+                `${at(z)} read ${r.bad} of ${r.px} centres wrong (${r.wrongDark} dark read light, ${r.wrongLight} light read dark; the first, ` +
+                    `${r.first.dark ? 'dark' : 'light'}, at row ${r.first.r} column ${r.first.c}, ${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}))`,
+            );
+        }
+        centres += r.px;
+    }
+    if (under === 0) faults.push(`the sheet drew no code under the ${MODULE_MIN_PX}px cut, so nothing showed the read refuses one`);
+    if (over === 0) faults.push(`the sheet drew no code from the ${MODULE_MIN_PX}px cut up, so nothing was read`);
+    return { codes: zones.length, under, over, centres, below, faults };
+}
+
+/**
+ * What `the-module-read-agrees-with-this-chrome` says under the contrast pass:
+ * the sheet, the codes refused under the cut and what they would have read,
+ * the codes read from it, and a reading taken again. `read` is `{ first,
+ * again? }`, each a `moduleSnapVerdict`. Pure.
+ */
+export function moduleSnapLines({ first, again }) {
+    const said = (v) =>
+        `${v.codes} code(s) drawn by qrSvg; the ${v.under} under the ${MODULE_MIN_PX}px cut refused` +
+        ` (read anyway, at no floor: ${v.below.wrong} of ${v.below.centres} centres wrong on ${v.below.codes} code(s)), ` +
+        `the ${v.over} from it read on ${v.centres} centres`;
+    const decided = again ?? first;
+    const lines = [
+        `1d's cut held to this Chrome (the-module-read-agrees-with-this-chrome; MODULE_MIN_PX ${MODULE_MIN_PX}, DPR 1): ${said(decided)}: ` +
+            (decided.faults.length === 0 ? 'agreed' : `${decided.faults.length} disagreement(s)`),
+    ];
+    for (const fault of decided.faults.slice(0, 12)) lines.push(`  ${fault}`);
+    if (decided.faults.length > 12) lines.push(`  … and ${decided.faults.length - 12} more`);
+    if (again !== undefined) {
+        lines.push(`  read again on a fresh capture after the first disagreed (${first.faults.length}): ${said(first)}`);
+        for (const fault of first.faults.slice(0, 6)) lines.push(`    first capture: ${fault}`);
+    }
+    return lines;
 }
 
 /** How many would-be failures `moduleReport` says in full; the rest are counted by code. */

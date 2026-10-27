@@ -14,7 +14,7 @@
  */
 // First: it listens for the policy's refusals from the page's first module statement.
 import { cspRefusals, type CspRefusal } from './cspWatch';
-import { PAY_QR_NARROWEST_PX, QR_SVG_QUIET_MODULES, cheapestOf, listingsInShopOrder, renderStall } from '../src/ui/render';
+import { PAY_QR_NARROWEST_PX, QR_SVG_QUIET_MODULES, cheapestOf, listingsInShopOrder, qrSvg, renderStall } from '../src/ui/render';
 import { wallFigureTier } from '../src/ui/window';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
@@ -57,7 +57,7 @@ import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
-import { matrixBits, matrixOfPath, type CodeMatrix } from './codeMatrix';
+import { MODULE_SNAP_OFFSETS, MODULE_SNAP_SIZES, matrixBits, matrixOfPath, moduleSnapText, type CodeMatrix } from './codeMatrix';
 import { qrMatrix } from '../src/domain/qr';
 import {
     clipVerdict,
@@ -12102,6 +12102,7 @@ declare global {
         __quietZones: () => QuietZone[];
         /** The matrix every one of those codes was drawn from, in their order, for 1d (report-only). */
         __codeMatrices: () => CodeMatrixRead[];
+        __moduleSnap: (on: boolean) => { codes: number; bottom: number; width: number };
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
         __contrastPlan: () => ContrastJob[];
@@ -13033,6 +13034,69 @@ window.__codeMatrices = () =>
         if (want !== read.bits) return { name: zone.name, fault: 'its path is not the matrix qrMatrix makes of the text its plate carries (data-pay-uri)' };
         return { name: zone.name, ...read, payload: 'checked' };
     });
+
+/**
+ * **1d's cut held to this Chrome** (`the-module-read-agrees-with-this-chrome`;
+ * `MODULE_SNAP_SIZES` and `MODULE_SNAP_OFFSETS` in `layout/codeMatrix.ts`,
+ * `moduleSnapVerdict` in `scripts/code-modules.mjs`). On, it draws a sheet of
+ * codes with the app's own `qrSvg` over the page — a white ground at the top
+ * of the stacking order, each code in a box of its size at its offset — and
+ * makes the sheet the prepared scope, so `__quietZones` and `__codeMatrices`
+ * answer for its codes alone, read exactly as a job's are; the runner then
+ * captures the page as it captures a job. Off, it takes the sheet away and
+ * puts the scope back. It answers how many codes it drew, how far down the
+ * sheet reaches (the runner refuses a sheet taller than its viewport) and
+ * its width.
+ */
+let moduleSnapScope: { sheet: HTMLElement; scope: ParentNode | undefined } | undefined;
+window.__moduleSnap = (on: boolean) => {
+    if (!on) {
+        if (moduleSnapScope !== undefined) {
+            moduleSnapScope.sheet.remove();
+            preparedScope = moduleSnapScope.scope;
+            moduleSnapScope = undefined;
+        }
+        return { codes: 0, bottom: 0, width: 0 };
+    }
+    const width = window.innerWidth;
+    const sheet = document.createElement('div');
+    sheet.id = 'module-snap';
+    for (const [p, v] of Object.entries({ position: 'absolute', left: '0', top: '0', 'z-index': '2147483647', background: '#ffffff', width: `${width}px`, margin: '0', padding: '0' })) {
+        sheet.style.setProperty(p, v, 'important');
+    }
+    const GAP = 8;
+    let x = GAP;
+    let y = GAP;
+    let rowBottom = y;
+    let i = 0;
+    for (const m of MODULE_SNAP_SIZES) {
+        MODULE_SNAP_OFFSETS.forEach((ox, j) => {
+            const svg = qrSvg(moduleSnapText(i), 'module snap');
+            const side = svg.viewBox.baseVal.width * m;
+            if (x + side + 1 > width - GAP) {
+                x = GAP;
+                y = rowBottom + GAP;
+            }
+            // The offset down is another of the offsets than the one across, so x and y meet every rounding apart.
+            const oy = MODULE_SNAP_OFFSETS[(j * 3 + 2) % MODULE_SNAP_OFFSETS.length]!;
+            const box = document.createElement('div');
+            box.className = 'module-snap-code';
+            for (const [p, v] of Object.entries({ position: 'absolute', left: `${x + ox}px`, top: `${y + oy}px`, width: `${side}px`, margin: '0', padding: '0' })) {
+                box.style.setProperty(p, v, 'important');
+            }
+            box.append(svg);
+            sheet.append(box);
+            rowBottom = Math.max(rowBottom, y + oy + side + 1);
+            x += Math.ceil(side) + GAP + 1;
+            i += 1;
+        });
+    }
+    sheet.style.setProperty('height', `${Math.ceil(rowBottom + GAP)}px`, 'important');
+    document.body.append(sheet);
+    moduleSnapScope = { sheet, scope: preparedScope };
+    preparedScope = sheet;
+    return { codes: i, bottom: Math.ceil(rowBottom + GAP), width };
+};
 
 /**
  * How the sign's name was painted when it was read (step 5a″, D14): each

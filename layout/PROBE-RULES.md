@@ -11709,10 +11709,13 @@ on the job's own capture, the one the quiet zone reads, and held to the
 matrix the code was drawn from: a dark module's centre wrong when any
 channel is over `MODULE_DARK_MAX` (10), a light module's when any channel
 is under `MODULE_LIGHT_MIN` (245). The centre is the pixel under the
-module's middle; from `MODULE_MIN_PX` (2) device pixels a module up that
-pixel lies wholly inside the module, at any offset (tested over eight sizes
-and six offsets), so it is the module's own paint and never an edge's
-antialiasing. A smaller module fails closed. The centre is read only inside
+module's middle; from `MODULE_MIN_PX` (3; it was 2 until the tenth review)
+device pixels a module up that pixel lies wholly inside the module as Chrome
+paints it, so it is the module's own paint and never an edge's
+antialiasing: the pixel under a module's middle stands at least m/2 − 1
+inside the module's edges, and Chrome snaps the svg by up to half a pixel,
+so it needs m/2 − 1 ≥ 0.5 (below, "The cut, held to this Chrome"). A
+smaller module fails closed. The centre is read only inside
 every clipping ancestor and the shot, the quiet zone's rule.
 
 **Where the matrix comes from.** The brief asked for the code's payload,
@@ -11792,7 +11795,8 @@ quiet zone's own list — every code on a geometry-only screen (the other
 overlay screens, the touch wall's `-quotes` and `-pay-3`, the Cycle
 fixtures), and every wall code at the other wall sizes. The least module read is
 3.62px (the after side of both cost pairs, which print it), so no code on
-the clean tree came near the 2px a centre read needs. The same report, word
+the clean tree came near the 3px a centre read needs (2px when this was
+measured). The same report, word
 for word but the times, on the docs commit's own run in the worktree
 (`runs/w-final.log`): exit 0, 234.0s.
 
@@ -11859,6 +11863,75 @@ included.
 - The text a code encodes, except on the wall's plate: the matrix is the one
   `qrSvg` drew, so a code drawn for the wrong text by the app reads right
   here (the app's own tests hold its texts).
+
+## Before 8g2: the tenth review's fixes (2026-10-27; CRITIC-10, decided by the window on the critic's recommendations)
+
+The review is `private/design/workshop-2026-09-23/before-8g2/CRITIC-10.md`;
+this round's evidence is under `before-8g2/critic10-fixes/` (`runs/`,
+`plants/`, `tools/`), and the paths below are relative to it. Labels as in
+1d's section: **quick** is the real runner in a scratch tree with the
+geometry walk skipped and the contrast queue cut (`tools/q1d.sh`,
+`tools/q1d-mutate.py`), or one probe page read (`tools/qp.sh`); **whole** is
+the whole runner. All four decisions are probe reads or thresholds; no look
+loses a rule.
+
+### The cut, held to this Chrome (item 1: `MODULE_MIN_PX` 2 → 3)
+
+**The incident.** 1d's centre read put a module's centre pixel where the
+box's geometry puts the module (`getBoundingClientRect` and the viewBox)
+and claimed, from two pixels a module up, that the pixel lay wholly inside
+it. Chrome does not paint the svg there: it snaps it to whole pixels, so a
+module's edges land up to half a pixel from that geometry. The critic drew
+`qrSvg`-shaped codes at fractional offsets at DPR 1 and ran the real
+`readModules` over them (`critic10/tools/snap.mjs`): of 5,887 centres a
+size, 742 read wrong at 2.1px a module, 335 at 2.25, 237 at 2.4, 181 at
+2.55, 74–90 at 2.6, 36 at 2.7, 7 at 2.85 and none from 2.9 to 4. The wrong
+values were mid-grey: the pixel straddled two modules. The unit test could
+not see it, because it painted its shot from the same arithmetic it checked.
+
+**The cut.** The pixel under a module's middle (the `floor` of it) stands at
+least m/2 − 1 inside the module's edges on either side; a half pixel's snap
+leaves it inside exactly when m/2 − 1 ≥ 0.5, so `MODULE_MIN_PX` is 3 (pinned
+by value). The smallest code the clean tree paints is 3.62px a module, so
+the cut refuses none of them.
+
+**`the-module-read-agrees-with-this-chrome`** (`moduleSnapVerdict` and
+`moduleSnapLines` in `scripts/code-modules.mjs`, `__moduleSnap` in
+`layout/probe.ts`, `MODULE_SNAP_SIZES` and `MODULE_SNAP_OFFSETS` in
+`layout/codeMatrix.ts`): the critic's snap read made a check the runner runs
+on every run, in Chrome and never in `pnpm test`. Once a run, on the first
+contrast tab after the walk and its canary, the page draws a sheet of codes
+with the app's own `qrSvg` — 18 fractional module sizes, 2.1 to 2.95 under
+the cut and 3 to 5.21 over it, each at seven sub-pixel offsets across, each
+paired with another of the seven down, 126 codes — on a white ground over everything at DPR 1,
+1280 wide, and makes the sheet the prepared scope, so `__quietZones` and
+`__codeMatrices` read its codes exactly as a job's are read. The runner
+captures it as it captures a job and holds 1d's reader to it: every code
+under the cut refused, every code from it up read right on every one of its
+centres, all of them on screen. A disagreement is read again once on a fresh
+capture after 250ms (the quiet zone's flake in mind) and believed only when
+the fresh capture agrees; otherwise the contrast pass fails, naming each code
+and both readings. It fails the run although 1d is report-only: it holds the
+instrument, not a look. The codes under the cut are read anyway at no floor
+and counted, the measurement the cut rests on, printed and never judged. The
+unit tests hold the geometry to the snap's model: from three pixels a module
+the centre pixel stands at least half a pixel inside its module at every
+offset, and a code painted with its box's edges rounded to whole pixels reads
+right from three pixels and wrong somewhere under it at a cut of two
+(`a-codes-modules-read-as-its-matrix`); and the verdict's own cases
+(`the-module-read-agrees-with-this-chrome` in `code-modules.test.mjs`).
+
+| Run | What it read | Exit |
+|---|---|---|
+| quick, the cut at 3 (`runs/q1d-snap-first.log`, `runs/q1d-snap-commit1.log`) | 126 codes; the 49 under the cut refused (read anyway: 1,053 of 30,625 centres wrong); the 77 from it read right on 48,125 centres: agreed | the cut queue's own vacuous lines only; no line of this check |
+| quick, red: `MODULE_MIN_PX` back to 2 (`tools/min2-mutate.py`, `runs/q1d-snap-min2.log`, `runs/q1d-snap-commit1-min2.log`) | 18 disagreements, every code from 2.1 to 2.55px at some offset (28–184 of 625 centres wrong each, mid-grey), on both captures | 1, on `the-module-read-agrees-with-this-chrome` |
+
+Its cost is one capture and one read: 0.19s (the phase table's `module snap`).
+
+**Not read, stated.** Any device pixel ratio but 1 (the snap is in device
+pixels and the passes run at 1), WebKit and Firefox, and the snap's own
+mechanism (the edges' rounding is the model the numbers fit, inferred, not
+read out of Chrome).
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

@@ -53,3 +53,23 @@ export function matrixOfPath(d: string, viewBox: string, quiet: number): CodeMat
 export function matrixBits(matrix: readonly (readonly boolean[])[]): string {
     return matrix.map((row) => row.map((dark) => (dark ? '1' : '0')).join('')).join('');
 }
+
+/**
+ * **The sheet that holds 1d's cut to this Chrome** (`__moduleSnap` in
+ * `layout/probe.ts`; `moduleSnapVerdict` in `scripts/code-modules.mjs`,
+ * `the-module-read-agrees-with-this-chrome`; the tenth critic's item 1).
+ * Chrome paints an svg at a fractional place snapped to whole pixels, so a
+ * module's edges land up to half a pixel from where its box's geometry puts
+ * them; the centre read is sound from `MODULE_MIN_PX` (3) up, where the
+ * centre pixel stands at least half a pixel inside its module. The sheet
+ * draws a code with `qrSvg` at every size here, under the cut (each must be
+ * refused) and over it (each must read every centre right), at every
+ * offset: sub-pixel shifts of the box, across and down, so every rounding of
+ * the snap is met. The sizes under the cut are the critic's (wrong centres
+ * read at each with a cut of 2); those over it run past the smallest code
+ * the clean tree paints (3.62px) to the pay codes' 5.21.
+ */
+export const MODULE_SNAP_SIZES: readonly number[] = [2.1, 2.25, 2.4, 2.55, 2.7, 2.85, 2.95, 3, 3.05, 3.1, 3.25, 3.37, 3.5, 3.62, 4, 4.46, 5.05, 5.21];
+export const MODULE_SNAP_OFFSETS: readonly number[] = [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95];
+/** The text of the sheet's `i`th code: a short one, so its matrix is small, and its own, so no two codes are drawn alike. */
+export const moduleSnapText = (i: number): string => `stall module snap ${String(i).padStart(3, '0')}`;

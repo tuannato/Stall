@@ -41,7 +41,7 @@ import {
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
-import { MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, readCodeModules, withMatrices } from './code-modules.mjs';
+import { MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, withMatrices } from './code-modules.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -51,6 +51,7 @@ import {
     CANVAS,
     CONTRAST_PASS,
     GEOMETRY_CANARY,
+    MODULE_SNAP_VIEWPORT,
     PASS_KINDS,
     TRANSPARENCY_PASS,
     VIEWPORTS,
@@ -4062,6 +4063,8 @@ try {
     // read folded, and the canary's reads again of it, said under the pass.
     const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], faults: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
     const canaryModules = { would: [], readAgain: [] };
+    // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
+    let moduleSnapRead;
     // D14: the least the sign's name read per look and decoration state
     // (line read, or ring read where it wears the outline), and how the
     // name was painted where it was read (`nameChrome`).
@@ -4470,6 +4473,52 @@ try {
                 tab.reducedNow = false;
             }
         }
+        /*
+         * **`the-module-read-agrees-with-this-chrome`** (the tenth critic's
+         * item 1, decided by the window): 1d's cut held to the Chrome this run
+         * measures in. Once a run, on the first tab and after the walk and its
+         * canary, the page draws a sheet of codes with `qrSvg` at fractional
+         * module sizes under the cut and over it, each at seven sub-pixel
+         * offsets (`__moduleSnap`), on a white ground over everything at DPR 1,
+         * and the sheet is captured as a job is and read by 1d's own reader
+         * (`moduleSnapVerdict`): every code under `MODULE_MIN_PX` refused,
+         * every code from it up read right on every centre. A disagreement is
+         * read again once on a fresh capture after 250ms, the quiet zone's
+         * flake in mind, and believed only when the fresh capture reads every
+         * code as the cut says; otherwise the run fails, with both readings.
+         * It fails the run though 1d is report-only: it holds the instrument,
+         * not a look.
+         */
+        currentStep = 'contrast: 1d held to this Chrome';
+        const moduleSnap = await timed('module snap', async () => {
+            const tab = tabs[0];
+            await cdp.send(
+                'Emulation.setDeviceMetricsOverride',
+                { width: MODULE_SNAP_VIEWPORT.width, height: MODULE_SNAP_VIEWPORT.height, deviceScaleFactor: 1, mobile: false },
+                tab.sessionId,
+            );
+            // Its page is at another size now: a later job on this tab would reopen its viewport.
+            tab.vp = undefined;
+            const sheet = await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(true)');
+            const read = async () => {
+                const img = await captureShot(cdp, tab.sessionId);
+                const zones = await evalJson(cdp, tab.sessionId, 'window.__quietZones()');
+                const matrices = await evalJson(cdp, tab.sessionId, 'window.__codeMatrices()');
+                const verdict = moduleSnapVerdict(img, withMatrices(zones, matrices));
+                if (sheet.bottom > MODULE_SNAP_VIEWPORT.height) verdict.faults.unshift(`the sheet reaches ${sheet.bottom}px down a ${MODULE_SNAP_VIEWPORT.height}px viewport`);
+                if (zones.length !== sheet.codes) verdict.faults.unshift(`the sheet drew ${sheet.codes} codes and the page read ${zones.length}`);
+                return verdict;
+            };
+            try {
+                const first = await read();
+                if (first.faults.length === 0) return { first };
+                await sleep(250);
+                return { first, again: await read() };
+            } finally {
+                await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(false)');
+            }
+        });
+        moduleSnapRead = moduleSnap;
         currentStep = 'contrast: the verdict';
         const planKeys = new Set(plan.map((j) => j.key));
         const missing = plan.filter((j) => !done.has(j.key)).map((j) => j.key);
@@ -4490,6 +4539,10 @@ try {
         // for one reason still names the others (round 8 — a missing rain
         // key used to hide the figures under the floor).
         const verdicts = [...canaryFaults];
+        {
+            const decided = moduleSnap.again ?? moduleSnap.first;
+            for (const fault of decided.faults) verdicts.push(`the-module-read-agrees-with-this-chrome: ${fault}`);
+        }
         // A refusal is said once, with how many times the pages met it: a
         // page-level one is met on every page every tab loads.
         for (const tab of tabs) await collectRefusals(tab);
@@ -4880,6 +4933,9 @@ try {
     // the verdict; it fails nothing until step 7c binds it.
     if (Object.keys(modulesRun.byVpClass).length > 0 || codesPaintedSeen.size > 0) {
         for (const line of moduleReport(modulesRun, canaryModules, codesPaintedSeen)) console.log(`  ${line}`);
+    }
+    if (moduleSnapRead !== undefined) {
+        for (const line of moduleSnapLines(moduleSnapRead)) console.log(`  ${line}`);
     }
     // Every prepared node that gave no box, by the page's reason, whatever
     // the verdict (step 5b: no silent drop): a picture tile, a box that

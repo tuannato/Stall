@@ -44,6 +44,8 @@ export declare const REDUCED: readonly { readonly vp: Viewport; readonly screens
 export declare const CLEAR_SCREENS: readonly string[];
 /** Each pick a list of plan keys, tried in order: the first whose walk measured something is read again. */
 export declare const GEOMETRY_CANARY: readonly (readonly string[])[];
+/** Not a pass: the viewport of `the-module-read-agrees-with-this-chrome`'s sheet, set once a run after the contrast walk. */
+export declare const MODULE_SNAP_VIEWPORT: Viewport;
 export declare const CONTRAST_PASS: Pass & { readonly viewports: readonly Viewport[] };
 export declare const TRANSPARENCY_PASS: Pass & { readonly vp: Viewport; readonly screens: string };
 export declare function geometryPlan(options?: { looks?: 'shipped' | 'workshop' }): Pass[];

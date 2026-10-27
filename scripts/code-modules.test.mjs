@@ -14,6 +14,8 @@ import {
     moduleCentres,
     moduleReadingLine,
     moduleReport,
+    moduleSnapLines,
+    moduleSnapVerdict,
     readCodeModules,
     readModules,
     withMatrices,
@@ -82,11 +84,12 @@ describe('a-codes-modules-read-as-its-matrix', () => {
         assert.equal(MODULE_LIGHT_MIN, 245);
         assert.equal(MODULE_LIGHT_MIN, QUIET_ZONE_FLOOR);
         assert.equal(MODULE_DARK_MAX, 255 - QUIET_ZONE_FLOOR);
-        assert.equal(MODULE_MIN_PX, 2);
+        assert.equal(MODULE_MIN_PX, 3);
     });
 
-    it('reads one centre pixel a module, wholly inside its module, at any offset from two pixels a module up', () => {
-        for (const module of [2, 2.01, 2.5, 3.37, 4.46, 4.94, 5.18, 7.9]) {
+    it('reads one centre pixel a module, at least half a pixel inside its module on every side, at any offset from three pixels a module up', () => {
+        // Chrome snaps the svg by up to half a pixel, so the centre pixel needs half a pixel of its module on each side: m/2 − 1 ≥ 0.5.
+        for (const module of [3, 3.01, 3.37, 3.62, 4.46, 4.94, 5.18, 7.9]) {
             for (const off of [0, 0.01, 0.25, 0.5, 0.75, 0.99]) {
                 const z = zoneOf(CHECKER, { x: 3 + off, y: 7 + off / 2, module });
                 const { centres, fault } = moduleCentres(z, 1000, 1000);
@@ -95,15 +98,42 @@ describe('a-codes-modules-read-as-its-matrix', () => {
                 for (const { r, c, x, y } of centres) {
                     const left = z.x + (c + QUIET_MODULES) * module;
                     const top = z.y + (r + QUIET_MODULES) * module;
-                    assert.ok(x >= left && x + 1 <= left + module, `column ${c} at ${module}px, offset ${off}: pixel ${x} outside ${left}–${left + module}`);
-                    assert.ok(y >= top && y + 1 <= top + module, `row ${r} at ${module}px, offset ${off}: pixel ${y} outside ${top}–${top + module}`);
+                    const eps = 1e-9;
+                    assert.ok(x - left >= 0.5 - eps && left + module - (x + 1) >= 0.5 - eps, `column ${c} at ${module}px, offset ${off}: pixel ${x} within half a pixel of ${left}–${left + module}`);
+                    assert.ok(y - top >= 0.5 - eps && top + module - (y + 1) >= 0.5 - eps, `row ${r} at ${module}px, offset ${off}: pixel ${y} within half a pixel of ${top}–${top + module}`);
                 }
             }
         }
     });
 
-    it('refuses a module under two pixels, a matrix that did not arrive and a square that is not its matrix and quiet zone', () => {
-        assert.match(moduleCentres(zoneOf(CHECKER, { module: 1.99 }), 1000, 1000).fault, /a module is 1\.99px, under the 2 device pixels/);
+    it('reads a code painted as Chrome snaps it right from three pixels a module, where two pixels would read it wrong', () => {
+        // The snapped box: its edges rounded to whole pixels, every module between them moved by at most half a pixel (the tenth critic's snap read).
+        const snapped = (z) => {
+            const span = z.matrix.n + 2 * QUIET_MODULES;
+            const x = Math.round(z.x);
+            const y = Math.round(z.y);
+            return { ...z, x, y, module: (Math.round(z.x + z.side) - x) / span, side: Math.round(z.x + z.side) - x };
+        };
+        let wrongUnder = 0;
+        for (const module of [2.1, 2.25, 2.4, 2.55, 2.7, 2.85, 3, 3.05, 3.37, 3.62, 4.46, 5.21]) {
+            for (const off of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
+                const z = zoneOf(CHECKER, { x: 3 + off, y: 7 + off, module });
+                const shot = shotOf(snapped(z), 260, 260);
+                if (module >= MODULE_MIN_PX) {
+                    const r = readModules(shot, z);
+                    assert.equal(r.fault, undefined);
+                    assert.equal(r.bad, 0, `${module}px at offset ${off}`);
+                } else {
+                    assert.match(readModules(shot, z).fault, /under the 3 device pixels/);
+                    wrongUnder += readModules(shot, z, 2).bad;
+                }
+            }
+        }
+        assert.ok(wrongUnder > 0, 'a cut of two pixels reads a snapped code wrong somewhere under three');
+    });
+
+    it('refuses a module under three pixels, a matrix that did not arrive and a square that is not its matrix and quiet zone', () => {
+        assert.match(moduleCentres(zoneOf(CHECKER, { module: 2.99 }), 1000, 1000).fault, /a module is 2\.99px, under the 3 device pixels/);
         const missing = { ...zoneOf(CHECKER), matrix: undefined, matrixFault: 'its path is not the squares qrSvg draws' };
         assert.match(moduleCentres(missing, 1000, 1000).fault, /could not be read: its path is not the squares qrSvg draws/);
         assert.match(moduleCentres({ ...zoneOf(CHECKER), matrix: { n: 21, bits: '01' } }, 1000, 1000).fault, /did not arrive whole/);
@@ -123,7 +153,7 @@ describe('a-codes-modules-read-as-its-matrix', () => {
     });
 
     it('reads a clean code right, every dark centre 0 and every light one 255, whatever the offset', () => {
-        for (const module of [2, 3.37, 4.7, 5.18]) {
+        for (const module of [3, 3.37, 4.7, 5.18]) {
             const z = zoneOf(CHECKER, { x: 4.4, y: 6.8, module });
             const r = readModules(shotOf(z), z);
             assert.equal(r.fault, undefined);
@@ -294,5 +324,57 @@ describe('1d-says-what-it-read-and-would-fail', () => {
     it('says none where nothing would fail', () => {
         const lines = moduleReport({ ...RUN, would: [] }, { would: [], readAgain: [] }, new Set());
         assert.ok(lines.includes('1d, would-be failures: none'));
+    });
+});
+
+describe('the-module-read-agrees-with-this-chrome', () => {
+    // The sheet the probe page draws (`__moduleSnap`), in small: codes under the cut and over it, painted where their zones say.
+    const sheet = () => {
+        const zones = [zoneOf(CHECKER, { x: 2.3, y: 2.6, module: 2.4 }), zoneOf(CHECKER, { x: 80.6, y: 3.1, module: 3.05 }), zoneOf(CHECKER, { x: 2.8, y: 110.4, module: 4.46 })];
+        const img = { width: 240, height: 260, bpp: 4, data: new Uint8Array(240 * 260 * 4).fill(255) };
+        for (const z of zones) {
+            const one = shotOf(z, 240, 260);
+            for (let i = 0; i < img.data.length; i += 1) img.data[i] = Math.min(img.data[i], one.data[i]);
+        }
+        return { zones, img };
+    };
+
+    it('agrees where every code under the cut is refused and every code from it reads every centre right, and measures what the refused ones would read', () => {
+        const { zones, img } = sheet();
+        const v = moduleSnapVerdict(img, zones);
+        assert.deepEqual(v.faults, []);
+        assert.equal(v.codes, 3);
+        assert.equal(v.under, 1);
+        assert.equal(v.over, 2);
+        assert.equal(v.centres, 2 * 441);
+        assert.equal(v.below.codes, 1);
+        assert.equal(v.below.centres, 441);
+        assert.match(moduleSnapLines({ first: v }).join('\n'), /^1d's cut held to this Chrome \(the-module-read-agrees-with-this-chrome; MODULE_MIN_PX 3, DPR 1\): 3 code\(s\) drawn by qrSvg; the 1 under the 3px cut refused \(read anyway, at no floor: \d+ of 441 centres wrong on 1 code\(s\)\), the 2 from it read on 882 centres: agreed$/);
+    });
+
+    it('disagrees with a code from the cut that reads a centre wrong, one not wholly on screen, one it cannot read, and one under the cut it cannot refuse', () => {
+        const { zones, img } = sheet();
+        // A snapped neighbour's paint on one centre of the 3.05px code.
+        const at = moduleCentres(zones[1], img.width, img.height).centres.find((m) => m.dark);
+        const i = (at.y * img.width + at.x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = 128;
+        const offShot = { ...zones[2], y: 200 };
+        const unreadable = { ...zones[2], matrix: undefined, matrixFault: 'its path is not the squares qrSvg draws' };
+        const underUnreadable = { ...zones[0], matrix: undefined, matrixFault: 'it has no path' };
+        const v = moduleSnapVerdict(img, [zones[0], zones[1], offShot, unreadable, underUnreadable]);
+        assert.equal(v.faults.length, 4);
+        assert.match(v.faults[0], /^the 3\.050px code at 80\.60,3\.10 read 1 of 441 centres wrong \(1 dark read light, 0 light read dark; the first, dark, at row \d+ column \d+, \d+,\d+ rgb\(128,128,128\)\)$/);
+        assert.match(v.faults[1], /^the 4\.460px code at 2\.80,200\.00 had \d+ of its 441 centres on screen$/);
+        assert.match(v.faults[2], /could not be read: the matrix it was drawn from could not be read: its path is not the squares qrSvg draws$/);
+        assert.match(v.faults[3], /^the 2\.400px code at 2\.30,2\.60 is under the 3px cut and was not refused \(the matrix it was drawn from could not be read: it has no path\)$/);
+        const lines = moduleSnapLines({ first: v, again: v }).join('\n');
+        assert.match(lines, /: 4 disagreement\(s\)\n {2}the 3\.050px code/);
+        assert.match(lines, /read again on a fresh capture after the first disagreed \(4\)/);
+    });
+
+    it('disagrees with a sheet that drew no code under the cut, or none from it', () => {
+        const { zones, img } = sheet();
+        assert.deepEqual(moduleSnapVerdict(img, zones.slice(1)).faults, ['the sheet drew no code under the 3px cut, so nothing showed the read refuses one']);
+        assert.deepEqual(moduleSnapVerdict(img, zones.slice(0, 1)).faults, ['the sheet drew no code from the 3px cut up, so nothing was read']);
     });
 });
