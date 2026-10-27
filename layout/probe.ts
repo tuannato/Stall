@@ -1710,10 +1710,12 @@ type ReachTally = {
     byKind: Partial<Record<ReachKind, number>>;
     /** Pairs met by a blurred layer's offset and spread alone, which the policy does not count (`reachLiteral`). */
     softCore: number;
+    /** Paints on which 1b threw and stopped (`reachThrown`). */
+    throws: number;
 };
 const reachByClass: Record<string, ReachTally> = {};
 const reachTally = (): ReachTally =>
-    (reachByClass[measuringClass] ??= { paints: 0, elements: 0, contents: 0, pseudos: 0, reachers: 0, targets: 0, pairs: 0, seeks: 0, needless: 0, fromValues: 0, would: 0, byKind: {}, softCore: 0 });
+    (reachByClass[measuringClass] ??= { paints: 0, elements: 0, contents: 0, pseudos: 0, reachers: 0, targets: 0, pairs: 0, seeks: 0, needless: 0, fromValues: 0, would: 0, byKind: {}, softCore: 0, throws: 0 });
 /** The would-be failures, word for word, up to `REACH_KEPT` a pass (the rest counted in the tallies). */
 const reachWould: string[] = [];
 const REACH_KEPT = 4000;
@@ -2075,14 +2077,21 @@ function textReaches(
     if (!decorations) return;
     const inEffect = cs.getPropertyValue('-webkit-text-decorations-in-effect');
     if (inEffect === '' || inEffect === 'none') return;
-    for (const kind of ['underline', 'overline'] as const) {
+    for (const kind of ['underline', 'overline', 'line-through'] as const) {
         if (!inEffect.includes(kind)) continue;
         const deco = getComputedStyle(decoratingBox(el, kind));
         const ascent = faceAscent(cs);
         const size = Number.parseFloat(cs.fontSize) || 16;
+        // A percentage is of 1em: the text's or its decorating box's, whichever is larger (an upper bound).
+        const em = Math.max(size, Number.parseFloat(deco.fontSize) || 0);
         for (const line of lines) {
-            const band = underlineBand(line, kind, ascent, size, cs.textUnderlineOffset, deco.textDecorationThickness, cs.textUnderlinePosition);
-            if (band !== undefined) out.sharp.push({ kind: 'decoration', rect: band, base: line, what: `${kind} ${deco.textDecorationThickness} at ${cs.textUnderlineOffset}`, soft: false });
+            const band = underlineBand(line, kind, ascent, size, cs.textUnderlineOffset, deco.textDecorationThickness, cs.textUnderlinePosition, em);
+            if (band === undefined) continue;
+            if ('unread' in band) {
+                out.anywhere ??= band.unread;
+                break;
+            }
+            out.sharp.push({ kind: 'decoration', rect: band, base: line, what: `${kind} ${deco.textDecorationThickness} at ${cs.textUnderlineOffset}`, soft: false });
         }
     }
 }
@@ -2780,17 +2789,34 @@ function reachKeyframes(
 /** The keyframe seeks per animation name: animations seeked, seeks, elements read, time (a clock). */
 const reachSeekNames: Record<string, { anims: number; seeks: number; els: number; ms: number }> = {};
 
-/** 1b on a geometry pass's paint, at rest and at the keyframes (`coverAtRest` calls it once every animation is reset). */
+/** 1b's throws, word for word up to `REACH_THROWN_KEPT` (a throw is counted in the measuring look's tally): 1b is report-only, so a throw fails no pass. */
+const reachThrown: string[] = [];
+const REACH_THROWN_KEPT = 40;
+
+/**
+ * 1b on a geometry pass's paint, at rest and at the keyframes (`coverAtRest`
+ * calls it once every animation is reset). Guarded whole: a throw anywhere in
+ * it — the read at rest, the keyframe reads from values, a seek — ends 1b on
+ * this paint, is counted and said (`reachThrown`), and fails nothing (the
+ * ninth critic's P2: `reachKeyframes` stood outside the seek's own `try`).
+ */
 function reachAtRest(screen: string, label: string): void {
     const t0 = performance.now();
-    const said = new Set<string>();
-    const held = new Set(reachRead(screen, label, undefined, undefined, said).map((rc) => rc.el));
-    const t1 = performance.now();
-    reachSeek(screen, label, said, held);
-    reachRest = undefined;
-    const t2 = performance.now();
-    reachMs += t2 - t0;
-    reachSeekMs += t2 - t1;
+    let t1: number | undefined;
+    try {
+        const said = new Set<string>();
+        const held = new Set(reachRead(screen, label, undefined, undefined, said).map((rc) => rc.el));
+        t1 = performance.now();
+        reachSeek(screen, label, said, held);
+    } catch (e) {
+        reachTally().throws += 1;
+        if (reachThrown.length < REACH_THROWN_KEPT) reachThrown.push(`${screen} / ${label}: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+    } finally {
+        reachRest = undefined;
+        const t2 = performance.now();
+        reachMs += t2 - t0;
+        if (t1 !== undefined) reachSeekMs += t2 - t1;
+    }
 }
 
 /**
@@ -14025,6 +14051,7 @@ const verdict = {
     reachWould,
     reachLiteral,
     reachSoft,
+    reachThrown,
     reachMs,
     reachSeekMs,
     reachSeekNames,

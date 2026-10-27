@@ -21,6 +21,7 @@ import {
     textShadowLayers,
     underlineBand,
     zoomOf,
+    emLength,
     type Box,
     type PseudoFacts,
 } from './paintReach';
@@ -164,7 +165,7 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
         expect(filterLayers(box(0, 0, 10, 10), parseFilter('blur(4px)', alphaOf)).blur).toEqual({ rect: box(0, 0, 10, 10), alpha: 1, sigma: 4 });
     });
 
-    it('places a decoration line from the baseline, and an under-placed one from the line’s bottom', () => {
+    it('places a decoration line from the baseline, an under-placed one from the line’s bottom, and reads a percentage of 1em', () => {
         const line = box(0, 100, 80, 120);
         // Ascent 15: the baseline at 115; an underline 4px below it, 3px thick.
         expect(underlineBand(line, 'underline', 15, 16, '4px', '3px', 'auto')).toEqual(box(0, 119, 80, 122));
@@ -172,6 +173,29 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
         expect(underlineBand(line, 'underline', 15, 16, '-4px', '3px', 'auto')).toEqual(box(0, 111, 80, 114));
         expect(underlineBand(line, 'underline', 15, 16, '4px', '3px', 'under')).toEqual(box(0, 124, 80, 127));
         expect(underlineBand(line, 'underline', 15, 12, 'auto', 'auto', 'auto')).toEqual(box(0, 115, 80, 116));
+        // UP: a percentage is of 1em, as CSS reads it, never 0 or a twelfth of the size.
+        expect(underlineBand(line, 'underline', 15, 16, '200%', '3px', 'auto')).toEqual(box(0, 147, 80, 150));
+        expect(underlineBand(line, 'underline', 15, 16, '4px', '25%', 'auto')).toEqual(box(0, 119, 80, 123));
+        // Read against the larger of the font sizes it may resolve against.
+        expect(underlineBand(line, 'underline', 15, 16, '100%', '3px', 'auto', 20)).toEqual(box(0, 135, 80, 138));
+        expect(underlineBand(line, 'underline', 15, 16, 'calc(100% + 4px)', '3px', 'auto')).toEqual(box(0, 135, 80, 138));
+        // A line-through across the line's middle; an overline at its top.
+        expect(underlineBand(line, 'line-through', 15, 16, 'auto', '4px', 'auto')).toEqual(box(0, 108, 80, 112));
+        expect(underlineBand(line, 'overline', 15, 16, 'auto', '2px', 'auto')).toEqual(box(0, 98, 80, 102));
+        // A length that reads as nothing here fails closed.
+        expect(underlineBand(line, 'underline', 15, 16, 'max(4px, 1em)', '3px', 'auto')).toHaveProperty('unread');
+        expect(underlineBand(line, 'underline', 15, 16, '4px', 'clamp(1px, 2px, 3px)', 'auto')).toHaveProperty('unread');
+    });
+
+    it('reads a length that may be a percentage of 1em', () => {
+        expect(emLength('4px', 16)).toBe(4);
+        expect(emLength('0', 16)).toBe(0);
+        expect(emLength('50%', 16)).toBe(8);
+        expect(emLength('-25%', 16)).toBe(-4);
+        expect(emLength('calc(50% - 2px)', 16)).toBe(6);
+        expect(emLength('calc(-2px + 50%)', 16)).toBe(6);
+        expect(emLength('auto', 16)).toBeUndefined();
+        expect(emLength('2em', 16)).toBeUndefined();
     });
 
     const pseudo = (over: Partial<PseudoFacts>): PseudoFacts => ({

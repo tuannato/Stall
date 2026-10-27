@@ -446,13 +446,36 @@ export function filterLayers(base: Box, f: FilterReach, scale = 1): { drops: Lay
 }
 
 /**
+ * A computed length that may be a percentage of 1em (`text-underline-offset`,
+ * `text-decoration-thickness` keep a percentage as written): px, a percentage
+ * of `em`, or a `calc()` of two such; undefined where it does not read.
+ */
+export function emLength(token: string, em: number): number | undefined {
+    const t = token.trim();
+    const px = pxLength(t);
+    if (px !== undefined) return px;
+    const pct = /^(-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)%$/i.exec(t);
+    if (pct !== null) return (Number.parseFloat(pct[1]!) / 100) * em;
+    const calc = /^calc\(\s*(.+?)\s+([+-])\s+(.+?)\s*\)$/.exec(t);
+    if (calc !== null) {
+        const a = emLength(calc[1]!, em);
+        const b = emLength(calc[3]!, em);
+        if (a !== undefined && b !== undefined) return calc[2] === '-' ? a - b : a + b;
+    }
+    return undefined;
+}
+
+/**
  * A decoration line's band beside one line box: `under`, the line's own
  * box; `ascent`, the face's ascent above its baseline (the line's top plus
  * it is the alphabetic baseline). An underline stands at its offset below the
  * baseline (`text-underline-position: under`: below the line's bottom), as
  * thick as its thickness; an overline at the line's top; a line-through
  * across its middle. Offsets and thicknesses `auto` or `from-font` are read
- * as the face's own (0 and a twelfth of the size).
+ * as the face's own (0 and a twelfth of the size); a percentage is of 1em,
+ * read against `em` (the caller's upper bound of the font sizes it may be
+ * resolved against); a length that reads as neither fails closed
+ * (`{ unread }`).
  */
 export function underlineBand(
     line: Box,
@@ -462,15 +485,19 @@ export function underlineBand(
     offset: string,
     thickness: string,
     position: string,
-): Box | undefined {
-    const thick = pxLength(thickness) ?? Math.max(1, fontSize / 12);
+    em = fontSize,
+): Box | undefined | { unread: string } {
+    const auto = (v: string): boolean => v === 'auto' || v === 'from-font' || v === '';
+    const thick = auto(thickness.trim()) ? Math.max(1, fontSize / 12) : emLength(thickness, em);
+    if (thick === undefined) return { unread: `a decoration thickness this read cannot take apart (${thickness.slice(0, 40)})` };
     if (!(thick > 0)) return undefined;
     if (kind === 'overline') return { left: line.left, top: line.top - thick, right: line.right, bottom: line.top + thick };
     if (kind === 'line-through') {
         const mid = (line.top + line.bottom) / 2;
         return { left: line.left, top: mid - thick / 2, right: line.right, bottom: mid + thick / 2 };
     }
-    const off = pxLength(offset) ?? 0;
+    const off = auto(offset.trim()) ? 0 : emLength(offset, em);
+    if (off === undefined) return { unread: `an underline offset this read cannot take apart (${offset.slice(0, 40)})` };
     const from = /\bunder\b/.test(position) ? line.bottom : line.top + ascent;
     return { left: line.left, top: from + off, right: line.right, bottom: from + off + thick };
 }

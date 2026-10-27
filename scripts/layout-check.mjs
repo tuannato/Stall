@@ -2867,6 +2867,11 @@ function reachLines(pass, r) {
         printed += 1;
     }
     if (r.would.length < sum('would')) lines.push(`      (${sum('would') - r.would.length} more counted and not kept word for word)`);
+    // A throw ends 1b on its paint and fails nothing: said, so a 1b that read nothing is not read as a 1b that found nothing.
+    if (sum('throws') > 0) {
+        lines.push(`      1b threw on ${sum('throws')} paint(s) and stopped there (it fails nothing):`);
+        for (const w of (r.thrown ?? []).slice(0, 8)) lines.push(`        ${w}`);
+    }
     return lines;
 }
 /*
@@ -3567,6 +3572,7 @@ try {
                 byClass: g.report.reachByClass,
                 would: g.report.reachWould ?? [],
                 literal: g.report.reachLiteral ?? [],
+                thrown: g.report.reachThrown ?? [],
                 soft: g.report.reachSoft ?? {},
                 ms: g.report.reachMs ?? 0,
                 seekMs: g.report.reachSeekMs ?? 0,
