@@ -1022,8 +1022,8 @@ money path this app can have, because nothing on it is derived.
      screens and the walk's stop at an invisible or `display: contents`
      box (read since 3a, report-only: "Before 8g2, 3a's open list" below);
      a static belt in the look lint for clips scoped to hover, focus, the
-     tap highlight or a turned wall; a neighbour's far shadow (read since
-     1b, report-only: N6, "Before 8g2, 1b's open list" below).
+     tap highlight or a turned wall; a neighbour's far shadow (failed by
+     1b since 7b: N6, "Before 8g2, 1b's open list" below).
   4. **Smaller, stated:** a look pseudo animated invisible at the frozen
      instant (PSa2); a gradient between its stops off the sampled screens
      and at a device pixel ratio over 1 (G2); `markLookPseudos` never
@@ -1171,8 +1171,12 @@ money path this app can have, because nothing on it is derived.
      and the end read itself. A box placed by `anchor()` elsewhere on the
      page follows them. **Closed for first-party looks by the lint** (they
      write no anchor positioning, `a-look-never-positions-against-an-anchor`)
-     **and open on the kit's road**: only the offset read's self-clip read
-     follows an anchor, nothing else does. Not planted.
+     **and on the kit's road by its probe** since D-2026-10-27-02: the
+     kit's probe fails every paint of the kit's look while its sheet
+     declares `anchor-name` (`the-kit-takes-no-anchor-positioning`), so no
+     named anchor reaches a kit look the probe passes. Not planted beyond
+     that refusal's own red proof (`layout/PROBE-RULES.md`, "The kit's
+     probe refuses a sheet that names an anchor").
   2. **The probe's hidden scrollbars**: the probe's Chrome runs with
      scrollbars hidden, so a scrollbar a transform's or a keyframe's
      overflow adds where scrollbars take room (a classic scrollbar) — which
@@ -1194,9 +1198,10 @@ money path this app can have, because nothing on it is derived.
      the six pay screens at 1280 read 0 failures on `8bdd315` (a quick
      read) while the shot at 35% shows the line "Your wallet signs" over
      nothing. The kit's road only: first-party looks write no
-     `anchor-name`, `position-anchor` or `position-visibility`. A refusal
-     in `workshop:probe` of any paint whose sheets declare `anchor-name` is
-     the owner's call (a README line).
+     `anchor-name`, `position-anchor` or `position-visibility`. **Closed for
+     a named anchor** by D-2026-10-27-02: `workshop:probe` refuses every
+     paint of the kit's look while the kit's sheet declares `anchor-name`,
+     and the workshop README says so in one line.
   4. **`sheetFacts` can go stale**: an `@import` still loading
      (`styleSheet === null`) is skipped rather than counted as unreadable,
      and the cache is keyed by the sheet counts alone, so a sheet whose
@@ -1204,51 +1209,22 @@ money path this app can have, because nothing on it is derived.
      reachable today (both lints refuse `@import`, and the probe's own
      `replaceSync` sheets set no `anchor-name`); not planted.
 
-- **Before 8g2, 1b's open list** (paints with no hit area, read
-  report-only; `layout/PROBE-RULES.md`, "Before 8g2, 1b"). 1b fails
-  nothing until step 7b binds it. Open:
-  1. **Rural's board over the address plate, accepted by name at 7b**
-     (D-2026-10-27-03; not built until 7b): `.stall-sign`'s `0 18px 40px`
-     at 0.32 composites to 0.23 over `button.addr` at 1280, the clean
-     tree's only source (142 would-be failures). The overlap is real — the
-     board's swing makes it paint after the in-flow content and darkens the
-     plate's top
-     (`private/design/workshop-2026-09-23/before-8g2/1b/shots/rural-board-1280-crop.png`)
-     — and the plate stays legible. 7b accepts it by one entry keyed by
-     look, selector, computed shadow and target, with a test; raising
-     `BLUR_OPACITY` to 0.25 (which admits a 4.5:1 figure taken to 2.9:1)
-     and restyling the shadow were the options not taken.
-  2. **The lint's underline cap admits a reach onto a neighbour's figure
-     (UL2), to be carried by 7b's binding**: Modern's row over "You pay"
-     underlined 3px thick and lowered 4px, both at their caps
-     (`DECORATION_THICKNESS_MAX_PX`, `UNDERLINE_OFFSET_MAX_PX`), lays a 2px
-     band over the figure — 1b 15 at 390, 1280 and 360, and the contrast
-     pass reads "You pay" at 1.00:1. Once 7b binds 1b, the band fails the
-     run; the cap is left as it is.
-  3. **Widen the keyframe seek before 7b binds 1b** (the ninth critic's L1
-     and K1, both read 0 by 1b today). L1: an animation that moves a target
-     by layout from outside the reacher's subtree and the target's (a
-     margin on a sibling) — Neo's tabs positioned with a `0 30px 0` band,
-     and `.collection-head` animating `margin-bottom` to −60px pulls the
-     rows under the band; 1b seeks an animation only where
-     its keyframes name a paint that reaches, it runs on a look pseudo, or
-     its own subtree holds a reacher or a target, and then holds a reacher
-     outside the subtree only to the targets inside it. K1 (kit only; the
-     first-party lint refuses it): a custom property set in a keyframe that
-     feeds a reach (`box-shadow: var(--x)`) on a box that paints nothing
-     that reaches at rest. The fix the critic named: seek every animation
-     that is not needless, and hold every reacher to every target at each
-     offset; its cost is not measured.
-  4. **Pseudo text past its width is under-read** (the ninth critic's P2,
+- **Before 8g2, 1b's open list** (paints with no hit area; bound since step
+  7b, `layout/PROBE-RULES.md`, "Before 8g2, 1b" and "Before 8g2, 7b: 1b
+  binds"). Built at 7b and off this list: Rural's board over the address
+  plate accepted by name (D-2026-10-27-03, `REACH_ACCEPTED`), UL2 failed by
+  the bind (the lint's underline cap is left as it is), and the keyframe
+  seek widened (the ninth critic's L1 and K1). Open:
+  1. **Pseudo text past its width is under-read** (the ninth critic's P2,
      not planted): a pseudo's region is its own resolved width (an inline
      one's, a font size a character), grown by one font size; text that
      runs past that width (`white-space: nowrap`, a `letter-spacing`)
      stands outside the region.
-  5. **The region model is proved by structure alone** (the ninth critic's
+  2. **The region model is proved by structure alone** (the ninth critic's
      P3): PW is a pseudo of a box whose region holds the figure's ancestor;
      a plant of a pseudo that is not an ancestor of the figure's row, moved
      onto it by its offsets alone, is still to be made.
-  6. **Not read by 1b, stated:** paint order (a meet is a meet whichever
+  3. **Not read by 1b, stated:** paint order (a meet is a meet whichever
      paints last); several reachers' blurs together (each reacher's layers
      are composited alone); a pseudo-element's exact box, and a decoration
      line on a pseudo's text; a reach between two keyframe offsets, and two
@@ -1258,24 +1234,30 @@ money path this app can have, because nothing on it is derived.
      shape and text over several lines (its line boxes, an ink box an upper
      bound); the contrast pass's paints (1b runs on the geometry passes
      alone).
-  7. **A run under the private look at 0x04's selection** with 1b in it
+  4. **A run under the private look at 0x04's selection** with 1b in it
      (the money guards' item 2 still stands).
+  5. **The accepted reach is keyed on exact strings** (`REACH_ACCEPTED`):
+     a Chrome that serialises a computed shadow or colour another way, or a
+     change to Rural's board, plate or mood, takes the 142 back to
+     failures. That fails closed (red, never silent), and is the cost of a
+     key no look's class is in.
+  6. **A move of a box that holds nothing 1b reads is left out** (`unmoved`:
+     no reacher, no target, no look pseudo at rest): sound by mechanism, a
+     transform, an offset or a motion path carrying only the box and what it
+     holds where no anchor can follow; no plant proves the gate itself.
 
-- **Before 8g2, 1d's open list** (a code's modules read in pixels, read
-  report-only; `layout/PROBE-RULES.md`, "Before 8g2, 1d: the code's
-  modules"). 1d fails nothing until step 7c binds it. Open:
-  1. **Bind it at 7c**, with its own red proof on the bound read (PQO's bare
-     reads are 1d's alone), the codes it owes by name (the quiet zone's
-     `CODES_REQUIRED`), and each carried look held to its own reads. **7c
-     reads the quiet-zone flake's sighting count first** (the tenth
-     critic's item 4, decided by the window): the dumps' `meta.quietReadAgain`
-     and `meta.codeModules` count every read-again by the run's tab count
-     and by tab, and the kept logs hold thirteen sightings, eleven at two
-     tabs and two at three, every one white on its fresh pair since the
-     read-again existed (`layout/PROBE-RULES.md`, "The quiet-zone flake,
-     sighting by sighting"). A flake that hits both captures is a false red
-     once 1d is bound, as it is for the quiet zone today; three tabs stay
-     the default, and go back to two if a sighting ever fails a run.
+- **Before 8g2, 1d's open list** (a code's modules read in pixels; bound
+  since step 7c, `layout/PROBE-RULES.md`, "Before 8g2, 1d: the code's
+  modules" and "Before 8g2, 7c: 1d binds"). Built at 7c and off this list:
+  the bind, its codes owed by name (the quiet zone's `CODES_REQUIRED`, every
+  look's own quiet-zone reads, each carried look on its own), and the flake
+  count read first — fifteen sightings in the kept logs, eleven at two tabs
+  and four at three, every one since the read-again existed white on its
+  fresh pair. Three tabs stay the default, and go back to two if a sighting
+  ever fails a run (now a failure of 1d and the quiet zone together). Open:
+  1. **The canary's reads again of 1d are said, not failed**: 1d is not in
+     the job's record the canary compares, so a 1d reading that differs on
+     the canary's tab fails nothing; the walk's read of the job decides.
   2. **A contrast target's glyphs laid over a code are not read** (PQG: the
      code's own lede moved up over the modules, 44px black glyphs and no
      ground, reads 0; 1a fails it, both lints admit it): the prepare blanks a

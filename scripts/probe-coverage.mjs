@@ -118,6 +118,9 @@
  *   boxes or a protected box, read past its clips): a look never read, or
  *   read with every target cut away, certified nothing about what reaches its
  *   money. A paint on which 1b threw is a failure of its own (`reachAtRest`).
+ * - **`the-kit-takes-no-anchor-positioning`** (D-2026-10-27-02): on the
+ *   kit's probe (`kit`), every geometry pass owes a read of the kit's look
+ *   (`kitAnchorPaints`); the ordinary probe owes nothing here.
  * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
  *   geometry pass owes, on every look it painted, money figures held to
  *   their dress on every surface it paints one (`DRESS_SURFACES_OWED`,
