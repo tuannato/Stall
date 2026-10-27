@@ -266,6 +266,15 @@ export function pxLength(token: string): number | undefined {
     return undefined;
 }
 
+/** A computed `zoom` as a factor: a number, a percentage, `normal` (1); 1 where it does not read. */
+export function zoomOf(value: string): number {
+    const v = value.trim();
+    if (v === '' || v === 'normal') return 1;
+    const n = Number.parseFloat(v);
+    if (!Number.isFinite(n) || !(n > 0)) return 1;
+    return v.endsWith('%') ? n / 100 : n;
+}
+
 /**
  * One computed shadow layer: a colour (anything but lengths and `inset`,
  * resolved to an alpha by the caller, whose canvas knows every colour

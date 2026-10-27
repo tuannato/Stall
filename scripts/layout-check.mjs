@@ -2845,7 +2845,7 @@ function reachLines(pass, r) {
     const lines = [
         `    ${pass}: ${sum('would')} would-be failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'})` +
             `${Object.keys(kinds).length === 0 ? '' : `, by kind ${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}`} · ` +
-            `${sum('paints')} paint(s), ${sum('elements')} element(s) and ${sum('pseudos')} look pseudo(s) read, ${sum('reachers')} with a paint that reaches, ` +
+            `${sum('paints')} paint(s), ${sum('elements')} element(s) (${sum('contents')} a display: contents text owner) and ${sum('pseudos')} look pseudo(s) read, ${sum('reachers')} with a paint that reaches, ` +
             `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('needless')} animation(s) left out: nothing that reaches or moves) · ` +
             `a blurred layer's offset and spread counted in full would add ${sum('softCore')} · ${(r.ms / 1000).toFixed(2)}s (seeks ${(r.seekMs / 1000).toFixed(2)}s)`,
     ];

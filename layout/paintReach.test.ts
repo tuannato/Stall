@@ -20,6 +20,7 @@ import {
     tailReach,
     textShadowLayers,
     underlineBand,
+    zoomOf,
     type Box,
     type PseudoFacts,
 } from './paintReach';
@@ -232,6 +233,15 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
         ]) {
             expect(pseudoRegion(pseudo(over)), JSON.stringify(over)).toHaveProperty('anywhere');
         }
+    });
+
+    it('reads a computed zoom as a factor', () => {
+        expect(zoomOf('1')).toBe(1);
+        expect(zoomOf('20')).toBe(20);
+        expect(zoomOf('0.56')).toBe(0.56);
+        expect(zoomOf('250%')).toBe(2.5);
+        expect(zoomOf('normal')).toBe(1);
+        expect(zoomOf('')).toBe(1);
     });
 
     it('says a meet in the kind that met', () => {

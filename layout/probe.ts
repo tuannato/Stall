@@ -109,6 +109,7 @@ import {
     textShadowLayers,
     underlineBand,
     union,
+    zoomOf,
     type Layer,
     type Meet,
     type ReachKind,
@@ -1694,6 +1695,8 @@ const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
 type ReachTally = {
     paints: number;
     elements: number;
+    /** Of the elements, `display: contents` text owners read (`reachOwner`: no box, their own text's paints). */
+    contents: number;
     pseudos: number;
     reachers: number;
     targets: number;
@@ -1710,7 +1713,7 @@ type ReachTally = {
 };
 const reachByClass: Record<string, ReachTally> = {};
 const reachTally = (): ReachTally =>
-    (reachByClass[measuringClass] ??= { paints: 0, elements: 0, pseudos: 0, reachers: 0, targets: 0, pairs: 0, seeks: 0, needless: 0, fromValues: 0, would: 0, byKind: {}, softCore: 0 });
+    (reachByClass[measuringClass] ??= { paints: 0, elements: 0, contents: 0, pseudos: 0, reachers: 0, targets: 0, pairs: 0, seeks: 0, needless: 0, fromValues: 0, would: 0, byKind: {}, softCore: 0 });
 /** The would-be failures, word for word, up to `REACH_KEPT` a pass (the rest counted in the tallies). */
 const reachWould: string[] = [];
 const REACH_KEPT = 4000;
@@ -2105,6 +2108,88 @@ type Reacher = { el: Element; pseudo: '::before' | '::after' | null; paints: Rea
 
 const NO_BOX: Box = { left: 0, top: 0, right: 0, bottom: 0 };
 
+/** Whether an element holds text of its own: a text node child with something in it. */
+function ownsText(el: Element): boolean {
+    for (const c of el.childNodes) if (c.nodeType === Node.TEXT_NODE && (c.textContent ?? '').trim() !== '') return true;
+    return false;
+}
+
+/**
+ * Whether 1b reads an element's own paints, and whether it has a box of its
+ * own (`boxed`): an element with layout boxes, or a `display: contents`
+ * element that holds text of its own — it generates no box, but its text is
+ * laid out in its parent's box and painted in its own style, a text-shadow and
+ * a decoration line included (the ninth critic's C1: a rail label made
+ * `display: contents` laid sharp copies of its text over the figure, and
+ * nothing read them). Undefined: it paints nothing of its own.
+ */
+function reachOwner(el: Element): { cs: CSSStyleDeclaration; boxed: boolean } | undefined {
+    const boxed = el.getClientRects().length > 0;
+    if (!boxed && !ownsText(el)) return undefined;
+    const cs = getComputedStyle(el);
+    if (!boxed && cs.display !== 'contents') return undefined;
+    if (cs.visibility !== 'visible') return undefined;
+    return { cs, boxed };
+}
+
+/**
+ * How much a `display: contents` element's paints are magnified: its own
+ * zoom and that of every box-less element up to the nearest box, times that
+ * box's `reachScale` — each factor at least 1, as `reachScale` is.
+ */
+function contentsScale(el: Element): number {
+    let z = 1;
+    let at: Element | null = el;
+    while (at !== null && at.getClientRects().length === 0) {
+        z *= Math.max(1, zoomOf(getComputedStyle(at).zoom));
+        at = at.parentElement;
+    }
+    return at === null ? z : z * reachScale(at, at.getBoundingClientRect());
+}
+
+/**
+ * An element's own paints that reach (`reachOwner` decides it is read): its
+ * box's — none for a `display: contents` element, which has none — and its own
+ * text's, off its own text nodes' lines: the shadow from each line's ink, a
+ * decoration line along each line box. `set` puts a keyframe's values in
+ * place of what the element computes at rest (`reachKeyframes`). Undefined
+ * where nothing reaches.
+ */
+function ownPaints(
+    el: Element,
+    cs: CSSStyleDeclaration,
+    boxed: boolean,
+    range: Range,
+    set: { boxShadow?: string; textShadow?: string; filter?: string; color?: string } = {},
+): ReachPaints | undefined {
+    const r = el.getBoundingClientRect();
+    const box: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    const k = boxed ? reachScale(el, r) : contentsScale(el);
+    // A box-less element's text paints are judged past each line's ink alone (`textReaches`): it has no box of its own to judge a blur past.
+    const paints: ReachPaints = { base: boxed ? box : undefined, bound: boxed ? box : NO_BOX, sharp: [], soft: [] };
+    const colour = set.color ?? cs.color;
+    if (boxed) {
+        const facts = boxPaintFacts(cs, el instanceof SVGElement && !(el instanceof SVGSVGElement));
+        boxReaches({ ...facts, color: colour, boxShadow: set.boxShadow ?? facts.boxShadow, filter: set.filter ?? facts.filter }, box, box, k, paints);
+    }
+    const textShadow = set.textShadow ?? cs.textShadow;
+    const shadowed = textShadow !== 'none';
+    const decorated = (cs.getPropertyValue('-webkit-text-decorations-in-effect') || 'none') !== 'none';
+    if (shadowed || decorated) {
+        const lines: Box[] = [];
+        const inks: Box[] = [];
+        for (const c of el.childNodes) {
+            if (c.nodeType !== Node.TEXT_NODE || (c.textContent ?? '').trim() === '') continue;
+            range.selectNodeContents(c);
+            const rects = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => ({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }));
+            lines.push(...rects);
+            if (shadowed) inks.push(...textInk(c as Text, cs, rects));
+        }
+        if (lines.length > 0) textReaches(el, cs, lines, inks, k, paints, false, textShadow, true, colour);
+    }
+    return paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined ? undefined : paints;
+}
+
 /** The reachers on `surface` (`only`: of these elements alone), each with the paints that reach; tallies into `t` where `rest`. */
 function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined, clipSeen: Map<Element, ClipLink[]>, t: ReachTally, rest: boolean): Reacher[] {
     const out: Reacher[] = [];
@@ -2112,34 +2197,15 @@ function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined,
     const scope: Element = surface instanceof Element ? surface : root;
     const range = document.createRange();
     const els = only === undefined ? scope.querySelectorAll('*') : [...only].filter((el) => scope.contains(el));
-    const cut = (el: Element, p: ReachPaints): void => cutToClips(el, p, clipSeen);
     for (const el of els) {
         if (rest) t.elements += 1;
-        if (el.getClientRects().length === 0 || el.closest('.deck-stall') !== null) continue;
-        const cs = getComputedStyle(el);
-        if (cs.visibility !== 'visible') continue;
-        const r = el.getBoundingClientRect();
-        const base: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-        const k = reachScale(el, r);
-        const paints: ReachPaints = { base, bound: base, sharp: [], soft: [] };
-        boxReaches(boxPaintFacts(cs, el instanceof SVGElement && !(el instanceof SVGSVGElement)), base, base, k, paints);
-        // Its own text's paints, off its own text's lines: the shadow from each line's ink, a decoration line along each line box.
-        const shadowed = cs.textShadow !== 'none';
-        const decorated = (cs.getPropertyValue('-webkit-text-decorations-in-effect') || 'none') !== 'none';
-        if (shadowed || decorated) {
-            const lines: Box[] = [];
-            const inks: Box[] = [];
-            for (const c of el.childNodes) {
-                if (c.nodeType !== Node.TEXT_NODE || (c.textContent ?? '').trim() === '') continue;
-                range.selectNodeContents(c);
-                const rects = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => ({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }));
-                lines.push(...rects);
-                if (shadowed) inks.push(...textInk(c as Text, cs, rects));
-            }
-            if (lines.length > 0) textReaches(el, cs, lines, inks, k, paints, false);
-        }
-        if (paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined) continue;
-        cut(el, paints);
+        if (el.closest('.deck-stall') !== null) continue;
+        const owner = reachOwner(el);
+        if (owner === undefined) continue;
+        if (rest && !owner.boxed) t.contents += 1;
+        const paints = ownPaints(el, owner.cs, owner.boxed, range);
+        if (paints === undefined) continue;
+        cutToClips(el, paints, clipSeen);
         out.push({ el, pseudo: null, paints });
     }
     // Look pseudos: of hosts on the surface, and of the boxes above it up to the app's root (the critic's T6 shape).
@@ -2627,7 +2693,7 @@ function reachKeyframes(
     const range = document.createRange();
     const csT = getComputedStyle(target);
     const inheriting: Element[] = props.has('text-shadow')
-        ? [...target.querySelectorAll('*')].filter((el) => el.getClientRects().length > 0 && getComputedStyle(el).textShadow === csT.textShadow)
+        ? [...target.querySelectorAll('*')].filter((el) => reachOwner(el) !== undefined && getComputedStyle(el).textShadow === csT.textShadow)
         : [];
     let reads = 0;
     for (const frame of frames) {
@@ -2640,33 +2706,11 @@ function reachKeyframes(
         const at = `with ${name} on ${where} at its keyframe at ${Math.round((frame.computedOffset ?? 0) * 100)}% (read from the keyframe's values)`;
         const owners = [target, ...(set.textShadow === undefined ? [] : inheriting)];
         for (const el of owners) {
-            if (el.getClientRects().length === 0) continue;
-            const cs = getComputedStyle(el);
-            const own = el === target;
-            const r = el.getBoundingClientRect();
-            const base: Box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-            const k = reachScale(el, r);
-            const paints: ReachPaints = { base, bound: base, sharp: [], soft: [] };
-            const facts = boxPaintFacts(cs, el instanceof SVGElement && !(el instanceof SVGSVGElement));
-            const colour = own ? (set.color ?? facts.color) : facts.color;
-            boxReaches(
-                { ...facts, color: colour, boxShadow: own ? (set.boxShadow ?? facts.boxShadow) : facts.boxShadow, filter: own ? (set.filter ?? facts.filter) : facts.filter },
-                base,
-                base,
-                k,
-                paints,
-            );
-            const lines: Box[] = [];
-            const inks: Box[] = [];
-            for (const c of el.childNodes) {
-                if (c.nodeType !== Node.TEXT_NODE || (c.textContent ?? '').trim() === '') continue;
-                range.selectNodeContents(c);
-                const rects = [...range.getClientRects()].filter((q) => q.width > 0 && q.height > 0).map((q) => ({ left: q.left, top: q.top, right: q.right, bottom: q.bottom }));
-                lines.push(...rects);
-                inks.push(...textInk(c as Text, cs, rects));
-            }
-            if (lines.length > 0) textReaches(el, cs, lines, inks, k, paints, false, set.textShadow ?? cs.textShadow, true, colour);
-            if (paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined) continue;
+            const owner = reachOwner(el);
+            if (owner === undefined) continue;
+            // The animated box's own paints at this keyframe; a box under it inherits only its text-shadow.
+            const paints = ownPaints(el, owner.cs, owner.boxed, range, el === target ? set : { textShadow: set.textShadow });
+            if (paints === undefined) continue;
             cutToClips(el, paints, rest.clipSeen);
             judgeReacher({ el, pseudo: null, paints }, rest.targets, t, screen, label, at, said);
             reads += 1;
