@@ -41,6 +41,7 @@ import {
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
+import { MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, readCodeModules, withMatrices } from './code-modules.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -1356,6 +1357,18 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     const codesReadByClass = {};
     let quietPixels = 0;
     const quietReadAgain = [];
+    // 1d (report-only): the module read's tallies, by viewport and look.
+    const modules = {
+        byVpClass: {},
+        stats: {},
+        would: [],
+        readAgain: [],
+        faults: [],
+        read: new Map(),
+        unread: new Map(),
+        payloadChecked: 0,
+        leastModule: Infinity,
+    };
     let ringTargets = 0;
     let ringPixels = 0;
     let ringLeastPerChar = Infinity;
@@ -1730,15 +1743,27 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     const zonesAt = performance.now();
                     const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
                     const firstAt = zones.length === 0 ? undefined : await quietContext(cdp, sessionId, img, zonesAt - imgAt);
-                    const reads = await readQuietZones({ img, zones, at: firstAt }, async () => {
-                        await sleep(250);
-                        const before = await evalJson(cdp, sessionId, 'window.__quietZones()');
-                        const fresh = await capture();
-                        const readAt = performance.now();
-                        const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
-                        if (fresh.why.length > 0) return { why: fresh.why };
-                        return { img: fresh.shot, zones: after, before, at: await quietContext(cdp, sessionId, fresh.shot, readAt - fresh.capturedAt) };
-                    });
+                    // The fresh pair is made once a job, for the quiet zone's
+                    // read and 1d's alike (`readAgainOnFreshPair`), and each
+                    // decides by its own rule; its zones carry their matrices.
+                    let pair;
+                    const again = () =>
+                        (pair ??= (async () => {
+                            await sleep(250);
+                            const before = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                            const fresh = await capture();
+                            const readAt = performance.now();
+                            const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                            if (fresh.why.length > 0) return { why: fresh.why };
+                            const matrices = await evalJson(cdp, sessionId, 'window.__codeMatrices()');
+                            return {
+                                img: fresh.shot,
+                                zones: withMatrices(after, matrices),
+                                before,
+                                at: await quietContext(cdp, sessionId, fresh.shot, readAt - fresh.capturedAt),
+                            };
+                        })());
+                    const reads = await readQuietZones({ img, zones, at: firstAt }, again);
                     for (const { z, r, turned, retry } of reads) {
                         const code = `${vp.name}/${screen}:${z.name}`;
                         if (turned) {
@@ -1775,6 +1800,70 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             );
                         } else if (retry !== undefined) {
                             quietReadAgain.push(`${at}: dark on the first capture, white on a fresh pair${readings}`);
+                        }
+                    }
+                    /*
+                     * 1d (before 8g2, report-only; `code-modules.mjs`): every
+                     * code the quiet-zone read reads, each module's centre on
+                     * the same capture held to the matrix the code was drawn
+                     * from (`__codeMatrices`, off the path's `d`), and a code
+                     * read wrong read again on the job's one fresh pair by the
+                     * quiet zone's own rule. Fails nothing: what it would fail
+                     * is said under the pass, by viewport and look.
+                     */
+                    if (zones.length > 0) {
+                        const matrices = await timed('modules-dom', () => evalJson(cdp, sessionId, 'window.__codeMatrices()'));
+                        const moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
+                        const variant = flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
+                        const tally = (modules.byVpClass[`${vp.name} ${plannedJob.sheetClass}`] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
+                        tally.jobs += 1;
+                        for (const { z, r, turned, retry } of moduleReads) {
+                            const code = `${vp.name}/${screen}:${z.name}`;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
+                            if (turned) {
+                                modules.unread.set(code, 'its frame is turned');
+                                tally.unread += 1;
+                                continue;
+                            }
+                            if (r.fault !== undefined) {
+                                modules.faults.push(`${at} — ${r.fault}`);
+                                modules.unread.set(code, r.fault);
+                                tally.unread += 1;
+                                continue;
+                            }
+                            if (r.px === 0) {
+                                modules.unread.set(code, 'no module centre of it is on screen');
+                                tally.unread += 1;
+                                continue;
+                            }
+                            if (z.payload === 'checked') modules.payloadChecked += 1;
+                            modules.read.set(code, (modules.read.get(code) ?? 0) + 1);
+                            tally.codes += 1;
+                            tally.modules += r.px;
+                            modules.leastModule = Math.min(modules.leastModule, z.module);
+                            foldStats((modules.stats[`${plannedJob.sheetClass} ${variant} ${screen} @${vp.name}`] ??= {}), r.stats);
+                            const readings =
+                                retry === undefined
+                                    ? ''
+                                    : `\n        first capture: ${moduleReadingLine(retry.first)}` +
+                                      (retry.again !== undefined
+                                          ? `\n        fresh pair: ${moduleReadingLine(retry.again, retry.again.before)}`
+                                          : retry.unbelieved !== undefined
+                                            ? `\n        fresh pair, not believed (${retry.why.join('; ')}): ${moduleReadingLine(retry.unbelieved, retry.unbelieved.before)}`
+                                            : `\n        not read again: ${retry.why.join('; ')}`);
+                            if (r.bad > 0) {
+                                tally.wrong += r.bad;
+                                tally.wouldCodes += 1;
+                                modules.would.push(
+                                    `${at} has ${r.bad} of ${r.px} module centre(s) wrong (${r.wrongDark} dark read light past ${MODULE_DARK_MAX}, ` +
+                                        `${r.wrongLight} light read dark under ${MODULE_LIGHT_MIN}; the first at row ${r.first.r} column ${r.first.c}, ` +
+                                        `${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}))` +
+                                        (retry?.again === undefined ? '' : ' on the fresh pair too') +
+                                        readings,
+                                );
+                            } else if (retry !== undefined) {
+                                modules.readAgain.push(`${at}: wrong on the first capture, right on a fresh pair${readings}`);
+                            }
                         }
                     }
                 }
@@ -2396,6 +2485,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             codesReadByClass,
             quietPixels,
             quietReadAgain,
+            modules,
             ringTargets,
             ringPixels,
             ringLeastPerChar,
@@ -3968,6 +4058,10 @@ try {
     // critic's N6): those reads are compared and never folded, so their
     // sightings were lost.
     const canaryQuietReadAgain = [];
+    // 1d (before 8g2, report-only; `code-modules.mjs`): every job's module
+    // read folded, and the canary's reads again of it, said under the pass.
+    const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], faults: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
+    const canaryModules = { would: [], readAgain: [] };
     // D14: the least the sign's name read per look and decoration state
     // (line read, or ring read where it wears the outline), and how the
     // name was painted where it was read (`nameChrome`).
@@ -4104,6 +4198,18 @@ try {
             }
             quietPixels += out.quietPixels;
             quietReadAgain.push(...out.quietReadAgain);
+            for (const [key, t] of Object.entries(out.modules.byVpClass)) {
+                const into = (modulesRun.byVpClass[key] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
+                for (const k of Object.keys(into)) into[k] += t[k];
+            }
+            for (const [key, st] of Object.entries(out.modules.stats)) foldStats((modulesRun.stats[key] ??= {}), st);
+            modulesRun.would.push(...out.modules.would);
+            modulesRun.readAgain.push(...out.modules.readAgain);
+            modulesRun.faults.push(...out.modules.faults);
+            countInto(modulesRun.read, out.modules.read);
+            for (const [code, why] of out.modules.unread) modulesRun.unread.set(code, why);
+            modulesRun.payloadChecked += out.modules.payloadChecked;
+            modulesRun.leastModule = Math.min(modulesRun.leastModule, out.modules.leastModule);
             ringTargets += out.ringTargets;
             ringPixels += out.ringPixels;
             ringLeastPerChar = Math.min(ringLeastPerChar, out.ringLeastPerChar);
@@ -4338,6 +4444,8 @@ try {
             contrastRun.canary = [...picks].sort(([a], [b]) => a - b).map(([n, why]) => {
                 const { tab, again } = readAgain.get(n);
                 for (const line of again.quietReadAgain ?? []) canaryQuietReadAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                for (const line of again.modules?.readAgain ?? []) canaryModules.readAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                for (const line of again.modules?.would ?? []) canaryModules.would.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
                 const sameBoxes = JSON.stringify(again.dumpBoxes) === JSON.stringify(answers[n].dumpBoxes);
                 const said = { key: queue[n].key, why, ranOn: ranOn[n], readOn: tab, same: sameRecord && sameBoxes };
@@ -4768,6 +4876,11 @@ try {
                     : `; on the canary's reads again: ${canaryQuietReadAgain.length}${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
         );
     }
+    // 1d (report-only): what the module read read and would fail, whatever
+    // the verdict; it fails nothing until step 7c binds it.
+    if (Object.keys(modulesRun.byVpClass).length > 0 || codesPaintedSeen.size > 0) {
+        for (const line of moduleReport(modulesRun, canaryModules, codesPaintedSeen)) console.log(`  ${line}`);
+    }
     // Every prepared node that gave no box, by the page's reason, whatever
     // the verdict (step 5b: no silent drop): a picture tile, a box that
     // draws nothing, a whole-box read cut to a sliver, text scrolled wholly
@@ -5072,6 +5185,16 @@ try {
                     // canary's reads again: how many, and which (each
                     // sighting's first line), so a reader comparing runs can
                     // find a code that recurs (the probe-shard critic's N6).
+                    // 1d (report-only): how many codes would fail the module
+                    // read, and how many read wrong and then right on a fresh
+                    // pair, on the walk and on the canary's reads again.
+                    codeModules: {
+                        would: modulesRun.would.length,
+                        readAgain: modulesRun.readAgain.length,
+                        canaryWould: canaryModules.would.length,
+                        canaryReadAgain: canaryModules.readAgain.length,
+                        sightings: [...modulesRun.readAgain, ...canaryModules.readAgain].map((line) => line.split('\n')[0]),
+                    },
                     quietReadAgain: {
                         walk: quietReadAgain.length,
                         canary: canaryQuietReadAgain.length,

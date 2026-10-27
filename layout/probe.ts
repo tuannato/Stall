@@ -57,6 +57,8 @@ import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import { STACK_CHOICES_CAP, colourTokens, everyMixReads, layerCovers, mostOpaque, srgbColour, tileArea, worstGround, type StackPaint } from './groundStack';
 import { lineOfCharacter } from './charLines';
+import { matrixBits, matrixOfPath, type CodeMatrix } from './codeMatrix';
+import { qrMatrix } from '../src/domain/qr';
 import {
     clipVerdict,
     columnExcuses,
@@ -8988,8 +8990,9 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  * other such look, `probe-coverage.mjs`).
  * **Not read, stated**: a box above the code (its fades are the cover
  * rules' and the quiet zone's), the code's size beyond its squareness (the
- * pay code's width is the gate's), the pixels (the quiet-zone read's, on
- * the contrast jobs), and a code between the pass's instants: the hold and
+ * pay code's width is the gate's), the pixels (the quiet-zone read's and,
+ * report-only, 1d's module read, on the contrast jobs), and a code between
+ * the pass's instants: the hold and
  * its place read read a code where the pass's last instant left it, so a
  * keyframe that carries its modules off the matrix there is read by nothing
  * (not planted).
@@ -12097,6 +12100,8 @@ declare global {
         __opaqueBoxes: () => { x: number; y: number; w: number; h: number }[];
         /** Every painted code in the last prepare's scope, for the quiet-zone read (D4). */
         __quietZones: () => QuietZone[];
+        /** The matrix every one of those codes was drawn from, in their order, for 1d (report-only). */
+        __codeMatrices: () => CodeMatrixRead[];
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
         __contrastPlan: () => ContrastJob[];
@@ -12915,6 +12920,9 @@ type QuietZone = {
     scrolled: { at: string; top: number; left: number }[];
 };
 
+/** A code's matrix as 1d reads it (`__codeMatrices`), or why it cannot be read. */
+type CodeMatrixRead = { name: string } & ((CodeMatrix & { payload?: 'checked' }) | { fault: string });
+
 /** The boxes above `el` that scroll or are scrolled, and the document's offset, for a quiet-zone reading. */
 function scrolledAbove(el: Element): { at: string; top: number; left: number }[] {
     const out: { at: string; top: number; left: number }[] = [];
@@ -12930,54 +12938,101 @@ function scrolledAbove(el: Element): { at: string; top: number; left: number }[]
     return out;
 }
 
-window.__quietZones = () =>
-    [...(preparedScope ?? document).querySelectorAll<SVGSVGElement>('svg.qr')]
-        .filter((svg) => svg.closest('.deck-stall') === null && getComputedStyle(svg).visibility === 'visible')
-        .map((svg): QuietZone | undefined => {
-            const r = svg.getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0) return undefined;
-            const cs = getComputedStyle(svg);
-            const px = (v: string): number => Number.parseFloat(v) || 0;
-            const left = px(cs.borderLeftWidth) + px(cs.paddingLeft);
-            const top = px(cs.borderTopWidth) + px(cs.paddingTop);
-            const cw = r.width - left - px(cs.borderRightWidth) - px(cs.paddingRight);
-            const ch = r.height - top - px(cs.borderBottomWidth) - px(cs.paddingBottom);
-            const side = Math.min(cw, ch);
-            const vb = svg.viewBox.baseVal.width;
-            if (!(side > 0) || !(vb > 0)) return undefined;
-            // The element's own radius cuts its corners at the border box;
-            // what it leaves of the content box's corner is the radius past
-            // the inset. Measured on the smallest of the four corners' insets.
-            const radius = px(cs.borderTopLeftRadius);
-            const inset = Math.min(left, top, r.width - left - cw, r.height - top - ch);
-            let x0 = -Infinity;
-            let y0 = -Infinity;
-            let x1 = Infinity;
-            let y1 = Infinity;
-            for (let at = svg.parentElement; at !== null && at !== document.documentElement; at = at.parentElement) {
-                const c = clipOf(at);
-                if (c === undefined) continue;
-                x0 = Math.max(x0, c.x0);
-                x1 = Math.min(x1, c.x1);
-                y0 = Math.max(y0, c.y0);
-                y1 = Math.min(y1, c.y1);
-            }
-            return {
-                name: codeName(svg),
-                x: r.x + left + (cw - side) / 2,
-                y: r.y + top + (ch - side) / 2,
-                side,
-                module: side / vb,
-                corner: Math.max(0, radius - inset),
-                // Finite, because the runner reads this through JSON, where
-                // an infinity is `null` — and a null clip is a clip at 0,
-                // which read every unclipped code as wholly clipped away.
-                clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
-                turned: angleOf(svg) !== 0,
-                scrolled: scrolledAbove(svg),
-            };
-        })
-        .filter((z): z is QuietZone => z !== undefined);
+/**
+ * The codes the quiet-zone read and 1d read: every `svg.qr` in the last
+ * prepare's scope, the door's deck aside, visible. `__quietZones` and
+ * `__codeMatrices` both walk `codeZones` over this list, so the runner pairs
+ * a code's zone with its matrix by place, and holds the names equal.
+ */
+function paintedCodes(): SVGSVGElement[] {
+    return [...(preparedScope ?? document).querySelectorAll<SVGSVGElement>('svg.qr')].filter(
+        (svg) => svg.closest('.deck-stall') === null && getComputedStyle(svg).visibility === 'visible',
+    );
+}
+
+function quietZoneOf(svg: SVGSVGElement): QuietZone | undefined {
+    const r = svg.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return undefined;
+    const cs = getComputedStyle(svg);
+    const px = (v: string): number => Number.parseFloat(v) || 0;
+    const left = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+    const top = px(cs.borderTopWidth) + px(cs.paddingTop);
+    const cw = r.width - left - px(cs.borderRightWidth) - px(cs.paddingRight);
+    const ch = r.height - top - px(cs.borderBottomWidth) - px(cs.paddingBottom);
+    const side = Math.min(cw, ch);
+    const vb = svg.viewBox.baseVal.width;
+    if (!(side > 0) || !(vb > 0)) return undefined;
+    // The element's own radius cuts its corners at the border box;
+    // what it leaves of the content box's corner is the radius past
+    // the inset. Measured on the smallest of the four corners' insets.
+    const radius = px(cs.borderTopLeftRadius);
+    const inset = Math.min(left, top, r.width - left - cw, r.height - top - ch);
+    let x0 = -Infinity;
+    let y0 = -Infinity;
+    let x1 = Infinity;
+    let y1 = Infinity;
+    for (let at = svg.parentElement; at !== null && at !== document.documentElement; at = at.parentElement) {
+        const c = clipOf(at);
+        if (c === undefined) continue;
+        x0 = Math.max(x0, c.x0);
+        x1 = Math.min(x1, c.x1);
+        y0 = Math.max(y0, c.y0);
+        y1 = Math.min(y1, c.y1);
+    }
+    return {
+        name: codeName(svg),
+        x: r.x + left + (cw - side) / 2,
+        y: r.y + top + (ch - side) / 2,
+        side,
+        module: side / vb,
+        corner: Math.max(0, radius - inset),
+        // Finite, because the runner reads this through JSON, where
+        // an infinity is `null` — and a null clip is a clip at 0,
+        // which read every unclipped code as wholly clipped away.
+        clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
+        turned: angleOf(svg) !== 0,
+        scrolled: scrolledAbove(svg),
+    };
+}
+
+/** Every painted code with the zone its ring is read from (`paintedCodes`, `quietZoneOf`). */
+function codeZones(): { svg: SVGSVGElement; zone: QuietZone }[] {
+    return paintedCodes().flatMap((svg) => {
+        const zone = quietZoneOf(svg);
+        return zone === undefined ? [] : [{ svg, zone }];
+    });
+}
+
+window.__quietZones = () => codeZones().map(({ zone }) => zone);
+
+/**
+ * **1d: the matrix each code was drawn from** (before 8g2, 1d, report-only;
+ * `layout/codeMatrix.ts`). One entry per zone `__quietZones` answers, in its
+ * order and with its name: the matrix `qrSvg` wrote into the path's `d`
+ * attribute from `qrMatrix(text)` — never read off the pixels 1d then reads
+ * — or why it cannot be read, which 1d says and counts as a code it could
+ * not read. Where the DOM carries the code's text (the touch wall's plate,
+ * `data-pay-uri`), the attribute's matrix is also held to `qrMatrix` of that
+ * text (`payload: 'checked'`), and a code that does not encode it is a
+ * fault.
+ */
+window.__codeMatrices = () =>
+    codeZones().map(({ svg, zone }): CodeMatrixRead => {
+        const path = svg.querySelector(':scope > path');
+        if (path === null) return { name: zone.name, fault: 'it has no path, so the matrix it was drawn from cannot be read' };
+        const read = matrixOfPath(path.getAttribute('d') ?? '', svg.getAttribute('viewBox') ?? '', QR_SVG_QUIET_MODULES);
+        if ('fault' in read) return { name: zone.name, fault: read.fault };
+        const payload = svg.parentElement?.closest('[data-pay-uri]')?.getAttribute('data-pay-uri');
+        if (payload === undefined || payload === null) return { name: zone.name, ...read };
+        let want: string;
+        try {
+            want = matrixBits(qrMatrix(payload));
+        } catch (err) {
+            return { name: zone.name, fault: `the text its plate carries does not make a code (${(err as Error).message.slice(0, 60)})` };
+        }
+        if (want !== read.bits) return { name: zone.name, fault: 'its path is not the matrix qrMatrix makes of the text its plate carries (data-pay-uri)' };
+        return { name: zone.name, ...read, payload: 'checked' };
+    });
 
 /**
  * How the sign's name was painted when it was read (step 5a″, D14): each
