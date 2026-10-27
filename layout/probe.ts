@@ -1785,39 +1785,85 @@ function lookPseudoHosts(): { which: 'before' | 'after'; host: string }[] {
 /**
  * **A box's clipping ancestors** (`overflow` on either axis, `contain:
  * paint`), nearest first, each with its padding box, the axes it clips on
- * and the axes it scrolls on; once an element a read. What clips a paint is
- * a question about a pair (`pairClip`): an ancestor that holds the other box
- * too and scrolls on an axis clips neither on that axis — they move together
- * as it scrolls, so what stands below the fold inside the stall's scroll
- * region is read where it stands — and every other ancestor clips at its
+ * and the axes it scrolls on; once an element a read. A box is clipped by
+ * the box whose content it is and by what clips that: its parent, or, for an
+ * `absolute` or `fixed` box, its containing block (`holdsOutOfFlow`) — a
+ * clip between an out-of-flow box and its containing block does not clip it
+ * (the ninth critic's CB2: a rail label made absolute escaped its column's
+ * `overflow: hidden`, and its paint was cut there all the same), and a
+ * `fixed` box held by the viewport is clipped by no ancestor. What clips a
+ * paint is a question about a pair (`pairClip`): a link that scrolls both
+ * boxes — it is in both chains — and that neither stands sticky under
+ * (`pinned`) clips neither on the axis it scrolls, since they keep their
+ * places as it scrolls, so what stands below the fold inside the stall's
+ * scroll region is read where it stands; every other link clips at its
  * padding box: a paint inside a scroller never leaves its window, at any
- * scroll, for a box outside it.
+ * scroll, for a box the scroller does not carry.
  */
-type ClipLink = { el: Element; box: Box; cx: boolean; cy: boolean; sx: boolean; sy: boolean };
+type ClipLink = { el: Element; box: Box; cx: boolean; cy: boolean; sx: boolean; sy: boolean; pinned: boolean };
+
+/** Whether a box is the containing block of its `absolute` descendants (`fixed`: of its `fixed` ones), from its computed style. */
+function holdsOutOfFlow(cs: CSSStyleDeclaration, fixed: boolean): boolean {
+    if (cs.display === 'contents') return false;
+    if (!fixed && cs.position !== 'static') return true;
+    const backdrop = cs.getPropertyValue('backdrop-filter') || cs.getPropertyValue('-webkit-backdrop-filter') || 'none';
+    const container = cs.getPropertyValue('container-type') || 'normal';
+    const visibility = cs.getPropertyValue('content-visibility') || 'visible';
+    return (
+        cs.transform !== 'none' ||
+        cs.translate !== 'none' ||
+        cs.rotate !== 'none' ||
+        cs.scale !== 'none' ||
+        cs.perspective !== 'none' ||
+        cs.filter !== 'none' ||
+        backdrop !== 'none' ||
+        /\b(?:layout|paint|strict|content)\b/.test(cs.contain) ||
+        /\b(?:transform|perspective|filter|backdrop-filter|translate|rotate|scale|contain)\b/.test(cs.willChange) ||
+        (!fixed && /\bposition\b/.test(cs.willChange)) ||
+        container !== 'normal' ||
+        visibility !== 'visible'
+    );
+}
+
+/** A box's own clip as a link of its content's chain, or undefined where it clips nothing (a `display: contents` box has no box to clip with). */
+function clipLinkOf(box: Element): ClipLink | undefined {
+    const cs = getComputedStyle(box);
+    if (cs.display === 'contents') return undefined;
+    const paint = /\b(?:paint|strict|content)\b/.test(cs.contain);
+    const cx = paint || cs.overflowX !== 'visible';
+    const cy = paint || cs.overflowY !== 'visible';
+    if (!cx && !cy) return undefined;
+    return { el: box, box: paddingBox(box), cx, cy, sx: !paint && scrollsOn(cs.overflowX), sy: !paint && scrollsOn(cs.overflowY), pinned: false };
+}
+
 function reachClipChain(el: Element, seen: Map<Element, ClipLink[]>): ClipLink[] {
     const known = seen.get(el);
     if (known !== undefined) return known;
-    const parent = el.parentElement;
+    const position = getComputedStyle(el).position;
+    const fixed = position === 'fixed';
+    // The box whose content it is: its parent, or an out-of-flow box's containing block.
+    let up = el.parentElement;
+    if (position === 'absolute' || fixed) while (up !== null && up !== document.documentElement && !holdsOutOfFlow(getComputedStyle(up), fixed)) up = up.parentElement;
     let chain: ClipLink[] = [];
-    if (parent !== null && parent !== document.documentElement) {
-        chain = reachClipChain(parent, seen);
-        const cs = getComputedStyle(parent);
-        const paint = /\b(?:paint|strict|content)\b/.test(cs.contain);
-        const cx = paint || cs.overflowX !== 'visible';
-        const cy = paint || cs.overflowY !== 'visible';
-        if (cx || cy) chain = [{ el: parent, box: paddingBox(parent), cx, cy, sx: !paint && scrollsOn(cs.overflowX), sy: !paint && scrollsOn(cs.overflowY) }, ...chain];
+    if (up !== null && up !== document.documentElement) {
+        const above = reachClipChain(up, seen);
+        // A sticky box keeps its place on screen as the links above it scroll: it is pinned under each (`pairClip` gives it no scroll exception).
+        const sticky = position === 'sticky';
+        const carried = sticky ? above.map((l) => (l.pinned ? l : { ...l, pinned: true })) : above;
+        const link = clipLinkOf(up);
+        chain = link === undefined ? carried : [{ ...link, pinned: sticky }, ...carried];
     }
     seen.set(el, chain);
     return chain;
 }
 
-/** What a chain of clips shows of a paint held to `other` (`reachClipChain`): every link, but on an axis a link that holds `other` scrolls. */
-function pairClip(chain: readonly ClipLink[], other: Element): Box {
+/** What a chain of clips shows of a paint held to a box whose own chain is `other` (`reachClipChain`): every link, but on an axis a link scrolls when it scrolls both and neither is pinned under it. */
+function pairClip(chain: readonly ClipLink[], other: readonly ClipLink[]): Box {
     let b: Box = ANYWHERE;
     for (const l of chain) {
-        const holds = l.el.contains(other);
-        if (l.cx && !(holds && l.sx)) b = { ...b, left: Math.max(b.left, l.box.left), right: Math.min(b.right, l.box.right) };
-        if (l.cy && !(holds && l.sy)) b = { ...b, top: Math.max(b.top, l.box.top), bottom: Math.min(b.bottom, l.box.bottom) };
+        const together = !l.pinned && other.some((o) => o.el === l.el && !o.pinned);
+        if (l.cx && !(together && l.sx)) b = { ...b, left: Math.max(b.left, l.box.left), right: Math.min(b.right, l.box.right) };
+        if (l.cy && !(together && l.sy)) b = { ...b, top: Math.max(b.top, l.box.top), bottom: Math.min(b.bottom, l.box.bottom) };
     }
     return b;
 }
@@ -1871,6 +1917,8 @@ type ReachPaints = {
     anywhere?: string;
     /** Its clipping ancestors, its own window, and whether that window cuts all of it (a pseudo's); set by `cutToClips`. */
     chain?: ClipLink[];
+    /** The links that carry it as they scroll (`pairClip`'s other side): its chain, and a pseudo's host's own clip, whose content it is. */
+    carriers?: ClipLink[];
     own?: Box;
     ownAll?: boolean;
 };
@@ -2057,6 +2105,8 @@ function reachBound(p: ReachPaints): Box {
  */
 function cutToClips(el: Element, p: ReachPaints, chainSeen: Map<Element, ClipLink[]>, pseudo = false): void {
     p.chain = reachClipChain(el, chainSeen);
+    const hostLink = pseudo ? clipLinkOf(el) : undefined;
+    p.carriers = hostLink === undefined ? p.chain : [hostLink, ...p.chain];
     p.own = reachOwnClip(el);
     p.ownAll = pseudo;
     p.bound = p.anywhere !== undefined ? ANYWHERE : (intersect(reachBound(p), cutClip(p.chain)) ?? NO_BOX);
@@ -2065,6 +2115,7 @@ function cutToClips(el: Element, p: ReachPaints, chainSeen: Map<Element, ClipLin
 /** Where a box clips its own content: its padding box on the axes it clips, or undefined where it clips none. */
 function reachOwnClip(el: Element): Box | undefined {
     const cs = getComputedStyle(el);
+    if (cs.display === 'contents') return undefined;
     const paint = /\b(?:paint|strict|content)\b/.test(cs.contain);
     const cx = paint || cs.overflowX !== 'visible';
     const cy = paint || cs.overflowY !== 'visible';
@@ -2322,10 +2373,10 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
         if (rc.pseudo === null ? rc.el === tn || rc.el.contains(tn) || tn.contains(rc.el) : rc.el === tn || tn.contains(rc.el)) continue;
         if (!target.boxes.some((b) => intersect(p.bound, b) !== undefined)) continue;
         // What each side's clips show of it, held to the other (`pairClip`).
-        const tClip = pairClip(target.chain, rc.el);
+        const tClip = pairClip(target.chain, p.carriers ?? p.chain ?? []);
         const boxes = target.boxes.map((b) => intersect(b, tClip)).filter((b): b is Box => b !== undefined);
         if (boxes.length === 0) continue;
-        const rClip = pairClip(p.chain ?? [], tn);
+        const rClip = pairClip(p.chain ?? [], target.chain);
         const textual = (kind: ReachKind): boolean => p.ownAll === true || kind.startsWith('text-shadow') || kind === 'decoration';
         const clipFor = (kind: ReachKind): Box => (p.own !== undefined && textual(kind) ? (intersect(rClip, p.own) ?? NO_BOX) : rClip);
         t.pairs += 1;
