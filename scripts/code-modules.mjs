@@ -401,7 +401,7 @@ export function moduleReport(run, canary, painted) {
     const faults = run.faults ?? [];
     lines.push(`1d, failed closed (failures: a module under ${MODULE_MIN_PX}px, a matrix it cannot read or pair): ${faults.length === 0 ? 'none' : `${faults.length}${faults.slice(0, 12).map((line) => `\n    ${line}`).join('')}${faults.length > 12 ? `\n    … and ${faults.length - 12} more` : ''}`}`);
     const thrown = [...(run.thrown ?? []), ...(canary.thrown ?? [])];
-    lines.push(`1d, threw (each a failure on the walk; on the canary's reads, said): ${thrown.length === 0 ? 'none' : `${thrown.length}${thrown.slice(0, 12).map((line) => `\n    ${line}`).join('')}${thrown.length > 12 ? `\n    … and ${thrown.length - 12} more` : ''}`}`);
+    lines.push(`1d, threw (in its own read, a failure of the job; answering for the matrices, each code read off that answer fails closed, and on a fresh pair the first reading stands; on the canary's reads, said): ${thrown.length === 0 ? 'none' : `${thrown.length}${thrown.slice(0, 12).map((line) => `\n    ${line}`).join('')}${thrown.length > 12 ? `\n    … and ${thrown.length - 12} more` : ''}`}`);
     // A turned frame's codes are read by neither 1d nor the quiet zone: said by look and code, never passed in silence.
     const turned = Object.entries(run.turnedByClass ?? {})
         .filter(([, codes]) => codes.size > 0)
