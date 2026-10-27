@@ -2432,6 +2432,65 @@ function ownPaints(
     return paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined ? undefined : paints;
 }
 
+/** A look pseudo's region as 1b reads it (`pseudoRegion`), off its computed style and its host's box. */
+function lookPseudoRegion(cs: CSSStyleDeclaration, hr: DOMRect): ReturnType<typeof pseudoRegion> {
+    const px = (v: string): number => Number.parseFloat(v) || 0;
+    return pseudoRegion({
+        host: { left: hr.left, top: hr.top, right: hr.right, bottom: hr.bottom },
+        display: cs.display,
+        position: cs.position,
+        width: cs.width,
+        height: cs.height,
+        top: cs.top,
+        right: cs.right,
+        bottom: cs.bottom,
+        left: cs.left,
+        marginTop: cs.marginTop,
+        marginRight: cs.marginRight,
+        marginBottom: cs.marginBottom,
+        marginLeft: cs.marginLeft,
+        paddingX: px(cs.paddingLeft) + px(cs.paddingRight),
+        paddingY: px(cs.paddingTop) + px(cs.paddingBottom),
+        borderX: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
+        borderY: px(cs.borderTopWidth) + px(cs.borderBottomWidth),
+        fontSize: px(cs.fontSize) || 16,
+        lineHeight: cs.lineHeight,
+        text: pseudoText(cs.content),
+        transform: cs.transform,
+        translate: cs.translate,
+        rotate: cs.rotate,
+        scale: cs.scale,
+        offsetPath: cs.getPropertyValue('offset-path') || 'none',
+        zoom: cs.zoom,
+    });
+}
+
+/**
+ * A look pseudo's paints that reach, from its region (`lookPseudoRegion`):
+ * its box paints off the region and, where it prints text, the region as a
+ * box and its text's paints; where its region cannot be read, nowhere it can
+ * name, if it paints at all (its text, its own area, or a paint that
+ * reaches). 1b's reachers and 1c's trigger read a pseudo by this one road.
+ */
+function pseudoReachPaints(el: Element, cs: CSSStyleDeclaration, region: ReturnType<typeof pseudoRegion>, k: number): ReachPaints {
+    const text = pseudoText(cs.content);
+    const paints: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
+    const holdsText = text.trim() !== '';
+    if ('anywhere' in region) {
+        // It fails closed where it paints at all: its text, its own area, or a paint that reaches.
+        const probe: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
+        boxReaches(boxPaintFacts(cs, false), NO_BOX, undefined, k, probe);
+        if (holdsText || paintsOwnArea(cs) || probe.sharp.length > 0 || probe.soft.length > 0 || probe.anywhere !== undefined) paints.anywhere = region.anywhere;
+    } else {
+        boxReaches(boxPaintFacts(cs, false), region.box, undefined, k, paints);
+        if (holdsText) {
+            paints.sharp.push({ kind: 'pseudo box', rect: region.box, base: undefined, what: `its text ${JSON.stringify(text.slice(0, 8))} at ${cs.fontSize}`, soft: false });
+            textReaches(el, cs, [region.box], [region.box], k, paints, true);
+        }
+    }
+    return paints;
+}
+
 /** The reachers on `surface` (`only`: of these elements alone), each with the paints that reach; tallies into `t` where `rest`. */
 function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined, clipSeen: Map<Element, ClipLink[]>, t: ReachTally, rest: boolean): Reacher[] {
     const out: Reacher[] = [];
@@ -2482,51 +2541,8 @@ function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined,
             const cs = getComputedStyle(el, pseudo);
             if (cs.content === 'none' || cs.content === 'normal' || cs.display === 'none' || cs.visibility !== 'visible') continue;
             if (rest) t.pseudos += 1;
-            const text = pseudoText(cs.content);
-            const px = (v: string): number => Number.parseFloat(v) || 0;
-            const region = pseudoRegion({
-                host: { left: hr.left, top: hr.top, right: hr.right, bottom: hr.bottom },
-                display: cs.display,
-                position: cs.position,
-                width: cs.width,
-                height: cs.height,
-                top: cs.top,
-                right: cs.right,
-                bottom: cs.bottom,
-                left: cs.left,
-                marginTop: cs.marginTop,
-                marginRight: cs.marginRight,
-                marginBottom: cs.marginBottom,
-                marginLeft: cs.marginLeft,
-                paddingX: px(cs.paddingLeft) + px(cs.paddingRight),
-                paddingY: px(cs.paddingTop) + px(cs.paddingBottom),
-                borderX: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
-                borderY: px(cs.borderTopWidth) + px(cs.borderBottomWidth),
-                fontSize: px(cs.fontSize) || 16,
-                lineHeight: cs.lineHeight,
-                text,
-                transform: cs.transform,
-                translate: cs.translate,
-                rotate: cs.rotate,
-                scale: cs.scale,
-                offsetPath: cs.getPropertyValue('offset-path') || 'none',
-                zoom: cs.zoom,
-            });
-            const k = reachScale(el, hr);
-            const paints: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
-            const holdsText = text.trim() !== '';
-            if ('anywhere' in region) {
-                // It fails closed where it paints at all: its text, its own area, or a paint that reaches.
-                const probe: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
-                boxReaches(boxPaintFacts(cs, false), NO_BOX, undefined, k, probe);
-                if (holdsText || paintsOwnArea(cs) || probe.sharp.length > 0 || probe.soft.length > 0 || probe.anywhere !== undefined) paints.anywhere = region.anywhere;
-            } else {
-                boxReaches(boxPaintFacts(cs, false), region.box, undefined, k, paints);
-                if (holdsText) {
-                    paints.sharp.push({ kind: 'pseudo box', rect: region.box, base: undefined, what: `its text ${JSON.stringify(text.slice(0, 8))} at ${cs.fontSize}`, soft: false });
-                    textReaches(el, cs, [region.box], [region.box], k, paints, true);
-                }
-            }
+            const region = lookPseudoRegion(cs, hr);
+            const paints = pseudoReachPaints(el, cs, region, reachScale(el, hr));
             if (paints.sharp.length === 0 && paints.soft.length === 0 && paints.anywhere === undefined) continue;
             cutToClips(el, paints, clipSeen, true);
             out.push({ el, pseudo, paints });
@@ -13055,8 +13071,8 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
  * The trigger (`digitTrigger`, `layout/digitTrigger.ts`): a box placed by a
  * relative or sticky offset, a transform, a negative margin, an out-of-flow
  * position, a motion path or an animation that sets more than an ink or a
- * ground, whose painted boxes (its own and every box it holds, grown by its
- * own sharp reach, each cut by the clips of the box whose content it is and
+ * ground, whose painted boxes (its own and every box it holds, each grown by
+ * 1b's whole sharp reach set, each cut by the clips of the box whose content it is and
  * held to the money node's own: `reachClipChain`, `pairClip`, 1b's) meet a
  * money node's line boxes —
  * neither the money node nor a box that holds it, which carry the money with
@@ -13135,11 +13151,29 @@ function triggerMeet(paints: readonly TriggerPaint[], node: TriggerLines): Box |
     return undefined;
 }
 
-/** A box's own sharp reach past it (an outline, a box shadow's offset and spread, a border image's outset), as 1b reads it. */
-function sharpReachOf(cs: CSSStyleDeclaration, base: Box): Box[] {
-    const paints: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
-    boxReaches(boxPaintFacts(cs, false), base, undefined, 1, paints);
-    return paints.sharp.map((s) => s.rect);
+/** The kinds of a reach that are a box's content (its text's paints), cut to that box's own window as 1b cuts them (`judgeReacher`'s `clipFor`). */
+const textualReach = (kind: ReachKind): boolean => kind.startsWith('text-shadow') || kind === 'decoration';
+
+/**
+ * What one element paints, as the trigger reads it: its border box, and 1b's
+ * whole sharp reach set off it (`ownPaints`: a box shadow's offset and spread,
+ * an outline, a border image's outset, a `drop-shadow()`, its own text's
+ * text-shadow off its lines' measured ink and its decoration lines' bands,
+ * a blurred layer by its core), each held by `chain`; its text's paints cut
+ * to its own window. A paint 1b cannot read is said instead (fails closed).
+ */
+function triggerPaintsOf(el: Element, chain: ClipLink[], range: Range): TriggerPaint[] | string {
+    const out: TriggerPaint[] = [];
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 || r.height > 0) out.push({ rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom }, chain, carriers: chain, own: undefined });
+    const owner = reachOwner(el);
+    if (owner === undefined) return out;
+    const paints = ownPaints(el, owner.cs, owner.boxed, range);
+    if (paints === undefined) return out;
+    if (paints.anywhere !== undefined) return paints.anywhere;
+    const window = reachOwnClip(el);
+    for (const sh of paints.sharp) out.push({ rect: sh.rect, chain, carriers: chain, own: textualReach(sh.kind) ? window : undefined });
+    return out;
 }
 
 /**
@@ -13152,13 +13186,15 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
     const root = scope === document ? document.getElementById('app')! : (scope as Element);
     const money = preparedNodes.filter((node) => node.matches(MONEY) && node.getClientRects().length > 0);
     const out: DigitTrigger = { reasons: [], count: 0, movers: 0, elements: 0, ms: 0 };
-    const box = (r: DOMRect): Box => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
     if (money.length === 0) {
         out.ms = performance.now() - t0;
         return out;
     }
     // Each node's line boxes cut to its own window where it clips its own text, and its chain of clips, held per pair to a mover's (`triggerMeet`).
     const chainSeen = new Map<Element, ClipLink[]>();
+    // What each element paints, read once though nested movers hold it twice.
+    const paintsSeen = new Map<Element, TriggerPaint[] | string>();
+    const range = document.createRange();
     const lines = new Map<Element, TriggerLines>(
         money.map((node) => {
             const own = reachOwnClip(node);
@@ -13199,15 +13235,18 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
         // A box that holds every money node carries all of them with it.
         if (money.every((node) => el === node || el.contains(node))) continue;
         out.movers += 1;
-        // Its own box and its reach, held by its own chain; every box it holds, by that box's chain.
-        const chain = reachClipChain(el, chainSeen);
-        const own = box(el.getBoundingClientRect());
-        const painted: TriggerPaint[] = [own, ...sharpReachOf(cs, own)].map((rect) => ({ rect, chain, carriers: chain, own: undefined }));
-        for (const d of el.querySelectorAll('*')) {
-            const r = d.getBoundingClientRect();
-            if (r.width === 0 && r.height === 0) continue;
-            const held = reachClipChain(d, chainSeen);
-            painted.push({ rect: box(r), chain: held, carriers: held, own: undefined });
+        // Its own box and every box it holds, each grown by its whole sharp reach and held by its own chain (`triggerPaintsOf`).
+        const painted: TriggerPaint[] = [];
+        let unread: string | undefined;
+        for (const d of [el, ...el.querySelectorAll('*')]) {
+            let held = paintsSeen.get(d);
+            if (held === undefined) paintsSeen.set(d, (held = triggerPaintsOf(d, reachClipChain(d, chainSeen), range)));
+            if (typeof held === 'string') unread ??= d === el ? held : `${named(d)}'s ${held}`;
+            else painted.push(...held);
+        }
+        if (unread !== undefined) {
+            say(`${named(el)} (${kinds.join('; ')}) paints where this page cannot read: ${unread.slice(0, 120)}`);
+            continue;
         }
         for (const node of money) {
             if (el === node || el.contains(node)) continue;
@@ -13246,35 +13285,7 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
             if (kinds.length === 0) continue;
             out.movers += 1;
             const hr = host.getBoundingClientRect();
-            const px = (v: string): number => Number.parseFloat(v) || 0;
-            const region = pseudoRegion({
-                host: box(hr),
-                display: cs.display,
-                position: cs.position,
-                width: cs.width,
-                height: cs.height,
-                top: cs.top,
-                right: cs.right,
-                bottom: cs.bottom,
-                left: cs.left,
-                marginTop: cs.marginTop,
-                marginRight: cs.marginRight,
-                marginBottom: cs.marginBottom,
-                marginLeft: cs.marginLeft,
-                paddingX: px(cs.paddingLeft) + px(cs.paddingRight),
-                paddingY: px(cs.paddingTop) + px(cs.paddingBottom),
-                borderX: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
-                borderY: px(cs.borderTopWidth) + px(cs.borderBottomWidth),
-                fontSize: px(cs.fontSize) || 16,
-                lineHeight: cs.lineHeight,
-                text: pseudoText(cs.content),
-                transform: cs.transform,
-                translate: cs.translate,
-                rotate: cs.rotate,
-                scale: cs.scale,
-                offsetPath: cs.getPropertyValue('offset-path') || 'none',
-                zoom: cs.zoom,
-            });
+            const region = lookPseudoRegion(cs, hr);
             const who = `${named(host)}::${which} (${kinds.join('; ')})`;
             if ('anywhere' in region) {
                 say(`${who} stands where this page cannot read: ${region.anywhere}`);
@@ -13285,7 +13296,13 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
             const hostLink = clipLinkOf(host);
             const carriers = hostLink === undefined ? chain : [hostLink, ...chain];
             const ownWindow = reachOwnClip(host);
-            const painted: TriggerPaint[] = [region.box, ...sharpReachOf(cs, region.box)].map((rect) => ({ rect, chain, carriers, own: ownWindow }));
+            // Its region, and 1b's whole sharp reach set off it (`pseudoReachPaints`), all of it its host's content.
+            const reach = pseudoReachPaints(host, cs, region, reachScale(host, hr));
+            if (reach.anywhere !== undefined) {
+                say(`${who} paints where this page cannot read: ${reach.anywhere.slice(0, 120)}`);
+                continue;
+            }
+            const painted: TriggerPaint[] = [region.box, ...reach.sharp.map((sh) => sh.rect)].map((rect) => ({ rect, chain, carriers, own: ownWindow }));
             for (const node of money) {
                 const at = triggerMeet(painted, lines.get(node)!);
                 if (at !== undefined) say(`${who} meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);

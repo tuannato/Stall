@@ -23,10 +23,14 @@
  *   `PAINT_ONLY_ANIMATION`, or whose keyframes this page cannot read (a custom
  *   property, which Chrome's `getKeyframes()` leaves out, fails closed).
  *
- * **What it paints**: its own border box and every box it holds, grown by its
- * own sharp reach (an outline, a box shadow's offset and spread, a border
- * image's outset); a look's moved pseudo-element by the region 1b reads it in
- * (`pseudoRegion`). Each painted rect is cut by the clips of the box whose
+ * **What it paints**: its own border box and every box it holds, each grown by
+ * 1b's whole sharp reach set (`ownPaints` in the probe: a box shadow's offset
+ * and spread, an outline, a border image's outset, a `drop-shadow()`, its own
+ * text's text-shadow off its lines' measured ink, its decoration lines'
+ * bands; a blurred layer by its core); a look's moved pseudo-element by the
+ * region 1b reads it in (`pseudoRegion`) and that same set off it
+ * (`pseudoReachPaints`). A paint 1b cannot read triggers the job (fails
+ * closed). Each painted rect is cut by the clips of the box whose
  * content it is — its parent, or an out-of-flow box's containing block — held
  * to the money node's own, 1b's `reachClipChain` and `pairClip` in the probe:
  * a clip between an absolute box and its containing block does not cut it,
