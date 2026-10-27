@@ -13083,7 +13083,15 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
  */
 type DigitTrigger = { reasons: string[]; count: number; movers: number; elements: number; ms: number };
 /** One money character, as the runner reads it: its own text box (`Range`), its ink, and its reference count. */
-type MoneyChar = { x: number; y: number; w: number; h: number; ink: string; ref: number; c: string };
+/**
+ * One money character, as the runner reads it: its own text box (`Range`),
+ * its ink, and its reference count; on a turned or scaled frame (`turn`)
+ * its reference is the glyph drawn upright, which says whether it is too
+ * small, and the sixteen phases of the turn it is held to (`charReference`).
+ */
+type MoneyChar = { x: number; y: number; w: number; h: number; ink: string; ref: number; c: string; turn?: CharTurn };
+/** A turned frame's reference at each of `CHAR_TURN_PHASES`: its count, and its mask over the character's pixel box as hex (row by row, four pixels a digit, the first pixel the high bit). */
+type CharTurn = { counts: number[]; masks: string[] };
 /** One money node's characters, by its index among the prepared nodes, and the characters left out by reason. */
 type MoneyCharsTarget = { i: number; sel: string; chars: MoneyChar[]; skipped: Record<string, number> };
 type MoneyChars = { targets: MoneyCharsTarget[]; prepared: number; ms: number };
@@ -13324,7 +13332,9 @@ const CHAR_REF_SIDE = 512;
 let refContext: CanvasRenderingContext2D | null | undefined;
 /** The upright canvas a turned frame's reference glyph is drawn on before it is resampled into the turn. */
 let uprightContext: CanvasRenderingContext2D | null | undefined;
-const refCache = new Map<string, number>();
+/** A character's reference (`charReference`): its count, and on a turned frame its sixteen phases. */
+type CharRef = { ref: number; turn?: CharTurn };
+const refCache = new Map<string, CharRef>();
 
 /**
  * A character's reference count: `c` drawn alone on a canvas in `cs`'s face,
@@ -13336,8 +13346,17 @@ const refCache = new Map<string, number>();
  * height is the rounded ascent and descent (Chrome's content area), in
  * proportion otherwise. `undefined` where no canvas draws, or the box is
  * wider or taller than the canvas.
+ *
+ * On a turned or scaled frame (`linear`) where the upright raster put the
+ * glyph inside its pixels is not known, so it answers, at each of
+ * `CHAR_TURN_PHASES`, the count and the mask of the glyph resampled into the
+ * turn (`turn`), for the runner to hold the character to the phase whose
+ * mask its shown pixels match best (`turnRef` in `char-read.mjs`, the
+ * eleventh critic's P1: the least of the sixteen let a partial cover pass
+ * there); and, as its `ref`, the least count over the same phases of the
+ * glyph drawn upright in its own box, which says whether it is too small.
  */
-function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: DOMMatrixReadOnly): number | undefined {
+function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: DOMMatrixReadOnly): CharRef | undefined {
     const x0 = Math.floor(r.x);
     const y0 = Math.floor(r.y);
     const cw = Math.ceil(r.x + r.width) - x0;
@@ -13365,9 +13384,11 @@ function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: 
     let key: string;
     let draw: (phase?: [number, number]) => void;
     // Where the page's upright raster put the glyph inside its pixels is
-    // not known in a turned frame, so its reference is the least count over
-    // `CHAR_TURN_PHASES` of them (one, where the frame is upright).
+    // not known in a turned frame, so it is drawn at each of
+    // `CHAR_TURN_PHASES` (one, where the frame is upright).
     let phases: [number, number][] = [[0, 0]];
+    // A turned frame's upright glyph, counted in its own box at a phase (`draw` sets it).
+    let uprightCount = 0;
     if (linear === undefined) {
         const rounded = Math.abs(r.height - (Math.round(a) + Math.round(d))) < 0.05;
         const base = rounded ? Math.round(a) : a + d > 0 ? (r.height * a) / (a + d) : a;
@@ -13409,6 +13430,13 @@ function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: 
             up.textAlign = 'left';
             up.fillStyle = '#000';
             up.fillText(c, CHAR_REF_PAD + phase[0], CHAR_REF_PAD + phase[1] + Math.round(a));
+            // The glyph drawn upright, counted in its own pixel box as an upright frame counts it: whether it is too small.
+            const ux0 = Math.floor(CHAR_REF_PAD + phase[0]);
+            const uy0 = Math.floor(CHAR_REF_PAD + phase[1]);
+            const uw = Math.ceil(CHAR_REF_PAD + phase[0] + w0) - ux0;
+            const ud = up.getImageData(ux0, uy0, Math.max(1, uw), Math.max(1, Math.ceil(CHAR_REF_PAD + phase[1] + h0) - uy0)).data;
+            uprightCount = 0;
+            for (let i = 3; i < ud.length; i += 4) if (ud[i]! >= 128) uprightCount += 1;
             // Upright box centre at (P + w0/2, P + h0/2), mapped onto the page box's centre.
             const ux = CHAR_REF_PAD + phase[0] + w0 / 2;
             const uy = CHAR_REF_PAD + phase[1] + h0 / 2;
@@ -13422,18 +13450,35 @@ function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: 
     }
     const seen = refCache.get(key);
     if (seen !== undefined) return seen;
-    let least = Infinity;
+    const counts: number[] = [];
+    const masks: string[] = [];
+    let upright = Infinity;
     for (const phase of phases) {
         ctx.clearRect(0, 0, cw + 2 * CHAR_REF_PAD, ch + 2 * CHAR_REF_PAD);
         ctx.fillStyle = '#000';
         draw(phase);
         const data = ctx.getImageData(CHAR_REF_PAD, CHAR_REF_PAD, cw, ch).data;
         let n = 0;
-        for (let i = 3; i < data.length; i += 4) if (data[i]! >= 128) n += 1;
-        least = Math.min(least, n);
+        let mask = '';
+        let nibble = 0;
+        for (let i = 3, k = 0; i < data.length; i += 4, k += 1) {
+            const on = data[i]! >= 128;
+            if (on) n += 1;
+            nibble = (nibble << 1) | (on ? 1 : 0);
+            if (k % 4 === 3) {
+                mask += nibble.toString(16);
+                nibble = 0;
+            }
+        }
+        const left = (cw * ch) % 4;
+        if (left !== 0) mask += (nibble << (4 - left)).toString(16);
+        counts.push(n);
+        masks.push(mask);
+        upright = Math.min(upright, uprightCount);
     }
-    refCache.set(key, least);
-    return least;
+    const got: CharRef = linear === undefined ? { ref: counts[0]! } : { ref: upright, turn: { counts, masks } };
+    refCache.set(key, got);
+    return got;
 }
 
 /**
@@ -13544,12 +13589,12 @@ window.__moneyChars = () => {
                     continue;
                 }
                 const drawn = same ? shownCps[k]! : painted(ch, cs.textTransform);
-                const ref = charReference(drawn, cs, r, linear);
-                if (ref === undefined) {
+                const got = charReference(drawn, cs, r, linear);
+                if (got === undefined) {
                     skip('too big');
                     continue;
                 }
-                target.chars.push({ x: r.x, y: r.y, w: r.width, h: r.height, ink, ref, c: drawn });
+                target.chars.push({ x: r.x, y: r.y, w: r.width, h: r.height, ink, ref: got.ref, c: drawn, ...(got.turn === undefined ? {} : { turn: got.turn }) });
             }
         }
     });

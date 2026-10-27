@@ -11,6 +11,7 @@ import {
     CHAR_KEEP_CUT,
     CHAR_MASK_ALPHA,
     CHAR_REF_MIN,
+    CHAR_TURN_FLOOR,
     charKept,
     charKind,
     charReport,
@@ -18,10 +19,12 @@ import {
     charsMoved,
     foldShares,
     inkOf,
+    maskBits,
     mergeShares,
     readCharsAgain,
     readMoneyChars,
     shareQuantile,
+    turnRef,
 } from './char-read.mjs';
 
 /** A white image of `w` by `h`, four bytes a pixel, with `paint` setting pixels. */
@@ -127,6 +130,70 @@ describe('a character is held to its own reference (charKept, readMoneyChars)', 
     });
 });
 
+/** A mask over `ch()`'s 6-by-7 pixel box, as the probe hands it (hex, four pixels a digit, the first the high bit): the pixels `on` names, in box coordinates. */
+const maskHex = (on, w = 6, h = 7) => {
+    let bits = '';
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) bits += on(x, y) ? '1' : '0';
+    while (bits.length % 4 !== 0) bits += '0';
+    let hex = '';
+    for (let k = 0; k < bits.length; k += 4) hex += Number.parseInt(bits.slice(k, k + 4), 2).toString(16);
+    return hex;
+};
+/** The glyph `shownWith` paints (4 by 5 at box 1,1), and a thinner phase of it (2 by 4 at box 2,1): two phases of a turn. */
+const GLYPH = maskHex((x, y) => x >= 1 && x <= 4 && y >= 1 && y <= 5);
+const THIN = maskHex((x, y) => x >= 2 && x <= 3 && y >= 1 && y <= 4);
+
+describe('a character on a turned frame is held to the phase its shown pixels match (turnRef, CHAR_TURN_FLOOR)', () => {
+    it('reads a mask as the probe writes it', () => {
+        assert.deepEqual([...maskBits('a0', 6)], [1, 0, 1, 0, 0, 0]);
+        assert.equal(maskBits(GLYPH, 42).reduce((n, b) => n + b, 0), 20);
+    });
+    it('picks the phase whose mask its shown pixels share most of, and the larger count at a tie', () => {
+        const shown = charKept(BLANK, shownWith(), ch(), true).mask;
+        assert.deepEqual(turnRef(shown, { counts: [20, 8], masks: [GLYPH, THIN] }), { phase: 0, ref: 20, match: 1 });
+        // Covered whole, it matches no phase: held to the largest.
+        assert.equal(turnRef(new Uint8Array(42), { counts: [8, 20], masks: [THIN, GLYPH] }).ref, 20);
+        // Drawn thin by its turn, it is held to the thin phase it matches, not to the largest: an uncovered glyph keeps all of it.
+        const thin = image(40, 30, (set) => {
+            for (let y = 10; y < 14; y += 1) for (let x = 11; x < 13; x += 1) set(x, y, [0, 0, 0]);
+        });
+        assert.deepEqual(turnRef(charKept(BLANK, thin, ch(), true).mask, { counts: [20, 8], masks: [GLYPH, THIN] }), { phase: 1, ref: 8, match: 1 });
+        const r = readMoneyChars(BLANK, thin, { targets: [target([ch({ ref: 18, turn: { counts: [20, 8], masks: [GLYPH, THIN] } })])], prepared: 1 });
+        assert.equal(r.would.length, 0);
+        assert.equal(r.shares[0].share, 1);
+    });
+    it('fails a partial cover that the least of the phases would have passed', () => {
+        // Eleven of twenty covered: 9 kept. Held to the least phase (8) it keeps more than all of it; held to the phase it matches, 0.45.
+        let n = 0;
+        const turned = ch({ ref: 18, turn: { counts: [20, 8], masks: [GLYPH, THIN] } });
+        const r = readMoneyChars(BLANK, shownWith(() => (n += 1) <= 11), { targets: [target([turned])], prepared: 1 });
+        assert.equal(r.would.length, 1);
+        assert.match(r.would[0].why, /keeps 9 of its 20 reference pixel\(s\) \(the phase of its turn its shown pixels match best\), 0\.45/);
+        assert.equal(r.shares[0].turned, true);
+        assert.equal(readMoneyChars(BLANK, shownWith(), { targets: [target([turned])], prepared: 1 }).would.length, 0);
+    });
+    it('says it is too small by its glyph drawn upright, and on a turn where a phase leaves it under the floor', () => {
+        assert.equal(CHAR_TURN_FLOOR, 3);
+        // A digit whose least phase draws 5 (under CHAR_REF_MIN) and whose upright glyph covers 18 is held (the critic's Rural "5").
+        const held = readMoneyChars(BLANK, shownWith(), { targets: [target([ch({ ref: 18, turn: { counts: [20, 5], masks: [GLYPH, THIN] } })])], prepared: 1 });
+        assert.equal(held.held, 1);
+        assert.equal(held.small, 0);
+        // A phase that leaves it 2 pixels: the turn can erase it, so it is not held.
+        const erased = readMoneyChars(BLANK, BLANK, { targets: [target([ch({ ref: 18, c: '=', turn: { counts: [20, CHAR_TURN_FLOOR - 1], masks: [GLYPH, THIN] } })])], prepared: 1 });
+        assert.deepEqual(erased.smallKinds, { 'other on a turn': 1 });
+        assert.equal(erased.would.length, 0);
+        // Its upright glyph under CHAR_REF_MIN: too small by kind, as on an upright frame.
+        const tiny = readMoneyChars(BLANK, BLANK, { targets: [target([ch({ ref: CHAR_REF_MIN - 1, c: '.', turn: { counts: [20, 20], masks: [GLYPH, GLYPH] } })])], prepared: 1 });
+        assert.deepEqual(tiny.smallKinds, { other: 1 });
+    });
+    it('believes a fresh pair only where a turned character answers the same phases', () => {
+        const a = { targets: [target([ch({ turn: { counts: [20, 8], masks: [GLYPH, THIN] } })])], prepared: 1 };
+        const b = { targets: [target([ch({ turn: { counts: [20, 9], masks: [GLYPH, THIN] } })])], prepared: 1 };
+        assert.equal(charsMoved(a, a), undefined);
+        assert.match(charsMoved(a, b), /on the fresh pair/);
+    });
+});
+
 describe('what the page’s characters must add up to (charsFault)', () => {
     const moneyTargets = [{ i: 3, sel: 'span.item-x[price]' }];
     it('says nothing where every character prepared is answered, read or left out by reason', () => {
@@ -222,7 +289,7 @@ describe('the shares and the report (foldShares, shareQuantile, charReport)', ()
         };
         const lines = charReport(run);
         assert.match(lines[0], /desktop t-neo 0 of 5 job\(s\) triggered; mobile t-modern 2 of 10 job\(s\) triggered \(1 by 1a's failures\), 30 character\(s\), 28 held/);
-        assert.match(lines[1], /too small to hold \(a reference under 6 pixels\), by kind: other 2/);
+        assert.match(lines[1], /too small to hold \(a reference under 6 pixels — on a turned frame, its glyph drawn upright — or, "on a turn", a phase of the turn leaving it under 3\), by kind: other 2/);
         assert.match(lines[2], /4 mover\(s\) over 100 element\(s\)/);
         assert.ok(lines.some((line) => /triggered jobs: 1\n    pay @mobile/.test(line)));
         assert.ok(lines.some((line) => /would-be failures: 1 character\(s\); by node \(characters\): mobile\/pay:span\.pay-x-n\[price\] 1/.test(line)));

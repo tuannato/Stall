@@ -43,6 +43,25 @@ export const CHAR_KEEP_CUT = 0.5;
  */
 export const CHAR_REF_MIN = 6;
 
+/**
+ * A character on a turned frame (Rural's swaying tag and tilted rows: the
+ * compositor resamples the frame's upright raster into the turn) is held
+ * only where the least of the sixteen phases of the turn leaves its glyph at
+ * least this many pixels: where some phase leaves it fewer, the turn alone
+ * can erase it, and a character read at that phase would read as covered
+ * with nothing over it. Measured (`PROBE-RULES.md`, "Before 8g2, 1c(c): the
+ * eleventh review's fixes"), with every job holding money read: the "=" on
+ * Rural's Pay several strip is erased whole at four to eight of its sixteen
+ * phases, and on the page its four reads kept 0, 4, 5 and 10 pixels where
+ * its other phases draw 8 to 11 — held, it would fail with nothing over it;
+ * every turned character a floor of 1, 2 or 3 holds is held by all three, and
+ * at 4 ten letters drop out. Its glyph drawn upright says whether it is too
+ * small (`CHAR_REF_MIN`; the critic's P1: the least of the sixteen fell to 3–5
+ * for digits that keep 12–18 on the page, Rural's "+5% surcharge" "5" and its
+ * selection line's "7", which are held now).
+ */
+export const CHAR_TURN_FLOOR = 3;
+
 /** An ink as the probe hands it (`rgb()`, `rgba()` or `color(srgb …)`), as three channels. */
 export function inkOf(value) {
     const m = /rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)/.exec(value);
@@ -58,9 +77,10 @@ export function inkOf(value) {
  * moved at least `CHAR_MASK_ALPHA` of the way from the blank toward the ink.
  * A pixel where the ink is the blank's own colour (under one level squared)
  * cannot move and is not counted. `inside` is false where the box runs past
- * the image, which the caller holds as unread.
+ * the image, which the caller holds as unread. `mask` (where asked for) is
+ * which of the box's pixels were counted, row by row.
  */
-export function charKept(blank, shown, ch) {
+export function charKept(blank, shown, ch, withMask = false) {
     const W = blank.width;
     const H = blank.height;
     const bpp = blank.bpp;
@@ -71,9 +91,11 @@ export function charKept(blank, shown, ch) {
     const inside = ch.w > 0 && ch.h > 0 && x0 >= 0 && y0 >= 0 && x1 < W && y1 < H;
     if (!inside) return { kept: 0, inside: false };
     const [ir, ig, ib] = inkOf(ch.ink);
+    const mask = withMask ? new Uint8Array((x1 - x0 + 1) * (y1 - y0 + 1)) : undefined;
     let kept = 0;
+    let k = 0;
     for (let y = y0; y <= y1; y += 1) {
-        for (let x = x0; x <= x1; x += 1) {
+        for (let x = x0; x <= x1; x += 1, k += 1) {
             const i = (y * W + x) * bpp;
             const dr = ir - blank.data[i];
             const dg = ig - blank.data[i + 1];
@@ -81,10 +103,48 @@ export function charKept(blank, shown, ch) {
             const den = dr * dr + dg * dg + db * db;
             if (den < 1) continue;
             const a = ((shown.data[i] - blank.data[i]) * dr + (shown.data[i + 1] - blank.data[i + 1]) * dg + (shown.data[i + 2] - blank.data[i + 2]) * db) / den;
-            if (a >= CHAR_MASK_ALPHA) kept += 1;
+            if (a >= CHAR_MASK_ALPHA) {
+                kept += 1;
+                if (mask !== undefined) mask[k] = 1;
+            }
         }
     }
-    return { kept, inside: true };
+    return mask === undefined ? { kept, inside: true } : { kept, inside: true, mask };
+}
+
+/** A mask as the probe hands it (hex, four pixels a digit, the first the high bit), as one byte a pixel over `n` pixels. */
+export function maskBits(hex, n) {
+    const out = new Uint8Array(n);
+    for (let k = 0; k < n; k += 1) out[k] = (Number.parseInt(hex[k >> 2] ?? '0', 16) >> (3 - (k & 3))) & 1;
+    return out;
+}
+
+/**
+ * The reference a character on a turned frame is held to: the count of the
+ * phase of the turn (`turn`, the probe's sixteen) whose mask its shown
+ * pixels (`shown`, `charKept`'s mask) match best, by the share of the two
+ * masks' union they share; at a tie, the larger count (the stricter). A
+ * glyph covered whole matches none and is held to the largest; a partial
+ * cover is matched to the phase that draws what is left of it, not to the
+ * phase that draws least (the eleventh critic's P1: held to the least of the
+ * sixteen, PLT's box over the right 0.30em of each price's last digit left
+ * Rural's turned digits 0.53–0.60 of their reference and Modern's upright
+ * ones 0.49–0.58; held to the phase they match, Rural's keep 0.51–0.56).
+ */
+export function turnRef(shown, turn) {
+    let best = { phase: 0, ref: -1, match: -1 };
+    turn.counts.forEach((count, phase) => {
+        const mask = maskBits(turn.masks[phase], shown.length);
+        let both = 0;
+        let either = 0;
+        for (let k = 0; k < shown.length; k += 1) {
+            both += shown[k] & mask[k];
+            either += shown[k] | mask[k];
+        }
+        const match = either === 0 ? 0 : both / either;
+        if (match > best.match || (match === best.match && count > best.ref)) best = { phase, ref: count, match };
+    });
+    return best;
 }
 
 /** A character's kind, for the distribution: a digit, a letter, or anything else. */
@@ -111,24 +171,28 @@ export function readMoneyChars(blank, shown, moneyChars) {
                 out.would.push(w);
                 continue;
             }
-            const { kept, inside } = charKept(blank, shown, ch);
+            const turned = ch.turn !== undefined;
+            const { kept, inside, mask } = charKept(blank, shown, ch, turned);
             if (!inside) {
                 const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept: 0, ref: ch.ref, why: 'its box runs past the capture' };
                 read.would.push(w);
                 out.would.push(w);
                 continue;
             }
-            if (ch.ref < CHAR_REF_MIN) {
+            // Too small: its reference under CHAR_REF_MIN (on a turned frame, its glyph drawn upright), or a phase of the turn that leaves it under CHAR_TURN_FLOOR.
+            const erased = turned && Math.min(...ch.turn.counts) < CHAR_TURN_FLOOR;
+            if (ch.ref < CHAR_REF_MIN || erased) {
                 out.small += 1;
-                const kind = charKind(ch.c);
+                const kind = ch.ref >= CHAR_REF_MIN ? `${charKind(ch.c)} on a turn` : charKind(ch.c);
                 out.smallKinds[kind] = (out.smallKinds[kind] ?? 0) + 1;
                 continue;
             }
+            const ref = turned ? turnRef(mask, ch.turn).ref : ch.ref;
             out.held += 1;
-            const share = kept / ch.ref;
-            out.shares.push({ share, kind: charKind(ch.c), ref: ch.ref, c: ch.c, sel: t.sel });
+            const share = kept / ref;
+            out.shares.push({ share, kind: charKind(ch.c), ref, c: ch.c, sel: t.sel, turned });
             if (share < CHAR_KEEP_CUT) {
-                const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept, ref: ch.ref, why: `it keeps ${kept} of its ${ch.ref} reference pixel(s), ${share.toFixed(2)} of them, under ${CHAR_KEEP_CUT}` };
+                const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept, ref, why: `it keeps ${kept} of its ${ref} reference pixel(s)${turned ? ' (the phase of its turn its shown pixels match best)' : ''}, ${share.toFixed(2)} of them, under ${CHAR_KEEP_CUT}` };
                 read.would.push(w);
                 out.would.push(w);
             }
@@ -175,7 +239,7 @@ export function charsMoved(first, again) {
         for (let j = 0; j < a.chars.length; j += 1) {
             const p = a.chars[j];
             const q = b.chars[j];
-            if (p.c !== q.c || p.x !== q.x || p.y !== q.y || p.w !== q.w || p.h !== q.h || p.ref !== q.ref) {
+            if (p.c !== q.c || p.x !== q.x || p.y !== q.y || p.w !== q.w || p.h !== q.h || p.ref !== q.ref || p.turn?.counts.join() !== q.turn?.counts.join()) {
                 return `${a.sel}'s "${p.c}" at ${p.x.toFixed(2)},${p.y.toFixed(2)} stands at ${q.x.toFixed(2)},${q.y.toFixed(2)} as "${q.c}" on the fresh pair`;
             }
         }
@@ -282,7 +346,10 @@ export function charReport(run) {
                       .join('; ')),
     );
     const small = Object.entries(run.smallKinds ?? {}).sort(([a], [b]) => a.localeCompare(b));
-    lines.push(`1c(c), too small to hold (a reference under ${CHAR_REF_MIN} pixels), by kind: ${small.length === 0 ? 'none' : small.map(([kind, n]) => `${kind} ${n}`).join(', ')}`);
+    lines.push(
+        `1c(c), too small to hold (a reference under ${CHAR_REF_MIN} pixels — on a turned frame, its glyph drawn upright — or, "on a turn", a phase of the turn leaving it under ${CHAR_TURN_FLOOR}), by kind: ` +
+            (small.length === 0 ? 'none' : small.map(([kind, n]) => `${kind} ${n}`).join(', ')),
+    );
     lines.push(
         `1c(c), the trigger read on every job: ${run.movers} mover(s) over ${run.elements} element(s), ${(run.triggerMs / 1000).toFixed(2)}s of tab time; ` +
             `the read on triggered jobs ${(run.readMs / 1000).toFixed(2)}s of tab time (${run.frames} shown frame(s) of its own, ${run.shared} shared)`,
