@@ -2268,6 +2268,7 @@ function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined,
                 rotate: cs.rotate,
                 scale: cs.scale,
                 offsetPath: cs.getPropertyValue('offset-path') || 'none',
+                zoom: cs.zoom,
             });
             const k = reachScale(el, hr);
             const paints: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };

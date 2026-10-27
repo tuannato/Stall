@@ -38,8 +38,9 @@
  *   when it holds text, placed anywhere in its host's border box, moved by its
  *   relative offsets and its margins (`pseudoRegion`): a region it stands
  *   somewhere inside. A pseudo whose size or place this cannot resolve, or
- *   that a transform, `translate`, `rotate`, `scale` or a motion path moves,
- *   or that is positioned out of flow, fails closed: it reaches anywhere.
+ *   that a transform, `translate`, `rotate`, `scale`, a motion path or its
+ *   own zoom moves or sizes, or that is positioned out of flow, fails closed:
+ *   it reaches anywhere.
  *   Because the region is wider than the box, a pseudo's paints are read with
  *   no "past its own box" exclusion — the region is not inside the box.
  * - **What a filter cannot say.** `filter: url()` names a filter this module
@@ -502,6 +503,8 @@ export type PseudoFacts = {
     rotate: string;
     scale: string;
     offsetPath: string;
+    /** Its own computed `zoom` (Chrome returns its lengths unzoomed). */
+    zoom: string;
 };
 
 /** A pseudo-element's region, or why it fails closed. */
@@ -519,7 +522,9 @@ export type PseudoRegion = { box: Box } | { anywhere: string };
  * its height its line's.
  *
  * Fails closed (reaches anywhere): a transform, `translate`, `rotate`,
- * `scale` or a motion path, which no box model here follows; `absolute`,
+ * `scale` or a motion path, which no box model here follows; its own `zoom`
+ * other than 1, which scales every length it has while the computed style
+ * gives them unzoomed; `absolute`,
  * `fixed` or `sticky`, out of flow; and a length that does not resolve. A
  * pseudo with `display: none` generates no box and paints nothing: the
  * caller leaves it out before it asks.
@@ -534,6 +539,8 @@ export function pseudoRegion(f: PseudoFacts): PseudoRegion {
     ] as const) {
         if (value.trim() !== '' && value.trim() !== none) return { anywhere: `it is moved by ${prop} ${value.slice(0, 40)}, which no box model here follows` };
     }
+    // Its own zoom scales every length it has, and Chrome returns them unzoomed (the ninth critic's Z1): this reads none of them as painted.
+    if (zoomOf(f.zoom) !== 1) return { anywhere: `it is zoomed ${f.zoom.slice(0, 20)}, and its lengths are read unzoomed` };
     if (f.position !== 'static' && f.position !== 'relative') return { anywhere: `it is positioned ${f.position}, out of flow` };
     const inline = f.display === 'inline' || f.display === 'contents';
     const lineH = pxLength(f.lineHeight) ?? f.fontSize * 1.3;

@@ -200,11 +200,13 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
         rotate: 'none',
         scale: 'none',
         offsetPath: 'none',
+        zoom: '1',
         ...over,
     });
 
     it('places a pseudo somewhere in its host, moved by its offsets and margins and grown by its text', () => {
         expect(pseudoRegion(pseudo({}))).toEqual({ box: box(100, 100, 200, 140) });
+        expect(pseudoRegion(pseudo({ zoom: 'normal' }))).toEqual({ box: box(100, 100, 200, 140) });
         // PW: moved up 60px.
         expect(pseudoRegion(pseudo({ position: 'relative', top: '-60px' }))).toEqual({ box: box(100, 40, 200, 80) });
         // PWa: a negative top margin pulls it up.
@@ -218,13 +220,16 @@ describe('paints with no hit area reaching over money (1b): the reach of each pa
         expect(inline).toEqual({ box: box(89, 89, 211, 151) });
     });
 
-    it('fails a pseudo closed where a transform moves it, where it is out of flow or where a length does not resolve', () => {
+    it('fails a pseudo closed where a transform moves it, where its own zoom sizes it, where it is out of flow or where a length does not resolve', () => {
         for (const over of [
             { transform: 'matrix(1, 0, 0, 1, 0, -60)' },
             { translate: '0px -60px' },
             { rotate: '45deg' },
             { scale: '3' },
             { offsetPath: 'ray(0deg)' },
+            // Z1: its own zoom scales lengths the computed style gives unzoomed.
+            { zoom: '20' },
+            { zoom: '0.5' },
             { position: 'absolute' },
             { position: 'sticky' },
             { width: 'auto' },
