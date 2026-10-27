@@ -12864,6 +12864,23 @@ none, a money node (`span.item-x`), another protected box, another tag or
 role, another plate's ground or ink, another reacher, a pseudo-element, and
 another kind. `BLUR_OPACITY` stays 0.2 for everything else.
 
+**Two holes in the first wiring of the entry, closed before the step was
+done** (`87ee812`). An accepted meet was said under the pair's failure key,
+so the same pair read again at a keyframe offset was never judged — a
+composite over the ceiling as the board swings, or another shadow, would
+have stood accepted on the strength of the meet at rest. It has a key of
+its own now, counted once a pair, and the pair is judged at every offset.
+And a meet read from a keyframe's own values (`reachKeyframes`) was keyed on
+the shadow the element computes at rest; it is keyed on the keyframe's own
+now, and a keyframe that sets the colour a `currentcolor` reads matches no
+entry. Red: BKV (`plants/BKV-board-keyframe-rural.css`), Rural's board with
+a keyframe of its own that draws its shadow at alpha 0.33 halfway — another
+shadow, its composite 0.22, under the ceiling (the plant replaces the sign's
+swing, so the board stands unturned and composites to 0.21 at rest). On
+`e209f18` the desk's `offers` read 0 failures, the at-rest meet accepted
+(`runs/q-BKV-before-fix-1280.log`); on `87ee812`, 7, each "at its keyframe
+at 50% (read from the keyframe's values)" (`runs/q-BKV-after-fix-1280.log`).
+
 ### Red proofs, the whole runner
 
 On `82ae137`, the scratch clone, three tabs, each plant alone
@@ -12884,6 +12901,7 @@ at 390 — and what else fails the run:
 | BA40, the board at alpha 0.40 | 142 at 1280 (composite 0.28), 0 accepted | 1: 1b alone |
 | BPL, the board over a white plate | 142 at 1280 (composite 0.23), 0 accepted | 1: 1b alone |
 | BMN, the board over the address text raised to the plate's top | 140 at 1280, over `span.addr-full` (a money node) at composite 0.22, under the ceiling; the plate's own 142 still accepted | 1: 1b alone (`runs/p-7b2-*.log`) |
+| BKV, the board's own keyframe at alpha 0.33 (on `87ee812`) | 172 at 1280, each at the keyframe's 50% (composite 0.22); the 142 at rest still accepted | 1: 1b alone (`runs/p-7b3-*.log`) |
 
 L1's failures are the tabs' band over the rows' figures at the heading's
 50%, and Neo's own text glows over the rows it pulled under them (13 at
@@ -13019,6 +13037,11 @@ calls on all four). Every run exits 0; the final runs fail nothing, accept
 the board's 142 at 1280, read no 1d failure, and see no quiet-zone
 sighting. Memory pressure (`kern.memorystatus_vm_pressure_level`) at warn
 on 8–11 of 17 samples a run, never critical.
+
+The last commit of the step (`87ee812`, the accepted meet's own key) came
+after the pairs. Its clean whole run, in the worktree (`runs/w-final.log`,
+started at a load of 2.11, the docs uncommitted): exit 0, 227.1s, 0 failures
+of 1b and 1d, the board's 142 accepted, no quiet-zone sighting.
 
 ## The kit's probe refuses a sheet that names an anchor (2026-10-28; the owner's D-2026-10-27-02)
 
