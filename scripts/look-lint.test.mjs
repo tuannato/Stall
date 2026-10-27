@@ -5497,6 +5497,24 @@ describe('a-look-never-positions-against-an-anchor', () => {
         accepts('@keyframes t-neo-move { to { translate: 0 2px; } }');
     });
 
+    it('is refused for the kit by its probe, as the workshop README says (D-2026-10-27-02)', () => {
+        // The kit's lint admits anchor positioning (below); its probe refuses every paint of the
+        // kit's look while the kit's sheet declares anchor-name (`kitAnchorFaults`), and every
+        // geometry pass of the kit's probe owes that rule a read (`probeCoverageGaps`' `kit`).
+        const readme = read('workshop/README.md').replace(/\s+/g, ' ');
+        assert.ok(
+            readme.includes('**No anchor positioning.** A box placed against an anchor follows it wherever it moves, so a sheet that names one (`anchor-name`) is refused. *(The kit — `workshop:probe`.)*'),
+            'the workshop README states the kit refuses anchor positioning, checked by workshop:probe',
+        );
+        const probe = read('layout/probe.ts');
+        assert.ok(probe.includes("const KIT_ANCHOR_CHECK = 'the-kit-takes-no-anchor-positioning';"));
+        assert.match(probe, /failures\.push\(\.\.\.lookSheetFaults\(screen, label\)\);\n\s+failures\.push\(\.\.\.kitAnchorFaults\(screen, label, look\)\);/);
+        assert.match(probe, /: named\n\s+\? `the kit's sheet declares anchor-name/);
+        assert.ok(probe.includes("const value = style.getPropertyValue('anchor-name').trim();\n        if (value !== '' && value !== 'none') named = true;"));
+        assert.ok(read('scripts/probe-coverage.mjs').includes("the-kit-takes-no-anchor-positioning read no paint of the kit's look"));
+        assert.ok(/kit: LOOKS === 'workshop'/.test(read('scripts/layout-check.mjs')));
+    });
+
     it('leaves the kit as it was: PAN and each road pass the kit lint', () => {
         assert.deepEqual(lintSheet(plantedKit(ANCHOR_PAN)), [], 'PAN in the kit');
         for (const rule of ['.t-neo .item-u { anchor-name: --t-neo-a; }', '.t-neo .pay-x-n { position: absolute; right: anchor(left); width: anchor-size(width); }', '.t-neo .pay-x-n { justify-self: anchor-center; }']) {

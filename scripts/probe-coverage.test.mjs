@@ -1023,6 +1023,33 @@ describe('1b-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
     });
 });
 
+describe('the-kit-takes-no-anchor-positioning-is-owed-on-the-kits-probe', () => {
+    /**
+     * The owner's D-2026-10-27-02: the kit's probe (`--looks workshop`)
+     * refuses every paint of the kit's look whose sheet declares
+     * `anchor-name` (`kitAnchorFaults` in the probe). A geometry pass of the
+     * kit's probe that read no paint of the kit's look under that rule
+     * refused nothing it owes; the ordinary probe owes nothing here.
+     */
+    const KIT_RULE = /^the-kit-takes-no-anchor-positioning /;
+    it('owes a read on every geometry pass of the kit’s probe, and nothing on the ordinary probe', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, { ...read, kitAnchorPaints: { read: 40, failed: 0 } }, { kit: true }).filter((gap) => KIT_RULE.test(gap)), [], pass);
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, kitAnchorPaints: { read: 0, failed: 0 } }, { kit: true }).filter((gap) => KIT_RULE.test(gap)),
+                ["the-kit-takes-no-anchor-positioning read no paint of the kit's look"],
+                pass,
+            );
+            assert.equal(probeCoverageGaps(pass, read, { kit: true }).filter((gap) => KIT_RULE.test(gap)).length, 1, pass);
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => KIT_RULE.test(gap)), [], pass);
+        }
+        for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }, { kit: true }).filter((gap) => KIT_RULE.test(gap)), [], pass);
+        }
+    });
+});
+
 const DRESS_RULE = /^a-money-figure-is-never-misdressed /;
 
 describe('the-dress-rule-is-owed-on-every-look-and-under-rurals-tag', () => {

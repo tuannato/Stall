@@ -3467,6 +3467,7 @@ try {
             paidPrivateClasses: PAID_PRIVATE_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
             sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
+            kit: LOOKS === 'workshop',
         });
         if (gaps.length > 0) {
             g.failed = true;
@@ -3623,7 +3624,7 @@ try {
                 g.outlined.push(...(wv.outlinedTargets ?? []));
                 g.worn.push(...(wv.wornClasses ?? []));
                 for (const code of wv.codesPainted ?? []) g.codes.push(`${vp.name}/${code}`);
-                const gaps = probeCoverageGaps(pass.coverage, wv, { privateClasses: PRIVATE_SHEET_CLASSES });
+                const gaps = probeCoverageGaps(pass.coverage, wv, { privateClasses: PRIVATE_SHEET_CLASSES, kit: LOOKS === 'workshop' });
                 const compared = probeCoverageLine(pass.coverage, wv);
                 const { line: clipSaid, faults: clipFaults } = coverClip(wv.coverByClass);
                 if (wv.failures.length === 0 && gaps.length === 0 && clipFaults.length === 0) {
@@ -3700,6 +3701,7 @@ try {
                 const gaps = probeCoverageGaps(pass.coverage, nv, {
                     privateClasses: PRIVATE_SHEET_CLASSES,
                     sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
+                    kit: LOOKS === 'workshop',
                 });
                 const compared = probeCoverageLine(pass.coverage, nv);
                 const { line: clipSaid, faults: clipFaults } = coverClip(nv.coverByClass);

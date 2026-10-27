@@ -152,6 +152,10 @@ attributes the app sets, by their exact value — never on a link, a picture,
 a label or anything that carries a token or an address. *(The kit —
 `workshop:lint`.)*
 
+**No anchor positioning.** A box placed against an anchor follows it
+wherever it moves, so a sheet that names one (`anchor-name`) is refused.
+*(The kit — `workshop:probe`.)*
+
 **Keyframes are named `wk-…`**, so they never collide with Stall's own.
 *(The kit.)*
 

@@ -43,6 +43,7 @@ import {
     harnessGateFaults,
     lookById,
     looksFor,
+    kitLook,
     measuredLooks,
     paintView,
     privateLooks,
@@ -11136,6 +11137,79 @@ function skeletonLadderFaults(screen: string, label: string): Failure[] {
 }
 
 /*
+ * **The kit takes no anchor positioning** (`the-kit-takes-no-anchor-positioning`;
+ * the owner's D-2026-10-27-02). The first-party look lint refuses anchor
+ * positioning in a shipped or private look's sheet
+ * (`a-look-never-positions-against-an-anchor`); the kit's lint admits it,
+ * and a box placed by `anchor()` follows its anchor's transform, offsets and
+ * motion path (`ANCHOR_FOLLOWED`), so the kit's own probe refuses it: on the
+ * workshop's probe page, every paint of the kit's look fails while the kit's
+ * sheet declares `anchor-name` (`sheetNamesAnAnchor`, read as `sheetFacts`
+ * reads the page's), and fails closed while the page cannot read that sheet. The rule reads the kit's
+ * sheet alone, by its URL (`kitLook().sheetUrl`); `workshop/README.md` says
+ * it in the kit's own words. Counted per paint (`kitAnchorPaints`).
+ */
+const KIT_ANCHOR_CHECK = 'the-kit-takes-no-anchor-positioning';
+/**
+ * Whether one sheet declares `anchor-name` at a value other than `none` in
+ * any rule, keyframe or nested rule (`@import`ed sheets read too), as
+ * `sheetFacts` reads the page's — or `'unread'` where the page cannot read
+ * it or a sheet it imports, which may.
+ */
+function sheetNamesAnAnchor(sheet: CSSStyleSheet): boolean | 'unread' {
+    let named = false;
+    let unread = false;
+    const names = (style: CSSStyleDeclaration): void => {
+        const value = style.getPropertyValue('anchor-name').trim();
+        if (value !== '' && value !== 'none') named = true;
+    };
+    const walk = (rules: CSSRuleList): void => {
+        for (const rule of rules) {
+            if (rule instanceof CSSKeyframesRule) {
+                for (const frame of rule.cssRules) names((frame as CSSKeyframeRule).style);
+                continue;
+            }
+            if ('style' in rule && (rule as CSSStyleRule).style instanceof CSSStyleDeclaration) names((rule as CSSStyleRule).style);
+            if (rule instanceof CSSImportRule) {
+                try {
+                    if (rule.styleSheet !== null) walk(rule.styleSheet.cssRules);
+                } catch {
+                    unread = true;
+                }
+            }
+            if ('cssRules' in rule) walk((rule as CSSGroupingRule).cssRules);
+        }
+    };
+    try {
+        walk(sheet.cssRules);
+    } catch {
+        unread = true;
+    }
+    return named ? true : unread ? 'unread' : false;
+}
+/** Paints of the kit's look this rule read, and those it failed. */
+const kitAnchorPaints = { read: 0, failed: 0 };
+function kitAnchorFaults(screen: string, label: string, look: Look): Failure[] {
+    const kit = kitLook();
+    if (kit === undefined || look !== kit) return [];
+    kitAnchorPaints.read += 1;
+    const url = kit.sheetUrl === undefined ? undefined : new URL(kit.sheetUrl, location.href).href;
+    const sheet = [...document.styleSheets].find((s) => url !== undefined && s.href === url);
+    const named = sheet === undefined ? undefined : sheetNamesAnAnchor(sheet);
+    const why =
+        sheet === undefined
+            ? `the kit's sheet is not on the page (${url ?? 'it names no sheet'}), so whether it declares anchor-name cannot be read`
+            : named === 'unread'
+              ? `the kit's sheet cannot be read on this page, so whether it declares anchor-name cannot be read`
+              : named
+                ? `the kit's sheet declares anchor-name: Stall does not take anchor positioning in a look, so the kit's probe refuses every paint of a sheet that names an anchor`
+                : undefined;
+    if (why === undefined) return [];
+    kitAnchorPaints.failed += 1;
+    return [{ screen, theme: label, check: KIT_ANCHOR_CHECK, detail: why }];
+}
+
+/*
  * `a-look-is-measured-with-its-sheet` (step 6, 6.7): every painted `.stall`
  * wearing a `t-*` class computes that class as `--look-sheet`, the name its
  * own sheet gives it (`every-look-sheet-names-itself`) — or the look was
@@ -12003,6 +12077,7 @@ for (const screen of measured) {
             }
             failures.push(...checkOverTime(screen, look, label, worn));
             failures.push(...lookSheetFaults(screen, label));
+            failures.push(...kitAnchorFaults(screen, label, look));
             failures.push(...fileClipFaults(screen, label));
             // The tree `checkOverTime` measured is still mounted: it seeks the
             // animations it painted rather than repainting.
@@ -15262,6 +15337,8 @@ const verdict = {
     sheetClasses: [...sheetClassesPainted].sort(),
     /* The look classes whose sheet named them on a painted stall (`a-look-is-measured-with-its-sheet`). */
     lookSheetsRead: [...lookSheetsRead].sort(),
+    /* The kit's anchor refusal (`kitAnchorFaults`): paints of the kit's look read, and those it failed. */
+    kitAnchorPaints,
     /* Elements with words of their own asked about a mask or clip naming a file (`no-word-is-clipped-by-a-file`). */
     fileClipChecks,
     /* Marks read hidden, per look class (`no-shipped-look-shows-a-mark`). */

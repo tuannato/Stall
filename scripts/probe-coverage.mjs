@@ -355,9 +355,13 @@ const WALL_ROLES = [
 export function probeCoverageGaps(
     pass,
     report,
-    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [] } = {},
+    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [], kit = false } = {},
 ) {
     const gaps = [];
+    // The kit's probe (`--looks workshop`): every geometry pass owes the kit's anchor refusal a read of the kit's look.
+    if (kit && GEOMETRY_PASSES.has(pass) && !((report.kitAnchorPaints?.read ?? 0) > 0)) {
+        gaps.push("the-kit-takes-no-anchor-positioning read no paint of the kit's look");
+    }
     if (!GEOMETRY_PASSES.has(pass) && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass)) {
         gaps.push(`the ${pass} pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why`);
     }
