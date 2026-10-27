@@ -42,6 +42,7 @@ import {
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
 import { MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, withMatrices } from './code-modules.mjs';
+import { charReport, charsFault, foldShares, mergeShares, readCharsAgain, readMoneyChars } from './char-read.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -1378,6 +1379,22 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         payloadChecked: 0,
         leastModule: Infinity,
     };
+    // 1c(c) (report-only): the per-character read's tallies, by viewport and look (`char-read.mjs`).
+    const digits = {
+        byVpClass: {},
+        triggers: [],
+        would: [],
+        readAgain: [],
+        faults: [],
+        shares: {},
+        smallKinds: {},
+        movers: 0,
+        elements: 0,
+        triggerMs: 0,
+        readMs: 0,
+        frames: 0,
+        shared: 0,
+    };
     let ringTargets = 0;
     let ringPixels = 0;
     let ringLeastPerChar = Infinity;
@@ -1917,10 +1934,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * fresh pair); a failing broken figure on a fresh blank and
                  * a fresh shown frame of its own, as it always was.
                  */
-                const glyphs = async (show, which) => {
+                const glyphs = async (show, which, money = false) => {
                     const r = await cdp.send(
                         'Runtime.evaluate',
-                        { expression: `window.__contrastGlyphs(${show}, ${JSON.stringify(which)})`, awaitPromise: true, returnByValue: true },
+                        { expression: `window.__contrastGlyphs(${show}, ${JSON.stringify(which)}, ${money})`, awaitPromise: true, returnByValue: true },
                         sessionId,
                     );
                     if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
@@ -1951,32 +1968,72 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         }),
                     );
                 };
-                /** The glyphs shown (`which`: both reads', or one's), one capture, the boxes re-read, the glyphs blanked again: `{ shot, why }`. */
-                const shownFrame = async (which) => {
+                /**
+                 * The glyphs shown (`which`: both reads', one's, or `none`;
+                 * `money`: every money node's too, for 1c(c)), one capture,
+                 * the boxes re-read (and, with money, its characters), the
+                 * glyphs blanked again: `{ shot, why, chars }`.
+                 */
+                const shownFrame = async (which, money = moneyShared && which === 'both') => {
                     const shownStart = performance.now();
-                    const n = await glyphs(true, which);
+                    const n = await glyphs(true, which, money);
                     const shownCap = await capture();
                     const shownRead = await reread();
-                    await glyphs(false, which);
+                    const chars = money ? await evalJson(cdp, sessionId, 'window.__moneyChars()') : undefined;
+                    await glyphs(false, which, money);
                     const why = [...shownCap.why, ...shownRead.why];
                     if (shownRead.live.boxes.length !== targets.length) {
                         why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
                     }
-                    const wantOutlined = which === 'figures' ? 0 : outlinedOf().length;
-                    const wantFigures = which === 'ring' ? 0 : brokenOf().length;
+                    const wantOutlined = which === 'both' || which === 'ring' ? outlinedOf().length : 0;
+                    const wantFigures = which === 'both' || which === 'figures' ? brokenOf().length : 0;
                     if (n.outlined !== wantOutlined) {
                         why.push(`${n.outlined} outlined targets shown where the read has ${wantOutlined}`);
                     }
                     if (n.figures !== wantFigures) {
                         why.push(`${n.figures} broken figures shown where the read has ${wantFigures}`);
                     }
+                    if (money && n.money !== (chars?.targets?.length ?? -1)) {
+                        why.push(`${n.money} money nodes shown where the page answered the characters of ${chars?.targets?.length ?? 'none'}`);
+                    }
                     const entry = phases.get('shown frame') ?? { calls: 0, ms: 0 };
                     entry.calls += 1;
                     entry.ms += performance.now() - shownStart;
                     phases.set('shown frame', entry);
-                    return { shot: shownCap.shot, why };
+                    return { shot: shownCap.shot, why, chars };
+                };
+                /*
+                 * 1c(c) (report-only; `char-read.mjs`): a job whose paint
+                 * holds a mover near money (`digitTrigger` in the probe, on
+                 * the prepared paint) reads every money character. Its
+                 * glyphs join the job's one shown frame, unless a money box
+                 * meets an outlined line (grown by its ring) or a broken
+                 * figure's piece of another target, where one read would
+                 * take the other's glyphs for its own: then they take a
+                 * frame of their own (`moneyApart`), as the two reads above
+                 * do. A job that triggers nothing shows no money glyph and
+                 * is captured as it was.
+                 */
+                const digitTrig = prep.digitTrigger ?? { reasons: [], count: 0, movers: 0, elements: 0, ms: 0 };
+                digits.movers += digitTrig.movers;
+                digits.elements += digitTrig.elements;
+                digits.triggerMs += digitTrig.ms;
+                const digitsKey = `${vp.name} ${plannedJob.sheetClass}`;
+                const digitsAt = (digits.byVpClass[digitsKey] ??= { jobs: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
+                digitsAt.jobs += 1;
+                const digitsOwed = digitTrig.count > 0;
+                const moneyOf = () => targets.filter((t) => t.money);
+                const moneyApart = () => {
+                    const others = [
+                        ...outlinedOf().flatMap((o) => (o.lines ?? []).map((l) => ({ t: o, x: l.x - o.ring - 1, y: l.y - o.ring - 1, w: l.w + 2 * o.ring + 2, h: l.h + 2 * o.ring + 2 }))),
+                        ...brokenOf().flatMap((b) => (b.digits ?? []).map((d) => ({ t: b, ...d }))),
+                    ];
+                    return moneyOf().some(
+                        (m) => m.ring === 0 && (m.digitsOwed ?? 0) === 0 && others.some(({ t, x, y, w, h }) => t !== m && m.x < x + w && x < m.x + m.w && m.y < y + h && y < m.y + m.h),
+                    );
                 };
                 const apart = framesApart();
+                const moneyShared = digitsOwed && !apart && !moneyApart();
                 if (apart) {
                     // Said in the dump only where it happens, so a tree on
                     // which no read meets the other dumps as it did.
@@ -2171,6 +2228,77 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     entry.ms += performance.now() - brokenStart;
                     phases.set('broken figures', entry);
                 }
+                /*
+                 * 1c(c), every digit where a mover is near (report-only;
+                 * `char-read.mjs`): on a triggered job, every money
+                 * character on the shown frame — the job's shared one where
+                 * its glyphs joined it, else a frame of their own — against
+                 * the job's own capture, each held to its own reference. A
+                 * job whose characters read wrong is read again on a fresh
+                 * pair (`readCharsAgain`); a would-be failure stands only
+                 * where the fresh pair, believed, fails it too. It fails
+                 * nothing: its sentences go to the run's report.
+                 */
+                const readDigits = async (why) => {
+                    const start = performance.now();
+                    digitsAt.triggered += 1;
+                    if (why === '1a') digitsAt.by1a += 1;
+                    const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}`;
+                    digits.triggers.push(
+                        why === '1a'
+                            ? `${at}: by 1a's ${cover.faults.length} failure(s) on this job`
+                            : `${at}: ${digitTrig.count} meet(s), ${digitTrig.reasons.join('; ')}${digitTrig.count > digitTrig.reasons.length ? '; …' : ''}`,
+                    );
+                    let first;
+                    if (why !== '1a' && shown?.chars !== undefined) {
+                        digits.shared += 1;
+                        first = { blank: img, shown: shown.shot, chars: shown.chars, why: shown.why };
+                    } else {
+                        digits.frames += 1;
+                        const blankCap = why === '1a' ? await capture() : { shot: img, why: [] };
+                        const own = await shownFrame('none', true);
+                        first = { blank: blankCap.shot, shown: own.shot, chars: own.chars, why: [...blankCap.why, ...own.why] };
+                    }
+                    const fault = first.why.length > 0 ? first.why : charsFault(first.chars, moneyOf());
+                    if (fault.length > 0) {
+                        for (const w of fault) digits.faults.push(`${at}: ${w}`);
+                    } else {
+                        const read = readMoneyChars(first.blank, first.shown, first.chars);
+                        const settled = await readCharsAgain({ read, chars: first.chars }, async () => {
+                            await sleep(250);
+                            const blankCap = await capture();
+                            const fresh = await shownFrame('none', true);
+                            return { why: [...blankCap.why, ...fresh.why], blank: blankCap.shot, shown: fresh.shot, chars: fresh.chars };
+                        });
+                        const r = settled.read;
+                        let skipped = 0;
+                        for (const t of first.chars.targets) skipped += Object.values(t.skipped).reduce((n, k) => n + k, 0);
+                        digitsAt.chars += r.chars;
+                        digitsAt.held += r.held;
+                        digitsAt.small += r.small;
+                        digitsAt.skipped += skipped;
+                        digitsAt.would += r.would.length;
+                        digitsAt.readAgain += settled.readAgain.length;
+                        foldShares((digits.shares[digitsKey] ??= {}), read.shares, at);
+                        for (const [kind, n] of Object.entries(read.smallKinds)) digits.smallKinds[kind] = (digits.smallKinds[kind] ?? 0) + n;
+                        record.digits = { by: why, chars: r.chars, held: r.held, small: r.small, skipped, would: r.would.length };
+                        for (const w of r.would) {
+                            digits.would.push(
+                                `${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why}` +
+                                    (settled.unbelieved !== undefined ? ` (read again on a fresh pair that cannot be believed: ${settled.unbelieved})` : read.would.length > 0 ? ' — on the fresh pair too' : ''),
+                            );
+                        }
+                        for (const w of settled.readAgain) {
+                            digits.readAgain.push(`${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why} on the first pair, kept on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})`);
+                        }
+                    }
+                    digits.readMs += performance.now() - start;
+                    const entry = phases.get('digits (1c)') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - start;
+                    phases.set('digits (1c)', entry);
+                };
+                if (retryWhy.length === 0 && digitsOwed) await readDigits('trigger');
                 /*
                  * Grid horizon at its worst, reported (step 5a″; the
                  * owner's C, 2026-09-27): the art flattened to its
@@ -2447,6 +2575,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     ...scan,
                     faults: scan.faults.map((w) => `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${w} — ${COVER_CHECK}`),
                 };
+                // 1c(c)'s second trigger: 1a's own failures on this job, read on a frame of their own.
+                if (retryWhy.length === 0 && !digitsOwed && cover.faults.length > 0) await readDigits('1a');
                 record.sampled = sampled;
                 record.dropped = dropped;
                 record.retried = retried;
@@ -2522,6 +2652,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             quietPixels,
             quietReadAgain,
             modules,
+            digits,
             ringTargets,
             ringPixels,
             ringLeastPerChar,
@@ -4132,6 +4263,8 @@ try {
     // 1d (before 8g2, report-only; `code-modules.mjs`): every job's module
     // read folded, and the canary's reads again of it, said under the pass.
     const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], readAgainByTab: {}, tabs: CONTRAST_TABS, faults: [], thrown: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
+    // 1c(c) (report-only): every job's `digits`, folded (`char-read.mjs`'s `charReport` says it).
+    const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
     const canaryModules = { would: [], readAgain: [], readAgainByTab: {}, thrown: [] };
     // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
     let moduleSnapRead;
@@ -4286,6 +4419,14 @@ try {
             for (const [code, why] of out.modules.unread) modulesRun.unread.set(code, why);
             modulesRun.payloadChecked += out.modules.payloadChecked;
             modulesRun.leastModule = Math.min(modulesRun.leastModule, out.modules.leastModule);
+            for (const [key, t] of Object.entries(out.digits.byVpClass)) {
+                const into = (digitsRun.byVpClass[key] ??= { jobs: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
+                for (const k of Object.keys(into)) into[k] += t[k];
+            }
+            for (const key of ['triggers', 'would', 'readAgain', 'faults']) digitsRun[key].push(...out.digits[key]);
+            for (const [key, byKind] of Object.entries(out.digits.shares)) mergeShares((digitsRun.shares[key] ??= {}), byKind);
+            for (const [kind, n] of Object.entries(out.digits.smallKinds)) digitsRun.smallKinds[kind] = (digitsRun.smallKinds[kind] ?? 0) + n;
+            for (const key of ['movers', 'elements', 'triggerMs', 'readMs', 'frames', 'shared']) digitsRun[key] += out.digits[key];
             ringTargets += out.ringTargets;
             ringPixels += out.ringPixels;
             ringLeastPerChar = Math.min(ringLeastPerChar, out.ringLeastPerChar);
@@ -5020,6 +5161,9 @@ try {
     // the verdict; it fails nothing until step 7c binds it.
     if (Object.keys(modulesRun.byVpClass).length > 0 || codesPaintedSeen.size > 0) {
         for (const line of moduleReport(modulesRun, canaryModules, codesPaintedSeen)) console.log(`  ${line}`);
+    }
+    if (Object.keys(digitsRun.byVpClass).length > 0) {
+        for (const line of charReport(digitsRun)) console.log(`  ${line}`);
     }
     if (moduleSnapRead !== undefined) {
         for (const line of moduleSnapLines(moduleSnapRead)) console.log(`  ${line}`);

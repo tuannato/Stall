@@ -87,6 +87,7 @@ import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
+import { cutTo, keyframeLonghands, meetsLines, moverKinds, type AnimationFacts } from './digitTrigger';
 import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
@@ -12206,6 +12207,8 @@ type ContrastPrepared = {
     uncovered?: string[];
     /** How the sign's name was painted at the frozen instant (D14): its animations and opacity. */
     nameChrome?: string[];
+    /** 1c(c): the movers near money on this paint (`digitTrigger`); a job with any reads every money character. */
+    digitTrigger?: DigitTrigger;
     /** The stalls that wore Neo's rain, and how many had it at its brightest. */
     rain: { worn: number; flattened: number };
     /** The signs that wore Grid horizon (painted as they are; `__horizonAtItsWorst` flattens them for the report). */
@@ -12253,7 +12256,9 @@ declare global {
          * wears the outline and every broken figure, for the job's one
          * "shown" frame; how many of each.
          */
-        __contrastGlyphs: (show: boolean, which?: 'both' | 'ring' | 'figures') => Promise<{ outlined: number; figures: number }>;
+        __contrastGlyphs: (show: boolean, which?: 'both' | 'ring' | 'figures' | 'none', money?: boolean) => Promise<{ outlined: number; figures: number; money: number }>;
+        /** 1c(c): every money node's characters on the last prepare's paint, each with its own reference count (report-only). */
+        __moneyChars: () => MoneyChars;
         /** 1a once on a contrast job's prepared paint (`coverScan`). */
         __coverFaults: () => CoverScan;
         /**
@@ -12998,15 +13003,20 @@ const glyphsBlanked = (el: Element): boolean => {
  * for its own. The horizon's worst read and the art-off read read the
  * outlined lines alone, and show them alone on their own frames (`ring`).
  */
-window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figures' = 'both') => {
+window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figures' | 'none' = 'both', money = false) => {
     let outlined = 0;
     let figures = 0;
+    let moneyShown = 0;
     for (const node of preparedNodes) {
-        const ring = which !== 'figures' && outlineOf(node) > 0;
-        const figure = which !== 'ring' && node.matches(MONEY) && node.querySelector('.fig-say') !== null;
-        if (!ring && !figure) continue;
+        const ring = (which === 'both' || which === 'ring') && outlineOf(node) > 0;
+        const figure = (which === 'both' || which === 'figures') && node.matches(MONEY) && node.querySelector('.fig-say') !== null;
+        // 1c(c), on a job its trigger found (`digitTrigger`): every money
+        // node's glyphs shown too, for the per-character read.
+        const coin = money && node.matches(MONEY) && node.getClientRects().length > 0;
+        if (!ring && !figure && !coin) continue;
         if (ring) outlined += 1;
         if (figure) figures += 1;
+        if (coin) moneyShown += 1;
         for (const el of [node, ...node.querySelectorAll<HTMLElement>('*')]) {
             if (el.dataset['probeColor'] === undefined) continue;
             if (show) {
@@ -13015,9 +13025,508 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
                 blankGlyphs(el);
             }
         }
+        // A money node inside another target inherits that target's blanked
+        // fill once its own is put back: shown, it wears the fill it painted
+        // in (the studio's quote inside its state line read 0 of every
+        // reference pixel until this).
+        const fill = node.dataset['probeFill'];
+        if (show && coin && fill !== undefined && getComputedStyle(node).getPropertyValue(GLYPH_FILL) !== fill) {
+            node.style.setProperty(GLYPH_FILL, fill, 'important');
+        }
     }
     await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
-    return { outlined, figures };
+    return { outlined, figures, money: moneyShown };
+};
+
+/**
+ * **1c(c): every digit, where a mover is near** (before 8g2, the plan's item
+ * 1c, the owner's D-2026-10-20-06 D1 (c); report-only until step 7d;
+ * `PROBE-RULES.md`, "Before 8g2, 1c(c): every digit, where a mover is
+ * near"). The broken-figure read (`digitRead` in the runner) counts glyph
+ * pixels per line, so one digit wholly covered leaves the line's others to
+ * make up its count (the critic's C-2); and no read held a money node that
+ * is not broken to its characters at all. On a contrast job whose paint holds
+ * a mover near money, every money node's characters are read one by one on
+ * the job's shown frame: each must keep at least `CHAR_KEEP_CUT`
+ * (`scripts/char-read.mjs`) of its own reference count — the same glyph, in
+ * the same face, weight, size, small caps and width, at the same subpixel
+ * offset, drawn on a canvas here and counted inside the same pixel box.
+ *
+ * The trigger (`digitTrigger`, `layout/digitTrigger.ts`): a box placed by a
+ * relative or sticky offset, a transform, a negative margin, an out-of-flow
+ * position, a motion path or an animation that sets more than an ink or a
+ * ground, whose painted boxes (its own and every box it holds, cut to its
+ * clips, grown by its own sharp reach) meet a money node's line boxes —
+ * neither the money node nor a box that holds it, which carry the money with
+ * them — or a look's pseudo-element so placed, by the region 1b reads it in
+ * (`pseudoRegion`; one whose region cannot be read triggers the job). Read
+ * off the prepared paint before anything is blanked; it costs one walk of
+ * the scope's computed styles, and nothing is captured for it.
+ */
+type DigitTrigger = { reasons: string[]; count: number; movers: number; elements: number; ms: number };
+/** One money character, as the runner reads it: its own text box (`Range`), its ink, and its reference count. */
+type MoneyChar = { x: number; y: number; w: number; h: number; ink: string; ref: number; c: string };
+/** One money node's characters, by its index among the prepared nodes, and the characters left out by reason. */
+type MoneyCharsTarget = { i: number; sel: string; chars: MoneyChar[]; skipped: Record<string, number> };
+type MoneyChars = { targets: MoneyCharsTarget[]; prepared: number; ms: number };
+
+/** How many trigger reasons a job carries in full; the rest are counted. */
+const DIGIT_TRIGGER_SAID = 6;
+
+/** The text boxes of a node's own text (`Range` rects), or its border box where it holds none: what a mover must meet. */
+function moneyLineBoxes(node: Element): Box[] {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0).map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom }));
+    if (lines.length > 0) return lines;
+    const b = node.getBoundingClientRect();
+    return b.width > 0 && b.height > 0 ? [{ left: b.left, top: b.top, right: b.right, bottom: b.bottom }] : [];
+}
+
+/** The animations running on each box of the page and on each pseudo-element, as `moverKinds` reads them. */
+function animationsByTarget(): Map<string, AnimationFacts[]> & { forEl: (el: Element, pseudo?: string) => AnimationFacts[] } {
+    const byEl = new Map<Element, Map<string, AnimationFacts[]>>();
+    for (const anim of document.getAnimations()) {
+        const effect = anim.effect as KeyframeEffect | null;
+        const target = effect?.target;
+        if (target === null || target === undefined) continue;
+        const pseudo = effect!.pseudoElement ?? '';
+        const name = (anim as CSSAnimation).animationName ?? (anim as CSSTransition).transitionProperty ?? anim.id ?? 'animation';
+        let frames: Record<string, unknown>[] = [];
+        try {
+            frames = effect!.getKeyframes() as unknown as Record<string, unknown>[];
+        } catch {
+            frames = [];
+        }
+        const at = byEl.get(target) ?? byEl.set(target, new Map()).get(target)!;
+        const list = at.get(pseudo) ?? at.set(pseudo, []).get(pseudo)!;
+        list.push({ name: String(name), props: keyframeLonghands(frames) });
+    }
+    const out = new Map<string, AnimationFacts[]>() as Map<string, AnimationFacts[]> & { forEl: (el: Element, pseudo?: string) => AnimationFacts[] };
+    out.forEl = (el, pseudo = '') => byEl.get(el)?.get(pseudo) ?? [];
+    return out;
+}
+
+/** The clips above an element, up to `root`: every box whose overflow is not `visible` on an axis, or that paints its contents only inside itself. */
+function clipsAbove(el: Element, root: Element): Box[] {
+    const out: Box[] = [];
+    for (let up = el.parentElement; up !== null; up = up.parentElement) {
+        const cs = getComputedStyle(up);
+        const contains = /\b(paint|strict|content)\b/.test(cs.contain);
+        if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || contains) {
+            const r = up.getBoundingClientRect();
+            const xCut = cs.overflowX !== 'visible' || contains;
+            const yCut = cs.overflowY !== 'visible' || contains;
+            out.push({ left: xCut ? r.left : -Infinity, top: yCut ? r.top : -Infinity, right: xCut ? r.right : Infinity, bottom: yCut ? r.bottom : Infinity });
+        }
+        if (up === root) break;
+    }
+    return out;
+}
+
+/** A box's own sharp reach past it (an outline, a box shadow's offset and spread, a border image's outset), as 1b reads it. */
+function sharpReachOf(cs: CSSStyleDeclaration, base: Box): Box[] {
+    const paints: ReachPaints = { base: undefined, bound: NO_BOX, sharp: [], soft: [] };
+    boxReaches(boxPaintFacts(cs, false), base, undefined, 1, paints);
+    return paints.sharp.map((s) => s.rect);
+}
+
+/**
+ * 1c(c)'s trigger on the prepared paint (`layout/digitTrigger.ts`): every
+ * mover in the scope whose painted boxes meet a money node's line boxes,
+ * said, and how many movers and elements were read.
+ */
+function digitTrigger(scope: ParentNode): DigitTrigger {
+    const t0 = performance.now();
+    const root = scope === document ? document.getElementById('app')! : (scope as Element);
+    const money = preparedNodes.filter((node) => node.matches(MONEY) && node.getClientRects().length > 0);
+    const out: DigitTrigger = { reasons: [], count: 0, movers: 0, elements: 0, ms: 0 };
+    const box = (r: DOMRect): Box => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    if (money.length === 0) {
+        out.ms = performance.now() - t0;
+        return out;
+    }
+    // Each node's line boxes as they show: cut to its clips and, where it clips its own text, to itself.
+    const lines = new Map(
+        money.map((node) => {
+            const cs = getComputedStyle(node);
+            const ownClip = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' ? [box(node.getBoundingClientRect())] : [];
+            const clips = [...ownClip, ...clipsAbove(node, root)];
+            return [node, moneyLineBoxes(node).map((b) => cutTo(b, clips)).filter((b): b is Box => b !== undefined)];
+        }),
+    );
+    const anims = animationsByTarget();
+    const say = (why: string): void => {
+        out.count += 1;
+        if (out.reasons.length < DIGIT_TRIGGER_SAID) out.reasons.push(why);
+    };
+    for (const el of [root, ...root.querySelectorAll('*')]) {
+        out.elements += 1;
+        if (el.closest('.deck-stall') !== null) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none') continue;
+        const kinds = moverKinds(
+            {
+                position: cs.position,
+                top: cs.top,
+                right: cs.right,
+                bottom: cs.bottom,
+                left: cs.left,
+                transform: cs.transform,
+                translate: cs.translate,
+                rotate: cs.rotate,
+                scale: cs.scale,
+                marginTop: cs.marginTop,
+                marginRight: cs.marginRight,
+                marginBottom: cs.marginBottom,
+                marginLeft: cs.marginLeft,
+                offsetPath: cs.getPropertyValue('offset-path') || 'none',
+            },
+            anims.forEl(el),
+        );
+        if (kinds.length === 0) continue;
+        // A box that holds every money node carries all of them with it.
+        if (money.every((node) => el === node || el.contains(node))) continue;
+        out.movers += 1;
+        const clips = clipsAbove(el, root);
+        const own = box(el.getBoundingClientRect());
+        const painted: Box[] = [];
+        for (const r of [own, ...sharpReachOf(cs, own)]) {
+            const cut = cutTo(r, clips);
+            if (cut !== undefined) painted.push(cut);
+        }
+        const ownClip = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' ? [own] : [];
+        for (const d of el.querySelectorAll('*')) {
+            const r = d.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) continue;
+            const cut = cutTo(box(r), [...ownClip, ...clips]);
+            if (cut !== undefined) painted.push(cut);
+        }
+        for (const node of money) {
+            if (el === node || el.contains(node)) continue;
+            const meet = meetsLines(painted, lines.get(node)!);
+            if (meet !== undefined) {
+                say(`${named(el)} (${kinds.join('; ')}) meets ${named(node)} at ${Math.round(meet.at.left)},${Math.round(meet.at.top)}`);
+            }
+        }
+    }
+    // A look's pseudo-elements, marked by the prepare (`markLookPseudos`).
+    for (const host of root.parentElement?.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]') ?? []) {
+        if (host !== root && !root.contains(host)) continue;
+        for (const which of ['before', 'after'] as const) {
+            if (!host.hasAttribute(`data-probe-lp-${which}`)) continue;
+            const cs = getComputedStyle(host, `::${which}`);
+            if (cs.content === 'none' || cs.content === 'normal' || cs.display === 'none') continue;
+            const kinds = moverKinds(
+                {
+                    position: cs.position,
+                    top: cs.top,
+                    right: cs.right,
+                    bottom: cs.bottom,
+                    left: cs.left,
+                    transform: cs.transform,
+                    translate: cs.translate,
+                    rotate: cs.rotate,
+                    scale: cs.scale,
+                    marginTop: cs.marginTop,
+                    marginRight: cs.marginRight,
+                    marginBottom: cs.marginBottom,
+                    marginLeft: cs.marginLeft,
+                    offsetPath: cs.getPropertyValue('offset-path') || 'none',
+                },
+                anims.forEl(host, `::${which}`),
+            );
+            if (kinds.length === 0) continue;
+            out.movers += 1;
+            const hr = host.getBoundingClientRect();
+            const px = (v: string): number => Number.parseFloat(v) || 0;
+            const region = pseudoRegion({
+                host: box(hr),
+                display: cs.display,
+                position: cs.position,
+                width: cs.width,
+                height: cs.height,
+                top: cs.top,
+                right: cs.right,
+                bottom: cs.bottom,
+                left: cs.left,
+                marginTop: cs.marginTop,
+                marginRight: cs.marginRight,
+                marginBottom: cs.marginBottom,
+                marginLeft: cs.marginLeft,
+                paddingX: px(cs.paddingLeft) + px(cs.paddingRight),
+                paddingY: px(cs.paddingTop) + px(cs.paddingBottom),
+                borderX: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
+                borderY: px(cs.borderTopWidth) + px(cs.borderBottomWidth),
+                fontSize: px(cs.fontSize) || 16,
+                lineHeight: cs.lineHeight,
+                text: pseudoText(cs.content),
+                transform: cs.transform,
+                translate: cs.translate,
+                rotate: cs.rotate,
+                scale: cs.scale,
+                offsetPath: cs.getPropertyValue('offset-path') || 'none',
+                zoom: cs.zoom,
+            });
+            const who = `${named(host)}::${which} (${kinds.join('; ')})`;
+            if ('anywhere' in region) {
+                say(`${who} stands where this page cannot read: ${region.anywhere}`);
+                continue;
+            }
+            const clips = [...clipsAbove(host, root), ...(getComputedStyle(host).overflowX !== 'visible' || getComputedStyle(host).overflowY !== 'visible' ? [box(hr)] : [])];
+            const painted = [region.box, ...sharpReachOf(cs, region.box)].map((r) => cutTo(r, clips)).filter((r): r is Box => r !== undefined);
+            for (const node of money) {
+                const meet = meetsLines(painted, lines.get(node)!);
+                if (meet !== undefined) say(`${who} meets ${named(node)} at ${Math.round(meet.at.left)},${Math.round(meet.at.top)}`);
+            }
+        }
+    }
+    out.ms = performance.now() - t0;
+    return out;
+}
+
+/** How far a money node's frame may be turned and its characters still be read in their axis-aligned boxes. */
+const CHAR_TURN_MAX = (2 * Math.PI) / 180;
+/** The upright raster's subpixel phases a turned frame's reference is drawn at (`charReference`): a quarter pixel apart on both axes. */
+const CHAR_TURN_PHASES: [number, number][] = [0, 0.25, 0.5, 0.75].flatMap((x) => [0, 0.25, 0.5, 0.75].map((y): [number, number] => [x, y]));
+/** The canvas pad around a reference glyph, CSS pixels: room for ink past its box, which neither count reads. */
+const CHAR_REF_PAD = 8;
+/** The reference canvas's side: a character box wider or taller than this less two pads is not read. */
+const CHAR_REF_SIDE = 512;
+let refContext: CanvasRenderingContext2D | null | undefined;
+/** The upright canvas a turned frame's reference glyph is drawn on before it is resampled into the turn. */
+let uprightContext: CanvasRenderingContext2D | null | undefined;
+const refCache = new Map<string, number>();
+
+/**
+ * A character's reference count: `c` drawn alone on a canvas in `cs`'s face,
+ * weight, size, small caps and width, its box at the same subpixel offset as
+ * `r` stands on the page, and the pixels inside the same pixel box
+ * (`floor(x)` to `ceil(x + w)`, the runner's crop) that its ink covers at
+ * least halfway — the runner's own threshold (`RING_MASK_ALPHA`). Its
+ * baseline is the box's top plus the face's ascent, rounded where the box's
+ * height is the rounded ascent and descent (Chrome's content area), in
+ * proportion otherwise. `undefined` where no canvas draws, or the box is
+ * wider or taller than the canvas.
+ */
+function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: DOMMatrixReadOnly): number | undefined {
+    const x0 = Math.floor(r.x);
+    const y0 = Math.floor(r.y);
+    const cw = Math.ceil(r.x + r.width) - x0;
+    const ch = Math.ceil(r.y + r.height) - y0;
+    if (cw + 2 * CHAR_REF_PAD > CHAR_REF_SIDE || ch + 2 * CHAR_REF_PAD > CHAR_REF_SIDE || cw <= 0 || ch <= 0) return undefined;
+    if (refContext === undefined) {
+        const canvas = document.createElement('canvas');
+        canvas.width = CHAR_REF_SIDE;
+        canvas.height = CHAR_REF_SIDE;
+        refContext = canvas.getContext('2d', { willReadFrequently: true });
+    }
+    const ctx = refContext;
+    if (ctx === null) return undefined;
+    const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    ctx.font = font;
+    ctx.fontVariantCaps = cs.fontVariantCaps as CanvasFontVariantCaps;
+    ctx.fontStretch = (STRETCH_KEYWORD[cs.fontStretch] ?? 'normal') as CanvasFontStretch;
+    ctx.fontKerning = 'none';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing;
+    const m = ctx.measureText(c);
+    const a = m.fontBoundingBoxAscent;
+    const d = m.fontBoundingBoxDescent;
+    let key: string;
+    let draw: (phase?: [number, number]) => void;
+    // Where the page's upright raster put the glyph inside its pixels is
+    // not known in a turned frame, so its reference is the least count over
+    // `CHAR_TURN_PHASES` of them (one, where the frame is upright).
+    let phases: [number, number][] = [[0, 0]];
+    if (linear === undefined) {
+        const rounded = Math.abs(r.height - (Math.round(a) + Math.round(d))) < 0.05;
+        const base = rounded ? Math.round(a) : a + d > 0 ? (r.height * a) / (a + d) : a;
+        const fx = r.x - x0;
+        const fy = r.y - y0 + base;
+        key = `${font}|${ctx.fontVariantCaps}|${ctx.fontStretch}|${ctx.letterSpacing}|${c}|${Math.round(fx * 64)}|${Math.round(fy * 64)}|${cw}|${ch}`;
+        draw = () => ctx.fillText(c, CHAR_REF_PAD + fx, CHAR_REF_PAD + fy);
+    } else {
+        // A turned or scaled frame (Rural's swaying tag and tilted rows):
+        // Chrome rasters the frame's layer upright and the compositor
+        // resamples it into the turn (measured: a 0.5° turn spreads an "="
+        // bar over two rows at under half its ink, where a glyph drawn
+        // turned stays sharp). So the glyph is drawn upright on a canvas of
+        // its own, its box — its advance by the face's rounded ascent and
+        // descent, Chrome's content area — and that canvas drawn into the
+        // frame's linear transform with bilinear smoothing, centred where
+        // the page's box (the turned box's axis-aligned bounds) is centred.
+        const w0 = m.width;
+        const h0 = Math.round(a) + Math.round(d);
+        const cx = CHAR_REF_PAD + (r.x + r.width / 2 - x0);
+        const cy = CHAR_REF_PAD + (r.y + r.height / 2 - y0);
+        const q = (v: number): number => Math.round(v * 4096);
+        key = `${font}|${ctx.fontVariantCaps}|${ctx.fontStretch}|${ctx.letterSpacing}|${c}|${q(linear.a)},${q(linear.b)},${q(linear.c)},${q(linear.d)}|${Math.round(cx * 64)}|${Math.round(cy * 64)}|${cw}|${ch}`;
+        draw = (phase = [0, 0]) => {
+            const up = (uprightContext ??= (() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = CHAR_REF_SIDE;
+                canvas.height = CHAR_REF_SIDE;
+                return canvas.getContext('2d', { willReadFrequently: true });
+            })());
+            if (up === null) return;
+            up.clearRect(0, 0, CHAR_REF_SIDE, CHAR_REF_SIDE);
+            up.font = ctx.font;
+            up.fontVariantCaps = ctx.fontVariantCaps;
+            up.fontStretch = ctx.fontStretch;
+            up.fontKerning = 'none';
+            up.letterSpacing = ctx.letterSpacing;
+            up.textBaseline = 'alphabetic';
+            up.textAlign = 'left';
+            up.fillStyle = '#000';
+            up.fillText(c, CHAR_REF_PAD + phase[0], CHAR_REF_PAD + phase[1] + Math.round(a));
+            // Upright box centre at (P + w0/2, P + h0/2), mapped onto the page box's centre.
+            const ux = CHAR_REF_PAD + phase[0] + w0 / 2;
+            const uy = CHAR_REF_PAD + phase[1] + h0 / 2;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'low';
+            ctx.setTransform(linear.a, linear.b, linear.c, linear.d, cx - (linear.a * ux + linear.c * uy), cy - (linear.b * ux + linear.d * uy));
+            ctx.drawImage(up.canvas, 0, 0);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+        };
+        phases = CHAR_TURN_PHASES;
+    }
+    const seen = refCache.get(key);
+    if (seen !== undefined) return seen;
+    let least = Infinity;
+    for (const phase of phases) {
+        ctx.clearRect(0, 0, cw + 2 * CHAR_REF_PAD, ch + 2 * CHAR_REF_PAD);
+        ctx.fillStyle = '#000';
+        draw(phase);
+        const data = ctx.getImageData(CHAR_REF_PAD, CHAR_REF_PAD, cw, ch).data;
+        let n = 0;
+        for (let i = 3; i < data.length; i += 4) if (data[i]! >= 128) n += 1;
+        least = Math.min(least, n);
+    }
+    refCache.set(key, least);
+    return least;
+}
+
+/**
+ * The linear part of everything that turns or scales a node (`transform`,
+ * `rotate`, `scale` on it and every box above it), or undefined where there
+ * is none: what a reference glyph is drawn in (`charReference`).
+ */
+function linearFrameOf(node: Element): DOMMatrixReadOnly | undefined {
+    const chain: Element[] = [];
+    for (let at: Element | null = node; at !== null && at !== document.documentElement; at = at.parentElement) chain.unshift(at);
+    let m = new DOMMatrix();
+    let any = false;
+    for (const el of chain) {
+        const cs = getComputedStyle(el);
+        const turn = /^(-?[\d.]+)deg$/.exec(cs.rotate.trim());
+        if (turn !== null && Number(turn[1]) !== 0) {
+            m = m.rotate(Number(turn[1]));
+            any = true;
+        }
+        if (cs.scale !== 'none' && cs.scale !== '') {
+            const [sx, sy] = cs.scale.trim().split(/\s+/).map(Number);
+            if (Number.isFinite(sx)) {
+                m = m.scale(sx!, Number.isFinite(sy) ? sy! : sx!);
+                any = true;
+            }
+        }
+        if (cs.transform !== 'none' && cs.transform !== '') {
+            const t = new DOMMatrix(cs.transform);
+            m = m.multiply(new DOMMatrix([t.a, t.b, t.c, t.d, 0, 0]));
+            any = true;
+        }
+    }
+    if (!any) return undefined;
+    const near = (v: number, w: number): boolean => Math.abs(v - w) < 1e-6;
+    return near(m.a, 1) && near(m.b, 0) && near(m.c, 0) && near(m.d, 1) ? undefined : m;
+}
+
+/** The nearest scroller above a node that actually scrolls: its box, the one clip a character may stand behind and not be read (the contrast boxes' own rule, `targetFor`). */
+function scrollClipOf(node: Element): DOMRect | undefined {
+    for (let up: Element | null = node; up !== null; up = up.parentElement) {
+        const cs = getComputedStyle(up);
+        if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && up.scrollHeight > up.clientHeight + 1) return up.getBoundingClientRect();
+        if (up.hasAttribute('data-ribbon') && (cs.overflowX === 'hidden' || cs.overflowX === 'clip')) return up.getBoundingClientRect();
+    }
+    return undefined;
+}
+
+/**
+ * 1c(c)'s characters (`window.__moneyChars`): every prepared money node with
+ * a box, each non-space character of its own text (text inside an `<svg>` is
+ * a drawing) with its box, its ink and its reference count. Left out, by
+ * reason and counted: a character behind the one clip a contrast box may be
+ * read behind (a scroller that scrolls) or past the page (`clipped`), a node
+ * turned past `CHAR_TURN_MAX` (`turned`), a box wider or taller than the
+ * reference canvas (`too big`). A character with no box at all in a node
+ * that has one is read as nothing there (`ref` 0 and an empty box), so the
+ * runner holds it as unread.
+ */
+window.__moneyChars = () => {
+    const t0 = performance.now();
+    const out: MoneyChars = { targets: [], prepared: 0, ms: 0 };
+    const range = document.createRange();
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    preparedNodes.forEach((node, i) => {
+        if (!node.matches(MONEY) || node.getClientRects().length === 0) return;
+        const target: MoneyCharsTarget = { i, sel: named(node), chars: [], skipped: {} };
+        out.targets.push(target);
+        const skip = (why: string): void => {
+            target.skipped[why] = (target.skipped[why] ?? 0) + 1;
+        };
+        const turned = Math.abs(angleOf(node)) > CHAR_TURN_MAX;
+        const linear = turned ? undefined : linearFrameOf(node);
+        const scroll = scrollClipOf(node);
+        const clip = { left: Math.max(0, scroll?.left ?? 0), top: Math.max(0, scroll?.top ?? 0), right: Math.min(W, scroll?.right ?? W), bottom: Math.min(H, scroll?.bottom ?? H) };
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+            const owner = text.parentElement;
+            if (owner === null || owner.closest('svg') !== null) continue;
+            const cs = getComputedStyle(owner);
+            const ink = glyphsBlanked(owner) ? ((owner as HTMLElement).dataset['probeInk'] ?? cs.color) : cs.color;
+            const value = text.textContent ?? '';
+            const shown = painted(value, cs.textTransform);
+            const same = [...shown].length === [...value].length;
+            const shownCps = [...shown];
+            let k = 0;
+            for (let at = 0; at < value.length; k += 1) {
+                const cp = value.codePointAt(at)!;
+                const len = cp > 0xffff ? 2 : 1;
+                const ch = String.fromCodePoint(cp);
+                const start = at;
+                at += len;
+                if (/[\s\p{Cf}]/u.test(ch)) continue;
+                out.prepared += 1;
+                if (turned) {
+                    skip('turned');
+                    continue;
+                }
+                range.setStart(text, start);
+                range.setEnd(text, start + len);
+                const r = range.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) {
+                    target.chars.push({ x: r.x, y: r.y, w: 0, h: 0, ink, ref: 0, c: ch });
+                    continue;
+                }
+                if (r.left < clip.left - 0.5 || r.top < clip.top - 0.5 || r.right > clip.right + 0.5 || r.bottom > clip.bottom + 0.5) {
+                    skip('clipped');
+                    continue;
+                }
+                const drawn = same ? shownCps[k]! : painted(ch, cs.textTransform);
+                const ref = charReference(drawn, cs, r, linear);
+                if (ref === undefined) {
+                    skip('too big');
+                    continue;
+                }
+                target.chars.push({ x: r.x, y: r.y, w: r.width, h: r.height, ink, ref, c: drawn });
+            }
+        }
+    });
+    out.ms = performance.now() - t0;
+    return out;
 };
 
 /**
@@ -14008,6 +14517,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     const lookMarks = shownLookMarks(scope);
     const fileArt = markFileArt(scope);
     const uncovered = uncoveredText(scope);
+    // 1c(c)'s trigger (report-only): read off this paint before anything is blanked.
+    const digitTriggered = digitTrigger(scope);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round
     // 8 (2026-09-15) — had its colour set to transparent by the outer node's
@@ -14029,6 +14540,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
             if (el.dataset['probeColor'] === undefined) {
                 el.dataset['probeColor'] = el.style.color;
                 el.dataset['probeInk'] ??= getComputedStyle(el).color;
+                // 1c(c): a money node's own fill as painted, for its shown frame (`__contrastGlyphs`).
+                if (el.matches(MONEY)) el.dataset['probeFill'] ??= getComputedStyle(el).getPropertyValue(GLYPH_FILL);
                 keepGlyphs(el);
             }
         }
@@ -14114,6 +14627,8 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         uncovered,
         // The sign name's animations and opacity where it was read (D14).
         nameChrome: nameChrome(scope),
+        // 1c(c): the movers near money this paint holds, which make the job read every digit.
+        digitTrigger: digitTriggered,
         // The stalls that wore the aurora, and how many had its tide held.
         tide: tideHeld,
         ...echo,
