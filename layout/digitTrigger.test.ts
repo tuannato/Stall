@@ -6,7 +6,7 @@
  * "Before 8g2, 1c(c)".
  */
 import { describe, expect, it } from 'vitest';
-import { MEET_TOL, PAINT_ONLY_ANIMATION, cutTo, kebab, keyframeLonghands, meetsLines, moverKinds, overlap, type MoverFacts } from './digitTrigger';
+import { MEET_TOL, PAINT_ONLY_ANIMATION, kebab, keyframeLonghands, meetsLines, moverKinds, overlap, type MoverFacts } from './digitTrigger';
 
 const still: MoverFacts = {
     position: 'static',
@@ -75,7 +75,7 @@ describe('1c(c): keyframe properties as Chrome names them (kebab, keyframeLongha
     });
 });
 
-describe('1c(c): when what a mover paints meets money (overlap, cutTo, meetsLines)', () => {
+describe('1c(c): when what a mover paints meets money (overlap, meetsLines)', () => {
     const line = { left: 100, top: 100, right: 200, bottom: 120 };
     it('meets a line it overlaps by more than MEET_TOL on both axes', () => {
         expect(meetsLines([{ left: 150, top: 110, right: 400, bottom: 300 }], [line])?.at).toEqual({ left: 150, top: 110, right: 200, bottom: 120 });
@@ -84,14 +84,6 @@ describe('1c(c): when what a mover paints meets money (overlap, cutTo, meetsLine
         expect(meetsLines([{ left: 200, top: 100, right: 300, bottom: 120 }], [line])).toBeUndefined();
         expect(meetsLines([{ left: 0, top: 120 - MEET_TOL, right: 300, bottom: 200 }], [line])).toBeUndefined();
         expect(meetsLines([{ left: 0, top: 119, right: 300, bottom: 200 }], [line])).toBeDefined();
-    });
-    it('cuts a painted box to every clip above it, and leaves nothing of one a clip hides whole', () => {
-        const painted = { left: 0, top: 0, right: 300, bottom: 300 };
-        expect(cutTo(painted, [{ left: 50, top: -Infinity, right: 120, bottom: Infinity }])).toEqual({ left: 50, top: 0, right: 120, bottom: 300 });
-        expect(cutTo(painted, [{ left: 400, top: 0, right: 500, bottom: 100 }])).toBeUndefined();
-        // A marquee's run cut to its cell no longer reaches the figure beside the cell.
-        const run = cutTo({ left: 0, top: 100, right: 260, bottom: 120 }, [{ left: 0, top: 90, right: 90, bottom: 130 }]);
-        expect(meetsLines(run === undefined ? [] : [run], [line])).toBeUndefined();
     });
     it('reads an overlap as undefined where the boxes are apart', () => {
         expect(overlap(line, { left: 300, top: 100, right: 400, bottom: 120 })).toBeUndefined();

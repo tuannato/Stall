@@ -23,10 +23,14 @@
  *   `PAINT_ONLY_ANIMATION`, or whose keyframes this page cannot read (a custom
  *   property, which Chrome's `getKeyframes()` leaves out, fails closed).
  *
- * **What it paints**: its own border box and every box it holds, cut to the
- * clips between it and the money it is held to, grown by its own sharp reach
- * (an outline, a box shadow's offset and spread, a border image's outset);
- * a look's moved pseudo-element by the region 1b reads it in (`pseudoRegion`).
+ * **What it paints**: its own border box and every box it holds, grown by its
+ * own sharp reach (an outline, a box shadow's offset and spread, a border
+ * image's outset); a look's moved pseudo-element by the region 1b reads it in
+ * (`pseudoRegion`). Each painted rect is cut by the clips of the box whose
+ * content it is — its parent, or an out-of-flow box's containing block — held
+ * to the money node's own, 1b's `reachClipChain` and `pairClip` in the probe:
+ * a clip between an absolute box and its containing block does not cut it,
+ * as Chrome does not (the eleventh critic's ESC).
  */
 import { movedBy, type Placement } from './coverPoints';
 
@@ -117,17 +121,6 @@ export function overlap(a: Box, b: Box, tol = 0): Box | undefined {
     const right = Math.min(a.right, b.right);
     const bottom = Math.min(a.bottom, b.bottom);
     return right - left > tol && bottom - top > tol ? { left, top, right, bottom } : undefined;
-}
-
-/** A box cut to every clip in `clips` (undefined where nothing of it is left). */
-export function cutTo(box: Box, clips: readonly Box[]): Box | undefined {
-    let at: Box | undefined = box;
-    for (const clip of clips) {
-        if (at === undefined) return undefined;
-        at = overlap(at, clip, -Infinity);
-        if (at !== undefined && (at.right <= at.left || at.bottom <= at.top)) return undefined;
-    }
-    return at;
 }
 
 /**

@@ -87,7 +87,7 @@ import { loadLookSheet, lookSheetState } from '../src/ui/lookSheets';
 import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } from './wornSheet';
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
-import { cutTo, keyframeLonghands, meetsLines, moverKinds, type AnimationFacts } from './digitTrigger';
+import { keyframeLonghands, meetsLines, moverKinds, type AnimationFacts } from './digitTrigger';
 import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
@@ -13055,8 +13055,10 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
  * The trigger (`digitTrigger`, `layout/digitTrigger.ts`): a box placed by a
  * relative or sticky offset, a transform, a negative margin, an out-of-flow
  * position, a motion path or an animation that sets more than an ink or a
- * ground, whose painted boxes (its own and every box it holds, cut to its
- * clips, grown by its own sharp reach) meet a money node's line boxes —
+ * ground, whose painted boxes (its own and every box it holds, grown by its
+ * own sharp reach, each cut by the clips of the box whose content it is and
+ * held to the money node's own: `reachClipChain`, `pairClip`, 1b's) meet a
+ * money node's line boxes —
  * neither the money node nor a box that holds it, which carry the money with
  * them — or a look's pseudo-element so placed, by the region 1b reads it in
  * (`pseudoRegion`; one whose region cannot be read triggers the job). Read
@@ -13107,21 +13109,30 @@ function animationsByTarget(): Map<string, AnimationFacts[]> & { forEl: (el: Ele
     return out;
 }
 
-/** The clips above an element, up to `root`: every box whose overflow is not `visible` on an axis, or that paints its contents only inside itself. */
-function clipsAbove(el: Element, root: Element): Box[] {
-    const out: Box[] = [];
-    for (let up = el.parentElement; up !== null; up = up.parentElement) {
-        const cs = getComputedStyle(up);
-        const contains = /\b(paint|strict|content)\b/.test(cs.contain);
-        if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || contains) {
-            const r = up.getBoundingClientRect();
-            const xCut = cs.overflowX !== 'visible' || contains;
-            const yCut = cs.overflowY !== 'visible' || contains;
-            out.push({ left: xCut ? r.left : -Infinity, top: yCut ? r.top : -Infinity, right: xCut ? r.right : Infinity, bottom: yCut ? r.bottom : Infinity });
-        }
-        if (up === root) break;
+/**
+ * A mover's painted rect with the clips 1b holds a paint to (`reachClipChain`,
+ * `pairClip`): the chain of the box whose content it is — its parent, or an
+ * out-of-flow box's containing block, so a clip between the two does not cut
+ * it (the eleventh critic's ESC, CB2's shape with a box shadow) — the links
+ * that carry it as they scroll, and, for a paint that is a box's content (its
+ * text's, a pseudo's), that box's own window.
+ */
+type TriggerPaint = { rect: Box; chain: ClipLink[]; carriers: ClipLink[]; own: Box | undefined };
+/** A money node as the trigger holds a mover to it: its line boxes cut to its own window, and its chain. */
+type TriggerLines = { lines: Box[]; chain: ClipLink[] };
+
+/** Where one of a mover's painted rects meets a money node's line boxes, each side cut by its own clips held to the other's (`pairClip`, 1b's rule), with `MEET_TOL` of slack. */
+function triggerMeet(paints: readonly TriggerPaint[], node: TriggerLines): Box | undefined {
+    for (const p of paints) {
+        let rect = intersect(p.rect, pairClip(p.chain, node.chain));
+        if (rect !== undefined && p.own !== undefined) rect = intersect(rect, p.own);
+        if (rect === undefined) continue;
+        const tClip = pairClip(node.chain, p.carriers);
+        const lines = node.lines.map((l) => intersect(l, tClip)).filter((l): l is Box => l !== undefined);
+        const meet = meetsLines([rect], lines);
+        if (meet !== undefined) return meet.at;
     }
-    return out;
+    return undefined;
 }
 
 /** A box's own sharp reach past it (an outline, a box shadow's offset and spread, a border image's outset), as 1b reads it. */
@@ -13146,13 +13157,13 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
         out.ms = performance.now() - t0;
         return out;
     }
-    // Each node's line boxes as they show: cut to its clips and, where it clips its own text, to itself.
-    const lines = new Map(
+    // Each node's line boxes cut to its own window where it clips its own text, and its chain of clips, held per pair to a mover's (`triggerMeet`).
+    const chainSeen = new Map<Element, ClipLink[]>();
+    const lines = new Map<Element, TriggerLines>(
         money.map((node) => {
-            const cs = getComputedStyle(node);
-            const ownClip = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' ? [box(node.getBoundingClientRect())] : [];
-            const clips = [...ownClip, ...clipsAbove(node, root)];
-            return [node, moneyLineBoxes(node).map((b) => cutTo(b, clips)).filter((b): b is Box => b !== undefined)];
+            const own = reachOwnClip(node);
+            const boxes = moneyLineBoxes(node);
+            return [node, { lines: own === undefined ? boxes : boxes.map((b) => intersect(b, own)).filter((b): b is Box => b !== undefined), chain: reachClipChain(node, chainSeen) }];
         }),
     );
     const anims = animationsByTarget();
@@ -13188,25 +13199,21 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
         // A box that holds every money node carries all of them with it.
         if (money.every((node) => el === node || el.contains(node))) continue;
         out.movers += 1;
-        const clips = clipsAbove(el, root);
+        // Its own box and its reach, held by its own chain; every box it holds, by that box's chain.
+        const chain = reachClipChain(el, chainSeen);
         const own = box(el.getBoundingClientRect());
-        const painted: Box[] = [];
-        for (const r of [own, ...sharpReachOf(cs, own)]) {
-            const cut = cutTo(r, clips);
-            if (cut !== undefined) painted.push(cut);
-        }
-        const ownClip = cs.overflowX !== 'visible' || cs.overflowY !== 'visible' ? [own] : [];
+        const painted: TriggerPaint[] = [own, ...sharpReachOf(cs, own)].map((rect) => ({ rect, chain, carriers: chain, own: undefined }));
         for (const d of el.querySelectorAll('*')) {
             const r = d.getBoundingClientRect();
             if (r.width === 0 && r.height === 0) continue;
-            const cut = cutTo(box(r), [...ownClip, ...clips]);
-            if (cut !== undefined) painted.push(cut);
+            const held = reachClipChain(d, chainSeen);
+            painted.push({ rect: box(r), chain: held, carriers: held, own: undefined });
         }
         for (const node of money) {
             if (el === node || el.contains(node)) continue;
-            const meet = meetsLines(painted, lines.get(node)!);
-            if (meet !== undefined) {
-                say(`${named(el)} (${kinds.join('; ')}) meets ${named(node)} at ${Math.round(meet.at.left)},${Math.round(meet.at.top)}`);
+            const at = triggerMeet(painted, lines.get(node)!);
+            if (at !== undefined) {
+                say(`${named(el)} (${kinds.join('; ')}) meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);
             }
         }
     }
@@ -13273,11 +13280,15 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
                 say(`${who} stands where this page cannot read: ${region.anywhere}`);
                 continue;
             }
-            const clips = [...clipsAbove(host, root), ...(getComputedStyle(host).overflowX !== 'visible' || getComputedStyle(host).overflowY !== 'visible' ? [box(hr)] : [])];
-            const painted = [region.box, ...sharpReachOf(cs, region.box)].map((r) => cutTo(r, clips)).filter((r): r is Box => r !== undefined);
+            // A pseudo is its host's content: held by its host's chain and cut to its host's own window, as 1b holds it (`cutToClips`).
+            const chain = reachClipChain(host, chainSeen);
+            const hostLink = clipLinkOf(host);
+            const carriers = hostLink === undefined ? chain : [hostLink, ...chain];
+            const ownWindow = reachOwnClip(host);
+            const painted: TriggerPaint[] = [region.box, ...sharpReachOf(cs, region.box)].map((rect) => ({ rect, chain, carriers, own: ownWindow }));
             for (const node of money) {
-                const meet = meetsLines(painted, lines.get(node)!);
-                if (meet !== undefined) say(`${who} meets ${named(node)} at ${Math.round(meet.at.left)},${Math.round(meet.at.top)}`);
+                const at = triggerMeet(painted, lines.get(node)!);
+                if (at !== undefined) say(`${who} meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);
             }
         }
     }
