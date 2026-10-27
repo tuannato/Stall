@@ -2402,7 +2402,13 @@ function reachTargets(surface: ParentNode, clipSeen: Map<Element, ClipLink[]>, n
 let reachRest: { targets: ReachTarget[]; clipSeen: Map<Element, ClipLink[]>; surface: ParentNode; all: Reacher[] } | undefined;
 
 /** A reacher: an element, or a look pseudo-element (its host and which), and its paints that reach. */
-type Reacher = { el: Element; pseudo: '::before' | '::after' | null; paints: ReachPaints };
+type Reacher = {
+    el: Element;
+    pseudo: '::before' | '::after' | null;
+    paints: ReachPaints;
+    /** The box-shadow its paints were read from where that is not what the element computes now: a keyframe's own value (`reachKeyframes`), for the accepted list's key. */
+    boxShadow?: string;
+};
 
 const NO_BOX: Box = { left: 0, top: 0, right: 0, bottom: 0 };
 
@@ -2694,19 +2700,24 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
         // One failure a pair (a reacher and a target, each its own box) and a kind, whatever it is read at.
         const key = `${whoKey}|${meet.kind}|${reachId(tn)}`;
         if (said.has(key)) continue;
-        said.add(key);
         const sentence =
             `${who}'s ${meet.kind}${meet.kind === 'unresolved' ? '' : ` (${meet.what})`} reaches ${target.name} at ${placed(meet)}` +
             (meet.coverage === undefined ? '' : `, composite ${meet.coverage.toFixed(2)}`) +
             (meet.kind === 'unresolved' ? ` — ${meet.what}: it reaches anywhere` : '') +
             (at === undefined ? '' : `, ${at}`);
-        // A meet the owner accepted by name (`REACH_ACCEPTED`), keyed on what the page paints: counted and said, not failed.
+        // A meet the owner accepted by name (`REACH_ACCEPTED`), keyed on what the page paints: counted and said once a
+        // pair, not failed — and it does not stand for the pair, so the same pair read past the entry at a keyframe
+        // offset (a composite over the ceiling as the board swings, say) still fails.
         const accepted = acceptedReach(reachFact(rc, meet, tn));
         if (accepted !== undefined) {
+            const acceptedKey = `${key}|accepted`;
+            if (said.has(acceptedKey)) continue;
+            said.add(acceptedKey);
             t.accepted += 1;
             if (reachAcceptedSaid.length < REACH_KEPT) reachAcceptedSaid.push(`${screen} / ${label}: ${sentence} — accepted: ${accepted.name}`);
             continue;
         }
+        said.add(key);
         t.would += 1;
         t.byKind[meet.kind] = (t.byKind[meet.kind] ?? 0) + 1;
         if (reachWould.length < REACH_KEPT) reachWould.push(`${screen} / ${label}: ${sentence}`);
@@ -2714,14 +2725,18 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
     }
 }
 
-/** A meet as the accepted list reads it (`acceptedReach`): the reacher and the target as the page paints them. */
+/**
+ * A meet as the accepted list reads it (`acceptedReach`): the reacher and the target as the page paints them — the
+ * reacher's shadow the one its paints were read from (a keyframe's own value where `reachKeyframes` read one, or what
+ * it computes at the rest or the seek it is read at).
+ */
 function reachFact(rc: Reacher, meet: Meet, target: Element): ReachFact {
     const rs = getComputedStyle(rc.el, rc.pseudo);
     const ts = getComputedStyle(target);
     return {
         kind: meet.kind,
         coverage: meet.coverage,
-        reacher: { tag: rc.el.tagName.toLowerCase(), classes: [...rc.el.classList], pseudo: rc.pseudo, boxShadow: rs.boxShadow },
+        reacher: { tag: rc.el.tagName.toLowerCase(), classes: [...rc.el.classList], pseudo: rc.pseudo, boxShadow: rc.boxShadow ?? rs.boxShadow },
         target: { tag: target.tagName.toLowerCase(), classes: [...target.classList], role: target.getAttribute('data-role'), background: ts.backgroundColor, color: ts.color },
     };
 }
@@ -3083,7 +3098,9 @@ function reachKeyframes(
             const paints = ownPaints(el, owner.cs, owner.boxed, range, el === target ? set : { textShadow: set.textShadow });
             if (paints === undefined) continue;
             cutToClips(el, paints, rest.clipSeen);
-            judgeReacher({ el, pseudo: null, paints }, rest.targets, t, screen, label, at, said);
+            // The shadow the accepted list keys on is this keyframe's; where the keyframe sets the colour a `currentcolor` reads, no computed string says it, and no entry is matched.
+            const keyed = el !== target ? undefined : set.color !== undefined ? 'a keyframe sets the colour its shadow may read' : set.boxShadow;
+            judgeReacher({ el, pseudo: null, paints, ...(keyed === undefined ? {} : { boxShadow: keyed }) }, rest.targets, t, screen, label, at, said);
             reads += 1;
         }
     }
