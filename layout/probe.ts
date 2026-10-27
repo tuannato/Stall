@@ -13203,8 +13203,9 @@ window.__codeMatrices = () =>
  * **1d's cut held to this Chrome** (`the-module-read-agrees-with-this-chrome`;
  * `MODULE_SNAP_SIZES` and `MODULE_SNAP_OFFSETS` in `layout/codeMatrix.ts`,
  * `moduleSnapVerdict` in `scripts/code-modules.mjs`). On, it draws a sheet of
- * codes with the app's own `qrSvg` over the page — a white ground at the top
- * of the stacking order, each code in a box of its size at its offset — and
+ * codes with the app's own `qrSvg` over the page — a white ground fixed to
+ * the viewport at the top of the stacking order, each code in a box of its
+ * size at its offset — and
  * makes the sheet the prepared scope, so `__quietZones` and `__codeMatrices`
  * answer for its codes alone, read exactly as a job's are; the runner then
  * captures the page as it captures a job. Off, it takes the sheet away and
@@ -13225,7 +13226,8 @@ window.__moduleSnap = (on: boolean) => {
     const width = window.innerWidth;
     const sheet = document.createElement('div');
     sheet.id = 'module-snap';
-    for (const [p, v] of Object.entries({ position: 'absolute', left: '0', top: '0', 'z-index': '2147483647', background: '#ffffff', width: `${width}px`, margin: '0', padding: '0' })) {
+    // Fixed to the viewport, so a document scrolled by an earlier paint cannot carry a code off the capture.
+    for (const [p, v] of Object.entries({ position: 'fixed', left: '0', top: '0', 'z-index': '2147483647', background: '#ffffff', width: `${width}px`, margin: '0', padding: '0' })) {
         sheet.style.setProperty(p, v, 'important');
     }
     const GAP = 8;

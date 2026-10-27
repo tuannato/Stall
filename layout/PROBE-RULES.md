@@ -11907,8 +11907,9 @@ on every run, in Chrome and never in `pnpm test`. Once a run, on the first
 contrast tab after the walk and its canary, the page draws a sheet of codes
 with the app's own `qrSvg` — 18 fractional module sizes, 2.1 to 2.95 under
 the cut and 3 to 5.21 over it, each at seven sub-pixel offsets across, each
-paired with another of the seven down, 126 codes — on a white ground over everything at DPR 1,
-1280 wide, and makes the sheet the prepared scope, so `__quietZones` and
+paired with another of the seven down, 126 codes — on a white ground over everything,
+fixed to the viewport so no scroll an earlier paint left can carry a code off
+the capture, at DPR 1, 1280 wide, and makes the sheet the prepared scope, so `__quietZones` and
 `__codeMatrices` read its codes exactly as a job's are read. The runner
 captures it as it captures a job and holds 1d's reader to it: every code
 under the cut refused, every code from it up read right on every one of its
@@ -11927,8 +11928,8 @@ right from three pixels and wrong somewhere under it at a cut of two
 
 | Run | What it read | Exit |
 |---|---|---|
-| quick, the cut at 3 (`runs/q1d-snap-first.log`, `runs/q1d-snap-commit1.log`) | 126 codes; the 49 under the cut refused (read anyway: 1,053 of 30,625 centres wrong); the 77 from it read right on 48,125 centres: agreed | the cut queue's own vacuous lines only; no line of this check |
-| quick, red: `MODULE_MIN_PX` back to 2 (`tools/min2-mutate.py`, `runs/q1d-snap-min2.log`, `runs/q1d-snap-commit1-min2.log`) | 18 disagreements, every code from 2.1 to 2.55px at some offset (28–184 of 625 centres wrong each, mid-grey), on both captures | 1, on `the-module-read-agrees-with-this-chrome` |
+| quick, the cut at 3 (`runs/q1d-snap-first.log`, `runs/q1d-snap-commit1.log`) | 126 codes; the 49 under the cut refused (read anyway: 1,053 of 30,625 centres wrong); the 77 from it read right on 48,125 centres: agreed | 1, on the cut queue's own vacuous lines alone; no line of this check |
+| quick, red: `MODULE_MIN_PX` back to 2 (`tools/min2-mutate.py`, `runs/q1d-snap-min2.log`, `runs/q1d-snap-commit1-min2.log`) | 18 disagreements on both captures, at every size from 2.1 to 2.85px (six codes at 2.1, two at 2.25, three at 2.4, four at 2.55, one each at 2.7 and 2.85), 13–184 of 625 centres wrong each, mid-grey; none at 2.95 | 1, on `the-module-read-agrees-with-this-chrome` |
 
 Its cost is one capture and one read: 0.19s (the phase table's `module snap`).
 
@@ -12011,8 +12012,11 @@ with a 5px absolute and a 5px fixed child at `top: 0; left: 0`, laid out
 unseen at the viewport's corner and taken away in the same task. A child at
 its wrapper's corner is held by it, one where the bare wrapper's child lands
 is not, anything else cannot be told; any disagreement is one of the pass's
-failures, and a geometry pass whose page ran no check fails the run. The
-runner prints the count and the agreement once over the geometry passes.
+failures, and a geometry pass that read 1b with no check on its page fails
+the run (the worn-only pass reads neither: its report is its own job's; a
+first wiring owed the check there too, and the round's first whole run
+failed on it alone, `runs/w-clean-default-1.log`). The runner prints the
+count and the agreement once over the geometry passes.
 
 | Read | Before | After | Control |
 |---|---|---|---|
@@ -12020,6 +12024,7 @@ runner prints the count and the agreement once over the geometry passes.
 | quick, MT: the same by `will-change: offset-path` (`runs/qp-MT-willchange-offsetpath-neo.log`) | 18 | 24 | 24 |
 | quick, FT: CB2 with the name column `container-type: inline-size` (`runs/qp-FT-containertype-neo.log`) | 0 | 18 | CB2: 18 (`runs/qp-CB2-abstext-neo.log`) |
 | quick, the self-check over the list as it was at `78c7deb` (`tools/oldhof-mutate.py`, `runs/qp-oof-oldfunction-390.log`; through the runner on the narrow pass, `tools/qpass-mutate.py`, `runs/q1d-oof-narrow-oldfunction.log`: the pass fails with the 29) | — | 29 disagreements, each a failure: `preserve-3d`, the three `container-type`s, `offset-path`, `offset-position`, `will-change` on `offset-path`, `offset-position`, `offset`, `-webkit-backdrop-filter`, `transform-origin` and `opacity, TRANSFORM`, and an inline box's transform, `contain: layout` and `will-change: transform` | the list now: 57 cases, 0 disagreements (`runs/qp-oof-clean-390.log`; the runner's line, `runs/q1d-oof-narrow.log`) |
+| quick, a page that writes no check into its verdict (`tools/nocheck-mutate.py`, the narrow pass, `runs/q1d-oof-nocheck.log`) | — | "✗ holds-out-of-flow-agrees-with-this-chrome: no check on the page of narrow", the run failed | — |
 
 All five at offers, 390, each plant alone; the before figures are the
 critic's on `78c7deb` (`critic10/runs/q-*.log`). Its cost is 5.1ms a page

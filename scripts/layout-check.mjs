@@ -3700,8 +3700,9 @@ try {
             });
             if (coverTally(g.report.coverByClass).paints > 0) coverSeen[g.key] = g.report.coverByClass;
         }
-        if (g.report !== undefined) outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0 });
         if (g.report?.reachByClass !== undefined) {
+            // Every pass whose page ran 1b ran its containing-block check too (the worn-only pass's report is its own job's, and runs neither).
+            outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0 });
             reachGeometry.push({
                 pass: g.key,
                 byClass: g.report.reachByClass,
@@ -3910,8 +3911,8 @@ try {
          * 2): every geometry pass's page held 1b's containing-block list to
          * where this Chrome places an absolute and a fixed child. A
          * disagreement is already one of that pass's failures; a page that
-         * ran no check at all is a failure here, since 1b would then read
-         * its out-of-flow boxes' clips on a list nothing held.
+         * read 1b and ran no check is a failure here, since 1b would then
+         * read its out-of-flow boxes' clips on a list nothing held.
          */
         const unchecked = outOfFlowGeometry.filter((o) => o.check === undefined || typeof o.check.cases !== 'number' || o.check.cases === 0).map((o) => o.pass);
         const disagreed = outOfFlowGeometry.filter((o) => (o.check?.disagree?.length ?? 0) > 0);
