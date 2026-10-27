@@ -12030,6 +12030,27 @@ containing block by and the list never names is missed by both (the
 critic's sweep and `cbsweep.mjs` are the evidence that none is left among
 the ones tried).
 
+### A box-less element is not walked from a containing block (item 3: C1 × CB2)
+
+**The incident.** C1 (the ninth review's) reads a `display: contents`
+element's own text paints; CB2 walks an absolute box's clip chain from its
+containing block. The critic's C1x is both at once: Neo's rail label
+`display: contents` and `position: absolute`, its 55 sharp copies over the
+figure. A box-less element generates no box, so `position` does not apply
+to it: its text is laid out in flow in its parent's box and scrolls with the
+rows. `reachClipChain` read `position` first and walked the label from a
+containing block above the stall's scroll region, which neither clips nor
+carries it, so the one price below the fold was lost: 18 against C1's 24.
+Both lints admit it.
+
+**The fix.** `reachClipChain` asks whether the element has a box before it
+reads `position`: a `display: contents` element is read as static, and its
+chain is its parent's.
+
+| Read | Before (`tools/nocontents-mutate.py`) | After | Control |
+|---|---|---|---|
+| quick, C1x at offers, 390 (`runs/qp-C1x-contents-absolute-neo-before.log`, `runs/qp-C1x-contents-absolute-neo.log`) | 18 | 24 | C1, the same label in flow: 24 (`runs/qp-C1-contents-neo.log`) |
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

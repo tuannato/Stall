@@ -2018,7 +2018,11 @@ function clipLinkOf(box: Element): ClipLink | undefined {
 function reachClipChain(el: Element, seen: Map<Element, ClipLink[]>): ClipLink[] {
     const known = seen.get(el);
     if (known !== undefined) return known;
-    const position = getComputedStyle(el).position;
+    // A box-less element (`display: contents`) is positioned by nothing, whatever it computes: its text and its children are laid out
+    // in flow in its parent's box and scroll with it, so its chain is its parent's (the tenth critic's C1x: such a label at `position:
+    // absolute` was walked from a containing block above the stall's scroll region, and the price below the fold was lost).
+    const cs = getComputedStyle(el);
+    const position = cs.display === 'contents' ? 'static' : cs.position;
     const fixed = position === 'fixed';
     // The box whose content it is: its parent, or an out-of-flow box's containing block.
     let up = el.parentElement;
