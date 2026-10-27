@@ -11343,31 +11343,41 @@ contrast pass, on the screens it samples.
 `layout/paintReach.ts`, and `reachAtRest` and its reads in
 `layout/probe.ts`). On every geometry pass, once a paint, at rest (just
 before 1a's read, every animation reset as 1a resets it), it reads every
-element on the open surface and every
+element on the open surface that has a box, every `display: contents`
+element that holds text of its own (its text's paints through its own
+style; since the ninth review's C1, below), and every
 look pseudo-element (its hosts from the CSSOM rule walk once a page,
 `lookPseudoHosts`; a look pseudo of a box above the surface, up to the app's
 root, included), and measures how far each paint reaches past the box it is
-drawn from: an outer `box-shadow` (offset and spread in full; its blur under
-the policy below), an `outline` (width plus offset), a
+drawn from: an outer `box-shadow` (a sharp layer's offset and spread in
+full; a blurred layer judged whole under the policy below), an `outline`
+(width plus offset), a
 `border-image-outset`, a `text-shadow` (each copy off its line's measured
 ink box, `textInk`), a `drop-shadow()` or `blur()` in a `filter` (`url()`
 and more than `MAX_DROP_SHADOWS` (4) drop shadows fail closed), a decoration
-line's band (an underline from the baseline at its offset and thickness),
-and a look pseudo's region (its own resolved size, grown by its font size
-when it holds text, anywhere in its host's box, moved by its offsets and
-margins; a transform, `translate`, `rotate`, `scale`, a motion path, an
-absolute, fixed or sticky position, or a size that does not resolve, fails
-closed). A reach that meets a money node's line boxes (`MONEY_FIGURES`) or a
+line's band (an underline from the baseline at its offset and thickness, an
+overline at its line's top, a line-through across its middle; a percentage
+read as 1em, and a length it cannot take apart failing closed, since the
+ninth review), and a look pseudo's region (its own resolved size, grown by
+its font size when it holds text, anywhere in its host's box, moved by its
+offsets and margins; a transform, `translate`, `rotate`, `scale`, a motion
+path, a zoom of its own, an absolute, fixed or sticky position, or a size
+that does not resolve, fails closed). A reach that meets a money node's line boxes (`MONEY_FIGURES`) or a
 protected box, the node neither its ancestor nor its descendant, past its own
 box, by more than `MEET_TOL` (1px) on both axes, is a would-be failure — one
 per pair of boxes and kind.
 
 **Animations.** An animation of a box-shadow, a text-shadow, a filter or a
 colour alone is read from its keyframes' own computed values (`getKeyframes`)
-with no seek; any other that sets a reach, runs on a look pseudo, or moves a
-reacher or a target is seeked to each keyframe offset and put back; one of a
-ground, an opacity, a clip, a mask or a custom property only those read is
-left alone (`reachNeedless`, `reachVarsRead`).
+with no seek; any other whose keyframes name a paint that reaches, that runs
+on a look pseudo, or whose own subtree holds a reacher or a target is seeked
+to each keyframe offset and put back, the targets inside it held to the
+reachers outside it; one of a ground, an opacity, a clip, a mask or a custom
+property only those read is left alone (`reachNeedless`, `reachVarsRead`).
+Not seeked, so not read (the ninth review's L1 and K1, PLAN § Open): an
+animation that moves a target by layout from outside the target's and the
+reacher's subtrees (a margin on a sibling), and a custom property a keyframe
+sets that feeds a reach on a box painting nothing that reaches at rest.
 
 ### Clips are held per pair
 
@@ -11385,9 +11395,16 @@ its content's paint at its padding box at every scroll position, so a paint
 inside it never reaches a box outside it.
 
 Now clips are a question about a pair (`reachClipChain`, `pairClip`,
-`ClipLink`): a clipping ancestor that holds the other box too and scrolls on
-an axis clips neither on that axis (they move together as it scrolls), and
-every other clipping ancestor cuts at its padding box; a box's own clip
+`ClipLink`): a link that scrolls both boxes clips neither on that axis
+(they move together as it scrolls), and every other link cuts at its padding
+box. Which links a box has, and which scroll it, are its clip chain's: the
+box whose content it is (its parent, or, since the ninth review's CB2, an
+absolute or fixed box's containing block, `holdsOutOfFlow`) and what clips
+that; a link is in both boxes' chains for the exception, and a box standing
+sticky under it takes none (`pinned`). Before CB2 the chain walked DOM
+parents and "holds the other box" was DOM containment, so an absolute box
+was cut by a clip between it and its containing block, which never clips
+it. A box's own clip
 (`reachOwnClip`) cuts its text's paints and a look pseudo's, at its padding
 box. Which targets a reacher can meet at all is found from a superset
 (`cutClip`: the axes that cut and do not scroll). Quick reads on the final
@@ -11466,8 +11483,10 @@ rules':
 | UL3, the row under "You pay" raised 24px (past the cap) | refuse, admit | 15 / 15 / 0 … / 15 at 360 | 1: the contrast pass, 12 |
 
 What 1b adds: the contrast pass reads 390, 1280 and 1920 alone, less the
-geometry-only screens; 1b reads PW, the outline and the border image on
-every wall size and at 360, where nothing else does. UL2 is a finding: the
+geometry-only screens; 1b reads PW and the outline on every wall size and at
+360, and the border image on the landscape walls and at 360 (0 on the four
+portrait walls, where the price stands under the name), where nothing else
+does. UL2 is a finding: the
 look lint's underline caps (`UNDERLINE_OFFSET_MAX_PX` 4px,
 `DECORATION_THICKNESS_MAX_PX` 3px) admit a band 2px over the next row's
 figure on Modern's listing face; it is in PLAN § Open.
@@ -11495,10 +11514,17 @@ first style and layout reads after the reset take a flush 1a used to pay, and
 the passes run on two tabs. The branch against main is +27.5s and +27.1s,
 nearly all of it already in `4d54c91` (255.8–256.0s against main's
 229.6–230.2s). The seventh review's pairs read that round's final probe at
-240.2s and 236.9s with a walk of about 117s, against today's 125–131s for
-`4d54c91`, while main's walk moved only from 89–91s to 93s: the branch's
-walk is slower on this machine today by about 8–14s without 1b, unexplained,
-and the branch against main is about 12s further apart than it was then.
+240.2s and 236.9s with a walk of about 117s, against these pairs' 125–131s
+for `4d54c91`, while main's walk moved only from 89–91s to 93s. **That is
+the machine, not the code** (the ninth review's table,
+`before-8g2/critic9/runs/walk-table.log`): on one day, 2026-10-27, the same
+code's walk read 116.3–118.2s on four runs and 125.1–131.2s on four others,
+every phase's work count identical across `41fd3c1` to `4d54c91` and every
+geometry pass 9–18% slower in proportion, the contrast pass flat, while
+`main` moved +3% alone. The state of the machine (two performance and four
+efficiency cores) hits the branch's style- and layout-heavy reads harder;
+nothing on the branch causes it, and a cost is read only from runs back to
+back.
 The final commit stands at 252.7–257.7s over four runs, under the 300s
 ceiling and past the 240s sharding line.
 
@@ -11512,13 +11538,82 @@ ceiling and past the 240s sharding line.
 - A pseudo-element's exact box (no DOM API gives it; its region is read),
   and a decoration line on a pseudo's text.
 - A reach between two keyframe offsets, and two animations at once.
-- A box inside a scroller held to one outside it at any scroll but the one
-  the paint stands at.
+- A box a scroller carries held to one it does not carry, or to a sticky
+  box, at any scroll but the one the paint stands at.
+- An animation that moves a target by layout from outside the target's and
+  the reacher's subtrees (L1), and a custom property a keyframe sets that
+  feeds a reach on a box painting nothing that reaches at rest (K1): to be
+  widened before 7b binds 1b (PLAN § Open).
+- A pseudo's text that runs past its region's width (`nowrap`, a
+  letter-spacing).
 - A column rule; an SVG element's own overflow; a glyph's shape (a
   text-shadow is blurred off its line's ink box, an upper bound); text over
   several lines (its line boxes).
 - The contrast pass's paints: 1b runs on the geometry passes alone.
 - The private look at 0x04 was not run under 1b.
+
+## Before 8g2, 1b: the ninth review's fixes (2026-10-27)
+
+The ninth critic's short verify of 1b (`before-8g2/CRITIC-9.md`, its plants
+and logs in `before-8g2/critic9/`) found four holes, each a plant 1b read 0
+where its control read more, and three passing every other geometry rule.
+The window decided by the critic's recommendation: fix C1, Z1 and CB2 and
+the cheap P2s, state L1 and K1 (PLAN § Open). Evidence:
+`before-8g2/critic9-fixes/` (`plants/`, `runs/`, `tools/`; `tools/qp.sh` is
+the critic's quick read on 4391/9411, with `REF=` to read an older commit's
+1b files and `MUTATE=` for a scratch mutation).
+
+**C1, a `display: contents` text owner** (`reachOwner`, `ownPaints`,
+`contentsScale`). `reachersOn` skipped an element with no client rects, and a
+`display: contents` element has none, though its text is laid out in its
+parent's box and painted in its own style. 1b now reads such an element when
+it holds text of its own: its text's paints (a text-shadow, a decoration
+line), no box paints, judged past each line's ink, scaled by its own zoom and
+every box-less ancestor's up to the nearest box, times that box's
+`reachScale`. The per-pass line prints how many were read.
+
+**Z1, a pseudo's own zoom** (`pseudoRegion`, `zoomOf`). Chrome gives a
+pseudo's computed lengths unzoomed, so a zero-height pseudo at `zoom: 20`
+with a 4px spread painted an 80px spread that 1b read as 4px. Fails closed
+now, beside a transform and a scale. Multiplying its lengths was not taken:
+its region, margins, offsets, shadow, outline and font size would each need
+it, and no served sheet sets a zoom on a pseudo (the door's deck minis carry
+the only `zoom`, and 1b does not read them), so failing closed costs the
+clean tree nothing.
+
+**CB2, an out-of-flow box's clips** (`reachClipChain`, `holdsOutOfFlow`,
+`pairClip`, above).
+
+**The P2s.** 1b is guarded whole (`reachAtRest`): a throw ends 1b on its
+paint, is counted in the measuring look's tally, said word for word
+(`reachThrown`) and printed on the pass's 1b line, and fails nothing; before,
+`reachKeyframes` stood outside the seek's own `try`. The decoration reader
+reads a percentage offset or thickness as 1em of the larger of the text's
+and its decorating box's font size, a `calc()` of a percentage and px as CSS
+does, fails closed on a length it cannot take apart, and reads a
+line-through across its line's middle (`emLength`, `underlineBand`).
+
+**Red proofs, quick reads** (one page read of one screen, the plant alone,
+each before the fix and after):
+
+| Plant | Screen, size | Before | After | Control |
+|---|---|---|---|---|
+| C1, Neo's rail label `display: contents` with 55 sharp text-shadow copies | offers, 390 | 0 | 24 | 24 (in flow) |
+| Z1, Neo's `.item-b::after` at `height: 0; zoom: 20` with a 4px spread | offers, 390 | 0 | 210 (each "unresolved: it is zoomed 20") | 30 (zoom 1, an 80px spread) |
+| CB2, Neo's `.item-b` `overflow: hidden`, its rail label absolute with the copies | offers, 390 | 0 | 18 | 18 (no clip) |
+| CB, the same with a `140px 0 0 30px` box-shadow | offers, 390 | 0 | 12 | 12 (no clip) |
+| UP, UL2 with its offset `200%` | item-listing, 390 | 0 | 5 | 5 (UL2, 4px) |
+| LT, the row over "You pay" struck through 60px (kit only) | item-listing, 390 | 0 | 5 | — |
+| a throw planted at the top of `reachKeyframes` (a scratch mutation) | offers, 390 | no verdict in 600s | a verdict; Neo's 6 paints counted as throws, nothing failed | — |
+
+CB2's control read 24 before the fix and 18 after: its absolute label's
+containing block is above the stall's scroll region (no box between is
+positioned), so the region neither clips nor carries it, and the one price
+below the fold is now read at the scroll it stands at — the stated gap
+("Not read", above), where it was read before as if the label scrolled with
+the rows. The lints admit C1, Z1 and CB2 (first party and kit); UP and LT
+are kit only (`runs/lint-plants.log`, and the critic's
+`critic9/runs/lint-my-plants.log`).
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

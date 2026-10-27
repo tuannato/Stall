@@ -1204,33 +1204,58 @@ money path this app can have, because nothing on it is derived.
 - **Before 8g2, 1b's open list** (paints with no hit area, read
   report-only; `layout/PROBE-RULES.md`, "Before 8g2, 1b"). 1b fails
   nothing until step 7b binds it. Open:
-  1. **Rural's board over the address plate** (the owner's call at 7b):
-     `.stall-sign`'s `0 18px 40px` at 0.32 composites to 0.23 over
-     `button.addr` at 1280, the clean tree's only source (142 would-be
-     failures). The overlap is real — the board's swing makes it paint after
-     the in-flow content and darkens the plate's top
+  1. **Rural's board over the address plate, accepted by name at 7b**
+     (D-2026-10-27-03; not built until 7b): `.stall-sign`'s `0 18px 40px`
+     at 0.32 composites to 0.23 over `button.addr` at 1280, the clean
+     tree's only source (142 would-be failures). The overlap is real — the
+     board's swing makes it paint after the in-flow content and darkens the
+     plate's top
      (`private/design/workshop-2026-09-23/before-8g2/1b/shots/rural-board-1280-crop.png`)
-     — and the plate stays legible. Options: raise `BLUR_OPACITY` to about
-     0.25 (every soft paint on the clean tree is then under it; the next is
-     Neo's figure glow at 0.163), accept the board by name, or restyle its
-     shadow.
-  2. **The lint's underline cap admits a reach onto a neighbour's figure**:
-     Modern's row over "You pay" underlined 3px thick and lowered 4px, both
-     at their caps (`DECORATION_THICKNESS_MAX_PX`,
-     `UNDERLINE_OFFSET_MAX_PX`), lays a 2px band over the figure — 1b 15 at
-     390, 1280 and 360, and the contrast pass reads "You pay" at 1.00:1.
-     Tighten the cap, hold the band to its own line box, or let 1b's
-     binding carry it.
-  3. **Not read by 1b, stated:** paint order (a meet is a meet whichever
+     — and the plate stays legible. 7b accepts it by one entry keyed by
+     look, selector, computed shadow and target, with a test; raising
+     `BLUR_OPACITY` to 0.25 (which admits a 4.5:1 figure taken to 2.9:1)
+     and restyling the shadow were the options not taken.
+  2. **The lint's underline cap admits a reach onto a neighbour's figure
+     (UL2), to be carried by 7b's binding**: Modern's row over "You pay"
+     underlined 3px thick and lowered 4px, both at their caps
+     (`DECORATION_THICKNESS_MAX_PX`, `UNDERLINE_OFFSET_MAX_PX`), lays a 2px
+     band over the figure — 1b 15 at 390, 1280 and 360, and the contrast
+     pass reads "You pay" at 1.00:1. Once 7b binds 1b, the band fails the
+     run; the cap is left as it is.
+  3. **Widen the keyframe seek before 7b binds 1b** (the ninth critic's L1
+     and K1, both read 0 by 1b today). L1: an animation that moves a target
+     by layout from outside the reacher's subtree and the target's (a
+     margin on a sibling) — Neo's tabs positioned with a `0 30px 0` band,
+     and `.collection-head` animating `margin-bottom` to −60px pulls the
+     rows under the band; 1b seeks an animation only where
+     its keyframes name a paint that reaches, it runs on a look pseudo, or
+     its own subtree holds a reacher or a target, and then holds a reacher
+     outside the subtree only to the targets inside it. K1 (kit only; the
+     first-party lint refuses it): a custom property set in a keyframe that
+     feeds a reach (`box-shadow: var(--x)`) on a box that paints nothing
+     that reaches at rest. The fix the critic named: seek every animation
+     that is not needless, and hold every reacher to every target at each
+     offset; its cost is not measured.
+  4. **Pseudo text past its width is under-read** (the ninth critic's P2,
+     not planted): a pseudo's region is its own resolved width (an inline
+     one's, a font size a character), grown by one font size; text that
+     runs past that width (`white-space: nowrap`, a `letter-spacing`)
+     stands outside the region.
+  5. **The region model is proved by structure alone** (the ninth critic's
+     P3): PW is a pseudo of a box whose region holds the figure's ancestor;
+     a plant of a pseudo that is not an ancestor of the figure's row, moved
+     onto it by its offsets alone, is still to be made.
+  6. **Not read by 1b, stated:** paint order (a meet is a meet whichever
      paints last); several reachers' blurs together (each reacher's layers
      are composited alone); a pseudo-element's exact box, and a decoration
      line on a pseudo's text; a reach between two keyframe offsets, and two
-     animations at once; a box inside a scroller held to one outside it at
-     any scroll but the one the paint stands at; a column rule; an SVG
-     element's own overflow; a glyph's shape and text over several lines
-     (its line boxes, an ink box an upper bound); the contrast pass's paints
-     (1b runs on the geometry passes alone).
-  4. **A run under the private look at 0x04's selection** with 1b in it
+     animations at once; a box inside a scroller held to one the scroller
+     does not carry, or to a sticky box, at any scroll but the one the paint
+     stands at; a column rule; an SVG element's own overflow; a glyph's
+     shape and text over several lines (its line boxes, an ink box an upper
+     bound); the contrast pass's paints (1b runs on the geometry passes
+     alone).
+  7. **A run under the private look at 0x04's selection** with 1b in it
      (the money guards' item 2 still stands).
 
 - **A landscape touch wall under about 900 wide is not supported yet, and

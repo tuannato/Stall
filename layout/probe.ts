@@ -1634,26 +1634,31 @@ window.__coverFaults = () => coverScan();
  * that has none answers nowhere (the plan's C-1): the critic's PW, the price
  * column's `::after` at `height: 0` moved up 60px with `box-shadow: 0 0 0
  * 60px` in a literal colour, hides the figure while every point 1a asks
- * returns the figure. This reads every element and every look pseudo-element
+ * returns the figure. This reads every element with a box, every `display:
+ * contents` element that holds text of its own (its text's paints alone:
+ * `reachOwner`, the ninth critic's C1), and every look pseudo-element
  * (`markLookPseudos`' kind, its hosts found from the CSSOM rule walk once a
  * page) on the open surface — and a look pseudo of a box above the surface,
  * up to the app's root — and, for each that is neither an ancestor nor a
  * descendant of the node it is held to, the reach past the box it is drawn
- * from of an outer `box-shadow` (its offset and spread in full, its blur
- * under the policy), an `outline` (its width plus its offset), a
- * `border-image-outset`, a `text-shadow` (from the text's own line boxes:
- * each copy past the line it copies), a `drop-shadow()` and a `blur()` in a
- * `filter` (`url()` fails closed), a decoration line's band (an underline
- * from the baseline at its offset and thickness, past its own line), and a
- * look pseudo-element's own region where it holds text (`pseudoRegion`:
+ * from of an outer `box-shadow` (a sharp layer's offset and spread in full;
+ * a blurred layer whole, under the policy), an `outline` (its width plus its
+ * offset), a `border-image-outset`, a `text-shadow` (from the text's own
+ * line boxes: each copy past the line it copies), a `drop-shadow()` and a
+ * `blur()` in a `filter` (`url()` fails closed), a decoration line's band
+ * (an underline from the baseline at its offset and thickness, an overline
+ * at its line's top, a line-through across its middle; a percentage of 1em
+ * read as CSS reads it, and a length that does not read failing closed), and
+ * a look pseudo-element's own region where it holds text (`pseudoRegion`:
  * anywhere in its host's box, moved by its offsets and margins and grown by
- * its text's size; a pseudo a transform moves, out of flow, or whose size or
- * place does not resolve reaches anywhere where it paints at all). Any reach
- * that meets a money node's line boxes (`MONEY_FIGURES`, its text's own) or
- * a protected box (`PROTECTED`, its border boxes), each cut to what its
- * clipping boxes show — the reach cut to what the reacher's show — past the
- * box it is drawn from (a pseudo's region is not inside its box, so nothing
- * is excluded), by more than a pixel on both axes, is a would-be failure.
+ * its text's size; a pseudo a transform moves, with a zoom of its own (the
+ * ninth critic's Z1), out of flow, or whose size or place does not resolve
+ * reaches anywhere where it paints at all). Any reach that meets a money
+ * node's line boxes (`MONEY_FIGURES`, its text's own) or a protected box
+ * (`PROTECTED`, its border boxes), each cut to what its clipping boxes show
+ * — the reach cut to what the reacher's show — past the box it is drawn from
+ * (a pseudo's region is not inside its box, so nothing is excluded), by more
+ * than a pixel on both axes, is a would-be failure.
  *
  * **The blur policy** (`BLUR_OPACITY`, measured first; `PROBE-RULES.md`,
  * "Before 8g2, 1b"): a blurred tail counts where the composite of every
@@ -1664,31 +1669,41 @@ window.__coverFaults = () => coverScan();
  *
  * **When**: on every geometry pass, once a paint, at rest — every animation
  * reset as 1a resets it, just before 1a's read (`coverAtRest`) — and at the
- * keyframes of the animations that can move or change a paint that reaches
- * (`reachSeek`): an animation of a box-shadow, a text-shadow, a filter or a
- * colour alone is read from its keyframes' own computed values, with no
- * seek (`reachKeyframes`); every other animation whose keyframes set a
- * paint that reaches (`REACH_PROPS`), that runs on a look pseudo, or that
- * runs on or above a box holding a reacher or a target is seeked to each
- * keyframe offset, and the boxes it runs on and under read again, the
- * targets it moves held to every reacher standing still; an animation of
- * nothing that reaches or moves (`reachNeedless`: a ground, an opacity, a
- * clip or a mask, and a custom property only those read) is left alone.
- * Clips are held per pair (`pairClip`): a scroller that holds both boxes
- * clips neither on the axis it scrolls (below the fold they move together),
- * every other clip cuts at its padding box. Fails nothing: its would-be
- * failures — one a pair of boxes and a kind — are counted per look and per
- * kind and printed per pass. Not read, stated: a reach between two keyframes, and two animations
- * at once; a value a keyframe read from its values does not set, read as it
+ * keyframes of some animations (`reachSeek`): an animation of a box-shadow,
+ * a text-shadow, a filter or a colour alone is read from its keyframes' own
+ * computed values, with no seek (`reachKeyframes`); every other animation
+ * whose keyframes name a paint that reaches (`REACH_PROPS`), that runs on a
+ * look pseudo, or whose own subtree holds a reacher or a target at rest is
+ * seeked to each keyframe offset, and the boxes it runs on and under read
+ * again, the targets inside it held to every reacher outside it standing
+ * still; an animation of nothing that reaches or moves (`reachNeedless`: a
+ * ground, an opacity, a clip or a mask, and a custom property only those
+ * read) is left alone. So two are not seeked (the ninth critic's L1 and K1,
+ * PLAN § Open): an animation that moves a target by layout from outside the
+ * target's and the reacher's subtrees (a margin on a sibling), and one that
+ * sets a custom property feeding a reach on a box that paints nothing that
+ * reaches at rest. Guarded whole: a throw ends 1b on its paint, is counted
+ * and said (`reachThrown`), and fails nothing. Clips are held per pair
+ * (`pairClip`, `reachClipChain`): a box is clipped by what clips the box
+ * whose content it is — its parent, or an absolute or fixed box's
+ * containing block (the ninth critic's CB2) — and a link that scrolls both
+ * boxes, neither standing sticky under it, clips neither on the axis it
+ * scrolls (they keep their places as it scrolls); every other link cuts at
+ * its padding box. Fails nothing: its would-be failures — one a pair of
+ * boxes and a kind — are counted per look and per kind and printed per pass.
+ * Not read, stated: a reach between two keyframes, and two animations at
+ * once; a value a keyframe read from its values does not set, read as it
  * computes at rest; an element's paint stacked under a neighbour's opaque
  * ground (paint order is not modelled: a meet is a meet whichever paints
  * last); several reachers' blurs together (each reacher's layers are
  * composited alone); a glyph's own shape (a text-shadow is blurred off its
  * line's measured ink box, an upper bound; a line over several lines, its
- * line boxes); a target inside a scroller against a reacher outside it at any
- * scroll but the one the paint stands at; a column rule; an SVG element's
- * own overflow; a decoration line on a pseudo's text; and where in its
- * region a pseudo actually stands.
+ * line boxes); a box a scroller carries against one it does not carry, or
+ * against a sticky box, at any scroll but the one the paint stands at; a
+ * column rule; an SVG element's own overflow; a decoration line on a
+ * pseudo's text; a pseudo's text that runs past its region's width
+ * (`nowrap`, a letter-spacing); and where in its region a pseudo actually
+ * stands.
  */
 const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
 /** One look's 1b tallies on a pass: paints read at rest, elements and pseudos read, reachers with a paint that reaches, targets held, pairs judged, keyframe seeks, would-be failures by kind. */
@@ -2606,13 +2621,18 @@ function reachNeedless(prop: string): boolean {
 
 /**
  * 1b at each keyframe offset: every animation whose keyframes set a paint
- * that reaches (`REACH_PROPS`, or a keyframes rule this page cannot read),
- * that runs on a look pseudo-element, or that runs on or above a box the read
- * at rest found holding a reacher (`held`) is seeked to each of its keyframe
- * offsets — its timing one normal, linear iteration, filled both ways, no
- * delay — and the boxes it runs on and under read again; then put back. A
- * would-be failure the read at rest said, or an earlier offset, is not said
- * again.
+ * that reaches by name (`REACH_PROPS`, or a keyframes rule this page cannot
+ * read), that runs on a look pseudo-element, or that runs on or above a box
+ * the read at rest found holding a reacher (`held`) or a target is seeked to
+ * each of its keyframe offsets — its timing one normal, linear iteration,
+ * filled both ways, no delay — and the boxes it runs on and under read
+ * again, and the targets under it held to the reachers outside it; then put
+ * back. A would-be failure the read at rest said, or an earlier offset, is
+ * not said again. Not seeked, stated (the ninth critic's L1 and K1): an
+ * animation on a box that holds neither a reacher nor a target and moves
+ * targets by layout (a margin on their sibling), and a custom property a
+ * keyframe sets that feeds a reach on a box painting nothing that reaches at
+ * rest (its name is not a paint's).
  */
 function reachSeek(screen: string, label: string, said: Set<string>, held: ReadonlySet<Element>): void {
     const t = reachTally();
