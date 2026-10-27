@@ -250,10 +250,11 @@ export function charsMoved(first, again) {
 /**
  * The read-again: a job whose first read has a would-be failure is read
  * again on a fresh pair (`again()`: a fresh blank, a fresh shown frame, the
- * characters answered again), and a would-be failure stands only where the
- * fresh pair, believed, fails it too. A pair that cannot be believed
- * (`charsMoved`, or a capture refused) leaves the first read standing, with
- * the reason. Answers the read that stands, and what was read again.
+ * characters answered again). Where the fresh pair is believed, a would-be
+ * failure stands if the pair fails it too, and one the pair reads whole is
+ * said as read again; a pair that cannot be believed (`charsMoved`, or a
+ * capture refused) leaves the first read standing, with the reason.
+ * Answers the read that stands, and what was read again.
  */
 export async function readCharsAgain(first, again) {
     if (first.read.would.length === 0) return { read: first.read, readAgain: [], unbelieved: undefined };

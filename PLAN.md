@@ -1305,8 +1305,8 @@ money path this app can have, because nothing on it is derived.
 - **Before 8g2, 1c(c)'s open list** (every money character read on its own,
   only on a contrast job where a mover is near money, read report-only; the
   owner's D-2026-10-20-06 D1 (c); `layout/PROBE-RULES.md`, "Before 8g2,
-  1c(c): every digit, where a mover is near"). 1c fails nothing until step
-  7d binds it. Open:
+  1c(c): every digit, where a mover is near" and "…: the eleventh review's
+  fixes"). 1c fails nothing until step 7d binds it. Open:
   1. **Bind it at 7d**, as D1 decides, with its own red proofs on the bound
      read (PL, a box over one digit, is 1c's alone among the contrast reads:
      the broken-figure read passes it) and the jobs it owes held to their
@@ -1316,29 +1316,61 @@ money path this app can have, because nothing on it is derived.
      clock in a scratch run that read every one of the 697 jobs holding
      money: 80.4–111.8s of tab time over four such runs, so about +27 to
      +37s of wall time at three tabs (the contrast pass 110.5–127.1s a tab
-     against 84.5s with the trigger alone). It is the owner's
-     to add if a later round leaves that room; it would also read the
-     covers the trigger does not see (3, below).
+     against 84.5s with the trigger alone). It would also read the covers
+     the trigger does not see (3, below). The window's decision, on the
+     eleventh critic's recommendation: fix the trigger's two holes first
+     (done: its clips and its reach set, the eleventh review) and decide
+     D1 (a) at 7d.
   3. **What the trigger does not see** (stated, not fixed): a box placed
      over money by stacking alone — `position: relative` and a `z-index` with
      no offset, its content overflowing a zero-height box — unless 1a fails
-     it (P1A, read by 1a's failures; MISS, a spread shadow with no hit area,
-     read by no contrast rule at all, 1b's on the geometry passes); an unmoved
+     it (P1A, read by 1a's failures). MISS, a spread shadow with no hit area,
+     triggers nothing, so 1c never reads it, but it is not unread: 1b reads it
+     on the geometry passes (131 would-be at 390, 137 at 1280, report-only)
+     and the contrast pass fails it (92 figures under 3:1, the broken-figure
+     read 16, `a-halo-never-reaches-a-neighbours-text` 29 a page pass;
+     `private/design/workshop-2026-09-23/before-8g2/1c/runs/w-MISS-shadow-modern.log`). Also unseen: an unmoved
      box's paint that reaches past it (1b's); an app sheet's pseudo-element
      (only a look's are read); a contrast target's own glyphs moved over money
-     (blanked in both captures, SVs, 1a's); a mover whose painted boxes meet
-     money only through a descendant's own overflow or reach (each held box is
-     read by its border box; its own reach is not grown).
+     (blanked in both captures, SVs, 1a's); a held box's text overflowing its
+     box (each held box is read by its border box and, since the eleventh
+     review, its sharp reach, not by its text's own lines); a blurred layer
+     past its core.
   4. **What the read does not read**: the geometry-only screens, the wall
      sizes the contrast pass does not paint, 360 and a turned wall; a frame
      turned past 2°; a character behind a scroller or past the shot; a cover
      of less than half a glyph (it keeps half its reference); a character with
      a reference under six pixels (counted by kind, never held; on the clean
-     measurement run 2,212 of 62,318 characters: 2,098 punctuation and
-     symbols, 109 letters and 5 digits, which were not found);
-     a turned frame's reference is the least of sixteen phases, so a partial
-     cover there passes more easily than on an upright one. Chrome only, DPR 1.
+     measurement run after the eleventh review 2,081 of 62,318 characters,
+     every one punctuation or a symbol, 12 of them on a turn, below).
+     **Decimal points and thousands commas are among them, by decision** (the
+     window, on the eleventh critic's recommendation): a full stop or a comma
+     at up to about 16px in its face covers fewer than six reference pixels (a
+     full stop of 4 at 15px and 5 at 16px in Inter, the critic's tally), so a
+     cover over a decimal point, which moves the figure a hundredfold, is not
+     held by 1c; at a floor of 4 a full stop read 0.50, on the cut itself.
+     **A turned frame** (Rural's swaying tag and tilted rows) is held to the
+     phase of its turn its shown pixels match best, a model of Chrome's
+     resample (an upright glyph drawn on a canvas and resampled bilinearly
+     into the frame's turn) measured on Rural alone; a character some phase
+     leaves under `CHAR_TURN_FLOOR` (3) pixels is too small "on a turn" (12
+     on the clean run: the "=" on Rural's Pay several strip and its like).
+     The five digits the least of sixteen phases called too small (Rural's
+     "+5% surcharge" "5" and its selection line's "7") were artefacts of that
+     least: they keep 12–18 pixels on the page and are held now. Chrome
+     only, DPR 1.
   5. **A run under the private look at 0x04's selection** with 1c in it.
+  6. **The canvas reference undercounts the page, stated** (the eleventh
+     critic's P2, not built): on upright frames the 99th percentile share is
+     1.75–2.15 (a light ink on a dark ground most), so "a cover of under half
+     a glyph" understates what can go unread on those nodes — a node whose
+     characters read twice their reference loses three quarters of a glyph
+     before it reads under the cut. Normalising each node's shares by its own
+     median share would close it; decide at 7d.
+  7. **The self-checks on Linux** (the eleventh critic): 1d's cut held to
+     this Chrome (`the-module-read-agrees-with-this-chrome`) and
+     `holds-out-of-flow-agrees-with-this-chrome` have run on this Mac alone;
+     CI's layout job on `ubuntu-latest` has not run them.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

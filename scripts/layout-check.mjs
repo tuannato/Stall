@@ -2235,9 +2235,11 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * its glyphs joined it, else a frame of their own — against
                  * the job's own capture, each held to its own reference. A
                  * job whose characters read wrong is read again on a fresh
-                 * pair (`readCharsAgain`); a would-be failure stands only
-                 * where the fresh pair, believed, fails it too. It fails
-                 * nothing: its sentences go to the run's report.
+                 * pair (`readCharsAgain`): where the pair is believed, a
+                 * would-be failure stands if the pair fails it too; where it
+                 * cannot be believed, the first read stands, with the
+                 * reason. It fails nothing: its sentences go to the run's
+                 * report.
                  */
                 const readDigits = async (why) => {
                     const start = performance.now();
@@ -4717,7 +4719,7 @@ try {
             );
             // Its page is at another size now: a later job on this tab would reopen its viewport.
             tab.vp = undefined;
-            const sheet = await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(true)');
+            let sheet;
             const read = async () => {
                 const img = await captureShot(cdp, tab.sessionId);
                 const zones = await evalJson(cdp, tab.sessionId, 'window.__quietZones()');
@@ -4727,8 +4729,8 @@ try {
                 if (zones.length !== sheet.codes) verdict.faults.unshift(`the sheet drew ${sheet.codes} codes and the page read ${zones.length}`);
                 return verdict;
             };
-            // A page that throws reading the sheet is a disagreement, said as one, never a pass that stops.
-            const threw = (err) => ({ codes: 0, under: 0, over: 0, centres: 0, below: { codes: 0, centres: 0, wrong: 0 }, faults: [`the page threw reading the sheet: ${String(err?.message ?? err).slice(0, 200)}`] });
+            // A page that throws drawing or reading the sheet is a disagreement, said as one, never a pass that stops (the eleventh critic's P3: the draw stood outside the guard).
+            const threw = (err, doing = 'reading') => ({ codes: 0, under: 0, over: 0, centres: 0, below: { codes: 0, centres: 0, wrong: 0 }, faults: [`the page threw ${doing} the sheet: ${String(err?.message ?? err).slice(0, 200)}`] });
             const readOrSay = async () => {
                 try {
                     return await read();
@@ -4736,14 +4738,29 @@ try {
                     return threw(err);
                 }
             };
-            try {
+            const drawAndRead = async () => {
+                try {
+                    sheet = await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(true)');
+                } catch (err) {
+                    return { first: threw(err, 'drawing') };
+                }
                 const first = await readOrSay();
                 if (first.faults.length === 0) return { first };
                 await sleep(250);
                 return { first, again: await readOrSay() };
+            };
+            let out;
+            try {
+                out = await drawAndRead();
             } finally {
-                await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(false)');
+                try {
+                    await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(false)');
+                } catch (err) {
+                    // Said on the reading that decides, so it fails the run as a disagreement does.
+                    if (out !== undefined) (out.again ?? out.first).faults.push(`the page threw taking the sheet away: ${String(err?.message ?? err).slice(0, 200)}`);
+                }
             }
+            return out;
         });
         moduleSnapRead = moduleSnap;
         currentStep = 'contrast: the verdict';

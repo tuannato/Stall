@@ -1828,8 +1828,10 @@ type ClipLink = { el: Element; box: Box; cx: boolean; cy: boolean; sx: boolean; 
  * without regard to case (the tenth critic's item 2: `\btransform\b` caught
  * `transform-style` by accident and `-webkit-backdrop-filter` wrongly; Chrome
  * reads `TRANSFORM` as `transform`); `position` holds the absolute ones alone.
- * Measured in Chrome 156 (`critic10-fixes/runs/cbsweep.log`) and held to the
- * Chrome every run uses by `holds-out-of-flow-agrees-with-this-chrome`.
+ * Measured in Chrome 156
+ * (`private/design/workshop-2026-09-23/before-8g2/critic10-fixes/runs/cbsweep.log`)
+ * and held to the Chrome every run uses by
+ * `holds-out-of-flow-agrees-with-this-chrome`.
  */
 const WILL_CHANGE_HOLDS: ReadonlySet<string> = new Set([
     'transform',
