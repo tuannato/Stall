@@ -1020,9 +1020,10 @@ money path this app can have, because nothing on it is derived.
      near money, animated pseudos, and a look pseudo on a sheet's scrim.
   3. **Round 4's P2s:** a box above's background image off the sampled
      screens and the walk's stop at an invisible or `display: contents`
-     box; a static belt in the look lint for clips scoped to hover, focus,
-     the tap highlight or a turned wall; a neighbour's far shadow (read
-     since 1b, report-only: N6, "Before 8g2, 1b's open list" below).
+     box (read since 3a, report-only: "Before 8g2, 3a's open list" below);
+     a static belt in the look lint for clips scoped to hover, focus, the
+     tap highlight or a turned wall; a neighbour's far shadow (read since
+     1b, report-only: N6, "Before 8g2, 1b's open list" below).
   4. **Smaller, stated:** a look pseudo animated invisible at the frozen
      instant (PSa2); a gradient between its stops off the sampled screens
      and at a device pixel ratio over 1 (G2); `markLookPseudos` never
@@ -1371,6 +1372,42 @@ money path this app can have, because nothing on it is derived.
      this Chrome (`the-module-read-agrees-with-this-chrome`) and
      `holds-out-of-flow-agrees-with-this-chrome` have run on this Mac alone;
      CI's layout job on `ubuntu-latest` has not run them.
+
+- **Before 8g2, 3a's open list** (the ground under a money figure's glyphs
+  walked to the stall, read report-only beside the bound read; the plan's
+  item 3a; `layout/PROBE-RULES.md`, "Before 8g2, 3a: the walk to the
+  stall"). 3a fails nothing until its binding. Open:
+  1. **Two reads before it binds, or the clean tree fails 3,339 times.**
+     Every one of its would-be failures on the clean tree is a model too
+     strict, none a real ground: (a) **where a lone tile falls** — a
+     `no-repeat` tile smaller than its area is read anywhere in its clip
+     area, with its stops and its absence; this makes Modern's 15 (the
+     events rail and the Awning's stripes under an activity amount, all
+     worn) and every one of Neo's stacks of too many choices (its corner
+     brackets on the cards and the sign: 594 at 390, 678 at 1280, 190 on
+     each wall pass). A scratch experiment reading such a tile where its
+     size and position put it took both to 0 at 390 and 1280
+     (`private/design/workshop-2026-09-23/before-8g2/3a/tools/exp-lone.py`);
+     not built, since the same read changes the bound rule's own layers.
+     (b) **where along a gradient a stop falls** — every stop is tried over
+     the whole area the layer covers; this makes Rural's 3,324 (the tag's
+     punch-hole ring stop, under the hole and never under the figure, 2.20:1).
+     Reading a stop's place (a linear gradient's line, a radial one's
+     radius) or accepting the ring by name are the options; the owner's
+     call at binding.
+  2. **At binding, the keyframe offsets read a box above's background image
+     too**: `GROUND_ABOVE` then covers the whole `GROUND_SIGNATURE`, and the
+     aurora's tide and the sunburst's angle, which turn the root's gradients
+     by a custom property, are seeked (`offsetGroundFaults` reads the bound
+     ground alone today).
+  3. **A box above's pictures stay the contrast pass's** (named where one
+     shows, composited as absent: the rain, the confetti, the sunburst and
+     the fixture's pictures under the activity amount on the bare ground).
+  4. **Not read, stated:** a part of a figure out of its scroller's view at
+     any scroll but the one to the view's nearest edge; a clip above a
+     scroller; an in-flow pseudo-element of a box above; rounded corners; a
+     gradient between its stops.
+  5. **A run under the private look at 0x04's selection** with 3a in it.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

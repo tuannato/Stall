@@ -12553,6 +12553,213 @@ reference undercounts the page (the critic's P2: the upright 99th-percentile
 share is 1.75–2.15), so "a cover of under half a glyph" understates what can go
 unread there; not built (PLAN § Open). D1 (a) is decided at 7d.
 
+## Before 8g2, 3a: the walk to the stall (2026-10-27; the plan's item 3a, round 4's P2-1 and round 5's V and DC; report-only)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/3a/`
+(`runs/`, `plants/`, `tools/`); the paths below are relative to it. A
+**quick** read is `tools/qp.sh` (one probe page at one viewport, the plant
+alone, on a scratch clone of the worktree, ports 4391/9411; it carries no
+private look); a **whole** read is `tools/run.sh` (the whole runner on that
+clone, the three-tab default, the tracked fixture carried, the one-minute
+load under 2.5 at each start).
+
+**The incident.** The ground read (`groundStackFault`) walks from a money
+element up to the first box whose background colour is opaque and stops
+there, whether or not that colour is under the glyphs and whether or not the
+box paints at all, and it reads no box above's background image. So the
+money-guards critic's plants read 0 on every geometry pass and were refused
+by the contrast pass alone, on the screens it samples: N1 (a gradient in the
+ink's own colour on Modern's `.item-a`, a black block under every row
+figure), N1b (the same on Neo's Cycle card), N2 (the skeleton's `.item-a`
+opaque white clipped to its content box, the figure moved off it onto
+`.item-p`'s dark ground), V (that white on an `.item-a` set `visibility:
+hidden`) and DC (on Rural's `.pay-x` set `display: contents`, "You pay" on
+`.pay-amt`'s dark ground).
+
+**The read** (`the-ground-walk-reaches-the-stall`, **report-only**;
+`groundWalkRead` and `groundWalkReport` in `layout/probe.ts`, the pure half
+in `layout/groundStack.ts`). Beside the bound read, for every element the
+dress rule reads the ground of, on every geometry pass at rest:
+- it walks every box from the element up to and including its stall;
+- each cell of the glyphs' ink is read from its topmost paint that hides what
+  is below it (`fromTopmostOpaque`, `hidesBelow`: every colour it may be
+  opaque): an opaque ground hides the paints above it in the tree only where
+  its own clip covers the cell;
+- a box whose `visibility` is not `visible`, or with `display: contents`,
+  paints nothing and ends nothing (`paintsNothing`);
+- a box above's gradient layers are read as the figure's own are
+  (`boxPaintsOf`'s `layersAbove`, a cache of its own, `layerCovers`), each
+  paint tagged with why it is new to this read (`source`: a box above's
+  background image, or a paint past where the bound walk stops, with the
+  box it stops at and why);
+- a box above's pictures (`url()` layers) are named where one shows under
+  the glyphs (`picturesShowing`: no opaque paint over it in the cell) and
+  composited as absent, not judged; the figure's own picture and a border
+  image that is one fail, as the bound read fails them;
+- the ink is cut by the clips below the nearest scroller
+  (`cutsBelowScroller`), and each part out of a scroller's view is read
+  where the least scroll brings it to the view's nearest edge (`byScroller`,
+  `shiftFor`): the paints of the boxes under that scroller move with it, the
+  scroller's own and those above stand still.
+
+Its judge is `worstGround` with `fromOpaque`: each cell from its topmost
+opaque paint, a paint's candidates that composite alike tried once
+(`distinct`: every colour at alpha 0 is one, two equal colours are one), and
+a cell no blend of whose paints can read under the floor (`everyMixReads`)
+passed unenumerated; none of the three passes a cell that fails. The bound
+read calls the judge as before. Per look and pass the probe tallies
+(`walkByClass`) the elements read, its would-be failures (it fails and the
+bound read does not), failures both make, failures the bound read makes and
+it would not, the walks that read a paint past the bound stop, a box
+above's gradient, a box above's picture, or skipped a box that paints
+nothing, and the elements with something unread (a picture that shows, a
+layer whose colours it cannot take, a stack of more than
+`STACK_CHOICES_CAP` choices). It keeps up to `WALK_KEPT` (4,000) would-be
+sentences with their sources, dropped and unread ones; a throw is counted
+and said (`walkThrown`). The runner prints them after 1b's lines, grouped by
+look and source (`walkLines`, up to `WALK_PRINTED` groups a list); its time
+(`walkMs`) is a clock the geometry canary leaves out.
+
+**The scroller, in three wirings** (quick, 390, every page screen;
+`runs/q-clean-390-all.log`, `-b`, `-c`, `-d`). The first cut the ink below
+the nearest scroller and nowhere else: 13 would-be failures on the record
+bytes (`p.fine.publish-hex`, Rural 7 and Neo 6, its bottom border at
+2.11–2.20:1), the hex's own text past its own scroller's view read over that
+scroller's border, which no content stands over. The second read a part out
+of view against the paints under the scroller alone: those went, and so did
+every picture under the activity amounts below the fold, the walk to the
+stall reading nothing of the stall there. The third, kept, brings each part
+into view: the hex stays clean and the activity amounts are read over the
+stall's own paints (which took Modern's, Neo's and Rural's all-worn activity
+over the choices cap, 288–576 ways, until `distinct`).
+
+**The clean tree** (whole, `runs/w-clean-1.log`, the three-tab default, the
+tracked fixture carried; exit 0, 221.0s of 300; the A/B pairs' final runs,
+below, read the same lists). Would-be failures per pass:
+
+| Pass | Would-be | Rural | Modern | Neo too many | unread pictures |
+|---|---|---|---|---|---|
+| 390 | 414 | 409 | 5 | 594 | 20 |
+| 1280 | 504 | 499 | 5 | 678 | 20 |
+| canvas | 384 | 384 | 0 | 342 | 22 |
+| portrait | 474 | 474 | 0 | 424 | 0 |
+| tablet, short-wall, side-tablet, hd-wall, tall-tablet, narrow-wall | 201 each | 201 | 0 | 190 each | 0 |
+| desk-wall | 111 | 111 | 0 | 108 | 0 |
+| 360 | 173 | 168 | 5 | 314 | 20 |
+| reduced motion @390 / @canvas | 73 / 0 | 73 / 0 | 0 | 90 / 0 | 0 / 5 |
+
+3,339 would-be in all; 0 failing in both and 0 the bound read makes and this
+one would not, on every pass. Neo and the skeleton have none, the tracked
+private fixture none. By source, each said real or not:
+
+1. **Rural's tag, `span.item-p`'s gradient** (3,324): the punch hole,
+   `radial-gradient(circle at 9px 50%, var(--s-bg) 2.2px, var(--s-accent) 3px
+   4.4px, …)` covering the tag, its terracotta ring stop (rgb 158, 70, 32)
+   tried under the figure's ink (rgb 58, 42, 24) at 2.20:1. **Not real**:
+   the ring is drawn within 4.4px of (9px, 50%), under the hole, and the
+   figure starts past the tag's 22px left padding. The read does not know
+   where along a gradient a stop falls; it tries every stop over the whole
+   area the layer covers. The contrast pass reads every Rural row it samples
+   at 3:1 or more (the run is green).
+2. **Modern + After hours + Pinstripe + Awning, `activity`** (5 each at 390,
+   1280 and 360): the receipt amount (`dd.event-dd`, "10,000 XEC") over the
+   events rail (`ol.events`, a 2px `no-repeat` tile at x 8.5px) and the
+   Awning's stripes (`no-repeat` on y, the stall's top 46px), each read
+   anywhere in its clip area, the accent (rgb 91, 147, 255) under the white
+   ink at 2.53:1. **Not real**: neither tile is under the amount at any
+   scroll (the stripes stand above the scroll region, which the Awning's
+   54px of padding starts below). A lone tile is not placed by
+   `layerCovers`, so it may paint anywhere. The contrast pass samples
+   `activity` worn at 390 and 1280 and reads it green.
+3. **Neo, more choices than the cap** (unread): a row's figure, 768 ways (the
+   card's eight corner-bracket layers, each a lone tile read anywhere with
+   its stops and its absence), and the sign's address, 1,572,864 ways (the
+   sign's sixteen). Neither is judged.
+4. **Pictures that show** (unread, real): the activity amount stands on the
+   stall's bare ground, and the walk names the picture under it — Neo's rain
+   (all worn), Rural's confetti and sunburst (all worn), the tracked
+   fixture's own pictures (bare and worn), and on the canvas the fixture's
+   stream-overlay picture under `span.pulse` (22). The contrast pass reads
+   them where it samples (the rain flattened at its brightest on
+   `activity`).
+
+**The root's own gradients under money.** Neo's backdrop and the aurora,
+Rural's sunburst and the Awning reach a judged cell under one money node
+only, the activity amount on the stall's bare ground (a scratch
+instrumentation of the judge, quick at 390 on `activity`, `offers`, `empty`
+and `pay`, `runs/exp-used-390.log`, `tools/exp-used.py`: Neo's backdrop 10
+cells, Neo all worn 25, Rural's sunburst 20, the Awning 20); everywhere else
+they stand under an opaque card, sheet or sign and are cut away. Neo's
+backdrop, the aurora and the sunburst read at 3:1 or more at every stop
+there. The rain is a picture (4, above). The walks that skip a box that
+paints nothing are 72 on the tablet, the tall tablet and the narrow wall
+(`.sw-pay-b`, `display: contents` there); no verdict moves.
+
+**A lone tile placed** (an experiment, not built: `tools/exp-lone.py` on the
+scratch clone, quick at 390 and 1280, every page screen,
+`runs/exp-lone-*.log`). Reading a `no-repeat` tile smaller than its area
+where its size and position put it (on a `scroll` layer), as one tile
+painting its stops over its own rect and nothing elsewhere, takes Neo's too
+many choices from 594 and 678 to 0 and Modern's activity from 5 to 0 at 390
+and 1280; Rural's 409 and 499 and the pictures stand. The two over-strict
+reads are the binding step's to decide (PLAN § Open).
+
+### Red proofs
+
+Each plant is in `plants/` (V and N2 at the end of stall.css under
+`.t-skeleton`, the others before their look's reduce block, `tools/apply.mjs`).
+The lints were read by `tools/lint-plants.mjs` (`runs/lint-plants.log`; a
+skeleton plant read as if under Modern's class): **both lints admit all
+five**. Quick counts are 3a's would-be failures on the plant's look over its
+clean count (`runs/reds-quick-*.txt`); whole counts are per pass, 390 / 1280 /
+canvas / portrait / tablet / desk-wall / short-wall / side-tablet / hd-wall /
+tall-tablet / narrow-wall / 360 / reduced motion @390, over the clean tree's.
+N1, N1b, DC and V ran in one whole run (one look each; `runs/w-plants-A.log`),
+N2 alone (it dresses the skeleton's `.item-a` too; `runs/w-plants-B.log`).
+
+| Plant | Quick | Whole | What the bound rules read |
+|---|---|---|---|
+| N1, Modern `.item-a` gradient in `currentColor` | 25 at 390 and at 1280 (`offers`), 1.00:1 | 370 / 445 / 300 / 374 / 179 / 105 / 179 / 179 / 179 / 179 / 179 / 194 / 54 | geometry 0; the contrast pass |
+| N1b, the same on Neo's Cycle card (`[data-mode='cycle']`) | 14 on the canvas (three Cycle screens), 1.36:1 | 0 / 16 / 70 / 86 / 86 / 70 / 86 / 86 / 86 / 86 / 86 / 0 / 0 | geometry 0; the contrast pass |
+| N2, the skeleton's white clipped to its content box | 5 at 390 (`offers`), 1.00:1, "past where the bound walk stops (span.item-a)" | 140 / 164 / 83 / 100 / 67 / 45 / 66 / 65 / 67 / 67 / 67 / 77 / 12 | the ground read 0; the moved figure fails other geometry rules on the walls and at 1280 (the Cycle card's digits 298; cut from below, its own clip and cut sideways 75 each; 1a 74; the asked amount covered 26); the contrast pass 72 |
+| V, the skeleton's white on a `visibility: hidden` box | 5 at 390, 1.00:1, "…stops (span.item-a, which paints nothing (visibility: hidden))" | 145 / 171 / 87 / 112 / 73 / 48 / 73 / 73 / 73 / 73 / 73 / 82 / 12 | the dress rule's held `visibility` on a box above, 1,193; the ground read 0 |
+| DC, Rural's `.pay-x` `display: contents` | 9 at 390 (`pay`, `pay-several`), 1.00:1, "…stops (div.pay-x, which paints nothing (display: contents))" | 31 / 31 / 0 / … / 31 at 360 / 7 | the ground read 0; `a-card-figure-stands-inside-its-row` 30 on tiered figures; the contrast pass |
+
+The two whole runs exit 1, by the contrast pass (276 figures with A's four
+plants, 72 with N2) and the geometry rules named; 3a moves no verdict.
+
+### Cost
+
+Back to back on this Mac, three tabs, the tracked fixture carried, no other
+probe running, each run started once the one-minute load was under 2.5
+(`tools/ab.sh`, `tools/abrun.sh`), scratch clones at `89d5ba2` (before 3a)
+and the 3a commit:
+
+| Pair | Before | After | Load at start | Geometry walk | Contrast tabs |
+|---|---|---|---|---|---|
+| 1 | 231.6s | 224.3s | 2.01, 2.16 | 113.4 → 110.9s | 99.4 → 94.5s |
+| 2 | 220.5s | 222.8s | 2.24, 2.09 | 107.6 → 109.1s | 94.6 → 96.3s |
+
+**3a adds −7.3s and +2.3s**, under the 6s the brief allowed; the walk −2.5s
+and +1.5s. Its own clock is 8.4–9.1s of page time summed over the geometry
+passes (`runs/w-clean-1.log` 9.05s, `ab-final-1` 8.66s, `ab-final-2`
+8.36s: 0.55–1.13s a pass, 360 the largest), about 3s of wall time at three
+tabs. Both final runs exit 0 with the report printed.
+
+### Not read, stated
+
+- Where a lone tile falls and where along a gradient a stop falls (1 to 3,
+  above): binding's to decide.
+- A box above's pictures: named, composited as absent, never judged.
+- A part of a figure out of its scroller's view at any scroll but the one
+  that brings it to the view's nearest edge; a clip above a scroller.
+- An in-flow `::before`/`::after` of a box above; rounded corners; a gradient
+  between its stops; a blend; the paints of a box outside the walk.
+- The keyframe offsets: `offsetGroundFaults` reads the bound ground alone,
+  and `GROUND_ABOVE` (a box above compared without its background image)
+  holds for it; at binding a box above is compared on the whole signature.
+- The private look at 0x04 was not run under 3a.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
