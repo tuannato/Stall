@@ -1263,7 +1263,16 @@ money path this app can have, because nothing on it is derived.
   modules"). 1d fails nothing until step 7c binds it. Open:
   1. **Bind it at 7c**, with its own red proof on the bound read (PQO's bare
      reads are 1d's alone), the codes it owes by name (the quiet zone's
-     `CODES_REQUIRED`), and each carried look held to its own reads.
+     `CODES_REQUIRED`), and each carried look held to its own reads. **7c
+     reads the quiet-zone flake's sighting count first** (the tenth
+     critic's item 4, decided by the window): the dumps' `meta.quietReadAgain`
+     and `meta.codeModules` count every read-again by the run's tab count
+     and by tab, and the kept logs hold thirteen sightings, eleven at two
+     tabs and two at three, every one white on its fresh pair since the
+     read-again existed (`layout/PROBE-RULES.md`, "The quiet-zone flake,
+     sighting by sighting"). A flake that hits both captures is a false red
+     once 1d is bound, as it is for the quiet zone today; three tabs stay
+     the default, and go back to two if a sighting ever fails a run.
   2. **A contrast target's glyphs laid over a code are not read** (PQG: the
      code's own lede moved up over the modules, 44px black glyphs and no
      ground, reads 0; 1a fails it, both lints admit it): the prepare blanks a
@@ -1281,7 +1290,10 @@ money path this app can have, because nothing on it is derived.
      carries a code's text in the DOM only on the touch wall's plate
      (`data-pay-uri`). A `data-*` attribute on every code would let 1d hold
      each to its payload: an app change (every visitor's bundle, and a link in
-     the DOM the pay sheets keep out of it on purpose), the owner's to weigh.
+     the DOM the pay sheets keep out of it on purpose). **Not added**
+     (CRITIC-10's judgement 2, decided by the window): it would catch only
+     an app bug that hands `qrSvg` the wrong text, which the composers'
+     tests hold, and a look cannot change the `d` attribute.
   5. **A paint that misses every centre** (a line thinner than half a module
      along the seams, a cover smaller than a module between centres) is not
      read; whether a camera reads through it is not measured.

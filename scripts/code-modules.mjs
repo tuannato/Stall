@@ -381,11 +381,17 @@ export function moduleReport(run, canary, painted) {
         for (const line of run.would.slice(0, MODULE_WOULD_PRINTED)) lines.push(`  ${line}`);
         if (run.would.length > MODULE_WOULD_PRINTED) lines.push(`  … and ${run.would.length - MODULE_WOULD_PRINTED} more`);
     }
+    // By tab, and at the run's tab count (the tenth critic's item 4): the read-again is for a capture's flake.
+    const byTab = (counts) =>
+        Object.entries(counts ?? {})
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([tab, n]) => `tab ${tab} ${n}`)
+            .join(', ') || 'none';
     lines.push(
-        `1d, read again on a fresh pair and right there: ` +
-            (run.readAgain.length === 0 ? 'none' : `${run.readAgain.length}${run.readAgain.map((line) => `\n    ${line}`).join('')}`) +
+        `1d, read again on a fresh pair and right there${run.tabs === undefined ? '' : `, at ${run.tabs} tab(s)`}: ` +
+            (run.readAgain.length === 0 ? 'none' : `${run.readAgain.length} (by tab: ${byTab(run.readAgainByTab)})${run.readAgain.map((line) => `\n    ${line}`).join('')}`) +
             `; on the canary's reads again: ` +
-            (canary.readAgain.length === 0 ? 'none' : `${canary.readAgain.length}${canary.readAgain.map((line) => `\n    ${line}`).join('')}`) +
+            (canary.readAgain.length === 0 ? 'none' : `${canary.readAgain.length} (by tab: ${byTab(canary.readAgainByTab)})${canary.readAgain.map((line) => `\n    ${line}`).join('')}`) +
             (canary.would.length === 0 ? '' : `; would-be on the canary's reads again: ${canary.would.length}${canary.would.map((line) => `\n    ${line}`).join('')}`),
     );
     const thrown = [...(run.thrown ?? []), ...(canary.thrown ?? [])];

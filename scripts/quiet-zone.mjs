@@ -104,12 +104,13 @@ export function readQuietZone(img, z) {
 /**
  * Every code of one job read, and a code that reads dark read again on a
  * fresh pair before the reading is believed — the ring read's own rule (the
- * money-guards round-7 critic's P2-3). A pay screen's code has read part of
- * its quiet zone non-white and then white on a rerun, four times, once on
- * main (`pay` @mobile, Neo worn, 4,572 of 21,420 pixels; `pay-several`
- * @mobile, Modern worn, 4,500 of 21,312, `rgb(18,21,26)`), and the cause is
- * not known; so a read that fails says what it read on, and a retry that
- * passes says both readings (`quietReadingLine`), to find it.
+ * money-guards round-7 critic's P2-3). A phone pay sheet's code has read part
+ * of its quiet zone the page's ground and then white again, thirteen times in
+ * the kept logs by 2026-10-27, eleven at two tabs and two at three (four failed
+ * runs before this read existed; nine since, each white on its fresh pair:
+ * `PROBE-RULES.md`, "The quiet-zone flake, sighting by sighting"), and the
+ * cause is not known; so a read that fails says what it read on, and a retry
+ * that passes says both readings (`quietReadingLine`), to find it.
  *
  * `first` is `{ img, zones, at }`: the capture the job's boxes were read
  * on, the zones the page reported after it (`__quietZones`), and what the

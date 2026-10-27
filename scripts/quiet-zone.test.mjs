@@ -119,9 +119,9 @@ const counted = (answer) => {
 
 describe('a-quiet-zone-that-reads-dark-is-read-again-on-a-fresh-pair', () => {
     /**
-     * The money-guards round-7 critic's P2-3: a pay screen's code read part
-     * of its quiet zone non-white and white on a rerun, four times, once on
-     * main. A code that reads dark is read again on a fresh pair — a new
+     * The money-guards round-7 critic's P2-3: a phone pay sheet's code reads
+     * part of its quiet zone the page's ground and white on a rerun (thirteen
+     * sightings in the kept logs by 2026-10-27; `PROBE-RULES.md`). A code that reads dark is read again on a fresh pair — a new
      * capture and the zones read beside it — and the fresh pair's reading
      * is the verdict; a real defect is steady state and reads dark there
      * too. Never a weaker read: a fresh pair that cannot read the code

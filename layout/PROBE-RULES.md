@@ -8964,8 +8964,9 @@ before it built ("probe-passes.mjs plans a pass this run cannot make", exit
 
 **A dark quiet zone is read again on a fresh pair** (`readQuietZones`,
 `scripts/quiet-zone.mjs`; the money-guards round-7 critic's P2-3). Four
-sightings, one on main: a pay screen's code read part of its quiet zone
-non-white and passed on a rerun (`pay` @mobile, Neo worn, 4,572 of 21,420
+sightings by then, one on main (thirteen in the kept logs by 2026-10-27:
+"The quiet-zone flake, sighting by sighting", below): a pay screen's code
+read part of its quiet zone non-white and passed on a rerun (`pay` @mobile, Neo worn, 4,572 of 21,420
 pixels; `pay-several` @mobile, Modern worn, 4,500 of 21,312,
 `rgb(18,21,26)`). The cause is not known. A code that reads dark is read
 again once on a fresh pair — a new capture after 250ms, the zones read just
@@ -11764,8 +11765,11 @@ in a scratch run by adding them to `OVERLAY_SAMPLED` there
 the cuts mirror the quiet zone's floor (`QUIET_ZONE_FLOOR` 245): ten levels
 either way of a paint that never moved off 0 or 255, pinned by value.
 
-**The read-again** (the critic's P3-7 item 7: the quiet-zone flake's four
-sightings were all on phone pay sheets, where 1d reads too). It is the quiet
+**The read-again** (the critic's P3-7 item 7: the quiet-zone flake's
+sightings were all on phone pay sheets, where 1d reads too; this said
+"four", the count of the failed runs before the read-again existed, where
+the kept logs held eleven by then: "The quiet-zone flake, sighting by
+sighting", below). It is the quiet
 zone's own, shared rather than copied: `readQuietZones` is now
 `readAgainOnFreshPair(first, again, readQuietZone)`, and 1d's
 `readCodeModules` is the same function over `readModules`, its unit "module
@@ -12099,6 +12103,63 @@ codes — the page changed between them, or two codes of one name traded
 places — and that code fails closed, said as such. **Red, unit**: the new
 cases of `a-codes-modules-pair-with-their-zones-by-place-and-name` fail
 against `code-modules.mjs` as committed (`runs/unit-item7-before.log`).
+
+### The quiet-zone flake, sighting by sighting (item 4)
+
+**Recorded** (the critic's recommendation, decided by the window: three
+tabs stay the default, sightings are counted per tab count, and the count
+goes back to two if a sighting ever fails a run). The critic counted the
+builder's run 5 and its own quick read as the fifth and sixth sightings;
+the kept logs hold nine read-again sightings, not two, so the record is all
+thirteen. Every one is a phone pay sheet's code at 390 reading a block of
+its quiet zone in the page's own ground with nothing moved; every one since
+the read-again existed was white on its fresh pair. A sighting is one code
+read once. The four before the read-again failed their runs and kept no log;
+the money-guards critic's report has them (`CRITIC-MONEY-GUARDS.md`), at the
+contrast pass's default then, two tabs.
+
+| # | Where (log) | Tabs | Screen, look | First capture's ring | Fresh pair |
+|---|---|---|---|---|---|
+| 1 | money-guards round 5, on main | 2 | `pay-xec`, Rural | 4,029 of 20,160, `rgb(251,242,223)` | none then: the run failed |
+| 2 | money-guards round 6 | 2 | `pay-moved`, Neo worn | 12,420 of 21,420, `rgb(5,6,13)` | the run failed |
+| 3 | money-guards round 7, `707f105` clean | 2 | `pay`, Neo worn | 4,572 of 21,420, `rgb(5,6,13)` | the run failed |
+| 4 | money-guards round 8, `e43bec8` clean | 2 | `pay-several`, Modern worn | 4,500 of 21,312, `rgb(18,21,26)` | the run failed |
+| 5 | `critic4-fixes/runs/p-PGs-ground-shadow-rural.c2-first.log` (a Rural plant) | 2 | `pay-several-longest-figure`, Neo worn | 4,963 of 23,088, `rgb(5,6,13)`, x 256–352 | white |
+| 6 | `critic4-fixes/runs/pair1-main.log` (main) | 2 | the same | 4,963 of 23,088, the same box | white |
+| 7 | `critic5-fixes/runs/c1-PF2-end-modern.log` (a Modern plant) | 2 | `pay-longest-figure`, Rural | 9,774 of 20,160, `rgb(251,242,223)`, x 42–347 | white |
+| 8 | `critic6-fixes/runs/c1-PQP-path-offset-modern.log` (a Modern plant) | 2 | `pay-several`, Neo worn | 5,364 of 21,420, `rgb(5,6,13)`, x 256–352 | white |
+| 9 | `critic7/runs/pair1-main.log` (main) | 2 | the same | 5,364 of 21,420, the same box | white |
+| 10 | `critic7-fixes/runs/c1-PVC-pay-collapse-desk-modern.log` (a Modern plant at 1280) | 2 | `pay`, Neo worn | 4,572 of 21,420, the round-7 box | white |
+| 11 | `critic7-fixes/runs/pair2-branch.log` | 2 | the same | 4,572 of 21,420, the same box | white |
+| 12 | `critic9-fixes/runs/w-clean-default.log`, the builder's run 5 at the three-tab default | 3 | `pay-xec`, the tracked fixture | 10,692 of 20,998, `rgb(236,230,218)`, x 38–351 | white |
+| 13 | `critic10/runs/q1d-none.log`, the critic's quick read | 3 | `pay`, Rural | 5,577 of 20,160, `rgb(251,242,223)`, x 255–347; 1d read 660 of 2,809 centres wrong | white, 1d right: the one shared pair rescued both reads, 1d's first read-again |
+
+**Per tab count: eleven at two tabs, two at three.** The runs behind them
+are not all kept, so this is no rate; three tabs have had at least four
+whole runs (the three in `critic9-fixes` and `critic10`'s clean one) and the
+quick reads of two rounds. Two things recur that a cause will have to
+explain: **a screen's flake has one shape** — the same ring count and box to
+the pixel when it comes back (4,572 three times, 5,364 twice, 4,963 twice),
+in different runs and trees — and **the dark run's left edge is at
+x 255–256 in five of the nine logged** (the others start at the code's own
+edge or inside the ring's band). Both fit a 256px raster tile of the sheet
+not yet painted when the capture is taken, the critic's "stale raster";
+inferred from the boxes, not read out of Chrome.
+
+**Counted from now on.** Each sighting's line says the tab that read it and
+the run's count (`(on tab 1 of 3)`), the pass's two lines say the count and
+the split (`quiet zone, read again on a fresh pair and white there, at 3
+tab(s): N (by tab: …)`, and 1d's), and the dump carries both:
+`meta.quietReadAgain` gains `tabs`, `walkByTab` and `canaryByTab`,
+`meta.codeModules` gains `tabs`, `readAgainByTab` and
+`canaryReadAgainByTab`. Seen with the flake made to order
+(`tools/band-mutate.py`, a dark band over the top six modules of every code
+on the job's capture alone; `runs/q1d-band-sightings.log` and
+`runs/q1d-band-sightings.dump-meta.json`): 18 sightings on the walk, 6 on
+each of the three tabs, and 2 on the canary's reads again, for the quiet
+zone and 1d alike. **Step 7c reads these counts before it binds 1d**
+(PLAN § Open): a flake that hits both captures is a false red once 1d is
+bound, as it would be for the quiet zone today.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

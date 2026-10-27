@@ -492,6 +492,12 @@ function contrast(la, lb) {
 
 /** `MIN_CONTRAST` in src/domain/theme.ts — below it a colour is a disappearance. */
 const PIXEL_CONTRAST_FLOOR = 3;
+/** A count per tab (`{ 0: 2, 2: 1 }`) said as `tab 0 2, tab 2 1`, or `none`. */
+const byTabSaid = (byTab) =>
+    Object.entries(byTab)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([tab, n]) => `tab ${tab} ${n}`)
+        .join(', ') || 'none';
 /**
  * How far a channel may move inside a protected box between the frame with
  * the look's pseudos and the frame without them before it counts as their
@@ -1822,7 +1828,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                                     ` — a-code-keeps-its-quiet-zone-white${readings}`,
                             );
                         } else if (retry !== undefined) {
-                            quietReadAgain.push(`${at}: dark on the first capture, white on a fresh pair${readings}`);
+                            quietReadAgain.push(`${at}: dark on the first capture, white on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})${readings}`);
                         }
                     }
                     /*
@@ -1890,7 +1896,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                                         readings,
                                 );
                             } else if (retry !== undefined) {
-                                modules.readAgain.push(`${at}: wrong on the first capture, right on a fresh pair${readings}`);
+                                modules.readAgain.push(`${at}: wrong on the first capture, right on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})${readings}`);
                             }
                         }
                     }
@@ -2492,6 +2498,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         })();
     } finally {
         Object.assign(out, {
+            // The tab the job ran on: its sightings are counted by tab and by the run's tab count (the tenth critic's item 4).
+            tab: tab.index,
             dumpJobs,
             dumpBoxes,
             refused,
@@ -4112,14 +4120,18 @@ try {
     let quietPixels = 0;
     // The codes read dark on a job's capture and white on a fresh pair (`readQuietZones`), said whatever the verdict.
     const quietReadAgain = [];
+    // How many of those each tab read (`out.tab`), and of the canary's reads again: said and dumped with the run's tab count, since
+    // the flake they are for is a capture's (the tenth critic's item 4: count sightings per tab count before 1d binds).
+    const quietByTab = {};
+    const canaryQuietByTab = {};
     // The same, on the jobs the cross-tab canary read again (the probe-shard
     // critic's N6): those reads are compared and never folded, so their
     // sightings were lost.
     const canaryQuietReadAgain = [];
     // 1d (before 8g2, report-only; `code-modules.mjs`): every job's module
     // read folded, and the canary's reads again of it, said under the pass.
-    const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], faults: [], thrown: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
-    const canaryModules = { would: [], readAgain: [], thrown: [] };
+    const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], readAgainByTab: {}, tabs: CONTRAST_TABS, faults: [], thrown: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
+    const canaryModules = { would: [], readAgain: [], readAgainByTab: {}, thrown: [] };
     // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
     let moduleSnapRead;
     // D14: the least the sign's name read per look and decoration state
@@ -4258,6 +4270,8 @@ try {
             }
             quietPixels += out.quietPixels;
             quietReadAgain.push(...out.quietReadAgain);
+            if (out.quietReadAgain.length > 0) quietByTab[out.tab] = (quietByTab[out.tab] ?? 0) + out.quietReadAgain.length;
+            if (out.modules.readAgain.length > 0) modulesRun.readAgainByTab[out.tab] = (modulesRun.readAgainByTab[out.tab] ?? 0) + out.modules.readAgain.length;
             for (const [key, t] of Object.entries(out.modules.byVpClass)) {
                 const into = (modulesRun.byVpClass[key] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
                 for (const k of Object.keys(into)) into[k] += t[k];
@@ -4506,6 +4520,8 @@ try {
                 const { tab, again } = readAgain.get(n);
                 for (const line of again.quietReadAgain ?? []) canaryQuietReadAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 for (const line of again.modules?.readAgain ?? []) canaryModules.readAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                if ((again.quietReadAgain?.length ?? 0) > 0) canaryQuietByTab[tab] = (canaryQuietByTab[tab] ?? 0) + again.quietReadAgain.length;
+                if ((again.modules?.readAgain?.length ?? 0) > 0) canaryModules.readAgainByTab[tab] = (canaryModules.readAgainByTab[tab] ?? 0) + again.modules.readAgain.length;
                 for (const line of again.modules?.would ?? []) canaryModules.would.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 for (const line of again.modules?.thrown ?? []) canaryModules.thrown.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
@@ -4990,11 +5006,13 @@ try {
                 (notRead.length === 0 ? 'none' : notRead.map((code) => (codesUnread.has(code) ? `${code} (${codesUnread.get(code)})` : code)).join(', ')),
         );
         console.log(
-            `  quiet zone, read again on a fresh pair and white there: ` +
-                (quietReadAgain.length === 0 ? 'none' : `${quietReadAgain.length}${quietReadAgain.map((line) => `\n    ${line}`).join('')}`) +
+            `  quiet zone, read again on a fresh pair and white there, at ${CONTRAST_TABS} tab(s): ` +
+                (quietReadAgain.length === 0
+                    ? 'none'
+                    : `${quietReadAgain.length} (by tab: ${byTabSaid(quietByTab)})${quietReadAgain.map((line) => `\n    ${line}`).join('')}`) +
                 (canaryQuietReadAgain.length === 0
                     ? `; on the canary's reads again: none`
-                    : `; on the canary's reads again: ${canaryQuietReadAgain.length}${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
+                    : `; on the canary's reads again: ${canaryQuietReadAgain.length} (by tab: ${byTabSaid(canaryQuietByTab)})${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
         );
     }
     // 1d (report-only): what the module read read and would fail, whatever
@@ -5312,16 +5330,26 @@ try {
                     // 1d (report-only): how many codes would fail the module
                     // read, and how many read wrong and then right on a fresh
                     // pair, on the walk and on the canary's reads again.
+                    // Both counted by the run's tab count and by the tab that read
+                    // each (the tenth critic's item 4: a flake that hits both
+                    // captures is a false red once 1d binds, so step 7c reads
+                    // these counts first).
                     codeModules: {
+                        tabs: CONTRAST_TABS,
                         would: modulesRun.would.length,
                         readAgain: modulesRun.readAgain.length,
+                        readAgainByTab: modulesRun.readAgainByTab,
                         canaryWould: canaryModules.would.length,
                         canaryReadAgain: canaryModules.readAgain.length,
+                        canaryReadAgainByTab: canaryModules.readAgainByTab,
                         sightings: [...modulesRun.readAgain, ...canaryModules.readAgain].map((line) => line.split('\n')[0]),
                     },
                     quietReadAgain: {
+                        tabs: CONTRAST_TABS,
                         walk: quietReadAgain.length,
+                        walkByTab: quietByTab,
                         canary: canaryQuietReadAgain.length,
+                        canaryByTab: canaryQuietByTab,
                         sightings: [...quietReadAgain, ...canaryQuietReadAgain].map((line) => line.split('\n')[0]),
                     },
                 },

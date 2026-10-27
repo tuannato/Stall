@@ -330,6 +330,13 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         assert.ok(lines.includes('1d, matrices also held to the text their plate carries (data-pay-uri): 0 code read(s); the least module read: 4.46px'));
         assert.ok(lines.includes('1d, read again on a fresh pair and right there: none; on the canary\'s reads again: none'));
         assert.ok(lines.includes('1d, threw and was caught (it fails nothing): none'));
+        // Sightings at the run's tab count and by the tab that read each (the tenth critic's item 4).
+        const sighted = moduleReport(
+            { ...RUN, tabs: 3, readAgain: ['pay @mobile / theme 3: the code pay-qr at 41,819: wrong on the first capture, right on a fresh pair (on tab 1 of 3)'], readAgainByTab: { 1: 1 } },
+            { would: [], readAgain: [], readAgainByTab: {} },
+            new Set(),
+        );
+        assert.ok(sighted.includes('1d, read again on a fresh pair and right there, at 3 tab(s): 1 (by tab: tab 1 1)\n    pay @mobile / theme 3: the code pay-qr at 41,819: wrong on the first capture, right on a fresh pair (on tab 1 of 3); on the canary\'s reads again: none'));
         const thrown = moduleReport({ ...RUN, thrown: ['pay @mobile / theme 1: the page threw answering for the codes\' matrices: planted'] }, { would: [], readAgain: [], thrown: ['(the canary) x'] }, new Set());
         assert.ok(thrown.includes("1d, threw and was caught (it fails nothing): 2\n    pay @mobile / theme 1: the page threw answering for the codes' matrices: planted\n    (the canary) x"));
     });
