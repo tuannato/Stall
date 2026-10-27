@@ -1176,11 +1176,29 @@ money path this app can have, because nothing on it is derived.
      measured by no pass. An older assumption of the environment, not of a
      read.
   3. **What an anchored box does that the self-clip read does not read**: a
-     figure an anchor carries over another box or off screen, with no clip
-     to cut it, and a figure `position-visibility` hides when its anchor is
-     clipped (measured once in Chrome 156, a box whose anchor was carried
-     out of an `overflow: hidden` box stayed visible; not planted). The
-     kit's road; first-party looks write no anchor positioning.
+     figure an anchor carries over another box or off screen with no clip
+     to cut it, and **a figure `position-visibility` hides**. Chrome 156
+     stops painting an anchored box when its anchor is carried out of a
+     clip that does not cut the box itself, and when its anchor is
+     `visibility: hidden`; the anchor's `opacity: 0`, `clip-path` and
+     `scale: 0` do not (the eighth critic,
+     `private/design/workshop-2026-09-23/before-8g2/critic8/pages/`). No
+     read the probe makes sees it: the hidden box still computes `visible`,
+     `checkVisibility()` answers true, and hit testing skips it, so 1a
+     reads the box under it. Plant PAV (PAN's anchor with the move taken
+     out, a keyframe `visibility: hidden` on `.item-u` from 30% to 40%):
+     the six pay screens at 1280 read 0 failures on `8bdd315` (a quick
+     read) while the shot at 35% shows the line "Your wallet signs" over
+     nothing. The kit's road only: first-party looks write no
+     `anchor-name`, `position-anchor` or `position-visibility`. A refusal
+     in `workshop:probe` of any paint whose sheets declare `anchor-name` is
+     the owner's call (a README line).
+  4. **`sheetFacts` can go stale**: an `@import` still loading
+     (`styleSheet === null`) is skipped rather than counted as unreadable,
+     and the cache is keyed by the sheet counts alone, so a sheet whose
+     rules change without the count changing is not read again. Neither is
+     reachable today (both lints refuse `@import`, and the probe's own
+     `replaceSync` sheets set no `anchor-name`); not planted.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

@@ -11146,7 +11146,13 @@ screens (or all of them), its log opening with an uptime line.
   paint and compositing longhand moved neither. No case moved the box after
   a flex, block or grid item. A table row's and a table column's
   `visibility` from `collapse` to `visible` moved the next row (50px) and
-  column; a flex item's and a grid item's did not.
+  column; a flex item's and a grid item's did not. **What this page could
+  not see** (the eighth critic): it read `checkVisibility()` and the
+  computed `visibility`, and both still say visible for a box
+  `position-visibility` hides, so its "stayed visible" for an anchor
+  carried out of a clip was wrong. Chrome 156 stops painting such a box,
+  and one whose anchor is `visibility: hidden` (PLAN § Open, the seventh
+  review's item 3).
 - The fix: `visibility` is off the list; the transform, motion-path and
   offset longhands are `ANCHOR_FOLLOWED` (the 22 cases' longhands, and
   `transform-style`, which moved the anchor), and an animation that sets one
