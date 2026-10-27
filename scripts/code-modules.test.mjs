@@ -132,12 +132,11 @@ describe('a-codes-modules-read-as-its-matrix', () => {
         assert.ok(wrongUnder > 0, 'a cut of two pixels reads a snapped code wrong somewhere under three');
     });
 
-    it('refuses a module under three pixels, a matrix that did not arrive and a square that is not its matrix and quiet zone', () => {
+    it('refuses a module under three pixels and a matrix that did not arrive', () => {
         assert.match(moduleCentres(zoneOf(CHECKER, { module: 2.99 }), 1000, 1000).fault, /a module is 2\.99px, under the 3 device pixels/);
         const missing = { ...zoneOf(CHECKER), matrix: undefined, matrixFault: 'its path is not the squares qrSvg draws' };
         assert.match(moduleCentres(missing, 1000, 1000).fault, /could not be read: its path is not the squares qrSvg draws/);
         assert.match(moduleCentres({ ...zoneOf(CHECKER), matrix: { n: 21, bits: '01' } }, 1000, 1000).fault, /did not arrive whole/);
-        assert.match(moduleCentres({ ...zoneOf(CHECKER), side: 30 * 4.7 }, 1000, 1000).fault, /draws 30\.00 modules a side where its matrix of 21 and a quiet zone of 4 make 29/);
         assert.match(moduleCentres({ ...zoneOf(CHECKER), clip: { x0: null, y0: 0, x1: 1, y1: 1 } }, 1000, 1000).fault, /did not arrive as numbers/);
     });
 
@@ -221,6 +220,16 @@ describe('a-codes-modules-pair-with-their-zones-by-place-and-name', () => {
         assert.equal(out[0].payload, 'checked');
         assert.equal(out[1].matrix, undefined);
         assert.equal(out[1].matrixFault, 'it has no path');
+    });
+    it('fails a code closed when its zone and its matrix are not of one code, and every code when the page threw', () => {
+        // A zone read off a code 30 modules a side, a matrix of 21 (29 with its quiet zones): two answers, two codes.
+        const out = withMatrices([{ ...ZONES[0], side: 30 * 4.7 }, ZONES[1]], [{ name: 'pay-qr', ...CHECKER }, { name: 'share-qr', ...CHECKER }]);
+        assert.equal(out[0].matrix, undefined);
+        assert.match(out[0].matrixFault, /^its zone was read off a code 30\.00 modules a side and its matrix off one of 29 \(21 and a quiet zone of 4 each side\): the page's two answers are not of one code$/);
+        assert.deepEqual(out[1].matrix, CHECKER);
+        assert.match(moduleCentres(out[0], 1000, 1000).fault, /could not be read: its zone was read off a code 30\.00 modules/);
+        const thrown = withMatrices(ZONES, { thrown: 'planted' });
+        assert.ok(thrown.every((z) => z.matrix === undefined && z.matrixFault === 'the page threw answering for its matrix (planted)'));
     });
     it('fails every code closed when the matrices do not line up with the codes', () => {
         for (const matrices of [[{ name: 'pay-qr', ...CHECKER }], [{ name: 'share-qr', ...CHECKER }, { name: 'pay-qr', ...CHECKER }], undefined]) {
@@ -320,6 +329,9 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         assert.ok(lines.includes('1d, codes a geometry pass painted and no contrast job read: 1: portrait/shop-window-wall:shop-window'));
         assert.ok(lines.includes('1d, matrices also held to the text their plate carries (data-pay-uri): 0 code read(s); the least module read: 4.46px'));
         assert.ok(lines.includes('1d, read again on a fresh pair and right there: none; on the canary\'s reads again: none'));
+        assert.ok(lines.includes('1d, threw and was caught (it fails nothing): none'));
+        const thrown = moduleReport({ ...RUN, thrown: ['pay @mobile / theme 1: the page threw answering for the codes\' matrices: planted'] }, { would: [], readAgain: [], thrown: ['(the canary) x'] }, new Set());
+        assert.ok(thrown.includes("1d, threw and was caught (it fails nothing): 2\n    pay @mobile / theme 1: the page threw answering for the codes' matrices: planted\n    (the canary) x"));
     });
     it('says none where nothing would fail', () => {
         const lines = moduleReport({ ...RUN, would: [] }, { would: [], readAgain: [] }, new Set());

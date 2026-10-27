@@ -84,12 +84,6 @@ export function moduleCentres(z, width, height, minPx = MODULE_MIN_PX) {
     if (!(n > 0) || bits.length !== n * n || /[^01]/.test(bits)) {
         return { centres: [], fault: `its matrix did not arrive whole (${n} a side, ${bits.length} modules)` };
     }
-    if (Math.abs(z.side / z.module - (n + 2 * QUIET_MODULES)) > 1e-6) {
-        return {
-            centres: [],
-            fault: `it draws ${(z.side / z.module).toFixed(2)} modules a side where its matrix of ${n} and a quiet zone of ${QUIET_MODULES} make ${n + 2 * QUIET_MODULES}`,
-        };
-    }
     if (z.module < minPx) {
         return { centres: [], fault: `a module is ${z.module.toFixed(2)}px, under the ${minPx} device pixels a centre read needs` };
     }
@@ -197,10 +191,19 @@ export function foldStats(into, from) {
  * The zones `__quietZones` answered, each with the matrix `__codeMatrices`
  * answered for it, paired by place and held to the same name: a list that
  * does not line up gives every code a `matrixFault` (the read fails closed
- * for it, and says so), and a code whose matrix the page could not read
- * carries the page's reason. Pure.
+ * for it, and says so), a code whose matrix the page could not read carries
+ * the page's reason, and a page that threw answering (`{ thrown }`, the
+ * runner's guard) gives every code that throw as its fault. **And one code a
+ * pair**: a zone's module is its side over the viewBox it was read against,
+ * and its matrix is that viewBox's less both quiet zones, so a zone and a
+ * matrix of one code agree by construction; they disagree only when the two
+ * answers were taken of different codes — the page changed between them, or
+ * two codes of one name traded places — and the code then fails closed. (That
+ * agreement was a check in `moduleCentres` that could not fail once the two
+ * were paired: the tenth critic's item 7.) Pure.
  */
 export function withMatrices(zones, matrices) {
+    if (typeof matrices?.thrown === 'string') return zones.map((z) => ({ ...z, matrixFault: `the page threw answering for its matrix (${matrices.thrown})` }));
     const lined = Array.isArray(matrices) && matrices.length === zones.length && zones.every((z, i) => matrices[i]?.name === z.name);
     return zones.map((z, i) => {
         if (!lined) {
@@ -211,6 +214,13 @@ export function withMatrices(zones, matrices) {
         }
         const m = matrices[i];
         if (typeof m.fault === 'string') return { ...z, matrixFault: m.fault };
+        const drawn = z.side / z.module;
+        if (Math.abs(drawn - (m.n + 2 * QUIET_MODULES)) > 1e-6) {
+            return {
+                ...z,
+                matrixFault: `its zone was read off a code ${drawn.toFixed(2)} modules a side and its matrix off one of ${m.n + 2 * QUIET_MODULES} (${m.n} and a quiet zone of ${QUIET_MODULES} each side): the page's two answers are not of one code`,
+            };
+        }
         return { ...z, matrix: { n: m.n, bits: m.bits }, ...(m.payload === 'checked' ? { payload: 'checked' } : {}) };
     });
 }
@@ -378,6 +388,8 @@ export function moduleReport(run, canary, painted) {
             (canary.readAgain.length === 0 ? 'none' : `${canary.readAgain.length}${canary.readAgain.map((line) => `\n    ${line}`).join('')}`) +
             (canary.would.length === 0 ? '' : `; would-be on the canary's reads again: ${canary.would.length}${canary.would.map((line) => `\n    ${line}`).join('')}`),
     );
+    const thrown = [...(run.thrown ?? []), ...(canary.thrown ?? [])];
+    lines.push(`1d, threw and was caught (it fails nothing): ${thrown.length === 0 ? 'none' : `${thrown.length}${thrown.slice(0, 12).map((line) => `\n    ${line}`).join('')}${thrown.length > 12 ? `\n    … and ${thrown.length - 12} more` : ''}`}`);
     const unread = [...run.unread].sort(([a], [b]) => a.localeCompare(b));
     lines.push(`1d, codes a contrast job painted and could not read: ${unread.length === 0 ? 'none' : unread.map(([code, why]) => `${code} (${why})`).join(', ')}`);
     const notRead = [...painted].filter((code) => !run.read.has(code) && !run.unread.has(code)).sort();

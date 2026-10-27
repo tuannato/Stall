@@ -12051,6 +12051,55 @@ chain is its parent's.
 |---|---|---|---|
 | quick, C1x at offers, 390 (`runs/qp-C1x-contents-absolute-neo-before.log`, `runs/qp-C1x-contents-absolute-neo.log`) | 18 | 24 | C1, the same label in flow: 24 (`runs/qp-C1-contents-neo.log`) |
 
+### 1d's timing and guard (items 5, 6 and 7)
+
+**Item 5: the first matrix was read after the fresh pair.** The job read
+the zones, ran the quiet zone's read — which makes the job's fresh pair
+whenever a ring reads dark — and only then asked `__codeMatrices` for the
+matrices of the first capture: whenever the quiet zone read again, 1d's
+first reading paired a capture with matrices read 250ms and a capture later.
+The matrices are now read right after the zones, before anything else asks
+the page. **Red, quick** (`tools/order-mutate.py`, an instrument never
+committed: the page counts its zone answers since the prepare, and
+`__codeMatrices` answers a fault for every code once more than one came
+before it; the plant `plants/QZ-dark-ring-modern.css`, a 6px black outline
+inside every Modern pay code's quiet zone and clear of its matrix, so the
+ring reads dark and the modules right): with the old order Modern's two pay
+jobs at 390 read 0 codes, each "read after 3 zone reads, so after the quiet
+zone's fresh pair" (`runs/q1d-order-before.log`, the runner as committed);
+with the new, 2 codes and 5,618 centres, 0 wrong (`runs/q1d-order-after.log`).
+
+**Item 6: 1d could take the quiet zone's read with it.** `__codeMatrices`
+ran unguarded in the job and inside the shared fresh pair, and
+`readCodeModules` unguarded in the job: a throw in either ended the job, and
+a throw inside the pair ended the quiet zone's read of that pair too, though
+1d is report-only. Now a page that throws answering for its matrices — in
+the job's read or in the pair — gives each code that throw as its
+`matrixFault` (`withMatrices`' `thrown`), a throw in 1d's own read is
+caught, and both are counted and printed (`1d, threw and was caught (it
+fails nothing)`, the canary's reads included). The sheet of
+`the-module-read-agrees-with-this-chrome` reads a throw as a disagreement,
+said as one. **Red, quick**, each a scratch mutation at `pay` 390, before
+(the runner as committed) and after:
+
+| Mutation | Before | After |
+|---|---|---|
+| `__codeMatrices` throws on every call (`tools/throw-mutate.py`, `runs/q1d-throw-*.log`) | the contrast pass stops: "page threw" | 11 caught (9 jobs and the canary's 2), every code said as not read, the quiet zone read as before; the sheet's check says the throw and fails the run |
+| it throws only inside the fresh pair, the QZ plant asking for one (`tools/throwpair-mutate.py`, `runs/q1d-throwpair-*.log`) | the contrast pass stops on the pair | the quiet zone's read decides on its pair ("on the fresh pair too"), 1d reads its 2 codes right and says 3 throws |
+| `readModules` throws on the pay code (`tools/readthrow-mutate.py`, `runs/q1d-readthrow-*.log`) | the contrast pass stops: "planted: readModules throws" | 11 caught, said word for word |
+
+**Item 7: a check that could not fail.** `moduleCentres` refused a code
+whose side over its module was not its matrix and both quiet zones; but the
+module is the side over the viewBox the zone was read against, and the
+matrix's size is that viewBox's less both quiet zones, so once paired the
+two agree by construction. The comparison is now where it means something,
+in the pairing (`withMatrices`): a zone and a matrix of one code agree, so
+they disagree only when the page's two answers were taken of different
+codes — the page changed between them, or two codes of one name traded
+places — and that code fails closed, said as such. **Red, unit**: the new
+cases of `a-codes-modules-pair-with-their-zones-by-place-and-name` fail
+against `code-modules.mjs` as committed (`runs/unit-item7-before.log`).
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.

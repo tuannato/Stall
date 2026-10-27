@@ -1365,6 +1365,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         would: [],
         readAgain: [],
         faults: [],
+        // Throws caught in 1d's own read, said and counted (it fails nothing).
+        thrown: [],
         read: new Map(),
         unread: new Map(),
         payloadChecked: 0,
@@ -1743,6 +1745,26 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      */
                     const zonesAt = performance.now();
                     const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                    /*
+                     * 1d's matrices, read right after the zones they pair with
+                     * and before anything else asks the page (the tenth
+                     * critic's item 5: they were read after the quiet zone's
+                     * read, so after its fresh pair whenever a ring read dark).
+                     * Guarded (item 6): 1d is report-only, so a page that throws
+                     * answering for its matrices fails each code closed for 1d
+                     * alone (`withMatrices`' `thrown`), is counted and said,
+                     * and never takes the quiet zone's read or the job with it —
+                     * in the fresh pair below as here.
+                     */
+                    const codeMatrices = async () => {
+                        try {
+                            return await evalJson(cdp, sessionId, 'window.__codeMatrices()');
+                        } catch (err) {
+                            modules.thrown.push(`${screen} @${vp.name} / theme ${theme}${wornLabel}: the page threw answering for the codes' matrices: ${err.message.slice(0, 200)}`);
+                            return { thrown: err.message.slice(0, 200) };
+                        }
+                    };
+                    const matrices = zones.length === 0 ? [] : await timed('modules-dom', codeMatrices);
                     const firstAt = zones.length === 0 ? undefined : await quietContext(cdp, sessionId, img, zonesAt - imgAt);
                     // The fresh pair is made once a job, for the quiet zone's
                     // read and 1d's alike (`readAgainOnFreshPair`), and each
@@ -1756,10 +1778,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             const readAt = performance.now();
                             const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
                             if (fresh.why.length > 0) return { why: fresh.why };
-                            const matrices = await evalJson(cdp, sessionId, 'window.__codeMatrices()');
+                            const freshMatrices = await codeMatrices();
                             return {
                                 img: fresh.shot,
-                                zones: withMatrices(after, matrices),
+                                zones: withMatrices(after, freshMatrices),
                                 before,
                                 at: await quietContext(cdp, sessionId, fresh.shot, readAt - fresh.capturedAt),
                             };
@@ -1813,8 +1835,13 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      * is said under the pass, by viewport and look.
                      */
                     if (zones.length > 0) {
-                        const matrices = await timed('modules-dom', () => evalJson(cdp, sessionId, 'window.__codeMatrices()'));
-                        const moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
+                        // Guarded whole (item 6): a throw in 1d's own read is counted and said, and fails nothing.
+                        let moduleReads = [];
+                        try {
+                            moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
+                        } catch (err) {
+                            modules.thrown.push(`${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`);
+                        }
                         const variant = flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
                         const tally = (modules.byVpClass[`${vp.name} ${plannedJob.sheetClass}`] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
                         tally.jobs += 1;
@@ -4091,8 +4118,8 @@ try {
     const canaryQuietReadAgain = [];
     // 1d (before 8g2, report-only; `code-modules.mjs`): every job's module
     // read folded, and the canary's reads again of it, said under the pass.
-    const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], faults: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
-    const canaryModules = { would: [], readAgain: [] };
+    const modulesRun = { byVpClass: {}, stats: {}, would: [], readAgain: [], faults: [], thrown: [], read: new Map(), unread: new Map(), payloadChecked: 0, leastModule: Infinity };
+    const canaryModules = { would: [], readAgain: [], thrown: [] };
     // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
     let moduleSnapRead;
     // D14: the least the sign's name read per look and decoration state
@@ -4239,6 +4266,7 @@ try {
             modulesRun.would.push(...out.modules.would);
             modulesRun.readAgain.push(...out.modules.readAgain);
             modulesRun.faults.push(...out.modules.faults);
+            modulesRun.thrown.push(...out.modules.thrown);
             countInto(modulesRun.read, out.modules.read);
             for (const [code, why] of out.modules.unread) modulesRun.unread.set(code, why);
             modulesRun.payloadChecked += out.modules.payloadChecked;
@@ -4479,6 +4507,7 @@ try {
                 for (const line of again.quietReadAgain ?? []) canaryQuietReadAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 for (const line of again.modules?.readAgain ?? []) canaryModules.readAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 for (const line of again.modules?.would ?? []) canaryModules.would.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                for (const line of again.modules?.thrown ?? []) canaryModules.thrown.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
                 const sameBoxes = JSON.stringify(again.dumpBoxes) === JSON.stringify(answers[n].dumpBoxes);
                 const said = { key: queue[n].key, why, ranOn: ranOn[n], readOn: tab, same: sameRecord && sameBoxes };
@@ -4539,11 +4568,20 @@ try {
                 if (zones.length !== sheet.codes) verdict.faults.unshift(`the sheet drew ${sheet.codes} codes and the page read ${zones.length}`);
                 return verdict;
             };
+            // A page that throws reading the sheet is a disagreement, said as one, never a pass that stops.
+            const threw = (err) => ({ codes: 0, under: 0, over: 0, centres: 0, below: { codes: 0, centres: 0, wrong: 0 }, faults: [`the page threw reading the sheet: ${String(err?.message ?? err).slice(0, 200)}`] });
+            const readOrSay = async () => {
+                try {
+                    return await read();
+                } catch (err) {
+                    return threw(err);
+                }
+            };
             try {
-                const first = await read();
+                const first = await readOrSay();
                 if (first.faults.length === 0) return { first };
                 await sleep(250);
-                return { first, again: await read() };
+                return { first, again: await readOrSay() };
             } finally {
                 await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(false)');
             }
