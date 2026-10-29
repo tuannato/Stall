@@ -3187,7 +3187,7 @@ const reachGeometry = [];
 const reachSeen = {};
 /** `holds-out-of-flow-agrees-with-this-chrome`, per geometry pass: the page's record of it (`outOfFlowCheck`) and its time. */
 const outOfFlowGeometry = [];
-/** How many grouped would-be sentences a pass prints word for word. */
+/** How many grouped failure sentences of 1b a pass prints word for word (1b fails since 7b; the rest are counted). */
 const REACH_PRINTED = 60;
 function reachLines(pass, r) {
     const classes = Object.keys(r.byClass).sort();

@@ -12174,9 +12174,11 @@ on the job's capture alone; `runs/q1d-band-sightings.log` and
 each of the three tabs, and 2 on the canary's reads again, for the quiet
 zone and 1d alike. **Step 7c reads these counts before it binds 1d**
 (PLAN § Open): a flake that hits both captures is a false red once 1d is
-bound, as it would be for the quiet zone today. (7c read them: fifteen
-sightings by then, eleven at two tabs and four at three, none left dark on
-its pair; "Before 8g2, 7c: 1d binds", below.)
+bound, as it would be for the quiet zone today. (7c read them and counted
+fifteen, four at three tabs; with the two its own plant runs held, which the
+thirteenth critic counted, there were seventeen by then, eleven at two tabs
+and six at three, none left dark on its pair; "Before 8g2, 7c: 1d binds",
+below.)
 
 ### The round's whole run
 
@@ -12849,8 +12851,11 @@ carrying `stall-sign`, its computed `box-shadow` exactly
 `rgba(58, 42, 24, 0.32) 0px 18px 40px 0px`; the target a `button` carrying
 `addr` with `data-role="addr-copy"`, its computed ground and ink exactly
 one of two plates — bare, `rgb(255, 253, 244)` under `rgb(107, 89, 66)`
-(6.9:1), or under Rural's one mood, Sun-faded, `rgb(247, 244, 238)` under
-`rgb(108, 95, 77)` (5.7:1); and a composite of at most 0.23. The first
+(6.6:1; this line said 6.9:1 until the thirteenth review's fixes), or under
+Rural's one mood, Sun-faded, `rgb(247, 244, 238)` under `rgb(108, 95, 77)`
+(5.7:1); and a composite of at most 0.23 — 0.25 since the thirteenth
+review's fixes (the owner's D-2026-10-29-01; "Before 8g2: the thirteenth
+review's fixes", below). The first
 wiring keyed one plate, and a quick read of the desk pass
 (`runs/q-clean-1280-wip1.log`) failed 62 of the 142: the mood's. No
 look's class is a key, so a starter of Rural (the same sheet and rows under
@@ -12901,7 +12906,7 @@ at 390 — and what else fails the run:
 | BA40, the board at alpha 0.40 | 142 at 1280 (composite 0.28), 0 accepted | 1: 1b alone |
 | BPL, the board over a white plate | 142 at 1280 (composite 0.23), 0 accepted | 1: 1b alone |
 | BMN, the board over the address text raised to the plate's top | 140 at 1280, over `span.addr-full` (a money node) at composite 0.22, under the ceiling; the plate's own 142 still accepted | 1: 1b alone (`runs/p-7b2-*.log`) |
-| BKV, the board's own keyframe at alpha 0.33 (on `87ee812`) | 172 at 1280, each at the keyframe's 50% (composite 0.22); the 142 at rest still accepted | 1: 1b alone (`runs/p-7b3-*.log`) |
+| BKV, the board's own keyframe at alpha 0.33 (on `87ee812`) | 172 at 1280: 142 the board over the plate at the keyframe's 50% (composite 0.22), and 30 false — the board behind a pay sheet's scrim, read against the sheet's money on 13 pay screens, 29 of them at 0% (the thirteenth review's B3; exactly 142 since its fix, below); the 142 at rest still accepted | 1: 1b alone (`runs/p-7b3-*.log`) |
 
 L1's failures are the tabs' band over the rows' figures at the heading's
 50%, and Neo's own text glows over the rows it pulled under them (13 at
@@ -12946,46 +12951,66 @@ job decides, and 1d is not in the job's record the canary compares.
 **Owed by name, as the quiet zone is.** The public looks' reads together
 hold every `CODES_REQUIRED` code ("read no module of …"). Every look holds
 every code whose quiet zone was read on its jobs, save one it failed closed
-on (a failure already) and one none of whose module centres was on screen
-("read no module centre of … on a … stall, where its quiet zone was read").
+on (a failure already) and — until the thirteenth review's fixes — one none
+of whose module centres was on screen ("read no module centre of … on a …
+stall, where its quiet zone was read"); since those fixes a code not read
+whole fails closed, and the kit's look on its probe owes the required codes
+too ("Before 8g2: the thirteenth review's fixes", below).
 Each carried look holds the required codes on its own jobs
 (`look-tallies.mjs`, `moduleCodesRead`; a paid look excused the record
 sheet's code, `PAID_LOOK_UNPAINTED_CODES`). Tests: the owed-codes case of
 `a-carried-look-is-held-to-its-own-skip-ceilings`, and
 `1d-says-what-it-read-and-would-fail` for the lines.
 
-**A turned frame's codes are said, not passed.** Rural turns its wall's
-code at 1920 and its Cycle card's at 1280, and neither 1d nor the quiet zone
-reads a turned frame. Every run now names them by look and code under the
-contrast pass ("1d, codes not read because their frame is turned (not held
-by 1d or by the quiet zone; stated)"): on the clean tree `t-rural`
+**A turned frame's codes were said, not read** (at this step; read upright
+since the thirteenth review's fixes, below). Rural turns its wall's code at
+1920 and its Cycle card's at 1280, and neither 1d nor the quiet zone read a
+turned frame. The run named them by look and code under the contrast pass
+("1d, codes not read because their frame is turned (not held by 1d or by
+the quiet zone; stated)"): on the clean tree `t-rural`
 `canvas/shop-window-wall:shop-window`,
 `desktop/shop-window-cycle-longest-figure:shop-window` and
-`desktop/shop-window-cycle:shop-window`. They are owed by neither rule on
-Rural; other looks read them.
+`desktop/shop-window-cycle:shop-window`. They were owed by neither rule on
+Rural. This paragraph went on "other looks read them", which held for these
+three screens and for no turn a look puts on a code itself: the thirteenth
+critic's PQOT (Modern's pay codes faded and turned 0.01°) took every one of
+Modern's pay codes out of both reads with the whole runner green, and on
+the kit's probe, where no code was owed by name, KQT did the same. Naming a
+code under the pass passed it in silence as far as the verdict went.
 
 ### The flake count, read first (the tenth critic's item 4)
 
-The kept logs under `before-8g2/` hold fifteen quiet-zone sightings
-("dark on the first capture, white on a fresh pair"), counted per tab count
-before the bind: **eleven at two tabs and four at three**. The thirteen of
-"The quiet-zone flake, sighting by sighting" (four that failed their runs
-before the read-again existed, all at two tabs; seven read again since at
-two tabs; two at three), and two since, each naming its tab:
+The kept logs under `before-8g2/` hold seventeen quiet-zone sightings
+("dark on the first capture, white on a fresh pair"), counted per tab count:
+**eleven at two tabs and six at three**. This section said fifteen and
+four at three when the step was done; the thirteenth critic counted the two
+this step's own plant runs held (#16 and #17), and its corrections are
+here. The thirteen of "The quiet-zone flake, sighting by sighting" (four
+that failed their runs before the read-again existed, all at two tabs; seven
+read again since at two tabs; two at three), and four since, each naming its
+tab:
 
-| # | Where (log) | Tabs | Screen, look | Fresh pair |
-|---|---|---|---|---|
-| 14 | `critic11-fixes/runs/w-clean.log`, the eleventh fixes' clean whole run | 3 | `pay-xec`, Modern, tab 1 of 3 | white |
-| 15 | `1c/runs/q-clean-trigger2.log`, a quick read | 3 | `pay-moved`, Neo worn, tab 0 of 3 | white |
+| # | Where (log) | Tabs | Screen, look | First capture's ring | Fresh pair |
+|---|---|---|---|---|---|
+| 14 | `critic11-fixes/runs/w-clean.log`, the eleventh fixes' clean whole run | 3 | `pay-xec`, Modern, tab 1 of 3 | — | white; 1d right |
+| 15 | `1c/runs/q-clean-trigger2.log`, a quick read | 3 | `pay-moved`, Neo worn, tab 0 of 3 | — | white; 1d right |
+| 16 | `7bc/runs/p-7b-UL2-lowered-modern.log`, this step's UL2 plant run (on `82ae137`, 1d report-only) | 3 | `pay-several`, Modern worn, tab 2 of 3 | 11,160 of 21,312, `rgb(18,21,26)`, x 38–351 | white; 1d 1,537 of 2,809 centres wrong first, right on the pair |
+| 17 | `7bc/runs/p-7b2-BMN-board-money-rural.log`, this step's BMN plant run (on `82ae137`, 1d report-only) | 3 | `pay-several-longest-figure`, Rural, tab 2 of 3 | 9,842 of 21,812, `rgb(251,242,223)`, x 42–347 | white; 1d 931 of 2,401 centres wrong first, right on the pair |
 
-Every sighting since the read-again existed was white on its fresh pair,
-and 1d's one read-again (#13) was right there; none at three tabs was ever
-left dark on the pair. The other "on the fresh pair too" lines in the logs
-are plants that put paint on the codes (PQO, PQM, a dark ring, CB2's and
-ESC's copies over the wall's payment plate), not flakes. The runs of this
-step add none: no sighting on any of them (`runs/w-*.log`, `runs/p-*.log`).
-So the bind went ahead, three tabs stay the default, and a sighting that
-fails a run now fails it for 1d and the quiet zone together.
+Every sighting since the read-again existed was white on its fresh pair;
+none at three tabs was ever left dark on the pair. **1d read again five
+times** (#13 to #17), each right on the pair, and **each on a quiet-zone
+sighting's own code on the same job**: 1d is hit exactly when the quiet
+zone is, so the one shared pair rescued both reads every time. (This
+section said "1d's one read-again (#13)", which was false.) The other "on
+the fresh pair too" lines in the logs are plants that put paint on the codes
+(PQO, PQM, a dark ring, CB2's and ESC's copies over the wall's payment
+plate), not flakes. This section also said "the runs of this step add none";
+#16 and #17 are this step's own. About four of some 97 three-tab logs,
+counted by tab, saw a sighting (the thirteenth critic's count), and none of
+the thirteen read again since the read-again existed was dark on both
+captures. So the bind stood, three tabs stay the default, and a sighting
+that fails a run fails it for 1d and the quiet zone together.
 
 ### Red proofs, the whole runner
 
@@ -13092,6 +13117,235 @@ failure a paint: 81 at 390, 93 at 1280, 66 on the canvas, 53 on each of the
 tall wall, the tablet, the short wall, the side tablet, the HD wall, the
 tall tablet and the narrow wall, 41 on the desk wall, 45 at 360, and 5 and
 3 under reduced motion. The clean kit (`runs/k-clean.log`): exit 0 in 19.2s.
+
+## Before 8g2: the thirteenth review's fixes (2026-10-29; CRITIC-13, the owner's D-2026-10-29-01)
+
+Its evidence is under
+`private/design/workshop-2026-09-23/before-8g2/critic13-fixes/` (`runs/`,
+`plants/`, `tools/`); the paths below are relative to it. The critic's own
+evidence is `critic13/`. Two code commits: `765351a` (1b) and `5e9cf6b` (the
+quiet zone and 1d).
+
+### B1: a turned code is read upright (the owner's decision 1)
+
+`quietZoneOf` sets `turned` wherever `angleOf` reads a turn — a hundredth
+of a degree and a whole turn alike, since it compares the sum with 0 — and
+until now neither the quiet zone nor 1d read such a code: the run named it
+under the contrast pass, the per-look owe excused it (a look owed only the
+codes whose quiet zone it read), and `CODES_REQUIRED` was owed only on the
+shipped run. The critic's PQOT, PQO with `rotate: 0.01deg` on the same box,
+faded every one of Modern's pay codes and exited 0 (`critic13/runs/p-PQOT.log`);
+KQT did the same on the kit's probe.
+
+**Now** (`__codeTurnsHeldOff` in `layout/probe.ts`, `readTurnedUpright` in
+`scripts/code-modules.mjs`, the runner's quiet-zone block): on a job with a
+turned code, the page holds off every transform (`transform`, `rotate`,
+`scale`, `translate`) on each turned code and every box above it, through
+the CSSOM as `withTransformsHeldOff` does (`holdOff`, which holds
+`transition-property` at `none` beside them so no transition starts, and puts
+the transforms back before the transitions), and answers after two frames;
+the runner captures that frame, reads the zones and matrices on it, puts
+the transforms back, and reads each turned code by both rules there. A code
+read dark or wrong upright is read again on a fresh pair held the same way
+(the shared-pair rule of `readAgainOnFreshPair`, one pair for both reads).
+A turned code that cannot be read upright fails closed, for both rules,
+saying why: no held frame could be had (a page throw, a shot of the wrong
+size), the held frame painted other codes, or the code is still turned on
+it. The pass says, by look and code, which turned codes it read upright
+("1d and the quiet zone, codes in a turned frame read upright"), and a
+failure line says "(in a turned frame, read upright: every transform above
+it held off)". A turned code is owed like any other (the per-look owe, and
+`CODES_REQUIRED`).
+
+**What Rural's turned codes read upright.** On the clean tree the three are
+Rural's: `canvas/shop-window-wall:shop-window` and
+`desktop/shop-window-cycle:shop-window` and
+`desktop/shop-window-cycle-longest-figure:shop-window`, bare and worn, six
+jobs. Upright, every one reads its quiet zone white and every module centre
+right: dark 0 and light 255 on every channel (`runs/q1d-clean-turned.log`,
+a quick read of those three screens on every look; and on BKV's whole run,
+whose plant touches no code, `runs/p-BKV.log`: 1d read none wrong, failed
+none closed, and could read every code a job painted). The
+hold took 1.2s of tab time over the six jobs in the quick read (about 0.2s a
+job: the hold, one capture, one zone and one matrix read, and the putting
+back).
+
+**Not read, stated.** Only the code and the boxes above it are held, so a
+box whose place one of those transforms decides — an absolute or fixed box
+whose containing block a transform made — can stand elsewhere on the held
+frame than on the job's; a cover laid that way over a turned code is read
+where it moved to (1a reads the job's own frame). A transition already
+running on a held box is cancelled when `transition-property` is held at
+`none` and does not resume (read from the CSS Transitions spec, not
+observed). A transform `angleOf` does not read as a turn (a 3D rotation
+about another axis, a motion path's own rotation) is not held; such a code
+is read on the job's frame as before. Neither road is planted.
+
+### The kit owes its codes by name (decision 3)
+
+The runner's `CODES_REQUIRED` check ran only `LOOKS === 'shipped'`; it now
+runs on the kit's probe too, over the kit's look's jobs, for the quiet zone
+and for 1d, as a carried look owes them on its own. The skeleton kit and the
+Rural starter read every one of the eleven: `runs/k-clean-2.log` exits 0 on
+the skeleton, and `runs/k-rural-starter.log` exits 0 on `workshop:start
+rural`, its wall code and its two Cycle codes read upright and the board's
+142 accepted on `t-workshop`. Red: KQH (`plants/KQH-…`, the kit's `.pay-qr`
+at `display: none`) names "a-code-keeps-its-quiet-zone-white read no quiet
+zone on mobile/pay:pay-qr, desktop/pay:pay-qr, mobile/pay-several:pay-qr,
+desktop/pay-several:pay-qr", and 1d's "read no module of" the same four, on
+this tree (`runs/k-KQH-tree.log`), and neither line on `e36d2fd`
+(`runs/k-KQH-base.log`); both runs fail other rules on it too (1a, the
+contrast pass's 8 figures: the pay code's svg has no box, which 1a
+fails), so the owe is the difference, not the exit.
+
+### 1d reads a code whole (item 8)
+
+1d held only the module centres it could see and owed nothing past them:
+the critic's PQS, `.pay-qr { max-height: 48px; overflow-y: auto }`, read
+6,930 of 37,938 mobile centres, all right (`critic13/runs/p-PQS.log`; the run
+failed on other rules). `readWholeModules` fails closed a code any of whose
+module centres is off screen or outside a clip — "only N of its M module
+centres are on screen inside its clips: a code is read whole or not at all",
+or "none of its M" — so a slot that shows the quiet zone alone, which 1d
+read as nothing and excused, fails too. Cheap: a count against `n²`. On
+BKV's whole run (no code planted) it fails nothing. The excuse "none of whose module
+centres was on screen" left the per-look owe with it. The quiet zone keeps
+its own rule (a code wholly clipped away is not read by it). Test:
+`fails closed a code not read whole, a slot that shows part of it or none`.
+
+### B2 and B3: the keyframe-values road (`reachKeyframes`, `765351a`)
+
+**B2.** An animation of a shadow, a filter or a colour alone on a box is
+read from its keyframes' values with no seek, on the box and on the text
+owners under it — never on a look pseudo under it, which inherits a
+text-shadow or a colour the box animates. KTSK2 (`plants/KTSK2-…`, the
+critic's, on the kit's probe over the Neo starter): a text-shadow keyframe
+on the phone rows' name column that only the rail label's `::after` carried
+over the price's first digit at 50%; the kit's probe exited 0. A box that
+hosts a look pseudo **or holds an element that does** is now seeked
+instead, where the pseudo is read with what it inherits. On the ordinary
+probe, the critic's TSK5 on Neo reads 18 at 390's `offers`, the `::after`'s
+copy over the price at the seek's 50% (`runs/q-TSK5-390-offers.log`), where
+`e36d2fd` read 0 (`runs/q-TSK5-390-offers-base.log`).
+
+**B3.** The read at rest and the seek's elements hold to the open surface;
+this road did not, and held a box behind a pay sheet's scrim to the sheet's
+money: BKV's 172 at 1280 were 142 real (the board over the plate at the
+keyframe's 50%) and 30 false (the board behind the scrim, against
+`seller-price`, `rate`, `pay-lines`, `pay-line-x` and `pay-x-n` on 13 pay
+screens, 29 at 0%). A box neither on the open surface nor above it is left
+out (`offSurface` in the tallies, printed on the pass's line: 254 at 390,
+254 at 1280 and 193 at 360 on PQOT's run, whose one plant animates
+nothing), and of a box above the surface
+only the owners on it are read — its own paints stand under the scrim. **The
+same class, by reading**: `reachersOn` under `only` held its elements to the
+surface but not its look-pseudo hosts; they are held to it now too (a host
+on the surface or a box above it, as the read at rest takes them). Started
+from the critic's trial diff (`critic13/tools/trial-fix-reachKeyframes.diff`),
+which returned early for an off-surface box and seeked on a pseudo host
+under the box; the build adds the owners' filter for a box above the
+surface, the pseudo hosts' filter under `only`, and the tally.
+
+### Items 4, 5 and 6
+
+**Item 4.** What an accepted meet does to its pair is one pure function,
+`sayReach` (`layout/paintReach.ts`): a pair already failed is said; an
+accepted meet is counted once under a key of its own, `<pair>|accepted`,
+and never under the pair's; any other meet fails once. `judgeReacher`
+decides every pair through it. `an-accepted-meet-does-not-stand-for-its-pair`
+(`layout/paintReach.test.ts`) holds both halves: the function, and that
+`judgeReacher` calls it and adds no key of its own but a blurred core's.
+Red by reverting `87ee812`'s key locally, each way, then restored:
+`sayReach` storing an accepted meet under the pair's key fails 2 of its
+tests (`runs/t-item4-red-a.log`); `judgeReacher` adding the pair's key before
+asking the accepted list, the shape before `87ee812`, fails the pin
+(`runs/t-item4-red-b.log`).
+
+**Item 5.** `inheriting` took every descendant whose text-shadow equalled
+the box's at rest, so one that set `text-shadow: none` itself was read with
+the keyframe's copies whenever the box stood at `none`. Now
+`textShadowHeirs` holds the box's text-shadow at a sentinel through the
+CSSOM (with its transitions held), takes the text owners under it that
+compute the sentinel, and puts the box back. Quick reads at 390's `offers`,
+Neo (`plants/ITS-…` and its control `plants/ITSc-…`; the box held at `none`
+until 49% so it computes `none` at rest): ITS — the name and the rail label
+set `none` — 18 on `e36d2fd` (the false red, by mechanism: they draw no
+copy) and 0 now; ITSc — they inherit — 18 on both
+(`runs/q-ITS*-390-{base,tree}.log`).
+
+**Item 6.** A blurred meet was the first of the target's boxes the blur
+met, so `acceptedReach` judged that box's composite; the meet is now the box
+it composites most over. Moot for a one-box plate; no plant.
+
+### The board's ceiling (decision 2)
+
+`REACH_ACCEPTED`'s one entry has a ceiling of 0.25 (it was 0.23):
+`the-reach-1b-accepts-by-name` pins it by value, accepts 0.2311 and 0.25,
+and fails 0.2501 and 0.322. `BLUR_OPACITY` stays 0.2 everywhere else. Why
+(the owner's reasons, re-derived): the pinned shadow string caps the
+composite at its own alpha, one layer at 0.322 as the probe reads it
+(`rgba(…, 0.32)` drawn on a canvas, 82 of 255); at 0.25 the plate's ink
+reads about 3.5:1 under Sun-faded with its ground darkened by a quarter of
+the board's ink and the ink untouched (3.49:1; 4.03:1 on the bare plate);
+and the address text spans inside the plate, money nodes, are no target of
+the entry and stay held at 0.2 (BMN). **The margin now** (quick reads,
+`runs/q-BUP*-1280.log`, the plate moved up by a relative offset): 0.2285 at
+rest, 0.2389 at 2px, 0.2438 at 3px, 0.2486 at 4px — accepted — and 0.2532
+at 5px, 7 failures on the desk's `offers`. The critic's half-pixel reads were
+0.2298 at 0.25px and 0.2311 at 0.5px, which turned all 142 red at 0.23. The
+docblock's bare plate figure, 6.9:1, was wrong: by the WCAG formula the
+plate reads 6.58:1.
+
+### Wording (items 1, 2 and 7)
+
+The flake count is seventeen, eleven at two tabs and six at three, and 1d
+read again five times, each on a quiet-zone sighting's own code ("Before
+8g2, 7c: 1d binds", corrected in place, with #16 and #17); the BKV row of
+"Before 8g2, 7b: 1b binds" says what its 172 were; the stale "would-be"
+wording left `judgeReacher`, `REACH_PRINTED`, `Meet`, `ReachFact` and
+`acceptedReach`; and "A turned frame's codes are said, not passed" says now
+what it was, and why "other looks read them" was false.
+
+### Red proofs
+
+Each plant alone. Whole runs on the scratch clone at `5e9cf6b`
+(`tools/run.sh`, three tabs, each started once the one-minute load was under
+2.5); kit runs with `tools/kit.sh` (`node scripts/workshop.mjs probe`); quick
+reads with `tools/q1d.sh` (the contrast pass alone, its queue filtered) and
+`tools/qp.sh` (one probe page). Failures per pass are listed only where not
+0.
+
+| Plant | Road | Counts | Exit |
+|---|---|---|---|
+| PQOT (the critic's: PQO, `opacity: 0.4` on Modern's `.pay-qr`, with `rotate: 0.01deg`) | whole runner | 1d 24 — every Modern pay code, bare and worn, at 390 and 1280, each "read upright"; the quiet zone 12 (the worn reads); PQO's own counts exactly | 1 (`runs/p-PQOT.log`; `e36d2fd` exited 0, `critic13/runs/p-PQOT.log`) |
+| KQT (the critic's: the kit's `.pay-qr` at `opacity: 0.1`, `rotate: .01deg`) | kit's probe | 1d 12 — every kit pay code read, each "read upright" | 1 (`runs/k-KQT.log`; `e36d2fd` exited 0). The run also failed the geometry canary on `reduced-motion @mobile`, a flake older than this round (below) |
+| PQ360 (PQO turned a whole turn) | quick read, `pay` | 1d 4 (the screen's 2 viewports, bare and worn), each read upright | — (`runs/q1d-PQ360-opacity-whole-turn-modern.log`) |
+| PR360 (a whole turn alone) | quick read, `pay` | 0: read upright and clean | — (`runs/q1d-PR360-whole-turn-modern.log`) |
+| KTSK2 (the critic's, on the Neo starter) | kit's probe | 1b 158 at 390, 26 at 360: the rail label's `::after` over the price at the seek's 50% | 1, 1b alone (`runs/k-KTSK2.log`; `e36d2fd` exited 0, the critic's trial fix read the same 158 and 26) |
+| BKV (7b's) | whole runner | 1b 142 at 1280, every one the board over the plate "at its keyframe at 50%"; none on a pay screen; the at-rest meet's 142 accepted | 1, 1b alone (`runs/p-BKV.log`; 172 on `87ee812`, 30 of them false) |
+| TSK5 (the critic's, Neo) | quick read, 390 `offers` | 1b 18; 0 on `e36d2fd` | — |
+| ITS / ITSc (item 5) | quick read, 390 `offers` | 0 / 18 now; 18 / 18 on `e36d2fd` | — |
+| BUP2–BUP5 (the plate up 2–5px) | quick read, 1280 `offers` | 0, 0, 0, 7 | — |
+| KQH (decision 3: the kit's `.pay-qr` at `display: none`) | kit's probe | the quiet zone's and 1d's "read no … of" the four required pay codes; on `e36d2fd` neither | 1 on both trees (1a and the contrast pass fail it too) (`runs/k-KQH-{tree,base}.log`) |
+
+### A flake on the kit's probe, older than this round
+
+The kit's skeleton probe failed `the-geometry-passes-read-the-same-on-every-tab`
+on three of five runs on this tree (`runs/k-clean.log`, `k-clean-3.log`,
+`k-KQT.log`) and on two of five on `e36d2fd` (`runs/k-clean-base-2.log`,
+`k-clean-base-3.log`): `reduced-motion @mobile`, read again on another tab,
+differed in 1a's point count by one to four (4379 to 4383), nothing else.
+The kit has no sticky desk sign, so its canary picks the reduced-motion
+pass at the phone, whose screens include `pay`; the pay fixtures stamp their
+rate with `Date.now()` at page load (`PAY_RATE` in `layout/fixtures.ts`) and
+the sheet prints that stamp to the second (`formatTriedAt`), so two tabs'
+pages loaded seconds apart lay that line out at different widths. That is
+the likely cause, read and not traced. The default run carries the tracked
+fixture, whose sign is sticky at the desk, so its canary picks the short
+desk pass instead (`GEOMETRY_CANARY`), which reads the sticky sign alone and
+prints no 1a count; a run whose
+looks have no sticky desk sign reads the phone's pass and can flake the
+same way. Not fixed here (PLAN § Open).
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

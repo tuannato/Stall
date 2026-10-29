@@ -1210,11 +1210,22 @@ money path this app can have, because nothing on it is derived.
      `replaceSync` sheets set no `anchor-name`); not planted.
 
 - **Before 8g2, 1b's open list** (paints with no hit area; bound since step
-  7b, `layout/PROBE-RULES.md`, "Before 8g2, 1b" and "Before 8g2, 7b: 1b
-  binds"). Built at 7b and off this list: Rural's board over the address
-  plate accepted by name (D-2026-10-27-03, `REACH_ACCEPTED`), UL2 failed by
-  the bind (the lint's underline cap is left as it is), and the keyframe
-  seek widened (the ninth critic's L1 and K1). Open:
+  7b, `layout/PROBE-RULES.md`, "Before 8g2, 1b", "Before 8g2, 7b: 1b binds"
+  and "Before 8g2: the thirteenth review's fixes"). Built at 7b and off this
+  list: Rural's board over the address plate accepted by name
+  (D-2026-10-27-03, `REACH_ACCEPTED`), UL2 failed by the bind (the lint's
+  underline cap is left as it is), and the keyframe seek widened (the ninth
+  critic's L1 and K1). Built at the thirteenth review's fixes and off it: a
+  look pseudo an animated box holds is seeked (B2, KTSK2), a box under an
+  open sheet's scrim is not read from its keyframes' values (B3, BKV's 30
+  false failures), `reachersOn`'s look-pseudo hosts under `only` held to the
+  open surface, the accepted meet's own key held by a test
+  (`an-accepted-meet-does-not-stand-for-its-pair`), a keyframe's text-shadow
+  read on the owners that inherit it (`textShadowHeirs`), the accepted list
+  judging the most over all the target's boxes, the board's ceiling raised
+  to 0.25 (D-2026-10-29-01), and the run under the private look at 0x04's
+  selection (the thirteenth critic's: 1b 0 failures and 0 wide seeks on
+  every pass). Open:
   1. **Pseudo text past its width is under-read** (the ninth critic's P2,
      not planted): a pseudo's region is its own resolved width (an inline
      one's, a font size a character), grown by one font size; text that
@@ -1234,13 +1245,19 @@ money path this app can have, because nothing on it is derived.
      shape and text over several lines (its line boxes, an ink box an upper
      bound); the contrast pass's paints (1b runs on the geometry passes
      alone).
-  4. **A run under the private look at 0x04's selection** with 1b in it
-     (the money guards' item 2 still stands).
-  5. **The accepted reach is keyed on exact strings** (`REACH_ACCEPTED`):
+  4. **The accepted reach is keyed on exact strings** (`REACH_ACCEPTED`):
      a Chrome that serialises a computed shadow or colour another way, or a
      change to Rural's board, plate or mood, takes the 142 back to
      failures. That fails closed (red, never silent), and is the cost of a
      key no look's class is in.
+  5. **The board's ceiling is still a tripwire, with a margin now**: at
+     0.25 (it was 0.23) the board composites 0.2285 at rest; with the
+     address plate moved up by a relative offset, 0.2389 at 2px, 0.2438 at
+     3px and 0.2486 at 4px stand accepted, and 0.2532 at 5px fails (7 on
+     the desk's `offers`, a quick read; `critic13-fixes/runs/q-BUP*.log`).
+     So between 4 and 5px of drift toward the board turns the 142 red,
+     where half a pixel did at 0.23. It fails closed. The pinned shadow caps the
+     composite at its own alpha, 0.322 as the probe reads it.
   6. **A move of a box that holds nothing 1b reads is left out** (`unmoved`:
      no reacher, no target, no look pseudo at rest): sound by mechanism, a
      transform, an offset or a motion path carrying only the box and what it
@@ -1248,13 +1265,23 @@ money path this app can have, because nothing on it is derived.
 
 - **Before 8g2, 1d's open list** (a code's modules read in pixels; bound
   since step 7c, `layout/PROBE-RULES.md`, "Before 8g2, 1d: the code's
-  modules" and "Before 8g2, 7c: 1d binds"). Built at 7c and off this list:
-  the bind, its codes owed by name (the quiet zone's `CODES_REQUIRED`, every
-  look's own quiet-zone reads, each carried look on its own), and the flake
-  count read first — fifteen sightings in the kept logs, eleven at two tabs
-  and four at three, every one since the read-again existed white on its
-  fresh pair. Three tabs stay the default, and go back to two if a sighting
-  ever fails a run (now a failure of 1d and the quiet zone together). Open:
+  modules", "Before 8g2, 7c: 1d binds" and "Before 8g2: the thirteenth
+  review's fixes"). Built at 7c and off this list: the bind, its codes owed
+  by name (the quiet zone's `CODES_REQUIRED`, every look's own quiet-zone
+  reads, each carried look on its own), and the flake count read first —
+  seventeen sightings in the kept logs, eleven at two tabs and six at three
+  (7c counted fifteen and four at three; the thirteenth critic found the two
+  this step's own plant runs held), every one since the read-again existed
+  white on its fresh pair. 1d read again five times in those logs, each
+  right on the pair and each on a quiet-zone sighting's own code: 1d is hit
+  exactly when the quiet zone is. Three tabs stay the default, and go back
+  to two if a sighting ever fails a run (now a failure of 1d and the quiet
+  zone together). Built at the thirteenth review's fixes and off it: a code
+  in a turned frame read upright by both reads, every transform above it
+  held off, or failed closed (B1, the owner's D-2026-10-29-01); a code read
+  whole or failed closed (item 8); the kit's look owing `CODES_REQUIRED` on
+  its probe (D-2026-10-29-01); and the run under the private look at 0x04's
+  selection (the thirteenth critic's: 1d read no code wrong). Open:
   1. **The canary's reads again of 1d are said, not failed**: 1d is not in
      the job's record the canary compares, so a 1d reading that differs on
      the canary's tab fails nothing; the walk's read of the job decides.
@@ -1265,8 +1292,7 @@ money path this app can have, because nothing on it is derived.
      code on a capture with no glyph blanked would close it; its cost is not
      measured.
   3. **Codes not read in pixels**: every code on a geometry-only screen, at
-     the wall sizes the contrast pass does not paint, at 360, and in a turned
-     frame (Rural's wall code at 1920 and two Cycle screens at 1280) — the
+     the wall sizes the contrast pass does not paint, and at 360 — the
      quiet zone's own list, 507 painted codes on the clean tree. So the QR
      paragraph's "most" stands (D4, the critic's P2-7) unless a pay code below
      the first screen is read at scroll stops too (D3(b)).
@@ -1283,7 +1309,33 @@ money path this app can have, because nothing on it is derived.
   5. **A paint that misses every centre** (a line thinner than half a module
      along the seams, a cover smaller than a module between centres) is not
      read; whether a camera reads through it is not measured.
-  6. **A run under the private look at 0x04's selection** with 1d in it.
+  6. **A turned code is read upright, not as it stands.** The frame the two
+     reads take holds off every transform on the code and the boxes above
+     it, and nothing else: a box whose place a transform there decides (an
+     absolute or fixed box whose containing block the transform made) can
+     stand elsewhere on that frame than it does on the job's, and a cover
+     laid that way over a turned code is read where it moved to (1a reads
+     the job's own frame). A transition already running on one of those
+     boxes is cancelled by the hold and does not resume (read from the
+     CSS Transitions spec, not observed). Neither is planted.
+
+- **Before 8g2, the kit probe's geometry canary flakes** (found at the
+  thirteenth review's fixes; `layout/PROBE-RULES.md`, "Before 8g2: the
+  thirteenth review's fixes"). On the kit's skeleton,
+  `the-geometry-passes-read-the-same-on-every-tab` failed `reduced-motion
+  @mobile` on two of five runs on `e36d2fd` and three of five on the fixes'
+  tree, 1a's point count differing by one to four between the two tabs'
+  reads and nothing else. The kit has no sticky desk sign, so its canary
+  reads the phone's reduced-motion pass again, `pay` among its screens; the
+  pay fixtures stamp their rate with `Date.now()` at page load and the sheet
+  prints it to the second, so two tabs lay that line out at different
+  widths — the likely cause, read and not traced. The default run carries
+  the tracked fixture, whose sign is sticky at the desk, so its canary reads
+  the short desk pass instead, which reads the sticky sign alone and prints
+  no 1a count; a run whose looks have no
+  sticky desk sign reads the phone's pass and can flake the same way. The
+  fixes to weigh: one clock for every probe page's fixtures, or a canary
+  pass whose screens print no clock.
 
 - **Before 8g2, 1c(c)'s open list** (every money character read on its own,
   only on a contrast job where a mover is near money, read report-only; the

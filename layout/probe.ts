@@ -2629,9 +2629,12 @@ function reachId(el: Element): number {
 }
 
 /**
- * One reacher held to every target it can meet: its would-be failures said
- * (`said` holds what is not said again: one a pair of boxes and a kind) and
- * tallied under the measuring look, `at` saying where it read. A sharp
+ * One reacher held to every target it can meet: its failures said, tallied
+ * under the measuring look and handed to the paint (`reachFailures`; a
+ * failure since 7b), and the meets `REACH_ACCEPTED` names counted apart
+ * (`sayReach` decides each: `said` holds what is not said again, one a pair
+ * of boxes and a kind, an accepted meet under a key of its own), `at`
+ * saying where it read. A sharp
  * reach meets past the box it is drawn from; a blurred layer counts under
  * the policy, its core included — its offset and spread met in full is the
  * literal reading of "offset and spread in full", measured and not counted (`softCore`,
