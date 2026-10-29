@@ -13212,6 +13212,11 @@ BKV's whole run (no code planted) it fails nothing. The excuse "none of whose mo
 centres was on screen" left the per-look owe with it. The quiet zone keeps
 its own rule (a code wholly clipped away is not read by it). Test:
 `fails closed a code not read whole, a slot that shows part of it or none`.
+Red: PQS (`plants/PQS-…`, the critic's), a quick read of `pay`: on
+`e36d2fd` 1d read Modern's two codes at 390 on 318 centres and those at
+1280 on 106, and failed nothing; now all four code reads fail closed, "only
+159 of its 2809" at 390 and "only 53 of its 2809" at 1280
+(`runs/q1d-PQS-{base,tree}.log`).
 
 ### B2 and B3: the keyframe-values road (`reachKeyframes`, `765351a`)
 
@@ -13325,6 +13330,7 @@ reads with `tools/q1d.sh` (the contrast pass alone, its queue filtered) and
 | BKV (7b's) | whole runner | 1b 142 at 1280, every one the board over the plate "at its keyframe at 50%"; none on a pay screen; the at-rest meet's 142 accepted | 1, 1b alone (`runs/p-BKV.log`; 172 on `87ee812`, 30 of them false) |
 | TSK5 (the critic's, Neo) | quick read, 390 `offers` | 1b 18; 0 on `e36d2fd` | — |
 | ITS / ITSc (item 5) | quick read, 390 `offers` | 0 / 18 now; 18 / 18 on `e36d2fd` | — |
+| PQS (the critic's: Modern's `.pay-qr` a 48px scroller) | quick read, `pay` | 1d 4, each failed closed as not read whole; 0 on `e36d2fd` | — |
 | BUP2–BUP5 (the plate up 2–5px) | quick read, 1280 `offers` | 0, 0, 0, 7 | — |
 | KQH (decision 3: the kit's `.pay-qr` at `display: none`) | kit's probe | the quiet zone's and 1d's "read no … of" the four required pay codes; on `e36d2fd` neither | 1 on both trees (1a and the contrast pass fail it too) (`runs/k-KQH-{tree,base}.log`) |
 
@@ -13346,6 +13352,42 @@ desk pass instead (`GEOMETRY_CANARY`), which reads the sticky sign alone and
 prints no 1a count; a run whose
 looks have no sticky desk sign reads the phone's pass and can flake the
 same way. Not fixed here (PLAN § Open).
+
+### The clean run
+
+`runs/w-clean.log`: `pnpm test:layout` in the worktree at `48d875e`, three
+tabs, the tracked fixture carried, started at a one-minute load of 2.36:
+exit 0, 222.2s of 300. 1b fails nothing on any pass and accepts the board's
+142 at 1280; `offSurface` leaves out 254 animation reads (summed over the
+paints) at 390, 254 at 1280 and 193 at 360. The quiet zone and 1d read Rural's three turned codes upright
+(six jobs, 1.1s of tab time in "codes upright"), read no code wrong, fail
+none closed and could read every code a contrast job painted; 507 codes a
+geometry pass painted are still read by no contrast job, as before. No
+quiet-zone sighting.
+
+### Cost
+
+Two A/B pairs back to back at three tabs with the tracked fixture carried,
+the `e36d2fd` clone against the scratch clone at `48d875e`, each started
+once the one-minute load was under 2.5 (`tools/ab.sh`; `runs/ab-*.log`,
+`.mem`, `.meta`):
+
+| Run | Commit | Load at start | Runtime | Walk | Contrast pass | Capture, mean | 1b page time (seeks) |
+|---|---|---|---|---|---|---|---|
+| base 1 | `e36d2fd` | 1.42 | 248.3s | 120.4s | 120.5s | 112ms | 18.71s (8.11s) |
+| final 1 | `48d875e` | 2.37 | 223.8s | 114.0s | 101.5s | 81ms | 18.80s (8.09s) |
+| final 2 | `48d875e` | 2.34 | 219.3s | 108.4s | 102.9s | 81ms | 17.25s (7.67s) |
+| base 2 | `e36d2fd` | 2.32 | 219.2s | 107.5s | 103.9s | 84ms | 16.55s (7.29s) |
+
+The first pair's −24.5s is the machine, not the change: base 1's captures
+averaged 112ms against 81–84ms on every other run of the evening, and its
+peak load was 9.90. The second pair is +0.1s. The new work is the held
+frame, "codes upright", 1.1s of tab time over six jobs on every final run
+(about 0.4s of wall time at three tabs); 1b's page time moved +0.1s in the
+first pair and +0.7s in the second, inside the spread base 1 and base 2
+show between themselves (18.71s and 16.55s). The contrast dumps of the second pair are
+byte-identical, 15,018 boxes over 823 jobs (`runs/ab-dump-compare.log`).
+Every run exits 0 and accepts the board's 142.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
