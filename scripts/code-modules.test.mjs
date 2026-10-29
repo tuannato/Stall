@@ -19,6 +19,8 @@ import {
     moduleSnapVerdict,
     readCodeModules,
     readModules,
+    readTurnedUpright,
+    readWholeModules,
     withMatrices,
 } from './code-modules.mjs';
 import { QUIET_MODULES, QUIET_ZONE_FLOOR, readQuietZones } from './quiet-zone.mjs';
@@ -277,11 +279,34 @@ describe('a-codes-modules-that-read-wrong-are-read-again-on-a-fresh-pair', () =>
         const two = await readCodeModules({ img: WRONG, zones: [Z] }, pairOf({ img: CLEAN, zones: [other], before: [Z] }).again);
         assert.ok(two[0].r.bad > 0);
         assert.match(two[0].retry.why.join(' '), /its matrix changed during the fresh pair/);
+        // A code read whole on the first capture and clipped on the pair: the pair cannot read it whole, so the first stands.
         const shorter = { ...Z, clip: { x0: -1e9, y0: 60, x1: 1e9, y1: 1e9 } };
-        const three = await readCodeModules({ img: WRONG, zones: [shorter] }, pairOf({ img: CLEAN, zones: [{ ...shorter, clip: { ...shorter.clip, y0: 90 } }], before: [shorter] }).again);
-        assert.match(three[0].retry.why.join(' '), /the fresh pair read \d+ of the \d+ module centres the first read/);
+        const three = await readCodeModules({ img: WRONG, zones: [Z] }, pairOf({ img: CLEAN, zones: [shorter], before: [Z] }).again);
+        assert.ok(three[0].r.bad > 0);
+        assert.match(three[0].retry.why.join(' '), /the fresh pair could not read it: only \d+ of its 441 module centres are on screen inside its clips: a code is read whole or not at all/);
         const none = await readCodeModules({ img: WRONG, zones: [Z] }, pairOf({ img: CLEAN, zones: [{ ...Z, clip: { x0: 0, y0: 0, x1: 1, y1: 1 } }], before: [Z] }).again);
-        assert.match(none[0].retry.why.join(' '), /the fresh pair could not read it: no module centre of it is on screen/);
+        assert.match(none[0].retry.why.join(' '), /the fresh pair could not read it: none of its 441 module centres are on screen inside its clips/);
+    });
+
+    it('fails closed a code not read whole, a slot that shows part of it or none (the thirteenth review’s item 8)', async () => {
+        // PQS's shape: a slot that shows the top rows; and one that shows the quiet zone alone.
+        const slot = { ...Z, clip: { x0: -1e9, y0: -1e9, x1: 1e9, y1: 60 } };
+        const part = await readCodeModules({ img: CLEAN, zones: [slot] }, pairOf({ img: CLEAN, zones: [slot], before: [slot] }).again);
+        assert.equal(part[0].retry, undefined);
+        assert.match(part[0].r.fault, /^only \d+ of its 441 module centres are on screen inside its clips: a code is read whole or not at all$/);
+        assert.ok(part[0].r.px > 0 && part[0].r.px < 441);
+        const quiet = { ...Z, clip: { x0: -1e9, y0: -1e9, x1: 1e9, y1: Z.y + 3 * Z.module } };
+        const zero = readWholeModules(CLEAN, quiet);
+        assert.equal(zero.px, 0);
+        assert.match(zero.fault, /^none of its 441 module centres are on screen inside its clips/);
+        // Every centre on screen reads as it did, and the fault of a module too small or a matrix unread stands.
+        assert.equal(readWholeModules(CLEAN, Z).fault, undefined);
+        assert.equal(readWholeModules(CLEAN, Z).px, 441);
+        assert.match(readWholeModules(CLEAN, { ...Z, module: 2.5 }).fault, /under the 3 device pixels/);
+        // One centre off is enough.
+        const shot = { ...CLEAN, height: Math.floor(Z.y + (20 + QUIET_MODULES + 0.5) * Z.module) };
+        const short = readWholeModules({ ...shot, data: CLEAN.data.slice(0, shot.width * shot.height * 4) }, Z);
+        assert.match(short.fault, /^only 420 of its 441 module centres are on screen/);
     });
 
     it('still fails a code that reads wrong on both captures', async () => {
@@ -307,6 +332,84 @@ describe('a-codes-modules-that-read-wrong-are-read-again-on-a-fresh-pair', () =>
     });
 });
 
+/**
+ * `a-turned-code-is-read-upright-or-fails-closed` (the thirteenth review's B1,
+ * the owner's D-2026-10-29-01): a code in a turned frame is read by the quiet
+ * zone and by 1d on a frame with every transform above it held off, with a
+ * fresh pair held the same way, or fails closed — never passed over.
+ */
+const TURNED = { ...Z, turned: true, name: 'shop-window' };
+const UNTURNED = zoneOf(CHECKER, { x: 10.3, y: 20.6, name: 'pay-qr' });
+describe('a-turned-code-is-read-upright-or-fails-closed', () => {
+    const calls = () => {
+        const n = { upright: 0, again: 0 };
+        return {
+            n,
+            upright: (frame) => async () => {
+                n.upright += 1;
+                return frame;
+            },
+            again: (pair) => async () => {
+                n.again += 1;
+                return pair;
+            },
+        };
+    };
+
+    it('reads nothing and makes no frame where no code is turned', async () => {
+        const c = calls();
+        const out = await readTurnedUpright([Z], c.upright({ why: ['never'] }), c.again({ why: ['never'] }));
+        assert.equal(out.size, 0);
+        assert.deepEqual(c.n, { upright: 0, again: 0 });
+    });
+
+    it('reads a turned code by both reads on the frame held upright, and leaves the others to the job', async () => {
+        const c = calls();
+        const out = await readTurnedUpright([UNTURNED, TURNED], c.upright({ img: CLEAN, zones: [UNTURNED, { ...TURNED, turned: false }], at: { heldOff: { codes: 1, boxes: 3 } } }), c.again({ why: ['never'] }));
+        assert.deepEqual([...out.keys()], [1]);
+        assert.equal(out.get(1).quiet.r.fault, undefined);
+        assert.equal(out.get(1).quiet.r.bad, 0);
+        assert.ok(out.get(1).quiet.r.px > 0);
+        assert.equal(out.get(1).modules.r.bad, 0);
+        assert.equal(out.get(1).modules.r.px, 441);
+        assert.deepEqual(c.n, { upright: 1, again: 0 });
+    });
+
+    it('fails a turned code read wrong upright, read again on one fresh pair held upright for both reads', async () => {
+        const c = calls();
+        const faded = paintOver(shotOf(Z), [0, 0, 220, 240], [255, 255, 255], 0.6);
+        const upright = { ...TURNED, turned: false };
+        const out = await readTurnedUpright([TURNED], c.upright({ img: faded, zones: [upright], at: {} }), c.again({ img: faded, zones: [upright], before: [upright], at: {} }));
+        assert.equal(out.get(0).modules.r.wrongDark, 221);
+        assert.ok(out.get(0).modules.retry.again.r.bad > 0);
+        assert.deepEqual(c.n, { upright: 1, again: 1 });
+        // White on the fresh pair held upright: the pair decides, as on any job.
+        const d = calls();
+        const back = await readTurnedUpright([TURNED], d.upright({ img: faded, zones: [upright], at: {} }), d.again({ img: CLEAN, zones: [upright], before: [upright], at: {} }));
+        assert.equal(back.get(0).modules.r.bad, 0);
+        assert.ok(back.get(0).modules.retry.first.r.bad > 0);
+        // A fresh pair that painted other codes is not believed: the first reading stands.
+        const e = calls();
+        const lost = await readTurnedUpright([TURNED], e.upright({ img: faded, zones: [upright], at: {} }), e.again({ img: CLEAN, zones: [], before: [], at: {} }));
+        assert.ok(lost.get(0).modules.r.bad > 0);
+        assert.match(lost.get(0).modules.retry.why.join(' '), /the fresh pair held upright painted the codes none where the first had shop-window/);
+    });
+
+    it('fails closed, for both reads, where the frame held upright cannot be had, painted other codes, or is still turned', async () => {
+        for (const [frame, said] of [
+            [{ why: ['the page threw holding the turns off: planted'] }, /^its frame is turned, and no frame with every transform above it held off could be had \(the page threw holding the turns off: planted\)$/],
+            [{ img: CLEAN, zones: [UNTURNED], at: {} }, /^its frame is turned, and the frame with every transform above it held off painted the codes pay-qr where the job had shop-window$/],
+            [{ img: CLEAN, zones: [TURNED], at: {} }, /^its frame is turned, and it is still turned with every transform above it held off$/],
+        ]) {
+            const c = calls();
+            const out = await readTurnedUpright([TURNED], c.upright(frame), c.again({ why: ['never'] }));
+            assert.match(out.get(0).quiet.r.fault, said);
+            assert.match(out.get(0).modules.r.fault, said);
+            assert.equal(c.n.again, 0);
+        }
+    });
+});
+
 const RUN = {
     byVpClass: { 'mobile t-modern': { jobs: 2, codes: 2, modules: 5618, wrong: 3, wouldCodes: 1, unread: 0 } },
     stats: { 't-modern bare pay @mobile': { dark: { n: 2, lo: 0, hi: 0 }, light: { n: 3, lo: 255, hi: 255 } }, 't-modern flags 7 broadcast @canvas': { dark: { n: 1, lo: 0, hi: 0 } } },
@@ -314,8 +417,8 @@ const RUN = {
     readAgain: [],
     faults: [],
     read: new Map([['mobile/pay:pay-qr', 2]]),
-    unread: new Map([['mobile/pay-moved:pay-qr', 'its frame is turned']]),
-    turnedByClass: { 't-rural': new Set(['mobile/pay-moved:pay-qr']) },
+    unread: new Map([['mobile/pay-moved:pay-qr', 'only 210 of its 441 module centres are on screen inside its clips: a code is read whole or not at all']]),
+    uprightByClass: { 't-rural': new Set(['desktop/shop-window-cycle:shop-window']) },
     payloadChecked: 0,
     leastModule: 4.4567,
 };
@@ -327,14 +430,14 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         assert.match(lines[1], /t-modern bare dark 0–0 \(2\) light 255–255 \(3\); t-modern flags 7 dark 0–0 \(1\) light none read/);
         assert.match(lines[2], /broadcast @canvas dark 0–0 \(1\) light none read; pay @mobile dark 0–0 \(2\) light 255–255 \(3\)/);
         assert.equal(lines[3], '1d, codes read wrong (failures): 1 code read(s); by code (reads): mobile/pay:pay-qr 1');
-        assert.ok(lines.includes('1d, codes a contrast job painted and could not read: mobile/pay-moved:pay-qr (its frame is turned)'));
+        assert.ok(lines.includes('1d, codes a contrast job painted and could not read: mobile/pay-moved:pay-qr (only 210 of its 441 module centres are on screen inside its clips: a code is read whole or not at all)'));
         assert.ok(lines.includes('1d, codes a geometry pass painted and no contrast job read: 1: portrait/shop-window-wall:shop-window'));
         assert.ok(lines.includes('1d, matrices also held to the text their plate carries (data-pay-uri): 0 code read(s); the least module read: 4.46px'));
         assert.ok(lines.includes('1d, read again on a fresh pair and right there: none; on the canary\'s reads again: none'));
         assert.ok(lines.includes('1d, threw (in its own read, a failure of the job; answering for the matrices, each code read off that answer fails closed, and on a fresh pair the first reading stands; on the canary\'s reads, said): none'));
-        assert.ok(lines.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair): none'));
-        // A turned frame's code is said by look and name (7c), never passed in silence.
-        assert.ok(lines.includes('1d, codes not read because their frame is turned (not held by 1d or by the quiet zone; stated): t-rural mobile/pay-moved:pay-qr'));
+        assert.ok(lines.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair, a code not read whole, a turned code not read upright): none'));
+        // A turned frame's code, read upright (the thirteenth review's B1), is said by look and name.
+        assert.ok(lines.includes('1d and the quiet zone, codes in a turned frame read upright (every transform above them held off): t-rural desktop/shop-window-cycle:shop-window'));
         // Sightings at the run's tab count and by the tab that read each (the tenth critic's item 4).
         const sighted = moduleReport(
             { ...RUN, tabs: 3, readAgain: ['pay @mobile / theme 3: the code pay-qr at 41,819: wrong on the first capture, right on a fresh pair (on tab 1 of 3)'], readAgainByTab: { 1: 1 } },
@@ -345,12 +448,12 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         const thrown = moduleReport({ ...RUN, thrown: ['pay @mobile / theme 1: the page threw answering for the codes\' matrices: planted'] }, { would: [], readAgain: [], thrown: ['(the canary) x'] }, new Set());
         assert.ok(thrown.includes("1d, threw (in its own read, a failure of the job; answering for the matrices, each code read off that answer fails closed, and on a fresh pair the first reading stands; on the canary's reads, said): 2\n    pay @mobile / theme 1: the page threw answering for the codes' matrices: planted\n    (the canary) x"));
         const closed = moduleReport({ ...RUN, faults: ['pay @mobile / theme 1: the code pay-qr at 37,815 — a module is 2.10px, under the 3 device pixels a centre read needs'] }, { would: [], readAgain: [] }, new Set());
-        assert.ok(closed.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair): 1\n    pay @mobile / theme 1: the code pay-qr at 37,815 — a module is 2.10px, under the 3 device pixels a centre read needs'));
+        assert.ok(closed.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair, a code not read whole, a turned code not read upright): 1\n    pay @mobile / theme 1: the code pay-qr at 37,815 — a module is 2.10px, under the 3 device pixels a centre read needs'));
     });
     it('says none where nothing fails', () => {
-        const lines = moduleReport({ ...RUN, would: [], turnedByClass: {} }, { would: [], readAgain: [] }, new Set());
+        const lines = moduleReport({ ...RUN, would: [], uprightByClass: {} }, { would: [], readAgain: [] }, new Set());
         assert.ok(lines.includes('1d, codes read wrong: none'));
-        assert.ok(lines.includes('1d, codes not read because their frame is turned (not held by 1d or by the quiet zone; stated): none'));
+        assert.ok(lines.includes('1d and the quiet zone, codes in a turned frame read upright (every transform above them held off): none'));
     });
     it('pins the rule’s name', () => {
         assert.equal(MODULE_CHECK, 'a-codes-modules-read-as-its-matrix');

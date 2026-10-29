@@ -27,7 +27,7 @@
  * first did, and its matrix is the same. Pure, so the geometry and the cuts
  * are tested on their own (`code-modules.test.mjs`).
  */
-import { QUIET_MODULES, readAgainOnFreshPair, readingContext } from './quiet-zone.mjs';
+import { QUIET_MODULES, readAgainOnFreshPair, readQuietZones, readingContext } from './quiet-zone.mjs';
 
 /**
  * Every channel of a dark module's centre is at most this, and every
@@ -148,17 +148,104 @@ function sameMatrix(a, b) {
 }
 
 /**
- * Every code of one job's modules read, and a code read wrong read again on
- * a fresh pair under the quiet zone's own rule (`readAgainOnFreshPair`;
- * `first` and `again` as `readQuietZones` takes them, the zones carrying
- * their matrices). One answer per zone, in order, as that read answers.
+ * **A code is read whole or not at all** (the thirteenth review's item 8):
+ * one code's modules read as `readModules` reads them, and a fault where
+ * fewer than every centre of its matrix is on screen inside every clip and
+ * the shot — none of them included. Until then 1d held only the centres it
+ * could see and owed nothing past them: the critic's PQS, the box that
+ * wraps every pay code made a 48px scroller, showed a strip of the top row
+ * and read 6,930 of the 37,938 centres at the phone, all of them right; and
+ * a slot that showed the quiet zone alone would have read none and been
+ * excused. Pure.
+ */
+export function readWholeModules(img, z, minPx = MODULE_MIN_PX) {
+    const r = readModules(img, z, minPx);
+    if (r.fault !== undefined) return r;
+    const whole = z.matrix.n * z.matrix.n;
+    if (r.px === whole) return r;
+    return {
+        px: r.px,
+        bad: 0,
+        fault: `${r.px === 0 ? 'none' : `only ${r.px}`} of its ${whole} module centres ${r.px === 1 ? 'is' : 'are'} on screen inside its clips: a code is read whole or not at all`,
+    };
+}
+
+/**
+ * Every code of one job's modules read whole (`readWholeModules`), and a code
+ * read wrong read again on a fresh pair under the quiet zone's own rule
+ * (`readAgainOnFreshPair`; `first` and `again` as `readQuietZones` takes
+ * them, the zones carrying their matrices). One answer per zone, in order, as
+ * that read answers.
  */
 export function readCodeModules(first, again) {
-    return readAgainOnFreshPair(first, again, readModules, {
+    return readAgainOnFreshPair(first, again, readWholeModules, {
         unit: 'module centres',
         nothing: 'no module centre of it is on screen',
         same: sameMatrix,
     });
+}
+
+/**
+ * **The codes of one job whose frame is turned, read upright** (the
+ * thirteenth review's B1; the owner's D-2026-10-29-01). A code whose frame is
+ * turned (`turned`: any turn the probe's `angleOf` reads, a hundredth of a
+ * degree and a whole turn among them) cannot be read on the job's own frame,
+ * and was read by neither the quiet zone nor 1d: a look that turned the box
+ * around its pay codes by 0.01° faded them with every pixel read green (the
+ * critic's PQOT; KQT on the kit's road). So it is read on a frame with every
+ * transform above it held off (`__codeTurnsHeldOff`), by both reads and their
+ * fresh pair as on any job.
+ *
+ * `zones` are the job's zones, in the page's order; `upright()` makes the
+ * frame held upright and answers `{ img, zones, at }` (its zones carrying
+ * their matrices, `withMatrices`) or `{ why: string[] }`; `uprightAgain()`
+ * makes the fresh pair on such a frame and answers as `readQuietZones`'
+ * `again` does (`before` among it). Each is called once at most, and neither
+ * unless a zone is turned. Answers a map from each turned zone's index to `{
+ * quiet, modules }`, each one answer as `readQuietZones` and
+ * `readCodeModules` give it, read off the upright frame — or, where the
+ * frame could not be had, painted other codes, or the code's frame is still
+ * turned on it, both a fault: a turned code is read upright or it fails
+ * closed. Pure but for the two calls.
+ */
+export async function readTurnedUpright(zones, upright, uprightAgain) {
+    const turned = zones.flatMap((z, i) => (z.turned ? [i] : []));
+    const out = new Map();
+    if (turned.length === 0) return out;
+    const fail = (i, why) => {
+        const r = { px: 0, bad: 0, fault: `its frame is turned, and ${why}` };
+        out.set(i, { quiet: { z: zones[i], r }, modules: { z: zones[i], r } });
+    };
+    const frame = await upright();
+    const names = (zs) => zs.map((z) => z.name).join(', ');
+    if ((frame.why ?? []).length > 0) {
+        for (const i of turned) fail(i, `no frame with every transform above it held off could be had (${frame.why.join('; ')})`);
+        return out;
+    }
+    if (names(frame.zones) !== names(zones)) {
+        for (const i of turned) fail(i, `the frame with every transform above it held off painted the codes ${names(frame.zones) || 'none'} where the job had ${names(zones)}`);
+        return out;
+    }
+    const readable = [];
+    for (const i of turned) {
+        if (frame.zones[i].turned) fail(i, 'it is still turned with every transform above it held off');
+        else readable.push(i);
+    }
+    if (readable.length === 0) return out;
+    const pick = (zs) => readable.map((i) => zs[i]);
+    let pair;
+    const again = () =>
+        (pair ??= (async () => {
+            const p = await uprightAgain();
+            if ((p.why ?? []).length > 0) return p;
+            if (names(p.zones) !== names(frame.zones)) return { why: [`the fresh pair held upright painted the codes ${names(p.zones) || 'none'} where the first had ${names(frame.zones)}`] };
+            return { ...p, zones: pick(p.zones), ...(p.before === undefined || names(p.before) !== names(frame.zones) ? { before: undefined } : { before: pick(p.before) }) };
+        })());
+    const first = { img: frame.img, zones: pick(frame.zones), at: frame.at };
+    const quiet = await readQuietZones(first, again);
+    const modules = await readCodeModules(first, again);
+    readable.forEach((i, k) => out.set(i, { quiet: quiet[k], modules: modules[k] }));
+    return out;
 }
 
 /**
@@ -399,16 +486,16 @@ export function moduleReport(run, canary, painted) {
             (canary.would.length === 0 ? '' : `; read wrong on the canary's reads again (said, not failed: the walk's read decides): ${canary.would.length}${canary.would.map((line) => `\n    ${line}`).join('')}`),
     );
     const faults = run.faults ?? [];
-    lines.push(`1d, failed closed (failures: a module under ${MODULE_MIN_PX}px, a matrix it cannot read or pair): ${faults.length === 0 ? 'none' : `${faults.length}${faults.slice(0, 12).map((line) => `\n    ${line}`).join('')}${faults.length > 12 ? `\n    … and ${faults.length - 12} more` : ''}`}`);
+    lines.push(`1d, failed closed (failures: a module under ${MODULE_MIN_PX}px, a matrix it cannot read or pair, a code not read whole, a turned code not read upright): ${faults.length === 0 ? 'none' : `${faults.length}${faults.slice(0, 12).map((line) => `\n    ${line}`).join('')}${faults.length > 12 ? `\n    … and ${faults.length - 12} more` : ''}`}`);
     const thrown = [...(run.thrown ?? []), ...(canary.thrown ?? [])];
     lines.push(`1d, threw (in its own read, a failure of the job; answering for the matrices, each code read off that answer fails closed, and on a fresh pair the first reading stands; on the canary's reads, said): ${thrown.length === 0 ? 'none' : `${thrown.length}${thrown.slice(0, 12).map((line) => `\n    ${line}`).join('')}${thrown.length > 12 ? `\n    … and ${thrown.length - 12} more` : ''}`}`);
-    // A turned frame's codes are read by neither 1d nor the quiet zone: said by look and code, never passed in silence.
-    const turned = Object.entries(run.turnedByClass ?? {})
+    // A turned frame's codes, read upright by both reads (B1, the thirteenth review): said by look and code.
+    const upright = Object.entries(run.uprightByClass ?? {})
         .filter(([, codes]) => codes.size > 0)
         .sort(([a], [b]) => a.localeCompare(b));
     lines.push(
-        `1d, codes not read because their frame is turned (not held by 1d or by the quiet zone; stated): ` +
-            (turned.length === 0 ? 'none' : turned.map(([cls, codes]) => `${cls} ${[...codes].sort().join(', ')}`).join('; ')),
+        `1d and the quiet zone, codes in a turned frame read upright (every transform above them held off): ` +
+            (upright.length === 0 ? 'none' : upright.map(([cls, codes]) => `${cls} ${[...codes].sort().join(', ')}`).join('; ')),
     );
     const unread = [...run.unread].sort(([a], [b]) => a.localeCompare(b));
     lines.push(`1d, codes a contrast job painted and could not read: ${unread.length === 0 ? 'none' : unread.map(([code, why]) => `${code} (${why})`).join(', ')}`);

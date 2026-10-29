@@ -41,7 +41,7 @@ import {
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
-import { MODULE_CHECK, MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, withMatrices } from './code-modules.mjs';
+import { MODULE_CHECK, MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, readTurnedUpright, withMatrices } from './code-modules.mjs';
 import { charReport, charsFault, foldShares, mergeShares, readCharsAgain, readMoneyChars } from './char-read.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
@@ -669,10 +669,12 @@ const coverSeen = {};
  */
 const codesPaintedSeen = new Set();
 /**
- * The codes the quiet-zone read owes by name: every code that pays — the
- * pay sheet's and "Pay several"'s at a phone and a desk, the wall's payment
- * plate — and one of each other kind: a record sheet's, the share code, the
- * overlay's and the wall's shop code.
+ * The codes the quiet-zone read and 1d owe by name: every code that pays —
+ * the pay sheet's and "Pay several"'s at a phone and a desk, the wall's
+ * payment plate — and one of each other kind: a record sheet's, the share
+ * code, the overlay's and the wall's shop code. Owed on the public looks'
+ * jobs together, on each carried look's own (`look-tallies.mjs`), and on the
+ * kit's look on its probe (the owner's D-2026-10-29-01).
  */
 const CODES_REQUIRED = [
     'mobile/pay:pay-qr',
@@ -1379,12 +1381,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         read: new Map(),
         // The codes it read by look (`vp/screen:name`), for the codes owed by name.
         readByClass: {},
-        // The codes it failed closed on by look: already failures, not owed again.
+        // The codes it failed closed on by look — a code not read whole, a turned code not read upright among them: already failures, not owed again.
         faultedByClass: {},
-        // The codes in a turned frame it could not read, by look: stated, never passed in silence.
-        turnedByClass: {},
-        // The codes none of whose module centres was on screen, by look (the quiet zone's rule for a code it cannot see).
-        offScreenByClass: {},
+        // The codes in a turned frame it read upright, every transform above them held off (B1), by look: said by name.
+        uprightByClass: {},
         unread: new Map(),
         payloadChecked: 0,
         leastModule: Infinity,
@@ -1822,13 +1822,65 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             };
                         })());
                     const reads = await readQuietZones({ img, zones, at: firstAt }, again);
-                    for (const { z, r, turned, retry } of reads) {
+                    /*
+                     * **A turned code read upright** (the thirteenth review's
+                     * B1, the owner's D-2026-10-29-01): a code whose frame is
+                     * turned is read by both reads on a frame captured with
+                     * every transform above it held off (`__codeTurnsHeldOff`,
+                     * `readTurnedUpright`), with a fresh pair of its own held
+                     * the same way, and fails closed where it cannot be — never
+                     * passed over. One more capture a job with a turned code.
+                     */
+                    const heldOff = async (on) => {
+                        const r = await cdp.send('Runtime.evaluate', { expression: `window.__codeTurnsHeldOff(${on})`, awaitPromise: true, returnByValue: true }, sessionId);
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails).slice(0, 300)}`);
+                        return r.result.value;
+                    };
+                    // The frame held upright, or why it could not be had; the turns are put back whatever happens, and a page that will not put them back is a failure of the job.
+                    const heldFrame = async (withBefore) => {
+                        let held;
+                        try {
+                            held = await heldOff(true);
+                            const before = withBefore ? await evalJson(cdp, sessionId, 'window.__quietZones()') : undefined;
+                            const shot = await capture();
+                            const readAt = performance.now();
+                            const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                            if (shot.why.length > 0) return { why: shot.why };
+                            return {
+                                img: shot.shot,
+                                zones: withMatrices(after, await codeMatrices()),
+                                ...(before === undefined ? {} : { before }),
+                                at: { ...(await quietContext(cdp, sessionId, shot.shot, readAt - shot.capturedAt)), heldOff: held },
+                            };
+                        } catch (err) {
+                            return { why: [`the page threw holding the turns off: ${String(err?.message ?? err).slice(0, 200)}`] };
+                        } finally {
+                            try {
+                                await heldOff(false);
+                            } catch (err) {
+                                const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the page threw putting back the turns it held off above its codes: ${String(err?.message ?? err).slice(0, 200)}`;
+                                modules.thrown.push(line);
+                                modules.failures.push(`${line} — ${MODULE_CHECK}`);
+                            }
+                        }
+                    };
+                    const upright = !zones.some((z) => z.turned)
+                        ? new Map()
+                        : await timed('codes upright', () =>
+                              readTurnedUpright(zones, () => heldFrame(false), async () => {
+                                  await sleep(250);
+                                  return heldFrame(true);
+                              }),
+                          );
+                    for (const [i, read] of upright) reads[i] = { ...read.quiet, upright: true };
+                    for (const { z, r, turned, retry, upright: readUpright } of reads) {
                         const code = `${vp.name}/${screen}:${z.name}`;
+                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${readUpright ? ' (in a turned frame, read upright: every transform above it held off)' : ''}`;
                         if (turned) {
-                            codesUnread.set(code, 'its frame is turned');
+                            // Unreachable while every turned code is read upright or failed closed: said as a failure, never passed over.
+                            dim.push(`${at} — its frame is turned and it was not read upright — a-code-keeps-its-quiet-zone-white`);
                             continue;
                         }
-                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
                         if (r.fault !== undefined) {
                             dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
                             continue;
@@ -1871,16 +1923,19 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      * fresh pair's where the pair is believed, the first where it
                      * cannot be — reads wrong, where the read fails closed (a
                      * module under `MODULE_MIN_PX`, a matrix it cannot read or
-                     * pair), and where 1d throws. A code in a turned frame is not
-                     * read, and is said by name under the pass, never passed in
-                     * silence; a code wholly off screen or clipped away is not
-                     * read, the quiet zone's rule.
+                     * pair, a code not read whole: any of its module centres off
+                     * screen or clipped away, the thirteenth review's item 8),
+                     * and where 1d throws. A code in a turned frame is read
+                     * upright, every transform above it held off (B1, above), or
+                     * fails closed.
                      */
                     if (zones.length > 0) {
                         // Guarded whole (item 6): a throw in 1d's own read is counted, said, and fails the job; the quiet zone's read stands.
                         let moduleReads = [];
                         try {
                             moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
+                            // The turned codes, read upright above (B1).
+                            for (const [i, read] of upright) moduleReads[i] = { ...read.modules, upright: true };
                         } catch (err) {
                             const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`;
                             modules.thrown.push(line);
@@ -1889,12 +1944,16 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         const variant = flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
                         const tally = (modules.byVpClass[`${vp.name} ${plannedJob.sheetClass}`] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
                         tally.jobs += 1;
-                        for (const { z, r, turned, retry } of moduleReads) {
+                        for (const { z, r, turned, retry, upright: readUpright } of moduleReads) {
                             const code = `${vp.name}/${screen}:${z.name}`;
-                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${readUpright ? ' (in a turned frame, read upright: every transform above it held off)' : ''}`;
                             if (turned) {
-                                modules.unread.set(code, 'its frame is turned');
-                                (modules.turnedByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                                // Unreachable while every turned code is read upright or failed closed: a failure, never passed over.
+                                const why = 'its frame is turned and it was not read upright';
+                                modules.faults.push(`${at} — ${why}`);
+                                modules.failures.push(`${at} — ${why} — ${MODULE_CHECK}`);
+                                modules.unread.set(code, why);
+                                (modules.faultedByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                                 tally.unread += 1;
                                 continue;
                             }
@@ -1907,13 +1966,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                                 tally.unread += 1;
                                 continue;
                             }
-                            if (r.px === 0) {
-                                modules.unread.set(code, 'no module centre of it is on screen');
-                                (modules.offScreenByClass[plannedJob.sheetClass] ??= new Set()).add(code);
-                                tally.unread += 1;
-                                continue;
-                            }
                             if (z.payload === 'checked') modules.payloadChecked += 1;
+                            if (readUpright) (modules.uprightByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                             modules.read.set(code, (modules.read.get(code) ?? 0) + 1);
                             (modules.readByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                             tally.codes += 1;
@@ -4397,8 +4451,7 @@ try {
         read: new Map(),
         readByClass: {},
         faultedByClass: {},
-        turnedByClass: {},
-        offScreenByClass: {},
+        uprightByClass: {},
         unread: new Map(),
         payloadChecked: 0,
         leastModule: Infinity,
@@ -4557,7 +4610,7 @@ try {
             modulesRun.faults.push(...out.modules.faults);
             modulesRun.thrown.push(...out.modules.thrown);
             countInto(modulesRun.read, out.modules.read);
-            for (const key of ['readByClass', 'faultedByClass', 'turnedByClass', 'offScreenByClass']) {
+            for (const key of ['readByClass', 'faultedByClass', 'uprightByClass']) {
                 for (const [cls, codes] of Object.entries(out.modules[key])) {
                     const into = (modulesRun[key][cls] ??= new Set());
                     for (const code of codes) into.add(code);
@@ -5113,15 +5166,19 @@ try {
             // figure proved the rule over nothing.
             verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
         }
-        if (LOOKS === 'shipped' && codesRead.size === 0) {
+        if (codesRead.size === 0) {
             verdicts.push('a-code-keeps-its-quiet-zone-white read no code — vacuous green');
         }
-        if (LOOKS === 'shipped') {
+        {
             // The codes a buyer pays by are owed by name (the critic, step
             // 5a″ item 7): a fixture that stopped painting one would leave
             // the rule green over the rest.
             // Read on the public looks' own jobs (8e2): a carried look's codes
             // are its own to owe (`look-tallies.mjs`), and never stand in.
+            // On the kit's probe (`--looks workshop`), the kit's look's jobs
+            // owe them the same (the thirteenth review, the owner's
+            // D-2026-10-29-01: until then the kit owed no code by name, and a
+            // turn of 0.01° took every pay code out of both reads, KQT).
             const publicCodes = new Set(
                 Object.entries(codesReadByClass)
                     .filter(([cls]) => !PRIVATE_SHEET_CLASSES.includes(cls))
@@ -5143,16 +5200,16 @@ try {
         /*
          * 1d once a contrast job (7c): every failure fails the pass; and on
          * every look, every code whose quiet zone was read on its jobs has its
-         * modules read there too — save one it failed closed on (a failure
-         * already) and one none of whose module centres was on screen (the
-         * quiet zone's rule; said by name below). A code in a turned frame is
-         * read by neither, and is said by name in 1d's lines below
-         * (`moduleReport`).
+         * modules read there too — save one it failed closed on, a failure
+         * already (a code not read whole, every centre on screen inside its
+         * clips, is one since the thirteenth review's item 8). A code in a
+         * turned frame is read upright by both, every transform above it held
+         * off (B1), and is said by name in 1d's lines below (`moduleReport`).
          */
         if (modulesRun.failures.length > 0) verdicts.push(`${modulesRun.failures.length} failure(s) of ${MODULE_CHECK}`);
         for (const [cls, codes] of Object.entries(codesReadByClass)) {
             const owed = [...codes]
-                .filter((code) => !['readByClass', 'faultedByClass', 'offScreenByClass'].some((key) => modulesRun[key][cls]?.has(code) ?? false))
+                .filter((code) => !['readByClass', 'faultedByClass'].some((key) => modulesRun[key][cls]?.has(code) ?? false))
                 .sort();
             if (owed.length > 0) verdicts.push(`${MODULE_CHECK} read no module centre of ${owed.join(', ')} on a ${cls} stall, where its quiet zone was read`);
         }

@@ -12820,6 +12820,11 @@ declare global {
         __quietZones: () => QuietZone[];
         /** The matrix every one of those codes was drawn from, in their order, for 1d (bound since 7c). */
         __codeMatrices: () => CodeMatrixRead[];
+        /**
+         * Hold every transform above each painted code whose frame is turned off (or put them back), for the
+         * frame the quiet zone and 1d read such a code on; how many codes and boxes it held.
+         */
+        __codeTurnsHeldOff: (on: boolean) => Promise<{ codes: number; boxes: number }>;
         __moduleSnap: (on: boolean) => { codes: number; bottom: number; width: number };
         __contrastScreens: string[];
         /** Every job of the contrast pass, at every viewport (`contrastPlan.ts`). */
@@ -14180,8 +14185,12 @@ function codeName(svg: Element): string {
  * letterboxing (`xMidYMid meet`) — its module (that square over the
  * viewBox), the corner the element's own radius cuts past its padding and
  * border, and the clip every clipping ancestor puts on it. A code whose
- * frame is turned is not read (an axis-aligned ring cannot be read in a
- * turned box) and says so.
+ * frame is turned (`turned`: any turn `angleOf` reads, 0.01° and 360°
+ * among them) cannot be read on this frame — an axis-aligned ring cannot be
+ * read in a turned box — so the runner reads it again on a frame with every
+ * transform above it held off (`__codeTurnsHeldOff`; the thirteenth
+ * review's B1, the owner's D-2026-10-29-01), and fails it closed where it
+ * cannot.
  */
 type QuietZone = {
     name: string;
@@ -14313,6 +14322,50 @@ window.__codeMatrices = () =>
         if (want !== read.bits) return { name: zone.name, fault: 'its path is not the matrix qrMatrix makes of the text its plate carries (data-pay-uri)' };
         return { name: zone.name, ...read, payload: 'checked' };
     });
+
+/**
+ * **A turned code read upright** (the thirteenth review's B1; the owner's
+ * D-2026-10-29-01). A code whose frame is turned — any turn `angleOf` reads,
+ * a hundredth of a degree and a whole turn among them — cannot be read on the
+ * job's frame: the quiet zone's ring and 1d's module centres are axis-aligned.
+ * It was read by neither, and a look that turned the box around a code by
+ * 0.01° took it out of both (the critic's PQOT and KQT). On, this holds off
+ * every transform (`HELD_OFF`) on the code and every box above it, for every
+ * painted code whose frame is turned, through the CSSOM (`holdOff`, the
+ * mechanism `withTransformsHeldOff` uses, its transitions held off with it so
+ * none starts), and answers once the page has drawn it; the runner then
+ * captures that frame and reads the zones and matrices on it. Off, it puts
+ * every one back. Only these boxes are held, so nothing else on the page
+ * moves; a box laid out against one of them (an absolute or fixed box whose
+ * containing block a transform made) can move with it.
+ */
+let codeTurnsHeld: (() => void) | undefined;
+window.__codeTurnsHeldOff = async (on: boolean) => {
+    if (!on) {
+        const putBack = codeTurnsHeld;
+        codeTurnsHeld = undefined;
+        putBack?.();
+        await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+        return { codes: 0, boxes: 0 };
+    }
+    if (codeTurnsHeld !== undefined) throw new Error('the turns above the codes are held off already');
+    const turned = codeZones()
+        .filter(({ zone }) => zone.turned)
+        .map(({ svg }) => svg);
+    const chain = new Set<HTMLElement | SVGElement>();
+    for (const svg of turned) {
+        for (let at: Element | null = svg; at !== null && at !== document.documentElement; at = at.parentElement) {
+            if (at instanceof HTMLElement || at instanceof SVGElement) chain.add(at);
+        }
+    }
+    const held = [...chain].filter((el) => {
+        const cs = getComputedStyle(el);
+        return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
+    });
+    codeTurnsHeld = holdOff(held, Object.fromEntries(HELD_OFF.map((p) => [p, 'none'])));
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return { codes: turned.length, boxes: held.length };
+};
 
 /**
  * **1d's cut held to this Chrome** (`the-module-read-agrees-with-this-chrome`;
