@@ -131,6 +131,7 @@ import {
     union,
     zoomOf,
     acceptedReach,
+    sayReach,
     type Layer,
     type Meet,
     type ReachFact,
@@ -1753,6 +1754,8 @@ type ReachTally = {
     wide: number;
     /** Animations that move their own box and what it holds, left out: it holds no reacher and no target, and runs on no look pseudo. */
     unmoved: number;
+    /** Animations read from their keyframes' values on a box neither on the open surface nor above it, left out: it paints under the open sheet's scrim (`reachKeyframes`). */
+    offSurface: number;
     /** Failures (one a pair of boxes and a kind). */
     would: number;
     byKind: Partial<Record<ReachKind, number>>;
@@ -1776,6 +1779,7 @@ const reachTally = (): ReachTally =>
         seeks: 0,
         wide: 0,
         unmoved: 0,
+        offSurface: 0,
         needless: 0,
         fromValues: 0,
         would: 0,
@@ -2577,7 +2581,8 @@ function reachersOn(surface: ParentNode, only: ReadonlySet<Element> | undefined,
         let found: Element[];
         try {
             if (only !== undefined) {
-                found = [...only].filter((el) => el.matches(host));
+                // Held to the open surface as the read at rest holds them (the thirteenth review): a host on it, or a box above it.
+                found = [...only].filter((el) => (scope.contains(el) || el.contains(scope)) && el.matches(host));
             } else {
                 found = [...(scope.matches(host) ? [scope] : []), ...scope.querySelectorAll(host)];
                 if (scope !== root) for (let up = scope.parentElement; up !== null; up = up.parentElement) {
@@ -2678,7 +2683,8 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
                     const c = compositeOverAny(layers, targetPast(b, p.base));
                     most = Math.max(most, c);
                     const m = blurMeet(kinds.length === 1 ? kinds[0]! : 'box-shadow blur', layers, b, p.base, [...new Set(p.soft.map((s) => s.what))].join('; ').slice(0, 120));
-                    if (m !== undefined && meet === undefined) meet = m;
+                    // The meet is the box it composites most over (the thirteenth review's item 6): the accepted list judges that composite, never the first box's.
+                    if (m !== undefined && (meet === undefined || (m.coverage ?? 0) > (meet.coverage ?? 0))) meet = m;
                 }
                 const source = `${describe(rc.el)}${rc.pseudo ?? ''} ${kinds.join('+')}`;
                 if (most > 0.001) reachSoft[source] = Math.max(reachSoft[source] ?? 0, Number(most.toFixed(4)));
@@ -2687,9 +2693,9 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
         const placed = (m: Meet): string => `${Math.round(m.at.left)},${Math.round(m.at.top)} (${Math.round(m.at.right - m.at.left)}x${Math.round(m.at.bottom - m.at.top)})`;
         if (meet === undefined) {
             if (core !== undefined) {
-                const key = `${whoKey}|core|${reachId(tn)}`;
-                if (said.has(key)) continue;
-                said.add(key);
+                const coreKey = `${whoKey}|core|${reachId(tn)}`;
+                if (said.has(coreKey)) continue;
+                said.add(coreKey);
                 t.softCore += 1;
                 if (reachLiteral.length < REACH_LITERAL_KEPT) {
                     reachLiteral.push(`${screen} / ${label}: ${who}'s ${core.kind} (${core.what}) core reaches ${target.name} at ${placed(core)}${at === undefined ? '' : `, ${at}`}`);
@@ -2707,17 +2713,15 @@ function judgeReacher(rc: Reacher, targets: readonly ReachTarget[], t: ReachTall
             (at === undefined ? '' : `, ${at}`);
         // A meet the owner accepted by name (`REACH_ACCEPTED`), keyed on what the page paints: counted and said once a
         // pair, not failed — and it does not stand for the pair, so the same pair read past the entry at a keyframe
-        // offset (a composite over the ceiling as the board swings, say) still fails.
+        // offset (a composite over the ceiling as the board swings, say) still fails (`sayReach`, `87ee812`).
         const accepted = acceptedReach(reachFact(rc, meet, tn));
-        if (accepted !== undefined) {
-            const acceptedKey = `${key}|accepted`;
-            if (said.has(acceptedKey)) continue;
-            said.add(acceptedKey);
+        const verdict = sayReach(said, key, accepted !== undefined);
+        if (verdict === 'said') continue;
+        if (verdict === 'accepted') {
             t.accepted += 1;
-            if (reachAcceptedSaid.length < REACH_KEPT) reachAcceptedSaid.push(`${screen} / ${label}: ${sentence} — accepted: ${accepted.name}`);
+            if (reachAcceptedSaid.length < REACH_KEPT) reachAcceptedSaid.push(`${screen} / ${label}: ${sentence} — accepted: ${accepted!.name}`);
             continue;
         }
-        said.add(key);
         t.would += 1;
         t.byKind[meet.kind] = (t.byKind[meet.kind] ?? 0) + 1;
         if (reachWould.length < REACH_KEPT) reachWould.push(`${screen} / ${label}: ${sentence}`);
@@ -3053,13 +3057,46 @@ const REACH_FROM_VALUES: ReadonlySet<string> = new Set(['box-shadow', 'text-shad
  * and colours resolved) — so each keyframe is read where it stands, as a seek
  * to it would read it, with no seek: the animated box's paints read again
  * with the values the keyframe sets in place of the ones it computes at rest,
- * and, for a text-shadow, every text owner under the box that inherits the
- * box's own (its text-shadow computes the box's at rest). A value a keyframe
- * does not set is read as it computes at rest, not as it interpolates there,
- * stated. False — the caller seeks instead — for a box that hosts a look
- * pseudo (its pseudo inherits what the box animates), and for a colour on a
- * box with boxes under it (a `currentcolor` anywhere below would follow it).
+ * and, for a text-shadow, every text owner under the box that inherits it
+ * (`textShadowHeirs`: what takes the box's own when it is held at a sentinel —
+ * one that sets its own, `none` included, does not; until the thirteenth
+ * review's item 5 it was every one whose text-shadow equalled the box's at
+ * rest). A value a keyframe does not set is read as it computes at rest, not
+ * as it interpolates there, stated. **Held to the open surface** (the
+ * thirteenth review's B3): a box neither on it nor above it paints under the
+ * open sheet's scrim, as the read at rest holds it, and is left out (`true`,
+ * `offSurface` in the tallies) — BKV's board behind a pay sheet's scrim was
+ * read against the sheet's money, 30 false failures at 1280; and of a box
+ * above it, only the owners on it are read. False — the caller seeks instead —
+ * for a box that hosts a look pseudo or holds an element that does (its
+ * pseudo inherits what the box animates: the thirteenth review's B2, KTSK2, a
+ * text-shadow keyframe on a row's name column that only the rail label's
+ * `::after` carried over the price), and for a colour on a box with boxes
+ * under it (a `currentcolor` anywhere below would follow it).
  */
+/**
+ * The text owners under `box` whose text-shadow is the box's own, inherited
+ * (`reachKeyframes`; the thirteenth review's item 5): `box`'s text-shadow is
+ * held at a sentinel through the CSSOM (`holdOff`, its transitions held with
+ * it), every element under it that computes the sentinel takes it, and the
+ * box is put back as it was. An element that sets a text-shadow of its own —
+ * `none` included — computes its own, and is not among them, where comparing
+ * each with the box's at rest read it with the keyframe's copies whenever the
+ * two were equal. A box that holds no inline style (not an HTML or SVG
+ * element) has no heirs read.
+ */
+const TEXT_SHADOW_SENTINEL = 'rgb(1, 2, 3) 1px 2px 3px';
+function textShadowHeirs(box: Element): Element[] {
+    if (!(box instanceof HTMLElement || box instanceof SVGElement)) return [];
+    const putBack = holdOff([box], { 'text-shadow': TEXT_SHADOW_SENTINEL });
+    try {
+        const marked = getComputedStyle(box).textShadow;
+        return [...box.querySelectorAll('*')].filter((el) => reachOwner(el) !== undefined && getComputedStyle(el).textShadow === marked);
+    } finally {
+        putBack();
+    }
+}
+
 function reachKeyframes(
     screen: string,
     label: string,
@@ -3072,15 +3109,20 @@ function reachKeyframes(
     pseudoHosts: ReadonlySet<Element>,
 ): boolean {
     const rest = reachRest;
-    if (rest === undefined || pseudoHosts.has(target) || (props.has('color') && target.children.length > 0)) return false;
+    if (rest === undefined) return false;
     const t = reachTally();
+    const scope: Element = rest.surface instanceof Element ? rest.surface : document.getElementById('app')!;
+    // Off the open surface and not above it: under the scrim (B3).
+    if (!scope.contains(target) && !target.contains(scope)) {
+        t.offSurface += 1;
+        return true;
+    }
+    // A look pseudo on the box or under it inherits what the box animates: seeked (B2).
+    if (pseudoHosts.has(target) || [...target.querySelectorAll('*')].some((el) => pseudoHosts.has(el)) || (props.has('color') && target.children.length > 0)) return false;
     const t0 = performance.now();
     const frames = effect.getKeyframes();
     const range = document.createRange();
-    const csT = getComputedStyle(target);
-    const inheriting: Element[] = props.has('text-shadow')
-        ? [...target.querySelectorAll('*')].filter((el) => reachOwner(el) !== undefined && getComputedStyle(el).textShadow === csT.textShadow)
-        : [];
+    const inheriting: Element[] = props.has('text-shadow') ? textShadowHeirs(target).filter((el) => scope.contains(el)) : [];
     let reads = 0;
     for (const frame of frames) {
         const value = (prop: string): string | undefined => {
@@ -3090,7 +3132,8 @@ function reachKeyframes(
         const set = { boxShadow: value('box-shadow'), textShadow: value('text-shadow'), filter: value('filter') ?? value('-webkit-filter'), color: value('color') };
         if (Object.values(set).every((v) => v === undefined)) continue;
         const at = `with ${name} on ${where} at its keyframe at ${Math.round((frame.computedOffset ?? 0) * 100)}% (read from the keyframe's values)`;
-        const owners = [target, ...(set.textShadow === undefined ? [] : inheriting)];
+        // The box itself where it is on the open surface; a box above it paints under the scrim (B3).
+        const owners = [...(scope.contains(target) ? [target] : []), ...(set.textShadow === undefined ? [] : inheriting)];
         for (const el of owners) {
             const owner = reachOwner(el);
             if (owner === undefined) continue;
@@ -8138,6 +8181,42 @@ function withTransformsHeldOff<T>(els: Iterable<HTMLElement>, read: () => T): T 
         return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
     });
     return withHeldOff(turned, HELD_OFF, read);
+}
+
+/**
+ * Hold each of `values`' properties at its value, `!important`, on `els`
+ * through the CSSOM, with `transition-property` held at `none` beside them so
+ * no transition starts, and answer the function that puts each back as it was
+ * (`withHeldOff`'s mechanism, for a hold that spans the runner's own calls —
+ * a capture between them): the properties first, then, once the page has
+ * taken them with the transitions still held, the transitions, so none starts
+ * on the way back either. A box that had no inline style is left with none.
+ */
+function holdOff(els: readonly (HTMLElement | SVGElement)[], values: Readonly<Record<string, string>>): () => void {
+    const props = ['transition-property', ...Object.keys(values)];
+    const kept = els.map((el) => props.map((p) => [el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const));
+    const bare = els.map((el) => !el.hasAttribute('style'));
+    for (const el of els) {
+        el.style.setProperty('transition-property', 'none', 'important');
+        for (const [p, v] of Object.entries(values)) el.style.setProperty(p, v, 'important');
+    }
+    const restore = (from: number, to: number): void =>
+        els.forEach((el, i) => {
+            for (let j = from; j < to; j += 1) {
+                const [value, priority] = kept[i]![j]!;
+                if (value === '') el.style.removeProperty(props[j]!);
+                else el.style.setProperty(props[j]!, value, priority);
+            }
+        });
+    return () => {
+        restore(1, props.length);
+        // The page takes the values back while the transitions are still held, so none starts.
+        for (const el of els) void getComputedStyle(el).getPropertyValue(props[1] ?? 'transition-property');
+        restore(0, 1);
+        els.forEach((el, i) => {
+            if (bare[i] && el.getAttribute('style') === '') el.removeAttribute('style');
+        });
+    };
 }
 
 /** Hold `props` at `none !important` on `els` while `read` runs, through the CSSOM, and put each back as it was (`withTransformsHeldOff`'s mechanism). */

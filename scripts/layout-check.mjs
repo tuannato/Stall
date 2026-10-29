@@ -3146,7 +3146,7 @@ function reachLines(pass, r) {
             `${Object.keys(kinds).length === 0 ? '' : `, by kind ${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}`}, ` +
             `${sum('accepted')} accepted by name (${classes.filter((cls) => (r.byClass[cls].accepted ?? 0) > 0).map((cls) => `${cls} ${r.byClass[cls].accepted}`).join(', ') || 'none'}) · ` +
             `${sum('paints')} paint(s), ${sum('elements')} element(s) (${sum('contents')} a display: contents text owner) and ${sum('pseudos')} look pseudo(s) read, ${sum('reachers')} with a paint that reaches, ` +
-            `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('wide')} reading every reacher against every target; ${sum('needless')} animation(s) left out: nothing that reaches or moves; ${sum('unmoved')} more: a move of a box that holds nothing 1b reads) · ` +
+            `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('wide')} reading every reacher against every target; ${sum('needless')} animation(s) left out: nothing that reaches or moves; ${sum('unmoved')} more: a move of a box that holds nothing 1b reads; ${sum('offSurface')} more: a box under an open sheet's scrim) · ` +
             `a blurred layer's offset and spread counted in full would add ${sum('softCore')} · ${(r.ms / 1000).toFixed(2)}s (seeks ${(r.seekMs / 1000).toFixed(2)}s)`,
     ];
     // A source said on many screens is one line: the sentence less its screen, its look and its place.

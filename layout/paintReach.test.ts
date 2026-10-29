@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     BLUR_OPACITY,
     MEET_TOL,
@@ -23,6 +26,7 @@ import {
     zoomOf,
     emLength,
     acceptedReach,
+    sayReach,
     REACH_ACCEPTED,
     type Box,
     type PseudoFacts,
@@ -307,7 +311,7 @@ describe('the-reach-1b-accepts-by-name', () => {
                         { background: 'rgb(247, 244, 238)', color: 'rgb(108, 95, 77)' },
                     ],
                 },
-                ceiling: 0.23,
+                ceiling: 0.25,
             },
         ]);
         expect(Object.isFrozen(REACH_ACCEPTED)).toBe(true);
@@ -321,12 +325,16 @@ describe('the-reach-1b-accepts-by-name', () => {
         expect(acceptedReach(board)?.name).toBe("Rural's sign board over the address plate (D-2026-10-27-03)");
         expect(acceptedReach({ ...board, target: { ...board.target, background: 'rgb(247, 244, 238)', color: 'rgb(108, 95, 77)' } })).toBeDefined();
         expect(acceptedReach({ ...board, reacher: { ...board.reacher, classes: ['stall-sign'] } })).toBeDefined();
-        expect(acceptedReach({ ...board, coverage: 0.23 })).toBeDefined();
+        // The owner's ceiling (D-2026-10-29-01): 0.25, where it was 0.23 — the composite stood half a pixel of drift under it.
+        expect(acceptedReach({ ...board, coverage: 0.2311 })).toBeDefined();
+        expect(acceptedReach({ ...board, coverage: 0.25 })).toBeDefined();
     });
 
-    it('fails the board when its shadow is darker: an alpha of 0.40 is another string, and a composite past the ceiling', () => {
+    it('fails the board when its shadow is darker: an alpha of 0.40 is another string, and a composite just past the ceiling', () => {
         expect(acceptedReach({ ...board, reacher: { ...board.reacher, boxShadow: 'rgba(58, 42, 24, 0.4) 0px 18px 40px 0px' } })).toBeUndefined();
-        expect(acceptedReach({ ...board, coverage: 0.231 })).toBeUndefined();
+        // Just over the ceiling.
+        expect(acceptedReach({ ...board, coverage: 0.2501 })).toBeUndefined();
+        expect(acceptedReach({ ...board, coverage: 0.322 })).toBeUndefined();
         expect(acceptedReach({ ...board, coverage: undefined })).toBeUndefined();
         expect(acceptedReach({ ...board, reacher: { ...board.reacher, boxShadow: 'rgba(58, 42, 24, 0.32) 0px 18px 40px 2px' } })).toBeUndefined();
     });
@@ -351,5 +359,51 @@ describe('the-reach-1b-accepts-by-name', () => {
         expect(acceptedReach({ ...board, reacher: { ...board.reacher, pseudo: '::after' } })).toBeUndefined();
         expect(acceptedReach({ ...board, kind: 'box-shadow' })).toBeUndefined();
         expect(acceptedReach({ ...board, kind: 'drop-shadow blur' })).toBeUndefined();
+    });
+});
+
+/**
+ * `an-accepted-meet-does-not-stand-for-its-pair` (the fix of `87ee812`; the
+ * thirteenth review's item 4: until then only BKV's whole run proved it, and
+ * reverting it left `pnpm test` green). An accepted meet is counted once a
+ * pair under a key of its own and never under the pair's, so the same pair
+ * read again at a keyframe offset past the entry still fails; and
+ * `judgeReacher` decides a pair through `sayReach` alone.
+ */
+describe('an-accepted-meet-does-not-stand-for-its-pair', () => {
+    it('fails the pair read past the entry after the same pair was accepted', () => {
+        const said = new Set<string>();
+        expect(sayReach(said, 'sign|box-shadow blur|plate', true)).toBe('accepted');
+        // The same pair accepted again (an offset of the board's swing) is said once.
+        expect(sayReach(said, 'sign|box-shadow blur|plate', true)).toBe('said');
+        // The same pair at a keyframe whose composite or shadow is past the entry fails.
+        expect(sayReach(said, 'sign|box-shadow blur|plate', false)).toBe('fails');
+        // Once failed, it is said and never accepted again.
+        expect(sayReach(said, 'sign|box-shadow blur|plate', false)).toBe('said');
+        expect(sayReach(said, 'sign|box-shadow blur|plate', true)).toBe('said');
+        expect([...said].sort()).toEqual(['sign|box-shadow blur|plate', 'sign|box-shadow blur|plate|accepted']);
+    });
+    it('fails a pair once and keeps another pair apart', () => {
+        const said = new Set<string>();
+        expect(sayReach(said, 'a|box-shadow|x', false)).toBe('fails');
+        expect(sayReach(said, 'a|box-shadow|x', false)).toBe('said');
+        expect(sayReach(said, 'a|box-shadow|y', true)).toBe('accepted');
+        expect(sayReach(said, 'a|box-shadow|y', false)).toBe('fails');
+    });
+    it('is how judgeReacher decides a pair, and judgeReacher keeps no pair key of its own', () => {
+        const probe = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'probe.ts'), 'utf8');
+        const start = probe.indexOf('function judgeReacher(');
+        expect(start).toBeGreaterThanOrEqual(0);
+        const body = probe
+            .slice(start, probe.indexOf('\n}\n', start))
+            .split('\n')
+            .map((line) => line.replace(/\/\/.*$/, ''))
+            .join('\n');
+        expect(body).toContain('const verdict = sayReach(said, key, accepted !== undefined);');
+        expect(body).toMatch(/if \(verdict === 'said'\) continue;/);
+        // The one key judgeReacher adds itself is a blurred core's, which fails nothing.
+        expect(body.match(/said\.add\(/g)).toHaveLength(1);
+        expect(body).toContain('said.add(coreKey);');
+        expect(body).not.toMatch(/\|accepted/);
     });
 });

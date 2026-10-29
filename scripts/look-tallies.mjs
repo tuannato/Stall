@@ -70,8 +70,9 @@ export function coverTally(byClass, classes = Object.keys(byClass ?? {})) {
  * (`reachByClass` in the page's verdict, `ReachTally` in the probe) — its
  * paints read, elements and look pseudos read, reachers with a paint that
  * reaches, targets held, pairs judged, keyframe seeks (`wide`: those that read
- * every reacher against every target), animations left out (`needless`, and
- * `unmoved`: a move of a box that holds nothing 1b reads) or
+ * every reacher against every target), animations left out (`needless`,
+ * `unmoved`: a move of a box that holds nothing 1b reads, and `offSurface`: a
+ * box under an open sheet's scrim, its paints read from its keyframes) or
  * read from their keyframes' own values (`fromValues`), failures (`would`),
  * meets accepted by name (`accepted`), a blurred layer's core alone
  * (`softCore`, not counted), and the paints it threw on (`throws`, each a
@@ -88,6 +89,7 @@ export const REACH_TALLY_KEYS = Object.freeze([
     'seeks',
     'wide',
     'unmoved',
+    'offSurface',
     'needless',
     'fromValues',
     'would',

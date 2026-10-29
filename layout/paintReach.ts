@@ -606,7 +606,7 @@ export function pseudoRegion(f: PseudoFacts): PseudoRegion {
     };
 }
 
-/** A would-be failure's numbers for its sentence: the kind, where it met the target, and the coverage a blur reached there. */
+/** A meet's numbers for its sentence: the kind, where it met the target, and the coverage a blur reached there. */
 export type Meet = { kind: ReachKind; at: Box; coverage?: number; what: string };
 
 /** The first sharp reach that meets a target past its base, as a meet. */
@@ -633,11 +633,13 @@ export function blurMeet(kind: ReachKind, layers: readonly Layer[], target: Box,
 }
 
 /**
- * What a would-be failure of 1b is, as the accepted list reads it: the kind
- * of paint and the composite it reached, the reacher as the page paints it
- * (its tag, its classes, which pseudo-element, its computed `box-shadow`) and
- * the target as the page paints it (its tag, its classes, its `data-role`,
- * its computed background and ink).
+ * A meet of 1b as the accepted list reads it, before it is judged a failure
+ * or accepted: the kind of paint and the composite it reached (the most over
+ * any of the target's boxes, the thirteenth review's item 6), the reacher as
+ * the page paints it (its tag, its classes, which pseudo-element, its
+ * computed `box-shadow`, or a keyframe's own where its paints were read from
+ * one) and the target as the page paints it (its tag, its classes, its
+ * `data-role`, its computed background and ink).
  */
 export type ReachFact = {
     kind: ReachKind;
@@ -670,14 +672,26 @@ export type AcceptedReach = {
  * its ink at 0.32, over the address plate under it — a real overlap (the
  * board swings, so it paints after the content in flow and darkens the
  * plate's top) that composites to 0.229 over the plate, which stays legible;
- * the clean tree's only 1b failure, 130 on `offers`' paints with the pin and
- * 12 on `unresolvable`'s without, all at 1280. Raising `BLUR_OPACITY` to 0.25
- * for it would admit a 4.5:1 figure taken to 2.9:1, under the 3:1 floor, on
- * every look.
+ * on the clean tree 142 meets at 1280 (130 on `offers`' paints with the pin
+ * and 12 on `unresolvable`'s without), which would fail 1b but for this
+ * entry. Raising `BLUR_OPACITY` to 0.25 for it would admit a 4.5:1 figure
+ * taken to 2.9:1, under the 3:1 floor, on every look.
+ *
+ * **Its ceiling is 0.25** (the owner's D-2026-10-29-01, on the thirteenth
+ * review's item 3; it was 0.23, and the board's composite stood half a pixel
+ * from it, by the critic's quick reads: 0.2285 at rest, 0.2290 at the most
+ * of its swing, 0.2311 with the plate moved 0.5px up, which turned all 142
+ * red). The pinned shadow already caps the composite at its own alpha
+ * whatever the layout does: one layer, 0.322 as the probe reads it (0.32
+ * drawn on a canvas, 82 of 255). At 0.25 the plate's ink stays about 3.5:1
+ * under Sun-faded, its lower plate, with the ground darkened by a quarter of
+ * the board's ink and the ink untouched (3.49:1; 4.0:1 bare). And the address
+ * text spans inside the plate (`span.addr-short`, `span.addr-full`, money
+ * nodes) are no target of this entry and stay held at `BLUR_OPACITY`.
  *
  * **Keyed on what the page paints, never on a look's class**: the look is
  * named by its board's computed shadow and its plate's computed ground and
- * ink — bare (`rgb(255, 253, 244)` under `rgb(107, 89, 66)`, 6.9:1) and under
+ * ink — bare (`rgb(255, 253, 244)` under `rgb(107, 89, 66)`, 6.6:1) and under
  * Rural's one mood, Sun-faded (`rgb(247, 244, 238)` under
  * `rgb(108, 95, 77)`, 5.7:1), the two plates the 142 stand on — so
  * `pnpm workshop:start rural`'s starter (the same sheet and rows under
@@ -701,11 +715,11 @@ export const REACH_ACCEPTED: readonly AcceptedReach[] = Object.freeze([
                 Object.freeze({ background: 'rgb(247, 244, 238)', color: 'rgb(108, 95, 77)' }),
             ]),
         }),
-        ceiling: 0.23,
+        ceiling: 0.25,
     }),
 ]);
 
-/** The accepted reach a would-be failure is, or undefined: every key equal, the composite known and at most the entry's ceiling. */
+/** The accepted reach a meet is, or undefined (it then fails): every key equal, the composite known and at most the entry's ceiling. */
 export function acceptedReach(fact: ReachFact, table: readonly AcceptedReach[] = REACH_ACCEPTED): AcceptedReach | undefined {
     return table.find(
         (a) =>
@@ -721,4 +735,28 @@ export function acceptedReach(fact: ReachFact, table: readonly AcceptedReach[] =
             fact.target.role === a.target.role &&
             a.target.plates.some((plate) => plate.background === fact.target.background && plate.color === fact.target.color),
     );
+}
+
+/**
+ * **What one meet of a pair is to 1b's said keys** (`judgeReacher`; the fix of
+ * `87ee812`, held by `an-accepted-meet-does-not-stand-for-its-pair` since the
+ * thirteenth review's item 4). `said` holds what was said on this paint, and
+ * `pair` the meet's key: a reacher, a target, each its own box, and a kind.
+ * A pair already failed is `said`. An accepted meet (`accepted`) is counted
+ * once a pair under a key of its own (`<pair>|accepted`) and never under the
+ * pair's: so the same pair read again at a keyframe offset past the entry (a
+ * composite over the ceiling as the board swings, another shadow) still
+ * `fails`. Any other meet `fails`, once a pair. It was the pair's key that an
+ * accepted meet took, and BKV's keyframe meets were never judged.
+ */
+export function sayReach(said: Set<string>, pair: string, accepted: boolean): 'said' | 'accepted' | 'fails' {
+    if (said.has(pair)) return 'said';
+    if (accepted) {
+        const own = `${pair}|accepted`;
+        if (said.has(own)) return 'said';
+        said.add(own);
+        return 'accepted';
+    }
+    said.add(pair);
+    return 'fails';
 }
