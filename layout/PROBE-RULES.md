@@ -13818,10 +13818,13 @@ upright, the most a corner moved ("1d and the quiet zone, the most a corner
 of each code read upright moved between its frame and the upright one").
 
 **Rural's turned codes, measured** (`runs/q1d-B1-clean-turned.log`): a
-corner of the Cycle card's two codes moves 0.99 modules (6.00px of a
-6.12px module at 1280) and of the wall code 0.55 (3.98px of 7.35px at
-1920); all three read upright, white and right. The critic's bound put the
-Cycle codes at about 1.04 modules.
+corner of the Cycle card's two codes moves 0.99 modules (6.00px at 1280)
+and of the wall code 0.55 (3.98px at 1920), each in the module the frame
+held upright reads; all three read upright, white and right. The critic's
+bound, the centre's travel plus the turn's, put the Cycle codes at about
+1.04 modules. (This paragraph gave the modules as 6.12px and 7.35px, the
+critic's figures; the runner's own travel in modules puts them nearer 6.06
+and 7.24.)
 
 ### Items 1 and 2: the trigger is owed its own walk, and a node it met reads a character or fails
 
