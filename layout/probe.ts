@@ -14,6 +14,7 @@
  */
 // First: it listens for the policy's refusals from the page's first module statement.
 import { cspRefusals, type CspRefusal } from './cspWatch';
+import { holdOff, textShadowHeirs } from './holdOff';
 import { PAY_QR_NARROWEST_PX, QR_SVG_QUIET_MODULES, cheapestOf, listingsInShopOrder, qrSvg, renderStall } from '../src/ui/render';
 import { wallFigureTier } from '../src/ui/window';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
@@ -3061,10 +3062,13 @@ const REACH_FROM_VALUES: ReadonlySet<string> = new Set(['box-shadow', 'text-shad
  * to it would read it, with no seek: the animated box's paints read again
  * with the values the keyframe sets in place of the ones it computes at rest,
  * and, for a text-shadow, every text owner under the box that inherits it
- * (`textShadowHeirs`: what takes the box's own when it is held at a sentinel —
- * one that sets its own, `none` included, does not; until the thirteenth
- * review's item 5 it was every one whose text-shadow equalled the box's at
- * rest). A value a keyframe does not set is read as it computes at rest, not
+ * (`textShadowHeirs`, `layout/holdOff.ts`: what takes the box's own when it
+ * is held at a sentinel — one that sets its own, `none` included, does not;
+ * until the thirteenth review's item 5 it was every one whose text-shadow
+ * equalled the box's at rest; and with every element under the box holding
+ * its transitions while it is read, since the fourteenth review's M1, or an
+ * heir with a transition on its text-shadow read its old value and was left
+ * out). A value a keyframe does not set is read as it computes at rest, not
  * as it interpolates there, stated. **Held to the open surface** (the
  * thirteenth review's B3): a box neither on it nor above it paints under the
  * open sheet's scrim, as the read at rest holds it, and is left out (`true`,
@@ -3077,29 +3081,6 @@ const REACH_FROM_VALUES: ReadonlySet<string> = new Set(['box-shadow', 'text-shad
  * `::after` carried over the price), and for a colour on a box with boxes
  * under it (a `currentcolor` anywhere below would follow it).
  */
-/**
- * The text owners under `box` whose text-shadow is the box's own, inherited
- * (`reachKeyframes`; the thirteenth review's item 5): `box`'s text-shadow is
- * held at a sentinel through the CSSOM (`holdOff`, its transitions held with
- * it), every element under it that computes the sentinel takes it, and the
- * box is put back as it was. An element that sets a text-shadow of its own —
- * `none` included — computes its own, and is not among them, where comparing
- * each with the box's at rest read it with the keyframe's copies whenever the
- * two were equal. A box that holds no inline style (not an HTML or SVG
- * element) has no heirs read.
- */
-const TEXT_SHADOW_SENTINEL = 'rgb(1, 2, 3) 1px 2px 3px';
-function textShadowHeirs(box: Element): Element[] {
-    if (!(box instanceof HTMLElement || box instanceof SVGElement)) return [];
-    const putBack = holdOff([box], { 'text-shadow': TEXT_SHADOW_SENTINEL });
-    try {
-        const marked = getComputedStyle(box).textShadow;
-        return [...box.querySelectorAll('*')].filter((el) => reachOwner(el) !== undefined && getComputedStyle(el).textShadow === marked);
-    } finally {
-        putBack();
-    }
-}
-
 function reachKeyframes(
     screen: string,
     label: string,
@@ -3125,7 +3106,7 @@ function reachKeyframes(
     const t0 = performance.now();
     const frames = effect.getKeyframes();
     const range = document.createRange();
-    const inheriting: Element[] = props.has('text-shadow') ? textShadowHeirs(target).filter((el) => scope.contains(el)) : [];
+    const inheriting: Element[] = props.has('text-shadow') ? textShadowHeirs(target, (el) => reachOwner(el) !== undefined).filter((el) => scope.contains(el)) : [];
     let reads = 0;
     for (const frame of frames) {
         const value = (prop: string): string | undefined => {
@@ -8184,42 +8165,6 @@ function withTransformsHeldOff<T>(els: Iterable<HTMLElement>, read: () => T): T 
         return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
     });
     return withHeldOff(turned, HELD_OFF, read);
-}
-
-/**
- * Hold each of `values`' properties at its value, `!important`, on `els`
- * through the CSSOM, with `transition-property` held at `none` beside them so
- * no transition starts, and answer the function that puts each back as it was
- * (`withHeldOff`'s mechanism, for a hold that spans the runner's own calls —
- * a capture between them): the properties first, then, once the page has
- * taken them with the transitions still held, the transitions, so none starts
- * on the way back either. A box that had no inline style is left with none.
- */
-function holdOff(els: readonly (HTMLElement | SVGElement)[], values: Readonly<Record<string, string>>): () => void {
-    const props = ['transition-property', ...Object.keys(values)];
-    const kept = els.map((el) => props.map((p) => [el.style.getPropertyValue(p), el.style.getPropertyPriority(p)] as const));
-    const bare = els.map((el) => !el.hasAttribute('style'));
-    for (const el of els) {
-        el.style.setProperty('transition-property', 'none', 'important');
-        for (const [p, v] of Object.entries(values)) el.style.setProperty(p, v, 'important');
-    }
-    const restore = (from: number, to: number): void =>
-        els.forEach((el, i) => {
-            for (let j = from; j < to; j += 1) {
-                const [value, priority] = kept[i]![j]!;
-                if (value === '') el.style.removeProperty(props[j]!);
-                else el.style.setProperty(props[j]!, value, priority);
-            }
-        });
-    return () => {
-        restore(1, props.length);
-        // The page takes the values back while the transitions are still held, so none starts.
-        for (const el of els) void getComputedStyle(el).getPropertyValue(props[1] ?? 'transition-property');
-        restore(0, 1);
-        els.forEach((el, i) => {
-            if (bare[i] && el.getAttribute('style') === '') el.removeAttribute('style');
-        });
-    };
 }
 
 /** Hold `props` at `none !important` on `els` while `read` runs, through the CSSOM, and put each back as it was (`withTransformsHeldOff`'s mechanism). */
