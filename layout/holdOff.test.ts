@@ -99,6 +99,43 @@ describe('an-heir-with-a-transition-is-still-an-heir', () => {
         const { box, kids } = stall();
         expect(textShadowHeirs(box, (el) => el !== kids.slow)).toEqual([kids.plain, kids.every]);
     });
+
+    /*
+     * The fifteenth review's item 4 (the owner's D-2026-10-31-01): in Chrome
+     * the put-backs alone left an heir transitioning toward `none` in 37 of
+     * the critic's 144 trials, so the call cancels every transition on the
+     * box and under it that was not running when it began. happy-dom starts
+     * no transition, so the page's answers are modelled here: before the
+     * call one transition and one animation run; after it, one transition
+     * more. Chrome is `critic15-fixes/runs/m1-heirs-chrome-after.log` (0 of
+     * 144) against `m1-heirs-chrome-nocancel.log` (38 of 144, the cancel
+     * taken out).
+     */
+    it('cancels the transitions its call started on the box and under it, and no other', () => {
+        const { box } = stall();
+        const answer = (kind: 'transition' | 'animation') => {
+            const a = { cancel: vi.fn(), ...(kind === 'transition' ? { transitionProperty: 'text-shadow' } : { animationName: 'k' }) };
+            return a as unknown as Animation & { cancel: ReturnType<typeof vi.fn> };
+        };
+        const running = answer('transition');
+        const keyframes = answer('animation');
+        const started = answer('transition');
+        const asked: unknown[] = [];
+        let calls = 0;
+        Object.defineProperty(box, 'getAnimations', {
+            configurable: true,
+            value: (options?: GetAnimationsOptions) => {
+                asked.push(options);
+                calls += 1;
+                return calls === 1 ? [running, keyframes] : [running, keyframes, started];
+            },
+        });
+        textShadowHeirs(box, () => true);
+        expect(asked).toEqual([{ subtree: true }, { subtree: true }]);
+        expect(started.cancel).toHaveBeenCalledTimes(1);
+        expect(running.cancel).not.toHaveBeenCalled();
+        expect(keyframes.cancel).not.toHaveBeenCalled();
+    });
 });
 
 describe('a-hold-holds-the-transitions-and-puts-them-back', () => {
