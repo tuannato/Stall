@@ -42,7 +42,7 @@ import {
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
 import { MODULE_CHECK, MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, readTurnedUpright, withMatrices } from './code-modules.mjs';
-import { charReport, charsFault, foldShares, mergeShares, readCharsAgain, readMoneyChars } from './char-read.mjs';
+import { CHAR_CHECK, CHAR_SAID, charReport, charsFault, charsOwedFaults, foldShares, mergeShares, readCharsAgain, readMoneyChars } from './char-read.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -1389,13 +1389,18 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         payloadChecked: 0,
         leastModule: Infinity,
     };
-    // 1c(c) (report-only): the per-character read's tallies, by viewport and look (`char-read.mjs`).
+    // 1c(c) (bound since 7d): the per-character read's tallies, by viewport and look (`char-read.mjs`).
     const digits = {
         byVpClass: {},
         triggers: [],
         would: [],
         readAgain: [],
         faults: [],
+        // A job its trigger fired on that read no character, and a throw caught in its read: each a failure.
+        empty: [],
+        thrown: [],
+        // Its failures, each a line with its check (a character that failed after the fresh pair, what could not be read, an empty read, a throw).
+        failures: [],
         shares: {},
         smallKinds: {},
         movers: 0,
@@ -2087,7 +2092,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     return { shot: shownCap.shot, why, chars };
                 };
                 /*
-                 * 1c(c) (report-only; `char-read.mjs`): a job whose paint
+                 * 1c(c) (bound since 7d; `char-read.mjs`): a job whose paint
                  * holds a mover near money (`digitTrigger` in the probe, on
                  * the prepared paint) reads every money character. Its
                  * glyphs join the job's one shown frame, unless a money box
@@ -2313,23 +2318,42 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     phases.set('broken figures', entry);
                 }
                 /*
-                 * 1c(c), every digit where a mover is near (report-only;
-                 * `char-read.mjs`): on a triggered job, every money
+                 * 1c(c), every digit where a mover is near (bound since 7d,
+                 * the owner's D-2026-10-30-02; `char-read.mjs`): on a
+                 * triggered job, every money
                  * character on the shown frame — the job's shared one where
                  * its glyphs joined it, else a frame of their own — against
                  * the job's own capture, each held to its own reference. A
                  * job whose characters read wrong is read again on a fresh
                  * pair (`readCharsAgain`): where the pair is believed, a
-                 * would-be failure stands if the pair fails it too; where it
-                 * cannot be believed, the first read stands, with the
-                 * reason. It fails nothing: its sentences go to the run's
-                 * report.
+                 * failure stands if the pair fails it too; where it cannot be
+                 * believed, the first read stands, with the reason. Each
+                 * character that stands under the cut fails the contrast
+                 * pass, and so do a read that cannot be had (a capture
+                 * refused, the page's characters not adding up, a money
+                 * target answered by none: `charsFault`), a job its trigger
+                 * fired on that read no character, and a throw in the read,
+                 * caught here so the job's other reads stand.
                  */
                 const readDigits = async (why) => {
                     const start = performance.now();
                     digitsAt.triggered += 1;
                     if (why === '1a') digitsAt.by1a += 1;
                     const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}`;
+                    try {
+                        await readDigitsOn(why, at);
+                    } catch (err) {
+                        const line = `${at}: 1c threw reading the money characters: ${String(err?.message ?? err).slice(0, 200)}`;
+                        digits.thrown.push(line);
+                        digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                    }
+                    digits.readMs += performance.now() - start;
+                    const entry = phases.get('digits (1c)') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - start;
+                    phases.set('digits (1c)', entry);
+                };
+                const readDigitsOn = async (why, at) => {
                     digits.triggers.push(
                         why === '1a'
                             ? `${at}: by 1a's ${cover.faults.length} failure(s) on this job`
@@ -2347,7 +2371,11 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     }
                     const fault = first.why.length > 0 ? first.why : charsFault(first.chars, moneyOf());
                     if (fault.length > 0) {
-                        for (const w of fault) digits.faults.push(`${at}: ${w}`);
+                        // Fails closed: the characters cannot be read as the job's.
+                        for (const w of fault) {
+                            digits.faults.push(`${at}: ${w}`);
+                            digits.failures.push(`${at}: ${w} — ${CHAR_CHECK}`);
+                        }
                     } else {
                         const read = readMoneyChars(first.blank, first.shown, first.chars);
                         const settled = await readCharsAgain({ read, chars: first.chars }, async () => {
@@ -2370,20 +2398,22 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         for (const [kind, n] of Object.entries(read.smallKinds)) digits.smallKinds[kind] = (digits.smallKinds[kind] ?? 0) + n;
                         record.digits = { by: why, chars: r.chars, held: r.held, small: r.small, skipped, would: r.would.length };
                         for (const w of r.would) {
-                            digits.would.push(
+                            const line =
                                 `${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why}` +
-                                    (settled.unbelieved !== undefined ? ` (read again on a fresh pair that cannot be believed: ${settled.unbelieved})` : read.would.length > 0 ? ' — on the fresh pair too' : ''),
-                            );
+                                (settled.unbelieved !== undefined ? ` (read again on a fresh pair that cannot be believed: ${settled.unbelieved})` : read.would.length > 0 ? ' — on the fresh pair too' : '');
+                            digits.would.push(line);
+                            digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                        }
+                        // A trigger that fired and read nothing is a read that did not happen.
+                        if (r.chars === 0) {
+                            const line = `${at}: its trigger fired (${why === '1a' ? "1a's failures" : 'a mover near money'}) and no money character was read`;
+                            digits.empty.push(line);
+                            digits.failures.push(`${line} — ${CHAR_CHECK}`);
                         }
                         for (const w of settled.readAgain) {
                             digits.readAgain.push(`${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why} on the first pair, kept on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})`);
                         }
                     }
-                    digits.readMs += performance.now() - start;
-                    const entry = phases.get('digits (1c)') ?? { calls: 0, ms: 0 };
-                    entry.calls += 1;
-                    entry.ms += performance.now() - start;
-                    phases.set('digits (1c)', entry);
                 };
                 if (retryWhy.length === 0 && digitsOwed) await readDigits('trigger');
                 /*
@@ -4477,8 +4507,8 @@ try {
         payloadChecked: 0,
         leastModule: Infinity,
     };
-    // 1c(c) (report-only): every job's `digits`, folded (`char-read.mjs`'s `charReport` says it).
-    const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
+    // 1c(c) (bound since 7d): every job's `digits`, folded (`char-read.mjs`'s `charReport` says it; its `failures` are the contrast pass's).
+    const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], empty: [], thrown: [], failures: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
     const canaryModules = { would: [], readAgain: [], readAgainByTab: {}, thrown: [] };
     // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
     let moduleSnapRead;
@@ -4644,7 +4674,7 @@ try {
                 const into = (digitsRun.byVpClass[key] ??= { jobs: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
                 for (const k of Object.keys(into)) into[k] += t[k];
             }
-            for (const key of ['triggers', 'would', 'readAgain', 'faults']) digitsRun[key].push(...out.digits[key]);
+            for (const key of ['triggers', 'would', 'readAgain', 'faults', 'empty', 'thrown', 'failures']) digitsRun[key].push(...out.digits[key]);
             for (const [key, byKind] of Object.entries(out.digits.shares)) mergeShares((digitsRun.shares[key] ??= {}), byKind);
             for (const [kind, n] of Object.entries(out.digits.smallKinds)) digitsRun.smallKinds[kind] = (digitsRun.smallKinds[kind] ?? 0) + n;
             for (const key of ['movers', 'elements', 'triggerMs', 'readMs', 'frames', 'shared']) digitsRun[key] += out.digits[key];
@@ -5228,6 +5258,21 @@ try {
          * off (B1), and is said by name in 1d's lines below (`moduleReport`).
          */
         if (modulesRun.failures.length > 0) verdicts.push(`${modulesRun.failures.length} failure(s) of ${MODULE_CHECK}`);
+        /*
+         * 1c once its trigger fires (7d, the owner's D-2026-10-30-02): every
+         * failure fails the pass — a character that stands under the cut, a
+         * read that cannot be had, a job its trigger fired on that read no
+         * character, a throw — and each public look owes, on each viewport,
+         * characters read where its jobs triggered (`charsOwedFaults`; each
+         * carried look on its own below, `look-tallies.mjs`).
+         */
+        if (digitsRun.failures.length > 0) verdicts.push(`${digitsRun.failures.length} failure(s) of ${CHAR_CHECK}`);
+        verdicts.push(
+            ...charsOwedFaults(
+                digitsRun.byVpClass,
+                [...new Set(Object.keys(digitsRun.byVpClass).map((key) => key.slice(key.indexOf(' ') + 1)))].filter((cls) => !PRIVATE_SHEET_CLASSES.includes(cls)),
+            ),
+        );
         for (const [cls, codes] of Object.entries(codesReadByClass)) {
             const owed = [...codes]
                 .filter((code) => !['readByClass', 'faultedByClass'].some((key) => modulesRun[key][cls]?.has(code) ?? false))
@@ -5264,6 +5309,7 @@ try {
                 codesRead: codesReadByClass,
                 moduleCodesRead: modulesRun.readByClass,
                 codesRequired: CODES_REQUIRED,
+                chars: digitsRun.byVpClass,
             });
             verdicts.push(...faults);
             for (const note of notes) console.log(`  ${note}`);
@@ -5349,6 +5395,10 @@ try {
             for (const line of modulesRun.failures) {
                 console.error(`    ${line}`);
             }
+            for (const line of digitsRun.failures.slice(0, CHAR_SAID)) {
+                console.error(`    ${line}`);
+            }
+            if (digitsRun.failures.length > CHAR_SAID) console.error(`    … and ${digitsRun.failures.length - CHAR_SAID} more failure(s) of ${CHAR_CHECK} (counted by node in 1c's own lines below)`);
         }
     } catch (err) {
         failed = true;

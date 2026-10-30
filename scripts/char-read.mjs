@@ -1,8 +1,9 @@
 /**
  * **1c(c): every digit, where a mover is near** (before 8g2, the plan's item
- * 1c, the owner's D-2026-10-20-06 D1 (c); report-only until step 7d binds
- * it; `PROBE-RULES.md`, "Before 8g2, 1c(c): every digit, where a mover is
- * near"). The pure half of the per-character read: how many of a
+ * 1c, the owner's D-2026-10-20-06 D1 (c); bound since step 7d, the owner's
+ * D-2026-10-30-02: its failures fail the contrast pass; `PROBE-RULES.md`,
+ * "Before 8g2, 1c(c): every digit, where a mover is near" and "Before 8g2,
+ * 7d: 1c binds"). The pure half of the per-character read: how many of a
  * character's pixels its shown glyph moved at least halfway from the blanked
  * capture toward its ink, held to the count the same glyph covers on its own
  * (its reference, drawn by the probe's `charReference` on a canvas), the
@@ -16,12 +17,15 @@
  * P2-3), so no one number of pixels a character serves both.
  */
 
+/** The check 1c's failures carry (bound since 7d): every money character on a job whose trigger fired keeps its glyph. */
+export const CHAR_CHECK = 'every-money-character-reads-where-a-mover-is-near';
+
 /** A pixel is the glyph's when the shown frame moved it at least this far from the blank toward the ink: the ring read's `RING_MASK_ALPHA`. */
 export const CHAR_MASK_ALPHA = 0.5;
 
 /**
  * A character keeps at least this share of its reference count, or it is a
- * would-be failure: the plan's half. Measured first (`PROBE-RULES.md`,
+ * failure (bound since 7d): the plan's half. Measured first (`PROBE-RULES.md`,
  * "Before 8g2, 1c(c)"), on the clean tree with every money node of every
  * contrast job read (a scratch run that triggers every job holding money,
  * 697 of the 796 jobs, the tracked fixture carried): 60,106 characters held,
@@ -179,7 +183,7 @@ export const charKind = (c) => (/\p{N}/u.test(c) ? 'digit' : /\p{L}/u.test(c) ? 
  * Every money node's characters read on one pair (`blank`, the job's own
  * capture; `shown`, its shown frame): for each target of `moneyChars`
  * (`__moneyChars`), each character's count against its reference. Answers
- * the reads, the would-be failures (kept under `CHAR_KEEP_CUT` of a
+ * the reads, the failures (`would`: kept under `CHAR_KEEP_CUT` of a
  * reference of at least `CHAR_REF_MIN`, or no box at all, or a box past the
  * image), the characters too small to hold, and the shares read.
  */
@@ -273,10 +277,10 @@ export function charsMoved(first, again) {
 }
 
 /**
- * The read-again: a job whose first read has a would-be failure is read
- * again on a fresh pair (`again()`: a fresh blank, a fresh shown frame, the
- * characters answered again). Where the fresh pair is believed, a would-be
- * failure stands if the pair fails it too, and one the pair reads whole is
+ * The read-again: a job whose first read has a failure is read again on a
+ * fresh pair (`again()`: a fresh blank, a fresh shown frame, the characters
+ * answered again). Where the fresh pair is believed, a failure stands if the
+ * pair fails it too, and one the pair reads whole is
  * said as read again; a pair that cannot be believed (`charsMoved`, or a
  * capture refused) leaves the first read standing, with the reason.
  * Answers the read that stands, and what was read again.
@@ -290,7 +294,7 @@ export async function readCharsAgain(first, again) {
     const fresh = readMoneyChars(pair.blank, pair.shown, pair.chars);
     const still = new Set(fresh.would.map((w) => `${w.sel}|${w.c}|${w.x}|${w.y}`));
     const readAgain = first.read.would.filter((w) => !still.has(`${w.sel}|${w.c}|${w.x}|${w.y}`));
-    // What stands: the would-be failures both pairs read, as the fresh pair read them.
+    // What stands: the failures both pairs read, as the fresh pair read them.
     const firstKeys = new Set(first.read.would.map((w) => `${w.sel}|${w.c}|${w.x}|${w.y}`));
     const would = fresh.would.filter((w) => firstKeys.has(`${w.sel}|${w.c}|${w.x}|${w.y}`));
     return { read: { ...fresh, would }, readAgain, unbelieved: undefined };
@@ -343,22 +347,45 @@ export function shareQuantile(f, q) {
     return Infinity;
 }
 
-/** How many would-be failures and triggered jobs the report says in full. */
+/**
+ * **The read owed per look** (7d): on each viewport, a look whose contrast
+ * jobs the trigger fired on must have had characters read there — a trigger
+ * that fired and read nothing is a read that did not happen. `byVpClass` is
+ * the run's fold (`vp cls` → `triggered`, `chars`, …), `classes` the looks
+ * held here (the public looks in the runner, each carried look on its own in
+ * `look-tallies.mjs`). Answers one sentence a viewport and look that owes,
+ * none where the trigger fired on no job. Pure.
+ */
+export function charsOwedFaults(byVpClass, classes) {
+    const out = [];
+    for (const [key, t] of Object.entries(byVpClass ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+        const at = key.indexOf(' ');
+        const vp = key.slice(0, at);
+        const cls = key.slice(at + 1);
+        if (!classes.includes(cls)) continue;
+        if (t.triggered > 0 && t.chars === 0) out.push(`${CHAR_CHECK}: its trigger fired on ${t.triggered} ${cls} job(s) at ${vp} and read no character on them`);
+    }
+    return out;
+}
+
+/** How many failures and triggered jobs the report says in full. */
 export const CHAR_SAID = 30;
 
 /**
- * What 1c(c) says under the contrast pass, whatever the verdict
- * (report-only: it fails nothing until step 7d). `run` is the fold of every
- * job's `digits`: `byVpClass` (`vp cls` → jobs, triggered, by1a, chars,
- * held, small, skipped, would, readAgain, ms), `triggers` and `would` and
- * `readAgain` and `faults` (sentences), `shares` (`foldShares` by
- * `vp cls`). Pure.
+ * What 1c(c) says under the contrast pass, whatever the verdict (bound since
+ * 7d: its failures are the contrast pass's, and are said with its own lines
+ * there too). `run` is the fold of every job's `digits`: `byVpClass`
+ * (`vp cls` → jobs, triggered, by1a, chars, held, small, skipped, would,
+ * readAgain, ms), `triggers`, `would` (the characters that failed),
+ * `readAgain`, `faults` (what could not be read), `thrown` and `empty` (a
+ * job its trigger fired on that read no character), each sentences, and
+ * `shares` (`foldShares` by `vp cls`). Pure.
  */
 export function charReport(run) {
     const lines = [];
     const byVp = Object.entries(run.byVpClass).sort(([a], [b]) => a.localeCompare(b));
     lines.push(
-        `1c(c), every digit where a mover is near (report-only; char-read.mjs; a character under ${CHAR_KEEP_CUT} of its reference count, ` +
+        `1c(c), every digit where a mover is near (${CHAR_CHECK}, bound; char-read.mjs; a character under ${CHAR_KEEP_CUT} of its reference count, ` +
             `a reference of ${CHAR_REF_MIN} pixels or more), by viewport and look: ` +
             (byVp.length === 0
                 ? 'no contrast job'
@@ -367,7 +394,7 @@ export function charReport(run) {
                           ([key, t]) =>
                               `${key} ${t.triggered} of ${t.jobs} job(s) triggered` +
                               (t.by1a === 0 ? '' : ` (${t.by1a} by 1a's failures)`) +
-                              (t.triggered === 0 ? '' : `, ${t.chars} character(s), ${t.held} held, ${t.small} too small, ${t.skipped} left out, ${t.would} would-be, ${t.readAgain} read again`),
+                              (t.triggered === 0 ? '' : `, ${t.chars} character(s), ${t.held} held, ${t.small} too small, ${t.skipped} left out, ${t.would} failing, ${t.readAgain} read again`),
                       )
                       .join('; ')),
     );
@@ -417,7 +444,7 @@ export function charReport(run) {
         lines.push(`1c(c), the least share read, by kind: ${[...byKind].sort(([a], [b]) => a.localeCompare(b)).map(([kind, f]) => `${kind} ${f.leastAt}`).join('; ')}`);
     }
     if (run.would.length === 0) {
-        lines.push('1c(c), would-be failures: none');
+        lines.push('1c(c), failures: none');
     } else {
         const byNode = new Map();
         for (const line of run.would) {
@@ -426,7 +453,7 @@ export function charReport(run) {
             byNode.set(node, (byNode.get(node) ?? 0) + 1);
         }
         lines.push(
-            `1c(c), would-be failures: ${run.would.length} character(s); by node (characters): ` +
+            `1c(c), failures: ${run.would.length} character(s); by node (characters): ` +
                 [...byNode]
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([node, n]) => `${node} ${n}`)
@@ -438,6 +465,9 @@ export function charReport(run) {
     lines.push(
         `1c(c), read again on a fresh pair and kept there: ${run.readAgain.length === 0 ? 'none' : `${run.readAgain.length}${run.readAgain.slice(0, CHAR_SAID).map((line) => `\n    ${line}`).join('')}`}`,
     );
-    lines.push(`1c(c), could not be read (it fails nothing): ${run.faults.length === 0 ? 'none' : `${run.faults.length}${run.faults.slice(0, CHAR_SAID).map((line) => `\n    ${line}`).join('')}`}`);
+    const said = (list) => (list.length === 0 ? 'none' : `${list.length}${list.slice(0, CHAR_SAID).map((line) => `\n    ${line}`).join('')}${list.length > CHAR_SAID ? `\n    … and ${list.length - CHAR_SAID} more` : ''}`);
+    lines.push(`1c(c), could not be read (each a failure): ${said(run.faults)}`);
+    lines.push(`1c(c), triggered and read no character (each a failure): ${said(run.empty ?? [])}`);
+    lines.push(`1c(c), threw and was caught (each a failure): ${said(run.thrown ?? [])}`);
     return lines;
 }

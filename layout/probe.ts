@@ -12754,7 +12754,7 @@ declare global {
          * "shown" frame; how many of each.
          */
         __contrastGlyphs: (show: boolean, which?: 'both' | 'ring' | 'figures' | 'none', money?: boolean) => Promise<{ outlined: number; figures: number; money: number }>;
-        /** 1c(c): every money node's characters on the last prepare's paint, each with its own reference count (report-only). */
+        /** 1c(c): every money node's characters on the last prepare's paint, each with its own reference count (bound since 7d). */
         __moneyChars: () => MoneyChars;
         /** 1a once on a contrast job's prepared paint (`coverScan`). */
         __coverFaults: () => CoverScan;
@@ -13579,9 +13579,10 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
 
 /**
  * **1c(c): every digit, where a mover is near** (before 8g2, the plan's item
- * 1c, the owner's D-2026-10-20-06 D1 (c); report-only until step 7d;
+ * 1c, the owner's D-2026-10-20-06 D1 (c); bound since step 7d, the
+ * owner's D-2026-10-30-02, its failures the contrast pass's;
  * `PROBE-RULES.md`, "Before 8g2, 1c(c): every digit, where a mover is
- * near"). The broken-figure read (`digitRead` in the runner) counts glyph
+ * near" and "Before 8g2, 7d: 1c binds"). The broken-figure read (`digitRead` in the runner) counts glyph
  * pixels per line, so one digit wholly covered leaves the line's others to
  * make up its count (the critic's C-2); and no read held a money node that
  * is not broken to its characters at all. On a contrast job whose paint holds
@@ -15206,7 +15207,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     const lookMarks = shownLookMarks(scope);
     const fileArt = markFileArt(scope);
     const uncovered = uncoveredText(scope);
-    // 1c(c)'s trigger (report-only): read off this paint before anything is blanked.
+    // 1c(c)'s trigger (bound since 7d): read off this paint before anything is blanked.
     const digitTriggered = digitTrigger(scope);
     // Every ink is read BEFORE any node is blanked. A target nested in a
     // target — the sign's copy control, a `.mini` inside `.addr`, since round

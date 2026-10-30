@@ -1,6 +1,6 @@
 /**
- * 1c(c)'s trigger, the pure half (`digitTrigger.ts`; before 8g2, report-only
- * until step 7d): what moves a box, and when what it paints meets a money
+ * 1c(c)'s trigger, the pure half (`digitTrigger.ts`; before 8g2, bound since
+ * step 7d): what moves a box, and when what it paints meets a money
  * node's line boxes. The probe's half reads the styles and boxes off the
  * prepared paint; its red proofs are the plants in `PROBE-RULES.md`,
  * "Before 8g2, 1c(c)".

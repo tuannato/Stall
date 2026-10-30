@@ -129,6 +129,15 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
         ]);
         assert.deepEqual(PAID_LOOK_UNPAINTED_CODES, ['desktop/publish-name:publish-qr']);
     });
+
+    it('owes 1c’s characters read on every viewport where its own jobs triggered it (7d)', () => {
+        const fired = { ...measured(), chars: { [`mobile ${FIXTURE}`]: { jobs: 9, triggered: 2, chars: 0 }, [`desktop ${FIXTURE}`]: { jobs: 9, triggered: 1, chars: 40 }, 'mobile t-modern': { jobs: 9, triggered: 3, chars: 0 } } };
+        assert.deepEqual(carriedTallyFaults(fired).faults, [
+            't-fixture-private: every-money-character-reads-where-a-mover-is-near: its trigger fired on 2 t-fixture-private job(s) at mobile and read no character on them',
+        ]);
+        // Where its trigger fired on no job, it owes nothing.
+        assert.deepEqual(carriedTallyFaults({ ...measured(), chars: { [`mobile ${FIXTURE}`]: { jobs: 9, triggered: 0, chars: 0 } } }).faults, []);
+    });
 });
 
 /**

@@ -30,12 +30,17 @@
  *   composes no record naming a paid look in step 8 (8b2), so under the
  *   look the sheet shows its refusal and no code (`PAID_LOOK_UNPAINTED_CODES`);
  * - **the wall's controls** (`WALL_ROLES`): owed on its own walls, in
- *   `probe-coverage.mjs` beside the public count.
+ *   `probe-coverage.mjs` beside the public count;
+ * - **1c's characters** (7d, `every-money-character-reads-where-a-mover-is-near`):
+ *   on each viewport where its own contrast jobs triggered 1c, characters
+ *   read there (`charsOwedFaults` in `char-read.mjs`, the public looks' rule).
  *
- * Pure: tallies in, sentences out. Node built-ins only; no `.d.mts`, no TS
- * test imports it. Test: `a-carried-look-is-held-to-its-own-skip-ceilings`
+ * Pure: tallies in, sentences out. It imports `char-read.mjs` alone, pure
+ * too; no `.d.mts`, no TS test imports it. Test: `a-carried-look-is-held-to-its-own-skip-ceilings`
  * (`scripts/look-tallies.test.mjs`).
  */
+
+import { charsOwedFaults } from './char-read.mjs';
 
 /** The two kinds of line skip the contrast pass counts (`LINE_SKIP_CEILING`'s). */
 export const LINE_SKIP_KINDS = Object.freeze(['clipped-away', 'not-rendered']);
@@ -257,6 +262,9 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  * - `moduleCodesRead`: the same, 1d's reads (`a-codes-modules-read-as-its-matrix`,
  *   7c), owed on the same codes;
  * - `codesRequired`: the codes owed by name (`CODES_REQUIRED`);
+ * - `chars`: 1c's fold by viewport and look (`vp cls` → `triggered`, `chars`,
+ *   …; 7d): a carried look owes characters read on each viewport where its
+ *   jobs triggered (`charsOwedFaults`);
  * - `ceilings`: the table (`CARRIED_LINE_SKIP_CEILING` by default).
  */
 export function carriedTallyFaults({
@@ -268,6 +276,7 @@ export function carriedTallyFaults({
     codesRead = {},
     moduleCodesRead = {},
     codesRequired = [],
+    chars = {},
     ceilings = CARRIED_LINE_SKIP_CEILING,
 }) {
     const faults = [];
@@ -320,6 +329,7 @@ export function carriedTallyFaults({
         if (modulesUnread.length > 0) {
             faults.push(`${cls}: a-codes-modules-read-as-its-matrix read no module of ${modulesUnread.join(', ')} under it`);
         }
+        for (const why of charsOwedFaults(chars, [cls])) faults.push(`${cls}: ${why}`);
     }
     return { faults, notes };
 }

@@ -1,7 +1,9 @@
 /**
  * **1c(c)'s trigger** (before 8g2, the plan's item 1c, the owner's
- * D-2026-10-20-06 D1 (c); report-only until step 7d; `PROBE-RULES.md`,
- * "Before 8g2, 1c(c): every digit, where a mover is near"). The per-character
+ * D-2026-10-20-06 D1 (c); bound since step 7d, the owner's
+ * D-2026-10-30-02, on the jobs this finds and no others; `PROBE-RULES.md`,
+ * "Before 8g2, 1c(c): every digit, where a mover is near" and "Before 8g2,
+ * 7d: 1c binds"). The per-character
  * digit read runs only on a contrast job whose page holds a mover near money,
  * and this is the pure half of how a job is found to hold one: what moves a
  * box (`moverKinds`) and whether what it paints meets a money node's line

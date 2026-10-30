@@ -1,9 +1,10 @@
 /**
- * 1c(c): every digit, where a mover is near (before 8g2; report-only until
- * step 7d; `char-read.mjs`, `PROBE-RULES.md`, "Before 8g2, 1c(c): every
- * digit, where a mover is near"). The pure half: a character's count
- * against its own reference, the read's would-be failures, what the page's
- * characters must add up to, the read-again on a fresh pair, and the report.
+ * 1c(c): every digit, where a mover is near (before 8g2; bound since step
+ * 7d; `char-read.mjs`, `PROBE-RULES.md`, "Before 8g2, 1c(c): every digit,
+ * where a mover is near" and "Before 8g2, 7d: 1c binds"). The pure half: a
+ * character's count against its own reference, the read's failures, what
+ * the page's characters must add up to, the read-again on a fresh pair, the
+ * read owed per look, and the report.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,6 +27,8 @@ import {
     shareQuantile,
     turnRef,
     TURN_MATCH_MARGIN,
+    CHAR_CHECK,
+    charsOwedFaults,
 } from './char-read.mjs';
 
 /** A white image of `w` by `h`, four bytes a pixel, with `paint` setting pixels. */
@@ -293,13 +296,15 @@ describe('the shares and the report (foldShares, shareQuantile, charReport)', ()
         assert.equal(shareQuantile(fold.digit, 0.001).toFixed(2), '0.95');
         assert.equal(shareQuantile(fold.digit, 0.99).toFixed(2), '1.05');
     });
-    it('says the jobs, the trigger’s cost, the shares, the would-be failures, the reads again and what could not be read', () => {
+    it('says the jobs, the trigger’s cost, the shares, the failures, the reads again, what could not be read, an empty read and a throw', () => {
         const run = {
             byVpClass: { 'mobile t-modern': { jobs: 10, triggered: 2, by1a: 1, chars: 30, held: 28, small: 2, skipped: 0, would: 1, readAgain: 0 }, 'desktop t-neo': { jobs: 5, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 } },
             triggers: ['pay @mobile / theme 1: 1 meet(s), p.note (top -172px (position relative)) meets span.pay-x-n[price] at 10,20'],
             would: ['pay @mobile / theme 1: span.pay-x-n[price] "2" at 29,213: it keeps 0 of its 284 reference pixel(s), 0.00 of them, under 0.5 — on the fresh pair too'],
             readAgain: [],
             faults: [],
+            empty: [],
+            thrown: ['pay @mobile / theme 1: 1c threw reading the money characters: planted'],
             shares: { 'mobile t-modern': foldShares({}, shares, 'pay @mobile / theme 1') },
             smallKinds: { other: 2 },
             movers: 4,
@@ -314,9 +319,38 @@ describe('the shares and the report (foldShares, shareQuantile, charReport)', ()
         assert.match(lines[1], /too small to hold \(a reference under 6 pixels — on a turned frame, its glyph drawn upright — or, "on a turn", a phase of the turn leaving it under 3\), by kind: other 2/);
         assert.match(lines[2], /4 mover\(s\) over 100 element\(s\)/);
         assert.ok(lines.some((line) => /triggered jobs: 1\n    pay @mobile/.test(line)));
-        assert.ok(lines.some((line) => /would-be failures: 1 character\(s\); by node \(characters\): mobile\/pay:span\.pay-x-n\[price\] 1/.test(line)));
+        assert.match(lines[0], /^1c\(c\), every digit where a mover is near \(every-money-character-reads-where-a-mover-is-near, bound;/);
+        assert.match(lines[0], /1 failing, 0 read again/);
+        assert.ok(lines.some((line) => /^1c\(c\), failures: 1 character\(s\); by node \(characters\): mobile\/pay:span\.pay-x-n\[price\] 1/.test(line)));
         assert.ok(lines.some((line) => /read again on a fresh pair and kept there: none/.test(line)));
-        assert.ok(lines.some((line) => /could not be read \(it fails nothing\): none/.test(line)));
+        assert.ok(lines.some((line) => /could not be read \(each a failure\): none/.test(line)));
+        assert.ok(lines.some((line) => /triggered and read no character \(each a failure\): none/.test(line)));
+        assert.ok(lines.some((line) => /threw and was caught \(each a failure\): 1\n    pay @mobile \/ theme 1: 1c threw/.test(line)));
+        assert.ok(!lines.some((line) => /would-be|report-only|fails nothing/.test(line)));
         assert.ok(lines.some((line) => /least share read, by kind: digit pay @mobile \/ theme 1: b "1" 0\.920/.test(line)));
+    });
+});
+
+/**
+ * The read owed per look (7d, the owner's D-2026-10-30-02): on a viewport
+ * where a look's contrast jobs triggered 1c, characters were read there, or
+ * the trigger fired and read nothing.
+ */
+describe('a look whose jobs triggered 1c had its characters read (charsOwedFaults, 7d)', () => {
+    it('fails a viewport and look whose triggered jobs read no character, and owes nothing where the trigger fired on none', () => {
+        assert.equal(CHAR_CHECK, 'every-money-character-reads-where-a-mover-is-near');
+        const byVpClass = {
+            'mobile t-modern': { jobs: 10, triggered: 2, chars: 0 },
+            'desktop t-modern': { jobs: 10, triggered: 2, chars: 30 },
+            'mobile t-neo': { jobs: 5, triggered: 0, chars: 0 },
+            'mobile t-fixture-private': { jobs: 5, triggered: 1, chars: 0 },
+        };
+        assert.deepEqual(charsOwedFaults(byVpClass, ['t-modern', 't-neo']), [
+            'every-money-character-reads-where-a-mover-is-near: its trigger fired on 2 t-modern job(s) at mobile and read no character on them',
+        ]);
+        assert.deepEqual(charsOwedFaults(byVpClass, ['t-fixture-private']), [
+            'every-money-character-reads-where-a-mover-is-near: its trigger fired on 1 t-fixture-private job(s) at mobile and read no character on them',
+        ]);
+        assert.deepEqual(charsOwedFaults({}, ['t-modern']), []);
     });
 });
