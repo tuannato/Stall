@@ -13179,7 +13179,11 @@ running on a held box is cancelled when `transition-property` is held at
 `none` and does not resume (read from the CSS Transitions spec, not
 observed). A transform `angleOf` does not read as a turn (a 3D rotation
 about another axis, a motion path's own rotation) is not held; such a code
-is read on the job's frame as before. Neither road is planted.
+is read on the job's frame as before. Neither road is planted. *(Corrected
+at the fourteenth review's fixes, below: the held frame also undid a scale,
+a mirror or a squash on the turned frame, and since M2 such a code fails
+closed unread; and "read on the job's frame as before" is false for a code
+turned edge-on, which leaves the zones and is read by neither pixel read.)*
 
 ### The kit owes its codes by name (decision 3)
 
@@ -13351,7 +13355,8 @@ fixture, whose sign is sticky at the desk, so its canary picks the short
 desk pass instead (`GEOMETRY_CANARY`), which reads the sticky sign alone and
 prints no 1a count; a run whose
 looks have no sticky desk sign reads the phone's pass and can flake the
-same way. Not fixed here (PLAN § Open).
+same way. Not fixed here (PLAN § Open). *(Traced and fixed at the
+fourteenth review's fixes, below: the cause was the one read here.)*
 
 ### The clean run
 
@@ -13388,6 +13393,152 @@ first pair and +0.7s in the second, inside the spread base 1 and base 2
 show between themselves (18.71s and 16.55s). The contrast dumps of the second pair are
 byte-identical, 15,018 boxes over 823 jobs (`runs/ab-dump-compare.log`).
 Every run exits 0 and accepts the board's 142.
+
+## Before 8g2: the fourteenth review's fixes (2026-10-30; CRITIC-14, the owner's D-2026-10-30-01)
+
+Its evidence is under
+`private/design/workshop-2026-09-23/before-8g2/critic14-fixes/` (`runs/`,
+`plants/`, `tools/`); the paths below are relative to it. The critic's own
+evidence is `critic14/`. Three code commits: `067c06b` (1b, M1), `66f336c`
+(the quiet zone and 1d, M2) and `98dea3d` (the fixed clock, item 1). The
+plants are the critic's, copied into `plants/`.
+
+### M1: an heir with a transition on its text-shadow is still an heir
+
+`textShadowHeirs` held the box's text-shadow at a sentinel and held only the
+box's transitions, so an element under it with `transition: text-shadow …`
+(or `all`) started a transition toward the sentinel, still computed its old
+value, and was not taken as an heir (measured by the critic in Chrome,
+`critic14/runs/heirs-transition-chrome.log`). A regression of the
+thirteenth review's item 5: the critic's KTSH, a text-shadow keyframe on
+the phone rows' name column that the rail label inherited under
+`transition: text-shadow .3s`, passed the kit's probe on `7754da0` and
+failed it on `e36d2fd`. Now every element under the box holds its
+transitions (`holdOff` with no values) before the box is held, and is put
+back after the box, so none starts a transition on the way in or out.
+`holdOff` and `textShadowHeirs` moved to `layout/holdOff.ts`; its test
+(`an-heir-with-a-transition-is-still-an-heir`, happy-dom) drives them over a
+model of a running transition — an element whose transition is not held
+answers the text-shadow it had before — and goes red when only the box's
+transitions are held (`runs/t-M1-red-box-only.log`, 2 of its 5 tests). The
+model is the test's, not Chrome's; Chrome is the plants below. Not seen by
+the test: the order of the two put-backs.
+
+### M2: a turned code is read upright only where its frame only turns
+
+The frame `__codeTurnsHeldOff` held upright took off every transform above
+a turned code, so a scale, a mirror or a squash on the same frame was undone
+with the turn: the critic's PSCT (`scale: .2; rotate: .01deg` on Modern's
+wall code box) and PMIR (`rotate: 180deg; scale: -1 1` on Modern's pay code
+box) each passed the whole runner on `7754da0`, read upright as codes the
+page does not paint (PSC, the scale alone, fails closed under the 3px
+module floor; PMIR0, the mirror alone, reads 4 codes wrong). Now the page
+says of each code whether every box from it up only turns it (`turnOnly` in
+`layout/probe.ts`: `scale` none or 1, a `translate` with no z, a `rotate`
+with no axis, and a `transform` that is 2D, orthonormal within 0.001 and
+with a determinant above 0), holds upright only codes whose frame does, and
+`readTurnedUpright` fails every other turned code closed for both reads,
+naming what its frame does ("its frame is turned, and what turns it does
+more than turn it (div.sw-qr has scale: 0.2): held upright it would not be
+the code the page paints, so it is not read"); no frame is made where no
+turned code only turns. A code's line says "(in a turned frame, read
+upright: every transform above it held off)" where it was read upright and
+"(in a turned frame, not read)" where it failed closed. Chrome serialises a
+`rotate` about the z axis as a plain angle (`z 45deg` and `0 0 1 45deg` as
+`45deg`, `0 0 -1 30deg` as `-30deg`; read by hand in headless Chrome), so
+those read as turns and pass `turnOnly`; `x 45deg` stays as written. Tests:
+`fails closed, unread and with what its frame does, a turned code whose
+frame does more than turn it, and reads the others` and its two siblings in
+`a-turned-code-is-read-upright-or-fails-closed` (`scripts/code-modules.test.mjs`).
+
+**What a turn `angleOf` does not read** (the critic's item 2): a `transform`
+about another axis (`rotateX`, `rotateY`), a `rotate` about the x or y axis
+and a motion path's own rotation add no turn, so a code with no other turn
+is read as it stands on the job's frame. The critic's P3X (`rotateX(60deg)`
+with an opacity) and PMP (a motion path's 0.01° with an opacity) read red
+that way, and PMP20 (a motion path's 20°) reads dark there: a false red on a
+code that would scan. A code turned edge-on is read by neither pixel read
+and said by no line: P3Y (`rotateY(89deg)`) squashes Modern's pay code until
+its box, less its unscaled padding, has no width, so `quietZoneOf` answers
+no zone (`runs/q1d-P3Y.log`: Modern's pay codes absent from the codes read
+and from "codes painted and not read"); the geometry fails it (the pay gate
+and the colour check's squareness, 40 failures at 390, the critic's
+`critic14/runs/q-P3Y-390-pay-geometry.log`). The critic's PZ, a padded code
+shrunk uniformly, leaves the zones the same way. Making such a code say a
+line, or fail, is not built (PLAN § Open).
+
+### Item 1: the kit's canary flake, traced and fixed
+
+The cause read at the thirteenth review's fixes is the cause: the pay
+sheet's rate line prints `formatTriedAt(PAY_RATE.atMs)` to the second, the
+pay fixtures stamp that rate at load, and 1a's lattice asks a glyph's points
+from its ink box, so two tabs' pages loaded at different seconds asked
+different point counts of that line. With the page clock pinned (the
+critic's `critic14/runs/qclock-pay-390-reduce-pinned.log`) the counts are
+the same at one printed time and differ between two — 960 against 956 on
+the kit's skeleton, 4850 against 4830 on Modern, 6818 against 6762 on Rural,
+at 01:00:00 and 01:11:11; Neo's mono face does not move. The canary reads
+the phone's reduced-motion pass again (`pay` among its screens) wherever no
+carried look has a sticky desk sign: the kit's probe, not the default run.
+Now `FIXED_CLOCK` is installed once on every tab before the geometry walk,
+so the geometry passes run on the clock the contrast passes always ran on,
+and not again before the contrast pass. With it: the kit's skeleton 5 runs
+of 5 green (`runs/k-clean-{1..5}.log`; the critic's 8 of 8 on the trial),
+the Rural starter 2 of 2 (`runs/k-rural-starter-{1,2}.log`; red 2 of 2 on
+`7754da0` by the critic's runs), and the ordinary clean whole run exits 0
+(below).
+
+### Items 3, 4 and 6
+
+**Item 3.** CLAUDE.md's 1b "Not read" list lost "a box behind an open
+sheet's scrim" at the thirteenth review's fixes, where a positive sentence
+replaced it; the gap is true (a box behind the scrim, raised over it by a
+`z-index`, whose paint with no hit area lies over the sheet's money, is read
+by no road of 1b, which holds its reachers to the open surface). It is back
+on the list, beside the positive sentence. Not planted.
+
+**Item 4.** `an-accepted-meet-does-not-stand-for-its-pair` holds
+`sayReach` by behaviour and `judgeReacher` by its text: the critic's
+mutation, `Set.prototype.add.call(said, key)` in the accepted branch,
+restores `87ee812`'s bug with the three files' 34 tests green
+(`critic14/runs/t-mut-sayreach-pin.log`). A behavioural test would drive
+`judgeReacher` itself, whose module (`layout/probe.ts`) runs the probe
+page's own top-level code when it is imported; not built, stated in PLAN §
+Open.
+
+**Item 6.** The worn-only sheet's "the look's own art was never fetched",
+once in two of the critic's runs under the private look at 0x04's
+selection and once before under load: cause unknown, in PLAN § Open.
+
+### Red proofs
+
+Each plant alone, on the scratch clone at `98dea3d` (`tools/run.sh`, the
+whole runner at three tabs, each started once the one-minute load was under
+2.5; `tools/kit.sh`, the kit's probe; `tools/qp.sh`, one probe page;
+`tools/q1d.sh`, the contrast pass alone on the named screens).
+
+| Plant | Road | Counts | Exit |
+|---|---|---|---|
+| KTSH (the kit's probe over the Neo starter; the heir under `transition: text-shadow .3s`) | kit's probe | 1b 152 at 390, 26 at 360, as on `e36d2fd` | 1 (`runs/k-KTSH.log`; `7754da0` exited 0, the critic's `critic14/runs/k-KTSH2.log`) |
+| KTSHc (its control: no transition) | kit's probe | 1b 152 at 390, 26 at 360 | 1 (`runs/k-KTSHc.log`) |
+| TSH / TSHc (the ordinary probe's twins, Neo, 390 `offers`) | quick read | 18 / 18 (0 / 18 on `7754da0`) | — (`runs/q-TSH*-390-offers.log`) |
+| ITS / ITSc (item 5's) | quick read, 390 `offers` | 0 / 18: item 5 kept | — (`runs/q-ITS*-390-offers.log`) |
+| PSCT | whole runner | 1d 6 and the quiet zone 6, each failed closed "(in a turned frame, not read)": Modern's wall code at 1920 and its two Cycle codes at 1280, bare and worn | 1 (`runs/p-PSCT.log`; `7754da0` exited 0, `critic14/runs/p-PSCT.log`) |
+| PMIR | whole runner | 1d 24 and the quiet zone 24, each failed closed: every Modern pay code, bare and worn, on the six pay screens with a code (`pay`, `pay-xec`, `pay-moved`, `pay-longest-figure`, `pay-several`, `pay-several-longest-figure`) at 390 and 1280 | 1 (`runs/p-PMIR.log`; `7754da0` exited 0) |
+| PSC (the scale alone) | quick read, `shop-window-wall` at 1920 | 1d 2 failed closed under the 3px floor, the quiet zone 2 by its corner (its radius cuts past one module of a code that small) | — (`runs/q1d-PSC-wall.log`) |
+| PQOT | quick read, `pay` | 1d 4 and the quiet zone 2, each read upright and red | — (`runs/q1d-PQOT.log`) |
+| P3Y | quick read, `pay` | no zone: Modern's pay codes read by neither rule and in no line | — (`runs/q1d-P3Y.log`) |
+| none (Rural's three turned codes) | quick read | read upright and clean: the quiet zone white, every centre dark 0 or light 255, none failed closed; "codes upright" 6 calls, 1.1s | — (`runs/q1d-clean-turned.log`) |
+| none (the kit's skeleton) | kit's probe, 5 runs | the canary green on all 5 | 0 ×5 (`runs/k-clean-*.log`) |
+| none (the Rural starter) | kit's probe, 2 runs | the canary green; the board's 142 accepted, its turned codes read upright | 0 ×2 (`runs/k-rural-starter-*.log`) |
+
+### The clean run
+
+`runs/w-clean-A.log`: the whole runner on the scratch clone at `98dea3d`,
+three tabs, the tracked fixture carried, started at a one-minute load of
+2.28 (peak 10.31): exit 0, 232.1s of 300. 1b fails nothing and accepts the
+board's 142 at 1280; the quiet zone and 1d read Rural's three turned codes
+upright and clean; both canaries green; no quiet-zone sighting.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

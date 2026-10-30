@@ -1225,7 +1225,10 @@ money path this app can have, because nothing on it is derived.
   judging the most over all the target's boxes, the board's ceiling raised
   to 0.25 (D-2026-10-29-01), and the run under the private look at 0x04's
   selection (the thirteenth critic's: 1b 0 failures and 0 wide seeks on
-  every pass). Open:
+  every pass). Built at the fourteenth review's fixes and off it: an heir
+  with a transition on its text-shadow is an heir (M1, KTSH;
+  `textShadowHeirs` holds the transitions of every element under the box).
+  Open:
   1. **Pseudo text past its width is under-read** (the ninth critic's P2,
      not planted): a pseudo's region is its own resolved width (an inline
      one's, a font size a character), grown by one font size; text that
@@ -1244,7 +1247,10 @@ money path this app can have, because nothing on it is derived.
      stands at; a column rule; an SVG element's own overflow; a glyph's
      shape and text over several lines (its line boxes, an ink box an upper
      bound); the contrast pass's paints (1b runs on the geometry passes
-     alone).
+     alone); and a box behind an open sheet's scrim, raised over it by a
+     `z-index`, whose paint with no hit area lies over the sheet's money
+     (every road holds its reachers to the open surface; the fourteenth
+     critic's item 3, not planted).
   4. **The accepted reach is keyed on exact strings** (`REACH_ACCEPTED`):
      a Chrome that serialises a computed shadow or colour another way, or a
      change to Rural's board, plate or mood, takes the 142 back to
@@ -1262,6 +1268,15 @@ money path this app can have, because nothing on it is derived.
      no reacher, no target, no look pseudo at rest): sound by mechanism, a
      transform, an offset or a motion path carrying only the box and what it
      holds where no anchor can follow; no plant proves the gate itself.
+  7. **`an-accepted-meet-does-not-stand-for-its-pair` pins `judgeReacher` by
+     its text** (the fourteenth critic's item 4): `sayReach` is held by
+     behaviour, but `judgeReacher` only by what its body says, so a key
+     added to the pair in the accepted branch some way the pin does not
+     name (`Set.prototype.add.call(said, key)`, the critic's mutation)
+     restores `87ee812`'s bug with the three files' 34 tests green. A
+     behavioural test would drive `judgeReacher` itself, which lives in
+     `layout/probe.ts`, whose module runs the probe page's own top-level
+     code when it is imported; not built.
 
 - **Before 8g2, 1d's open list** (a code's modules read in pixels; bound
   since step 7c, `layout/PROBE-RULES.md`, "Before 8g2, 1d: the code's
@@ -1309,33 +1324,54 @@ money path this app can have, because nothing on it is derived.
   5. **A paint that misses every centre** (a line thinner than half a module
      along the seams, a cover smaller than a module between centres) is not
      read; whether a camera reads through it is not measured.
-  6. **A turned code is read upright, not as it stands.** The frame the two
-     reads take holds off every transform on the code and the boxes above
-     it, and nothing else: a box whose place a transform there decides (an
-     absolute or fixed box whose containing block the transform made) can
-     stand elsewhere on that frame than it does on the job's, and a cover
-     laid that way over a turned code is read where it moved to (1a reads
-     the job's own frame). A transition already running on one of those
-     boxes is cancelled by the hold and does not resume (read from the
-     CSS Transitions spec, not observed). Neither is planted.
+  6. **A turned code is read upright, not as it stands, and only where its
+     frame only turns.** The frame the two reads take holds off every
+     transform on the code and the boxes above it, and nothing else: a box
+     whose place a transform there decides (an absolute or fixed box whose
+     containing block the transform made) can stand elsewhere on that frame
+     than it does on the job's, and a cover laid that way over a turned code
+     is read where it moved to (1a reads the job's own frame). A transition
+     already running on one of those boxes is cancelled by the hold and does
+     not resume (read from the CSS Transitions spec, not observed). Neither
+     is planted. Since the fourteenth review's M2 (the owner's
+     D-2026-10-30-01) a code whose frame also scales, skews, mirrors or
+     leaves the plane (`turnOnly`: every box from the code up with `scale`
+     none or 1, a `translate` with no z, a `rotate` with no axis, a
+     `transform` 2D and orthonormal with a determinant above 0) fails
+     closed for both reads unread, where the held frame read it as a code
+     the page does not paint (PSCT and PMIR passed the whole runner). A
+     turn `angleOf` does not read adds no turn: a code turned only by a
+     `transform` about another axis, a `rotate` about the x or y axis or a
+     motion path is read as it stands on the job's frame (P3X and PMP read
+     red there; PMP20, a motion path's 20°, reads dark there, a false red on
+     a code that would scan), and one turned edge-on (P3Y,
+     `rotateY(89deg)`) leaves `codeZones` and is read by no pixel read and
+     said by no line (the geometry fails it, 40 at 390; item 7).
+  7. **A code can leave `codeZones` with nothing said** (the fourteenth
+     critic's PZ and P3Y): `quietZoneOf` subtracts the svg's padding, read
+     unscaled, from its box, read scaled, so a padded code shrunk uniformly
+     or squashed edge-on has no content side and is no zone — read by
+     neither pixel read and owed by neither (the critic's PZ: the share code
+     at 5% read on 7 jobs, not 9). Latent: no wrapper holds a padded code
+     alone, and the pay codes are gated. A line, or a failure, for a painted
+     code with a box and no zone would close it; not built.
 
-- **Before 8g2, the kit probe's geometry canary flakes** (found at the
-  thirteenth review's fixes; `layout/PROBE-RULES.md`, "Before 8g2: the
-  thirteenth review's fixes"). On the kit's skeleton,
-  `the-geometry-passes-read-the-same-on-every-tab` failed `reduced-motion
-  @mobile` on two of five runs on `e36d2fd` and three of five on the fixes'
-  tree, 1a's point count differing by one to four between the two tabs'
-  reads and nothing else. The kit has no sticky desk sign, so its canary
-  reads the phone's reduced-motion pass again, `pay` among its screens; the
-  pay fixtures stamp their rate with `Date.now()` at page load and the sheet
-  prints it to the second, so two tabs lay that line out at different
-  widths — the likely cause, read and not traced. The default run carries
-  the tracked fixture, whose sign is sticky at the desk, so its canary reads
-  the short desk pass instead, which reads the sticky sign alone and prints
-  no 1a count; a run whose looks have no
-  sticky desk sign reads the phone's pass and can flake the same way. The
-  fixes to weigh: one clock for every probe page's fixtures, or a canary
-  pass whose screens print no clock.
+- **Before 8g2, the fourteenth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-14.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fourteenth review's fixes"). Built and off it: M1 (1b's list above), M2
+  (1d's list above, item 6), and the kit probe's geometry canary flake,
+  traced and fixed — the pay sheet printed its rate to the real second on
+  the geometry passes, so two tabs' pages asked 1a different point counts of
+  that line (960 against 956 on the kit's skeleton at the critic's two
+  pinned times); every tab now runs on the fixed clock from before the
+  walk. Open:
+  1. **PZ and P3Y**: 1d's list above, item 7.
+  2. **The worn-only sheet's "the look's own art was never fetched"** (the
+     fourteenth critic's item 6): printed once in two runs under the private
+     look at 0x04's selection, and seen once before in the 8g1f critic's log
+     under load. Its cause is not known.
+  3. **`judgeReacher`'s pin pins text**: 1b's list above, item 7.
 
 - **Before 8g2, 1c(c)'s open list** (every money character read on its own,
   only on a contrast job where a mover is near money, read report-only; the
