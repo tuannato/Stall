@@ -1325,15 +1325,30 @@ money path this app can have, because nothing on it is derived.
      along the seams, a cover smaller than a module between centres) is not
      read; whether a camera reads through it is not measured.
   6. **A turned code is read upright, not as it stands, and only where its
-     frame only turns.** The frame the two reads take holds off every
+     frame only turns and holding the turn off moves it at most 1.5
+     modules.** The frame the two reads take holds off every
      transform on the code and the boxes above it, and nothing else: a box
      whose place a transform there decides (an absolute or fixed box whose
      containing block the transform made) can stand elsewhere on that frame
      than it does on the job's, and a cover laid that way over a turned code
-     is read where it moved to (1a reads the job's own frame). A transition
+     is read where it moved to (1a reads the job's own frame). **The code
+     itself stands where the held frame puts it** (the fifteenth review's
+     B1, the owner's D-2026-10-31-01): holding off a `translate`, or a turn
+     about a far origin, moves it, and a mask or a clip that did not move
+     with it was read in the wrong place — PTO2 (every Modern pay code
+     carried 140px down into a masked band) passed the whole runner, and
+     P45 (a 45° turn about the code's own centre, its corners past a mask)
+     passed a check of the centre alone. Since then a code that holding the
+     turn off moves at any corner more than 1.5 modules fails closed for
+     both reads (`uprightCornerTravel`), so what the held frame does not see
+     is a mask or a clip cutting at most 1.5 modules of the painted code's
+     edge, inside its quiet zone; on the clean tree a corner of Rural's
+     Cycle codes moves 0.99 modules, of its wall code 0.55. A transition
      already running on one of those boxes is cancelled by the hold and does
-     not resume (read from the CSS Transitions spec, not observed). Neither
-     is planted. Since the fourteenth review's M2 (the owner's
+     not resume (observed in Chrome by the fifteenth critic on the heirs
+     `textShadowHeirs` holds through the same `holdOff`, not on a code's
+     box). The box placed by a transform and the transition are not
+     planted. Since the fourteenth review's M2 (the owner's
      D-2026-10-30-01) a code whose frame also scales, skews, mirrors or
      leaves the plane (`turnOnly`: every box from the code up with `scale`
      none or 1, a `translate` with no z, a `rotate` with no axis, a
@@ -1370,8 +1385,23 @@ money path this app can have, because nothing on it is derived.
   2. **The worn-only sheet's "the look's own art was never fetched"** (the
      fourteenth critic's item 6): printed once in two runs under the private
      look at 0x04's selection, and seen once before in the 8g1f critic's log
-     under load. Its cause is not known.
+     under load; seen again in the fifteenth critic's run under the
+     selection (`critic15/runs/w-selected.log`), its third sighting there.
+     Its cause is not known.
   3. **`judgeReacher`'s pin pins text**: 1b's list above, item 7.
+
+- **Before 8g2, the fifteenth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-15.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fifteenth review's fixes"). Built and off it: B1 (1d's list above, item
+  6), the trigger's walk owed and the per-node empty read (1c(c)'s list
+  below), and the closing of that list's PL and selection items. Open:
+  1. **The canvas reference's undercount, for the owner**: 1c(c)'s list
+     below, item 4.
+  2. **J5's remainder and its thin clean margin**: 1c(c)'s list below, item
+     3 (99 of 923, the 3-of-11 "l"; 0.588, 0.088 above the cut).
+  3. **The worn-only sheet's flake**: the fourteenth review's list above,
+     item 2 (its third sighting under the selection).
 
 - **Before 8g2, 1c(c)'s open list** (every money character read on its own,
   only on a contrast job where a mover is near money; bound since step 7d,
@@ -1388,26 +1418,33 @@ money path this app can have, because nothing on it is derived.
   turned character is held to the largest phase within 0.2 of its best match
   (J5), measured with every money job read (0 under the cut; the least
   turned letter 0.588), and the trigger reads the look pseudos of every box
-  a mover holds (HRP2). Open:
-  1. **PL is 1c's alone among the contrast reads** (a box over one digit of
-     the strip's total: the broken-figure read passes it); its whole-runner
-     proof on the bound read is not made at 7d, only its quick read (4 on 4
-     jobs, "Before 8g2: 1c's two holes").
-  2. **D1 (a), every money job, is measured and not built** (the owner's
+  a mover holds (HRP2). Built at the fifteenth review's fixes and off this
+  list (`layout/PROBE-RULES.md`, "Before 8g2: the fifteenth review's
+  fixes"): a prepare that answers no trigger fails its job, and each look
+  owes the trigger's walk over every job of it holding money (its item 1);
+  a node the trigger met none of whose characters was read, some left out
+  turned past 2° or too big, fails (its item 2); and two items closed by the
+  fifteenth critic's runs — PL, 1c's alone among the contrast reads (a box
+  over one digit of the strip's total), through the whole runner bound,
+  exits 1 with 4 1c failures, on the bare jobs 1c the only contrast read
+  that fails it (`critic15/runs/p-PL.log`), and the run under the private
+  look at 0x04's selection triggers 46 jobs and fails none
+  (`critic15/runs/w-selected.log`). Open:
+  1. **D1 (a), every money job, is measured and not built** (the owner's
      D-2026-10-30-02 keeps it open as an option). From 1c's own clock in
      scratch runs that read every one of the 697 jobs holding money:
      80.4–111.8s of tab time over four such runs at the eleventh review, and
      117.8s on the forced run before 7d, so about +27 to +39s of wall time
      at three tabs (a third of the tab time), against the runs' 222–242s and
      the 300s ceiling. It
-     would also read the covers the trigger does not see (3, below).
-  3. **What the trigger does not see** (stated, not fixed): a box placed
+     would also read the covers the trigger does not see (2, below).
+  2. **What the trigger does not see** (stated, not fixed): a box placed
      over money by stacking alone — `position: relative` and a `z-index` with
      no offset, its content overflowing a zero-height box — unless 1a fails
      it (P1A, read by 1a's failures). MISS, a spread shadow with no hit area,
-     triggers nothing, so 1c never reads it, but it is not unread: 1b reads it
-     on the geometry passes (131 would-be at 390, 137 at 1280, report-only)
-     and the contrast pass fails it (92 figures under 3:1, the broken-figure
+     triggers nothing, so 1c never reads it, but it is not unread: 1b, bound
+     since 7b, reads it on the geometry passes (131 would-be failures at 390
+     and 137 at 1280 when 1b was report-only) and the contrast pass fails it (92 figures under 3:1, the broken-figure
      read 16, `a-halo-never-reaches-a-neighbours-text` 29 a page pass;
      `private/design/workshop-2026-09-23/before-8g2/1c/runs/w-MISS-shadow-modern.log`). Also unseen: an unmoved
      box's paint that reaches past it (1b's); an app sheet's pseudo-element
@@ -1416,9 +1453,13 @@ money path this app can have, because nothing on it is derived.
      box (each held box is read by its border box and, since the eleventh
      review, its sharp reach, not by its text's own lines); a blurred layer
      past its core.
-  4. **What the read does not read**: the geometry-only screens, the wall
+  3. **What the read does not read**: the geometry-only screens, the wall
      sizes the contrast pass does not paint, 360 and a turned wall; a frame
-     turned past 2°; a character behind a scroller or past the shot; a cover
+     turned past 2° (a node the trigger met that it leaves out whole fails,
+     since the fifteenth review's item 2); a character behind a scroller or
+     past the shot (a node the trigger met whose every character stands
+     behind a scroller fails only where the job reads no character at all,
+     stated); a cover
      of less than half a glyph (it keeps half its reference); a character with
      a reference under six pixels (counted by kind, never held; on the clean
      measurement run after the eleventh review 2,081 of 62,318 characters,
@@ -1435,22 +1476,36 @@ money path this app can have, because nothing on it is derived.
      Chrome's resample (an upright glyph drawn on a canvas and resampled
      bilinearly into the frame's turn) measured on Rural alone; the 0.2 was
      fitted in mask space on Rural's 2,350 turned characters and measured
-     again in Chrome with every money job read, on this Mac alone; a character some phase
+     again in Chrome with every money job read, on this Mac alone. **J5's
+     margin is thin on clean glyphs and still lets some covers choose**
+     (the fifteenth critic): on clean turned glyphs J5's reference is never
+     below the best match's, and the least share kept, 0.588 (an "e" on
+     Rural's surcharge line), is 0.088 above the cut; where no full phase
+     comes within 0.2 the cover still chooses its phase — of TRN's 923
+     turned characters that keep under half the page's own clean count,
+     paired by place with their clean read, 99 pass (307 under the best
+     match alone), the worst an "l" keeping 3 of its 11 pixels, held to a
+     phase of 4 against a clean reference of 10. A floor at 0.7 of the
+     upright reference would drop that one (97 pass) with 0 clean under the
+     cut; the window kept 0.2 and no floor (D-2026-10-31-01). A character some phase
      leaves under `CHAR_TURN_FLOOR` (3) pixels is too small "on a turn" (12
      on the clean run: the "=" on Rural's Pay several strip and its like).
      The five digits the least of sixteen phases called too small (Rural's
      "+5% surcharge" "5" and its selection line's "7") were artefacts of that
      least: they keep 12–18 pixels on the page and are held now. Chrome
      only, DPR 1.
-  5. **A run under the private look at 0x04's selection** with 1c in it.
-  6. **The canvas reference undercounts the page, stated** (the eleventh
-     critic's P2, not built): on upright frames the 99th percentile share is
-     1.75–2.15 (a light ink on a dark ground most), so "a cover of under half
-     a glyph" understates what can go unread on those nodes — a node whose
-     characters read twice their reference loses three quarters of a glyph
-     before it reads under the cut. Normalising each node's shares by its own
-     median share would close it; decide at 7d.
-  7. **The self-checks on Linux** (the eleventh critic): 1d's cut held to
+  4. **The canvas reference undercounts the page — for the owner** (the
+     eleventh critic's P2, not built; it said "decide at 7d", and 7d's
+     decisions, D-2026-10-30-02 and -03, do not mention it): on upright
+     frames the 99th percentile share is 1.75–2.15 (a light ink on a dark
+     ground most), so "a cover of under half a glyph" understates what can
+     go unread on those nodes — under the bind a node with a light ink on a
+     dark ground can lose about three quarters of a glyph and still pass,
+     and the fifteenth critic reads most of TRN's 99 passes above (3) as
+     coming from this undercount, not from J5. Normalising each node's
+     shares by its own median share would close it; its cost is not
+     measured.
+  5. **The self-checks on Linux** (the eleventh critic): 1d's cut held to
      this Chrome (`the-module-read-agrees-with-this-chrome`) and
      `holds-out-of-flow-agrees-with-this-chrome` have run on this Mac alone;
      CI's layout job on `ubuntu-latest` has not run them.

@@ -142,19 +142,26 @@ export const TURN_MATCH_MARGIN = 0.2;
  * of the best match, a match being the share of the two masks' union they
  * share. A glyph covered whole matches none and is held to the largest.
  *
- * **A cover cannot choose its own phase** (the twelfth critic's item 1, J5;
- * the owner's D-2026-10-30-02): held to the one phase its shown pixels match
- * best, as until then, a partial cover left a glyph that matched a thinner,
- * lower-count phase, so the reference shrank with the glyph — TRN's box over
- * the top 62% of Rural's surcharge and selection lines left a "7" 3 of 12
- * pixels and passed it at 0.60 against a phase that counts 5; in mask space
- * 175 under-half covers passed only because their leftovers chose their
- * phase. Every phase near the best stands for it now, and the largest of
- * them is held, so a leftover that matches a thin phase best is still held
- * to the full phases it nearly matches. Held to the least of the sixteen,
- * before the eleventh review, a partial cover passed outright; held to the
- * largest of all sixteen, two clean characters read under the cut in mask
- * space. Answers the chosen phase, its count and its match.
+ * **A cover can no longer choose a thin phase that a full phase nearly
+ * matches** (the twelfth critic's item 1, J5; the owner's D-2026-10-30-02):
+ * held to the one phase its shown pixels match best, as until then, a partial
+ * cover left a glyph that matched a thinner, lower-count phase, so the
+ * reference shrank with the glyph — TRN's box over the top 62% of Rural's
+ * surcharge and selection lines left a "7" 3 of 12 pixels and passed it at
+ * 0.60 against a phase that counts 5; in mask space 175 under-half covers
+ * passed only because their leftovers chose their phase. Every phase near the
+ * best stands for it now, and the largest of them is held, so a leftover
+ * that matches a thin phase best is still held to the full phases it nearly
+ * matches. **Where no full phase comes within the margin, the cover still
+ * chooses** (the fifteenth review's item 3): of TRN's 923 turned characters
+ * that keep under half the page's own clean count (paired by place with
+ * their clean read, the fifteenth critic's `critic15/runs/upref-floor.txt`),
+ * 99 still pass, where the best match alone passed 307 — the worst an "l"
+ * that keeps 3 of its 11 pixels, held to a phase of 4 against a clean
+ * reference of 10. Held to the least of the sixteen, before the eleventh
+ * review, a partial cover passed outright; held to the largest of all
+ * sixteen, two clean characters read under the cut in mask space. Answers
+ * the chosen phase, its count and its match.
  */
 export function turnRef(shown, turn) {
     const matches = turn.counts.map((count, phase) => {

@@ -13415,7 +13415,11 @@ the phone rows' name column that the rail label inherited under
 `transition: text-shadow .3s`, passed the kit's probe on `7754da0` and
 failed it on `e36d2fd`. Now every element under the box holds its
 transitions (`holdOff` with no values) before the box is held, and is put
-back after the box, so none starts a transition on the way in or out.
+back after the box. (This entry said "so none starts a transition on the
+way in or out"; that was false: in Chrome the put-backs alone left an heir
+transitioning toward `none` in 37 of the fifteenth critic's 144 trials, and
+the call has cancelled the transitions it starts since the fifteenth
+review's item 4, below.)
 `holdOff` and `textShadowHeirs` moved to `layout/holdOff.ts`; its test
 (`an-heir-with-a-transition-is-still-an-heir`, happy-dom) drives them over a
 model of a running transition — an element whose transition is not held
@@ -13553,7 +13557,7 @@ character held to a JSON line with its reference under each rule
 (`runs/*.jsonl`), and `tools/m-margin.py` (scratch only) reads the margin
 from `TURN_MARGIN`, 0 being the rule before J5.
 
-### Item 1: a cover cannot choose its own reference phase (J5)
+### Item 1: a cover can no longer choose a thin phase that a full phase nearly matches (J5)
 
 A character on a turned frame was held to the one phase of its turn whose
 mask its shown pixels matched best (`turnRef`). A partial cover leaves a
@@ -13570,9 +13574,16 @@ largest count among the phases whose masks the shown pixels match within
 `TURN_MATCH_MARGIN` (0.2) of the best match (overlap over union) — the
 critic's J5, which in mask space read 0 clean false reds and passed 238 of
 the 1,435 (`critic12/runs/turnref-variants.log`). Test: `holds a leftover to
-the largest phase within the margin of its best match, so a cover cannot
-choose a thin phase` (`scripts/char-read.test.mjs`), red at a margin of 0
-(`runs/t-J5-red-margin0.log`).
+the largest phase within the margin of its best match, so a cover can no
+longer choose a thin phase that a full phase nearly matches`
+(`scripts/char-read.test.mjs`; named "…so a cover cannot choose a thin phase"
+until the fifteenth review's fixes), red at a margin of 0
+(`runs/t-J5-red-margin0.log`). Where no full phase comes within the margin
+the cover still chooses: the fifteenth critic, pairing TRN's dumps with
+their clean reads by place, found 99 of the 923 turned characters that keep
+under half the page's own clean count still passing, the worst an "l"
+keeping 3 of its 11 pixels, held to a phase of 4 ("Before 8g2: the
+fifteenth review's fixes", below).
 
 **Measured with every money job read before it binds** (the critic's
 condition: the margin was fitted on the same 2,350 characters): a forced
@@ -13681,7 +13692,9 @@ trigger fired on must have had characters read there ("its trigger fired on
 N … job(s) at … and read no character on them"; `charsOwedFaults`), and each
 carried look owes the same on its own (`carriedTallyFaults`'s `chars`,
 `scripts/look-tallies.mjs`). Where the trigger fires on no job — the clean
-tree, at every viewport — nothing is owed. Tests: `a look whose jobs
+tree, at every viewport — nothing is owed (since the fifteenth review's
+item 1, below, the trigger's own walk is owed on every job holding money,
+triggered or not). Tests: `a look whose jobs
 triggered 1c had its characters read (charsOwedFaults, 7d)`
 (`scripts/char-read.test.mjs`), `owes 1c’s characters read on every viewport
 where its own jobs triggered it (7d)` (`scripts/look-tallies.test.mjs`), and
@@ -13753,6 +13766,187 @@ clean tree the round adds no read the contrast pass makes: 1c's trigger
 fires on no job, so binding it reads nothing more; the held boxes' look
 pseudos are read inside the trigger's own walk; the geometry passes' fixed
 clock changes no count; the heirs' hold is on 1b's keyframe-values road.
+
+## Before 8g2: the fifteenth review's fixes (2026-10-31; CRITIC-15, the owner's D-2026-10-31-01)
+
+Its evidence is under
+`private/design/workshop-2026-09-23/before-8g2/critic15-fixes/` (`runs/`,
+`plants/`, `tools/`); the paths below are relative to it. The critic's own
+evidence is `critic15/`. Four code commits: `c7e7696` (the quiet zone and
+1d, B1), `22a95f1` (1c, items 1 and 2), `29bac4c` (1b, item 4) and
+`7260dd1` (the contrast pass, item 5); item 3 is wording. The plants are
+the critic's, copied into `plants/`. A **quick** read is `tools/q1d.sh` or
+`tools/q1c.sh`: the contrast pass alone on the named screens, the runner
+mutated in the scratch clone and never committed (`q1d-mutate.py`,
+`q1c-mutate.py`, the critic's); `tools/run.sh` is the whole runner at three
+tabs, each started once the one-minute load was under 2.5.
+
+### B1: a turned code is read upright only where it stands where the page paints it
+
+The frame `__codeTurnsHeldOff` holds upright holds off a `translate` with
+the turn, and a turn about a far origin carries the code too, so it put a
+turned code back where it would stand unmoved, and a mask or a clip that
+did not move with the code was read in the wrong place. The critic's PTO2
+(`.pay-qr { rotate: .02deg; transform-origin: -400000px 0 }`, the ticket
+grown a 200px band below and masked off) carried every Modern pay code
+about 140px down into the band and passed the whole runner on `d12095e`
+(`critic15/runs/p-PTO2.log`); PTR2 (`rotate: .01deg; translate: 0 40%`)
+read upright and clean; P45 (a 45° turn about the code's own centre, the
+ticket masked to its border box) put the code's corners past the mask while
+its centre stayed, so the critic's trial, which bounded the centre's travel
+alone, read it upright and clean.
+
+Now each code's zone carries its turn (`angle`, from `angleOf`), and
+`readTurnedUpright` fails a turned code closed for both reads where holding
+the turn off moves any corner of its square more than
+`UPRIGHT_TRAVEL_MODULES` (1.5, pinned by value) modules, or where its zone
+does not say how far it is turned. **The corners are computed, not
+bounded** (`uprightCornerTravel` in `scripts/code-modules.mjs`): a frame
+that only turns (`turnOnly`) maps the code's square by one turn and one
+move, so each corner stands on the job's frame at the painted centre (the
+centre of its turned bounds) plus the upright half-diagonal turned by the
+zone's angle, and on the upright frame at the upright centre plus that
+half-diagonal; the travel is exact for such a frame and never more than the
+centre's travel plus 2·sin(θ/2) of the half-diagonal, the bound the critic
+proposed (`how far the frame held upright moves a turned code` in
+`scripts/code-modules.test.mjs` holds both). A displacement that is one
+turn and one move is largest at a corner, so no point of the code moves
+more than 1.5 modules on a code read upright: what the held frame does not
+see is a mask or a clip that cuts at most 1.5 modules of the painted code's
+edge, inside its 4-module quiet zone. The runner says, for each code read
+upright, the most a corner moved ("1d and the quiet zone, the most a corner
+of each code read upright moved between its frame and the upright one").
+
+**Rural's turned codes, measured** (`runs/q1d-B1-clean-turned.log`): a
+corner of the Cycle card's two codes moves 0.99 modules (6.00px of a
+6.12px module at 1280) and of the wall code 0.55 (3.98px of 7.35px at
+1920); all three read upright, white and right. The critic's bound put the
+Cycle codes at about 1.04 modules.
+
+### Items 1 and 2: the trigger is owed its own walk, and a node it met reads a character or fails
+
+**Item 1.** The runner read a prepare that answered no `digitTrigger` as a
+trigger that found nothing (`?? { count: 0, … }`), so the critic's
+`kill-trigger.py` (the field dropped from the prepare's answer) took TS's 90
+failures to 0 with nothing owed (`critic15/runs/q-TS-killed.log`). Now such
+a job fails ("its prepare answered no 1c trigger, so whether a mover is near
+its money was not read"), the trigger also answers how many money nodes it
+held movers to (`money`), and each look owes, on each viewport, that the
+trigger walked every one of its jobs holding money (`charsOwedFaults`:
+`money` against `walked`, a job walked where its prepare answered a trigger
+that held movers to money over the elements it walked; each carried look on
+its own through `look-tallies.mjs`). Under the contrast pass the runner
+says the walk by viewport and look ("1c(c), the trigger's walk, owed on
+every job holding money"), its movers and elements with it, and the
+prepares that answered none.
+
+**Item 2.** The empty read was judged per job, so a node the trigger met
+whose characters were all left out passed wherever the screen's other money
+was read: the critic's TS3 (TS with the price's tag tilted 3°, which the
+dress rule admits up to 10°) triggered 5 of 5 jobs, left 165 characters out
+as turned past 2° and failed nothing (`critic15/runs/q-TS3.log`). Now the
+trigger says which money nodes a mover met (`met`, every one where a
+mover's paint cannot be read), and a met node none of whose characters was
+read, with some left out turned past 2° or too big, fails ("its trigger met
+… and no character of it was read (left out: …)", `metNodesUnread` in
+`scripts/char-read.mjs`). A met node whose every character stands behind a
+scroller is a stated limit: it fails only where the job reads no character
+at all. Tests: `owes the trigger’s walk over every job holding money, and
+nothing where it walked them all` and `a node the trigger met reads a
+character or says why not (metNodesUnread)` (`scripts/char-read.test.mjs`).
+
+### Item 3: J5's sentence said more than J5 does
+
+"A cover cannot choose its phase" (CLAUDE.md, the `turnRef` docblock, this
+file's heading in "Before 8g2: 1c's two holes" and the J5 test's name)
+overclaimed: where no full phase comes within `TURN_MATCH_MARGIN` (kept at
+0.2) of the best match, a cover still chooses a thin one. Pairing the
+builder's TRN dumps with their clean reads by place
+(`critic15/tools/trn-trueshare.py`, approximate: by rounded position), the
+critic found 923 of 1,712 turned characters keeping under half the page's
+own clean count, J5 passing 99 of them (the best match alone 307), the
+worst an "l" that keeps 3 of its 11 pixels, held to a phase of 4 against a
+clean reference of 10 (`critic15/runs/upref-floor.txt`). Each place now
+says "a cover can no longer choose a thin phase that a full phase nearly
+matches", with that remainder; the test is renamed to match. On clean
+glyphs J5's reference is the stricter (never below the best match's, more
+than 1.4× it on 37 glyphs), and the least share a clean turned character
+keeps, 0.588, is 0.088 above the cut (the critic's forced read,
+`critic15/runs/forced-all-clean-margins.txt`; Rural, this Mac).
+
+### Item 4: textShadowHeirs cancels the transitions its call starts
+
+The fourteenth review's M1 held the transitions of every element under the
+box and put the box back first, and its docblock and this file's M1 entry
+said that so none started a transition on the way back. In Chrome, on a
+box whose text-shadow a keyframe sets, the call left an heir under
+`transition: text-shadow …` (or `all`) transitioning from its value toward
+`none` in 37 of the critic's 144 trials (`critic15/runs/m1-heirs-chrome-3.log`),
+more often where the heir's style had not been read before the call. Now
+the call reads the transitions on the box and under it
+(`getAnimations({ subtree: true })`) before it holds anything and, once
+both are put back, cancels every transition that was not running then. The
+critic's script over `layout/holdOff.ts` (`tools/m1-heirs-chrome-3.mjs`,
+its port moved): 40 of 144 left one running as committed
+(`runs/m1-heirs-chrome-before.log`), 0 of 144 with the cancel
+(`runs/m1-heirs-chrome-after.log`), and 38 of 144 with the cancel taken out
+and the read before the call kept (`runs/m1-heirs-chrome-nocancel.log`): the
+cancel, not the read, makes the zero. `holdOff`'s own claim — that none of
+the properties it holds starts a transition on the way back — was measured
+for the hold `__codeTurnsHeldOff` makes: 0 of 96 trials on a box turned by
+`rotate` or `transform` with a transition on it, a keyframe on its `rotate`
+among them (`tools/m1-holdoff-chrome.mjs`, `runs/m1-holdoff-chrome.log`).
+The test (`cancels the transitions its call started on the box and under
+it, and no other`, `layout/holdOff.test.ts`) models the page's answers,
+since happy-dom starts no transition; it is red with the cancel taken out
+(`runs/t-item4-red-nocancel.log`).
+
+### Item 5: a shown frame blanks the glyphs again whatever happens
+
+`shownFrame` showed the glyphs, captured, re-read and blanked them again in
+sequence, so a throw after they were shown left them shown for every read
+the job made after it; 1c's own frame throws inside its read, which is
+caught so the job's other reads stand. The blank is in a `finally` now. A
+quick read of TS with a throw planted after the capture on 1c's own frame
+(`tools/throw-in-shown-frame-fixed.py`, the critic's plant moved to the new
+code, which also counts, where the caught throw is said, the elements the
+prepare blanked that stand with their glyphs shown): 5 jobs "threw and was
+caught", and 0 such elements after each throw (`runs/q-TS-throw.log`),
+against 6 to 22 on each job with the `finally`'s blank taken out
+(`runs/q-TS-throw-nofinally.log`).
+
+### Items 6 to 9 (PLAN § Open)
+
+The canvas reference's undercount (1c(c)'s list) was to be decided at 7d,
+and 7d's decisions do not mention it: it is the owner's now, with its cost
+stated (under the bind a node with a light ink on a dark ground can lose
+about three quarters of a glyph and still pass, and the critic reads most
+of TRN's 99 passes as coming from it). 1c(c)'s list says 1b is bound (its
+MISS item said "report-only"), and closes two items on the critic's runs:
+PL through the whole runner, bound, exits 1 with 4 1c failures, 1c the only
+contrast read that fails it on the bare jobs (`critic15/runs/p-PL.log`), and
+the run under the private look at 0x04's selection triggers 46 jobs and
+fails none (`critic15/runs/w-selected.log`). J5's thin clean margin (0.588,
+0.088 above the cut) and its remainder (99 of 923) are on that list; the
+worn-only sheet's "the look's own art was never fetched" has its third
+sighting under the selection (the fourteenth review's list).
+
+### Red proofs
+
+| Plant | Road | Counts | Exit |
+|---|---|---|---|
+| PTO2 (`plants/PTO2-…`) | whole runner, `7260dd1` | 1d 24 and the quiet zone 24, each failed closed "(in a turned frame, not read)": every Modern pay code, bare and worn, on the six pay screens at 390 and 1280, "holding its turn off moves a corner of it 139.7px (its centre 139.7px), more than 1.5 modules (7.77px)" at 390; the geometry passes green | 1 (`runs/p-PTO2.log`, 220.9s, load 1.47 at the start; `d12095e` exited 0, `critic15/runs/p-PTO2.log`) |
+| PTO2 | quick, `pay` | 1d 4 and the quiet zone 4 failed closed (139.7px at 390, 139.8px at 1280) | — (`runs/q1d-PTO2.log`) |
+| PTR2 | quick, `pay` | 1d 4 and the quiet zone 4 failed closed (141.3px at 390, 190.9px at 1280) | — (`runs/q1d-PTR2.log`) |
+| P45 | quick, `pay` at 1280 | 1d 2 and the quiet zone 2 failed closed: a corner 238.1px, its centre 0.0px | — (`runs/q1d-P45.log`) |
+| PTR2c (the control: the move, no turn) | quick, `pay` | read on the job's frame: 1d 4 wrong, 1,908 of 5,618 centres at 390 and 2,014 at 1280 | — (`runs/q1d-PTR2c.log`) |
+| none (Rural's three turned codes) | quick, the wall and Cycle screens | read upright and clean; a corner 0.99 modules at most | — (`runs/q1d-B1-clean-turned.log`) |
+| TS (the control) | quick, `offers` at 390 | 90 failing on 5 of 5 Neo jobs; every look's jobs walked (Neo 5 of 5, 56 movers over 726 elements) | — (`runs/q-TS.log`) |
+| TS3 | quick, `offers` at 390 | 20: the covered price on each of its rows, "no character of it was read (left out: … turned past 2°)" (0 at `d12095e`) | — (`runs/q-TS3.log`) |
+| TS with `kill-trigger.py` | quick, `offers` at 390 | 12 jobs "answered no 1c trigger", and every look's walk owed ("walked 0 of the …"), the fixture's on its own (0 at `d12095e`) | — (`runs/q-TS-killed.log`) |
+| TS with a throw in the shown frame | quick, `offers` at 390 | 5 caught; 0 elements left shown after each (6 to 22 with the `finally`'s blank taken out) | — (`runs/q-TS-throw*.log`) |
+| `textShadowHeirs` in Chrome | the critic's script | 0 of 144 left a transition (40 as committed, 38 with the cancel taken out) | — (`runs/m1-heirs-chrome-*.log`) |
+| `holdOff` in Chrome | `tools/m1-holdoff-chrome.mjs` | 0 of 96 | — (`runs/m1-holdoff-chrome.log`) |
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

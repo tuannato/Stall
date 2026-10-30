@@ -172,7 +172,7 @@ describe('a character on a turned frame is held to the largest phase its shown p
      * whose leftover matches a thin phase best, and the full phase nearly as
      * well, is held to the full phase: the cover cannot shrink its reference.
      */
-    it('holds a leftover to the largest phase within the margin of its best match, so a cover cannot choose a thin phase', () => {
+    it('holds a leftover to the largest phase within the margin of its best match, so a cover can no longer choose a thin phase that a full phase nearly matches', () => {
         assert.equal(TURN_MATCH_MARGIN, 0.2);
         // GLYPH draws 20 pixels and THIN 8, inside it. A leftover of THIN's 8 and `extra` more of GLYPH's.
         const glyph = maskBits(GLYPH, 42);
