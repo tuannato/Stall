@@ -13873,10 +13873,12 @@ const refCache = new Map<string, CharRef>();
  * On a turned or scaled frame (`linear`) where the upright raster put the
  * glyph inside its pixels is not known, so it answers, at each of
  * `CHAR_TURN_PHASES`, the count and the mask of the glyph resampled into the
- * turn (`turn`), for the runner to hold the character to the phase whose
- * mask its shown pixels match best (`turnRef` in `char-read.mjs`, the
- * eleventh critic's P1: the least of the sixteen let a partial cover pass
- * there); and, as its `ref`, the least count over the same phases of the
+ * turn (`turn`), for the runner to hold the character to the largest count
+ * among the phases whose masks its shown pixels match within a margin of
+ * the best (`turnRef` in `char-read.mjs`: the eleventh critic's P1, the
+ * least of the sixteen let a partial cover pass there; the twelfth critic's
+ * item 1, the one phase matched best let a cover choose it); and, as its
+ * `ref`, the least count over the same phases of the
  * glyph drawn upright in its own box, which says whether it is too small.
  */
 function charReference(c: string, cs: CSSStyleDeclaration, r: DOMRect, linear?: DOMMatrixReadOnly): CharRef | undefined {

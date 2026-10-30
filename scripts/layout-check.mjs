@@ -2365,7 +2365,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         digitsAt.skipped += skipped;
                         digitsAt.would += r.would.length;
                         digitsAt.readAgain += settled.readAgain.length;
-                        // A turned frame's shares apart from the upright ones (`turnRef`: its reference is the phase its shown pixels match best).
+                        // A turned frame's shares apart from the upright ones (`turnRef`: its reference is the largest phase its shown pixels match within the margin of the best).
                         for (const sh of read.shares) foldShares((digits.shares[sh.turned ? `${digitsKey} turned` : digitsKey] ??= {}), [sh], at);
                         for (const [kind, n] of Object.entries(read.smallKinds)) digits.smallKinds[kind] = (digits.smallKinds[kind] ?? 0) + n;
                         record.digits = { by: why, chars: r.chars, held: r.held, small: r.small, skipped, would: r.would.length };

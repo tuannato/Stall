@@ -25,6 +25,7 @@ import {
     readMoneyChars,
     shareQuantile,
     turnRef,
+    TURN_MATCH_MARGIN,
 } from './char-read.mjs';
 
 /** A white image of `w` by `h`, four bytes a pixel, with `paint` setting pixels. */
@@ -143,7 +144,7 @@ const maskHex = (on, w = 6, h = 7) => {
 const GLYPH = maskHex((x, y) => x >= 1 && x <= 4 && y >= 1 && y <= 5);
 const THIN = maskHex((x, y) => x >= 2 && x <= 3 && y >= 1 && y <= 4);
 
-describe('a character on a turned frame is held to the phase its shown pixels match (turnRef, CHAR_TURN_FLOOR)', () => {
+describe('a character on a turned frame is held to the largest phase its shown pixels nearly match (turnRef, CHAR_TURN_FLOOR)', () => {
     it('reads a mask as the probe writes it', () => {
         assert.deepEqual([...maskBits('a0', 6)], [1, 0, 1, 0, 0, 0]);
         assert.equal(maskBits(GLYPH, 42).reduce((n, b) => n + b, 0), 20);
@@ -162,13 +163,34 @@ describe('a character on a turned frame is held to the phase its shown pixels ma
         assert.equal(r.would.length, 0);
         assert.equal(r.shares[0].share, 1);
     });
+    /*
+     * The twelfth critic's item 1 (J5): a cover chose its own phase. A glyph
+     * whose leftover matches a thin phase best, and the full phase nearly as
+     * well, is held to the full phase: the cover cannot shrink its reference.
+     */
+    it('holds a leftover to the largest phase within the margin of its best match, so a cover cannot choose a thin phase', () => {
+        assert.equal(TURN_MATCH_MARGIN, 0.2);
+        // GLYPH draws 20 pixels and THIN 8, inside it. A leftover of THIN's 8 and `extra` more of GLYPH's.
+        const glyph = maskBits(GLYPH, 42);
+        const thin = maskBits(THIN, 42);
+        const leftover = (extra) => {
+            let more = extra;
+            return glyph.map((b, k) => (thin[k] === 1 ? 1 : b === 1 && more > 0 ? ((more -= 1), 1) : 0));
+        };
+        const phases = { counts: [8, 20], masks: [THIN, GLYPH] };
+        // Eleven pixels: THIN matched best (8/11), GLYPH within the margin (11/20): held to GLYPH's 20, where the best match alone held it to 8.
+        const eleven = turnRef(leftover(3), phases);
+        assert.deepEqual(eleven, { phase: 1, ref: 20, match: 11 / 20 });
+        // Nine pixels: GLYPH (9/20) is past the margin of THIN's 8/9, so THIN stands for it.
+        assert.deepEqual(turnRef(leftover(1), phases), { phase: 0, ref: 8, match: 8 / 9 });
+    });
     it('fails a partial cover that the least of the phases would have passed', () => {
         // Eleven of twenty covered: 9 kept. Held to the least phase (8) it keeps more than all of it; held to the phase it matches, 0.45.
         let n = 0;
         const turned = ch({ ref: 18, turn: { counts: [20, 8], masks: [GLYPH, THIN] } });
         const r = readMoneyChars(BLANK, shownWith(() => (n += 1) <= 11), { targets: [target([turned])], prepared: 1 });
         assert.equal(r.would.length, 1);
-        assert.match(r.would[0].why, /keeps 9 of its 20 reference pixel\(s\) \(the phase of its turn its shown pixels match best\), 0\.45/);
+        assert.match(r.would[0].why, /keeps 9 of its 20 reference pixel\(s\) \(the largest phase of its turn its shown pixels match within the margin of the best\), 0\.45/);
         assert.equal(r.shares[0].turned, true);
         assert.equal(readMoneyChars(BLANK, shownWith(), { targets: [target([turned])], prepared: 1 }).would.length, 0);
     });

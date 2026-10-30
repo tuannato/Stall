@@ -120,20 +120,40 @@ export function maskBits(hex, n) {
 }
 
 /**
- * The reference a character on a turned frame is held to: the count of the
- * phase of the turn (`turn`, the probe's sixteen) whose mask its shown
- * pixels (`shown`, `charKept`'s mask) match best, by the share of the two
- * masks' union they share; at a tie, the larger count (the stricter). A
- * glyph covered whole matches none and is held to the largest; a partial
- * cover is matched to the phase that draws what is left of it, not to the
- * phase that draws least (the eleventh critic's P1: held to the least of the
- * sixteen, PLT's box over the right 0.30em of each price's last digit left
- * Rural's turned digits 0.53–0.60 of their reference and Modern's upright
- * ones 0.49–0.58; held to the phase they match, Rural's keep 0.51–0.56).
+ * How far below the best match a phase may match the shown pixels and still
+ * stand for the character (`turnRef`): a share of the masks' union, 0 to 1.
+ * The twelfth critic's J5, measured in mask space over the builder's 2,350
+ * turned characters (`critic12/tools/turnref-estimators.py`): 0 clean false
+ * reds, and 238 covers that leave under half of a glyph's own pixels passing
+ * against 558 with no margin; fitted on those characters, so measured again
+ * with every money job read before it was bound (`PROBE-RULES.md`, "Before
+ * 8g2: 1c's two holes").
+ */
+export const TURN_MATCH_MARGIN = 0.2;
+
+/**
+ * The reference a character on a turned frame is held to: the largest count
+ * among the phases of the turn (`turn`, the probe's sixteen) whose masks its
+ * shown pixels (`shown`, `charKept`'s mask) match within `TURN_MATCH_MARGIN`
+ * of the best match, a match being the share of the two masks' union they
+ * share. A glyph covered whole matches none and is held to the largest.
+ *
+ * **A cover cannot choose its own phase** (the twelfth critic's item 1, J5;
+ * the owner's D-2026-10-30-02): held to the one phase its shown pixels match
+ * best, as until then, a partial cover left a glyph that matched a thinner,
+ * lower-count phase, so the reference shrank with the glyph — TRN's box over
+ * the top 62% of Rural's surcharge and selection lines left a "7" 3 of 12
+ * pixels and passed it at 0.60 against a phase that counts 5; in mask space
+ * 175 under-half covers passed only because their leftovers chose their
+ * phase. Every phase near the best stands for it now, and the largest of
+ * them is held, so a leftover that matches a thin phase best is still held
+ * to the full phases it nearly matches. Held to the least of the sixteen,
+ * before the eleventh review, a partial cover passed outright; held to the
+ * largest of all sixteen, two clean characters read under the cut in mask
+ * space. Answers the chosen phase, its count and its match.
  */
 export function turnRef(shown, turn) {
-    let best = { phase: 0, ref: -1, match: -1 };
-    turn.counts.forEach((count, phase) => {
+    const matches = turn.counts.map((count, phase) => {
         const mask = maskBits(turn.masks[phase], shown.length);
         let both = 0;
         let either = 0;
@@ -141,10 +161,15 @@ export function turnRef(shown, turn) {
             both += shown[k] & mask[k];
             either += shown[k] | mask[k];
         }
-        const match = either === 0 ? 0 : both / either;
-        if (match > best.match || (match === best.match && count > best.ref)) best = { phase, ref: count, match };
+        return { phase, ref: count, match: either === 0 ? 0 : both / either };
     });
-    return best;
+    const best = Math.max(...matches.map((m) => m.match));
+    let chosen = { phase: 0, ref: -1, match: -1 };
+    for (const m of matches) {
+        if (m.match < best - TURN_MATCH_MARGIN - 1e-12) continue;
+        if (m.ref > chosen.ref || (m.ref === chosen.ref && m.match > chosen.match)) chosen = m;
+    }
+    return chosen;
 }
 
 /** A character's kind, for the distribution: a digit, a letter, or anything else. */
@@ -192,7 +217,7 @@ export function readMoneyChars(blank, shown, moneyChars) {
             const share = kept / ref;
             out.shares.push({ share, kind: charKind(ch.c), ref, c: ch.c, sel: t.sel, turned });
             if (share < CHAR_KEEP_CUT) {
-                const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept, ref, why: `it keeps ${kept} of its ${ref} reference pixel(s)${turned ? ' (the phase of its turn its shown pixels match best)' : ''}, ${share.toFixed(2)} of them, under ${CHAR_KEEP_CUT}` };
+                const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept, ref, why: `it keeps ${kept} of its ${ref} reference pixel(s)${turned ? ' (the largest phase of its turn its shown pixels match within the margin of the best)' : ''}, ${share.toFixed(2)} of them, under ${CHAR_KEEP_CUT}` };
                 read.would.push(w);
                 out.would.push(w);
             }
