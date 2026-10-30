@@ -186,6 +186,47 @@ export function readCodeModules(first, again) {
 }
 
 /**
+ * How far, in modules, holding a turned code's frame upright may move a
+ * corner of its square before the code is not read upright
+ * (`readTurnedUpright`; the fifteenth review's B1, the owner's
+ * D-2026-10-31-01). Pinned by value.
+ */
+export const UPRIGHT_TRAVEL_MODULES = 1.5;
+
+/**
+ * How far the frame held upright moves a turned code (the fifteenth review's
+ * B1): the centre of its square between the job's zone (`painted`, the
+ * centre of its turned bounds) and the zone on the frame held upright
+ * (`upright`), and the most any of its four corners moves. A frame that only
+ * turns (`turnOnly`) maps the code's square by one turn and one move, so a
+ * corner stands on the job's frame at the painted centre plus the upright
+ * half-diagonal turned by the painted zone's `angle`, and on the upright
+ * frame at the upright centre plus that half-diagonal: the travel is
+ * computed from the two centres, the turn and the upright side, exactly for
+ * such a frame, and never more than the centre's travel plus 2·sin(θ/2) of
+ * the half-diagonal. `undefined` where the painted zone carries no finite
+ * angle. Pure.
+ */
+export function uprightCornerTravel(painted, upright) {
+    if (typeof painted?.angle !== 'number' || !Number.isFinite(painted.angle)) return undefined;
+    const half = upright.side / 2;
+    const dx = painted.x + painted.side / 2 - (upright.x + half);
+    const dy = painted.y + painted.side / 2 - (upright.y + half);
+    const c = Math.cos(painted.angle);
+    const s = Math.sin(painted.angle);
+    let corner = 0;
+    for (const [vx, vy] of [
+        [-half, -half],
+        [half, -half],
+        [half, half],
+        [-half, half],
+    ]) {
+        corner = Math.max(corner, Math.hypot(dx + c * vx - s * vy - vx, dy + s * vx + c * vy - vy));
+    }
+    return { centre: Math.hypot(dx, dy), corner };
+}
+
+/**
  * **The codes of one job whose frame is turned, read upright** (the
  * thirteenth review's B1; the owner's D-2026-10-29-01). A code whose frame is
  * turned (`turned`: any turn the probe's `angleOf` reads, a hundredth of a
@@ -215,7 +256,20 @@ export function readCodeModules(first, again) {
  * not paint (the critic's PSCT, a fifth of the size and 0.01°, and PMIR, a
  * half turn and a mirror, passed the whole runner read upright) — fails
  * closed for both reads with what its frame does, and no frame is made where
- * no turned zone is turn-only. Pure but for the two calls.
+ * no turned zone is turn-only. **And only where the code stands where the
+ * page paints it** (the fifteenth review's B1, the owner's D-2026-10-31-01):
+ * the frame held upright holds off a `translate` with the turn, and a turn
+ * about a far origin carries the code too, so it put the code back where it
+ * would stand unmoved, and a mask or a clip that did not move with it was
+ * read in the wrong place (the critic's PTO2, a turn of 0.02° about an
+ * origin 400,000px away, carried every Modern pay code 140px down into a
+ * masked band and passed the whole runner; P45, a turn of 45° about the
+ * code's own centre, put its corners past a mask while the centre stayed).
+ * A code that holding the turn off moves any corner of more than
+ * `UPRIGHT_TRAVEL_MODULES` modules (`uprightCornerTravel`), or whose zone
+ * does not say how far it is turned, fails closed for both reads; each
+ * answer read upright carries that travel (`travel`: `px`, `modules`). Pure
+ * but for the two calls.
  */
 export async function readTurnedUpright(zones, upright, uprightAgain) {
     const out = new Map();
@@ -245,9 +299,26 @@ export async function readTurnedUpright(zones, upright, uprightAgain) {
         return out;
     }
     const readable = [];
+    const travel = new Map();
     for (const i of turned) {
-        if (frame.zones[i].turned) fail(i, 'it is still turned with every transform above it held off');
-        else readable.push(i);
+        if (frame.zones[i].turned) {
+            fail(i, 'it is still turned with every transform above it held off');
+            continue;
+        }
+        const moved = uprightCornerTravel(zones[i], frame.zones[i]);
+        const module = frame.zones[i].module;
+        if (moved === undefined) {
+            fail(i, 'the page did not say how far it is turned, so how far holding the turn off moves it cannot be read');
+        } else if (!(moved.corner <= UPRIGHT_TRAVEL_MODULES * module)) {
+            fail(
+                i,
+                `holding its turn off moves a corner of it ${moved.corner.toFixed(1)}px (its centre ${moved.centre.toFixed(1)}px), ` +
+                    `more than ${UPRIGHT_TRAVEL_MODULES} modules (${(UPRIGHT_TRAVEL_MODULES * module).toFixed(2)}px): held upright it is not where the page paints it, so it is not read`,
+            );
+        } else {
+            readable.push(i);
+            travel.set(i, { px: moved.corner, modules: moved.corner / module });
+        }
     }
     if (readable.length === 0) return out;
     const pick = (zs) => readable.map((i) => zs[i]);
@@ -262,7 +333,7 @@ export async function readTurnedUpright(zones, upright, uprightAgain) {
     const first = { img: frame.img, zones: pick(frame.zones), at: frame.at };
     const quiet = await readQuietZones(first, again);
     const modules = await readCodeModules(first, again);
-    readable.forEach((i, k) => out.set(i, { quiet: quiet[k], modules: modules[k], upright: true }));
+    readable.forEach((i, k) => out.set(i, { quiet: quiet[k], modules: modules[k], upright: true, travel: travel.get(i) }));
     return out;
 }
 
@@ -514,6 +585,12 @@ export function moduleReport(run, canary, painted) {
     lines.push(
         `1d and the quiet zone, codes in a turned frame read upright (every transform above them held off): ` +
             (upright.length === 0 ? 'none' : upright.map(([cls, codes]) => `${cls} ${[...codes].sort().join(', ')}`).join('; ')),
+    );
+    // How far holding the turn off moved each code read upright, at most a corner's `UPRIGHT_TRAVEL_MODULES` modules (B1, the fifteenth review).
+    const travel = [...(run.uprightTravel ?? new Map())].sort(([a], [b]) => a.localeCompare(b));
+    lines.push(
+        `1d and the quiet zone, the most a corner of each code read upright moved between its frame and the upright one (more than ${UPRIGHT_TRAVEL_MODULES} modules fails closed): ` +
+            (travel.length === 0 ? 'none' : travel.map(([code, t]) => `${t.cls} ${code} ${t.modules.toFixed(2)} modules (${t.px.toFixed(2)}px)`).join('; ')),
     );
     const unread = [...run.unread].sort(([a], [b]) => a.localeCompare(b));
     lines.push(`1d, codes a contrast job painted and could not read: ${unread.length === 0 ? 'none' : unread.map(([code, why]) => `${code} (${why})`).join(', ')}`);

@@ -21,6 +21,8 @@ import {
     readModules,
     readTurnedUpright,
     readWholeModules,
+    UPRIGHT_TRAVEL_MODULES,
+    uprightCornerTravel,
     withMatrices,
 } from './code-modules.mjs';
 import { QUIET_MODULES, QUIET_ZONE_FLOOR, readQuietZones } from './quiet-zone.mjs';
@@ -338,8 +340,10 @@ describe('a-codes-modules-that-read-wrong-are-read-again-on-a-fresh-pair', () =>
  * zone and by 1d on a frame with every transform above it held off, with a
  * fresh pair held the same way, or fails closed — never passed over.
  */
-const TURNED = { ...Z, turned: true, turnOnly: true, name: 'shop-window' };
+const TURNED = { ...Z, turned: true, turnOnly: true, angle: (0.01 * Math.PI) / 180, name: 'shop-window' };
 const UNTURNED = zoneOf(CHECKER, { x: 10.3, y: 20.6, name: 'pay-qr' });
+/** A turned zone as the frame held upright reads it: where it stands with no transform, not turned. */
+const UNMOVED = (z) => ({ ...z, turned: false, angle: 0 });
 describe('a-turned-code-is-read-upright-or-fails-closed', () => {
     const calls = () => {
         const n = { upright: 0, again: 0 };
@@ -435,6 +439,52 @@ describe('a-turned-code-is-read-upright-or-fails-closed', () => {
         assert.equal(c.n.upright, 1);
     });
 
+    /*
+     * The fifteenth review's B1 (the owner's D-2026-10-31-01): the frame held
+     * upright holds off a translate and a turn about a far origin with the
+     * turn, so it can put the code where the page does not paint it (the
+     * critic's PTO2, 140px down past a mask; P45, a 45° turn about the code's
+     * own centre, its corners past a mask while its centre stays).
+     */
+    it('reads upright only a code no corner of which holding the turn off moves more than 1.5 modules, and fails the others closed', async () => {
+        assert.equal(UPRIGHT_TRAVEL_MODULES, 1.5);
+        const s = TURNED.side;
+        const cx = TURNED.x + s / 2;
+        const cy = TURNED.y + s / 2;
+        // PTO2's shape: the job's frame paints the code 140px below where the frame held upright puts it.
+        const far = { ...TURNED, y: TURNED.y + 140, name: 'pay-qr' };
+        // P45's shape: turned 45° about its own centre; the job's zone is its turned bounds, about the same centre.
+        const diamond = { ...TURNED, angle: Math.PI / 4, x: cx - (s * Math.SQRT2) / 2, y: cy - (s * Math.SQRT2) / 2, side: s * Math.SQRT2, name: 'pay-qr' };
+        // Rural's shape: a turn of 0.6° and a move of 4px, under a module and a half at every corner.
+        const tilted = { ...TURNED, y: TURNED.y + 4, angle: (0.6 * Math.PI) / 180 };
+        for (const [moved, said] of [
+            [far, /^its frame is turned, and holding its turn off moves a corner of it 140\.0px \(its centre 140\.0px\), more than 1\.5 modules \(7\.05px\): held upright it is not where the page paints it, so it is not read$/],
+            [diamond, /^its frame is turned, and holding its turn off moves a corner of it 73\.8px \(its centre 0\.0px\), more than 1\.5 modules \(7\.05px\)/],
+        ]) {
+            const c = calls();
+            const out = await readTurnedUpright([moved, tilted], c.upright({ img: CLEAN, zones: [{ ...moved, ...UNMOVED(TURNED), name: 'pay-qr' }, UNMOVED(TURNED)], at: {} }), c.again({ why: ['never'] }));
+            assert.match(out.get(0).quiet.r.fault, said);
+            assert.match(out.get(0).modules.r.fault, said);
+            assert.equal(out.get(0).upright, false);
+            assert.equal(out.get(1).upright, true);
+            assert.equal(out.get(1).modules.r.bad, 0);
+            // The travel it read upright at: past its centre's 4px, within the centre's travel and the turn's bound.
+            const t = out.get(1).travel;
+            assert.ok(t.px > 4 && t.px <= 4 + 2 * Math.sin((0.3 * Math.PI) / 180) * (s / Math.SQRT2) + 1e-9, `travel ${t.px}`);
+            assert.ok(Math.abs(t.modules - t.px / TURNED.module) < 1e-12);
+            assert.ok(t.modules < 1.5);
+        }
+    });
+
+    it('fails closed a turned code whose zone does not say how far it is turned', async () => {
+        const c = calls();
+        const silent = { ...TURNED };
+        delete silent.angle;
+        const out = await readTurnedUpright([silent], c.upright({ img: CLEAN, zones: [UNMOVED(TURNED)], at: {} }), c.again({ why: ['never'] }));
+        assert.match(out.get(0).modules.r.fault, /^its frame is turned, and the page did not say how far it is turned, so how far holding the turn off moves it cannot be read$/);
+        assert.equal(out.get(0).upright, false);
+    });
+
     it('makes no frame where every turned code does more than turn, and fails a zone that does not say', async () => {
         const c = calls();
         const mirrored = { ...TURNED, turnOnly: "div.pay-qr has transform: matrix(-1, 0, 0, 1, 0, 0), which mirrors it" };
@@ -447,6 +497,42 @@ describe('a-turned-code-is-read-upright-or-fails-closed', () => {
     });
 });
 
+/** A code's square on the frame held upright, for `uprightCornerTravel`'s cases. */
+const at = { x: 100, y: 200, side: 100 };
+describe('how far the frame held upright moves a turned code (uprightCornerTravel, the fifteenth review’s B1)', () => {
+    it('is nothing where the code neither moves nor turns, and the move alone where it only moves', () => {
+        assert.deepEqual(uprightCornerTravel({ ...at, angle: 0 }, at), { centre: 0, corner: 0 });
+        const moved = uprightCornerTravel({ ...at, x: 103, y: 196, angle: 0 }, at);
+        assert.ok(Math.abs(moved.centre - 5) < 1e-12 && Math.abs(moved.corner - 5) < 1e-12);
+    });
+    it('is 2·sin(θ/2) of the half-diagonal where it turns about its own centre, whichever way', () => {
+        for (const deg of [0.6, -0.6, 45, -45, 180]) {
+            const theta = (deg * Math.PI) / 180;
+            const t = uprightCornerTravel({ ...at, angle: theta }, at);
+            assert.ok(Math.abs(t.centre) < 1e-12);
+            assert.ok(Math.abs(t.corner - 2 * Math.abs(Math.sin(theta / 2)) * (100 / Math.SQRT2)) < 1e-9, `${deg}°: ${t.corner}`);
+        }
+    });
+    it('is never more than the centre’s travel and the turn’s bound together, nor less than either', () => {
+        for (const [dx, dy, deg] of [
+            [3, -4, 0.6],
+            [-1.3, 0.2, -2],
+            [0, 140, 0.02],
+            [20, 0, 90],
+        ]) {
+            const theta = (deg * Math.PI) / 180;
+            const t = uprightCornerTravel({ ...at, x: at.x + dx, y: at.y + dy, angle: theta }, at);
+            const turn = 2 * Math.abs(Math.sin(theta / 2)) * (100 / Math.SQRT2);
+            assert.ok(t.corner <= t.centre + turn + 1e-9, `${dx},${dy},${deg}: ${t.corner} > ${t.centre + turn}`);
+            assert.ok(t.corner >= Math.max(t.centre, turn) - 1e-9, `${dx},${dy},${deg}: ${t.corner} < ${Math.max(t.centre, turn)}`);
+        }
+    });
+    it('is undefined where the zone carries no finite angle', () => {
+        assert.equal(uprightCornerTravel({ ...at }, at), undefined);
+        assert.equal(uprightCornerTravel({ ...at, angle: Number.NaN }, at), undefined);
+    });
+});
+
 const RUN = {
     byVpClass: { 'mobile t-modern': { jobs: 2, codes: 2, modules: 5618, wrong: 3, wouldCodes: 1, unread: 0 } },
     stats: { 't-modern bare pay @mobile': { dark: { n: 2, lo: 0, hi: 0 }, light: { n: 3, lo: 255, hi: 255 } }, 't-modern flags 7 broadcast @canvas': { dark: { n: 1, lo: 0, hi: 0 } } },
@@ -456,6 +542,7 @@ const RUN = {
     read: new Map([['mobile/pay:pay-qr', 2]]),
     unread: new Map([['mobile/pay-moved:pay-qr', 'only 210 of its 441 module centres are on screen inside its clips: a code is read whole or not at all']]),
     uprightByClass: { 't-rural': new Set(['desktop/shop-window-cycle:shop-window']) },
+    uprightTravel: new Map([['desktop/shop-window-cycle:shop-window', { cls: 't-rural', px: 4.234, modules: 0.6918 }]]),
     payloadChecked: 0,
     leastModule: 4.4567,
 };
@@ -475,6 +562,8 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         assert.ok(lines.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair, a code not read whole, a turned code not read upright): none'));
         // A turned frame's code, read upright (the thirteenth review's B1), is said by look and name.
         assert.ok(lines.includes('1d and the quiet zone, codes in a turned frame read upright (every transform above them held off): t-rural desktop/shop-window-cycle:shop-window'));
+        // And how far holding its turn off moved it, the most a corner moved (the fifteenth review's B1).
+        assert.ok(lines.includes('1d and the quiet zone, the most a corner of each code read upright moved between its frame and the upright one (more than 1.5 modules fails closed): t-rural desktop/shop-window-cycle:shop-window 0.69 modules (4.23px)'));
         // Sightings at the run's tab count and by the tab that read each (the tenth critic's item 4).
         const sighted = moduleReport(
             { ...RUN, tabs: 3, readAgain: ['pay @mobile / theme 3: the code pay-qr at 41,819: wrong on the first capture, right on a fresh pair (on tab 1 of 3)'], readAgainByTab: { 1: 1 } },
@@ -488,9 +577,10 @@ describe('1d-says-what-it-read-and-would-fail', () => {
         assert.ok(closed.includes('1d, failed closed (failures: a module under 3px, a matrix it cannot read or pair, a code not read whole, a turned code not read upright): 1\n    pay @mobile / theme 1: the code pay-qr at 37,815 — a module is 2.10px, under the 3 device pixels a centre read needs'));
     });
     it('says none where nothing fails', () => {
-        const lines = moduleReport({ ...RUN, would: [], uprightByClass: {} }, { would: [], readAgain: [] }, new Set());
+        const lines = moduleReport({ ...RUN, would: [], uprightByClass: {}, uprightTravel: new Map() }, { would: [], readAgain: [] }, new Set());
         assert.ok(lines.includes('1d, codes read wrong: none'));
         assert.ok(lines.includes('1d and the quiet zone, codes in a turned frame read upright (every transform above them held off): none'));
+        assert.ok(lines.includes('1d and the quiet zone, the most a corner of each code read upright moved between its frame and the upright one (more than 1.5 modules fails closed): none'));
     });
     it('pins the rule’s name', () => {
         assert.equal(MODULE_CHECK, 'a-codes-modules-read-as-its-matrix');

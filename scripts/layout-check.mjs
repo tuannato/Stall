@@ -1385,6 +1385,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         faultedByClass: {},
         // The codes in a turned frame it read upright, every transform above them held off (B1), by look: said by name.
         uprightByClass: {},
+        // How far holding the turn off moved each code it read upright, the most a corner moved (the fifteenth review's B1): said.
+        uprightTravel: new Map(),
         unread: new Map(),
         payloadChecked: 0,
         leastModule: Infinity,
@@ -1943,7 +1945,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         try {
                             moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
                             // The turned codes, read upright above (B1).
-                            for (const [i, read] of upright) moduleReads[i] = { ...read.modules, upright: read.upright };
+                            for (const [i, read] of upright) moduleReads[i] = { ...read.modules, upright: read.upright, travel: read.travel };
                         } catch (err) {
                             const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`;
                             modules.thrown.push(line);
@@ -1952,7 +1954,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         const variant = flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
                         const tally = (modules.byVpClass[`${vp.name} ${plannedJob.sheetClass}`] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
                         tally.jobs += 1;
-                        for (const { z, r, turned, retry, upright: readUpright } of moduleReads) {
+                        for (const { z, r, turned, retry, upright: readUpright, travel } of moduleReads) {
                             const code = `${vp.name}/${screen}:${z.name}`;
                             const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${turnedSaid(readUpright)}`;
                             if (turned) {
@@ -1975,7 +1977,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                                 continue;
                             }
                             if (z.payload === 'checked') modules.payloadChecked += 1;
-                            if (readUpright) (modules.uprightByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                            if (readUpright) {
+                                (modules.uprightByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                                if (travel !== undefined && !(travel.px <= (modules.uprightTravel.get(code)?.px ?? -1))) modules.uprightTravel.set(code, { ...travel, cls: plannedJob.sheetClass });
+                            }
                             modules.read.set(code, (modules.read.get(code) ?? 0) + 1);
                             (modules.readByClass[plannedJob.sheetClass] ??= new Set()).add(code);
                             tally.codes += 1;
@@ -4503,6 +4508,7 @@ try {
         readByClass: {},
         faultedByClass: {},
         uprightByClass: {},
+        uprightTravel: new Map(),
         unread: new Map(),
         payloadChecked: 0,
         leastModule: Infinity,
@@ -4667,6 +4673,7 @@ try {
                     for (const code of codes) into.add(code);
                 }
             }
+            for (const [code, t] of out.modules.uprightTravel) if (!(t.px <= (modulesRun.uprightTravel.get(code)?.px ?? -1))) modulesRun.uprightTravel.set(code, t);
             for (const [code, why] of out.modules.unread) modulesRun.unread.set(code, why);
             modulesRun.payloadChecked += out.modules.payloadChecked;
             modulesRun.leastModule = Math.min(modulesRun.leastModule, out.modules.leastModule);

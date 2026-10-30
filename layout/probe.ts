@@ -13150,7 +13150,10 @@ function angleOf(el: Element | null): number {
  * frame does anything but turn is failed closed by both reads instead
  * (`readTurnedUpright`), and says so. A turn `angleOf` does not read (a
  * motion path's, a `transform` about another axis) is not asked here: such a
- * code is not turned, and is read as it stands.
+ * code is not turned, and is read as it stands. A move in the plane (a
+ * `translate`, a turn about a far origin) is not asked here: the runner
+ * fails a code closed where holding its turn off moves any corner of it more
+ * than 1.5 modules (`readTurnedUpright`; the fifteenth review's B1).
  */
 function turnOnly(el: Element | null): true | string {
     for (let at = el; at !== null && at !== document.documentElement; at = at.parentElement) {
@@ -14221,6 +14224,13 @@ type QuietZone = {
     clip: { x0: number; y0: number; x1: number; y1: number };
     turned: boolean;
     /**
+     * How far its frame is turned, in radians (`angleOf`): with the centre of
+     * its square on the job's frame and on the frame held upright, how far
+     * holding the turn off moves each corner of the code (`readTurnedUpright`;
+     * the fifteenth review's B1).
+     */
+    angle: number;
+    /**
      * Whether every transform from the code up only turns it (`turnOnly`):
      * `true`, or what one box does besides — a turned code is read upright
      * only where it is `true` (`readTurnedUpright`).
@@ -14276,6 +14286,7 @@ function quietZoneOf(svg: SVGSVGElement): QuietZone | undefined {
     const side = Math.min(cw, ch);
     const vb = svg.viewBox.baseVal.width;
     if (!(side > 0) || !(vb > 0)) return undefined;
+    const angle = angleOf(svg);
     // The element's own radius cuts its corners at the border box;
     // what it leaves of the content box's corner is the radius past
     // the inset. Measured on the smallest of the four corners' insets.
@@ -14304,7 +14315,8 @@ function quietZoneOf(svg: SVGSVGElement): QuietZone | undefined {
         // an infinity is `null` — and a null clip is a clip at 0,
         // which read every unclipped code as wholly clipped away.
         clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
-        turned: angleOf(svg) !== 0,
+        turned: angle !== 0,
+        angle,
         turnOnly: turnOnly(svg),
         scrolled: scrolledAbove(svg),
     };
@@ -14367,7 +14379,14 @@ window.__codeMatrices = () =>
  * does nothing but turn is held** (`turnOnly`, the fourteenth review's M2):
  * holding off a scale or a mirror with the turn made a code the page does not
  * paint, so a code whose frame also scales, skews, mirrors or leaves the
- * plane is not held, and the runner fails it closed unread.
+ * plane is not held, and the runner fails it closed unread. **And a code is
+ * read where the held frame puts it** (the fifteenth review's B1): holding
+ * off a `translate`, or a turn about a far origin, puts the code back where
+ * it would stand unmoved, and a mask or a clip that does not move with it is
+ * then read in the wrong place (the critic's PTO2), so the runner reads a
+ * code upright only where no corner of it moves more than 1.5 modules
+ * between the two frames (`readTurnedUpright`), and fails it closed
+ * otherwise.
  */
 let codeTurnsHeld: (() => void) | undefined;
 window.__codeTurnsHeldOff = async (on: boolean) => {
