@@ -2068,15 +2068,26 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * The glyphs shown (`which`: both reads', one's, or `none`;
                  * `money`: every money node's too, for 1c(c)), one capture,
                  * the boxes re-read (and, with money, its characters), the
-                 * glyphs blanked again: `{ shot, why, chars }`.
+                 * glyphs blanked again: `{ shot, why, chars }`. **Blanked
+                 * again whatever happens** (the fifteenth review's item 5): a
+                 * throw after they were shown — 1c's own frame throws inside
+                 * its read, which is caught so the job's other reads stand —
+                 * left them shown for every read the job made after it.
                  */
                 const shownFrame = async (which, money = moneyShared && which === 'both') => {
                     const shownStart = performance.now();
-                    const n = await glyphs(true, which, money);
-                    const shownCap = await capture();
-                    const shownRead = await reread();
-                    const chars = money ? await evalJson(cdp, sessionId, 'window.__moneyChars()') : undefined;
-                    await glyphs(false, which, money);
+                    let n;
+                    let shownCap;
+                    let shownRead;
+                    let chars;
+                    try {
+                        n = await glyphs(true, which, money);
+                        shownCap = await capture();
+                        shownRead = await reread();
+                        chars = money ? await evalJson(cdp, sessionId, 'window.__moneyChars()') : undefined;
+                    } finally {
+                        await glyphs(false, which, money);
+                    }
                     const why = [...shownCap.why, ...shownRead.why];
                     if (shownRead.live.boxes.length !== targets.length) {
                         why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
