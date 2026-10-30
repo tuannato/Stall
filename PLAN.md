@@ -1009,7 +1009,7 @@ money path this app can have, because nothing on it is derived.
      first: a hit test with `pointer-events` forced on over every money
      node and every protected box, on every pass, false reds counted
      before it binds (1a, bound since 7a); and the digit read on every
-     money node on the sampled screens (1c(c), report-only, on the jobs
+     money node on the sampled screens (1c(c), bound since 7d, on the jobs
      where a mover is near: "Before 8g2, 1c(c)'s open list" below). Then
      whether the README's "most" can go is the owner's (D-2026-10-20-02,
      -03).
@@ -1374,30 +1374,33 @@ money path this app can have, because nothing on it is derived.
   3. **`judgeReacher`'s pin pins text**: 1b's list above, item 7.
 
 - **Before 8g2, 1c(c)'s open list** (every money character read on its own,
-  only on a contrast job where a mover is near money, read report-only; the
-  owner's D-2026-10-20-06 D1 (c); `layout/PROBE-RULES.md`, "Before 8g2,
-  1c(c): every digit, where a mover is near" and "…: the eleventh review's
-  fixes"). 1c fails nothing until step 7d binds it. Built at the
+  only on a contrast job where a mover is near money; bound since step 7d,
+  the owner's D-2026-10-20-06 D1 (c) and D-2026-10-30-02;
+  `layout/PROBE-RULES.md`, "Before 8g2, 1c(c): every digit, where a mover is
+  near", "…: the eleventh review's fixes" and "Before 8g2, 7d: 1c binds").
+  Built at 7d and off this list: the bind — a character under the cut after
+  the fresh pair, a read that cannot be had, a triggered job that read no
+  character and a throw each fail the contrast pass — with each look owing
+  characters read where its jobs triggered (each carried look on its own),
+  and red proofs on the bound read through the whole runner. Built at the
   fourteenth review's fixes round and off this list (`layout/PROBE-RULES.md`,
   "Before 8g2: 1c's two holes"): the twelfth critic's two blocking holes — a
   turned character is held to the largest phase within 0.2 of its best match
   (J5), measured with every money job read (0 under the cut; the least
   turned letter 0.588), and the trigger reads the look pseudos of every box
   a mover holds (HRP2). Open:
-  1. **Bind it at 7d**, as D1 decides, with its own red proofs on the bound
-     read (PL, a box over one digit, is 1c's alone among the contrast reads:
-     the broken-figure read passes it) and the jobs it owes held to their
-     reads. On the clean tree it triggers on no job, so binding it moves no
-     verdict there.
-  2. **D1 (a), every money job, is measured and not built.** From 1c's own
-     clock in a scratch run that read every one of the 697 jobs holding
-     money: 80.4–111.8s of tab time over four such runs, so about +27 to
-     +37s of wall time at three tabs (the contrast pass 110.5–127.1s a tab
-     against 84.5s with the trigger alone). It would also read the covers
-     the trigger does not see (3, below). The window's decision, on the
-     eleventh critic's recommendation: fix the trigger's two holes first
-     (done: its clips and its reach set, the eleventh review) and decide
-     D1 (a) at 7d.
+  1. **PL is 1c's alone among the contrast reads** (a box over one digit of
+     the strip's total: the broken-figure read passes it); its whole-runner
+     proof on the bound read is not made at 7d, only its quick read (4 on 4
+     jobs, "Before 8g2: 1c's two holes").
+  2. **D1 (a), every money job, is measured and not built** (the owner's
+     D-2026-10-30-02 keeps it open as an option). From 1c's own clock in
+     scratch runs that read every one of the 697 jobs holding money:
+     80.4–111.8s of tab time over four such runs at the eleventh review, and
+     117.8s on the forced run before 7d, so about +27 to +39s of wall time
+     at three tabs (a third of the tab time), against the runs' 222–242s and
+     the 300s ceiling. It
+     would also read the covers the trigger does not see (3, below).
   3. **What the trigger does not see** (stated, not fixed): a box placed
      over money by stacking alone — `position: relative` and a `z-index` with
      no offset, its content overflowing a zero-height box — unless 1a fails

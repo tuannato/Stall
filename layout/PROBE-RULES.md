@@ -12220,7 +12220,7 @@ alone, its computed ink against the blanked ground, so a cover laid over it
 with its own contrasting ground passed the contrast pass (PC2, PC3′) wherever
 1a's hit test did not stand in.
 
-**The rule** (report-only until step 7d; `scripts/char-read.mjs`,
+**The rule** (report-only until step 7d, bound since: "Before 8g2, 7d: 1c binds", below; `scripts/char-read.mjs`,
 `layout/digitTrigger.ts`, `digitTrigger` and `__moneyChars` in
 `layout/probe.ts`; tests `1c(c): what moves a box (moverKinds)`, `1c(c): when
 what a mover paints meets money`, `a character is held to its own reference`,
@@ -13642,6 +13642,92 @@ three tabs, the tracked fixture carried, started at a one-minute load of
 2.46 (peak 7.85): exit 0, 236.2s of 300. 1c's trigger fired on no job of
 796 (the held boxes' look pseudos read on every mover, 3,339 movers over
 72,023 elements, 1.24s of tab time).
+
+## Before 8g2, 7d: 1c binds (2026-10-30; the plan's step 7d, the owner's D-2026-10-30-02)
+
+The same evidence folder as the two sections above (`critic14-fixes/`). One
+code commit: `9d43165`.
+
+1c(c), `every-money-character-reads-where-a-mover-is-near` (`CHAR_CHECK` in
+`scripts/char-read.mjs`), is a bound rule, **on the jobs its trigger finds
+and no others** — the owner's option (c): D1 (a), reading every money job,
+stays not built and open (+27 to +39s of wall time at three tabs from 1c's
+own clock: 80.4–111.8s of tab time at the eleventh review, 117.8s on the
+forced run before this step). On a contrast job its trigger fires on (a
+mover near money, or 1a's own failures), each of these fails the contrast
+pass:
+
+- **a character that keeps under `CHAR_KEEP_CUT` (0.5) of its reference**,
+  on the decided reading: the fresh pair's where the pair is believed (every
+  character in the same box with the same reference, and on a turn the same
+  phases), the first pair's where it cannot be (`readCharsAgain`, as before);
+- **a read that cannot be had**, as before failed closed and now a failure:
+  a character with no box or past the shot, a capture of another size, a
+  page whose characters do not add up to those it prepared, a live money
+  target it answered none of (`charsFault`);
+- **a job its trigger fired on that read no character** ("its trigger fired
+  … and no money character was read");
+- **a throw in the read**, caught (the job's other reads stand) and said
+  ("1c threw reading the money characters").
+
+A character too small to hold (a reference under `CHAR_REF_MIN` (6), or on a
+turn a phase under `CHAR_TURN_FLOOR` (3)) stays counted by kind and said,
+never failed: the forced measurement before this step found 2,081 such, all
+punctuation or symbols (12 on a turn), decimal points and thousands commas
+among them by the window's earlier decision.
+
+**Owed per look.** On each viewport, a public look whose contrast jobs the
+trigger fired on must have had characters read there ("its trigger fired on
+N … job(s) at … and read no character on them"; `charsOwedFaults`), and each
+carried look owes the same on its own (`carriedTallyFaults`'s `chars`,
+`scripts/look-tallies.mjs`). Where the trigger fires on no job — the clean
+tree, at every viewport — nothing is owed. Tests: `a look whose jobs
+triggered 1c had its characters read (charsOwedFaults, 7d)`
+(`scripts/char-read.test.mjs`), `owes 1c’s characters read on every viewport
+where its own jobs triggered it (7d)` (`scripts/look-tallies.test.mjs`), and
+the report's own case (`says the jobs, the trigger’s cost, the shares, the
+failures, the reads again, what could not be read, an empty read and a
+throw`). The canary (`the-contrast-pass-reads-the-same-on-every-tab`)
+compares a triggered job's record, which carries its 1c counts; its reads
+add no failure of their own, as 1d's do not.
+
+**What it says.** Under the contrast pass, whatever the verdict: by viewport
+and look, the jobs triggered, the characters read, held, too small and left
+out, the failing ones and the reads again; the triggered jobs and why; the
+shares kept by kind, turned frames apart; the failures by node; the reads
+again; what could not be read, the empty reads and the throws, each "(each a
+failure)". The first `CHAR_SAID` (30) failures are also printed with the
+contrast pass's own failure lines.
+
+### Red proofs, bound
+
+Each plant alone through the whole runner, on the scratch clone at
+`9d43165`, three tabs, each started once the one-minute load was under 2.5
+(`tools/run.sh`; `tools/batch-c.sh`):
+
+| Plant | 1c failures | Jobs triggered | Also failing | Exit |
+|---|---|---|---|---|
+| PC2 (`plants/PC2-note-modern.css`, the eleventh critic's: Modern's pay note moved up over the figure) | 286 | 8, Modern at 390 | 1a on the phone, narrow and reduced-motion passes and once a contrast job (20), the contrast box read (12) | 1 (`runs/p-C-PC2.log`, 230.9s) |
+| TS (`plants/TS-reltext-neo.css`: a moved rail label's sharp text-shadow over the price) | 232 | 38, Neo at 390 and 1280 | `an-outline-where-the-text-has-its-own-ground`, 1b and the dress rule on the geometry passes, the contrast box read (24) | 1 (`runs/p-C-TS.log`, 233.2s) |
+| ESC (`plants/ESC-absshadow-neo.css`: an absolute label escaping its clipping column, its box shadow over the price) | 445 | 40, Neo at 390, 1280 and 1920 | `a-halo-never-reaches-a-neighbours-text`, 1b and 1a on the geometry passes; 1a once a contrast job (2), 1d (4: its shadow over the touch wall's paying code), the contrast box read (29) | 1 (`runs/p-C-ESC.log`, 250.2s) |
+| TRN (`plants/TRN-topcover-rural.css`, the twelfth critic's) | 947 | 26, Rural at 390, 1280 and 1920 | 1b (its `::after` blocks over the lines) and the dress rule on the geometry passes, the contrast box read (4) | 1 (`runs/p-C-TRN.log`, 258.1s) |
+| HRP2 (`plants/HRP2-heldpseudo-diamond-neo.css`, the twelfth critic's) | 9 (the price on `offers` at 390, 5; the strip's quotes at 390 and 1280, 2 each) | 40, Neo at 390, 1280 and 1920 | 1b on the geometry passes, the contrast box read (113) | 1 (`runs/p-C-HRP2.log`, 239.3s) |
+
+On every plant 1c is one of several rules that fail; no plant here fails 1c
+alone through the whole runner. PL, a box over one digit of the strip's
+total, is the plant 1c alone among the contrast reads catches, and it was
+read quick on this tree only (4 on 4 jobs, "Before 8g2: 1c's two holes").
+
+### The clean run
+
+`runs/w-clean-C.log`: the whole runner on the scratch clone at `9d43165`,
+three tabs, the tracked fixture carried, started at a one-minute load of
+2.18: exit 0, 230.6s of 300. 1c's trigger fired on no job (1.23s of tab
+time), so it read and failed nothing and owed nothing; 1b, 1d and the quiet
+zone as in the sections above.
+The kit's skeleton probe on the same tree (`runs/k-clean-C.log`, `tools/kit.sh`):
+exit 0 in 18.1s; 1c's trigger fired on none of its jobs. 1c binds on the
+kit's probe as on the ordinary one: it is the same runner.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
