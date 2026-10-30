@@ -13612,7 +13612,17 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
  * off the prepared paint before anything is blanked; it costs one walk of
  * the scope's computed styles, and nothing is captured for it.
  */
-type DigitTrigger = { reasons: string[]; count: number; movers: number; elements: number; ms: number };
+/**
+ * The trigger's answer: its meets said (`reasons`, the first
+ * `DIGIT_TRIGGER_SAID`) and counted (`count`), the movers and elements it
+ * walked, the money nodes it held movers to (`money`), and which of them a
+ * mover met (`met`, their indices among the prepared nodes: every one where
+ * a mover's paint cannot be read). The runner fails a job whose prepare
+ * answers none, owes per look and viewport that it walked every job holding
+ * money, and fails a node it met that read no character, each left out
+ * turned or too big (the fifteenth review's items 1 and 2).
+ */
+type DigitTrigger = { reasons: string[]; count: number; movers: number; elements: number; money: number; met: number[]; ms: number };
 /** One money character, as the runner reads it: its own text box (`Range`), its ink, and its reference count. */
 /**
  * One money character, as the runner reads it: its own text box (`Range`),
@@ -13752,11 +13762,13 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
     const t0 = performance.now();
     const root = scope === document ? document.getElementById('app')! : (scope as Element);
     const money = preparedNodes.filter((node) => node.matches(MONEY) && node.getClientRects().length > 0);
-    const out: DigitTrigger = { reasons: [], count: 0, movers: 0, elements: 0, ms: 0 };
+    const out: DigitTrigger = { reasons: [], count: 0, movers: 0, elements: 0, money: money.length, met: [], ms: 0 };
     if (money.length === 0) {
         out.ms = performance.now() - t0;
         return out;
     }
+    // The money nodes a mover met, or every one where a mover's paint cannot be read (`met`).
+    const met = new Set<HTMLElement>();
     // Each node's line boxes cut to its own window where it clips its own text, and its chain of clips, held per pair to a mover's (`triggerMeet`).
     const chainSeen = new Map<Element, ClipLink[]>();
     // What each element paints, read once though nested movers hold it twice.
@@ -13825,6 +13837,7 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
         }
         if (unread !== undefined) {
             say(`${named(el)} (${kinds.join('; ')}) paints where this page cannot read: ${unread.slice(0, 120)}`);
+            for (const node of money) if (el !== node && !el.contains(node)) met.add(node);
             continue;
         }
         for (const node of money) {
@@ -13832,6 +13845,7 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
             const at = triggerMeet(painted, lines.get(node)!);
             if (at !== undefined) {
                 say(`${named(el)} (${kinds.join('; ')}) meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);
+                met.add(node);
             }
         }
     }
@@ -13867,14 +13881,19 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
             const painted = pseudoTriggerPaints(host, which, cs, chainSeen);
             if (typeof painted === 'string') {
                 say(`${named(host)}${painted.replace(/^::(before|after)/, `::$1 (${kinds.join('; ')})`)}`);
+                for (const node of money) met.add(node);
                 continue;
             }
             for (const node of money) {
                 const at = triggerMeet(painted, lines.get(node)!);
-                if (at !== undefined) say(`${who} meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);
+                if (at !== undefined) {
+                    say(`${who} meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);
+                    met.add(node);
+                }
             }
         }
     }
+    out.met = [...met].map((node) => preparedNodes.indexOf(node)).sort((a, b) => a - b);
     out.ms = performance.now() - t0;
     return out;
 }

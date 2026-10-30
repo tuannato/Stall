@@ -42,7 +42,7 @@ import {
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
 import { MODULE_CHECK, MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, readTurnedUpright, withMatrices } from './code-modules.mjs';
-import { CHAR_CHECK, CHAR_SAID, charReport, charsFault, charsOwedFaults, foldShares, mergeShares, readCharsAgain, readMoneyChars } from './char-read.mjs';
+import { CHAR_CHECK, CHAR_SAID, charReport, charsFault, charsOwedFaults, foldShares, mergeShares, metNodesUnread, readCharsAgain, readMoneyChars } from './char-read.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -1398,9 +1398,11 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         would: [],
         readAgain: [],
         faults: [],
-        // A job its trigger fired on that read no character, and a throw caught in its read: each a failure.
+        // A job its trigger fired on that read no character, a node it met that read none (each left out turned or too big), and a throw caught in its read: each a failure.
         empty: [],
         thrown: [],
+        // A job whose prepare answered no trigger (the fifteenth review's item 1): each a failure.
+        unwalked: [],
         // Its failures, each a line with its check (a character that failed after the fresh pair, what could not be read, an empty read, a throw).
         failures: [],
         shares: {},
@@ -2108,13 +2110,33 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * do. A job that triggers nothing shows no money glyph and
                  * is captured as it was.
                  */
-                const digitTrig = prep.digitTrigger ?? { reasons: [], count: 0, movers: 0, elements: 0, ms: 0 };
+                /*
+                 * **The trigger is owed its own walk** (the fifteenth review's
+                 * item 1, the owner's D-2026-10-31-01): a prepare that answers
+                 * no trigger is a failure of the job, where it read as a
+                 * trigger that found nothing (the critic's plant dropped the
+                 * field and TS's 90 failures went to 0), and each look owes,
+                 * on each viewport, that the trigger walked every job holding
+                 * money (`charsOwedFaults`: `money` against `walked`).
+                 */
+                const digitTrig = prep.digitTrigger ?? { reasons: [], count: 0, movers: 0, elements: 0, money: 0, met: [], ms: 0 };
+                if (prep.digitTrigger === undefined) {
+                    const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: its prepare answered no 1c trigger, so whether a mover is near its money was not read`;
+                    digits.unwalked.push(line);
+                    digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                }
                 digits.movers += digitTrig.movers;
                 digits.elements += digitTrig.elements;
                 digits.triggerMs += digitTrig.ms;
                 const digitsKey = `${vp.name} ${plannedJob.sheetClass}`;
-                const digitsAt = (digits.byVpClass[digitsKey] ??= { jobs: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
+                const digitsAt = (digits.byVpClass[digitsKey] ??= { jobs: 0, money: 0, walked: 0, movers: 0, elements: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
                 digitsAt.jobs += 1;
+                if (targets.some((t) => t.money)) {
+                    digitsAt.money += 1;
+                    if (prep.digitTrigger !== undefined && digitTrig.money > 0 && digitTrig.elements > 0) digitsAt.walked += 1;
+                }
+                digitsAt.movers += digitTrig.movers;
+                digitsAt.elements += digitTrig.elements;
                 const digitsOwed = digitTrig.count > 0;
                 const moneyOf = () => targets.filter((t) => t.money);
                 const moneyApart = () => {
@@ -2414,6 +2436,21 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             const line = `${at}: its trigger fired (${why === '1a' ? "1a's failures" : 'a mover near money'}) and no money character was read`;
                             digits.empty.push(line);
                             digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                        }
+                        /*
+                         * And so is a node the trigger met that read none of its
+                         * characters, each left out turned past 2° or too big
+                         * (the fifteenth review's item 2, the owner's
+                         * D-2026-10-31-01): judged per job, TS3 — TS with the
+                         * price's tag tilted 3°, which the dress rule admits —
+                         * left out the covered price whole while the screen's
+                         * other money was read, and nothing failed. A node whose
+                         * characters all stand behind a scroller is a stated
+                         * limit, and not failed here.
+                         */
+                        for (const line of metNodesUnread(first.chars, digitTrig.met ?? [])) {
+                            digits.empty.push(`${at}: ${line}`);
+                            digits.failures.push(`${at}: ${line} — ${CHAR_CHECK}`);
                         }
                         for (const w of settled.readAgain) {
                             digits.readAgain.push(`${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why} on the first pair, kept on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})`);
@@ -4514,7 +4551,7 @@ try {
         leastModule: Infinity,
     };
     // 1c(c) (bound since 7d): every job's `digits`, folded (`char-read.mjs`'s `charReport` says it; its `failures` are the contrast pass's).
-    const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], empty: [], thrown: [], failures: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
+    const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], empty: [], thrown: [], unwalked: [], failures: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
     const canaryModules = { would: [], readAgain: [], readAgainByTab: {}, thrown: [] };
     // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
     let moduleSnapRead;
@@ -4678,10 +4715,10 @@ try {
             modulesRun.payloadChecked += out.modules.payloadChecked;
             modulesRun.leastModule = Math.min(modulesRun.leastModule, out.modules.leastModule);
             for (const [key, t] of Object.entries(out.digits.byVpClass)) {
-                const into = (digitsRun.byVpClass[key] ??= { jobs: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
+                const into = (digitsRun.byVpClass[key] ??= { jobs: 0, money: 0, walked: 0, movers: 0, elements: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
                 for (const k of Object.keys(into)) into[k] += t[k];
             }
-            for (const key of ['triggers', 'would', 'readAgain', 'faults', 'empty', 'thrown', 'failures']) digitsRun[key].push(...out.digits[key]);
+            for (const key of ['triggers', 'would', 'readAgain', 'faults', 'empty', 'thrown', 'unwalked', 'failures']) digitsRun[key].push(...out.digits[key]);
             for (const [key, byKind] of Object.entries(out.digits.shares)) mergeShares((digitsRun.shares[key] ??= {}), byKind);
             for (const [kind, n] of Object.entries(out.digits.smallKinds)) digitsRun.smallKinds[kind] = (digitsRun.smallKinds[kind] ?? 0) + n;
             for (const key of ['movers', 'elements', 'triggerMs', 'readMs', 'frames', 'shared']) digitsRun[key] += out.digits[key];

@@ -29,6 +29,7 @@ import {
     TURN_MATCH_MARGIN,
     CHAR_CHECK,
     charsOwedFaults,
+    metNodesUnread,
 } from './char-read.mjs';
 
 /** A white image of `w` by `h`, four bytes a pixel, with `paint` setting pixels. */
@@ -324,7 +325,13 @@ describe('the shares and the report (foldShares, shareQuantile, charReport)', ()
         assert.ok(lines.some((line) => /^1c\(c\), failures: 1 character\(s\); by node \(characters\): mobile\/pay:span\.pay-x-n\[price\] 1/.test(line)));
         assert.ok(lines.some((line) => /read again on a fresh pair and kept there: none/.test(line)));
         assert.ok(lines.some((line) => /could not be read \(each a failure\): none/.test(line)));
-        assert.ok(lines.some((line) => /triggered and read no character \(each a failure\): none/.test(line)));
+        assert.ok(lines.some((line) => /triggered and read no character, on the job or on a node it met \(each a failure\): none/.test(line)));
+        assert.ok(lines.some((line) => /a prepare that answered no trigger \(each a failure\): none/.test(line)));
+        // The trigger's own walk, by viewport and look (the fifteenth review's item 1).
+        assert.ok(lines.some((line) => line === "1c(c), the trigger's walk, owed on every job holding money, by viewport and look: desktop t-neo 0 of 0 walked, 0 mover(s) over 0 element(s); mobile t-modern 0 of 0 walked, 0 mover(s) over 0 element(s)"));
+        const walked = charReport({ ...run, byVpClass: { 'mobile t-modern': { ...run.byVpClass['mobile t-modern'], money: 9, walked: 9, movers: 4, elements: 100 } }, unwalked: ['pay @mobile / theme 1: its prepare answered no 1c trigger, so whether a mover is near its money was not read'] });
+        assert.ok(walked.some((line) => line === "1c(c), the trigger's walk, owed on every job holding money, by viewport and look: mobile t-modern 9 of 9 walked, 4 mover(s) over 100 element(s)"));
+        assert.ok(walked.some((line) => /a prepare that answered no trigger \(each a failure\): 1\n    pay @mobile \/ theme 1: its prepare answered no 1c trigger/.test(line)));
         assert.ok(lines.some((line) => /threw and was caught \(each a failure\): 1\n    pay @mobile \/ theme 1: 1c threw/.test(line)));
         assert.ok(!lines.some((line) => /would-be|report-only|fails nothing/.test(line)));
         assert.ok(lines.some((line) => /least share read, by kind: digit pay @mobile \/ theme 1: b "1" 0\.920/.test(line)));
@@ -352,5 +359,55 @@ describe('a look whose jobs triggered 1c had its characters read (charsOwedFault
             'every-money-character-reads-where-a-mover-is-near: its trigger fired on 1 t-fixture-private job(s) at mobile and read no character on them',
         ]);
         assert.deepEqual(charsOwedFaults({}, ['t-modern']), []);
+    });
+
+    /*
+     * The fifteenth review's item 1 (the owner's D-2026-10-31-01): the
+     * runner read a prepare that answered no trigger as a trigger that found
+     * nothing, so a trigger that stopped running owed nothing (the critic's
+     * kill-trigger plant took TS's 90 failures to 0). Each look owes, on
+     * each viewport, the trigger's walk over every job of it holding money.
+     */
+    it('owes the trigger’s walk over every job holding money, and nothing where it walked them all', () => {
+        const byVpClass = {
+            'mobile t-modern': { jobs: 10, money: 9, walked: 9, triggered: 0, chars: 0 },
+            'desktop t-modern': { jobs: 10, money: 9, walked: 0, triggered: 0, chars: 0 },
+            'mobile t-neo': { jobs: 5, money: 0, walked: 0, triggered: 0, chars: 0 },
+            'canvas t-neo': { jobs: 5, money: 4, walked: 3, triggered: 2, chars: 0 },
+        };
+        assert.deepEqual(charsOwedFaults(byVpClass, ['t-modern', 't-neo']), [
+            'every-money-character-reads-where-a-mover-is-near: its trigger walked 3 of the 4 t-neo job(s) holding money at canvas',
+            'every-money-character-reads-where-a-mover-is-near: its trigger fired on 2 t-neo job(s) at canvas and read no character on them',
+            'every-money-character-reads-where-a-mover-is-near: its trigger walked 0 of the 9 t-modern job(s) holding money at desktop',
+        ]);
+    });
+});
+
+/**
+ * The fifteenth review's item 2 (the owner's D-2026-10-31-01): a node the
+ * trigger met that read no character, each left out turned past 2° or too
+ * big, fails — judged per job, TS3 (TS with the price's tag tilted 3°) left
+ * the covered price out whole and passed.
+ */
+describe('a node the trigger met reads a character or says why not (metNodesUnread)', () => {
+    const chars = (i, n, skipped) => ({ i, sel: `span.n${i}`, chars: Array.from({ length: n }, () => ({ c: '1' })), skipped });
+    it('fails a met node whose every character was left out turned or too big, and no other', () => {
+        const moneyChars = {
+            targets: [
+                chars(3, 0, { turned: 7 }),
+                chars(4, 0, { 'too big': 2, clipped: 1 }),
+                chars(5, 0, { clipped: 6 }),
+                chars(6, 5, { turned: 0 }),
+                chars(7, 0, { turned: 9 }),
+                chars(8, 0, {}),
+            ],
+        };
+        assert.deepEqual(metNodesUnread(moneyChars, [3, 4, 5, 6, 8]), [
+            'its trigger met span.n3 and no character of it was read (left out: 7 turned past 2°)',
+            'its trigger met span.n4 and no character of it was read (left out: 2 too big, 1 behind a scroller)',
+        ]);
+        // A node no mover met (7) is not held here: the job-level read is.
+        assert.deepEqual(metNodesUnread(moneyChars, []), []);
+        assert.deepEqual(metNodesUnread(undefined, [3]), []);
     });
 });

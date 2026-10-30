@@ -348,13 +348,47 @@ export function shareQuantile(f, q) {
 }
 
 /**
+ * **A node the trigger met that read no character** (the fifteenth review's
+ * item 2, the owner's D-2026-10-31-01): of the money nodes `moneyChars`
+ * answered (`__moneyChars`), each whose index is in `met` (the nodes a mover
+ * met, `digitTrigger`'s `met`) that answered no character to read, with at
+ * least one left out turned past 2° (`turned`) or too big for the reference
+ * canvas (`too big`). Judged per job, a cover over a node turned past 2°
+ * passed wherever the screen's other money was read (the critic's TS3, TS
+ * with the price's tag tilted 3°: 165 characters left out, 0 failing). A
+ * node whose characters all stand behind a scroller (`clipped`) is a stated
+ * limit and answers nothing here. Answers one sentence a node. Pure.
+ */
+export function metNodesUnread(moneyChars, met) {
+    const out = [];
+    const wanted = new Set(met);
+    for (const t of moneyChars?.targets ?? []) {
+        if (!wanted.has(t.i) || t.chars.length > 0) continue;
+        const turned = t.skipped?.turned ?? 0;
+        const big = t.skipped?.['too big'] ?? 0;
+        if (turned + big === 0) continue;
+        const left = [turned > 0 ? `${turned} turned past 2°` : '', big > 0 ? `${big} too big` : '', (t.skipped?.clipped ?? 0) > 0 ? `${t.skipped.clipped} behind a scroller` : '']
+            .filter((said) => said !== '')
+            .join(', ');
+        out.push(`its trigger met ${t.sel} and no character of it was read (left out: ${left})`);
+    }
+    return out;
+}
+
+/**
  * **The read owed per look** (7d): on each viewport, a look whose contrast
  * jobs the trigger fired on must have had characters read there — a trigger
- * that fired and read nothing is a read that did not happen. `byVpClass` is
- * the run's fold (`vp cls` → `triggered`, `chars`, …), `classes` the looks
- * held here (the public looks in the runner, each carried look on its own in
- * `look-tallies.mjs`). Answers one sentence a viewport and look that owes,
- * none where the trigger fired on no job. Pure.
+ * that fired and read nothing is a read that did not happen. **And the
+ * trigger is owed its own walk** (the fifteenth review's item 1): on each
+ * viewport, every job of the look holding money (`money`) must have had the
+ * trigger walk it (`walked`: a prepare that answered a trigger, which held
+ * movers to money over the elements it walked), or a trigger that stopped
+ * answering reads as one that found nothing. `byVpClass` is the run's fold
+ * (`vp cls` → `money`, `walked`, `triggered`, `chars`, …), `classes` the
+ * looks held here (the public looks in the runner, each carried look on its
+ * own in `look-tallies.mjs`). Answers one sentence a viewport and look that
+ * owes, none where every job holding money was walked and the trigger fired
+ * on none. Pure.
  */
 export function charsOwedFaults(byVpClass, classes) {
     const out = [];
@@ -363,6 +397,7 @@ export function charsOwedFaults(byVpClass, classes) {
         const vp = key.slice(0, at);
         const cls = key.slice(at + 1);
         if (!classes.includes(cls)) continue;
+        if ((t.money ?? 0) > (t.walked ?? 0)) out.push(`${CHAR_CHECK}: its trigger walked ${t.walked ?? 0} of the ${t.money} ${cls} job(s) holding money at ${vp}`);
         if (t.triggered > 0 && t.chars === 0) out.push(`${CHAR_CHECK}: its trigger fired on ${t.triggered} ${cls} job(s) at ${vp} and read no character on them`);
     }
     return out;
@@ -406,6 +441,12 @@ export function charReport(run) {
     lines.push(
         `1c(c), the trigger read on every job: ${run.movers} mover(s) over ${run.elements} element(s), ${(run.triggerMs / 1000).toFixed(2)}s of tab time; ` +
             `the read on triggered jobs ${(run.readMs / 1000).toFixed(2)}s of tab time (${run.frames} shown frame(s) of its own, ${run.shared} shared)`,
+    );
+    lines.push(
+        `1c(c), the trigger's walk, owed on every job holding money, by viewport and look: ` +
+            (byVp.length === 0
+                ? 'no contrast job'
+                : byVp.map(([key, t]) => `${key} ${t.walked ?? 0} of ${t.money ?? 0} walked, ${t.movers ?? 0} mover(s) over ${t.elements ?? 0} element(s)`).join('; ')),
     );
     lines.push(
         `1c(c), triggered jobs: ${run.triggers.length === 0 ? 'none' : `${run.triggers.length}${run.triggers.slice(0, CHAR_SAID).map((line) => `\n    ${line}`).join('')}`}` +
@@ -467,7 +508,8 @@ export function charReport(run) {
     );
     const said = (list) => (list.length === 0 ? 'none' : `${list.length}${list.slice(0, CHAR_SAID).map((line) => `\n    ${line}`).join('')}${list.length > CHAR_SAID ? `\n    … and ${list.length - CHAR_SAID} more` : ''}`);
     lines.push(`1c(c), could not be read (each a failure): ${said(run.faults)}`);
-    lines.push(`1c(c), triggered and read no character (each a failure): ${said(run.empty ?? [])}`);
+    lines.push(`1c(c), triggered and read no character, on the job or on a node it met (each a failure): ${said(run.empty ?? [])}`);
+    lines.push(`1c(c), a prepare that answered no trigger (each a failure): ${said(run.unwalked ?? [])}`);
     lines.push(`1c(c), threw and was caught (each a failure): ${said(run.thrown ?? [])}`);
     return lines;
 }
