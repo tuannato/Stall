@@ -206,16 +206,34 @@ export function readCodeModules(first, again) {
  * `readCodeModules` give it, read off the upright frame — or, where the
  * frame could not be had, painted other codes, or the code's frame is still
  * turned on it, both a fault: a turned code is read upright or it fails
- * closed. Pure but for the two calls.
+ * closed. Each answer carries `upright`: `true` where it was read off the
+ * upright frame, `false` where it failed closed before (the runner says
+ * which). **Only a frame that does nothing but turn is read upright** (the
+ * fourteenth review's M2, the owner's D-2026-10-30-01): a zone whose
+ * `turnOnly` is not `true` — its frame also scales, skews, mirrors or leaves
+ * the plane, and holding that off with the turn makes a code the page does
+ * not paint (the critic's PSCT, a fifth of the size and 0.01°, and PMIR, a
+ * half turn and a mirror, passed the whole runner read upright) — fails
+ * closed for both reads with what its frame does, and no frame is made where
+ * no turned zone is turn-only. Pure but for the two calls.
  */
 export async function readTurnedUpright(zones, upright, uprightAgain) {
-    const turned = zones.flatMap((z, i) => (z.turned ? [i] : []));
     const out = new Map();
-    if (turned.length === 0) return out;
     const fail = (i, why) => {
         const r = { px: 0, bad: 0, fault: `its frame is turned, and ${why}` };
-        out.set(i, { quiet: { z: zones[i], r }, modules: { z: zones[i], r } });
+        out.set(i, { quiet: { z: zones[i], r }, modules: { z: zones[i], r }, upright: false });
     };
+    const turned = [];
+    for (const [i, z] of zones.entries()) {
+        if (!z.turned) continue;
+        if (z.turnOnly === true) turned.push(i);
+        else
+            fail(
+                i,
+                `what turns it does more than turn it (${typeof z.turnOnly === 'string' ? z.turnOnly : 'the page did not say that it only turns it'}): held upright it would not be the code the page paints, so it is not read`,
+            );
+    }
+    if (turned.length === 0) return out;
     const frame = await upright();
     const names = (zs) => zs.map((z) => z.name).join(', ');
     if ((frame.why ?? []).length > 0) {
@@ -244,7 +262,7 @@ export async function readTurnedUpright(zones, upright, uprightAgain) {
     const first = { img: frame.img, zones: pick(frame.zones), at: frame.at };
     const quiet = await readQuietZones(first, again);
     const modules = await readCodeModules(first, again);
-    readable.forEach((i, k) => out.set(i, { quiet: quiet[k], modules: modules[k] }));
+    readable.forEach((i, k) => out.set(i, { quiet: quiet[k], modules: modules[k], upright: true }));
     return out;
 }
 

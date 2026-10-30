@@ -338,7 +338,7 @@ describe('a-codes-modules-that-read-wrong-are-read-again-on-a-fresh-pair', () =>
  * zone and by 1d on a frame with every transform above it held off, with a
  * fresh pair held the same way, or fails closed — never passed over.
  */
-const TURNED = { ...Z, turned: true, name: 'shop-window' };
+const TURNED = { ...Z, turned: true, turnOnly: true, name: 'shop-window' };
 const UNTURNED = zoneOf(CHECKER, { x: 10.3, y: 20.6, name: 'pay-qr' });
 describe('a-turned-code-is-read-upright-or-fails-closed', () => {
     const calls = () => {
@@ -405,8 +405,45 @@ describe('a-turned-code-is-read-upright-or-fails-closed', () => {
             const out = await readTurnedUpright([TURNED], c.upright(frame), c.again({ why: ['never'] }));
             assert.match(out.get(0).quiet.r.fault, said);
             assert.match(out.get(0).modules.r.fault, said);
+            assert.equal(out.get(0).upright, false);
             assert.equal(c.n.again, 0);
         }
+    });
+
+    it('says which answers were read off the upright frame', async () => {
+        const c = calls();
+        const out = await readTurnedUpright([TURNED], c.upright({ img: CLEAN, zones: [{ ...TURNED, turned: false }], at: {} }), c.again({ why: ['never'] }));
+        assert.equal(out.get(0).upright, true);
+    });
+
+    /*
+     * The fourteenth review's M2 (the owner's D-2026-10-30-01): a frame that
+     * scales, mirrors or squashes the code besides turning it is not held
+     * upright, since holding that off makes a code the page does not paint
+     * (the critic's PSCT and PMIR passed the whole runner).
+     */
+    it('fails closed, unread and with what its frame does, a turned code whose frame does more than turn it, and reads the others', async () => {
+        const scaled = { ...TURNED, turnOnly: 'div.sw-qr has scale: 0.2', name: 'sw-qr' };
+        const c = calls();
+        const out = await readTurnedUpright([scaled, TURNED], c.upright({ img: CLEAN, zones: [scaled, { ...TURNED, turned: false }], at: {} }), c.again({ why: ['never'] }));
+        const said = /^its frame is turned, and what turns it does more than turn it \(div\.sw-qr has scale: 0\.2\): held upright it would not be the code the page paints, so it is not read$/;
+        assert.match(out.get(0).quiet.r.fault, said);
+        assert.match(out.get(0).modules.r.fault, said);
+        assert.equal(out.get(0).upright, false);
+        assert.equal(out.get(1).upright, true);
+        assert.equal(out.get(1).modules.r.bad, 0);
+        assert.equal(c.n.upright, 1);
+    });
+
+    it('makes no frame where every turned code does more than turn, and fails a zone that does not say', async () => {
+        const c = calls();
+        const mirrored = { ...TURNED, turnOnly: "div.pay-qr has transform: matrix(-1, 0, 0, 1, 0, 0), which mirrors it" };
+        const silent = { ...TURNED, name: 'pay-qr' };
+        delete silent.turnOnly;
+        const out = await readTurnedUpright([mirrored, silent], c.upright({ img: CLEAN, zones: [], at: {} }), c.again({ why: ['never'] }));
+        assert.match(out.get(0).modules.r.fault, /which mirrors it\): held upright/);
+        assert.match(out.get(1).modules.r.fault, /\(the page did not say that it only turns it\)/);
+        assert.deepEqual(c.n, { upright: 0, again: 0 });
     });
 });
 

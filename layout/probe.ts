@@ -13137,6 +13137,43 @@ function angleOf(el: Element | null): number {
 }
 
 /**
+ * **Whether every transform from `el` up only turns it** (the fourteenth
+ * review's M2, the owner's D-2026-10-30-01): `true`, or what one box does
+ * besides turning it and moving it in the plane — a `scale` other than 1, a
+ * `translate` off the plane, a `rotate` about an axis, or a `transform` that
+ * is not 2D, not orthonormal (it scales or skews) or whose determinant is
+ * not above 0 (it mirrors). The quiet zone and 1d read a turned code upright,
+ * every transform above it held off (`__codeTurnsHeldOff`), and that frame
+ * undid a scale, a mirror or a squash with the turn: the critic's PSCT (a
+ * fifth of the size and 0.01°) and PMIR (a half turn and a mirror) passed the
+ * whole runner, read upright as codes the page does not paint. A code whose
+ * frame does anything but turn is failed closed by both reads instead
+ * (`readTurnedUpright`), and says so. A turn `angleOf` does not read (a
+ * motion path's, a `transform` about another axis) is not asked here: such a
+ * code is not turned, and is read as it stands.
+ */
+function turnOnly(el: Element | null): true | string {
+    for (let at = el; at !== null && at !== document.documentElement; at = at.parentElement) {
+        const cs = getComputedStyle(at);
+        const who = describe(at);
+        if (cs.scale !== 'none' && !cs.scale.trim().split(/\s+/).every((v) => Number(v) === 1)) return `${who} has scale: ${cs.scale}`;
+        if (cs.translate !== 'none') {
+            const parts = cs.translate.trim().split(/\s+/);
+            if (parts.length > 2 && Number.parseFloat(parts[2]!) !== 0) return `${who} has translate: ${cs.translate}, off the plane`;
+        }
+        if (cs.rotate !== 'none' && !/^-?[\d.]+(e[+-]?\d+)?deg$/.test(cs.rotate.trim())) return `${who} has rotate: ${cs.rotate}, about an axis`;
+        if (cs.transform !== 'none') {
+            const m = new DOMMatrixReadOnly(cs.transform);
+            const said = `${who} has transform: ${cs.transform.slice(0, 80)}`;
+            if (!m.is2D) return `${said}, off the plane`;
+            if (Math.abs(Math.hypot(m.a, m.b) - 1) > 1e-3 || Math.abs(Math.hypot(m.c, m.d) - 1) > 1e-3 || Math.abs(m.a * m.c + m.b * m.d) > 1e-3) return `${said}, which scales or skews it`;
+            if (m.a * m.d - m.b * m.c <= 0) return `${said}, which mirrors it`;
+        }
+    }
+    return true;
+}
+
+/**
  * A turned box before its turn: `getBoundingClientRect()` and
  * `Range.getClientRects()` answer a turned box's axis-aligned bounds, W×H,
  * and for a turn θ those are w·c + h·s by w·s + h·c — solved here for w and
@@ -14150,6 +14187,12 @@ type QuietZone = {
     clip: { x0: number; y0: number; x1: number; y1: number };
     turned: boolean;
     /**
+     * Whether every transform from the code up only turns it (`turnOnly`):
+     * `true`, or what one box does besides — a turned code is read upright
+     * only where it is `true` (`readTurnedUpright`).
+     */
+    turnOnly: true | string;
+    /**
      * Every box above the code that scrolls or is scrolled, with its offset
      * when the zones were read, and the document's own — said when a read
      * fails, to find why (`quietReadingLine`, `quiet-zone.mjs`).
@@ -14228,6 +14271,7 @@ function quietZoneOf(svg: SVGSVGElement): QuietZone | undefined {
         // which read every unclipped code as wholly clipped away.
         clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
         turned: angleOf(svg) !== 0,
+        turnOnly: turnOnly(svg),
         scrolled: scrolledAbove(svg),
     };
 }
@@ -14285,7 +14329,11 @@ window.__codeMatrices = () =>
  * captures that frame and reads the zones and matrices on it. Off, it puts
  * every one back. Only these boxes are held, so nothing else on the page
  * moves; a box laid out against one of them (an absolute or fixed box whose
- * containing block a transform made) can move with it.
+ * containing block a transform made) can move with it. **Only a frame that
+ * does nothing but turn is held** (`turnOnly`, the fourteenth review's M2):
+ * holding off a scale or a mirror with the turn made a code the page does not
+ * paint, so a code whose frame also scales, skews, mirrors or leaves the
+ * plane is not held, and the runner fails it closed unread.
  */
 let codeTurnsHeld: (() => void) | undefined;
 window.__codeTurnsHeldOff = async (on: boolean) => {
@@ -14297,8 +14345,9 @@ window.__codeTurnsHeldOff = async (on: boolean) => {
         return { codes: 0, boxes: 0 };
     }
     if (codeTurnsHeld !== undefined) throw new Error('the turns above the codes are held off already');
+    // Only a frame that turns and does nothing else (`turnOnly`): every other turned code fails closed unread (M2).
     const turned = codeZones()
-        .filter(({ zone }) => zone.turned)
+        .filter(({ zone }) => zone.turned && zone.turnOnly === true)
         .map(({ svg }) => svg);
     const chain = new Set<HTMLElement | SVGElement>();
     for (const svg of turned) {

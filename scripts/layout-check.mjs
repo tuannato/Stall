@@ -1831,6 +1831,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      * the same way, and fails closed where it cannot be — never
                      * passed over. One more capture a job with a turned code.
                      */
+                    // What a code's line says of its turned frame: read upright on it, or failed closed in it (a frame that cannot be had, or one that does more than turn, M2).
+                    const turnedSaid = (readUpright) =>
+                        readUpright === true ? ' (in a turned frame, read upright: every transform above it held off)' : readUpright === false ? ' (in a turned frame, not read)' : '';
                     const heldOff = async (on) => {
                         const r = await cdp.send('Runtime.evaluate', { expression: `window.__codeTurnsHeldOff(${on})`, awaitPromise: true, returnByValue: true }, sessionId);
                         if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails).slice(0, 300)}`);
@@ -1872,10 +1875,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                                   return heldFrame(true);
                               }),
                           );
-                    for (const [i, read] of upright) reads[i] = { ...read.quiet, upright: true };
+                    for (const [i, read] of upright) reads[i] = { ...read.quiet, upright: read.upright };
                     for (const { z, r, turned, retry, upright: readUpright } of reads) {
                         const code = `${vp.name}/${screen}:${z.name}`;
-                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${readUpright ? ' (in a turned frame, read upright: every transform above it held off)' : ''}`;
+                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${turnedSaid(readUpright)}`;
                         if (turned) {
                             // Unreachable while every turned code is read upright or failed closed: said as a failure, never passed over.
                             dim.push(`${at} — its frame is turned and it was not read upright — a-code-keeps-its-quiet-zone-white`);
@@ -1935,7 +1938,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         try {
                             moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
                             // The turned codes, read upright above (B1).
-                            for (const [i, read] of upright) moduleReads[i] = { ...read.modules, upright: true };
+                            for (const [i, read] of upright) moduleReads[i] = { ...read.modules, upright: read.upright };
                         } catch (err) {
                             const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`;
                             modules.thrown.push(line);
@@ -1946,7 +1949,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         tally.jobs += 1;
                         for (const { z, r, turned, retry, upright: readUpright } of moduleReads) {
                             const code = `${vp.name}/${screen}:${z.name}`;
-                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${readUpright ? ' (in a turned frame, read upright: every transform above it held off)' : ''}`;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${turnedSaid(readUpright)}`;
                             if (turned) {
                                 // Unreachable while every turned code is read upright or failed closed: a failure, never passed over.
                                 const why = 'its frame is turned and it was not read upright';
