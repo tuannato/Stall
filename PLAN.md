@@ -1377,7 +1377,13 @@ money path this app can have, because nothing on it is derived.
   only on a contrast job where a mover is near money, read report-only; the
   owner's D-2026-10-20-06 D1 (c); `layout/PROBE-RULES.md`, "Before 8g2,
   1c(c): every digit, where a mover is near" and "…: the eleventh review's
-  fixes"). 1c fails nothing until step 7d binds it. Open:
+  fixes"). 1c fails nothing until step 7d binds it. Built at the
+  fourteenth review's fixes round and off this list (`layout/PROBE-RULES.md`,
+  "Before 8g2: 1c's two holes"): the twelfth critic's two blocking holes — a
+  turned character is held to the largest phase within 0.2 of its best match
+  (J5), measured with every money job read (0 under the cut; the least
+  turned letter 0.588), and the trigger reads the look pseudos of every box
+  a mover holds (HRP2). Open:
   1. **Bind it at 7d**, as D1 decides, with its own red proofs on the bound
      read (PL, a box over one digit, is 1c's alone among the contrast reads:
      the broken-figure read passes it) and the jobs it owes held to their
@@ -1421,9 +1427,12 @@ money path this app can have, because nothing on it is derived.
      cover over a decimal point, which moves the figure a hundredfold, is not
      held by 1c; at a floor of 4 a full stop read 0.50, on the cut itself.
      **A turned frame** (Rural's swaying tag and tilted rows) is held to the
-     phase of its turn its shown pixels match best, a model of Chrome's
-     resample (an upright glyph drawn on a canvas and resampled bilinearly
-     into the frame's turn) measured on Rural alone; a character some phase
+     largest phase of its turn within 0.2 of the one its shown pixels match
+     best (J5, since the fourteenth review's fixes round), a model of
+     Chrome's resample (an upright glyph drawn on a canvas and resampled
+     bilinearly into the frame's turn) measured on Rural alone; the 0.2 was
+     fitted in mask space on Rural's 2,350 turned characters and measured
+     again in Chrome with every money job read, on this Mac alone; a character some phase
      leaves under `CHAR_TURN_FLOOR` (3) pixels is too small "on a turn" (12
      on the clean run: the "=" on Rural's Pay several strip and its like).
      The five digits the least of sixteen phases called too small (Rural's

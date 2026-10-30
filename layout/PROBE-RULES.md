@@ -13540,6 +13540,109 @@ three tabs, the tracked fixture carried, started at a one-minute load of
 board's 142 at 1280; the quiet zone and 1d read Rural's three turned codes
 upright and clean; both canaries green; no quiet-zone sighting.
 
+## Before 8g2: 1c's two holes (2026-10-30; the twelfth critic's items 1 and 2 and its J5, the owner's D-2026-10-30-02)
+
+The same evidence folder as the section above (`critic14-fixes/`). Two code
+commits: `600ed62` (the turned reference) and `e304d58` (the trigger). A
+**quick** read is `tools/q1c.sh`: the contrast pass alone on the screens it
+names (the runner mutated in the scratch tree, never committed:
+`q1c-mutate.py`); **forced** reads every contrast job holding money as if
+its trigger had fired (the same tool's `all`, the mutation 1c's report and
+the twelfth critic used). `tools/m-turndump.py` (scratch only) writes every
+character held to a JSON line with its reference under each rule
+(`runs/*.jsonl`), and `tools/m-margin.py` (scratch only) reads the margin
+from `TURN_MARGIN`, 0 being the rule before J5.
+
+### Item 1: a cover cannot choose its own reference phase (J5)
+
+A character on a turned frame was held to the one phase of its turn whose
+mask its shown pixels matched best (`turnRef`). A partial cover leaves a
+glyph that matches a thinner, lower-count phase, so the reference shrank
+with the glyph: in mask space over the 2,350 turned characters the
+twelfth critic held from the eleventh review's forced measurement, a
+cover over the right half left under half
+of the page's own pixels on 1,435 of them and the best match passed 558,
+175 of them only because the leftover chose its phase (fixed at the clean
+glyph's phase, 383 pass); in Chrome, the critic's TRN (a box over the top
+62% of Rural's surcharge and selection lines) passed a "7" that kept 3 of
+12 pixels at 0.60 against a phase that counts 5. Now the reference is the
+largest count among the phases whose masks the shown pixels match within
+`TURN_MATCH_MARGIN` (0.2) of the best match (overlap over union) — the
+critic's J5, which in mask space read 0 clean false reds and passed 238 of
+the 1,435 (`critic12/runs/turnref-variants.log`). Test: `holds a leftover to
+the largest phase within the margin of its best match, so a cover cannot
+choose a thin phase` (`scripts/char-read.test.mjs`), red at a margin of 0
+(`runs/t-J5-red-margin0.log`).
+
+**Measured with every money job read before it binds** (the critic's
+condition: the margin was fitted on the same 2,350 characters): a forced
+quick read of the whole contrast plan (`runs/q-forced-all-J5.log`, the dump
+`runs/forced-all-J5.jsonl`, `runs/forced-all-J5-analysis.txt`): 697 jobs,
+60,847 characters held, **none under the cut**, 2,081 too small (2,069
+punctuation or symbols and 12 "on a turn"). The least share kept, under J5
+and, beside it, under the best match alone on the same reading:
+
+| Frame | Characters | Digit | Letter | Other |
+|---|---|---|---|---|
+| turned (Rural) | 2,350 | 0.722 ("5", 13 of 18, the selection figure, `pay-several-strip-long-figure` at 1280) — 0.778 alone | 0.588 ("e", 10 of 17, the surcharge line, `pay-several-strip` at 1280) — 0.750 alone | 0.667 (".", 6 of 9) — 0.750 alone |
+| upright | 58,497 | 0.784 ("1", 29 of 37, Pay several's lines) — the same | 1.000 — the same | 0.667 ("=", 16 of 24, the wall's rate) — the same |
+
+On 1,591 of the turned characters J5's reference differs from the best
+match's; on no upright one. The margin stays 0.2: the clean tree reads 0
+under it, the least turned letter 0.088 above the cut.
+
+**Red proof, TRN** (`plants/TRN-topcover-rural.css`, the critic's; quick,
+its five screens at 390 and 1280): 834 would-be characters under J5
+(`runs/q-TRN-J5.log`) against 617 under the best match alone
+(`runs/q-TRN-best.log`, the same tree with the margin at 0), all on Rural's
+ten triggered jobs. Paired by place (`runs/TRN-analysis.txt`, the fresh
+pair's reading where a job was read again), 244 characters fail under J5
+that pass under the best match alone, and none the other way: most of them
+the letters of the "+5% surcharge" line on `pay-several-strip`, an "e" that
+keeps 7 pixels held to a phase of 17 under J5 where its leftover chose one
+of 8. The critic's own count, 186 of the characters that
+fail against their clean reference and passed at `397653f`, is a different
+measure. The same screens clean and forced under J5 read 0
+(`runs/q-TRN-clean-all-J5.log`).
+
+### Item 2: the trigger reads the look pseudos of the boxes a mover holds
+
+The mover loop grew every box a mover holds by its own paints (`ownPaints`),
+and read a look pseudo only where the pseudo itself moved, so the critic's
+HRP2 — HR's shape, Neo's phone-row name column moved by `top: 1px`, the
+rail label it holds printing "◆" in its `::after` with 24 sharp
+text-shadow copies of it over the price, both lints admitting it — triggered 0 of 5 jobs at 390 and 0 of 5 at 1280 (forced, it
+read 5 at 390). Now every marked look pseudo of the mover and of each box it
+holds (`paintingLookPseudo`) is read by its region and its sharp reach
+(`pseudoTriggerPaints`: `lookPseudoRegion`, `pseudoReachPaints`, held to its
+host's chain, carried by its host's own link and cut to its host's own
+window, the road a moving pseudo already took, now one helper for both);
+one whose region or reach cannot be read triggers the job, as before. HRP2
+(`runs/q-HRP2.log`): 5 of 5 of Neo's jobs at 390 triggered, 5 would-be
+characters, the price's, as forced (`runs/q-HRP2-all.log`); 0 at 1280, where
+the forced read reads none either (its copies reach no money there). The
+clean `offers`: no job triggered (`runs/q-offers-control.log`).
+
+### The earlier plants, quick, on this tree
+
+PC2 86 on 4 jobs (`runs/q-PC2.log`), PC3′ on Neo 30 on 6
+(`runs/q-PC3p-neo.log`), N3 104 on 22 (`runs/q-N3.log`), PL 4 on 4
+(`runs/q-PL.log`), P1A 508 on 8, by 1a's failures (`runs/q-P1A.log`), TS 90
+on 5 (`runs/q-TS.log`) and ESC 105 on 5 (`runs/q-ESC.log`): each the count
+its last quick read had.
+
+**D1 (a)'s cost, read again.** The forced read's own clock: the read on
+triggered jobs 117.8s of tab time over the 697 jobs, against 80.4–111.8s on
+the four forced runs of 1c's report.
+
+### The clean run
+
+`runs/w-clean-B.log`: the whole runner on the scratch clone at `e304d58`,
+three tabs, the tracked fixture carried, started at a one-minute load of
+2.46 (peak 7.85): exit 0, 236.2s of 300. 1c's trigger fired on no job of
+796 (the held boxes' look pseudos read on every mover, 3,339 movers over
+72,023 elements, 1.24s of tab time).
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
