@@ -13948,6 +13948,36 @@ sighting under the selection (the fourteenth review's list).
 | `textShadowHeirs` in Chrome | the critic's script | 0 of 144 left a transition (40 as committed, 38 with the cancel taken out) | — (`runs/m1-heirs-chrome-*.log`) |
 | `holdOff` in Chrome | `tools/m1-holdoff-chrome.mjs` | 0 of 96 | — (`runs/m1-holdoff-chrome.log`) |
 
+### The clean run
+
+`runs/w-clean.log`: `pnpm test:layout` in the worktree at `128367b`, three
+tabs, the tracked fixture carried, started at a one-minute load of 2.23:
+exit 0, 221.4s of 300. Rural's three turned codes read upright, white and
+right, a corner moved 0.99 modules at most; the trigger walked all 697 jobs
+holding money (3,339 movers over 72,023 elements) and fired on none; no
+prepare went unanswered; both canaries green.
+
+### Cost
+
+One A/B pair back to back at three tabs with the tracked fixture carried
+(`tools/ab.sh`; `runs/ab-*.log`, `.mem`, `.meta`): a clone at `d12095e`
+against a clone at `128367b`, each started once the one-minute load was
+under 2.5.
+
+| Run | Commit | Load at start | Runtime | Contrast pass | Captures | 1c's trigger |
+|---|---|---|---|---|---|---|
+| base | `d12095e` | 2.00 (peak 7.29) | 222.1s | 102.1s | 1,309 | 1.14s of tab time |
+| final | `128367b` | 2.29 (peak 7.44) | 223.1s | 104.3s | 1,309 | 1.34s of tab time |
+
++1.0s, under the 8s at which a prune is proposed; one pair, so it is not
+told apart from the machine. The geometry passes read within about a
+second of each other pass for pass, but for the narrow wall (+2.3s); the
+contrast dumps are identical, 15,018 boxes over 823 jobs
+(`runs/ab-dump-compare.log`). On the clean tree the round adds one
+computation per code read upright (its corner travel, from numbers the
+zones already carry), the trigger's list of the nodes it met, and one
+`getAnimations` read before and after each call of `textShadowHeirs`.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
