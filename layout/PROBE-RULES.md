@@ -13729,6 +13729,31 @@ The kit's skeleton probe on the same tree (`runs/k-clean-C.log`, `tools/kit.sh`)
 exit 0 in 18.1s; 1c's trigger fired on none of its jobs. 1c binds on the
 kit's probe as on the ordinary one: it is the same runner.
 
+### Cost
+
+One A/B pair back to back at three tabs with the tracked fixture carried
+(`tools/ab.sh`; `runs/ab-*.log`, `.mem`, `.meta`): the `7754da0` clone
+against the scratch clone at `9d43165`, the last code commit of this round
+(`6747f91` after it changes no code), each started once the one-minute load
+was under 2.5. A first attempt was stopped and is not counted
+(`runs/ab-base-aborted.log`): the selected look-lint ran beside its base run.
+
+| Run | Commit | Load at start | Runtime | Contrast pass | Captures | 1c's trigger |
+|---|---|---|---|---|---|---|
+| base | `7754da0` | 2.10 (peak 7.55) | 229.3s | 108.3s | 1,309, 116.1s | 1.45s of tab time |
+| final | `9d43165` | 2.22 (peak 10.21) | 235.9s | 113.8s | 1,309, 114.6s | 1.25s of tab time |
+
++6.6s, under the 8s at which a prune is proposed; one pair, so it is not
+told apart from the machine (the final's peak load was 10.21). The geometry
+passes read within 1.3s of each other pass for pass, as many faster as
+slower (the short wall −1.3s, the reduced-motion phone +0.8s); the contrast
+pass is +5.5s with the same captures; the contrast dumps are
+identical, 15,018 boxes over 823 jobs (`runs/ab-dump-compare.log`). On the
+clean tree the round adds no read the contrast pass makes: 1c's trigger
+fires on no job, so binding it reads nothing more; the held boxes' look
+pseudos are read inside the trigger's own walk; the geometry passes' fixed
+clock changes no count; the heirs' hold is on 1b's keyframe-values road.
+
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
 ci.yml's manual `layout` job now sets `LAYOUT_CONTRAST_TABS: '2'`.
