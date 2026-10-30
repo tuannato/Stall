@@ -3396,6 +3396,23 @@ try {
      * (`unshownFailures`), whose red proof is a page whose
      * `document.hasFocus` answers false. Each tab has its own page, viewport
      * and emulated media; nothing a pass reads is another tab's.
+     *
+     * **Every tab's page runs on the fixed clock** (`FIXED_CLOCK`, shared
+     * with `looks-diff.mjs`), installed here before the geometry walk, so
+     * the geometry passes read it as the contrast passes do (the fourteenth
+     * review's item 1, the owner's D-2026-10-30-01). Until then only the
+     * contrast passes did, and the geometry passes kept the real clock: the
+     * pay fixtures stamp their rate at load and the pay sheet prints it to
+     * the second (`formatTriedAt`), and 1a's lattice asks a glyph's points
+     * from its ink box, so two tabs' pages loaded at different seconds asked
+     * different point counts of that line — 960 against 956 on the kit's
+     * skeleton, 4850 against 4830 on Modern, 6818 against 6762 on Rural, by
+     * the critic's pinned clock (`critic14/runs/qclock-pay-390-reduce-pinned.log`;
+     * Neo's mono face does not move) — and the canary
+     * (`the-geometry-passes-read-the-same-on-every-tab`) read the phone's
+     * reduced-motion pass again, `pay` among its screens, wherever no carried
+     * look had a sticky desk sign: the kit's skeleton went red in one run of
+     * five on the critic's machine, the Rural starter in two of two.
      */
     const tabs = [{ index: 0, cdp, sessionId, targetId: undefined }];
     for (let index = 1; index < CONTRAST_TABS; index += 1) {
@@ -3405,6 +3422,8 @@ try {
     }
     for (const tab of tabs) {
         Object.assign(tab, { step: undefined, geometry: [] });
+        await cdp.send('Page.enable', {}, tab.sessionId);
+        await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, tab.sessionId);
         await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, tab.sessionId);
     }
 
@@ -4281,9 +4300,9 @@ try {
      * (`FIXED_CLOCK`, shared with `looks-diff.mjs`): the pay fixtures stamp
      * their rate at load and a sheet prints it to the second, the quote's age
      * and the wall's freshness are read against "now", and the pay code turns
-     * stale 120 s after that stamp. Installed here, on every tab the pass
-     * drives, so the geometry passes above keep the real clock they were
-     * written against.
+     * stale 120 s after that stamp. It is installed once on every tab, before
+     * the geometry walk (above), so the geometry passes run on it too since
+     * the fourteenth review's item 1; it is not installed here again.
      *
      * The page is focused whether or not its window is: `render.ts` focuses a
      * sheet's close and a face's back control, and `:focus-visible` paints a
@@ -4296,7 +4315,6 @@ try {
      */
     const readyTab = async (tabSession) => {
         await cdp.send('Page.enable', {}, tabSession);
-        await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, tabSession);
         await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, tabSession);
     };
     /*
