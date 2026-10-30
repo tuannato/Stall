@@ -13596,8 +13596,12 @@ window.__contrastGlyphs = async (show: boolean, which: 'both' | 'ring' | 'figure
  * position, a motion path or an animation that sets more than an ink or a
  * ground, whose painted boxes (its own and every box it holds, each grown by
  * 1b's whole sharp reach set, each cut by the clips of the box whose content it is and
- * held to the money node's own: `reachClipChain`, `pairClip`, 1b's) meet a
- * money node's line boxes —
+ * held to the money node's own: `reachClipChain`, `pairClip`, 1b's — and,
+ * since the twelfth critic's item 2, the look pseudos of each of those
+ * boxes, by the region 1b reads one in and its reach, held to its host's
+ * chain and cut to its host's own window: HRP2, a held rail label's
+ * `::after` throwing sharp text-shadow copies over the price, triggered no
+ * job) meet a money node's line boxes —
  * neither the money node nor a box that holds it, which carry the money with
  * them — or a look's pseudo-element so placed, by the region 1b reads it in
  * (`pseudoRegion`; one whose region cannot be read triggers the job). Read
@@ -13708,6 +13712,34 @@ function triggerPaintsOf(el: Element, chain: ClipLink[], range: Range): TriggerP
 }
 
 /**
+ * What one look pseudo paints, as the trigger reads it: its region
+ * (`lookPseudoRegion`) and 1b's whole sharp reach set off it
+ * (`pseudoReachPaints`), all of it its host's content — held by the host's
+ * chain, carried by the host's own link with it, and cut to the host's own
+ * window, as 1b holds a pseudo (`cutToClips`) — or what cannot be read, said
+ * instead (fails closed).
+ */
+function pseudoTriggerPaints(host: Element, which: 'before' | 'after', cs: CSSStyleDeclaration, chainSeen: Map<Element, ClipLink[]>): TriggerPaint[] | string {
+    const hr = host.getBoundingClientRect();
+    const region = lookPseudoRegion(cs, hr);
+    if ('anywhere' in region) return `::${which} stands where this page cannot read: ${region.anywhere}`;
+    const chain = reachClipChain(host, chainSeen);
+    const hostLink = clipLinkOf(host);
+    const carriers = hostLink === undefined ? chain : [hostLink, ...chain];
+    const ownWindow = reachOwnClip(host);
+    const reach = pseudoReachPaints(host, cs, region, reachScale(host, hr));
+    if (reach.anywhere !== undefined) return `::${which} paints where this page cannot read: ${reach.anywhere.slice(0, 120)}`;
+    return [region.box, ...reach.sharp.map((sh) => sh.rect)].map((rect) => ({ rect, chain, carriers, own: ownWindow }));
+}
+
+/** Whether a host's `::before` or `::after` is a marked look pseudo that paints (`markLookPseudos`): its computed style, or `undefined`. */
+function paintingLookPseudo(host: Element, which: 'before' | 'after'): CSSStyleDeclaration | undefined {
+    if (!host.hasAttribute(`data-probe-lp-${which}`)) return undefined;
+    const cs = getComputedStyle(host, `::${which}`);
+    return cs.content === 'none' || cs.content === 'normal' || cs.display === 'none' ? undefined : cs;
+}
+
+/**
  * 1c(c)'s trigger on the prepared paint (`layout/digitTrigger.ts`): every
  * mover in the scope whose painted boxes meet a money node's line boxes,
  * said, and how many movers and elements were read.
@@ -13725,6 +13757,8 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
     const chainSeen = new Map<Element, ClipLink[]>();
     // What each element paints, read once though nested movers hold it twice.
     const paintsSeen = new Map<Element, TriggerPaint[] | string>();
+    // What each host's marked look pseudos paint, read once likewise (`pseudoTriggerPaints`).
+    const pseudoSeen = new Map<Element, Map<string, TriggerPaint[] | string>>();
     const range = document.createRange();
     const lines = new Map<Element, TriggerLines>(
         money.map((node) => {
@@ -13774,6 +13808,16 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
             if (held === undefined) paintsSeen.set(d, (held = triggerPaintsOf(d, reachClipChain(d, chainSeen), range)));
             if (typeof held === 'string') unread ??= d === el ? held : `${named(d)}'s ${held}`;
             else painted.push(...held);
+            // Its own look pseudos and those of every box it holds move with it (the twelfth critic's item 2, HRP2).
+            for (const which of ['before', 'after'] as const) {
+                const pcs = paintingLookPseudo(d, which);
+                if (pcs === undefined) continue;
+                const seen = pseudoSeen.get(d) ?? pseudoSeen.set(d, new Map()).get(d)!;
+                let ps = seen.get(which);
+                if (ps === undefined) seen.set(which, (ps = pseudoTriggerPaints(d, which, pcs, chainSeen)));
+                if (typeof ps === 'string') unread ??= `${named(d)}${ps}`;
+                else painted.push(...ps);
+            }
         }
         if (unread !== undefined) {
             say(`${named(el)} (${kinds.join('; ')}) paints where this page cannot read: ${unread.slice(0, 120)}`);
@@ -13791,9 +13835,8 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
     for (const host of root.parentElement?.querySelectorAll('[data-probe-lp-before], [data-probe-lp-after]') ?? []) {
         if (host !== root && !root.contains(host)) continue;
         for (const which of ['before', 'after'] as const) {
-            if (!host.hasAttribute(`data-probe-lp-${which}`)) continue;
-            const cs = getComputedStyle(host, `::${which}`);
-            if (cs.content === 'none' || cs.content === 'normal' || cs.display === 'none') continue;
+            const cs = paintingLookPseudo(host, which);
+            if (cs === undefined) continue;
             const kinds = moverKinds(
                 {
                     position: cs.position,
@@ -13815,25 +13858,13 @@ function digitTrigger(scope: ParentNode): DigitTrigger {
             );
             if (kinds.length === 0) continue;
             out.movers += 1;
-            const hr = host.getBoundingClientRect();
-            const region = lookPseudoRegion(cs, hr);
             const who = `${named(host)}::${which} (${kinds.join('; ')})`;
-            if ('anywhere' in region) {
-                say(`${who} stands where this page cannot read: ${region.anywhere}`);
+            // A pseudo is its host's content: its region and its reach, held by its host's chain and cut to its host's own window (`pseudoTriggerPaints`).
+            const painted = pseudoTriggerPaints(host, which, cs, chainSeen);
+            if (typeof painted === 'string') {
+                say(`${named(host)}${painted.replace(/^::(before|after)/, `::$1 (${kinds.join('; ')})`)}`);
                 continue;
             }
-            // A pseudo is its host's content: held by its host's chain and cut to its host's own window, as 1b holds it (`cutToClips`).
-            const chain = reachClipChain(host, chainSeen);
-            const hostLink = clipLinkOf(host);
-            const carriers = hostLink === undefined ? chain : [hostLink, ...chain];
-            const ownWindow = reachOwnClip(host);
-            // Its region, and 1b's whole sharp reach set off it (`pseudoReachPaints`), all of it its host's content.
-            const reach = pseudoReachPaints(host, cs, region, reachScale(host, hr));
-            if (reach.anywhere !== undefined) {
-                say(`${who} paints where this page cannot read: ${reach.anywhere.slice(0, 120)}`);
-                continue;
-            }
-            const painted: TriggerPaint[] = [region.box, ...reach.sharp.map((sh) => sh.rect)].map((rect) => ({ rect, chain, carriers, own: ownWindow }));
             for (const node of money) {
                 const at = triggerMeet(painted, lines.get(node)!);
                 if (at !== undefined) say(`${who} meets ${named(node)} at ${Math.round(at.left)},${Math.round(at.top)}`);
