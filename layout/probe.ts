@@ -2077,19 +2077,24 @@ function triggerSelfCheck(): { fired: number; met: boolean; ms: number; problem?
     const saved = preparedNodes;
     const box = document.createElement('div');
     box.style.cssText = 'position: fixed; top: 0px; left: 0px; width: 300px; height: 120px; margin: 0; padding: 0; visibility: hidden; transform: none; filter: none; contain: none';
+    // Two money nodes, the mover over the second alone: a trigger that holds every mover to the first money node meets nothing.
+    const decoy = document.createElement('div');
+    decoy.setAttribute('data-role', 'price');
+    decoy.style.cssText = 'position: static; margin: 10px; width: 100px; height: 20px; font: 16px/20px monospace';
+    decoy.textContent = '456';
     const node = document.createElement('div');
     node.setAttribute('data-role', 'price');
     node.style.cssText = 'position: static; margin: 10px; width: 100px; height: 20px; font: 16px/20px monospace';
     node.textContent = '123';
     const mover = document.createElement('div');
-    mover.style.cssText = 'position: absolute; top: 5px; left: 5px; width: 60px; height: 40px; margin: 0';
-    box.append(node, mover);
+    mover.style.cssText = 'position: absolute; top: 40px; left: 5px; width: 60px; height: 20px; margin: 0';
+    box.append(decoy, node, mover);
     try {
         document.body.append(box);
-        preparedNodes = [node];
+        preparedNodes = [decoy, node];
         const got = digitTrigger(box);
-        const met = got.met.includes(0);
-        return { fired: got.count, met, ms: performance.now() - t0, ...(got.count > 0 && met ? {} : { problem: `the trigger counted ${got.count} meet(s) of a box moved over a money node and ${met ? 'named' : 'did not name'} that node` }) };
+        const met = got.met.length === 1 && got.met[0] === 1;
+        return { fired: got.count, met, ms: performance.now() - t0, ...(got.count > 0 && met ? {} : { problem: `the trigger counted ${got.count} meet(s) of a box moved over a money node and ${met ? 'named' : 'did not name'} that node alone (met: ${got.met.join(',') || 'none'})` }) };
     } catch (e) {
         return { fired: 0, met: false, ms: performance.now() - t0, problem: `the self-check threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}` };
     } finally {
