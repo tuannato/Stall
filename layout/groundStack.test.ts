@@ -24,11 +24,18 @@ import {
     mostOpaque,
     paintsNothing,
     picturesShowing,
+    placeGradient,
+    placeTile,
+    readGradient,
     shiftFor,
     srgbColour,
+    stopsOver,
     tileArea,
+    tileBand,
+    tileHoldsItsGradient,
     worstGround,
     STACK_CHOICES_CAP,
+    type GradientPlace,
     type StackPaint,
 } from './groundStack';
 
@@ -389,3 +396,153 @@ describe('the-ground-walk-reaches-the-stall: the walk to the stall', () => {
     });
 });
 
+/**
+ * Where a tile stands and where a stop falls (before 8g2, the binding of 3a;
+ * J1(a) of D-2026-10-28-01): read wherever every value is one this reader
+ * takes apart, and, whenever one is not, the strict read as before.
+ */
+describe('the-ground-walk-reaches-the-stall: where a tile stands and where a stop falls', () => {
+    const area = { w: 120, h: 40 };
+    const at0: [string, string] = ['0%', '0%'];
+
+    it('places a tile by its size and position, and fails closed on anything it does not read', () => {
+        expect(placeTile('no-repeat', '8px 2px', ['7px', 'calc(100% - 3px)'], area)).toEqual({ x: 7, y: 35, w: 8, h: 2, repeatX: false, repeatY: false });
+        expect(placeTile('no-repeat', 'auto', ['-9999px', '0%'], area)).toEqual({ x: -9999, y: 0, w: 120, h: 40, repeatX: false, repeatY: false });
+        expect(placeTile('repeat-x', '4px 2px', ['0px', '100%'], area)).toEqual({ x: 0, y: 38, w: 4, h: 2, repeatX: true, repeatY: false });
+        expect(placeTile('repeat', 'auto', at0, area)).toEqual({ x: 0, y: 0, w: 120, h: 40, repeatX: true, repeatY: true });
+        // Chrome keeps `2px calc(100% - 32px)` (the Activity rail): taken apart, as a position's is.
+        expect(placeTile('no-repeat', '2px calc(100% - 32px)', ['8.5px', '16px'], { w: 300, h: 500 })).toEqual({ x: 8.5, y: 16, w: 2, h: 468, repeatX: false, repeatY: false });
+        // A tile 1px square is placed: that it paints no more than itself is what the critic’s SZ needed read.
+        expect(placeTile('no-repeat', '1px 1px', at0, area)).toEqual({ x: 0, y: 0, w: 1, h: 1, repeatX: false, repeatY: false });
+        // Not read, and so the strict read: under a pixel, `round`, `space`, a size or position not taken apart, an attachment not `scroll`, no area.
+        for (const [repeat, size, position, a, attachment] of [
+            ['no-repeat', '0.5px 3px', at0, area, 'scroll'],
+            ['round', 'auto', at0, area, 'scroll'],
+            ['space', '10px 10px', at0, area, 'scroll'],
+            ['no-repeat', 'min(50%, 2px) auto', at0, area, 'scroll'],
+            ['no-repeat', 'auto', ['anchor(--x)', '0%'], area, 'scroll'],
+            ['no-repeat', 'auto', at0, area, 'fixed'],
+            ['repeat', 'auto', at0, area, 'local'],
+            ['no-repeat', 'auto', at0, { w: 0, h: 40 }, 'scroll'],
+            ['repeat repeat repeat', 'auto', at0, area, 'scroll'],
+        ] as const) {
+            expect(placeTile(repeat, size, position, a, attachment), `${repeat} ${size} ${attachment}`).toBeUndefined();
+        }
+    });
+
+    it('bands a tile: its own span on an axis that does not repeat, every place on one that does', () => {
+        expect(tileBand({ x: 7, y: 35, w: 8, h: 2, repeatX: false, repeatY: false }, 100, 200)).toEqual(box(107, 235, 115, 237));
+        expect(tileBand({ x: 0, y: 38, w: 4, h: 2, repeatX: true, repeatY: false }, 100, 200)).toEqual({ left: -Infinity, right: Infinity, top: 238, bottom: 240 });
+    });
+
+    it('takes a stop’s place from a tile that holds its whole gradient, and not from tiles that repeat inside the area', () => {
+        expect(tileHoldsItsGradient({ x: 0, y: 0, w: 120, h: 40, repeatX: true, repeatY: true }, area)).toBe(true);
+        expect(tileHoldsItsGradient({ x: 0, y: 0, w: 8, h: 2, repeatX: false, repeatY: false }, area)).toBe(true);
+        expect(tileHoldsItsGradient({ x: 0, y: 0, w: 4, h: 40, repeatX: true, repeatY: false }, area)).toBe(false);
+    });
+
+    it('reads the gradients it can place, and no others', () => {
+        expect(readGradient('radial-gradient(circle at 9px 50%, rgb(255, 255, 255) 2.2px, rgb(255, 0, 0) 3px, rgb(255, 0, 0) 4.4px, color(srgb 0.82 0 0.18) 5.4px)')).toEqual({
+            kind: 'radial',
+            head: 'circle at 9px 50%',
+            items: [
+                { colour: 'rgb(255, 255, 255)', at: '2.2px' },
+                { colour: 'rgb(255, 0, 0)', at: '3px' },
+                { colour: 'rgb(255, 0, 0)', at: '4.4px' },
+                { colour: 'color(srgb 0.82 0 0.18)', at: '5.4px' },
+            ],
+        });
+        expect(readGradient('linear-gradient(rgb(255, 0, 0), 40%, rgb(0, 0, 255) calc(100% - 4px))')?.items).toEqual([{ colour: 'rgb(255, 0, 0)' }, { at: '40%' }, { colour: 'rgb(0, 0, 255)', at: 'calc(100% - 4px)' }]);
+        for (const other of [
+            'conic-gradient(rgb(255, 0, 0), rgb(0, 0, 255))',
+            'repeating-linear-gradient(90deg, rgb(255, 0, 0) 0px, rgb(0, 0, 255) 2px)',
+            '-webkit-linear-gradient(top, rgb(255, 0, 0), rgb(0, 0, 255))',
+            'linear-gradient(in oklch longer hue, rgb(255, 0, 0), rgb(0, 0, 255))',
+            'linear-gradient(90deg in oklab, rgb(255, 0, 0), rgb(0, 0, 255))',
+            'radial-gradient(circle at 9px 50% in hsl, rgb(255, 0, 0), rgb(0, 0, 255))',
+            'linear-gradient(rgb(255, 0, 0) 10px 20px 30px, rgb(0, 0, 255))',
+            'linear-gradient(rgb(255, 0, 0)',
+            'url("a.svg")',
+        ]) {
+            expect(readGradient(other), other).toBeUndefined();
+        }
+        // A position the reader cannot take apart leaves the gradient unplaced.
+        expect(placeGradient(readGradient('linear-gradient(rgb(255, 0, 0) 20px, rgb(0, 0, 255) min(50%, 30px))')!, 120, 40)).toBeUndefined();
+    });
+
+    const placed = (layer: string, w: number, h: number, colours: readonly Colour[], left = 0, top = 0): GradientPlace => {
+        const p = placeGradient(readGradient(layer)!, w, h)!;
+        return { shape: p.shape, tile: { left, top, w, h, repeatX: false, repeatY: false }, stops: p.at.map((at, i) => ({ at, colour: colours[i]! })) };
+    };
+    const A = c(1, 1, 1);
+    const B = c(2, 2, 2);
+    const C = c(3, 3, 3);
+
+    it('lays a linear gradient along its line: each direction, angle and corner', () => {
+        const down = placed('linear-gradient(rgb(1, 1, 1) 0%, rgb(2, 2, 2) 50%, rgb(3, 3, 3) 100%)', 100, 100, [A, B, C]);
+        expect(stopsOver(down, box(10, 5, 90, 20))).toEqual([A, B]);
+        expect(stopsOver(down, box(10, 60, 90, 70))).toEqual([B, C]);
+        const right = placed('linear-gradient(90deg, rgb(1, 1, 1) 0%, rgb(2, 2, 2) 50%, rgb(3, 3, 3) 100%)', 100, 100, [A, B, C]);
+        expect(stopsOver(right, box(60, 0, 90, 100))).toEqual([B, C]);
+        const up = placed('linear-gradient(to top, rgb(1, 1, 1) 0%, rgb(2, 2, 2) 50%, rgb(3, 3, 3) 100%)', 100, 100, [A, B, C]);
+        expect(stopsOver(up, box(0, 60, 100, 70))).toEqual([A, B]);
+        // To a corner, on a box that is not square: the corner is 100%, the far corner 0%.
+        const corner = placed('linear-gradient(to right bottom, rgb(1, 1, 1) 0%, rgb(2, 2, 2) 50%, rgb(3, 3, 3) 100%)', 200, 50, [A, B, C]);
+        expect(stopsOver(corner, box(0, 0, 2, 2))).toEqual([A, B]);
+        expect(stopsOver(corner, box(198, 48, 200, 50))).toEqual([B, C]);
+    });
+
+    it('honours a hard stop, a stop written in px, a position with none, and a hint', () => {
+        // White from 50% on: the black is proved elsewhere past it.
+        const hard = placed('linear-gradient(rgb(1, 1, 1) 0px, rgb(1, 1, 1) 50%, rgb(2, 2, 2) 50%, rgb(2, 2, 2) 100%)', 100, 100, [A, A, B, B]);
+        expect(stopsOver(hard, box(0, 60, 100, 80))).toEqual([B, B]);
+        const px = placed('linear-gradient(rgb(1, 1, 1) 0px, rgb(2, 2, 2) 10px, rgb(3, 3, 3) 20px)', 100, 100, [A, B, C]);
+        expect(stopsOver(px, box(0, 40, 100, 80))).toEqual([C]);
+        // Spaced evenly with no position; raised to the largest before it.
+        expect(placeGradient(readGradient('linear-gradient(rgb(1, 1, 1), rgb(2, 2, 2), rgb(3, 3, 3))')!, 100, 100)!.at).toEqual([0, 0.5, 1]);
+        expect(placeGradient(readGradient('linear-gradient(rgb(1, 1, 1) 50%, rgb(2, 2, 2) 20%, rgb(3, 3, 3))')!, 100, 100)!.at).toEqual([0.5, 0.5, 1]);
+        expect(placeGradient(readGradient('linear-gradient(rgb(1, 1, 1), 40%, rgb(2, 2, 2))')!, 100, 100)!.at).toEqual([0, 1]);
+    });
+
+    it('sets a radial gradient’s stops by their distance from its centre, and reads Rural’s punch hole where it is drawn', () => {
+        // circle at 9px 50%: the bg to 2.2px, the ring 3px to 4.4px, the card from 5.4px.
+        const layer = 'radial-gradient(circle at 9px 50%, rgb(1, 1, 1) 2.2px, rgb(2, 2, 2) 3px, rgb(2, 2, 2) 4.4px, rgb(3, 3, 3) 5.4px)';
+        const hole = placed(layer, 160, 40, [A, B, B, C]);
+        // The figure, past the tag's 22px of padding: the card alone.
+        expect(stopsOver(hole, box(22, 10, 150, 30))).toEqual([C]);
+        // Ink over the ring: the ring is tried.
+        expect(stopsOver(hole, box(12, 16, 150, 24))).toContain(B);
+        // Over the centre: the hole too.
+        expect(stopsOver(hole, box(7, 18, 11, 22))).toContain(A);
+    });
+
+    it('reads every size of ending shape, and an elliptical stop in the gradient ray’s units', () => {
+        const sized = (head: string, w: number, h: number) => placeGradient(readGradient(`radial-gradient(${head}${head === '' ? '' : ', '}rgb(1, 1, 1), rgb(2, 2, 2))`)!, w, h)!.shape;
+        // The default: an ellipse through the far corner, sides in the box's proportion.
+        const e = sized('', 200, 100) as { rx: number; ry: number; cx: number };
+        expect(e.cx).toBe(100);
+        expect(e.rx).toBeCloseTo(100 * Math.SQRT2, 6);
+        expect(e.ry).toBeCloseTo(50 * Math.SQRT2, 6);
+        expect(sized('circle', 200, 100)).toMatchObject({ rx: Math.hypot(100, 50), ry: Math.hypot(100, 50) });
+        expect(sized('75px at 24% 50%', 200, 100)).toMatchObject({ cx: 48, cy: 50, rx: 75, ry: 75 });
+        expect(sized('135% 86px at 50% -10px', 200, 100)).toMatchObject({ cx: 100, cy: -10, rx: 270, ry: 86 });
+        expect(sized('farthest-side at 10px 20px', 200, 100)).toMatchObject({ rx: 190, ry: 80 });
+        expect(sized('circle closest-side at 10px 20px', 200, 100)).toMatchObject({ rx: 10, ry: 10 });
+        expect(sized('circle farthest-corner at 0px 0px', 30, 40)).toMatchObject({ rx: 50, ry: 50 });
+        expect(sized('circle closest-corner at 10px 20px', 200, 100)).toMatchObject({ rx: Math.hypot(10, 20) });
+        // Past what it can draw from: no extent at all.
+        expect(placeGradient(readGradient('radial-gradient(0px 10px, rgb(1, 1, 1), rgb(2, 2, 2))')!, 100, 100)).toBeUndefined();
+        expect(placeGradient(readGradient('radial-gradient(closest-side at 0px 0px, rgb(1, 1, 1), rgb(2, 2, 2))')!, 100, 100)).toBeUndefined();
+        // An elliptical px stop is on the horizontal ray.
+        expect(placeGradient(readGradient('radial-gradient(40px 10px at 50% 50%, rgb(1, 1, 1) 20px, rgb(2, 2, 2))')!, 100, 100)!.at).toEqual([0.5, 1]);
+    });
+
+    it('wraps a tile that repeats into the band around its area', () => {
+        const p = placeGradient(readGradient('linear-gradient(90deg, rgb(1, 1, 1) 0%, rgb(2, 2, 2) 50%, rgb(3, 3, 3) 100%)')!, 100, 40)!;
+        const wrap: GradientPlace = { shape: p.shape, tile: { left: 10, top: 10, w: 100, h: 40, repeatX: true, repeatY: true }, stops: p.at.map((at, i) => ({ at, colour: [A, B, C][i]! })) };
+        // The left border's band shows the end of the tile before.
+        expect(stopsOver(wrap, box(8, 20, 10, 30))).toEqual([B, C]);
+        // Inside the tile, its start.
+        expect(stopsOver(wrap, box(12, 20, 20, 30))).toEqual([A, B]);
+    });
+});
