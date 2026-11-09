@@ -14257,6 +14257,12 @@ type QuietZone = {
      */
     angle: number;
     /**
+     * Where the code's content box stands from the border box's centre on an unturned frame — half the difference of the left and
+     * right, and of the top and bottom, border and padding — so a turned zone's true centre is its bounds' centre plus this turned by
+     * `angle`, where `x` and `y` put it unturned (`uprightCornerTravel`; the sixteenth review's item 2).
+     */
+    pad: { x: number; y: number };
+    /**
      * Whether every transform from the code up only turns it (`turnOnly`):
      * `true`, or what one box does besides — a turned code is read upright
      * only where it is `true` (`readTurnedUpright`).
@@ -14343,6 +14349,7 @@ function quietZoneOf(svg: SVGSVGElement): QuietZone | undefined {
         clip: { x0: Math.max(x0, -1e9), y0: Math.max(y0, -1e9), x1: Math.min(x1, 1e9), y1: Math.min(y1, 1e9) },
         turned: angle !== 0,
         angle,
+        pad: { x: (left - px(cs.borderRightWidth) - px(cs.paddingRight)) / 2, y: (top - px(cs.borderBottomWidth) - px(cs.paddingBottom)) / 2 },
         turnOnly: turnOnly(svg),
         scrolled: scrolledAbove(svg),
     };

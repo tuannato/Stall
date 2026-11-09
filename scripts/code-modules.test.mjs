@@ -527,6 +527,23 @@ describe('how far the frame held upright moves a turned code (uprightCornerTrave
             assert.ok(t.corner >= Math.max(t.centre, turn) - 1e-9, `${dx},${dy},${deg}: ${t.corner} < ${Math.max(t.centre, turn)}`);
         }
     });
+    it('carries the content box’s offset from the border box’s centre, turned, where the padding is asymmetric (the sixteenth review’s item 2)', () => {
+        const pad = { x: 30, y: -12 };
+        for (const deg of [0.6, -2, 45, 180]) {
+            const theta = (deg * Math.PI) / 180;
+            // The code turns about the border box's centre (bcx, bcy); on the painted frame its square stands at that centre plus pad turned,
+            // and the zone says the centre plus pad unturned. On the upright frame it stands at the centre plus pad.
+            const bc = { x: 400, y: 300 };
+            const upright = { x: bc.x + pad.x - 50, y: bc.y + pad.y - 50, side: 100 };
+            const zone = { x: bc.x + pad.x - 50, y: bc.y + pad.y - 50, side: 100, angle: theta, pad };
+            const t = uprightCornerTravel(zone, upright);
+            const ghost = uprightCornerTravel({ ...zone, pad: undefined }, upright);
+            // The code's own square turns about its own centre only, so with the true centre moved by turn(pad) - pad the centre's travel is 2·sin(θ/2)·|pad|.
+            const want = 2 * Math.abs(Math.sin(theta / 2)) * Math.hypot(pad.x, pad.y);
+            assert.ok(Math.abs(t.centre - want) < 1e-9, `${deg}°: ${t.centre} against ${want}`);
+            assert.ok(Math.abs(ghost.centre) < 1e-12, 'with no pad stated the centre is taken as the border box’s, as before');
+        }
+    });
     it('is undefined where the zone carries no finite angle', () => {
         assert.equal(uprightCornerTravel({ ...at }, at), undefined);
         assert.equal(uprightCornerTravel({ ...at, angle: Number.NaN }, at), undefined);

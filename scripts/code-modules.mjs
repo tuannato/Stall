@@ -202,18 +202,24 @@ export const UPRIGHT_TRAVEL_MODULES = 1.5;
  * corner stands on the job's frame at the painted centre plus the upright
  * half-diagonal turned by the painted zone's `angle`, and on the upright
  * frame at the upright centre plus that half-diagonal: the travel is
- * computed from the two centres, the turn and the upright side, exactly for
- * such a frame, and never more than the centre's travel plus 2·sin(θ/2) of
- * the half-diagonal. `undefined` where the painted zone carries no finite
- * angle. Pure.
+ * computed from the two centres, the turn and the upright side, and never
+ * more than the centre's travel plus 2·sin(θ/2) of the half-diagonal. **The
+ * painted centre is the code's, not the border box's** (the sixteenth review's
+ * item 2): the zone's `x` and `y` put the content box inside the turned
+ * bounds with the unturned padding, which is the border box's centre plus
+ * `pad` unturned, and the code's content box stands at `pad` turned by the
+ * turn (`pad` is absent, as zero, where a caller states none). `undefined`
+ * where the painted zone carries no finite angle. Pure.
  */
 export function uprightCornerTravel(painted, upright) {
     if (typeof painted?.angle !== 'number' || !Number.isFinite(painted.angle)) return undefined;
     const half = upright.side / 2;
-    const dx = painted.x + painted.side / 2 - (upright.x + half);
-    const dy = painted.y + painted.side / 2 - (upright.y + half);
     const c = Math.cos(painted.angle);
     const s = Math.sin(painted.angle);
+    const px = painted.pad?.x ?? 0;
+    const py = painted.pad?.y ?? 0;
+    const dx = painted.x + painted.side / 2 - px + (c * px - s * py) - (upright.x + half);
+    const dy = painted.y + painted.side / 2 - py + (s * px + c * py) - (upright.y + half);
     let corner = 0;
     for (const [vx, vy] of [
         [-half, -half],
