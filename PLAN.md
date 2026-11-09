@@ -1020,7 +1020,7 @@ money path this app can have, because nothing on it is derived.
      near money, animated pseudos, and a look pseudo on a sheet's scrim.
   3. **Round 4's P2s:** a box above's background image off the sampled
      screens and the walk's stop at an invisible or `display: contents`
-     box (read since 3a, report-only: "Before 8g2, 3a's open list" below);
+     box (bound since 3a's binding, D-2026-10-28-01: "Before 8g2, 3a's open list" below);
      a static belt in the look lint for clips scoped to hover, focus, the
      tap highlight or a turned wall; a neighbour's far shadow (failed by
      1b since 7b: N6, "Before 8g2, 1b's open list" below).
@@ -1538,40 +1538,37 @@ money path this app can have, because nothing on it is derived.
      CI's layout job on `ubuntu-latest` has not run them.
 
 - **Before 8g2, 3a's open list** (the ground under a money figure's glyphs
-  walked to the stall, read report-only beside the bound read; the plan's
-  item 3a; `layout/PROBE-RULES.md`, "Before 8g2, 3a: the walk to the
-  stall"). 3a fails nothing until its binding. Open:
-  1. **Two reads before it binds, or the clean tree fails 3,339 times.**
-     Every one of its would-be failures on the clean tree is a model too
-     strict, none a real ground: (a) **where a lone tile falls** — a
-     `no-repeat` tile smaller than its area is read anywhere in its clip
-     area, with its stops and its absence; this makes Modern's 15 (the
-     events rail and the Awning's stripes under an activity amount, all
-     worn) and every one of Neo's stacks of too many choices (its corner
-     brackets on the cards and the sign: 594 at 390, 678 at 1280, 190 on
-     each wall pass). A scratch experiment reading such a tile where its
-     size and position put it took both to 0 at 390 and 1280
-     (`private/design/workshop-2026-09-23/before-8g2/3a/tools/exp-lone.py`);
-     not built, since the same read changes the bound rule's own layers.
-     (b) **where along a gradient a stop falls** — every stop is tried over
-     the whole area the layer covers; this makes Rural's 3,324 (the tag's
-     punch-hole ring stop, under the hole and never under the figure, 2.20:1).
-     Reading a stop's place (a linear gradient's line, a radial one's
-     radius) or accepting the ring by name are the options; the owner's
-     call at binding.
-  2. **At binding, the keyframe offsets read a box above's background image
-     too**: `GROUND_ABOVE` then covers the whole `GROUND_SIGNATURE`, and the
-     aurora's tide and the sunburst's angle, which turn the root's gradients
-     by a custom property, are seeked (`offsetGroundFaults` reads the bound
-     ground alone today).
-  3. **A box above's pictures stay the contrast pass's** (named where one
-     shows, composited as absent: the rain, the confetti, the sunburst and
-     the fixture's pictures under the activity amount on the bare ground).
-  4. **Not read, stated:** a part of a figure out of its scroller's view at
-     any scroll but the one to the view's nearest edge; a clip above a
-     scroller; an in-flow pseudo-element of a box above; rounded corners; a
-     gradient between its stops.
-  5. **A run under the private look at 0x04's selection** with 3a in it.
+  walked to the stall; the plan's item 3a; bound since D-2026-10-28-01, which
+  took J1(a), J3 and J4 by recommendation; `layout/PROBE-RULES.md`, "Before 8g2:
+  3a binds"). Open:
+  1. **A box above's moving background at a keyframe offset, the owner's call.**
+     A keyframe that moves only `background-position` or `background-size` on a
+     box above stays `SEEK_NEEDLESS`: a look can slide a tile under a figure there
+     between the instants, and no rule reads it. Seeking them too was built and
+     measured: 1,227 animations at 390 against 177, the geometry passes summed
+     336.9s of tab time against 314.5s, about +7.5s of wall on a whole run at
+     three tabs, on top of the bind's own +4.5s. The plan's item was the whole
+     signature on a box above alone (the aurora's tide and the sunburst's angle,
+     built, about +2.4s). Option (a), seek them: the gap closes for +7.5s (a first
+     whole run with them read 234.8s against the bind's 225.2s, of 300). Option
+     (b), leave it stated, as it is: free, the gap stands, and a first-party
+     keyframe moving a background on a box above is admitted by the lint. A cheaper
+     seek (one upright hold per seek where one per figure is made, skipping a move
+     that cannot reach an ink) was not tried. Recommendation: (a) when the margin
+     under 300 allows, after the port.
+  2. **A box above's pictures stay the contrast pass's** (named where one shows,
+     composited as absent: the rain, the confetti, the sunburst and the fixture's
+     pictures under the activity amount on the bare ground, printed under the
+     pass and owed to nothing).
+  3. **Not read, stated:** a part of a figure out of its scroller's view at any
+     scroll but the one to the view's nearest edge; a clip above a scroller; an
+     in-flow pseudo-element of a box above; rounded corners; a gradient between
+     its stops; a conic or repeating gradient's stops, one with an interpolation
+     written out, and the other values `placeTile` and `placeGradient` refuse,
+     which are read strictly.
+  4. **Read under the private look at 0x04's selection at the bind:** 0 failures
+     of this read, 0 of too many choices, every pass read; the run's known
+     failures are unchanged (PROBE-RULES names them by rule).
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

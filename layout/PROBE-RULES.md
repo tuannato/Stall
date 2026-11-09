@@ -12568,6 +12568,9 @@ node's median), "Round 16", below). D1 (a) is decided at 7d.
 
 ## Before 8g2, 3a: the walk to the stall (2026-10-27; the plan's item 3a, round 4's P2-1 and round 5's V and DC; report-only)
 
+(Bound since 2026-11-09: "Before 8g2: 3a binds", below. What follows is the
+report-only read as it was built.)
+
 Its evidence is under `private/design/workshop-2026-09-23/before-8g2/3a/`
 (`runs/`, `plants/`, `tools/`); the paths below are relative to it. A
 **quick** read is `tools/qp.sh` (one probe page at one viewport, the plant
@@ -12608,7 +12611,9 @@ dress rule reads the ground of, on every geometry pass at rest:
 - a box above's pictures (`url()` layers) are named where one shows under
   the glyphs (`picturesShowing`: no opaque paint over it in the cell) and
   composited as absent, not judged; the figure's own picture and a border
-  image that is one fail, as the bound read fails them;
+  image that is one failed here per box, before `fromTopmostOpaque`, which the
+  twelfth critic's BIP showed was false under opaque cards (per cell since the
+  binding, "Before 8g2: 3a binds", below);
 - the ink is cut by the clips below the nearest scroller
   (`cutsBelowScroller`), and each part out of a scroller's view is read
   where the least scroll brings it to the view's nearest edge (`byScroller`,
@@ -14092,6 +14097,210 @@ by the old rule, no weaker than before.
 
 The first three ran at `c405c05`/`028e70d`, before item 5; the mutations at
 `028e70d`.
+
+## Before 8g2: 3a binds (2026-11-09; the owner's D-2026-10-28-01 J1(a), J2, J3 and J4, the twelfth critic's items 3 and 4 and its `tooMany`)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/3a-bind/`
+(`runs/`, `plants/`, `tools/`); the paths below are relative to it. A **quick**
+read is `tools/qp.sh` (one probe page at one viewport, the plant alone, on a
+scratch clone, ports 4391/9411); a **whole** read is `tools/run.sh` (the whole
+runner, the three-tab default, the tracked fixture carried, each started at a
+one-minute load under 2.5).
+
+**What it is now.** `the-ground-walk-reaches-the-stall` (`groundWalkRead`) is
+the ground the dress rule holds, on every geometry pass, its failures the dress
+rule's, in the pass's own list. `groundStackFault` is gone (J4: one cause, one
+failure). `worstGround` has one reading: each cell from its topmost opaque
+paint, a paint's candidates that composite alike tried once, a cell no blend of
+whose paints can read under the floor passed unenumerated. Too many choices
+fails (J2) now the clean tree reads none. A picture that shows stays printed,
+not judged. A box whose `visibility` is not `visible`, or with `display:
+contents`, ends nothing (the critic's V and DC, the old read's false stop). A
+throw fails the paint and is counted. Owed on every look of every geometry pass
+(`walkByClass`, `probe-coverage.mjs`), each carried look on its own
+(`look-tallies.mjs`, `walkTally`); tests
+`3a-is-owed-a-read-on-every-look-of-every-geometry-pass` and the carried case in
+`a-carried-look-is-held-to-its-own-skip-ceilings`.
+
+**Where a tile stands and where a stop falls (J1(a), J3).** In the pure module:
+
+- `placeTile` reads a layer's tile where its size and position put it, the
+  first tile's place, its size and which axes repeat: `tileBand` is the strip it
+  can paint, its own span on an axis that does not repeat. A `calc()` of a
+  length and a percentage is taken apart there (`2px calc(100% - 32px)`, the
+  Activity rail).
+- `readGradient` and `placeGradient` read a `linear-gradient` and a
+  `radial-gradient` as the CSS rules put them: an angle, `to` a side or a
+  corner, a circle or an ellipse by size or extent keyword, its centre; each
+  stop's position by the three rules of CSS Images (the first and last set, a
+  position under one written before it raised, a run spaced evenly), hints kept
+  for the raise.
+- `stopsOver` gives the stops that bear on a cell: every stop whose position
+  falls on the stretch of the line the cell lies on, and the stop on either side
+  of it, whose colour the ramp there is still a mix of. A pixel of slack each
+  way (`STOP_SLACK_PX`). A stop past those is proved elsewhere.
+- Whenever a value is not read (`placeTile` or `placeGradient` undefined), the
+  layer is read as it was, by `layerCovers`: not a conic or repeating gradient,
+  an interpolation written out, a prefixed form, a stop or size past a `calc()`
+  of a length and a percentage, `round`, `space`, a `fixed` or `local` layer, a
+  tile under a pixel. A tile that repeats inside its area stands where it
+  stands, and its stops are read strictly (the engine snaps the period).
+
+Rural's 3,324 go for the reason the critic's RING1 proved was the only one: the
+tag's padding puts the figure 13px and more from a hole at `9px 50%`, past the
+ring's last stop at `5.4px`, so only the card's colour bears on a cell under it.
+Neo's corner brackets and Modern's rail and stripes leave the cells they were
+never under.
+
+**The holes the twelfth critic found.**
+
+- **BIP** (a picture filled on a box above, under opaque cards): every picture
+  that fails is read after `fromTopmostOpaque`, per cell, in the pure half's
+  `picturesShowing` (`fault` on the paint). The earlier entry's "a border image
+  that is one fail, as the bound read fails them" is corrected there.
+- **CBG3** (an absolute figure whose containing block is above a card cut
+  short): the ink is cut by the chain of the box whose content it is, 1b's
+  `reachClipChain`; each box's paints by its own (`walkClip`, `pairClip`'s rule,
+  up to the first scroller that carries both). A scroller moves what it carries,
+  by chain, not by depth.
+- **`tooMany`** (`worstGround` returned at the first such cell): it keeps
+  scanning, and a failure in another cell is the verdict.
+
+**It is read upright.** A gradient's stops are read in the box's own frame, so
+the read stands every frame upright (`withFramesUpright`): the transforms held at
+`translate(0)`, the three longhands off, `holdOff`'s way. `translate(0)` and not
+`none`, because a box with a `transform` is the containing block of an absolute
+or fixed figure (`none`, what `withTransformsHeldOff` sets, takes that away and
+moves the figure).
+
+**Item E.** A box above is compared on the whole `GROUND_SIGNATURE` at a keyframe
+offset, so the aurora's tide and the sunburst's angle, which turn the root's
+gradients by a custom property, read the ground at each of their keyframes
+(`offsetGroundFaults`). **A box above's moving background is not seeked**: a
+keyframe that moves only `background-position` or `background-size` there stays
+`SEEK_NEEDLESS`. A first form seeked those too: 1,227 animations at 390 against
+177, the geometry passes summed 336.9s against 314.5s. That is the one part of
+this round's reading that was over what the plan allowed: PLAN § Open, 3a's
+list, for the owner.
+
+**The cheap P3s.** `byScroller` moves a part only on an axis the scroller
+scrolls, and cuts on one it clips and cannot scroll: test `cuts an ink on an axis
+a scroller clips and cannot scroll`. An unreadable box above is a paint that may
+be anywhere, failing where it shows: no real colour reaches it (UNP's `oklch()`
+ring is read by the engine, 0 failures, drawn outside the shelf), so it is proved
+by a scratch mutation (`tools/mut-unread.py`: `rgb(1, 2, 3)` read as unreadable):
+under cards 0, over the bare activity amounts 10. A `background-attachment:
+local` layer is read strictly, kept where it stands: it covers the view, so no
+stop is missed. A failing picture's would-be under an empty group key went with
+the would-be list.
+
+**Is the geometry Chrome's?** A scratch check, once, by hand
+(`tools/geo-check.scratch.test.ts`, not in the suite): 24 hard-stop gradients and
+tiles painted in Chrome (each direction and corner; a circle and an ellipse by
+every extent keyword, sized in px and in %; a tile wrapping into a border band;
+lone tiles placed by px, `%`, `calc()` and `right 5px bottom 7px`) and read back
+pixel by pixel against `tileBand` and `stopsOver`: 32,958 clean pixels read,
+30,325 of them to one colour, **0 wrong**. Mutating the corner direction reads
+760 wrong and the extent's near and far 4,051.
+
+### The clean tree
+
+Whole (`runs/ab-bind-2.log`, the three-tab default, the tracked fixture carried;
+exit 0, 225.2s of 300, load 2.48 at the start). 0 failures from the read on any
+pass, 0 stacks of too many choices, 0 thrown; per pass the elements read: 5,246
+/ 5,663 / 8,791 / 8,994 / 7,122 / 6,729 / 7,122 / 7,122 / 7,122 / 7,122 / 7,122
+/ 3,832 (360) / 706 and 40 (reduced motion), every look owing a read. The 3,339
+would-be failures of the report-only read are gone, for the reasons above; the
+pictures it left to the contrast pass stand (20 at 390 and at 1280, 22 on the
+canvas, the fixture's and the rain's and the sunburst's under the activity
+amount on the bare ground, printed under the pass).
+
+### Red proofs
+
+Whole runs, exit 1, each plant alone, the failures of the read per pass (the
+phone, the desk, the canvas, the tall wall, the tablet, `desk-wall`,
+`short-wall`, `side-tablet`, `hd-wall`, `tall-tablet`, `narrow-wall`, 360, reduced
+motion at 390); the plants are the 3a report-only round's, in `3a/plants/`:
+
+| Plant | Failures | Runtime | Load |
+|---|---|---|---|
+| N1 | 370 / 445 / 300 / 374 / 179 / 105 / 179 ×5 / 194 / 54 | 237.4s | 2.30 |
+| N1b | 0 / 16 / 70 / 86 / 86 / 70 / 86 ×5 / 0 / 0 | 223.4s | 2.44 |
+| N2 | 140 / 164 / 83 / 100 / 67 / 45 / 66 / 65 / 67 / 67 / 67 / 77 / 12 | 240.3s | 2.46 |
+| V | 145 / 171 / 87 / 112 / 73 / 48 / 73 ×5 / 82 / 12 | 231.4s | 2.33 |
+| DC | 31 / 31 / 0 … / 31 / 7 | 232.9s | 2.45 |
+
+Each is the report-only read's count, so the binding moved no verdict on them.
+Quick reads, failures of the read, one page, one viewport (`runs/q-plants-*.log`):
+
+| Plant | Reads | Note |
+|---|---|---|
+| BIP (`critic12/plants`) | 0 at 390 (`offers`) and 1280 (`offers`, `pay`) | no longer a failure where the cards hide it |
+| CBG3 | 5 at 390 and 1280 | red: the ink past the card, on the stall's ground |
+| UNP | 0 | the ring is read (`oklch()` resolves through the engine); nothing unread |
+| UNPf, UNPb, with `tools/mut-unread.py` | 0 under the cards, 10 on the bare activity amounts | a box that cannot be read fails where it shows |
+| RING1 | 0 | the ring stops are gone; the bound read's own control |
+| W1, a linear gradient's dark stop under the figure | 25 | the wrong way: red |
+| W1c, the same stop 3px wide off the figure | 0 | control |
+| W2, Rural's ring drawn out to 200px under the figure | 35 | the ring read where it is |
+| W3, a lone ink-coloured tile under the figure | 25 | placed: red |
+| W3c, the same tile off the box | 0 | control |
+| W4 repeating, W5 conic | 25, 25 | read strictly: red |
+| W6, a box above's gradient on the bare ground | 10 | past the old stop |
+
+**The plants the old ground read went red on stay red** (`runs/q-plants-reg.log`):
+N9a 35, N9b 35, SZ 35, SZ-lit 9, SZt 35, FX 13 (on the Cycle cards), A1 25, A5 8,
+G2 (border) 8, a box above's ground 35, a box above's inset shadow 8, a box above's
+filled border image 9, an outer shadow under overflowing text 7, an own picture
+25, PG, PGs, PGv, PGi 64 each, PGr 483, PGpos 64, PGatt 64, PGatt2 and PGatt3 65,
+PGpad 64, PGmar 54. FP (a false red fixed in round 6) stays 0. Two read 0 for the
+ground, each still red or a false red gone: **PGind** (the indent carries the
+glyphs past the card's `overflow: hidden`, so no ink remains to read; the old walk
+stopped at the figure's own opaque ground and never met that clip; the run still
+fails, `a-money-figure-never-clips-itself`, 76 at 390) and **PGc** (the plant's
+ground colour lies under Rural's gradient, whose card colour is opaque: the ground
+is the card, and the plant fails 368 geometry checks on the box it collapsed).
+
+### Under the private look at 0x04's selection
+
+The whole runner, exit 1, 235.7s, load 2.44, with `t-inkwash` carried: 0 failures of the
+read on any pass, 0 of too many choices, 0 thrown; its own owe met on every geometry
+pass. The run's failures are the ones it already had, by rule: mobile 24, desktop
+55, narrow 155, short 7, contrast 1a 24 and 3 figures under 3:1. The selected
+look lint: 260 of 260.
+
+### Cost
+
+Back to back on this Mac, three tabs, the tracked fixture carried, each started
+at a one-minute load of 2.35–2.48 (`tools/ab.sh`), `82bfd46` against the bind:
+
+| Run | Whole | Geometry passes, summed | Offset read | The read's own clock |
+|---|---|---|---|---|
+| base 1 | 219.2s | 298.7s | 8.7s | — |
+| base 2 | 228.4s | 302.9s | 9.0s | — |
+| bind, moving backgrounds seeked (first form) | 234.8s | 336.9s | 42.4s | 32.0s |
+| bind, final | 225.2s | 314.5s | 16.2s | 21.0s |
+
+The two base runs differ by 9.2s, so a single whole-run pair says little; the
+geometry passes, summed over tabs and divided by three, say about **+4.5s** of
+wall for the bind, and **+7.5s** more for seeking a box above's moving background
+(`bind-1`), which is left out and handed back (PLAN § Open). The contrast pass is
+unchanged (93.9–100.1s of tab time).
+
+### Not read, stated
+
+- A box above's pictures: named, composited as absent, never judged.
+- A box above's moving background (position or size) at a keyframe offset (PLAN).
+- A part of a figure out of its scroller's view at any scroll but the one that
+  brings it to the view's nearest edge; a clip above a scroller.
+- A box above's in-flow `::before`/`::after`; rounded corners; a blend; the paints
+  of a box outside the walk.
+- A gradient between its stops, and a stop that a tile repeats inside its area
+  places (read strictly).
+- A figure in an inline box split over lines or columns: the tile area is its
+  bounding box.
+- The geometry above was compared with Chrome's paint on this Mac, once: not
+  Linux, DPR above 1, WebKit or Firefox; and no pass paints it for itself.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
