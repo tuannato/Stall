@@ -2066,6 +2066,38 @@ function outOfFlowSelfCheck(): { cases: number; held: { absolute: number; fixed:
     return { cases: OUT_OF_FLOW_CASES.length, held, disagree };
 }
 
+/**
+ * **`the-trigger-fires-on-a-planted-mover`** (the sixteenth review's item 1): 1c's trigger fires on no job of the clean tree, so a
+ * trigger that walks and finds nothing (a meet that answers nothing, movers held to the wrong node, no element read as a mover) read as
+ * today's run. Once a page, a money node and a box moved over it are painted off to one side, the real `digitTrigger` runs over them,
+ * and it must count the meet and name that node. The DOM is removed before this returns; `preparedNodes` is put back.
+ */
+function triggerSelfCheck(): { fired: number; met: boolean; ms: number; problem?: string } {
+    const t0 = performance.now();
+    const saved = preparedNodes;
+    const box = document.createElement('div');
+    box.style.cssText = 'position: fixed; top: 0px; left: 0px; width: 300px; height: 120px; margin: 0; padding: 0; visibility: hidden; transform: none; filter: none; contain: none';
+    const node = document.createElement('div');
+    node.setAttribute('data-role', 'price');
+    node.style.cssText = 'position: static; margin: 10px; width: 100px; height: 20px; font: 16px/20px monospace';
+    node.textContent = '123';
+    const mover = document.createElement('div');
+    mover.style.cssText = 'position: absolute; top: 5px; left: 5px; width: 60px; height: 40px; margin: 0';
+    box.append(node, mover);
+    try {
+        document.body.append(box);
+        preparedNodes = [node];
+        const got = digitTrigger(box);
+        const met = got.met.includes(0);
+        return { fired: got.count, met, ms: performance.now() - t0, ...(got.count > 0 && met ? {} : { problem: `the trigger counted ${got.count} meet(s) of a box moved over a money node and ${met ? 'named' : 'did not name'} that node` }) };
+    } catch (e) {
+        return { fired: 0, met: false, ms: performance.now() - t0, problem: `the self-check threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}` };
+    } finally {
+        preparedNodes = saved;
+        box.remove();
+    }
+}
+
 /** A box's own clip as a link of its content's chain, or undefined where it clips nothing (a `display: contents` box has no box to clip with). */
 function clipLinkOf(box: Element): ClipLink | undefined {
     const cs = getComputedStyle(box);
@@ -15513,6 +15545,8 @@ const outOfFlowStart = performance.now();
 const outOfFlowCheck = outOfFlowSelfCheck();
 const outOfFlowMs = performance.now() - outOfFlowStart;
 for (const detail of outOfFlowCheck.disagree) failures.push({ screen: 'probe page', theme: '-', check: 'holds-out-of-flow-agrees-with-this-chrome', detail });
+const triggerCheck = triggerSelfCheck();
+if (triggerCheck.problem !== undefined) failures.push({ screen: 'probe page', theme: '-', check: 'the-trigger-fires-on-a-planted-mover', detail: triggerCheck.problem });
 const verdict = {
     viewport: window.innerWidth,
     reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -15631,6 +15665,8 @@ const verdict = {
     /* `holds-out-of-flow-agrees-with-this-chrome`: the cases read and how many of each kind of child Chrome held, its disagreements (also failures), and its own time (a clock). */
     outOfFlowCheck,
     outOfFlowMs,
+    /* `the-trigger-fires-on-a-planted-mover`: the meets the real trigger counted over a planted box, whether it named the node (a failure otherwise), and its time (a clock). */
+    triggerCheck,
     reachSeekMs,
     reachSeekNames,
     /* The dress rule's keyframe-offset read (`offsetDressFaults`): its counts, and its own time (a clock). */

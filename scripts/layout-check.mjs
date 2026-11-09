@@ -3023,7 +3023,7 @@ function geometryRecordDiffers(walked, again) {
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
         // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
-        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined, walkMs: undefined };
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined, triggerCheck: undefined, walkMs: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -4093,7 +4093,7 @@ try {
         }
         if (g.report?.reachByClass !== undefined) {
             // Every pass whose page ran 1b ran its containing-block check too (the worn-only pass's report is its own job's, and runs neither).
-            outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0 });
+            outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0, trigger: g.report.triggerCheck });
             reachGeometry.push({
                 pass: g.key,
                 byClass: g.report.reachByClass,
@@ -4339,6 +4339,24 @@ try {
                     : `${first.cases} wrapper(s), each with an absolute and a fixed child, on ${outOfFlowGeometry.length - unchecked.length} page(s); ` +
                       `Chrome held ${first.held.absolute} absolute and ${first.held.fixed} fixed child(ren) a page; ` +
                       (disagreed.length === 0 ? 'holdsOutOfFlow agreed on every one' : `disagreed on ${disagreed.map((o) => `${o.pass} (${o.check.disagree.length})`).join(', ')}`)) +
+                ` · ${ms.toFixed(1)}ms over the passes`,
+        );
+    }
+    {
+        /*
+         * `the-trigger-fires-on-a-planted-mover` (the sixteenth review's item 1): every page that ran 1b's check also painted a
+         * money node with a box moved over it and ran the real trigger on it; a miss is already one of that pass's failures, and a
+         * page with no record of the check is a failure here, so a trigger that walks and finds nothing cannot read as a clean run.
+         */
+        const unrun = outOfFlowGeometry.filter((o) => o.trigger === undefined || typeof o.trigger.fired !== 'number' || o.trigger.fired === 0).map((o) => o.pass);
+        const ms = outOfFlowGeometry.reduce((n, o) => n + (o.trigger?.ms ?? 0), 0);
+        if (unrun.length > 0) {
+            failed = true;
+            console.error(`✗ the-trigger-fires-on-a-planted-mover: no meet counted on the page of ${unrun.join(', ')}`);
+        }
+        console.log(
+            `    1c's trigger held to a planted mover (the-trigger-fires-on-a-planted-mover): ` +
+                (outOfFlowGeometry.length === 0 ? 'no page ran the check' : `${outOfFlowGeometry.length - unrun.length} of ${outOfFlowGeometry.length} page(s) counted ${outOfFlowGeometry[0].trigger?.fired ?? 0} meet(s) of a box moved over a money node`) +
                 ` · ${ms.toFixed(1)}ms over the passes`,
         );
     }
