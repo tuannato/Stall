@@ -8496,26 +8496,24 @@ const SEEK_ON_OWN: ReadonlySet<string> = new Set([
 
 /**
  * The longhands a box's paints are read from by the ground read
- * (`boxPaintsOf`, `groundWalkRead`), with the ink they are judged against:
- * an element whose values of these differ at a keyframe offset from the
- * pass's last instant has a ground, or an ink, the seek changed
- * (`offsetGroundFaults`). A box above the figure is compared on
- * `GROUND_ABOVE` alone: its background image is not read there (a
- * decoration's paint, the contrast pass's), so a decoration's custom
- * property turning a root's gradient — the aurora's tide, the sunburst's
- * angle — changes nothing the ground read sees. Every longhand
- * `boxPaintsOf` reads is here, those it reads of a box above before
- * `GROUND_ABOVE` and those it reads of a figure's own elements alone after
- * it (`the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read`,
- * `layout/offsetHeld.test.ts`): the sixth review's PGatt3 — a keyframe
- * `background-attachment: fixed` from 30% to 40% of a loop on Modern's
- * quote `.item-x`, painted on its own ink under one tile of the page's
- * ground — was seeked and its ground never read again, the attachment not
- * being here; the paddings, which place a box's content box (a background
- * clipped or placed there), were not here either. Where the glyphs move
- * over a ground that stays (a padding, an indent, a margin), no longhand
- * here changes, and the ground is read again by the ink's own move
- * (`inkSignature`, the sixth review's PGpad).
+ * (`boxPaintsOf`, `groundWalkRead`), with the ink they are judged against: an
+ * element whose values of these differ at a keyframe offset from the pass's
+ * last instant has a ground, or an ink, the seek changed
+ * (`offsetGroundFaults`). A box above the figure is compared on the whole list
+ * since the binding of 3a (D-2026-10-28-01): its background image is read
+ * there too, so a decoration's custom property turning a root's gradient —
+ * the aurora's tide, the sunburst's angle — is a ground the seek changed. The
+ * sixth review's PGatt3 — a keyframe `background-attachment: fixed` from 30%
+ * to 40% of a loop on Modern's quote `.item-x`, painted on its own ink under
+ * one tile of the page's ground — was seeked and its ground never read again
+ * while the attachment was not here; the paddings, which place a box's
+ * content box (a background clipped or placed there), were not here either.
+ * Every longhand `boxPaintsOf` reads is here
+ * (`the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read`,
+ * `layout/offsetHeld.test.ts`). Where the glyphs move over a ground that
+ * stays (a padding, an indent, a margin), no longhand here changes, and the
+ * ground is read again by the ink's own move (`inkSignature`, the sixth
+ * review's PGpad).
  */
 const GROUND_SIGNATURE = [
     'color',
@@ -8550,9 +8548,6 @@ const GROUND_SIGNATURE = [
     'background-position-x',
     'background-position-y',
 ] as const;
-/** How many of `GROUND_SIGNATURE`'s longhands a box above the figure is compared on: all but its background image's (`boxPaintsOf` reads none there). */
-const GROUND_ABOVE = GROUND_SIGNATURE.indexOf('background-image');
-
 /**
  * The longhands that change a box's paints and nothing a held read holds: a
  * background's colour or image (the shorthand is these to a keyframe), where
@@ -8932,13 +8927,13 @@ function groundOnly(anim: Animation, effect: KeyframeEffect, own: boolean): bool
     return props !== undefined && [...props].every((prop) => GROUND_ONLY.has(prop) || needlessHere(prop, own));
 }
 
-/** An element's ground as the ground read sees it (`GROUND_SIGNATURE`): the whole list for one of the figure's own elements, the first `GROUND_ABOVE` for a box above it. */
-function groundSignature(el: Element, own: boolean): string {
+/** An element's ground as the ground read sees it (`GROUND_SIGNATURE`). */
+function groundSignature(el: Element): string {
     const cs = getComputedStyle(el);
-    return (own ? GROUND_SIGNATURE : GROUND_SIGNATURE.slice(0, GROUND_ABOVE)).map((prop) => cs.getPropertyValue(prop)).join('|');
+    return GROUND_SIGNATURE.map((prop) => cs.getPropertyValue(prop)).join('|');
 }
-/** The ground signatures the offset read compares against (`offsetDressFaults`), as the pass's last instant left them, by element and by whether it is a figure's own. */
-let restGround = new Map<string, string>();
+/** The ground signatures the offset read compares against (`offsetDressFaults`), as the pass's last instant left them, by element. */
+let restGround = new Map<Element, string>();
 /**
  * Where a figure's text stands, as its text's client rects to a hundredth
  * of a pixel (`offsetGroundFaults`): a seek that moves the glyphs (a
@@ -8958,18 +8953,6 @@ function inkSignature(node: Element): string {
 }
 /** Each figure's `inkSignature` as the pass's last instant left it (`offsetDressFaults`). */
 let restInk = new Map<Element, string>();
-const groundKeys = new WeakMap<Element, number>();
-let groundKeyNext = 0;
-/** A key for an element's signature in `restGround`, by element and by the list it is read on. */
-function groundKey(el: Element, own: boolean): string {
-    let id = groundKeys.get(el);
-    if (id === undefined) {
-        id = groundKeyNext;
-        groundKeyNext += 1;
-        groundKeys.set(el, id);
-    }
-    return `${id}|${own ? 'own' : 'above'}`;
-}
 
 /**
  * Whether an animation changes only a shadow outside the box above every
@@ -9004,11 +8987,11 @@ function outerShadowOnly(anim: Animation, effect: KeyframeEffect, target: Elemen
  * own elements under the animated box, and the boxes from the figure's
  * parent up to the animated box when it stands above the figure.
  */
-function groundWalk(r: DressRead, target: Element): [Element, boolean][] {
-    const out: [Element, boolean][] = r.own.filter((el) => el === target || target.contains(el)).map((el) => [el, true]);
+function groundWalk(r: DressRead, target: Element): Element[] {
+    const out: Element[] = r.own.filter((el) => el === target || target.contains(el));
     if (target !== r.node && target.contains(r.node)) {
         for (let box = r.node.parentElement; box !== null; box = box.parentElement) {
-            out.push([box, false]);
+            out.push(box);
             if (box === target) break;
         }
     }
@@ -9035,8 +9018,10 @@ type GroundMemo = { own: Map<Element, BoxPaints>; above: Map<Element, BoxPaints>
  * ground or a shadow in a keyframe (`a-keyframe-never-sets-a-ground-or-a-shadow`);
  * this is the kit's road, and it reads a ground changed through a custom
  * property or an ink too, which the lint's belt does not name. A failure says
- * the animation, its box and the offset. A box above is compared without its
- * background image.
+ * the animation, its box and the offset. Since the binding of 3a a box above
+ * is compared on the whole signature, its background image included: the
+ * aurora's tide and the sunburst's angle turn the root's gradients by a custom
+ * property, and each is read at each of its keyframes.
  *
  * **Not read, stated**: a ground between two offsets; a pseudo-element's
  * animation; an animation off the figure's walk (seeked for the self-clip read
@@ -9049,7 +9034,7 @@ type GroundMemo = { own: Map<Element, BoxPaints>; above: Map<Element, BoxPaints>
  */
 function offsetGroundFaults(r: DressRead, target: Element, at: string, paintsHere: GroundMemo): string[] {
     const inkMoved = inkSignature(r.node) !== restInk.get(r.node);
-    if (!inkMoved && !groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];
+    if (!inkMoved && !groundWalk(r, target).some((el) => groundSignature(el) !== restGround.get(el))) return [];
     dressSeek.grounds += 1;
     const out: string[] = [];
     const kept = { own: ownPaintsSeen, above: abovePaintsSeen };
@@ -9270,9 +9255,8 @@ function offsetDressFaults(read: readonly DressRead[]): Map<HTMLElement, string[
         // Before the read sets its timing: the ground of every element this
         // animation can change, as the pass's last instant left it.
         for (const r of reads ?? []) {
-            for (const [el, own] of groundWalk(r, target)) {
-                const key = groundKey(el, own);
-                if (!restGround.has(key)) restGround.set(key, groundSignature(el, own));
+            for (const el of groundWalk(r, target)) {
+                if (!restGround.has(el)) restGround.set(el, groundSignature(el));
             }
             if (!restInk.has(r.node)) restInk.set(r.node, inkSignature(r.node));
         }

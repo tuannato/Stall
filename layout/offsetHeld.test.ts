@@ -83,21 +83,6 @@ function bodyOf(name: string): string {
     return PROBE.slice(start, PROBE.indexOf('\n}\n', start));
 }
 
-/** The span of `body` from `head` to the brace that closes the block it opens. */
-function blockOf(body: string, head: string): string {
-    const start = body.indexOf(head);
-    expect(start, `the body holds ${head}`).toBeGreaterThanOrEqual(0);
-    let depth = 0;
-    for (let i = body.indexOf('{', start); i < body.length; i += 1) {
-        if (body[i] === '{') depth += 1;
-        else if (body[i] === '}') {
-            depth -= 1;
-            if (depth === 0) return body.slice(start, i + 1);
-        }
-    }
-    throw new Error(`the block ${head} does not close`);
-}
-
 /** The longhands a body reads off `cs`: a `cs.camelCase` property (never a method), and a `cs.getPropertyValue('…')`, a `border-${side}-…` template read over the four sides. */
 function readsOf(body: string): Set<string> {
     const out = new Set<string>();
@@ -135,31 +120,23 @@ const GROUND_EXCLUDED: Record<string, string> = {};
 describe('the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read', () => {
     const signature = setOf('GROUND_SIGNATURE');
     const paints = bodyOf('boxPaintsOf');
-    const ownBlock = blockOf(paints, "if (cs.backgroundImage !== 'none') {");
     it('hands its style to no helper but borderImageReach, and reads that one too', () => {
         const helpers = new Set([...paints.matchAll(/\b(\w+)\((?:[^()]*,\s*)?cs\s*[,)]/g)].map((m) => m[1]!));
         expect([...helpers].sort()).toEqual(['borderImageReach']);
     });
 
-    it('names every longhand the ground read reads of any box before GROUND_ABOVE, and of a figure’s own elements in the list', () => {
-        expect(PROBE).toContain("const GROUND_ABOVE = GROUND_SIGNATURE.indexOf('background-image');");
-        expect(PROBE).toContain('(own ? GROUND_SIGNATURE : GROUND_SIGNATURE.slice(0, GROUND_ABOVE))');
-        const above = signature.slice(0, signature.indexOf('background-image'));
-        const ownOnly = readsOf(ownBlock);
-        const any = readsOf(paints.replace(ownBlock, ''));
+    it('names every longhand the ground read reads of any box, the background image’s among them (a box above is compared on the whole list)', () => {
+        expect(PROBE).toContain('return GROUND_SIGNATURE.map((prop) => cs.getPropertyValue(prop)).join(\'|\');');
+        expect(PROBE).not.toContain('GROUND_ABOVE');
+        const any = readsOf(paints);
         for (const prop of readsOf(bodyOf('borderImageReach'))) any.add(prop);
         // The parse reads what it should: the longhands the sixth review found left out among them.
-        for (const prop of ['color', 'box-shadow', 'padding-top', 'border-image-outset']) expect(any, prop).toContain(prop);
-        for (const prop of ['background-image', 'background-attachment', 'background-position-x']) expect(ownOnly, prop).toContain(prop);
+        for (const prop of ['color', 'box-shadow', 'padding-top', 'border-image-outset', 'background-image', 'background-attachment', 'background-position-x']) expect(any, prop).toContain(prop);
         for (const prop of any) {
             if (prop in GROUND_EXCLUDED) continue;
-            expect(above, `boxPaintsOf reads ${prop} of a box above, and GROUND_SIGNATURE does not name it before GROUND_ABOVE`).toContain(prop);
+            expect(signature, `boxPaintsOf reads ${prop} of a box, and GROUND_SIGNATURE does not name it`).toContain(prop);
         }
-        for (const prop of ownOnly) {
-            if (prop in GROUND_EXCLUDED) continue;
-            expect(signature, `boxPaintsOf reads ${prop} of a figure's own element, and GROUND_SIGNATURE does not name it`).toContain(prop);
-        }
-        for (const prop of Object.keys(GROUND_EXCLUDED)) expect(new Set([...any, ...ownOnly]), `GROUND_EXCLUDED names ${prop}, which the ground read does not read`).toContain(prop);
+        for (const prop of Object.keys(GROUND_EXCLUDED)) expect(any, `GROUND_EXCLUDED names ${prop}, which the ground read does not read`).toContain(prop);
     });
 });
 
@@ -267,7 +244,7 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         // And the ground read at an offset: its trigger (a signature changed on the walk, or the text moved) and the own elements it reads.
         const ground = flatBody('offsetGroundFaults');
         for (const block of [
-            'const inkMoved = inkSignature(r.node) !== restInk.get(r.node); if (!inkMoved && !groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];',
+            'const inkMoved = inkSignature(r.node) !== restInk.get(r.node); if (!inkMoved && !groundWalk(r, target).some((el) => groundSignature(el) !== restGround.get(el))) return [];',
             'for (const el of r.own) { if (el !== target && !target.contains(el)) continue; const why = groundVerdict(r.screen, r.label, el, r.node, r.stall, paintsHere.chains, false);',
         ]) {
             expect(ground, block).toContain(block);
