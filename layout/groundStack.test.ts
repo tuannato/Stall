@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Colour } from './atRest';
 import {
+    aboutOrigin,
+    applyAffine,
     byScroller,
     colourTokens,
     composite,
@@ -21,19 +23,27 @@ import {
     layerCovers,
     luminance,
     mostOpaque,
+    paintAtPiece,
     paintsNothing,
+    pairFrame,
     picturesShowing,
     placeGradient,
     placeTile,
     readGradient,
+    readMatrix,
+    readOrigin,
     shiftFor,
     srgbColour,
     stopsOver,
     tileArea,
     tileBand,
     tileHoldsItsGradient,
+    turnPieces,
     worstGround,
+    writtenTransform,
     STACK_CHOICES_CAP,
+    TURN_PIECES_CAP,
+    type Affine,
     type GradientPlace,
     type StackPaint,
 } from './groundStack';
@@ -45,6 +55,7 @@ const ink = (alpha: number): Colour => c(...INK, alpha);
 const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom });
 const GLYPHS = box(10, 10, 110, 40);
 const OVER = [box(0, 0, 200, 100)];
+const readGradientShape = (): GradientPlace['shape'] => placeGradient(readGradient('linear-gradient(rgb(0, 0, 0), rgb(0, 0, 0))')!, 100, 20)!.shape;
 
 describe('a-money-figure-is-never-misdressed: the ground stack', () => {
     it('reads every colour a computed value writes, and refuses one it cannot take apart', () => {
@@ -404,6 +415,143 @@ describe('the-ground-walk-reaches-the-stall: the walk to the stall', () => {
         expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
         // No other cell failing, the stack over the cap is the verdict.
         expect(worstGround([card, ...many], box(10, 10, 50, 40), [90, 90, 90], 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
+    });
+});
+
+/**
+ * Each paint by what separates it from the figure (before 8g2, D-2026-11-09-07;
+ * the eighteenth review's SCL3 and CASE-F): the transforms strictly below the
+ * painting box, composed innermost first, and the paint put into the ink's
+ * frame per piece of ink. The probe's half (reading a box's transform before
+ * the hold) is proved red in a browser (`layout/PROBE-RULES.md`).
+ */
+describe('the-ground-walk-reaches-the-stall: each paint by what separates it from the figure', () => {
+    const ROTATE_10: Affine = { a: Math.cos(Math.PI / 18), b: Math.sin(Math.PI / 18), c: -Math.sin(Math.PI / 18), d: Math.cos(Math.PI / 18), e: 0, f: 0 };
+    const SHIFT_0_34: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 34 };
+    const SCALE_125: Affine = { a: 1.25, b: 0, c: 0, d: 1.25, e: 0, f: 0 };
+    const NO_MOVE = { dx: 0, dy: 0 };
+    const DARK = c(...INK);
+    const band = (r: ReturnType<typeof box>): StackPaint => ({ what: 'a band above', candidates: [DARK], rects: [r] });
+    const WHITE: StackPaint = { what: 'the card', candidates: [c(255, 255, 255)], rects: OVER };
+
+    it('reads a computed matrix and an origin, and refuses what leaves the plane', () => {
+        expect(readMatrix('none')).toEqual({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+        expect(readMatrix('matrix(1.25, 0, 0, 1.25, 3, -4.5)')).toEqual({ a: 1.25, b: 0, c: 0, d: 1.25, e: 3, f: -4.5 });
+        expect(readMatrix('matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)')).toBeUndefined();
+        expect(readMatrix('matrix(1, 0, 0)')).toBeUndefined();
+        expect(readOrigin('170.5px 22px')).toEqual([170.5, 22]);
+        expect(readOrigin('170.5px 22px 0px')).toEqual([170.5, 22]);
+        expect(readOrigin('50% 22px')).toBeUndefined();
+    });
+
+    it('writes the longhands in CSS’s order, a calc() whole, and fails closed off the plane', () => {
+        const none = { transform: 'none', rotate: 'none', scale: 'none', translate: 'none' };
+        expect(writtenTransform({ ...none, transform: 'matrix(1, 0, 0, 1, 2, 3)' })).toBe('matrix(1, 0, 0, 1, 2, 3)');
+        expect(writtenTransform({ transform: 'matrix(2, 0, 0, 2, 0, 0)', rotate: '10deg', scale: '1.25', translate: 'calc(50% + 5px) 10px' })).toBe(
+            'translate(calc(50% + 5px), 10px) rotate(10deg) scale(1.25, 1.25) matrix(2, 0, 0, 2, 0, 0)',
+        );
+        expect(writtenTransform({ ...none, translate: '7px' })).toBe('translate(7px, 0px)');
+        expect(writtenTransform({ ...none, scale: '1.5 2' })).toBe('scale(1.5, 2)');
+        expect(writtenTransform({ ...none, translate: '1px 2px 3px' })).toBeUndefined();
+        expect(writtenTransform({ ...none, rotate: 'x 10deg' })).toBeUndefined();
+        expect(writtenTransform({ ...none, rotate: '1 1 0 10deg' })).toBeUndefined();
+        expect(writtenTransform({ ...none, scale: '1 1 2' })).toBeUndefined();
+    });
+
+    it('turns about the transform’s origin', () => {
+        const quarter: Affine = { a: 0, b: 1, c: -1, d: 0, e: 0, f: 0 };
+        const [x, y] = applyAffine(aboutOrigin(quarter, 10, 10), 20, 10);
+        expect(x).toBeCloseTo(10, 9);
+        expect(y).toBeCloseTo(20, 9);
+    });
+
+    it('composes the chain innermost first: a shift inside a scale is scaled, one outside it is not', () => {
+        const inside = pairFrame([SHIFT_0_34, SCALE_125])!;
+        expect(applyAffine(inside.map, 0, 0)[1]).toBeCloseTo(42.5, 9);
+        const outside = pairFrame([SCALE_125, SHIFT_0_34])!;
+        expect(applyAffine(outside.map, 0, 0)[1]).toBeCloseTo(34, 9);
+    });
+
+    it('says a pair’s scale and how far its turn reaches, and refuses a map that collapses the plane', () => {
+        expect(pairFrame([SCALE_125])).toMatchObject({ scale: 1.25, chord: 0 });
+        const tilt = pairFrame([ROTATE_10])!;
+        expect(tilt.scale).toBeCloseTo(1, 9);
+        expect(tilt.chord).toBeCloseTo(2 * Math.sin(Math.PI / 36), 9);
+        expect(pairFrame([{ a: 0, b: 0, c: 0, d: 0, e: 0, f: 0 }])).toBeUndefined();
+    });
+
+    it('shifts a paint by what the shift below it carries the figure (UP2d)', () => {
+        const frame = pairFrame([SHIFT_0_34])!;
+        const on = paintAtPiece(band(box(0, 50, 200, 80)), frame, GLYPHS, NO_MOVE, NO_MOVE);
+        expect(on.rects).toEqual([box(0, 16, 200, 46)]);
+        expect(worstGround([WHITE, on], GLYPHS, INK, 3, 0.5)).toMatchObject({ ratio: 1 });
+        // Read in the flat frame the band is off the glyphs: the road that was green.
+        expect(worstGround([WHITE, band(box(0, 50, 200, 80))], GLYPHS, INK, 3, 0.5)).toBeUndefined();
+    });
+
+    it('places a paint exactly under a scale: a point of the ink and the paint it stands on (SCL3)', () => {
+        const scale = aboutOrigin(SCALE_125, 100, 25);
+        const frame = pairFrame([scale])!;
+        const piece = box(120, 20, 160, 30);
+        const placed = paintAtPiece(band(box(185, 0, 300, 100)), frame, piece, NO_MOVE, NO_MOVE).rects[0]!;
+        // The left edge in the ink's frame is where the scale puts ink onto the band's left edge.
+        const [onEdge] = applyAffine(scale, placed.left, 25);
+        expect(onEdge).toBeCloseTo(185, 9);
+        expect(worstGround([WHITE, paintAtPiece(band(box(185, 0, 300, 100)), frame, piece, NO_MOVE, NO_MOVE)], piece, INK, 3, 0.5)).toBeUndefined();
+        const later = box(160, 20, 200, 30);
+        expect(worstGround([WHITE, paintAtPiece(band(box(185, 0, 300, 100)), frame, later, NO_MOVE, NO_MOVE)], later, INK, 3, 0.5)).toMatchObject({ ratio: 1 });
+    });
+
+    it('carries a figure by a tilt onto a band above the tilted box, and off the band it would stand on flat (CASE-F)', () => {
+        const tilt = aboutOrigin(ROTATE_10, 80, 40);
+        const frame = pairFrame([tilt])!;
+        const ink0 = box(280, 33, 318, 47);
+        const bandOn = band(box(0, 60, 400, 90));
+        const bandFlat = band(box(0, 30, 400, 50));
+        const verdicts = (b: StackPaint): (object | undefined)[] => turnPieces(ink0, frame.chord).map((p) => worstGround([WHITE, paintAtPiece(b, frame, p, NO_MOVE, NO_MOVE)], p, INK, 3, 0.5));
+        expect(verdicts(bandOn).some((v) => v !== undefined)).toBe(true);
+        expect(verdicts(bandFlat).every((v) => v === undefined)).toBe(true);
+    });
+
+    it('shifts a gradient’s place at scale 1, and reads every stop over its band on a scaled pair', () => {
+        const place: GradientPlace = { shape: readGradientShape(), tile: { left: 0, top: 0, w: 100, h: 20, repeatX: false, repeatY: false }, stops: [{ at: 0, colour: DARK }, { at: 1, colour: DARK }] };
+        const paint: StackPaint = { what: 'a gradient', candidates: [DARK], rects: [box(0, 0, 100, 20)], gradient: place };
+        const shifted = paintAtPiece(paint, pairFrame([SHIFT_0_34])!, GLYPHS, NO_MOVE, NO_MOVE);
+        expect(shifted.gradient?.tile.top).toBeCloseTo(-34, 9);
+        expect(shifted.gradient?.tile.left).toBeCloseTo(0, 9);
+        expect(paintAtPiece(paint, pairFrame([SCALE_125])!, GLYPHS, NO_MOVE, NO_MOVE).gradient).toBeUndefined();
+    });
+
+    it('takes a scroll first: the paint where its scrollers put it, the piece at its flat place', () => {
+        const frame = pairFrame([SHIFT_0_34])!;
+        const moved = box(10, 110, 110, 140); // GLYPHS scrolled down by 100
+        const carried = paintAtPiece(band(box(0, 50, 200, 80)), frame, moved, { dx: 0, dy: 100 }, { dx: 0, dy: 100 });
+        expect(carried.rects[0]!.top).toBeCloseTo(116, 9);
+        const standing = paintAtPiece(band(box(0, 50, 200, 80)), frame, moved, NO_MOVE, { dx: 0, dy: 100 });
+        expect(standing.rects[0]!.top).toBeCloseTo(16, 9);
+    });
+
+    it('leaves a figure on a band its own tilted box paints: a transform at the painting box moves both (NEST)', () => {
+        // The chain below a paint on the tilted box holds nothing, or a no-op turn on the figure's own box.
+        const noop = pairFrame([aboutOrigin({ a: Math.cos(1.7e-4), b: Math.sin(1.7e-4), c: -Math.sin(1.7e-4), d: Math.cos(1.7e-4), e: 0, f: 0 }, 310, 40)])!;
+        const ink0 = box(280, 33, 318, 47);
+        const placed = paintAtPiece(band(box(0, 36, 400, 44)), noop, ink0, NO_MOVE, NO_MOVE);
+        expect(worstGround([WHITE, placed], ink0, INK, 3, 0.5)).toMatchObject({ ratio: 1 });
+    });
+
+    it('cuts an ink so a turn moves no piece by more than about a pixel, and not at all with no turn', () => {
+        const ink0 = box(0, 0, 100, 22);
+        expect(turnPieces(ink0, 0)).toEqual([ink0]);
+        const chord = pairFrame([ROTATE_10])!.chord;
+        const pieces = turnPieces(ink0, chord);
+        for (const p of pieces) {
+            expect((p.right - p.left) / 2).toBeLessThanOrEqual(1 / chord + 1e-9);
+            expect((p.bottom - p.top) / 2).toBeLessThanOrEqual(1 / chord + 1e-9);
+        }
+        expect(pieces.reduce((n, p) => n + (p.right - p.left) * (p.bottom - p.top), 0)).toBeCloseTo(2200, 6);
+        // Rural's sway cuts a figure at most once on an axis.
+        expect(turnPieces(ink0, 2 * Math.sin((0.8 * Math.PI) / 360)).length).toBeLessThanOrEqual(2);
+        expect(turnPieces(box(0, 0, 1200, 400), chord).length).toBeLessThanOrEqual(TURN_PIECES_CAP);
     });
 });
 

@@ -920,6 +920,181 @@ export function shiftFor(carried: ReadonlySet<number>, moves: readonly ScrollMov
     return { dx, dy };
 }
 
+/**
+ * **A transform as a map of the flat frame** (before 8g2, D-2026-11-09-07; the
+ * eighteenth review's blocker 1 and CASE-F). The probe reads the ground under a
+ * figure with every box on its walk held upright (`withFramesUpright`), so a
+ * paint and a stretch of ink each have a place in one flat frame. A transform
+ * on a box moves that box and everything inside it, so what separates a paint
+ * on box j from the figure is only the transforms strictly below j: every
+ * transform at j and above moves both and cancels. So each pair is read by its
+ * own map, the transforms from the figure up to (not including) the painting
+ * box, composed innermost first.
+ */
+export type Affine = { readonly a: number; readonly b: number; readonly c: number; readonly d: number; readonly e: number; readonly f: number };
+
+const IDENTITY: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
+/** A computed `transform` as a map, or undefined for a 3D matrix or a value this read does not take apart. */
+export function readMatrix(value: string): Affine | undefined {
+    if (value.trim() === 'none') return IDENTITY;
+    const m = /^matrix\(([^)]*)\)$/.exec(value.trim());
+    if (m === null) return undefined;
+    const n = m[1]!.split(',').map((v) => Number(v));
+    if (n.length !== 6 || !n.every(Number.isFinite)) return undefined;
+    return { a: n[0]!, b: n[1]!, c: n[2]!, d: n[3]!, e: n[4]!, f: n[5]! };
+}
+
+/** A computed `transform-origin` as two lengths in px (a third, for depth, is not read), or undefined. */
+export function readOrigin(value: string): readonly [number, number] | undefined {
+    const m = /^(-?[\d.]+(?:e[-+]?\d+)?)px\s+(-?[\d.]+(?:e[-+]?\d+)?)px(?:\s+-?[\d.]+(?:e[-+]?\d+)?px)?$/.exec(value.trim());
+    return m === null ? undefined : [Number(m[1]), Number(m[2])];
+}
+
+/**
+ * A box's computed transform longhands as one transform list, in CSS's order
+ * (`translate`, `rotate`, `scale`, then `transform`), for the engine to compose
+ * with percentages and `calc()` resolved against the box; `transform` alone
+ * when no longhand stands. Undefined for a value that leaves the plane or that
+ * this read does not take apart (the probe fails closed on it). The motion
+ * path, which CSS applies between `scale` and `transform`, is not here: a box
+ * on a figure's walk may not have one (`BOX_HELD`).
+ */
+export function writtenTransform(w: { transform: string; rotate: string; scale: string; translate: string }): string | undefined {
+    const list: string[] = [];
+    if (w.translate !== 'none') {
+        const [x, y = '0px', z, ...more] = topLevelWords(w.translate.trim());
+        if (x === undefined || more.length > 0 || (z !== undefined && Number.parseFloat(z) !== 0)) return undefined;
+        list.push(`translate(${x}, ${y})`);
+    }
+    if (w.rotate !== 'none') {
+        const m = /^(?:z\s+)?(-?[\d.]+(?:e[-+]?\d+)?)deg$/.exec(w.rotate.trim());
+        if (m === null) return undefined;
+        list.push(`rotate(${m[1]}deg)`);
+    }
+    if (w.scale !== 'none') {
+        const [x, y = x, z = 1, ...more] = w.scale.trim().split(/\s+/).map(Number);
+        if (more.length > 0 || x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y) || z !== 1) return undefined;
+        list.push(`scale(${x}, ${y})`);
+    }
+    if (w.transform !== 'none') list.push(w.transform);
+    return list.join(' ');
+}
+
+/** `outer` after `inner`. */
+function composeAffine(outer: Affine, inner: Affine): Affine {
+    return {
+        a: outer.a * inner.a + outer.c * inner.b,
+        b: outer.b * inner.a + outer.d * inner.b,
+        c: outer.a * inner.c + outer.c * inner.d,
+        d: outer.b * inner.c + outer.d * inner.d,
+        e: outer.a * inner.e + outer.c * inner.f + outer.e,
+        f: outer.b * inner.e + outer.d * inner.f + outer.f,
+    };
+}
+
+/** A transform's matrix about its origin, as a map of the flat frame (`ox`, `oy` in that frame). */
+export function aboutOrigin(m: Affine, ox: number, oy: number): Affine {
+    return composeAffine({ a: 1, b: 0, c: 0, d: 1, e: ox, f: oy }, composeAffine(m, { a: 1, b: 0, c: 0, d: 1, e: -ox, f: -oy }));
+}
+
+/** Where a map puts a point. */
+export function applyAffine(m: Affine, x: number, y: number): readonly [number, number] {
+    return [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f];
+}
+
+/**
+ * What separates one paint from the figure: the map from the flat frame into
+ * the painting box's frame, its uniform scale, and how far its turn moves a
+ * point one pixel from the centre (the turn's chord, `2 sin(θ / 2)`; a scale
+ * and a shift do not count).
+ */
+export type PairFrame = { readonly map: Affine; readonly scale: number; readonly chord: number };
+
+/** A scale this close to 1 is none: a place's stops are shifted, not read strictly. */
+const PAIR_UNSCALED = 0.001;
+
+/**
+ * The frame between a paint and the figure, from the maps of the boxes from
+ * the figure up to, and not including, the painting box, innermost first; or
+ * undefined for a map that collapses the plane (a scale of zero).
+ */
+export function pairFrame(chain: readonly Affine[]): PairFrame | undefined {
+    let map = IDENTITY;
+    for (const t of chain) map = composeAffine(t, map);
+    const scale = Math.sqrt(Math.abs(map.a * map.d - map.b * map.c));
+    if (!(scale > 1e-6)) return undefined;
+    return { map, scale, chord: Math.hypot(map.a / scale - 1, map.b / scale) };
+}
+
+/** A shift a scroll gives (`shiftFor`). */
+export type ScrollShift = { readonly dx: number; readonly dy: number };
+
+/**
+ * A paint in the ink's frame, for one piece of the ink (the shape of
+ * `shiftFor`'s move, per piece): `rect' = c + (rect − mapped) / scale`, where
+ * `c` is the piece's centre and `mapped` where that centre stands in the
+ * painting box's frame. A scroll is taken first: the paint stands where the
+ * scrollers that carry it put it (`paintMove`), and the piece's flat place is
+ * its place with the ink's scroll taken off (`inkMove`). A gradient's place
+ * shifts with the paint at scale 1; on a scaled pair its stops take the strict
+ * read, every stop over the tile's own band, because a stop's distance in the
+ * paint's frame is not one in the ink's.
+ */
+export function paintAtPiece(p: StackPaint, frame: PairFrame, piece: Box, paintMove: ScrollShift, inkMove: ScrollShift): StackPaint {
+    const cx = (piece.left + piece.right) / 2;
+    const cy = (piece.top + piece.bottom) / 2;
+    const [mx, my] = applyAffine(frame.map, cx - inkMove.dx, cy - inkMove.dy);
+    const { scale } = frame;
+    const place = (r: Box): Box => ({
+        left: cx + (r.left + paintMove.dx - mx - inkMove.dx) / scale,
+        right: cx + (r.right + paintMove.dx - mx - inkMove.dx) / scale,
+        top: cy + (r.top + paintMove.dy - my - inkMove.dy) / scale,
+        bottom: cy + (r.bottom + paintMove.dy - my - inkMove.dy) / scale,
+    });
+    const { gradient, ...rest } = p;
+    return {
+        ...rest,
+        rects: p.rects.map(place),
+        ...(gradient === undefined || Math.abs(scale - 1) > PAIR_UNSCALED
+            ? {}
+            : { gradient: shiftPlace(gradient, cx + paintMove.dx - mx - inkMove.dx, cy + paintMove.dy - my - inkMove.dy) }),
+    };
+}
+
+/** The most pieces a turn cuts one stretch of ink into (`turnPieces`). */
+export const TURN_PIECES_CAP = 64;
+
+/**
+ * A stretch of ink cut so a turn moves no point of a piece more than about a
+ * pixel from where the piece's own centre says (`paintAtPiece` moves paints by
+ * that centre and turns nothing): half a piece's side at most `1 / chord` on
+ * each axis, 5.7px at the 10-degree tilt `DRESS_TILT_DEG` allows. No turn, no
+ * cut. Bounded by `TURN_PIECES_CAP`: past it the pieces grow, and the turn
+ * inside one is more than a pixel.
+ */
+export function turnPieces(ink: Box, chord: number): Box[] {
+    if (chord < 1e-4) return [ink];
+    const pitch = 2 / chord;
+    let nx = Math.max(1, Math.ceil((ink.right - ink.left) / pitch));
+    let ny = Math.max(1, Math.ceil((ink.bottom - ink.top) / pitch));
+    if (nx * ny > TURN_PIECES_CAP) {
+        const k = Math.sqrt((nx * ny) / TURN_PIECES_CAP);
+        nx = Math.max(1, Math.floor(nx / k));
+        ny = Math.max(1, Math.floor(ny / k));
+    }
+    if (nx === 1 && ny === 1) return [ink];
+    const out: Box[] = [];
+    const w = (ink.right - ink.left) / nx;
+    const h = (ink.bottom - ink.top) / ny;
+    for (let i = 0; i < nx; i += 1) {
+        for (let j = 0; j < ny; j += 1) {
+            out.push({ left: ink.left + i * w, right: ink.left + (i + 1) * w, top: ink.top + j * h, bottom: ink.top + (j + 1) * h });
+        }
+    }
+    return out;
+}
+
 /** A paint as it stands over one cell: a placed gradient's candidates are the stops that bear on it (`stopsOver`). */
 function atCell(p: StackPaint, cell: Box): StackPaint {
     return p.gradient === undefined ? p : { ...p, candidates: stopsOver(p.gradient, cell) };

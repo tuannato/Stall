@@ -59,6 +59,7 @@ import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import {
     STACK_CHOICES_CAP,
+    aboutOrigin,
     colourTokens,
     byScroller,
     everyMixReads,
@@ -76,7 +77,15 @@ import {
     tileBand,
     tileHoldsItsGradient,
     worstGround,
+    pairFrame,
+    paintAtPiece,
+    readMatrix,
+    readOrigin,
+    turnPieces,
+    writtenTransform,
+    type Affine,
     type GradientPlace,
+    type PairFrame,
     type ScrollMove,
     type StackPaint,
 } from './groundStack';
@@ -6959,18 +6968,27 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
  * blend from the figure to the stall held to `normal`. A cell at least
  * `DRESS_GROUND_ALPHA` opaque that reads under `DRESS_GROUND_CONTRAST` against
  * the ink fails; more ways of choosing one cell's stops than the judge reads
- * fails too (J2 of D-2026-10-28-01); under the alpha the cell is mostly what
+ * fails too (the twelfth critic's J2); under the alpha the cell is mostly what
  * lies below the stack, the contrast pass's. Its geometry is read only when
  * the colours alone cannot pass it: a stack no blend of whose colours reads
  * under the floor (`everyMixReads`), or whose most opaque total stays under
  * the alpha floor (`mostOpaque`), passes unmeasured. A colour it cannot read
  * fails on the figure's own box; on a box above, where that box shows.
  *
- * It is read with every transform from the figure to the stall held upright
- * (`withFramesUpright`), so a stop's distance is a distance in the box's own
- * frame (Rural tilts its rows and sways its tag), and each box at the centre
- * its own transforms give it, so a shift between a paint and the figure is
- * read (the seventeenth review's B1).
+ * It is read with every box from the figure to the stall held upright in one
+ * flat frame (`withFramesUpright`), so a stop's distance is a distance in the
+ * box's own frame (Rural tilts its rows and sways its tag). **Each paint is
+ * then placed by what separates it from the figure** (D-2026-11-09-07):
+ * every transform at the painting box or above moves paint and figure both
+ * and cancels, and the ones strictly below it are composed (`pairFrame`) and
+ * the paint is put into the ink's frame per piece of ink (`paintAtPiece`,
+ * `rect' = c + (rect − mapped) / scale`): a shift or a scale exactly, a turn
+ * by pieces short enough that it moves none by more than about a pixel
+ * (`turnPieces`; none where no turn stands). So a tilted box's own band stands
+ * under its own figure (NEST), and a band above the tilted, scaled or shifted
+ * box is read where the figure is carried onto it (CASE-E, CASE-F, SCL3,
+ * UP2d). No cost where no transform stands on the chain. A transform this
+ * read cannot take apart, on a box with a paint above it, fails closed.
  *
  * **Not read, stated**: a part of a figure out of its scroller's view at any
  * scroll but the one that brings it to the nearest edge of the view; a clip
@@ -6978,11 +6996,16 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
  * gradient between its stops (the stops on either side of a cell are tried,
  * not what they blend to); a conic or repeating gradient's stops, one with an
  * interpolation written out, a size or position this reader does not take
- * apart (all read strictly); a border or a box shadow of a box in more than
- * one fragment, which the read stands on the bounding box where Chrome draws
- * them per fragment (the bottom border of a line lies under the next line's
- * glyphs: IN3); and a tilt's turn relative to what is painted above the
- * tilted box (`withFramesUpright`).
+ * apart (all read strictly); a gradient's stops under a scale between it and
+ * the figure (read strictly: every stop over the tile's own band); a border or
+ * a box shadow of a box in more than one fragment, which the read stands on
+ * the bounding box where Chrome draws them per fragment (the bottom border of
+ * a line lies under the next line's glyphs: IN3); a clip on a box above a
+ * transform, the ink's own and a paint's, which is read in the flat frame; the
+ * turn inside one piece of ink, about a pixel, and more past `TURN_PIECES_CAP`;
+ * a scroller inside a transformed box (its scroll is read at scale 1, unturned);
+ * a motion path (`BOX_HELD` refuses one on the walk); and a box above's
+ * background that moves between keyframe offsets.
  */
 const WALK_THROWN_KEPT = 40;
 /** One look's tallies on a pass: figures' elements read, failures, a box above's gradient read, a box above's picture met, walks that skipped a box that paints nothing, elements with a picture left to the contrast pass, stacks of too many choices, throws. */
@@ -7003,76 +7026,84 @@ let walkChainsSeen = new Map<Element, ClipLink[]>();
  * What the transforms are held at for the ground read: upright, and each box
  * still a transformed box, so an absolute or fixed figure keeps the containing
  * block a `transform` gave it (`withTransformsHeldOff` sets `none`, which
- * takes it away). A box its own transforms moved is then held at a
- * `translate()` of that distance (`withFramesUpright`), still a transformed box.
+ * takes it away).
  */
 const UPRIGHT: Readonly<Record<string, string>> = { transform: 'translate(0)', rotate: 'none', scale: 'none', translate: 'none' };
 
+/** A display that takes no transform (a box this rule holds in the flat frame all the same). */
+const TAKES_NO_TRANSFORM = new Set(['inline', 'contents', 'none', 'ruby', 'ruby-text', 'table-column', 'table-column-group']);
+/** A transform this read could not take apart: where the figure stands then is not known to it (`groundWalkRead` fails closed). */
+const UNPLACED = 'unplaced';
 /**
- * Run `read` with every transform on `els` held upright, each box still where
- * its own transforms put its centre, and put each back (`holdOff`).
+ * The map each box's own transforms make of the flat frame, while the boxes
+ * are held (`withFramesUpright`): `undefined` for a box that takes none.
+ */
+let framesHeld: ReadonlyMap<Element, Affine | typeof UNPLACED> = new Map();
+
+/** A box's map of the flat frame (`aboutOrigin`): read with the box held, its origin read where the box stands flat. */
+function flatFrameOf(w: { el: HTMLElement; transform: string; rotate: string; scale: string; translate: string; origin: string; transformBox: string }): Affine | typeof UNPLACED {
+    const list = writtenTransform(w);
+    if (list === undefined) return UNPLACED;
+    let matrix = w.transform;
+    if (list !== w.transform) {
+        // A longhand stands: the engine composes the list with the box's own
+        // percentages and `calc()`. `holdOff` holds the transitions and puts
+        // the inline `transform` back after.
+        w.el.style.setProperty('transform', list, 'important');
+        matrix = getComputedStyle(w.el).transform;
+        w.el.style.setProperty('transform', UPRIGHT.transform!, 'important');
+    }
+    const m = readMatrix(matrix);
+    const origin = readOrigin(w.origin);
+    if (m === undefined || origin === undefined) return UNPLACED;
+    const r = w.el.getBoundingClientRect();
+    let left = r.left;
+    let top = r.top;
+    if (w.transformBox === 'content-box' || w.transformBox === 'fill-box') {
+        const cs = getComputedStyle(w.el);
+        left += (Number.parseFloat(cs.borderLeftWidth) || 0) + (Number.parseFloat(cs.paddingLeft) || 0);
+        top += (Number.parseFloat(cs.borderTopWidth) || 0) + (Number.parseFloat(cs.paddingTop) || 0);
+    }
+    return aboutOrigin(m, left + origin[0], top + origin[1]);
+}
+
+/**
+ * Run `read` with every transform on `els` held upright in one flat frame, and
+ * each box's map of that frame on `framesHeld`, and put each back (`holdOff`).
  *
- * **Where a box stands in the hold** (the seventeenth review's B1,
- * D-2026-11-09-05): held at `translate(0)`, a box stood where it would stand
- * unmoved, so a shift on a box between a paint and the figure was lost and the
- * figure was read off the band the page paints it on (the critic's UP2d, the
- * digits ink on ink and the whole runner green). So the boxes are taken
- * outermost first, a level of the tree at a time (boxes of one level do not
- * move each other): a box's centre is read with its own transforms on and
- * every box above it already held, it is held upright, and it is carried back
- * by the difference. That is its painted centre where no box above it tilts.
- *
- * **Where one does, it is not the centre on the screen, on purpose**: a tilt
- * above turns everything under it together, so a child's place inside a tilted
- * box is its layout place, and folding the tilt into the child (each box read
- * at its centre on the screen, the critic's trial) moved a child that merely
- * carries a transform off the band its tilted parent paints under it (NEST: a
- * 10-degree head, a no-op `rotate` on the figure's box, red at `5330e91`, green
- * under the trial, digits ink on ink) and put a stop's distance out of the
- * box's own frame on Rural's tilts.
- *
- * **Not read, stated**: a box above a tilted box. A tilt about the box's own
- * centre carries an off-centre figure relative to what is painted above the
- * tilted box, by up to the arm times the sine of the angle (about 30px at
- * `DRESS_TILT_DEG` and a 175px arm, under 2px on Rural's rows), and the hold
- * has no one place for a figure that is right for a paint inside the tilt and
- * one above it (PLAN § Open, 3a's list).
+ * **Each pair of a paint and a figure gets its own place** (D-2026-11-09-07,
+ * the eighteenth review). One hold can give a box one place, and a figure
+ * needs two: a paint inside a transformed box and a paint above it see the
+ * figure at different places. Three holds in a row went wrong that way (UP2d
+ * a shift, SCL3 a scale, CASE-F a tilt). So the transforms are not folded into
+ * the hold at all: each box's full transform is read first, `translate`,
+ * `rotate`, `scale` and `transform` in CSS's order, about its
+ * `transform-origin` (`writtenTransform`, `aboutOrigin`), every box is held at
+ * `translate(0)`, and `groundWalkRead` places each paint per piece of ink
+ * through the transforms between that paint and the figure (`paintAtPiece`).
+ * A transition does not run (`holdOff`), and a seeked animation's transform is
+ * the value read here, the hold's `!important` beating it after.
  */
 function withFramesUpright<T>(els: Iterable<HTMLElement>, read: () => T): T {
-    const turned = [...new Set(els)].filter((el) => {
+    const turned = [...new Set(els)].flatMap((el) => {
         const cs = getComputedStyle(el);
-        return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
+        if (cs.transform === 'none' && cs.rotate === 'none' && cs.scale === 'none' && cs.translate === 'none') return [];
+        return [{ el, transform: cs.transform, rotate: cs.rotate, scale: cs.scale, translate: cs.translate, origin: cs.transformOrigin, transformBox: cs.transformBox, display: cs.display }];
     });
     if (turned.length === 0) return read();
-    const centre = (el: Element): readonly [number, number] => {
-        const r = el.getBoundingClientRect();
-        return [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
-    };
-    const levels = new Map<number, HTMLElement[]>();
-    for (const el of turned) {
-        let depth = 0;
-        for (let up = el.parentElement; up !== null; up = up.parentElement) depth += 1;
-        const level = levels.get(depth);
-        if (level === undefined) levels.set(depth, [el]);
-        else level.push(el);
-    }
-    const putBack: (() => void)[] = [];
+    const kept = framesHeld;
+    const putBack = holdOff(
+        turned.map((t) => t.el),
+        UPRIGHT,
+    );
     try {
-        for (const depth of [...levels.keys()].sort((a, b) => a - b)) {
-            const level = levels.get(depth)!;
-            const own = level.map(centre);
-            putBack.push(holdOff(level, UPRIGHT));
-            level.forEach((el, i) => {
-                const [x, y] = centre(el);
-                const dx = own[i]![0] - x;
-                const dy = own[i]![1] - y;
-                // `holdOff` kept the box's inline `transform` before this write, and puts that back.
-                if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) el.style.setProperty('transform', `translate(${dx}px, ${dy}px)`, 'important');
-            });
-        }
+        const frames = new Map<Element, Affine | typeof UNPLACED>();
+        for (const t of turned) if (!TAKES_NO_TRANSFORM.has(t.display)) frames.set(t.el, flatFrameOf(t));
+        framesHeld = frames;
         return read();
     } finally {
-        for (const back of putBack.reverse()) back();
+        framesHeld = kept;
+        putBack();
     }
 }
 
@@ -7123,6 +7154,24 @@ function groundWalkRead(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element
         }
         if (at === stall) break;
     }
+    // What separates each box's paints from the figure: the transforms strictly
+    // below it (`pairFrame`). A transform at the painting box or above moves
+    // both, and cancels.
+    const pairs = new Map<Element, PairFrame>();
+    const below: Affine[] = [];
+    let broken: string | undefined;
+    let unplaced: string | undefined;
+    for (const l of walk) {
+        if (l.paints.length > 0) {
+            unplaced ??= broken;
+            const frame = below.length > 0 ? pairFrame(below) : undefined;
+            if (frame !== undefined) pairs.set(l.at, frame);
+            else if (below.length > 0) unplaced ??= `the transforms below ${describe(l.at)} collapse the plane`;
+        }
+        const held = framesHeld.get(l.at);
+        if (held === UNPLACED) broken ??= `a transform on ${describe(l.at)} this read cannot take apart`;
+        else if (held !== undefined) below.push(held);
+    }
     // Bottom first: the stall, then each box below it.
     const links = [...walk].reverse();
     const stack = links.flatMap((l) => l.paints.map((p) => ({ p, at: l.at })));
@@ -7132,6 +7181,10 @@ function groundWalkRead(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element
     if (!mustRead) {
         const candidates = stack.map((s) => s.p.candidates);
         if (mostOpaque(candidates) < DRESS_GROUND_ALPHA || everyMixReads(candidates, ink.rgb, DRESS_GROUND_CONTRAST, DRESS_GROUND_ALPHA)) return out;
+    }
+    if (unplaced !== undefined) {
+        out.fault = `${unplaced}, so where its glyphs stand on what is painted under them is not known`;
+        return out;
     }
     // The clips of the box whose content the ink is: its own, and its chain.
     const ownClip = clipLinkOf(el);
@@ -7161,13 +7214,14 @@ function groundWalkRead(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element
         }
         return held;
     };
-    type Judged = StackPaint & { carried: ReadonlySet<number> };
+    type Judged = StackPaint & { carried: ReadonlySet<number>; pair?: PairFrame };
     const judged: Judged[] = [];
     const NOBODY: ReadonlySet<number> = new Set();
     for (const l of links) {
         // A box above that cannot be read: a paint that may be anywhere, and fails where it shows.
         if (l.unread !== undefined) judged.push({ what: `${describe(l.at)}'s paints`, candidates: [], rects: [ANYWHERE], picture: true, fault: l.unread, carried: NOBODY });
         const { clip, carried } = heldOf(l.at);
+        const pair = pairs.get(l.at);
         for (const p of l.paints) {
             const rects = p.rects().flatMap((r) => intersect(r, clip) ?? []);
             if (rects.length === 0) continue;
@@ -7182,15 +7236,18 @@ function groundWalkRead(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element
                 candidates: p.candidates,
                 rects,
                 carried,
+                ...(pair === undefined ? {} : { pair }),
                 ...(p.gradient === undefined ? {} : { gradient: p.gradient }),
                 ...(p.picture === undefined ? {} : { picture: true }),
                 ...(fails === undefined ? {} : { fault: fails }),
             });
         }
     }
-    const at = (moves: readonly ScrollMove[]): StackPaint[] =>
+    const every: ReadonlySet<number> = new Set(scrollerLinks.keys());
+    const at = (moves: readonly ScrollMove[], piece: Box): StackPaint[] =>
         judged.map((j) => {
             const { dx, dy } = shiftFor(j.carried, moves);
+            if (j.pair !== undefined) return paintAtPiece(j, j.pair, piece, { dx, dy }, shiftFor(every, moves));
             if (dx === 0 && dy === 0) return j;
             return {
                 ...j,
@@ -7201,8 +7258,12 @@ function groundWalkRead(el: HTMLElement, cs: CSSStyleDeclaration, stall: Element
     const rgbText = (rgb: readonly number[]): string => rgb.map((v) => Math.round(v)).join(', ');
     const pictures = new Set<string>();
     let tooMany = 0;
-    for (const { part: i, moves } of parts) {
-        const here = at(moves);
+    // A turn moves a paint differently under each end of the ink: pieces short
+    // enough that it moves none by more than about a pixel (`turnPieces`).
+    const chord = Math.max(0, ...judged.map((j) => j.pair?.chord ?? 0));
+    const pieces = parts.flatMap(({ part, moves }) => turnPieces(part, chord).map((i) => ({ i, moves })));
+    for (const { i, moves } of pieces) {
+        const here = at(moves, i);
         for (const p of picturesShowing(here, i)) {
             if (p.fault !== undefined) out.fault ??= p.fault;
             else pictures.add(p.what);
@@ -7268,7 +7329,12 @@ function groundVerdict(screen: string, label: string, el: HTMLElement, figure: H
  * - a figure under a 10-degree tilt, on a band its tilted box paints, its own
  *   box carrying a no-op turn, must fail: the tilt turns band and figure
  *   together, so it is not folded into the figure's place (the same round's
- *   NEST).
+ *   NEST);
+ * - a figure a scale (and a turn) on the box between carries onto a band
+ *   painted above that box must fail, and with the band under where the figure
+ *   would stand without it, which that transform carries it off, must pass
+ *   (the eighteenth review's SCL3 and CASE-F; D-2026-11-09-07): a read that
+ *   loses the pair's map fails all four.
  * Nothing here is painted: the boxes live inside one synchronous task, on a
  * fixed root at the viewport's corner (`visibility` stays visible, which the
  * walk asks).
@@ -7283,6 +7349,10 @@ function groundSelfCheck(): { cases: number; ms: number; problems: string[] } {
         { name: 'a figure with a band of its ink off it', box: band(70, 20), carrier: '', fails: false },
         { name: 'a figure a transform carries onto that band', box: band(70, 20), carrier: 'transform: translateY(45px)', fails: true },
         { name: 'a figure on a band of a box tilted above it', box: `${band(36, 8)}; transform: rotate(10deg)`, carrier: 'rotate: 0.01deg', fails: true },
+        { name: 'a figure a scale carries onto a band above the scaled box', box: band(60, 30), carrier: 'scale: 1.5; transform-origin: 30px -60px', fails: true },
+        { name: 'a figure a scale carries off a band above the scaled box', box: band(30, 20), carrier: 'scale: 1.5; transform-origin: 30px -60px', fails: false },
+        { name: 'a figure a tilt carries onto a band above the tilted box', box: band(60, 30), carrier: 'transform: rotate(10deg); transform-origin: -200px 10px', fails: true },
+        { name: 'a figure a tilt carries off a band above the tilted box', box: band(30, 20), carrier: 'transform: rotate(10deg); transform-origin: -200px 10px', fails: false },
     ];
     const kept = { own: ownPaintsSeen, above: abovePaintsSeen };
     const stall = document.createElement('div');
