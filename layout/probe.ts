@@ -7334,7 +7334,12 @@ function groundVerdict(screen: string, label: string, el: HTMLElement, figure: H
  *   painted above that box must fail, and with the band under where the figure
  *   would stand without it, which that transform carries it off, must pass
  *   (the eighteenth review's SCL3 and CASE-F; D-2026-11-09-07): a read that
- *   loses the pair's map fails all four.
+ *   loses the pair's map fails all four;
+ * - a figure a shift on its own box, inside a scale on the box between, lands
+ *   on a band above must fail: a chain composed outermost first, or one that
+ *   leaves out the figure's own transform, reads it off the band (the
+ *   nineteenth review's mutants, which every other case and the unit tests
+ *   passed).
  * Nothing here is painted: the boxes live inside one synchronous task, on a
  * fixed root at the viewport's corner (`visibility` stays visible, which the
  * walk asks).
@@ -7344,7 +7349,7 @@ function groundSelfCheck(): { cases: number; ms: number; problems: string[] } {
     const INK = 'rgb(20, 23, 26)';
     const FIGURE_AT = 'position: absolute; top: 30px; right: 0px; width: 60px; height: 20px; margin: 0px; padding: 0px';
     const band = (top: number, height: number): string => `background: linear-gradient(${INK}, ${INK}) 0px ${top}px / 100% ${height}px no-repeat`;
-    const cases: readonly { name: string; box: string; carrier: string; fails: boolean }[] = [
+    const cases: readonly { name: string; box: string; carrier: string; fails: boolean; figure?: string }[] = [
         { name: 'a figure on a ground of its own ink', box: `background: ${INK}`, carrier: '', fails: true },
         { name: 'a figure with a band of its ink off it', box: band(70, 20), carrier: '', fails: false },
         { name: 'a figure a transform carries onto that band', box: band(70, 20), carrier: 'transform: translateY(45px)', fails: true },
@@ -7353,6 +7358,7 @@ function groundSelfCheck(): { cases: number; ms: number; problems: string[] } {
         { name: 'a figure a scale carries off a band above the scaled box', box: band(30, 20), carrier: 'scale: 1.5; transform-origin: 30px -60px', fails: false },
         { name: 'a figure a tilt carries onto a band above the tilted box', box: band(60, 30), carrier: 'transform: rotate(10deg); transform-origin: -200px 10px', fails: true },
         { name: 'a figure a tilt carries off a band above the tilted box', box: band(30, 20), carrier: 'transform: rotate(10deg); transform-origin: -200px 10px', fails: false },
+        { name: 'a shift inside a scale lands the figure on a band: the chain is composed figure first', box: band(86, 14), carrier: 'scale: 2; transform-origin: 0 0', figure: 'transform: translateY(20px)', fails: true },
     ];
     const kept = { own: ownPaintsSeen, above: abovePaintsSeen };
     const stall = document.createElement('div');
@@ -7366,7 +7372,7 @@ function groundSelfCheck(): { cases: number; ms: number; problems: string[] } {
             const carrier = document.createElement('div');
             carrier.style.cssText = `${FIGURE_AT}; ${c.carrier}`;
             const figure = document.createElement('div');
-            figure.style.cssText = 'width: 60px; height: 20px; margin: 0px; padding: 0px';
+            figure.style.cssText = `width: 60px; height: 20px; margin: 0px; padding: 0px; ${c.figure ?? ''}`;
             figure.textContent = '1234';
             carrier.append(figure);
             box.append(carrier);
