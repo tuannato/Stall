@@ -8671,10 +8671,11 @@ with round 7's `attachment !== 'local'`.
 - the positioning area is the element's bounding box (P3-1): for an inline
   split over lines or a block split over columns Chrome places a tile in
   another box (the fragments end to end), so a lone tile can leave a fragment
-  bare and be read as covering it. No money glyph owner a look can tile wraps
-  so today but a broken figure's pieces, whose every longhand
-  `a-broken-figure-wears-the-figures-own-ink` holds; stated in the probe's
-  docblock, not built;
+  bare and be read as covering it. Stated here as harmless because no money
+  glyph owner a look can tile wrapped so but a broken figure's pieces: that was
+  false, `.pay-q` wraps on a tier-3 face, and the box has taken the strict read
+  since the seventeenth review's B2 ("Before 8g2: the seventeenth review's
+  fixes", below);
 - the probe's docblocks (the critic's four corrections to (d)): the contrast
   pass blanks every target's glyphs at once; a look pseudo is read at the
   frozen instant alone, so one animated invisible at 400ms is not read (PSa2);
@@ -14139,12 +14140,16 @@ throw fails the paint and is counted. Owed on every look of every geometry pass
   falls on the stretch of the line the cell lies on, and the stop on either side
   of it, whose colour the ramp there is still a mix of. A pixel of slack each
   way (`STOP_SLACK_PX`). A stop past those is proved elsewhere.
-- Whenever a value is not read (`placeTile` or `placeGradient` undefined), the
-  layer is read as it was, by `layerCovers`: not a conic or repeating gradient,
-  an interpolation written out, a prefixed form, a stop or size past a `calc()`
-  of a length and a percentage, `round`, `space`, a `fixed` or `local` layer, a
-  tile under a pixel. A tile that repeats inside its area stands where it
-  stands, and its stops are read strictly (the engine snaps the period).
+- Whenever a value is not read the layer is read strictly, by one of two roads.
+  Where `placeTile` reads and only the gradient is not (a conic or repeating
+  gradient, an interpolation written out, a prefixed form, a stop past a
+  `calc()` of a length and a percentage; and a tile that repeats inside its
+  area, which stands where it stands while the engine snaps its period): every
+  stop, over the tile's own band. Where `placeTile` is undefined (a size or a
+  position past such a `calc()`, `round`, `space`, a `fixed` or `local` layer, a
+  tile under a pixel; since the seventeenth review a box in more than one
+  fragment): `layerCovers`, every stop where the tiles are proved to paint, and
+  absent too over the rest of the clip area.
 
 Rural's 3,324 go for the reason the critic's RING1 proved was the only one: the
 tag's padding puts the figure 13px and more from a hole at `9px 50%`, past the
@@ -14168,7 +14173,10 @@ never under.
 
 **It is read upright.** A gradient's stops are read in the box's own frame, so
 the read stands every frame upright (`withFramesUpright`): the transforms held at
-`translate(0)`, the three longhands off, `holdOff`'s way. `translate(0)` and not
+a `translate()`, the three longhands off, `holdOff`'s way, and each box at the
+centre its own transforms give it, so a shift between a paint and the figure is
+read (held at `translate(0)` until the seventeenth review's B1, which lost it:
+"Before 8g2: the seventeenth review's fixes", below). A `translate()` and not
 `none`, because a box with a `transform` is the containing block of an absolute
 or fixed figure (`none`, what `withTransformsHeldOff` sets, takes that away and
 moves the figure).
@@ -14297,10 +14305,165 @@ unchanged (93.9–100.1s of tab time).
   of a box outside the walk.
 - A gradient between its stops, and a stop that a tile repeats inside its area
   places (read strictly).
-- A figure in an inline box split over lines or columns: the tile area is its
-  bounding box.
+- A figure in an inline box split over lines or columns: its tiles take the
+  strict read since the seventeenth review; a border or a box shadow Chrome
+  draws per fragment stands on the bounding box (IN3, below).
+- A tilt's turn relative to a paint above the tilted box (CASE-E, below).
 - The geometry above was compared with Chrome's paint on this Mac, once: not
   Linux, DPR above 1, WebKit or Firefox; and no pass paints it for itself.
+
+## Before 8g2: the seventeenth review's fixes (2026-11-09; the owner's D-2026-11-09-05)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/critic17-fixes/`
+(`runs/`, `plants/`, `tools/`); the critic's plants are in `critic17/plants/`. A
+**quick** read is `tools/q.sh` (one probe page at one viewport, the plant alone, on
+a scratch clone, ports 4391/9411); a **whole** read is `tools/run.sh` (the whole
+runner, the three-tab default, the tracked fixture carried, each started at a
+one-minute load under 3).
+
+**B1: the upright hold.** `withFramesUpright` held every box at `translate(0)`, so
+a shift on a box between a paint and the figure was lost: the figure was read where
+it would stand unmoved. The critic's UP2d (`translateY(34px)` on the figure's box,
+an inset band of its ink on the box above) exited 0, the digits ink on ink.
+
+Each box is now taken outermost first, a level of the tree at a time: its centre
+is read with its own transforms on and every box above it held, it is held upright,
+and it is carried back by the difference, a `translate()` written over the hold.
+That is its painted centre where no box above it tilts.
+
+**Where one does it is not, and that is a departure from the decision's words.**
+The decision said each box at its painted centre, and the critic's trial read the
+centre on the screen. That folds a tilt above into a child that merely carries a
+transform. NEST (`plants/NEST-…`: a head tilted 10 degrees, a band of ink it paints
+in its own frame under the figure, a no-op `rotate: 0.01deg` on the figure's box;
+first-party lint clean): 14 failures at `5330e91`, **0 under the trial**, 14 now. On
+the painted page head, band and figure turn together and the digits are on the
+band. It also put the distance out of the box's own frame on Rural's tilts: a price
+cell against its tilted row drifts 1.0–1.5px from layout under this hold, which is
+the cell's own sway about its left origin, and up to 2.0px with 0.3px sideways under
+the trial (`runs/frames-check-{fix,trial}.log`). What the critic's far-origin plant
+needs is kept: a box's own far-origin tilt moves its centre, and that is measured.
+
+**Checked in Chrome on planted boxes** (`tools/expr-frames.js`, `runs/frames-check-fix.log`):
+the put-back restores an inline `transform`, an inline `!important` one and no `style`
+attribute where there was none, over the value the second write set (and a test,
+`holdOff.test.ts`); a box with `transition: transform 10s` reads no mid-transition
+value in the hold, computes `transition-property: none` there, and has no animation
+during it or after it (TR1, UP2d with that transition, stays 14 red; a transition
+already running is cancelled by the hold, as `holdOff` says, its mid value kept as
+the place); an absolute and a fixed child keep the offsets a shifted box's
+containing block gives them, and one under a box with `rotate` alone, which stays
+at `translate(0)`; a child of a 10-degree box stands at its layout offset (130, 0)
+where the screen says (128.0, 22.6); nested shifts add; a keyframe's transform,
+seeked, is the place the hold keeps. **The keyframe offsets call the same hold**:
+KF1 (the same move at 45–55% of a 1000s run, off every instant, beside a custom
+property so the seek is made; the kit's road, the first-party lint refuses the
+custom property) fails the ground read at its two offsets now (3a's tally 28, the
+14 rows at each) and read 0 from it at `5330e91`, red there only by `keyframeHeld`.
+
+**B2: a tile on a box in more than one fragment.** `boxPaintsOf` placed a tile on
+the element's bounding rect, while Chrome lays the fragments end to end and positions
+the tile on that strip. A box with more than one client rect now asks no `placeTile`.
+**Beyond the trial**: on such a box a lone tile proves no cover, since the strip can
+run past where the tile stops. IN2 (a white tile 200px long on the quote face's split
+inline, 190px wide, over a ground of its ink, on phones): bare Modern reads 0 at
+`5330e91` and under the trial, both the tile read as covering the box and hiding the
+ground; now 2 (the plant's one failure at `5330e91` is the After hours mood's white
+ink on the white tile, not this).
+
+**`the-ground-read-fails-a-planted-ground`** (`groundSelfCheck`, the review's item 1).
+The owe asks only that an element was counted, so a read that answers nothing exited
+0. Once a page, after every paint, the real `groundWalkRead` under the real
+`withFramesUpright` goes through four planted boxes on a fixed root, removed in a
+`finally`: a figure on a ground of its own ink (must fail on the ground), a band of
+its ink off it (must pass), the same figure carried onto that band by a transform on
+a box between (must fail, B1), a figure on a band of a 10-degree box with a no-op
+turn on its own box (must fail, NEST's class). Its answer is one of the page's
+failures; the runner fails a page with no record of it and prints the count and the
+time (32.9ms over the 15 pages of the clean run).
+
+### Red proofs
+
+Whole runs, exit 1, each alone, at the code's commit (`48ce71b`; the only code
+change after it is one docblock):
+
+| Plant or mutant | Failures | Runtime | Load at start |
+|---|---|---|---|
+| UP2d | desktop 14, mobile 14, the dress rule | 226.0s | 1.91 |
+| IN1b | mobile 2, narrow 2, the dress rule | 229.2s | 2.71 |
+| M1 (`groundWalkRead` answers nothing) | 3 on each of the 15 pages, the self-check | 219.1s | 2.75 |
+| M3 (no ink read) | 3 on each of the 15 pages, the self-check | 230.3s | 2.94 |
+
+Quick reads (`runs/queue1.txt`), failures of the read at 390 unless noted:
+
+| Plant | Reads | Note |
+|---|---|---|
+| UP4 (`translate:` longhand), UP3b (0.5 degrees about a far origin) | 14, 14 | 0 and 0 at `5330e91` |
+| UPREL, BXA (controls) | 14, 14 | as before |
+| IN1 | 2 | 0 at `5330e91` |
+| NEST | 14 | 0 under the trial |
+| IN2 | 2 | above |
+| TR1 | 14 | a transition on the transform |
+| KF1 | 14, 3a's tally 28 | the ground read at the offsets |
+| N1, W1, W3, W4, W5 | 25 each | unchanged |
+| W1c, W3c (controls) | 0, 0 | unchanged |
+| CBG3 | 5 | unchanged |
+| FX (1920, canvas) | 13 | unchanged |
+| SZ | 35 | unchanged |
+
+The self-check's other mutants, quick: the hold carrying no box back (B1 undone), 1
+(the transform case); each box at its centre on the screen (the trial), 1 (the tilt
+case); every box read strictly, 1 (the band off the figure must pass) and 30 others;
+`boxPaintsOf` holding no paints, 3.
+
+### The clean tree
+
+Whole, at `afbf51b` (only `.md` files follow it), the three-tab default, the tracked
+fixture carried: **exit 0, 236.3s of 300**, one-minute load 2.79 at the start (the
+five-minute 3.96). 0 failures on every pass, the read's element counts those of the
+bind (5,246 / 5,663 / 8,791 / 8,994 / 7,122 / 6,729 / 7,122 ×5 / 3,832 / 706 and
+40), 0 of too many choices, 0 thrown; the planted cases read on 15 of 15 pages.
+
+### Under the private look at 0x04's selection
+
+The whole runner, exit 1, 234.8s, load 2.83 (`runs/w-selected.log`), `t-inkwash`
+carried: mobile 24, desktop 55, narrow 155, short 7, contrast 1a 24, 3 figures under
+3:1, the failures it already had; 3a fails nothing on any pass; the planted cases
+read on 16 of 16 pages.
+
+### The kit's probe
+
+Skeleton exit 0 (15.9s, load 2.72), Rural starter exit 0 (59.2s, load 2.77), Neo
+starter exit 0 (82.9s, load 2.94).
+
+### Cost
+
+236.3s, 5.3s above 231s, so no A/B pair against `5330e91` was run; that base read
+224.0s at a load of 1.50 (the critic's run), so what the whole-run difference says
+is mixed with the machine's state. The read's own clock, summed over the passes:
+20.7s at `5330e91` and 22.3s here. The contrast pass, which this round does not
+touch, read 105.5s there and 108.3s here.
+
+### Not read, stated
+
+- **A tilt's turn relative to a paint above the tilted box.** The hold places a box
+  once, and inside the tilt is right for what that box and its children paint. A tilt
+  about the box's own centre carries an off-centre figure over a paint above the
+  tilted box by the arm times the sine of the angle: about 30px at 10 degrees and a
+  175px arm, under 2px on Rural's rows. CASE-E (a 10-degree head, transparent, a band
+  on the row above where the figure lands; lint clean): 0 failures at `82bfd46`,
+  `5330e91`, under the critic's trial and now, the digits half on the band. PLAN §
+  Open, 3a's list, with its options.
+- **A split inline's borders and shadows.** IN3 (a bottom border on the quote face's
+  inline figure; lint clean): Chrome draws it per fragment and line 1's band lies under
+  line 2's glyphs, the second line ink on ink, and the read's one bottom band stands
+  below the last line. 0 failures at `82bfd46`, `5330e91` and now.
+- **A keyframe that turns a box above about a far origin.** A written shift in a
+  keyframe is refused at its value (KF2, 14, "a transform that moves it"); a turn has
+  no shift in its matrix and is `SEEK_NEEDLESS` on a box above (KF3: `rotate: 0.5deg`
+  about an origin 3,850px off, between two instants, over UP2d's band: 0, lint clean).
+- UP4, UP3b, UPREL, BXA, NEST, IN2, TR1, KF1, KF2 and KF3 were read at 390 on one page,
+  not through the whole runner.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

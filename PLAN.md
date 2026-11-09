@@ -1569,6 +1569,44 @@ money path this app can have, because nothing on it is derived.
   4. **Read under the private look at 0x04's selection at the bind:** 0 failures
      of this read, 0 of too many choices, every pass read; the run's known
      failures are unchanged (PROBE-RULES names them by rule).
+  5. **A keyframe that turns a box above stays unread.** `transform`, `rotate`,
+     `scale`, `translate` and the offset longhands are `SEEK_NEEDLESS` on a box
+     above. A written shift in a keyframe is refused at its value (`keyframeHeld`;
+     KF2, `transform: translateY(34px)` between two instants: 14 failures, "a
+     transform that moves it"), but a turn about a far origin has no shift in its
+     matrix and carries the figure with nothing reading it (KF3, `rotate: 0.5deg`
+     about an origin 3,850px off, between two instants, over a band of its ink: 0
+     failures, lint clean). The seventeenth review's B1 fix (`withFramesUpright`,
+     each box at the centre its own transforms give it) covers the frozen instant
+     and an offset seeked for another reason (KF1), not this.
+  6. **The geometry check against Chrome lives only in scratch files**
+     (`placeTile`, `tileBand`, `placeGradient`, `stopsOver` against Chrome's
+     paint: the bind's 24 cases, the seventeenth critic's 34 more, 0 wrong). Not
+     in `test:layout`; worth a place there as a self-check.
+  7. **A tilt's turn relative to a paint above the tilted box, the owner's call.**
+     The hold places each box once, and inside the tilt is right for what that
+     box and its children paint. A tilt about the box's own centre carries an
+     off-centre figure over what is painted above the tilted box, by the arm
+     times the sine of the angle: about 30px at the 10-degree limit and a 175px
+     arm, under 2px on Rural's rows. CASE-E (a 10-degree head, transparent, a
+     band on the row above where the figure lands) reads 0 failures at
+     `82bfd46`, `5330e91`, under the critic's trial and now, with the digits
+     half on the band. Option (a), read per pair, the ink placed in each
+     paint's own box through the transforms between them (about 30 lines by my estimate, a pure
+     half to test): closes it exactly. Option (b), grow the ink by the arm's reach
+     for a paint above a tilted box: fails closed, some false reds at large
+     tilts. Option (c), leave it stated: free. Recommendation: (a), before a
+     look ships a tilt over a few degrees.
+  8. **A split inline's borders and shadows stand on its bounding box.** IN3 (a
+     bottom border on the quote face's inline figure): Chrome draws it per
+     fragment, line 1's band lies under line 2's glyphs, 0 failures at `82bfd46`,
+     `5330e91` and now, the second line ink on ink. The seventeenth review's B2
+     fix is about tiles. Option (a), read each side's band per client rect; (b),
+     state it. Recommendation: (a), in the same round as item 7.
+  **Closed by the seventeenth review's fixes** (D-2026-11-09-05): a shift between a
+  paint and the figure, lost by the upright hold (B1, UP2d); a tile on a box in
+  more than one fragment, placed on the bounding box (B2, IN1b); a dead ground
+  read that exited 0 (`the-ground-read-fails-a-planted-ground`).
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,
