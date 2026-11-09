@@ -10,10 +10,11 @@ import { describe, expect, it } from 'vitest';
 import { qrMatrix } from '../src/domain/qr';
 import { QR_SVG_QUIET_MODULES, qrSvg } from '../src/ui/render';
 import { MODULE_SNAP_OFFSETS, MODULE_SNAP_SIZES, matrixBits, matrixOfPath, moduleSnapText } from './codeMatrix';
+import { ADDR } from './fixtures';
 
 const TEXTS = [
-    'ecash:qz2708636snqhsxu8wnlka78h6fdp77ar59jrf5035?amount=12.34&op_return_raw=04535454502000112233',
-    'https://stall.cash/s/qz2708636snqhsxu8wnlka78h6fdp77ar59jrf5035',
+    `${ADDR}?amount=12.34&op_return_raw=04535454502000112233`,
+    `https://stall.cash/s/${ADDR.slice('ecash:'.length)}`,
     'x',
 ];
 
