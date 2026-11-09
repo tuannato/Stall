@@ -77,11 +77,13 @@ code, the buy and pay controls, the seller's address, and the bytes of a
 record a seller is about to sign. Nothing may paint over them at any width,
 push them past the edge of the screen, or leave them below 3:1 contrast
 against what is actually painted behind them. *(The kit — `workshop:probe`
-reads whether anything covers, cuts or fades this on every screen and state
-it paints, and reads the contrast, and the digits where a box is moved near
-a figure or a figure is broken, in pixels at 390, 1280 and 1920 wide on the
-screens it samples; Stall checks the rest at intake, such as a pointer's hover, a
-turned wall and a screen the kit does not measure. And `workshop:lint` refuses the ways to paint text in
+reads whether anything cuts or fades the prices and text here on every
+screen and state it paints, and whether anything covers them on the first
+screen there; and, at 390, 1280 and 1920 wide on the screens it samples,
+what stands below the first screen, the codes, the contrast, and the digits
+where a box is moved near a figure or a figure is broken; Stall checks the
+rest at intake, such as a pointer's hover, a turned wall and a screen the
+kit does not measure. And `workshop:lint` refuses the ways to paint text in
 a colour the probe does not read: `-webkit-text-fill-color`,
 `-webkit-text-stroke`, `background-clip: text`.)*
 
@@ -106,8 +108,8 @@ pointer's hover, a turned wall and a screen the kit does not measure.)*
 **QR codes stay black on white, with their quiet margin.** Only the box
 around a code may take your look. *(The kit — `workshop:probe` catches
 most of what could cover a code on the screens and states it paints, and
-reads a code's colours, its margin and its modules; Stall checks the rest
-at intake.)*
+reads a code's colours, and on the screens it samples its margin and
+modules; Stall checks the rest at intake.)*
 
 **No page scrolls sideways, and no words run under a control or past the
 edge of their box.** *(The kit.)*
