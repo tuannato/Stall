@@ -6154,11 +6154,8 @@ function moneySelfClipFaults(screen: string, label: string): Failure[] {
  *   round 8 for `fixed`); the positioning area is the element's bounding
  *   box, which for an inline split over lines or a block split over columns
  *   is not the box Chrome places a tile in (it lays the fragments end to
- *   end), so a lone tile over such a box can leave a fragment bare and be
- *   read as covering it — no money glyph owner a look can tile wraps so but
- *   a broken figure's pieces, whose every longhand
- *   `a-broken-figure-wears-the-figures-own-ink` holds (the critic's P3-1 on
- *   round 7); a
+ *   end), so such a box takes the strict read (the seventeenth review's B2:
+ *   `.pay-q` wraps on a tier-3 face, and a look may tile it); a
  *   `dashed`, `dotted` or `double` border paints its band in part and is
  *   read as its colour over the whole band; a 3D border — `inset`,
  *   `outset`, `groove`, `ridge` — paints two other shades of its colour
