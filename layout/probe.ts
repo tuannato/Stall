@@ -6958,7 +6958,9 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
  *
  * It is read with every transform from the figure to the stall held upright
  * (`withFramesUpright`), so a stop's distance is a distance in the box's own
- * frame: Rural tilts its rows and sways its tag.
+ * frame (Rural tilts its rows and sways its tag), and each box at the centre
+ * its own transforms give it, so a shift between a paint and the figure is
+ * read (the seventeenth review's B1).
  *
  * **Not read, stated**: a part of a figure out of its scroller's view at any
  * scroll but the one that brings it to the nearest edge of the view; a clip
@@ -6987,22 +6989,76 @@ let walkChainsSeen = new Map<Element, ClipLink[]>();
  * What the transforms are held at for the ground read: upright, and each box
  * still a transformed box, so an absolute or fixed figure keeps the containing
  * block a `transform` gave it (`withTransformsHeldOff` sets `none`, which
- * takes it away).
+ * takes it away). A box its own transforms moved is then held at a
+ * `translate()` of that distance (`withFramesUpright`), still a transformed box.
  */
 const UPRIGHT: Readonly<Record<string, string>> = { transform: 'translate(0)', rotate: 'none', scale: 'none', translate: 'none' };
 
-/** Run `read` with every transform on `els` held upright, and put each back (`holdOff`). */
+/**
+ * Run `read` with every transform on `els` held upright, each box still where
+ * its own transforms put its centre, and put each back (`holdOff`).
+ *
+ * **Where a box stands in the hold** (the seventeenth review's B1,
+ * D-2026-11-09-05): held at `translate(0)`, a box stood where it would stand
+ * unmoved, so a shift on a box between a paint and the figure was lost and the
+ * figure was read off the band the page paints it on (the critic's UP2d, the
+ * digits ink on ink and the whole runner green). So the boxes are taken
+ * outermost first, a level of the tree at a time (boxes of one level do not
+ * move each other): a box's centre is read with its own transforms on and
+ * every box above it already held, it is held upright, and it is carried back
+ * by the difference. That is its painted centre where no box above it tilts.
+ *
+ * **Where one does, it is not the centre on the screen, on purpose**: a tilt
+ * above turns everything under it together, so a child's place inside a tilted
+ * box is its layout place, and folding the tilt into the child (each box read
+ * at its centre on the screen, the critic's trial) moved a child that merely
+ * carries a transform off the band its tilted parent paints under it (NEST: a
+ * 10-degree head, a no-op `rotate` on the figure's box, red at `5330e91`, green
+ * under the trial, digits ink on ink) and put a stop's distance out of the
+ * box's own frame on Rural's tilts.
+ *
+ * **Not read, stated**: a box above a tilted box. A tilt about the box's own
+ * centre carries an off-centre figure relative to what is painted above the
+ * tilted box, by up to the arm times the sine of the angle (about 30px at
+ * `DRESS_TILT_DEG` and a 175px arm, under 2px on Rural's rows), and the hold
+ * has no one place for a figure that is right for a paint inside the tilt and
+ * one above it (PLAN § Open, 3a's list).
+ */
 function withFramesUpright<T>(els: Iterable<HTMLElement>, read: () => T): T {
-    const turned = [...els].filter((el) => {
+    const turned = [...new Set(els)].filter((el) => {
         const cs = getComputedStyle(el);
         return cs.transform !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none' || cs.translate !== 'none';
     });
     if (turned.length === 0) return read();
-    const putBack = holdOff(turned, UPRIGHT);
+    const centre = (el: Element): readonly [number, number] => {
+        const r = el.getBoundingClientRect();
+        return [(r.left + r.right) / 2, (r.top + r.bottom) / 2];
+    };
+    const levels = new Map<number, HTMLElement[]>();
+    for (const el of turned) {
+        let depth = 0;
+        for (let up = el.parentElement; up !== null; up = up.parentElement) depth += 1;
+        const level = levels.get(depth);
+        if (level === undefined) levels.set(depth, [el]);
+        else level.push(el);
+    }
+    const putBack: (() => void)[] = [];
     try {
+        for (const depth of [...levels.keys()].sort((a, b) => a - b)) {
+            const level = levels.get(depth)!;
+            const own = level.map(centre);
+            putBack.push(holdOff(level, UPRIGHT));
+            level.forEach((el, i) => {
+                const [x, y] = centre(el);
+                const dx = own[i]![0] - x;
+                const dy = own[i]![1] - y;
+                // `holdOff` kept the box's inline `transform` before this write, and puts that back.
+                if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) el.style.setProperty('transform', `translate(${dx}px, ${dy}px)`, 'important');
+            });
+        }
         return read();
     } finally {
-        putBack();
+        for (const back of putBack.reverse()) back();
     }
 }
 

@@ -151,4 +151,21 @@ describe('a-hold-holds-the-transitions-and-puts-them-back', () => {
         expect(el.style.getPropertyPriority('transition-property')).toBe('important');
         expect(el.style.getPropertyValue('rotate')).toBe('');
     });
+
+    it('puts back what the page had over a value written during the hold (`withFramesUpright` carries a box at a second `transform`)', () => {
+        const inline = document.createElement('div');
+        inline.style.setProperty('transform', 'translateY(34px)');
+        const important = document.createElement('div');
+        important.style.setProperty('transform', 'translateY(21px)', 'important');
+        const bare = document.createElement('div');
+        document.body.append(inline, important, bare);
+        const putBack = holdOff([inline, important, bare], { transform: 'translate(0)' });
+        for (const el of [inline, important, bare]) el.style.setProperty('transform', 'translate(1px, 2px)', 'important');
+        putBack();
+        expect(inline.style.getPropertyValue('transform')).toBe('translateY(34px)');
+        expect(inline.style.getPropertyPriority('transform')).toBe('');
+        expect(important.style.getPropertyValue('transform')).toBe('translateY(21px)');
+        expect(important.style.getPropertyPriority('transform')).toBe('important');
+        expect(bare.hasAttribute('style')).toBe(false);
+    });
 });
