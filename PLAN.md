@@ -321,7 +321,9 @@ working accept, and there is no accept.
   a lower reading is gone on about 92 jobs). 1a does not hit-test a point
   behind a scroller's clip (it is counted, and `CLIP_SKIP_CEILING`, 0.3,
   fails a pass over it; D3 (a) of D-2026-10-20-06, the owner's), so a pay
-  code below the first screen on a phone is hit-tested by nothing.
+  code below the first screen is hit-tested only on a contrast job, whose
+  shot is grown to hold the page; at 360 and on a geometry-only screen it is
+  hit-tested by nothing (the eighteenth review's correction).
 - **A code's modules are read in pixels, and a turned code is read upright
   or fails closed (1d; owner, 2026-10-26, 2026-10-29 and 2026-11-09:
   D-2026-10-26-04, D-2026-10-29-01 and D-2026-11-09-01, all as recommended;
@@ -374,7 +376,7 @@ working accept, and there is no accept.
 - **The ground under a money figure is read to the stall, where its stops
   and tiles fall (3a; owner, 2026-10-28: D-2026-10-28-01 J1, J3 and J4; by
   recommendation, 2026-11-09: D-2026-11-09-04, D-2026-11-09-05 and
-  D-2026-11-09-06).** The dress rule reads every paint under the figure up
+  D-2026-11-09-07).** The dress rule reads every paint under the figure up
   to and including its stall, and a ground under 3:1 against the ink (a
   cell of half opacity or more, `DRESS_GROUND_ALPHA`) fails. A tile stands
   where its size and position put it, a stop bears on a cell only where its
@@ -383,14 +385,22 @@ working accept, and there is no accept.
   (`groundStackFault` is replaced); on the clean tree 3,339 false failures,
   3,324 of them Rural's punch-hole ring, went to 0. A box that stands in
   more than one fragment is read strictly and none of its tiles counts as
-  covering (D-2026-11-09-05 and D-2026-11-09-06). Each box is held at the
-  centre its own transforms give it, outermost first (D-2026-11-09-06,
-  option (a); reading it at the centre on the screen was refused, because
-  it let a figure covered inside a tilted box pass). Each run plants a
-  ground and the read must fail it (`the-ground-read-fails-a-planted-ground`).
-  **Costs, stated:** about 4.5 seconds of wall time; a box painted above a
-  tilted box has its relative turn unread (up to about 30px at 10° and a
-  175px arm, under 2px on Rural); and **a background that moves on a box
+  covering (D-2026-11-09-05). **Each paint is read by what separates it from
+  the figure** (D-2026-11-09-07, the eighteenth review): every box is held
+  upright in one flat frame, each box's transform read first, and a paint on
+  a box is placed in the ink's frame through the transforms strictly below
+  that box, per piece of ink (a transform at the painting box or above moves
+  paint and figure both and cancels; a shift or a scale is exact, a turn is
+  cut into pieces it moves by about a pixel). It replaced holding each box
+  at one place (D-2026-11-09-06), which went wrong three times for one
+  reason, a figure needs two places, one for a paint inside a transformed box
+  and one for a paint above it (UP2d, SCL3, CASE-E, CASE-F). Each run plants
+  grounds and the read must fail and pass them
+  (`the-ground-read-fails-a-planted-ground`). **Costs, stated:** about 4.5
+  seconds of wall time at the bind (the per-pair read's own is in
+  PROBE-RULES); a clip on a box above a transform is read in the flat frame,
+  and a gradient's stops under a scale between it and the figure are read
+  strictly; and **a background that moves on a box
   above a figure (its position or size, between two reads) is not read**
   (D-2026-11-09-04: reading it would add about 7.5 seconds, 225.2 to 234.8,
   and doing it after the port, when time allows, was the recommendation;
@@ -439,21 +449,33 @@ working accept, and there is no accept.
   about 480 MiB swapped at three tabs), and the run's ceiling stays 300
   seconds.
 - **The kit README's labels, and what stays "most" (owner, 2026-10-20:
-  D-2026-10-20-06 D1 (c), D2, D3 (a), D4 (b) and D5 (a), as recommended;
-  done at step 10 of the before-8g2 chapter).** "Most" was kept until the
-  reads above bound. "Money is never covered, cut or faded" now says the
-  kit's probe reads whether anything covers, cuts or fades the protected
-  boxes on every screen and state it paints, and reads the contrast, and
-  the digits where a box is moved near a figure or a figure is broken, in
-  pixels at 390, 1280 and 1920 wide on the screens it samples. That is
-  weaker than the plain "the digits", because 1c reads where its trigger
-  finds a mover and the contrast pass skips the geometry-only screens.
-  "The whole price is never dressed to misread" takes the label of "A price
-  is dressed as one piece". **The QR paragraph keeps "most" for covering**
-  (D4 (b)): 1a hit-tests nothing behind a scroller's clip, so a pay code
-  below the first screen on a phone is not, and reading it at scroll stops
-  (D3 (b)) was not chosen; the paragraph now also says the probe reads a
-  code's colours, margin and modules. D5 (a) is the state belt, above.
+  D-2026-10-20-06 D1 (c), D2, D3 (a) and D4 (b), as recommended; the money
+  label's wording by recommendation, 2026-11-09: D-2026-11-09-07; done at
+  step 10 of the before-8g2 chapter and scoped at the eighteenth review).**
+  "Most" was kept until the reads above bound. "Money is never covered, cut
+  or faded" now says the kit's probe reads whether anything cuts or fades
+  the prices and text on every screen and state it paints, and whether
+  anything covers them on the first screen there; and, at 390, 1280 and 1920
+  wide on the screens it samples, what stands below the first screen, the
+  codes, the contrast, and the digits where a box is moved near a figure or
+  a figure is broken. That is weaker than the wording it replaced ("covers,
+  cuts or fades this on every screen and state it paints"), which promised
+  more than the kit reads: a cover below the first screen on a geometry-only
+  screen passes the kit's probe (`kit-BF1`) and so does a fade on a box
+  above a code on one (`kit-KQF1`). 1c reads where its trigger finds a
+  mover, and the contrast pass skips the geometry-only screens. **The QR
+  paragraph keeps "most" for covering** (D4 (b)): 1a hit-tests nothing
+  behind a scroller's clip, so below the first screen a pay code is
+  hit-tested only on a contrast job and at 360 and on a geometry-only
+  screen not at all, and reading it at scroll stops (D3 (b)) was not chosen.
+  **Whose wording:** D4 (b) is the split of the README's label and "most"
+  on the QR paragraph. The QR paragraph's clause on what the probe reads of
+  a code ("reads a code's colours, and on the screens it samples its margin
+  and modules") and "The whole price is never dressed to misread" taking
+  the label of "A price is dressed as one piece" are the window's, under
+  the owner's standing instruction of 2026-10-30. D5 (a) of D-2026-10-20-06
+  was the block list for a state rule, which D-2026-10-20-08 replaced with
+  the allow-list (the state belt, above).
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
@@ -1741,30 +1763,57 @@ money path this app can have, because nothing on it is derived.
      (`placeTile`, `tileBand`, `placeGradient`, `stopsOver` against Chrome's
      paint: the bind's 24 cases, the seventeenth critic's 34 more, 0 wrong). Not
      in `test:layout`; worth a place there as a self-check.
-  7. **A tilt's turn relative to a paint above the tilted box, the owner's call.**
-     The hold places each box once, and inside the tilt is right for what that
-     box and its children paint. A tilt about the box's own centre carries an
-     off-centre figure over what is painted above the tilted box, by the arm
-     times the sine of the angle: about 30px at the 10-degree limit and a 175px
-     arm, under 2px on Rural's rows. CASE-E (a 10-degree head, transparent, a
-     band on the row above where the figure lands) reads 0 failures at
-     `82bfd46`, `5330e91`, under the critic's trial and now, with the digits
-     half on the band. Option (a), read per pair, the ink placed in each
-     paint's own box through the transforms between them (about 30 lines by my estimate, a pure
-     half to test): closes it exactly. Option (b), grow the ink by the arm's reach
-     for a paint above a tilted box: fails closed, some false reds at large
-     tilts. Option (c), leave it stated: free. Recommendation: (a), before a
-     look ships a tilt over a few degrees.
-  8. **A split inline's borders and shadows stand on its bounding box.** IN3 (a
+  7. **A split inline's borders and shadows stand on its bounding box.** IN3 (a
      bottom border on the quote face's inline figure): Chrome draws it per
      fragment, line 1's band lies under line 2's glyphs, 0 failures at `82bfd46`,
      `5330e91` and now, the second line ink on ink. The seventeenth review's B2
      fix is about tiles. Option (a), read each side's band per client rect; (b),
-     state it. Recommendation: (a), in the same round as item 7.
-  **Closed by the seventeenth review's fixes** (D-2026-11-09-05): a shift between a
-  paint and the figure, lost by the upright hold (B1, UP2d); a tile on a box in
-  more than one fragment, placed on the bounding box (B2, IN1b); a dead ground
-  read that exited 0 (`the-ground-read-fails-a-planted-ground`).
+     state it. Recommendation: (a).
+  8. **A clip above a transform is read in the flat frame.** The per-pair read
+     (D-2026-11-09-07) places paints, and the clips that cut the ink and each
+     paint are still read with every box upright: a figure a scale or a tilt
+     carries past an `overflow` on a box above the transform is read as if it
+     stood where layout puts it. A figure cut there on the page is read as
+     ink the page does not paint, and one the flat clip cuts and the page
+     does not is left unread. Reading each clip through the transforms below
+     its box, as the paints are, is the fix; not built.
+  **Closed by the seventeenth review's fixes** (D-2026-11-09-05): a tile on a box
+  in more than one fragment, placed on the bounding box (B2, IN1b); a dead
+  ground read that exited 0 (`the-ground-read-fails-a-planted-ground`).
+  **Closed by the eighteenth review's fix** (D-2026-11-09-07, the per-pair
+  read): a shift, a scale or a tilt between a paint and the figure. This list
+  said CASE-E "reads 0 failures at `82bfd46`", and CLAUDE.md §6 "the same at
+  `82bfd46`", as if the tilt were never read: true only of CASE-E's gradient
+  tile band. CASE-F, the same 10-degree tilt with a band the old read did place
+  (an inset box shadow on the row), was 14 failures at `82bfd46` and 0 through
+  the whole runner at `6d49b6e`, so it was a regression like UP2d (B1 of the
+  seventeenth review) and SCL3 (a `scale`, B1 of the eighteenth), all three the
+  one hold giving a box one place. All of them fail now.
+
+- **Before 8g2, after the eighteenth review: what the money reads still do not
+  say** (`private/design/workshop-2026-09-23/before-8g2/CRITIC-18.md`). Open:
+  1. **Liveness for 1a, 1b, the keyframe offsets, the end read and the ground
+     read's call site.** The critic's `tools/mut-dead-reads-1a-1b-keyframes-end.py`
+     drops 1a's verdict in `coverScan`, 1b's failure in `judgeReacher`, makes
+     `offsetDressFaults` and `coverAtEnd` answer nothing and drops the ground
+     verdict at its call site in the dress rule: the whole runner exits 0.
+     `groundSelfCheck` calls `groundWalkRead` directly, so it cannot see that
+     call site, and `dressSeek` and `coverEnd` are printed and owed by nothing.
+     A one-page liveness check for each, about 80 lines; a code regression and
+     not a look, so it did not block (D-2026-11-09-07: after the merge).
+  2. **A cover below the first screen on a geometry-only screen, at 360 and at
+     the wall sizes the contrast pass does not paint** (`kit-BF1`: the last
+     row's picture slid over its own price on `crowded`, the kit's probe exits
+     0; the same plant on the first row exits 1). 1a hit-tests nothing behind a
+     scroller's clip (`clipVerdict`, `layout/coverPoints.ts`), and the contrast
+     pass, which grows its shot to hold the page, does not sample those.
+  3. **A fade on a box above a code on a geometry-only screen** (`kit-KQF1`: a
+     stream code's plate at opacity 0.3 under one `[data-tier]`, the kit's probe
+     exits 0; on a sampled screen 1d fails it). The dress rule's box read
+     (`BOX_HELD`) holds a box above a money figure; `a-code-is-drawn-black-on-white`
+     reads the code's own boxes and no box above them.
+  4. **CI's two-tab dispatch** (D6 of D-2026-10-20-06): 263.6s of 300 on this
+     Mac at load 2.32 (the eighteenth review), unmeasured on `ubuntu-latest`.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

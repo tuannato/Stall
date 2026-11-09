@@ -14000,8 +14000,8 @@ zones already carry), the trigger's list of the nodes it met, and one
 ## Before 8g2: the sixteenth review's fixes (2026-11-09; CRITIC-16, the owner's D-2026-11-09-01 and D-2026-11-09-02)
 
 Evidence is under `private/design/workshop-2026-09-23/before-8g2/critic16-fixes/`
-(`runs/`, `plants/`, `tools/`); the paths below are relative to it. Scratch
-clone at `/private/tmp/c16f/tree`, ports 4391/9411, one probe at a time.
+(`runs/`, `plants/`, `tools/`); the paths below are relative to it. A scratch
+clone, ports 4391/9411, one probe at a time.
 
 **B1: a mask on a turned code's chain fails the code closed.**
 `uprightCornerTravel` bounded how far the held frame moves the code against
@@ -14099,7 +14099,7 @@ by the old rule, no weaker than before.
 The first three ran at `c405c05`/`028e70d`, before item 5; the mutations at
 `028e70d`.
 
-## Before 8g2: 3a binds (2026-11-09; the owner's D-2026-10-28-01 J1(a), J2, J3 and J4, the twelfth critic's items 3 and 4 and its `tooMany`)
+## Before 8g2: 3a binds (2026-11-09; the owner's D-2026-10-28-01 J1(a), J3 and J4; the twelfth critic's J2 (too many choices fails once the clean tree reads none), its items 3 and 4 and its `tooMany`)
 
 Its evidence is under `private/design/workshop-2026-09-23/before-8g2/3a-bind/`
 (`runs/`, `plants/`, `tools/`); the paths below are relative to it. A **quick**
@@ -14453,7 +14453,10 @@ touch, read 105.5s there and 108.3s here.
   175px arm, under 2px on Rural's rows. CASE-E (a 10-degree head, transparent, a band
   on the row above where the figure lands; lint clean): 0 failures at `82bfd46`,
   `5330e91`, under the critic's trial and now, the digits half on the band. PLAN §
-  Open, 3a's list, with its options.
+  Open, 3a's list, with its options. **Corrected by the eighteenth review**: that 0
+  at `82bfd46` is true of CASE-E's gradient tile band alone, a value the old read did
+  not place; CASE-F, the same tilt over an inset box shadow, was 14 at `82bfd46`, so
+  this was a regression and not an older gap (below, the eighteenth review's fixes).
 - **A split inline's borders and shadows.** IN3 (a bottom border on the quote face's
   inline figure; lint clean): Chrome draws it per fragment and line 1's band lies under
   line 2's glyphs, the second line ink on ink, and the read's one bottom band stands
@@ -14464,6 +14467,127 @@ touch, read 105.5s there and 108.3s here.
   about an origin 3,850px off, between two instants, over UP2d's band: 0, lint clean).
 - UP4, UP3b, UPREL, BXA, NEST, IN2, TR1, KF1, KF2 and KF3 were read at 390 on one page,
   not through the whole runner.
+
+## Before 8g2: the eighteenth review's fixes (2026-11-09; D-2026-11-09-07)
+
+Its evidence is under `private/design/workshop-2026-09-23/before-8g2/critic18-fixes/`
+(`runs/`, `plants/`, `tools/`; `runs/summary.txt` is the index); the critic's plants
+are in `critic18/plants/`, the older ones in `critic17/` and `critic17-fixes/`. A
+**quick** read and a **whole** read are as in the seventeenth round's entry, on a
+scratch clone, ports 4391/9411, one probe at a time.
+
+**The change of model.** The upright hold gave every box one place, and a figure
+needs two: one for a paint inside a transformed box and one for a paint above it.
+Three holds in a row went wrong for that reason: a shift (UP2d), a `scale` on the head
+under a band the row paints (SCL3, the whole runner green, "100" reading "10") and a
+tilt (CASE-F, CASE-E). So `withFramesUpright` no longer places a box at all. It reads
+each box's full transform before the hold (`translate`, `rotate`, `scale` and
+`transform` in CSS's order, about its `transform-origin`; the engine composes a
+longhand's percentage or `calc()`), holds every box at `translate(0)`, and hands
+the maps to `groundWalkRead` on `framesHeld`. A transform on a box moves that box and
+everything inside it, so a paint on box j and the figure are both moved by every
+transform at j and above, and those cancel: only the transforms strictly below j
+separate them (`pairFrame`, innermost first). Each paint is put into the ink's frame
+per piece of ink by `paintAtPiece`: `rect' = c + (rect − mapped) / scale`, where `c` is
+the piece's centre and `mapped` where that centre stands in the painting box's frame,
+the same shape as a scroll's move. NEST (a tilted head's own band under its figure)
+stays red, because that tilt moves both; UP2d, SCL3, CASE-E and CASE-F go red, because
+theirs moves only the figure against the row's band.
+
+**Where it departs from the sketch.** A turn cuts the ink along both axes, not along
+its length alone: a turn moves a point sideways by its height as well (`turnPieces`,
+half a piece's side at most `1 / chord`, 5.7px at 10 degrees, at most 64 pieces). A
+scale needs no pieces: the formula is exact for one. A transform this read cannot take
+apart fails closed only where a paint stands above it. A box of a display that takes
+no transform (`inline`, `contents`) is given none, because `getComputedStyle` still
+writes the matrix there.
+
+### Red proofs
+
+Whole runs, each alone, at the code's commit (`6c31580`; only `.md` files follow it):
+
+| Plant or mutant | Exit | Failures | Runtime | Load at start |
+|---|---|---|---|---|
+| SCL3 | 1 | mobile 14, the dress rule | 241.0s | 2.81 |
+| CASE-F | 1 | mobile 14, the dress rule | 245.3s | 2.90 |
+| UP2d | 1 | mobile 14, desktop 14, the dress rule | 234.6s | 2.91 |
+| the pair mapping removed (`tools/mut-no-pair.py`) | 1 | 5 on each of the 15 pages, the self-check: the shift, the scale onto a band, the scale off one, the tilt onto one, the tilt off one | 233.2s | 2.74 |
+
+The same five sentences on one quick page with the transforms read after the hold
+(`tools/mut-after-hold.py`), so the capture's order is held too. `pnpm test` exit 0
+(vitest 2,557; node 1,228 pass, 0 fail, 1 skip), both `tsc`s and `pnpm build` exit 0.
+
+Quick reads (`runs/quick-final.txt`), failures at 390 unless noted, load 3.1 to 5.9:
+
+| Plant | Reads | Note |
+|---|---|---|
+| CASE-E | 7 | bare Modern alone: on the worn variant Pinstripe's own rule moves the row's `background-position`, and the band stands at the row's top, off the figure |
+| NEST, UP4, UP3b, UPREL, BXA, TR1 | 14 each | as before |
+| KF1 | 14 | the ground read fails at both offsets too (3a's tally 28) |
+| KF2 | 14 | "a transform that moves it" |
+| KF3 | 0 | a keyframe turn about a far origin stays unread (`SEEK_NEEDLESS`) |
+| IN1, IN2 | 2, 2 | as before |
+| N1, W1, W3, W4, W5 | 25 each | as before |
+| W1c, W3c (controls) | 0, 0 | as before |
+| CBG3 | 5 ground reads, 19 in all | as before |
+| FX (1920, canvas) | 13 | as before |
+| SZ | 35 | as before |
+| SCL2 (control) | 14 ground, 210 in all | the band under the unscaled figure |
+| SCL1 | 0 | correct: on the painted page the figure stands 31px right of the band; it is the word "from" that stands on it |
+
+### Against Chrome
+
+Once, on planted boxes through the real hold and the real walk (`tools/chrome-check.mjs`,
+`runs/chrome-check.txt`), a figure on a row under eight arrangements: none, a 10-degree
+tilt either way, a 1.25 `scale`, a 34px shift, a tilt with a scale inside it, the three
+longhands with a percentage `translate`, and a tilt with the band painted by the tilted
+box itself. A band of the figure's ink was swept in 2px steps from the bottom and from
+the right. Where the read says the ink's centre stands on the page is within 0.5px of the
+centre of the painted pixels in every case. The read and the painted pixels first meet
+at the same step, or one step apart, on all sixteen sweeps (the right-edge sweeps are
+one step off with no transform too: the ink box's right edge is the text's advance,
+and a glyph stops short of it). Not covered: a device pixel ratio over 1, another
+browser, a gradient band (a solid inset shadow only), a clip above the transform, a
+scroller, a proportional face.
+
+### The clean tree
+
+Whole, at `6c31580`, the three-tab default, the tracked fixture carried: **exit 0,
+232.0s of 300**, one-minute load 1.61 at the start. 0 failures on every pass, the read's
+element counts those of `6d49b6e` (5,246 / 5,663 / 8,791 / 8,994 / 7,122 / 6,729 / 7,122
+×5 / 3,832 / 706 and 40), 0 of too many choices, 0 thrown; the 8 planted cases read on
+15 of 15 pages (75.2ms over the passes).
+
+### Under the private look at 0x04's selection
+
+The whole runner, exit 1, 238.7s, load 2.88 (`runs/w-selected.log`), `t-inkwash`
+carried: mobile 24, desktop 55, narrow 155, short 7, contrast 1a 24, 3 figures under
+3:1, the failures it already had; the planted cases read on 16 of 16 pages.
+
+### The kit's probe
+
+Skeleton exit 0 (16.5s, load 2.79), Rural starter exit 0 (62.4s, load 2.79), Neo
+starter exit 0 (84.2s, load 2.81).
+
+### Cost
+
+No A/B pair: 232.0s is under the seventeenth round's 236.3s. The read's own clock,
+summed over the passes: 21.88s at `6d49b6e` (the critic's clean run) and 21.67s here.
+
+### Not read, stated
+
+- **A clip above a transform.** The clips that cut the ink and each paint are read in
+  the flat frame. A figure a scale or a tilt carries past an `overflow` on a box above
+  the transform is read as if it stood where layout puts it. PLAN § Open, 3a's list.
+- **The turn inside one piece of ink,** about a pixel, more past `TURN_PIECES_CAP`.
+- **A gradient's stops under a scale** between it and the figure: read strictly, every
+  stop over the tile's own band, which can only fail more.
+- **A scroller inside a transformed box:** its scroll is read at scale 1, unturned.
+- **The order of the chain at its call site** is held by one unit test of `pairFrame`
+  and by the Chrome check's nested scene, not by the self-check: a mutant reversing the
+  chain would pass the whole runner.
+- SCL2, SCL1, UP4, UP3b, UPREL, BXA, NEST, IN2, TR1 and KF1 to KF3 were read at 390 on
+  one page, not through the whole runner.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 
@@ -15134,14 +15258,20 @@ sixth review; the rest of a filter is as it was).
 ## Step 10: the kit README's labels (D4(b) of D-2026-10-20-06)
 "Most" was kept on the kit README's three money labels until the reads bound
 (1a at 7a, 1b at 7b, 1d at 7c, 1c(c) at 7d, 3a). They have, and the labels
-changed with a test pin (`a-look-may-not-dress-a-figures-pieces`): "Money is
-never covered, cut or faded" says the kit's probe reads whether anything
-covers, cuts or fades the protected boxes on every screen and state it
-paints and reads the contrast, and the digits where a box is moved near a
-figure or a figure is broken, in pixels at 390, 1280 and 1920 wide on the
-screens it samples (weaker than "the digits": 1c's trigger, D-2026-10-30-02,
-and the geometry-only screens); "The whole price is never dressed to
-misread" takes "A price is dressed as one piece"'s label. The QR paragraph
-keeps "most" for covering, since a pay code below the first screen on a phone
-is never hit-tested (D3(a)), and now says the probe reads a code's colours,
-margin and modules. No rule changed.
+changed with a test pin (`a-look-may-not-dress-a-figures-pieces`), and the
+eighteenth review scoped them again (D-2026-11-09-07): "Money is never
+covered, cut or faded" says the kit's probe reads whether anything cuts or
+fades the prices and text here on every screen and state it paints, and
+whether anything covers them on the first screen there; and, at 390, 1280 and
+1920 wide on the screens it samples, what stands below the first screen, the
+codes, the contrast, and the digits where a box is moved near a figure or a
+figure is broken (the critic's `kit-BF1`, a cover below the first screen on
+`crowded`, and `kit-KQF1`, a fade on a box above a code on a geometry-only
+screen, each exit 0 on the kit's probe; 1c's trigger is D-2026-10-30-02); "The
+whole price is never dressed to misread" takes "A price is dressed as one
+piece"'s label, which is true of a scale on a box above the figure only since
+this round's per-pair ground read. The QR paragraph keeps "most" for covering:
+a pay code below the first screen is hit-tested only on a contrast job, whose
+shot is grown to hold the page (at 360 and on a geometry-only screen not at
+all; D3(a)), and it says the probe reads a code's colours, and on the screens
+it samples its margin and modules. No rule changed.
