@@ -1395,6 +1395,20 @@ money path this app can have, because nothing on it is derived.
      Its cause is not known.
   3. **`judgeReacher`'s pin pins text**: 1b's list above, item 7.
 
+- **Before 8g2, the sixteenth review's open list** (`private/design/workshop-2026-09-23/before-8g2/CRITIC-16.md`
+  §6; built at its fixes round, `layout/PROBE-RULES.md`, "Before 8g2: the
+  sixteenth review's fixes", D-2026-11-09-01 and -02). Closed: B1 (a mask, a
+  mask border, a clip-path or a clip on a turned code's chain fails the code
+  closed), the dead-trigger self-check, the asymmetric-padding centre and the
+  canvas undercount (1c(c)'s item 4). Open:
+  1. **A mask over a turned code is red** until option (c) of the critic's J1
+     exists: read a turned code on the painted frame at rotated sample points,
+     dropping the held frame for it. A round's work; wanted only if a look
+     ever needs a mask above a turned code.
+  2. **Not verified**: Linux and CI, a device pixel ratio over 1, WebKit and
+     Firefox, a real phone scanning a masked code, PRM2 and PCT on the kit's
+     probe.
+
 - **Before 8g2, the fifteenth review's open list** (the critic's "For PLAN §
   Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-15.md`; the
   rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
