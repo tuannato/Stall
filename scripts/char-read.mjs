@@ -183,6 +183,19 @@ export function turnRef(shown, turn) {
     return chosen;
 }
 
+/**
+ * The divisor of one money node's shares (D-2026-11-09-02): the median share of the node's held characters, or 1 where that is
+ * under 1 or there is nothing to take it of. A one-character node's median is its own share, so it is divided by itself where it is
+ * over 1 and left alone where it is not: a share over 1 is over the cut either way. Pure.
+ */
+export function nodeScale(shares) {
+    if (shares.length === 0) return 1;
+    const sorted = [...shares].sort((x, y) => x - y);
+    const mid = sorted.length >> 1;
+    const median = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    return Math.max(1, median);
+}
+
 /** A character's kind, for the distribution: a digit, a letter, or anything else. */
 export const charKind = (c) => (/\p{N}/u.test(c) ? 'digit' : /\p{L}/u.test(c) ? 'letter' : 'other');
 
@@ -199,6 +212,7 @@ export function readMoneyChars(blank, shown, moneyChars) {
     for (const t of moneyChars.targets) {
         const read = { i: t.i, sel: t.sel, chars: t.chars.length, would: [] };
         out.targets.push(read);
+        const held = [];
         for (const ch of t.chars) {
             out.chars += 1;
             if (ch.w <= 0 || ch.h <= 0) {
@@ -225,10 +239,17 @@ export function readMoneyChars(blank, shown, moneyChars) {
             }
             const ref = turned ? turnRef(mask, ch.turn).ref : ch.ref;
             out.held += 1;
-            const share = kept / ref;
-            out.shares.push({ share, kind: charKind(ch.c), ref, c: ch.c, sel: t.sel, turned });
-            if (share < CHAR_KEEP_CUT) {
-                const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept, ref, why: `it keeps ${kept} of its ${ref} reference pixel(s)${turned ? ' (the largest phase of its turn its shown pixels match within the margin of the best)' : ''}, ${share.toFixed(2)} of them, under ${CHAR_KEEP_CUT}` };
+            held.push({ ch, kept, ref, turned, share: kept / ref });
+        }
+        // The canvas reference undercounts the page on a light ink over a dark ground (the 99th-percentile share is 1.75 to 2.15 there), so
+        // a node that loses most of a glyph can still read over the cut. Each share is divided by its node's own median, where that is
+        // over 1 (`nodeScale`; D-2026-11-09-02), so a node whose reference is not undercounted is left as it was.
+        const scale = nodeScale(held.map((h) => h.share));
+        for (const { ch, kept, ref, turned, share } of held) {
+            const norm = share / scale;
+            out.shares.push({ share: norm, raw: share, kind: charKind(ch.c), ref, c: ch.c, sel: t.sel, turned });
+            if (norm < CHAR_KEEP_CUT) {
+                const w = { sel: t.sel, c: ch.c, x: ch.x, y: ch.y, kept, ref, why: `it keeps ${kept} of its ${ref} reference pixel(s)${turned ? ' (the largest phase of its turn its shown pixels match within the margin of the best)' : ''}, ${share.toFixed(2)} of them${scale > 1 ? `, ${norm.toFixed(2)} of them beside the node's median of ${scale.toFixed(2)}` : ''}, under ${CHAR_KEEP_CUT}` };
                 read.would.push(w);
                 out.would.push(w);
             }

@@ -22,6 +22,7 @@ import {
     inkOf,
     maskBits,
     mergeShares,
+    nodeScale,
     readCharsAgain,
     readMoneyChars,
     shareQuantile,
@@ -94,6 +95,49 @@ describe('a character is held to its own reference (charKept, readMoneyChars)', 
         // Ten covered: exactly half, kept.
         let m = 0;
         assert.equal(readMoneyChars(BLANK, shownWith(() => (m += 1) <= 10), { targets: [target([ch()])], prepared: 1 }).would.length, 0);
+    });
+    it('divides a node’s shares by its median where that is over 1, and leaves a node whose median is not alone (D-2026-11-09-02)', () => {
+        // Three glyphs of 20 pixels at x = 5, 15 and 25; `lost` pixels of the third are hidden from the shown frame.
+        const frame = (lost) =>
+            image(40, 30, (set) => {
+                let n = 0;
+                for (const x0 of [5, 15, 25]) {
+                    for (let y = 10; y < 15; y += 1) for (let x = x0; x < x0 + 4; x += 1) if (x0 !== 25 || (n += 1) > lost) set(x, y, [0, 0, 0]);
+                }
+            });
+        const node = (ref) => ({ targets: [target([5, 15, 25].map((x0) => ch({ x: x0 - 0.5, ref, c: String(x0) })))], prepared: 3 });
+        // Reference 10 on a page that paints 20: shares 2, 2 and 0.8 (12 of the third's pixels lost). The median is 2, the third is 0.4 of the node's own scale: held.
+        const light = readMoneyChars(BLANK, frame(12), node(10));
+        assert.deepEqual(light.would.map((w) => w.c), ['25']);
+        assert.match(light.would[0].why, /0\.80 of them, 0\.40 of them beside the node's median of 2\.00, under 0\.5/);
+        assert.deepEqual(light.shares.map((x) => [x.raw, x.share]), [[2, 1], [2, 1], [0.8, 0.4]]);
+        // Without the node's scale (the old read) that third character passed at 0.8.
+        assert.ok(0.8 >= CHAR_KEEP_CUT);
+        // Reference 20: shares 1, 1 and 0.4: a median of 1 divides by 1, and the read is the old one, sentence included.
+        const exact = readMoneyChars(BLANK, frame(12), node(20));
+        assert.deepEqual(exact.would.map((w) => w.c), ['25']);
+        assert.doesNotMatch(exact.would[0].why, /median/);
+        // Reference 40: shares 0.5, 0.5 and 0.2 and a median under 1: nothing is lifted, and the node's two whole glyphs are kept at exactly half.
+        const heavy = readMoneyChars(BLANK, frame(12), node(40));
+        assert.deepEqual(heavy.would.map((w) => w.c), ['25']);
+        assert.deepEqual(heavy.shares.map((x) => x.share), [0.5, 0.5, 0.2]);
+        // The hole: where most of a node's characters are covered, its median falls under 1 and nothing is lifted (the old read, no weaker).
+        const most = readMoneyChars(BLANK, frame(0), { targets: [target([ch({ x: 4.5, ref: 10, c: 'a' }), ch({ x: 14.5, ref: 25, c: 'b' }), ch({ x: 24.5, ref: 25, c: 'c' })])], prepared: 3 });
+        assert.deepEqual(most.shares.map((x) => x.share), [2, 0.8, 0.8]);
+        assert.equal(most.would.length, 0);
+    });
+    it('takes the median of one character as its own share: divided by itself over 1, untouched under it', () => {
+        assert.equal(nodeScale([]), 1);
+        assert.equal(nodeScale([2]), 2);
+        assert.equal(nodeScale([0.4]), 1);
+        assert.equal(nodeScale([0.9, 3, 2]), 2);
+        assert.equal(nodeScale([1, 3]), 2);
+        const single = readMoneyChars(BLANK, shownWith(), { targets: [target([ch({ ref: 10 })])], prepared: 1 });
+        assert.equal(single.shares[0].share, 1);
+        assert.equal(single.would.length, 0);
+        let n = 0;
+        const lost = readMoneyChars(BLANK, shownWith(() => (n += 1) <= 16), { targets: [target([ch({ ref: 10 })])], prepared: 1 });
+        assert.equal(lost.would.length, 1);
     });
     it('reads each character on its own: one digit covered fails though its line holds plenty', () => {
         // Two glyphs, the second covered whole: a per-line count of 20 over two characters would pass at 10 a character.
