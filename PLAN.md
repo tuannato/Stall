@@ -1340,9 +1340,14 @@ money path this app can have, because nothing on it is derived.
      P45 (a 45° turn about the code's own centre, its corners past a mask)
      passed a check of the centre alone. Since then a code that holding the
      turn off moves at any corner more than 1.5 modules fails closed for
-     both reads (`uprightCornerTravel`), so what the held frame does not see
-     is a mask or a clip cutting at most 1.5 modules of the painted code's
-     edge, inside its quiet zone; on the clean tree a corner of Rural's
+     both reads (`uprightCornerTravel`). **A mask, a mask border, a clip-path
+     or a clip on the chain fails the code closed** (the sixteenth review's
+     B1, D-2026-11-09-01): the held frame puts the masking box back with
+     everything else, so it moves the mask against the code while the code
+     stands still (PRM2: 45px of every Modern pay code masked off at travel
+     0.00 modules; PCT: the matrix's first two rows at 1.45), and the 1.5
+     module bound said nothing of it. What the bound still covers is a box
+     whose place the held frame changes with no mask on the chain; on the clean tree a corner of Rural's
      Cycle codes moves 0.99 modules, of its wall code 0.55. A transition
      already running on one of those boxes is cancelled by the hold and does
      not resume (observed in Chrome by the fifteenth critic on the heirs

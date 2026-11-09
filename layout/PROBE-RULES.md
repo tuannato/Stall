@@ -13806,14 +13806,22 @@ that only turns (`turnOnly`) maps the code's square by one turn and one
 move, so each corner stands on the job's frame at the painted centre (the
 centre of its turned bounds) plus the upright half-diagonal turned by the
 zone's angle, and on the upright frame at the upright centre plus that
-half-diagonal; the travel is exact for such a frame and never more than the
-centre's travel plus 2·sin(θ/2) of the half-diagonal, the bound the critic
+half-diagonal; the travel is exact for such a frame (the painted centre is the
+code's content box's: the zone carries `pad`, the content box's offset from
+the border box's centre, and the travel turns it by the zone's angle) and
+never more than the centre's travel plus 2·sin(θ/2) of the half-diagonal, the bound the critic
 proposed (`how far the frame held upright moves a turned code` in
 `scripts/code-modules.test.mjs` holds both). A displacement that is one
 turn and one move is largest at a corner, so no point of the code moves
-more than 1.5 modules on a code read upright: what the held frame does not
-see is a mask or a clip that cuts at most 1.5 modules of the painted code's
-edge, inside its 4-module quiet zone. The runner says, for each code read
+more than 1.5 modules on a code read upright. **That did not bound a mask**
+(the sixteenth review's B1): the held frame puts a masking box on the chain
+back with everything else, so a mask moves against the code while the code
+stands still, and this paragraph's earlier sentence, that a mask or a clip
+the frame does not see cuts at most 1.5 modules of the painted code's edge,
+inside its 4-module quiet zone, was false (PRM2 cut 6 to 9 modules at travel
+0.00, PCT 1.9 modules into the matrix). A mask or clip-path on the chain now
+fails the code closed ("Round 16", below); what the bound still covers is a
+box whose place the frame changes with no mask on the chain. The runner says, for each code read
 upright, the most a corner moved ("1d and the quiet zone, the most a corner
 of each code read upright moved between its frame and the upright one").
 
@@ -13824,7 +13832,8 @@ held upright reads; all three read upright, white and right. The critic's
 bound, the centre's travel plus the turn's, put the Cycle codes at about
 1.04 modules. (This paragraph gave the modules as 6.12px and 7.35px, the
 critic's figures; the runner's own travel in modules puts them nearer 6.06
-and 7.24.)
+and 7.27, the held frame's modules 6.061 and 7.273; the sixteenth review's
+item 3.)
 
 ### Items 1 and 2: the trigger is owed its own walk, and a node it met reads a character or fails
 
