@@ -296,6 +296,164 @@ working accept, and there is no accept.
   underline on hover. The kit lint is unchanged; a pointer's hover is checked
   at intake. Probe and lint cannot be a complete fence against a look written
   to cheat; what they leave is stated and checked at intake.
+- **Nothing covers money, with or without a hit area (1a and 1b; owner,
+  2026-10-20 to 2026-10-29: D-2026-10-20-13 (1) and (2), D-2026-10-26-01,
+  D-2026-10-27-03 and D-2026-10-29-01, all as recommended).** The probe asks
+  every money node and every protected box, on every geometry pass, with
+  `pointer-events` forced on (1a), and reads every paint that has no hit
+  area (a shadow, an outline, a neighbour's underline, a blur) for how far
+  it reaches past its box (1b). Both fail the run. The points over a glyph's
+  ink are at most 3px apart down its centre and along its middle row
+  (`INK_LINE_PITCH`): a thin band over half a digit of a price at a phone's
+  width had passed until then (the critic's PB). A finite animation filled
+  forwards is asked again at its end. A blurred layer counts where the
+  composite reaches 0.2 (`BLUR_OPACITY`), and a reach that meets a protected
+  box by more than 1px fails. One reach is accepted by name: Rural's sign
+  board over the address plate at the desk (a real overlap, 142 would-be
+  failures at 1280, a plate that stays legible), keyed on the kind, the
+  tags, the classes, the computed shadow and the target, with a composite
+  ceiling of **0.25** (D-2026-10-29-01: at 0.23 half a pixel of drift turned
+  142 passes into failures). Raising the general threshold to 0.25 was
+  refused, since it would take a 4.5:1 figure to about 2.9:1. **Costs,
+  stated:** the denser points added about 6.5 to 7 seconds (2.17 million
+  probes to 4.66 million), paid back by cutting the horizon's worst-case
+  read to its three pinned jobs (about 15 to 17 seconds; its guard against
+  a lower reading is gone on about 92 jobs). 1a does not hit-test a point
+  behind a scroller's clip (it is counted, and `CLIP_SKIP_CEILING`, 0.3,
+  fails a pass over it; D3 (a) of D-2026-10-20-06, the owner's), so a pay
+  code below the first screen on a phone is hit-tested by nothing.
+- **A code's modules are read in pixels, and a turned code is read upright
+  or fails closed (1d; owner, 2026-10-26, 2026-10-29 and 2026-11-09:
+  D-2026-10-26-04, D-2026-10-29-01 and D-2026-11-09-01, all as recommended;
+  by recommendation under the owner's standing instruction of 2026-10-30:
+  D-2026-10-30-01 and D-2026-10-31-01).** On every contrast job each
+  module's centre pixel of every code is held to the matrix `qrSvg` drew: a
+  dark centre above 10 or a light one under 245 on any channel fails, and a
+  module under 3 device pixels fails closed. A rule on every geometry pass
+  holds every code to black on white with its modules where `qrSvg` put
+  them, and the quiet zone is read white. The kit's probe owes every
+  `CODES_REQUIRED` code to both reads, as the public looks do (a turn of
+  0.01° had taken a pay code out of both). A code in a turned frame is read
+  on a frame with every transform held off, and only where its frame does
+  nothing but turn (2D, orthonormal, positive determinant), no corner of
+  the code moves more than 1.5 modules when the turn is held off
+  (`UPRIGHT_TRAVEL_MODULES`) and no mask, mask border or clip stands on its
+  chain; otherwise it fails closed and says why. **Cost, stated:** a look
+  that wants a mask over a turned code is red until a read on the painted
+  frame at rotated sample points exists (D-2026-11-09-01 (a); its option
+  (c) was not built). A code on a geometry-only screen, at the wall sizes
+  the contrast pass does not paint and at 360 is not read in pixels.
+  Builder choices cited here: D-2026-10-30-03, D-2026-10-31-02 and
+  D-2026-11-09-03.
+- **Every money character is read where a mover is near, and not on every
+  money job (1c; owner, 2026-10-20: D-2026-10-20-06 D1; by recommendation
+  from 2026-10-30: D-2026-10-30-02 and D-2026-10-31-01; owner, 2026-11-09:
+  D-2026-11-09-02).** On a contrast job whose paint holds a moved,
+  sticky or absolute box, a motion path or an animation that sets more
+  than an ink, a ground or an opacity near a money node, each character of
+  the node is read on its own against a reference drawn in the page: under
+  half of it (`CHAR_KEEP_CUT`, 0.5) fails, and a reference under 6 pixels
+  (`CHAR_REF_MIN`) is counted and not held, **so a decimal point or a comma
+  at a small size is not held: stated, and kept.** On a turned frame the
+  reference is the largest count among the phases whose masks match within
+  0.2 (`TURN_MATCH_MARGIN`). A job the trigger fired on that read no
+  character, a touched node with every character dropped and a job whose
+  prepare answered no trigger all fail, and the trigger is owed per look
+  and per viewport. Each run plants a mover and the trigger must find it
+  (`the-trigger-fires-on-a-planted-mover`). Each character's share is
+  divided by its node's median where that is over 1 (D-2026-11-09-02):
+  measured on the clean tree with every money job read, 0 characters under
+  the cut and the least normalised share 0.545. The critic's figure of
+  three quarters of a stroke passing was not what the measurement found;
+  the true gap was a band of 0.375 to 0.5, and it is closed. **The owner's
+  D1 (a), reading every money job, is measured and not built** (+27 to +37
+  seconds on a run of about 222 to 241 against a ceiling of 300); the
+  trigger costs about 0.4 seconds of wall time at three tabs. **Not read,
+  stated:** a cover placed by stacking alone, an unmoved box's reach and a
+  cover of under half a glyph.
+- **The ground under a money figure is read to the stall, where its stops
+  and tiles fall (3a; owner, 2026-10-28: D-2026-10-28-01 J1, J3 and J4; by
+  recommendation, 2026-11-09: D-2026-11-09-04, D-2026-11-09-05 and
+  D-2026-11-09-06).** The dress rule reads every paint under the figure up
+  to and including its stall, and a ground under 3:1 against the ink (a
+  cell of half opacity or more, `DRESS_GROUND_ALPHA`) fails. A tile stands
+  where its size and position put it, a stop bears on a cell only where its
+  gradient line falls, and a value the read cannot parse is read the strict
+  way. One model serves the dress rule and the older ground read
+  (`groundStackFault` is replaced); on the clean tree 3,339 false failures,
+  3,324 of them Rural's punch-hole ring, went to 0. A box that stands in
+  more than one fragment is read strictly and none of its tiles counts as
+  covering (D-2026-11-09-05 and D-2026-11-09-06). Each box is held at the
+  centre its own transforms give it, outermost first (D-2026-11-09-06,
+  option (a); reading it at the centre on the screen was refused, because
+  it let a figure covered inside a tilted box pass). Each run plants a
+  ground and the read must fail it (`the-ground-read-fails-a-planted-ground`).
+  **Costs, stated:** about 4.5 seconds of wall time; a box painted above a
+  tilted box has its relative turn unread (up to about 30px at 10° and a
+  175px arm, under 2px on Rural); and **a background that moves on a box
+  above a figure (its position or size, between two reads) is not read**
+  (D-2026-11-09-04: reading it would add about 7.5 seconds, 225.2 to 234.8,
+  and doing it after the port, when time allows, was the recommendation;
+  § Open has it).
+- **Money is read at every keyframe and at the end of a lasting animation
+  (owner, 2026-10-26: D-2026-10-26-03 (1), as recommended).** Every
+  animation on a money node, on an element under it with text or on a box
+  above it is seeked alone to each keyframe offset and to 0 and 1, and the
+  figure's held dress, its ground and its cut text are read there. This
+  closes PT2 (a keyframe that made the ink transparent for part of a cycle)
+  and PF2 (a cover that slides in at the end of a run and stays). The end
+  read is pruned where nothing asked can be covered. **Cost, stated:** the
+  end read cost about 7 to 8 seconds of page time over the geometry passes
+  before the prune and about 1 second after, and the keyframe offsets 4.2;
+  what lies between two offsets, and two animations at once, are not read.
+- **First-party look sheets are fenced where no pass paints (owner,
+  2026-10-20 to 2026-10-27: D-2026-10-20-07, D-2026-10-20-13 (3),
+  D-2026-10-26-03 (2), D-2026-10-26-04, D-2026-10-27-01 and
+  D-2026-10-27-02, all as recommended).** In a first-party look sheet no
+  transition or keyframe changes the size, spacing, zoom or scale of a
+  money node (D-2026-10-20-07, widened from `font-size`); no keyframe sets
+  `display`, `content-visibility`, `visibility` or `all`
+  (D-2026-10-20-13 (3) added `visibility`), an inherited ink or a custom
+  property (D-2026-10-26-03 (2)), a background or a shadow; SVG paint
+  stands only on a drawn icon (D-2026-10-26-04); and there is no anchor
+  positioning at all (D-2026-10-27-01), because a box placed by `anchor()`
+  follows its anchor's transform and carried the pay figure out of its clip
+  (the critic's PAN). The probe reads that road too, and the kit's
+  `workshop:probe` refuses every paint whose sheet declares `anchor-name`
+  (D-2026-10-27-02), which closes the family on the kit's side and drops
+  about 28 seconds of extra measuring. **Costs, stated:** no first-party
+  look uses any of these, and the private look at 0x04 passes them; a
+  creator's look cannot use anchor positioning, and the kit's lint admits
+  the rest and leaves it to the probe and to intake. D-2026-10-20-07 also
+  kept, on the owner's word, six Cycle figures at 26 to 31.6px at 1024x768
+  and 11 cards whose wrapped figure stands under half a pixel from the
+  status line.
+- **The probe runs three tabs by default on six cores (owner, 2026-10-27:
+  D-2026-10-27-04; CI's two tabs, 2026-10-20: D-2026-10-20-06 D6).** A
+  machine with at least 6 cores and 8 GiB runs three tabs, 4 or 5 cores two,
+  and anything smaller one (`LAYOUT_CONTRAST_TABS` overrides, and the reason
+  is printed). CI's manual job stays on two. The two further trials the
+  owner asked for passed: 231.0 to 231.6 seconds against 253.4 to 255.5 on
+  two tabs, every verdict identical byte for byte, and memory pressure never
+  reached critical. **Cost, stated:** on 8 GiB the margin is memory (up to
+  about 480 MiB swapped at three tabs), and the run's ceiling stays 300
+  seconds.
+- **The kit README's labels, and what stays "most" (owner, 2026-10-20:
+  D-2026-10-20-06 D1 (c), D2, D3 (a), D4 (b) and D5 (a), as recommended;
+  done at step 10 of the before-8g2 chapter).** "Most" was kept until the
+  reads above bound. "Money is never covered, cut or faded" now says the
+  kit's probe reads whether anything covers, cuts or fades the protected
+  boxes on every screen and state it paints, and reads the contrast, and
+  the digits where a box is moved near a figure or a figure is broken, in
+  pixels at 390, 1280 and 1920 wide on the screens it samples. That is
+  weaker than the plain "the digits", because 1c reads where its trigger
+  finds a mover and the contrast pass skips the geometry-only screens.
+  "The whole price is never dressed to misread" takes the label of "A price
+  is dressed as one piece". **The QR paragraph keeps "most" for covering**
+  (D4 (b)): 1a hit-tests nothing behind a scroller's clip, so a pay code
+  below the first screen on a phone is not, and reading it at scroll stops
+  (D3 (b)) was not chosen; the paragraph now also says the probe reads a
+  code's colours, margin and modules. D5 (a) is the state belt, above.
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
@@ -1010,9 +1168,9 @@ money path this app can have, because nothing on it is derived.
      node and every protected box, on every pass, false reds counted
      before it binds (1a, bound since 7a); and the digit read on every
      money node on the sampled screens (1c(c), bound since 7d, on the jobs
-     where a mover is near: "Before 8g2, 1c(c)'s open list" below). Then
-     whether the README's "most" can go is the owner's (D-2026-10-20-02,
-     -03).
+     where a mover is near: "Before 8g2, 1c(c)'s open list" below). The
+     README's "most" went at step 10 where the reads bound, and stays on
+     the QR paragraph's covering clause (D4(b) of D-2026-10-20-06, § Decided).
   2. **A run under the private look at 0x04's selection** (`pnpm test` and
      the whole runner), with its sheet grepped first for a `fixed` or
      `local` background attachment near money (now read as possibly
@@ -1309,8 +1467,8 @@ money path this app can have, because nothing on it is derived.
   3. **Codes not read in pixels**: every code on a geometry-only screen, at
      the wall sizes the contrast pass does not paint, and at 360 — the
      quiet zone's own list, 507 painted codes on the clean tree. So the QR
-     paragraph's "most" stands (D4, the critic's P2-7) unless a pay code below
-     the first screen is read at scroll stops too (D3(b)).
+     paragraph keeps "most" for covering (D4(b), the critic's P2-7) unless a
+     pay code below the first screen is read at scroll stops too (D3(b)).
   4. **The payload is held only on the wall's plate.** 1d reads the matrix
      off the path's `d`, the one `qrSvg` drew from `qrMatrix(text)`; the app
      carries a code's text in the DOM only on the touch wall's plate
