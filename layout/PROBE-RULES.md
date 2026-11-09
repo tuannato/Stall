@@ -14583,11 +14583,44 @@ summed over the passes: 21.88s at `6d49b6e` (the critic's clean run) and 21.67s 
 - **A gradient's stops under a scale** between it and the figure: read strictly, every
   stop over the tile's own band, which can only fail more.
 - **A scroller inside a transformed box:** its scroll is read at scale 1, unturned.
-- **The order of the chain at its call site** is held by one unit test of `pairFrame`
-  and by the Chrome check's nested scene, not by the self-check: a mutant reversing the
-  chain would pass the whole runner.
+- **The order of the chain at its call site** was read by nothing that ran at this
+  round's commit: `pairFrame`'s unit test feeds the function directly and the Chrome
+  check is a one-off that nothing reruns. A mutant reversing the chain passed the whole
+  runner (the nineteenth review, below). The nineteenth review's ninth case holds it now.
 - SCL2, SCL1, UP4, UP3b, UPREL, BXA, NEST, IN2, TR1 and KF1 to KF3 were read at 390 on
   one page, not through the whole runner.
+
+## Before 8g2: the nineteenth review (2026-11-09)
+
+Its report is `private/design/workshop-2026-09-23/before-8g2/CRITIC-19.md`, its evidence
+`before-8g2/critic19/`, this entry's `before-8g2/critic19-fixes/runs/`. It passed the
+per-pair read: 1,000 random transform chains of 1 to 5 nested boxes against Chrome's
+pixels gave 0 wrong verdicts where the painting box is not inline (scratch,
+`critic19/tools/fuzz.mjs`; device pixel ratio 1, a monospace figure; no border, outer
+shadow, conic gradient, scroller or clip above a transform).
+
+**The chain's order held by nothing that ran.** A mutant reversing the chain at its call
+site (`below.unshift`) passed the whole runner, exit 0, 233.8s, and `layout/groundStack.test.ts`,
+and it is a live risk: on `crowded` at 390, a shift inside a scale over a band on the row
+reads 14 ground failures with the real read and 0 under the mutant. A mutant leaving
+the figure's own transform out of the chain passed the eight cases too. So the self-check
+gained a ninth case: `translateY(20px)` on the figure, `scale: 2` about the carrier's
+corner, the band at 86 to 100 of the row.
+
+| Self-check, one probe page (`runs/selfcheck.txt`) | Cases | Problems |
+|---|---|---|
+| clean, at `1375c55` | 9 | 0 |
+| chain reversed at the call site | 9 | 1, the ninth case |
+| the figure's own transform left out | 9 | 1, the ninth case |
+
+Whole, at `1375c55`, the three-tab default, the tracked fixture carried: exit 0, 233.2s of
+300, one-minute load 1.43 at the start, the 9 planted cases read on 15 of 15 pages (60.9ms
+over the passes). `pnpm test` exit 0 (vitest 2,557; node 1,228 pass, 0 fail, 1 skip), both
+`tsc`s and `pnpm build` exit 0. The kit's probe and the private look's selection were not
+run again: the commit adds one case to a check no look's sheet reaches.
+
+**Moved to PLAN § Open:** the strict read's false red when a gradient with a stop under
+3:1 stands above a `scale`.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

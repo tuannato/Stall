@@ -385,7 +385,7 @@ working accept, and there is no accept.
   (`groundStackFault` is replaced); on the clean tree 3,339 false failures,
   3,324 of them Rural's punch-hole ring, went to 0. A box that stands in
   more than one fragment is read strictly and none of its tiles counts as
-  covering (D-2026-11-09-05). **Each paint is read by what separates it from
+  covering (D-2026-11-09-05 and D-2026-11-09-06). **Each paint is read by what separates it from
   the figure** (D-2026-11-09-07, the eighteenth review): every box is held
   upright in one flat frame, each box's transform read first, and a paint on
   a box is placed in the ink's frame through the transforms strictly below
@@ -1756,9 +1756,9 @@ money path this app can have, because nothing on it is derived.
      transform that moves it"), but a turn about a far origin has no shift in its
      matrix and carries the figure with nothing reading it (KF3, `rotate: 0.5deg`
      about an origin 3,850px off, between two instants, over a band of its ink: 0
-     failures, lint clean). The seventeenth review's B1 fix (`withFramesUpright`,
-     each box at the centre its own transforms give it) covers the frozen instant
-     and an offset seeked for another reason (KF1), not this.
+     failures, lint clean). A `scale` is in the same list and was not planted.
+     The per-pair read (D-2026-11-09-07) reads a transform at the frozen instant
+     and at an offset seeked for another reason (KF1), not this.
   6. **The geometry check against Chrome lives only in scratch files**
      (`placeTile`, `tileBand`, `placeGradient`, `stopsOver` against Chrome's
      paint: the bind's 24 cases, the seventeenth critic's 34 more, 0 wrong). Not
@@ -1814,6 +1814,16 @@ money path this app can have, because nothing on it is derived.
      reads the code's own boxes and no box above them.
   4. **CI's two-tab dispatch** (D6 of D-2026-10-20-06): 263.6s of 300 on this
      Mac at load 2.32 (the eighteenth review), unmeasured on `ubuntu-latest`.
+  5. **The strict read's false red under a scale** (the nineteenth review,
+     `before-8g2/CRITIC-19.md`; `critic19/plants/kit-STRIPE2-scale.css`). A
+     gradient with a stop under 3:1 against the figure's ink, on a box above a
+     `scale`, is tried at every stop over the tile's own band, so a look with a
+     6px accent rule in its own tokens and `scale: 1.02` on `.item-head` fails
+     the Modern starter with 1,581 lines of "the ground under its glyphs", where
+     the figure stands on the card (the control with no scale exits 0). It takes
+     both a stop under 3:1 and a scale between it and the figure; no shipped look
+     or starter has that. Fix: read the stops through the pair's map instead of
+     strictly. Not built.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,
