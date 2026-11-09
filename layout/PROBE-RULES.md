@@ -15130,3 +15130,18 @@ look. The kit is unchanged. Still accepted in a keyframe (stated, plants `m7`):
 `position`, `float`, `contain`, `overflow`, `height`, `max-height`, `order`,
 `grid-area`, `z-index`, `mix-blend-mode` and `filter` (its `blur()` is capped since the
 sixth review; the rest of a filter is as it was).
+
+## Step 10: the kit README's labels (D4(b) of D-2026-10-20-06)
+"Most" was kept on the kit README's three money labels until the reads bound
+(1a at 7a, 1b at 7b, 1d at 7c, 1c(c) at 7d, 3a). They have, and the labels
+changed with a test pin (`a-look-may-not-dress-a-figures-pieces`): "Money is
+never covered, cut or faded" says the kit's probe reads whether anything
+covers, cuts or fades the protected boxes on every screen and state it
+paints and reads the contrast, and the digits where a box is moved near a
+figure or a figure is broken, in pixels at 390, 1280 and 1920 wide on the
+screens it samples (weaker than "the digits": 1c's trigger, D-2026-10-30-02,
+and the geometry-only screens); "The whole price is never dressed to
+misread" takes "A price is dressed as one piece"'s label. The QR paragraph
+keeps "most" for covering, since a pay code below the first screen on a phone
+is never hit-tested (D3(a)), and now says the probe reads a code's colours,
+margin and modules. No rule changed.
