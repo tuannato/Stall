@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { TRACKED_FIXTURE_CLASS, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { GEOMETRY_PASSES as OWING_GEOMETRY, TRACKED_FIXTURE_CLASS, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
@@ -41,6 +41,8 @@ import {
 } from './process-groups.mjs';
 import { requireCleanKitBuild } from './workshop-build-check.mjs';
 import { QUIET_ZONE_FLOOR, quietReadingLine, readQuietZones } from './quiet-zone.mjs';
+import { MODULE_CHECK, MODULE_DARK_MAX, MODULE_LIGHT_MIN, foldStats, moduleReadingLine, moduleReport, moduleSnapLines, moduleSnapVerdict, readCodeModules, readTurnedUpright, withMatrices } from './code-modules.mjs';
+import { CHAR_CHECK, CHAR_SAID, charReport, charsFault, charsOwedFaults, foldShares, mergeShares, metNodesUnread, readCharsAgain, readMoneyChars } from './char-read.mjs';
 import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
@@ -50,6 +52,7 @@ import {
     CANVAS,
     CONTRAST_PASS,
     GEOMETRY_CANARY,
+    MODULE_SNAP_VIEWPORT,
     PASS_KINDS,
     TRANSPARENCY_PASS,
     VIEWPORTS,
@@ -59,7 +62,7 @@ import {
     runnerPasses,
     viewportOffPlan,
 } from './probe-passes.mjs';
-import { carriedTallyFaults, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
+import { COVER_TALLY_KEYS, carriedTallyFaults, clipCeilingFault, clipLine, coverTally, reachTally, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
@@ -490,6 +493,12 @@ function contrast(la, lb) {
 
 /** `MIN_CONTRAST` in src/domain/theme.ts — below it a colour is a disappearance. */
 const PIXEL_CONTRAST_FLOOR = 3;
+/** A count per tab (`{ 0: 2, 2: 1 }`) said as `tab 0 2, tab 2 1`, or `none`. */
+const byTabSaid = (byTab) =>
+    Object.entries(byTab)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([tab, n]) => `tab ${tab} ${n}`)
+        .join(', ') || 'none';
 /**
  * How far a channel may move inside a protected box between the frame with
  * the look's pseudos and the frame without them before it counts as their
@@ -535,6 +544,20 @@ const LEGACY = process.env.LAYOUT_LEGACY === '1';
  */
 
 // Grid horizon at its worst: the owner's numbers and their verdict (`horizon-worst.mjs`).
+/*
+ * **Read on the three jobs the owner's numbers were read on, and no other**
+ * (D-2026-10-20-13, the owner's D2(a)): a shipped run reads the sign at the
+ * horizon's worst on `HORIZON_WORST`'s three jobs alone, where it read
+ * every job that wore the horizon (94 on the default plan) to hold that no
+ * other job read lower. What is lost, stated: that guard against a
+ * regression on the other jobs — a change that lowers the name, the tagline
+ * or the state line at the horizon's worst on a job that is not one of the
+ * three passes the run. The ring read over the horizon as painted, on every
+ * job that wears it, is the failing guard and is unchanged. A kit run pins
+ * nothing and still reads every job the page owes (`__contrastOwed`).
+ */
+const HORIZON_PINNED_JOBS = new Set(Object.values(HORIZON_WORST).map((at) => at.job));
+const readsHorizonWorst = (key) => LOOKS !== 'shipped' || HORIZON_PINNED_JOBS.has(key);
 
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
@@ -543,8 +566,9 @@ const LEGACY = process.env.LAYOUT_LEGACY === '1';
  * over its box — the rain
  * between its strokes is in the box, and what a reader needs is the ground
  * right against every stroke. So the job is captured once more with the
- * outlined glyphs shown (`__contrastGlyphs`), and for each line of each
- * outlined target:
+ * outlined glyphs shown (`__contrastGlyphs`, the job's one shown frame,
+ * which the broken-figure read shares), and for each line of each outlined
+ * target:
  *
  * - the **glyph mask** is every pixel inside the line's rect (its text
  *   node's characters on one line box, clipped like the box) where the
@@ -630,12 +654,14 @@ const NAMES_COPIED = (await servedSheets({ env: CARRIED.env }))
  */
 const wornClassesSeen = new Set();
 /**
- * Each carried private look's points behind a clip and hit-tested, per
- * geometry pass (`clipByClass` in the page's verdict, 8e2): held to the
- * clip ceiling on its own (`look-tallies.mjs`) where the public looks keep
- * the ratio over theirs.
+ * 1a's tallies per look on every pass that read it (`coverByClass` in the
+ * page's verdict; the contrast pass's own under `contrast`), by pass: each
+ * carried private look is held to the clip ceiling on its own points
+ * (`look-tallies.mjs`, 8e2) where the public looks keep the ratio over
+ * theirs on each pass (`coverClip`). A pass that read 1a on no look (the
+ * short passes) is not here.
  */
-const clipSeen = {};
+const coverSeen = {};
 /**
  * Every code a geometry pass painted, as `pass/screen:name` (the probe's
  * `codesPainted`): the contrast pass lists which of them it read the quiet
@@ -643,10 +669,12 @@ const clipSeen = {};
  */
 const codesPaintedSeen = new Set();
 /**
- * The codes the quiet-zone read owes by name: every code that pays — the
- * pay sheet's and "Pay several"'s at a phone and a desk, the wall's payment
- * plate — and one of each other kind: a record sheet's, the share code, the
- * overlay's and the wall's shop code.
+ * The codes the quiet-zone read and 1d owe by name: every code that pays —
+ * the pay sheet's and "Pay several"'s at a phone and a desk, the wall's
+ * payment plate — and one of each other kind: a record sheet's, the share
+ * code, the overlay's and the wall's shop code. Owed on the public looks'
+ * jobs together, on each carried look's own (`look-tallies.mjs`), and on the
+ * kit's look on its probe (the owner's D-2026-10-29-01).
  */
 const CODES_REQUIRED = [
     'mobile/pay:pay-qr',
@@ -960,8 +988,9 @@ function legacyBand(img, target) {
  * pieces paint, so a look that hid a piece, or made one transparent or
  * faint, would show no digit while the money box's own read — the node's
  * computed ink against the blanked ground — stayed green. Read on a capture
- * with the broken figures' glyphs shown (`__contrastFigureGlyphs`) against
- * the blanked capture, which is the painted ground: for every line of every
+ * with the broken figures' glyphs shown (`__contrastGlyphs`, the job's one
+ * shown frame, which the ring read shares) against the blanked capture (the
+ * job's own), which is the painted ground: for every line of every
  * piece, the glyph pixels (those that moved at least halfway from the
  * ground toward the FIGURE's own ink, never the piece's), each read for its
  * contrast against its own ground pixel the way the line read reads a
@@ -1338,6 +1367,53 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     const codesReadByClass = {};
     let quietPixels = 0;
     const quietReadAgain = [];
+    // 1d (bound since 7c): the module read's tallies, by viewport and look, and its failures.
+    const modules = {
+        byVpClass: {},
+        stats: {},
+        would: [],
+        // Its failures, each a line (a code read wrong after the fresh pair, a code its read failed closed on, a throw).
+        failures: [],
+        readAgain: [],
+        faults: [],
+        // Throws caught in 1d's own read, said, counted, and each a failure.
+        thrown: [],
+        read: new Map(),
+        // The codes it read by look (`vp/screen:name`), for the codes owed by name.
+        readByClass: {},
+        // The codes it failed closed on by look — a code not read whole, a turned code not read upright among them: already failures, not owed again.
+        faultedByClass: {},
+        // The codes in a turned frame it read upright, every transform above them held off (B1), by look: said by name.
+        uprightByClass: {},
+        // How far holding the turn off moved each code it read upright, the most a corner moved (the fifteenth review's B1): said.
+        uprightTravel: new Map(),
+        unread: new Map(),
+        payloadChecked: 0,
+        leastModule: Infinity,
+    };
+    // 1c(c) (bound since 7d): the per-character read's tallies, by viewport and look (`char-read.mjs`).
+    const digits = {
+        byVpClass: {},
+        triggers: [],
+        would: [],
+        readAgain: [],
+        faults: [],
+        // A job its trigger fired on that read no character, a node it met that read none (each left out turned or too big), and a throw caught in its read: each a failure.
+        empty: [],
+        thrown: [],
+        // A job whose prepare answered no trigger (the fifteenth review's item 1): each a failure.
+        unwalked: [],
+        // Its failures, each a line with its check (a character that failed after the fresh pair, what could not be read, an empty read, a throw).
+        failures: [],
+        shares: {},
+        smallKinds: {},
+        movers: 0,
+        elements: 0,
+        triggerMs: 0,
+        readMs: 0,
+        frames: 0,
+        shared: 0,
+    };
     let ringTargets = 0;
     let ringPixels = 0;
     let ringLeastPerChar = Infinity;
@@ -1354,6 +1430,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     let lookPseudoJobs = 0;
     let lookMarkJobs = 0;
     const lookMarkJobsByClass = {};
+    let shownApartJobs = 0;
+    let cover;
     const artOffFrames = {};
     let artOffTargets = 0;
     let artOffJobs = 0;
@@ -1709,23 +1787,112 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                      */
                     const zonesAt = performance.now();
                     const zones = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                    /*
+                     * 1d's matrices, read right after the zones they pair with
+                     * and before anything else asks the page (the tenth
+                     * critic's item 5: they were read after the quiet zone's
+                     * read, so after its fresh pair whenever a ring read dark).
+                     * Guarded (item 6): a page that throws answering for its
+                     * matrices fails each code closed for 1d alone
+                     * (`withMatrices`' `thrown`; each a failure of 1d since
+                     * 7c), is counted and said, and never takes the quiet
+                     * zone's read or the job with it — in the fresh pair below
+                     * as here.
+                     */
+                    const codeMatrices = async () => {
+                        try {
+                            return await evalJson(cdp, sessionId, 'window.__codeMatrices()');
+                        } catch (err) {
+                            // Every code then fails closed for 1d (`withMatrices`' `thrown`), each a failure of its own below.
+                            modules.thrown.push(`${screen} @${vp.name} / theme ${theme}${wornLabel}: the page threw answering for the codes' matrices: ${err.message.slice(0, 200)}`);
+                            return { thrown: err.message.slice(0, 200) };
+                        }
+                    };
+                    const matrices = zones.length === 0 ? [] : await timed('modules-dom', codeMatrices);
                     const firstAt = zones.length === 0 ? undefined : await quietContext(cdp, sessionId, img, zonesAt - imgAt);
-                    const reads = await readQuietZones({ img, zones, at: firstAt }, async () => {
-                        await sleep(250);
-                        const before = await evalJson(cdp, sessionId, 'window.__quietZones()');
-                        const fresh = await capture();
-                        const readAt = performance.now();
-                        const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
-                        if (fresh.why.length > 0) return { why: fresh.why };
-                        return { img: fresh.shot, zones: after, before, at: await quietContext(cdp, sessionId, fresh.shot, readAt - fresh.capturedAt) };
-                    });
-                    for (const { z, r, turned, retry } of reads) {
+                    // The fresh pair is made once a job, for the quiet zone's
+                    // read and 1d's alike (`readAgainOnFreshPair`), and each
+                    // decides by its own rule; its zones carry their matrices.
+                    let pair;
+                    const again = () =>
+                        (pair ??= (async () => {
+                            await sleep(250);
+                            const before = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                            const fresh = await capture();
+                            const readAt = performance.now();
+                            const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                            if (fresh.why.length > 0) return { why: fresh.why };
+                            const freshMatrices = await codeMatrices();
+                            return {
+                                img: fresh.shot,
+                                zones: withMatrices(after, freshMatrices),
+                                before,
+                                at: await quietContext(cdp, sessionId, fresh.shot, readAt - fresh.capturedAt),
+                            };
+                        })());
+                    const reads = await readQuietZones({ img, zones, at: firstAt }, again);
+                    /*
+                     * **A turned code read upright** (the thirteenth review's
+                     * B1, the owner's D-2026-10-29-01): a code whose frame is
+                     * turned is read by both reads on a frame captured with
+                     * every transform above it held off (`__codeTurnsHeldOff`,
+                     * `readTurnedUpright`), with a fresh pair of its own held
+                     * the same way, and fails closed where it cannot be — never
+                     * passed over. One more capture a job with a turned code.
+                     */
+                    // What a code's line says of its turned frame: read upright on it, or failed closed in it (a frame that cannot be had, or one that does more than turn, M2).
+                    const turnedSaid = (readUpright) =>
+                        readUpright === true ? ' (in a turned frame, read upright: every transform above it held off)' : readUpright === false ? ' (in a turned frame, not read)' : '';
+                    const heldOff = async (on) => {
+                        const r = await cdp.send('Runtime.evaluate', { expression: `window.__codeTurnsHeldOff(${on})`, awaitPromise: true, returnByValue: true }, sessionId);
+                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails).slice(0, 300)}`);
+                        return r.result.value;
+                    };
+                    // The frame held upright, or why it could not be had; the turns are put back whatever happens, and a page that will not put them back is a failure of the job.
+                    const heldFrame = async (withBefore) => {
+                        let held;
+                        try {
+                            held = await heldOff(true);
+                            const before = withBefore ? await evalJson(cdp, sessionId, 'window.__quietZones()') : undefined;
+                            const shot = await capture();
+                            const readAt = performance.now();
+                            const after = await evalJson(cdp, sessionId, 'window.__quietZones()');
+                            if (shot.why.length > 0) return { why: shot.why };
+                            return {
+                                img: shot.shot,
+                                zones: withMatrices(after, await codeMatrices()),
+                                ...(before === undefined ? {} : { before }),
+                                at: { ...(await quietContext(cdp, sessionId, shot.shot, readAt - shot.capturedAt)), heldOff: held },
+                            };
+                        } catch (err) {
+                            return { why: [`the page threw holding the turns off: ${String(err?.message ?? err).slice(0, 200)}`] };
+                        } finally {
+                            try {
+                                await heldOff(false);
+                            } catch (err) {
+                                const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the page threw putting back the turns it held off above its codes: ${String(err?.message ?? err).slice(0, 200)}`;
+                                modules.thrown.push(line);
+                                modules.failures.push(`${line} — ${MODULE_CHECK}`);
+                            }
+                        }
+                    };
+                    const upright = !zones.some((z) => z.turned)
+                        ? new Map()
+                        : await timed('codes upright', () =>
+                              readTurnedUpright(zones, () => heldFrame(false), async () => {
+                                  await sleep(250);
+                                  return heldFrame(true);
+                              }),
+                          );
+                    for (const [i, read] of upright) reads[i] = { ...read.quiet, upright: read.upright };
+                    for (const { z, r, turned, retry, upright: readUpright } of reads) {
                         const code = `${vp.name}/${screen}:${z.name}`;
+                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${turnedSaid(readUpright)}`;
                         if (turned) {
-                            codesUnread.set(code, 'its frame is turned');
+                            // Unreachable while every turned code is read upright or failed closed: said as a failure, never passed over.
+                            dim.push(`${at} — its frame is turned and it was not read upright — a-code-keeps-its-quiet-zone-white`);
                             continue;
                         }
-                        const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}`;
                         if (r.fault !== undefined) {
                             dim.push(`${at} — ${r.fault} — a-code-keeps-its-quiet-zone-white`);
                             continue;
@@ -1754,48 +1921,271 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                                     ` — a-code-keeps-its-quiet-zone-white${readings}`,
                             );
                         } else if (retry !== undefined) {
-                            quietReadAgain.push(`${at}: dark on the first capture, white on a fresh pair${readings}`);
+                            quietReadAgain.push(`${at}: dark on the first capture, white on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})${readings}`);
+                        }
+                    }
+                    /*
+                     * 1d (before 8g2, bound since step 7c; `code-modules.mjs`,
+                     * `a-codes-modules-read-as-its-matrix`): every code the
+                     * quiet-zone read reads, each module's centre on the same
+                     * capture held to the matrix the code was drawn from
+                     * (`__codeMatrices`, off the path's `d`), and a code read
+                     * wrong read again on the job's one fresh pair by the quiet
+                     * zone's own rule: it fails where the decided reading — the
+                     * fresh pair's where the pair is believed, the first where it
+                     * cannot be — reads wrong, where the read fails closed (a
+                     * module under `MODULE_MIN_PX`, a matrix it cannot read or
+                     * pair, a code not read whole: any of its module centres off
+                     * screen or clipped away, the thirteenth review's item 8),
+                     * and where 1d throws. A code in a turned frame is read
+                     * upright, every transform above it held off (B1, above), or
+                     * fails closed.
+                     */
+                    if (zones.length > 0) {
+                        // Guarded whole (item 6): a throw in 1d's own read is counted, said, and fails the job; the quiet zone's read stands.
+                        let moduleReads = [];
+                        try {
+                            moduleReads = await timed('modules', () => readCodeModules({ img, zones: withMatrices(zones, matrices), at: firstAt }, again));
+                            // The turned codes, read upright above (B1).
+                            for (const [i, read] of upright) moduleReads[i] = { ...read.modules, upright: read.upright, travel: read.travel };
+                        } catch (err) {
+                            const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: 1d threw reading the codes' modules: ${String(err?.message ?? err).slice(0, 200)}`;
+                            modules.thrown.push(line);
+                            modules.failures.push(`${line} — ${MODULE_CHECK}`);
+                        }
+                        const variant = flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
+                        const tally = (modules.byVpClass[`${vp.name} ${plannedJob.sheetClass}`] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
+                        tally.jobs += 1;
+                        for (const { z, r, turned, retry, upright: readUpright, travel } of moduleReads) {
+                            const code = `${vp.name}/${screen}:${z.name}`;
+                            const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}: the code ${z.name} at ${Math.round(z.x)},${Math.round(z.y)}${turnedSaid(readUpright)}`;
+                            if (turned) {
+                                // Unreachable while every turned code is read upright or failed closed: a failure, never passed over.
+                                const why = 'its frame is turned and it was not read upright';
+                                modules.faults.push(`${at} — ${why}`);
+                                modules.failures.push(`${at} — ${why} — ${MODULE_CHECK}`);
+                                modules.unread.set(code, why);
+                                (modules.faultedByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                                tally.unread += 1;
+                                continue;
+                            }
+                            if (r.fault !== undefined) {
+                                // Fails closed: a module too small to read, a matrix it cannot read or pair.
+                                modules.faults.push(`${at} — ${r.fault}`);
+                                modules.failures.push(`${at} — ${r.fault} — ${MODULE_CHECK}`);
+                                modules.unread.set(code, r.fault);
+                                (modules.faultedByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                                tally.unread += 1;
+                                continue;
+                            }
+                            if (z.payload === 'checked') modules.payloadChecked += 1;
+                            if (readUpright) {
+                                (modules.uprightByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                                if (travel !== undefined && !(travel.px <= (modules.uprightTravel.get(code)?.px ?? -1))) modules.uprightTravel.set(code, { ...travel, cls: plannedJob.sheetClass });
+                            }
+                            modules.read.set(code, (modules.read.get(code) ?? 0) + 1);
+                            (modules.readByClass[plannedJob.sheetClass] ??= new Set()).add(code);
+                            tally.codes += 1;
+                            tally.modules += r.px;
+                            modules.leastModule = Math.min(modules.leastModule, z.module);
+                            foldStats((modules.stats[`${plannedJob.sheetClass} ${variant} ${screen} @${vp.name}`] ??= {}), r.stats);
+                            const readings =
+                                retry === undefined
+                                    ? ''
+                                    : `\n        first capture: ${moduleReadingLine(retry.first)}` +
+                                      (retry.again !== undefined
+                                          ? `\n        fresh pair: ${moduleReadingLine(retry.again, retry.again.before)}`
+                                          : retry.unbelieved !== undefined
+                                            ? `\n        fresh pair, not believed (${retry.why.join('; ')}): ${moduleReadingLine(retry.unbelieved, retry.unbelieved.before)}`
+                                            : `\n        not read again: ${retry.why.join('; ')}`);
+                            if (r.bad > 0) {
+                                tally.wrong += r.bad;
+                                tally.wouldCodes += 1;
+                                const line =
+                                    `${at} has ${r.bad} of ${r.px} module centre(s) wrong (${r.wrongDark} dark read light past ${MODULE_DARK_MAX}, ` +
+                                    `${r.wrongLight} light read dark under ${MODULE_LIGHT_MIN}; the first at row ${r.first.r} column ${r.first.c}, ` +
+                                    `${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}))` +
+                                    (retry?.again === undefined ? '' : ' on the fresh pair too');
+                                modules.would.push(`${line}${readings}`);
+                                modules.failures.push(`${line} — ${MODULE_CHECK}${readings}`);
+                            } else if (retry !== undefined) {
+                                modules.readAgain.push(`${at}: wrong on the first capture, right on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})${readings}`);
+                            }
                         }
                     }
                 }
                 /*
-                 * The ring read (`ringRead`): every outlined target, on a
-                 * second capture with its glyphs shown. A failing ring is
-                 * read again on a fresh pair before it is believed — the
-                 * box read's own rule, and it shares that rule's one
-                 * re-shot per job.
+                 * **The job's one "shown" frame** (before 8g2, commit 2):
+                 * the ring read and the broken-figure read are both read
+                 * against the job's own capture (`img`), which is the
+                 * blank, on one capture with their glyphs shown
+                 * (`__contrastGlyphs`: the outlined targets' and the broken
+                 * figures' alike). It was two frames until then — the ring
+                 * read's shown capture, and the broken-figure read's own
+                 * blank and shown pair — on the same blanked, frozen paint.
+                 * Each read keeps its own retry: a failing ring is read
+                 * again on a fresh blank and a fresh shown frame, sharing
+                 * the box read's one re-shot per job (the job's capture is
+                 * replaced, so the broken-figure read after it reads the
+                 * fresh pair); a failing broken figure on a fresh blank and
+                 * a fresh shown frame of its own, as it always was.
                  */
-                if (retryWhy.length === 0 && targets.some((t) => t.ring > 0)) {
+                const glyphs = async (show, which, money = false) => {
+                    const r = await cdp.send(
+                        'Runtime.evaluate',
+                        { expression: `window.__contrastGlyphs(${show}, ${JSON.stringify(which)}, ${money})`, awaitPromise: true, returnByValue: true },
+                        sessionId,
+                    );
+                    if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+                    return r.result.value;
+                };
+                const outlinedOf = () => targets.filter((t) => t.ring > 0);
+                const brokenOf = () => targets.filter((t) => (t.digitsOwed ?? 0) > 0);
+                /*
+                 * **One frame, unless one read's glyphs could stand in the
+                 * other's** (before 8g2, item 8): the ring read takes every
+                 * glyph pixel inside an outlined line's rect for that line's,
+                 * and reads its ring up to its outline's width past it; the
+                 * broken-figure read takes every glyph pixel inside a piece's
+                 * rect for the figure's. Where an outlined line's rect, grown
+                 * by its ring and a pixel, meets a piece of another target's
+                 * broken figure, a glyph of one shown beside the other would be
+                 * read as the other's, so each read takes a shown frame of its
+                 * own: the outlined glyphs alone, then the figures' alone.
+                 */
+                const framesApart = () => {
+                    const pieces = brokenOf().flatMap((t) => (t.digits ?? []).map((d) => ({ t, d })));
+                    return outlinedOf().some((o) =>
+                        (o.lines ?? []).some((l) => {
+                            const grow = o.ring + 1;
+                            return pieces.some(
+                                ({ t, d }) => t !== o && l.x - grow < d.x + d.w && d.x < l.x + l.w + grow && l.y - grow < d.y + d.h && d.y < l.y + l.h + grow,
+                            );
+                        }),
+                    );
+                };
+                /**
+                 * The glyphs shown (`which`: both reads', one's, or `none`;
+                 * `money`: every money node's too, for 1c(c)), one capture,
+                 * the boxes re-read (and, with money, its characters), the
+                 * glyphs blanked again: `{ shot, why, chars }`. **Blanked
+                 * again whatever happens** (the fifteenth review's item 5): a
+                 * throw after they were shown — 1c's own frame throws inside
+                 * its read, which is caught so the job's other reads stand —
+                 * left them shown for every read the job made after it.
+                 */
+                const shownFrame = async (which, money = moneyShared && which === 'both') => {
+                    const shownStart = performance.now();
+                    let n;
+                    let shownCap;
+                    let shownRead;
+                    let chars;
+                    try {
+                        n = await glyphs(true, which, money);
+                        shownCap = await capture();
+                        shownRead = await reread();
+                        chars = money ? await evalJson(cdp, sessionId, 'window.__moneyChars()') : undefined;
+                    } finally {
+                        await glyphs(false, which, money);
+                    }
+                    const why = [...shownCap.why, ...shownRead.why];
+                    if (shownRead.live.boxes.length !== targets.length) {
+                        why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
+                    }
+                    const wantOutlined = which === 'both' || which === 'ring' ? outlinedOf().length : 0;
+                    const wantFigures = which === 'both' || which === 'figures' ? brokenOf().length : 0;
+                    if (n.outlined !== wantOutlined) {
+                        why.push(`${n.outlined} outlined targets shown where the read has ${wantOutlined}`);
+                    }
+                    if (n.figures !== wantFigures) {
+                        why.push(`${n.figures} broken figures shown where the read has ${wantFigures}`);
+                    }
+                    if (money && n.money !== (chars?.targets?.length ?? -1)) {
+                        why.push(`${n.money} money nodes shown where the page answered the characters of ${chars?.targets?.length ?? 'none'}`);
+                    }
+                    const entry = phases.get('shown frame') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - shownStart;
+                    phases.set('shown frame', entry);
+                    return { shot: shownCap.shot, why, chars };
+                };
+                /*
+                 * 1c(c) (bound since 7d; `char-read.mjs`): a job whose paint
+                 * holds a mover near money (`digitTrigger` in the probe, on
+                 * the prepared paint) reads every money character. Its
+                 * glyphs join the job's one shown frame, unless a money box
+                 * meets an outlined line (grown by its ring) or a broken
+                 * figure's piece of another target, where one read would
+                 * take the other's glyphs for its own: then they take a
+                 * frame of their own (`moneyApart`), as the two reads above
+                 * do. A job that triggers nothing shows no money glyph and
+                 * is captured as it was.
+                 */
+                /*
+                 * **The trigger is owed its own walk** (the fifteenth review's
+                 * item 1, the owner's D-2026-10-31-01): a prepare that answers
+                 * no trigger is a failure of the job, where it read as a
+                 * trigger that found nothing (the critic's plant dropped the
+                 * field and TS's 90 failures went to 0), and each look owes,
+                 * on each viewport, that the trigger walked every job holding
+                 * money (`charsOwedFaults`: `money` against `walked`).
+                 */
+                const digitTrig = prep.digitTrigger ?? { reasons: [], count: 0, movers: 0, elements: 0, money: 0, met: [], ms: 0 };
+                if (prep.digitTrigger === undefined) {
+                    const line = `${screen} @${vp.name} / theme ${theme}${wornLabel}: its prepare answered no 1c trigger, so whether a mover is near its money was not read`;
+                    digits.unwalked.push(line);
+                    digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                }
+                digits.movers += digitTrig.movers;
+                digits.elements += digitTrig.elements;
+                digits.triggerMs += digitTrig.ms;
+                const digitsKey = `${vp.name} ${plannedJob.sheetClass}`;
+                const digitsAt = (digits.byVpClass[digitsKey] ??= { jobs: 0, money: 0, walked: 0, movers: 0, elements: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
+                digitsAt.jobs += 1;
+                if (targets.some((t) => t.money)) {
+                    digitsAt.money += 1;
+                    if (prep.digitTrigger !== undefined && digitTrig.money > 0 && digitTrig.elements > 0) digitsAt.walked += 1;
+                }
+                digitsAt.movers += digitTrig.movers;
+                digitsAt.elements += digitTrig.elements;
+                const digitsOwed = digitTrig.count > 0;
+                const moneyOf = () => targets.filter((t) => t.money);
+                const moneyApart = () => {
+                    const others = [
+                        ...outlinedOf().flatMap((o) => (o.lines ?? []).map((l) => ({ t: o, x: l.x - o.ring - 1, y: l.y - o.ring - 1, w: l.w + 2 * o.ring + 2, h: l.h + 2 * o.ring + 2 }))),
+                        ...brokenOf().flatMap((b) => (b.digits ?? []).map((d) => ({ t: b, ...d }))),
+                    ];
+                    return moneyOf().some(
+                        (m) => m.ring === 0 && (m.digitsOwed ?? 0) === 0 && others.some(({ t, x, y, w, h }) => t !== m && m.x < x + w && x < m.x + m.w && m.y < y + h && y < m.y + m.h),
+                    );
+                };
+                const apart = framesApart();
+                const moneyShared = digitsOwed && !apart && !moneyApart();
+                if (apart) {
+                    // Said in the dump only where it happens, so a tree on
+                    // which no read meets the other dumps as it did.
+                    record.shownApart = true;
+                    shownApartJobs += 1;
+                }
+                let shown;
+                if (retryWhy.length === 0 && (apart ? outlinedOf().length > 0 : outlinedOf().length > 0 || brokenOf().length > 0)) {
+                    shown = await shownFrame(apart ? 'ring' : 'both');
+                    if (shown.why.length > 0) {
+                        retryWhy = shown.why.map((w) => `with the glyphs shown, ${w}`);
+                    }
+                }
+                /*
+                 * The ring read (`ringRead`): every outlined target, on the
+                 * shown frame. A failing ring is read again on a fresh pair
+                 * before it is believed — the box read's own rule, and it
+                 * shares that rule's one re-shot per job.
+                 */
+                if (retryWhy.length === 0 && outlinedOf().length > 0) {
                     const ringStart = performance.now();
-                    const glyphs = async (show) => {
-                        const r = await cdp.send(
-                            'Runtime.evaluate',
-                            { expression: `window.__contrastGlyphs(${show})`, awaitPromise: true, returnByValue: true },
-                            sessionId,
-                        );
-                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                        return r.result.value;
-                    };
-                    const shownPair = async () => {
-                        const n = await glyphs(true);
-                        const shownCap = await capture();
-                        const shownRead = await reread();
-                        await glyphs(false);
-                        const why = [...shownCap.why, ...shownRead.why];
-                        if (shownRead.live.boxes.length !== targets.length) {
-                            why.push(`${shownRead.live.boxes.length} boxes with the glyphs shown where the blanked read had ${targets.length}`);
-                        }
-                        if (n !== targets.filter((t) => t.ring > 0).length) {
-                            why.push(`${n} outlined targets shown where the read has ${targets.filter((t) => t.ring > 0).length}`);
-                        }
-                        return { shot: shownCap.shot, why };
-                    };
-                    const readAll = (shown) =>
-                        targets.filter((t) => t.ring > 0).map((t) => ({ t, r: ringRead(img, shown, t) }));
+                    const readAll = (shot) => outlinedOf().map((t) => ({ t, r: ringRead(img, shot, t) }));
                     const bad = ({ r }) => r.worst < PIXEL_CONTRAST_FLOOR || r.thin.length > 0 || r.bare.length > 0;
-                    let pair = await shownPair();
-                    let results = pair.why.length === 0 ? readAll(pair.shot) : [];
-                    if (pair.why.length === 0 && results.some(bad) && !retried) {
+                    let results = readAll(shown.shot);
+                    if (results.some(bad) && !retried) {
                         await sleep(250);
                         const again = await capture();
                         const againRead = await reread();
@@ -1805,14 +2195,14 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             imgAt = again.capturedAt;
                             targets = againRead.live.boxes;
                             retried = true;
-                            pair = await shownPair();
-                            results = pair.why.length === 0 ? readAll(pair.shot) : [];
+                            shown = await shownFrame(apart ? 'ring' : 'both');
+                            results = shown.why.length === 0 ? readAll(shown.shot) : [];
                         } else {
-                            pair = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
+                            shown = { why: whyAgain.length > 0 ? whyAgain : ['the re-read after a failing ring moved the boxes'] };
                         }
                     }
-                    if (pair.why.length > 0) {
-                        retryWhy = pair.why.map((w) => `with the glyphs shown, ${w}`);
+                    if (shown.why.length > 0) {
+                        retryWhy = shown.why.map((w) => `with the glyphs shown, ${w}`);
                     }
                     sampled += results.length;
                     for (const { t, r } of results) {
@@ -1897,41 +2287,45 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                 }
                 /*
                  * A broken figure paints every digit (`digitRead`, round 3):
-                 * the figures broken after a comma, on a capture with their
-                 * glyphs shown, each piece's glyphs read in the figure's
-                 * own ink. A failing read is taken again on a fresh pair
+                 * the figures broken after a comma, on the shown frame
+                 * against the job's own capture, each piece's glyphs read
+                 * in the figure's own ink. A failing read is taken again on
+                 * a fresh pair — a fresh blank and a fresh shown frame —
                  * before it is believed, like a failing box.
                  */
-                const broken = targets.filter((t) => (t.digitsOwed ?? 0) > 0);
+                const broken = brokenOf();
                 if (retryWhy.length === 0 && broken.length > 0) {
                     const brokenStart = performance.now();
-                    const figureGlyphs = async (show) => {
-                        const r = await cdp.send(
-                            'Runtime.evaluate',
-                            { expression: `window.__contrastFigureGlyphs(${show})`, awaitPromise: true, returnByValue: true },
-                            sessionId,
-                        );
-                        if (r.exceptionDetails) throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
-                        return r.result.value;
-                    };
-                    const readBroken = async () => {
+                    const readOn = (blank, shot) => broken.map((t) => ({ t, r: digitRead(blank, shot, t) }));
+                    const readFresh = async () => {
                         const blankCap = await capture();
-                        const n = await figureGlyphs(true);
-                        const shownCap = await capture();
-                        await figureGlyphs(false);
-                        const why = [...blankCap.why, ...shownCap.why];
-                        if (n !== broken.length) why.push(`${n} broken figures shown where the read has ${broken.length}`);
-                        return { why, results: why.length > 0 ? [] : broken.map((t) => ({ t, r: digitRead(blankCap.shot, shownCap.shot, t) })) };
+                        const fresh = await shownFrame(apart ? 'figures' : 'both');
+                        const why = [...blankCap.why, ...fresh.why];
+                        return { why, results: why.length > 0 ? [] : readOn(blankCap.shot, fresh.shot) };
                     };
                     const bad = ({ t, r }) => r.thin.length > 0 || r.found < t.digitsOwed;
-                    let pass = await readBroken();
-                    if (pass.why.length === 0 && pass.results.some(bad)) {
+                    // The figures' own shown frame where the reads stand apart.
+                    const figuresShown = apart ? await shownFrame('figures') : shown;
+                    let pass = figuresShown.why.length > 0 ? { why: figuresShown.why, results: [] } : { why: [], results: readOn(img, figuresShown.shot) };
+                    if (pass.results.some(bad)) {
                         await sleep(250);
-                        pass = await readBroken();
+                        pass = await readFresh();
                     }
                     if (pass.why.length > 0) {
                         retryWhy = pass.why.map((w) => `for the broken figures, ${w}`);
                     } else {
+                        // The readings themselves, in the dump: a change to
+                        // how they are taken is compared reading by reading
+                        // (`contrast-dump.mjs` holds the boxes; these ride
+                        // the job's record).
+                        record.broken = pass.results.map(({ t, r }) => ({
+                            i: t.i,
+                            sel: t.sel,
+                            found: r.found,
+                            maskPx: r.maskPx,
+                            least: dumpValue(r.least),
+                            thin: r.thin.length,
+                        }));
                         brokenKeys.add(plannedJob.key);
                         for (const { t, r } of pass.results) {
                             brokenFigures += 1;
@@ -1962,6 +2356,120 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     phases.set('broken figures', entry);
                 }
                 /*
+                 * 1c(c), every digit where a mover is near (bound since 7d,
+                 * the owner's D-2026-10-30-02; `char-read.mjs`): on a
+                 * triggered job, every money
+                 * character on the shown frame — the job's shared one where
+                 * its glyphs joined it, else a frame of their own — against
+                 * the job's own capture, each held to its own reference. A
+                 * job whose characters read wrong is read again on a fresh
+                 * pair (`readCharsAgain`): where the pair is believed, a
+                 * failure stands if the pair fails it too; where it cannot be
+                 * believed, the first read stands, with the reason. Each
+                 * character that stands under the cut fails the contrast
+                 * pass, and so do a read that cannot be had (a capture
+                 * refused, the page's characters not adding up, a money
+                 * target answered by none: `charsFault`), a job its trigger
+                 * fired on that read no character, and a throw in the read,
+                 * caught here so the job's other reads stand.
+                 */
+                const readDigits = async (why) => {
+                    const start = performance.now();
+                    digitsAt.triggered += 1;
+                    if (why === '1a') digitsAt.by1a += 1;
+                    const at = `${screen} @${vp.name} / theme ${theme}${wornLabel}`;
+                    try {
+                        await readDigitsOn(why, at);
+                    } catch (err) {
+                        const line = `${at}: 1c threw reading the money characters: ${String(err?.message ?? err).slice(0, 200)}`;
+                        digits.thrown.push(line);
+                        digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                    }
+                    digits.readMs += performance.now() - start;
+                    const entry = phases.get('digits (1c)') ?? { calls: 0, ms: 0 };
+                    entry.calls += 1;
+                    entry.ms += performance.now() - start;
+                    phases.set('digits (1c)', entry);
+                };
+                const readDigitsOn = async (why, at) => {
+                    digits.triggers.push(
+                        why === '1a'
+                            ? `${at}: by 1a's ${cover.faults.length} failure(s) on this job`
+                            : `${at}: ${digitTrig.count} meet(s), ${digitTrig.reasons.join('; ')}${digitTrig.count > digitTrig.reasons.length ? '; …' : ''}`,
+                    );
+                    let first;
+                    if (why !== '1a' && shown?.chars !== undefined) {
+                        digits.shared += 1;
+                        first = { blank: img, shown: shown.shot, chars: shown.chars, why: shown.why };
+                    } else {
+                        digits.frames += 1;
+                        const blankCap = why === '1a' ? await capture() : { shot: img, why: [] };
+                        const own = await shownFrame('none', true);
+                        first = { blank: blankCap.shot, shown: own.shot, chars: own.chars, why: [...blankCap.why, ...own.why] };
+                    }
+                    const fault = first.why.length > 0 ? first.why : charsFault(first.chars, moneyOf());
+                    if (fault.length > 0) {
+                        // Fails closed: the characters cannot be read as the job's.
+                        for (const w of fault) {
+                            digits.faults.push(`${at}: ${w}`);
+                            digits.failures.push(`${at}: ${w} — ${CHAR_CHECK}`);
+                        }
+                    } else {
+                        const read = readMoneyChars(first.blank, first.shown, first.chars);
+                        const settled = await readCharsAgain({ read, chars: first.chars }, async () => {
+                            await sleep(250);
+                            const blankCap = await capture();
+                            const fresh = await shownFrame('none', true);
+                            return { why: [...blankCap.why, ...fresh.why], blank: blankCap.shot, shown: fresh.shot, chars: fresh.chars };
+                        });
+                        const r = settled.read;
+                        let skipped = 0;
+                        for (const t of first.chars.targets) skipped += Object.values(t.skipped).reduce((n, k) => n + k, 0);
+                        digitsAt.chars += r.chars;
+                        digitsAt.held += r.held;
+                        digitsAt.small += r.small;
+                        digitsAt.skipped += skipped;
+                        digitsAt.would += r.would.length;
+                        digitsAt.readAgain += settled.readAgain.length;
+                        // A turned frame's shares apart from the upright ones (`turnRef`: its reference is the largest phase its shown pixels match within the margin of the best).
+                        for (const sh of read.shares) foldShares((digits.shares[sh.turned ? `${digitsKey} turned` : digitsKey] ??= {}), [sh], at);
+                        for (const [kind, n] of Object.entries(read.smallKinds)) digits.smallKinds[kind] = (digits.smallKinds[kind] ?? 0) + n;
+                        record.digits = { by: why, chars: r.chars, held: r.held, small: r.small, skipped, would: r.would.length };
+                        for (const w of r.would) {
+                            const line =
+                                `${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why}` +
+                                (settled.unbelieved !== undefined ? ` (read again on a fresh pair that cannot be believed: ${settled.unbelieved})` : read.would.length > 0 ? ' — on the fresh pair too' : '');
+                            digits.would.push(line);
+                            digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                        }
+                        // A trigger that fired and read nothing is a read that did not happen.
+                        if (r.chars === 0) {
+                            const line = `${at}: its trigger fired (${why === '1a' ? "1a's failures" : 'a mover near money'}) and no money character was read`;
+                            digits.empty.push(line);
+                            digits.failures.push(`${line} — ${CHAR_CHECK}`);
+                        }
+                        /*
+                         * And so is a node the trigger met that read none of its
+                         * characters, each left out turned past 2° or too big
+                         * (the fifteenth review's item 2, the owner's
+                         * D-2026-10-31-01): judged per job, TS3 — TS with the
+                         * price's tag tilted 3°, which the dress rule admits —
+                         * left out the covered price whole while the screen's
+                         * other money was read, and nothing failed. A node whose
+                         * characters all stand behind a scroller is a stated
+                         * limit, and not failed here.
+                         */
+                        for (const line of metNodesUnread(first.chars, digitTrig.met ?? [])) {
+                            digits.empty.push(`${at}: ${line}`);
+                            digits.failures.push(`${at}: ${line} — ${CHAR_CHECK}`);
+                        }
+                        for (const w of settled.readAgain) {
+                            digits.readAgain.push(`${at}: ${w.sel} "${w.c}" at ${Math.round(w.x)},${Math.round(w.y)}: ${w.why} on the first pair, kept on a fresh pair (on tab ${tab.index} of ${CONTRAST_TABS})`);
+                        }
+                    }
+                };
+                if (retryWhy.length === 0 && digitsOwed) await readDigits('trigger');
+                /*
                  * Grid horizon at its worst, reported (step 5a″; the
                  * owner's C, 2026-09-27): the art flattened to its
                  * brightest paint (`__horizonAtItsWorst`), a frame with
@@ -1971,7 +2479,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  * regression guard and not a floor: the ring read on the
                  * horizon as painted, above, is the failing guard.
                  */
-                if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0) {
+                if (retryWhy.length === 0 && (prep.horizon?.worn ?? 0) > 0 && readsHorizonWorst(plannedJob.key)) {
                     const worstStart = performance.now();
                     const page = async (expression) => {
                         const r = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
@@ -1981,9 +2489,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     const flat = await page('window.__horizonAtItsWorst(true)');
                     const blankCap = await capture();
                     const flatRead = await reread();
-                    await page('window.__contrastGlyphs(true)');
+                    await page("window.__contrastGlyphs(true, 'ring')");
                     const shownCap = await capture();
-                    await page('window.__contrastGlyphs(false)');
+                    await page("window.__contrastGlyphs(false, 'ring')");
                     const back = await page('window.__horizonAtItsWorst(false)');
                     const why = [...blankCap.why, ...shownCap.why, ...flatRead.why];
                     if (flat.worn !== flat.flattened || flat.worn !== prep.horizon.worn || back.worn !== flat.worn) {
@@ -2013,6 +2521,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                             byJob.set(plannedJob.key, Math.min(byJob.get(plannedJob.key) ?? Infinity, least));
                             horizonWorst.set(part, byJob);
                         }
+                        // This job's least per sign line, in the dump beside
+                        // the boxes (the run prints only the least of all).
+                        record.horizonWorst = Object.fromEntries([...horizonWorst].map(([part, byJob]) => [part, dumpValue(byJob.get(plannedJob.key))]));
                     }
                     const entry = phases.get('horizon worst') ?? { calls: 0, ms: 0 };
                     entry.calls += 1;
@@ -2160,9 +2671,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         const why = [...blank.why];
                         let shown;
                         if (why.length === 0 && targets.some((t) => t.ring > 0)) {
-                            await page('window.__contrastGlyphs(true)');
+                            await page("window.__contrastGlyphs(true, 'ring')");
                             shown = await capture();
-                            await page('window.__contrastGlyphs(false)');
+                            await page("window.__contrastGlyphs(false, 'ring')");
                             why.push(...shown.why);
                         }
                         await page("window.__artOff('off')");
@@ -2214,6 +2725,28 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                     entry.ms += performance.now() - artStart;
                     phases.set('art off', entry);
                 }
+                /*
+                 * 1a (`nothing-covers-money-or-a-protected-box`; `coverScan`
+                 * in the probe), bound since 7a: the hit test with
+                 * `pointer-events` forced on, once on the job's paint at its
+                 * full height — every frame above put back what it changed.
+                 * Below the first screen stands only what a wall, shot at
+                 * its own screen's size, holds inside its own scrollers;
+                 * those points are counted, not asked. Every failure fails
+                 * the pass; the tallies are folded per look and held to the
+                 * clip ceiling, and every job not refused owes its read.
+                 */
+                const scan = await timed('cover (1a)', () => evalJson(cdp, sessionId, 'window.__coverFaults()'));
+                if (!Array.isArray(scan?.faults) || COVER_TALLY_KEYS.some((key) => key !== 'paints' && key !== 'failed' && !Number.isFinite(scan[key]))) {
+                    throw new Error(`the page's 1a read (__coverFaults) answered no tally a job can be held to: ${JSON.stringify(scan)?.slice(0, 120)}`);
+                }
+                cover = {
+                    cls: plannedJob.sheetClass,
+                    ...scan,
+                    faults: scan.faults.map((w) => `${screen} @${vp.name} / theme ${theme}${wornLabel}: ${w} — ${COVER_CHECK}`),
+                };
+                // 1c(c)'s second trigger: 1a's own failures on this job, read on a frame of their own.
+                if (retryWhy.length === 0 && !digitsOwed && cover.faults.length > 0) await readDigits('1a');
                 record.sampled = sampled;
                 record.dropped = dropped;
                 record.retried = retried;
@@ -2265,6 +2798,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
         })();
     } finally {
         Object.assign(out, {
+            // The tab the job ran on: its sightings are counted by tab and by the run's tab count (the tenth critic's item 4).
+            tab: tab.index,
             dumpJobs,
             dumpBoxes,
             refused,
@@ -2286,6 +2821,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             codesReadByClass,
             quietPixels,
             quietReadAgain,
+            modules,
+            digits,
             ringTargets,
             ringPixels,
             ringLeastPerChar,
@@ -2302,6 +2839,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             lookPseudoJobs,
             lookMarkJobs,
             lookMarkJobsByClass,
+            shownApartJobs,
             artOffFrames,
             artOffTargets,
             artOffJobs,
@@ -2309,6 +2847,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             honestUnrendered,
             honestReads,
             honestJobs,
+            cover,
         });
     }
 }
@@ -2346,20 +2885,48 @@ let failed = false;
 // the cost is.
 /*
  * How much of the cover check the clip tolerance may eat before the pass
- * stops meaning anything. `clipsOf` skips a point outside every clipping
- * ancestor because it is reachable by scrolling and nothing outside the clip
- * can cover it — correct, and also the one way this guard can be widened into
- * a green run over nothing.
+ * stops meaning anything. A point behind a clip a scroller brings it out
+ * from is counted and not hit-tested, because it is reachable by scrolling
+ * and nothing outside the clip can cover it — correct, and also the one way
+ * this guard can be widened into a green run over nothing.
  *
- * Measured 2026-09-19, the first run that printed a denominator: mobile
- * 1,830 of 13,118 (14%), desktop 1,582 of 11,319 (14%), canvas 0 of 825.
- * The ceiling is a little over twice that — drift protection, not a target:
- * it catches a tolerance that has started eating the pass while leaving room
- * for a screen or two more. Headroom is jitter, not an invitation. If a
- * legitimate change pushes past it, the question to answer first is which
- * points stopped being checked, not what the number should be.
+ * Measured 2026-09-19 on `coveredBy`'s points, the first run that printed a
+ * denominator: mobile 1,830 of 13,118 (14%), desktop 1,582 of 11,319 (14%),
+ * canvas 0 of 825. The ceiling is a little over twice that — drift
+ * protection, not a target: it catches a tolerance that has started eating
+ * the pass while leaving room for a screen or two more. Headroom is jitter,
+ * not an invitation. If a legitimate change pushes past it, the question to
+ * answer first is which points stopped being checked, not what the number
+ * should be.
+ *
+ * **On 1a's points since 7a** (the critic's third review, its checklist
+ * item 8; `coverClip`, `look-tallies.mjs`): every geometry pass that read 1a
+ * and the contrast pass, the public looks' sum on each, and every carried
+ * look on its own. The two wall scrollers (`WALL_SCROLLERS` in
+ * `layout/coverPoints.ts`, the touch wall's list and a payment's lines)
+ * scroll by design, took the counter tablet to 34% and the narrow wall to
+ * 33% on the clean tree before 7a, and are counted apart, outside the
+ * ratio; a point behind a clip that cuts and does not scroll is no longer
+ * counted at all, but failed (`clipVerdict`). The ceiling stays 30%, and a
+ * pass that hit-tested no point fails.
  */
 const CLIP_SKIP_CEILING = 0.3;
+
+/**
+ * The clip ceiling on one pass's 1a tallies (`coverByClass`): the public
+ * looks' sum, as the line the pass says (` · 1a: …`, empty where 1a read
+ * nothing) and the faults. Each carried look is held on its own at the end
+ * of the run (`carriedTallyFaults`), from `coverSeen`.
+ */
+function coverClip(byClass) {
+    const publicTally = coverTally(
+        byClass,
+        Object.keys(byClass ?? {}).filter((cls) => !PRIVATE_SHEET_CLASSES.includes(cls)),
+    );
+    if (publicTally.paints === 0) return { line: '', faults: [] };
+    const why = clipCeilingFault(publicTally, CLIP_SKIP_CEILING);
+    return { line: ` · 1a: ${clipLine(publicTally)}`, faults: why === undefined ? [] : [`the public looks' 1a points: ${why}`] };
+}
 
 /*
  * How many tabs of the one Chrome the geometry passes and the contrast pass
@@ -2377,14 +2944,19 @@ const CLIP_SKIP_CEILING = 0.3;
  * (`the-geometry-passes-read-the-same-on-every-tab`,
  * `the-contrast-pass-reads-the-same-on-every-tab`).
  *
- * Unasked, it is 2 only where the overlap is there to take — at least
- * `CONTRAST_TABS_MIN_CORES` cores and `CONTRAST_TABS_MIN_MEMORY` of memory —
- * and 1 elsewhere (the critic's P3-7: on two cores the gain is not there,
- * and no machine smaller than this Mac has run two tabs). The count and why
- * are printed with the pass. `workshop:probe` runs this file, so the kit's
- * probe takes the same count by the same rule.
+ * Unasked, it is 3 on a machine of at least `CONTRAST_TABS_THREE_CORES`
+ * cores and `CONTRAST_TABS_MIN_MEMORY` of memory (D-2026-10-27-04: three tabs
+ * measured twice more on this Mac, 6 cores and 8 GiB, every canary green and
+ * memory pressure normal; `PROBE-RULES.md`, "Three tabs as the default"),
+ * 2 on at least `CONTRAST_TABS_MIN_CORES` cores and that memory, and 1
+ * elsewhere (the critic's P3-7: on two cores the gain is not there, and no
+ * machine smaller than this Mac has run two tabs). The count and why are
+ * printed with the pass. `workshop:probe` runs this file, so the kit's probe
+ * takes the same count by the same rule; CI's layout job sets its own
+ * (`ci.yml`).
  */
 const CONTRAST_TABS_MIN_CORES = 4;
+const CONTRAST_TABS_THREE_CORES = 6;
 const CONTRAST_TABS_MIN_MEMORY = 8 * 1024 ** 3;
 const { count: CONTRAST_TABS, why: CONTRAST_TABS_WHY } = (() => {
     const asked = process.env.LAYOUT_CONTRAST_TABS;
@@ -2401,7 +2973,8 @@ const { count: CONTRAST_TABS, why: CONTRAST_TABS_WHY } = (() => {
     if (cores < CONTRAST_TABS_MIN_CORES || memory < CONTRAST_TABS_MIN_MEMORY) {
         return { count: 1, why: `the default under ${CONTRAST_TABS_MIN_CORES} cores or ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
     }
-    return { count: 2, why: `the default, on ${machine}` };
+    if (cores >= CONTRAST_TABS_THREE_CORES) return { count: 3, why: `the default on ${CONTRAST_TABS_THREE_CORES} cores or more and ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
+    return { count: 2, why: `the default on ${CONTRAST_TABS_MIN_CORES} to ${CONTRAST_TABS_THREE_CORES - 1} cores and ${CONTRAST_TABS_MIN_MEMORY / 1024 ** 3} GiB, here ${machine}` };
 })();
 
 /*
@@ -2428,7 +3001,6 @@ function geometryRecord(key, tab) {
         sticky: undefined,
         worn: [],
         codes: [],
-        clip: undefined,
         log: (text) => g.lines.push({ err: false, text }),
         error: (text) => g.lines.push({ err: true, text }),
         took: () => `${((performance.now() - startedAt) / 1000).toFixed(1)}s`,
@@ -2448,8 +3020,12 @@ function geometryRecordDiffers(walked, again) {
     }
     // The page's report as a verdict: everything it says but how long its
     // font wait took (`faces.waitedMs`), which is a clock, not a reading.
-    const verdictOf = (report) =>
-        report?.faces === undefined || report.faces === null ? report : { ...report, faces: { ...report.faces, waitedMs: undefined } };
+    const verdictOf = (report) => {
+        if (report === undefined || report === null) return report;
+        // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined, triggerCheck: undefined, groundCheck: undefined, walkMs: undefined };
+        return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
+    };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
     if (reportOf(walked) !== reportOf(again)) {
         const a = verdictOf(walked.report) ?? {};
@@ -2472,7 +3048,7 @@ function geometryRecordDiffers(walked, again) {
     const untimed = (g) =>
         JSON.stringify(g.lines.map(({ err, text }) => [err, text.replace(/— \d+\.\ds/g, '— (time)').replace(/asked, \d+ ms/g, 'asked, (time)')]));
     if (untimed(walked) !== untimed(again)) return 'the lines it says differ';
-    for (const field of ['failed', 'outlined', 'marksShown', 'sticky', 'worn', 'codes', 'clip']) {
+    for (const field of ['failed', 'outlined', 'marksShown', 'sticky', 'worn', 'codes']) {
         if (JSON.stringify(walked[field]) !== JSON.stringify(again[field])) return `what it adds to the totals differs at ${field}`;
     }
     return undefined;
@@ -2638,6 +3214,159 @@ function phaseTable(passMs, tabs = 1) {
 const runDumpJobs = [];
 const runDumpBoxes = [];
 /*
+ * **1a, `nothing-covers-money-or-a-protected-box`** (before 8g2; `coverScan`
+ * in the probe), bound since 7a: the hit test with `pointer-events` and
+ * `interactivity` forced on, over every money node, every protected box and
+ * the unbuyable label, on every geometry pass (each paint, at rest) and once
+ * a contrast job at its full height. A geometry pass's failures are in its
+ * own failure list, beside every other rule's; a contrast job's fail the
+ * contrast pass (`coverFailed`), and a job not refused that read nothing is
+ * named (`coverUnread`). What it read is printed per pass and per look,
+ * with its own time, and `coveredBy`'s — still bound at rest and at the six
+ * instants for the price and "You pay" (and at the last instant for the
+ * unbuyable label), under its own check names — per phase beside it.
+ */
+const COVER_CHECK = 'nothing-covers-money-or-a-protected-box';
+const coverGeometry = [];
+const coverContrast = {};
+const coverFailed = [];
+const coverUnread = [];
+function coverLines(label, byClass, ms, coveredBy, end, seek) {
+    const classes = Object.keys(byClass).sort();
+    const sum = (key) => classes.reduce((n, cls) => n + (byClass[cls][key] ?? 0), 0);
+    const tally = coverTally(byClass);
+    const line =
+        `    ${label}: ${sum('failed')} failure(s) (${classes.map((cls) => `${cls} ${byClass[cls].failed}`).join(', ') || 'no look'}) · ` +
+        `${sum('paints')} read(s) over ${sum('nodes')} node(s), ${sum('points')} point(s): ${sum('checked')} hit-tested, ` +
+        `${sum('below')} below the screen, ${sum('offSide')} past a side edge, ${sum('above')} above the top, ` +
+        `${clipLine(tally)}, ${sum('appHidden')} node(s) the app hides skipped · ${(ms / 1000).toFixed(2)}s` +
+        (coveredBy?.calls === undefined
+            ? ''
+            : ` · coveredBy ${['rest', 'instants', 'label']
+                  .map((phase) => `${phase} ${coveredBy.calls[phase] ?? 0} in ${((coveredBy.ms?.[phase] ?? 0) / 1000).toFixed(2)}s`)
+                  .join(', ')}`) +
+        (end === undefined ? '' : ` · at the end of a lasting animation: ${end.reads} read(s), ${end.skipped ?? 0} paint(s) left out (every lasting animation a transform inside a clip that meets nothing asked), ${end.failed} failure(s) in ${(end.ms / 1000).toFixed(2)}s`) +
+        (seek === undefined
+            ? ''
+            : ` · the dress rule's keyframe offsets: ${seek.anims} animation(s) (${seek.layout ?? 0} for the self-clip read alone; ${seek.anchored ?? 0} counted as moving another box because an anchor can follow them), ${seek.seeks} seek(s), ${seek.reads} figure read(s), ${seek.grounds ?? 0} ground(s) read again where a seek changed them, ${seek.clips ?? 0} self-clip read(s), ${seek.faults} fault(s) in ${(seek.ms / 1000).toFixed(2)}s`);
+    return [line];
+}
+/*
+ * **1b, `a-paint-with-no-hit-area-reaches-no-money`, bound since step 7b**
+ * (before 8g2; `reachAtRest` in the probe, the pure half
+ * `layout/paintReach.ts`): the reach of every paint with no hit area — an
+ * outer box-shadow, an outline, a border image's outset, a text-shadow, a
+ * drop shadow or a blur in a filter, a decoration line, a look pseudo's
+ * region — held to every money node's line boxes and every protected box,
+ * on every geometry pass, once a paint at rest and at the keyframes of every
+ * animation that is not needless. Its failures are in the pass's own list
+ * (a throw that stopped it on a paint is one); here they are printed per
+ * pass, per look and per kind, grouped by source up to `REACH_PRINTED`, and
+ * beside them the meets the owner accepted by name (`REACH_ACCEPTED`, counted
+ * and never failed), the blur policy's measurement — the most each soft
+ * paint reached over a target — and what a blurred layer would add with its
+ * offset and spread counted in full, as a sharp one's is (not counted).
+ */
+const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
+const reachGeometry = [];
+/** 1b's tallies per look on every geometry pass that owes it (`OWING_GEOMETRY`), for each carried look's own (`carriedTallyFaults`). */
+const reachSeen = {};
+/** 3a's tallies per look, by pass (each carried look owes a read on its own). */
+const walkSeen = {};
+/** `holds-out-of-flow-agrees-with-this-chrome`, per geometry pass: the page's record of it (`outOfFlowCheck`) and its time. */
+const outOfFlowGeometry = [];
+/** How many grouped failure sentences of 1b a pass prints word for word (1b fails since 7b; the rest are counted). */
+const REACH_PRINTED = 60;
+function reachLines(pass, r) {
+    const classes = Object.keys(r.byClass).sort();
+    const total = reachTally(r.byClass, classes);
+    const sum = (key) => total[key];
+    const kinds = {};
+    for (const cls of classes) for (const [kind, n] of Object.entries(r.byClass[cls].byKind ?? {})) kinds[kind] = (kinds[kind] ?? 0) + n;
+    const lines = [
+        `    ${pass}: ${sum('would')} failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'})` +
+            `${Object.keys(kinds).length === 0 ? '' : `, by kind ${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}`}, ` +
+            `${sum('accepted')} accepted by name (${classes.filter((cls) => (r.byClass[cls].accepted ?? 0) > 0).map((cls) => `${cls} ${r.byClass[cls].accepted}`).join(', ') || 'none'}) · ` +
+            `${sum('paints')} paint(s), ${sum('elements')} element(s) (${sum('contents')} a display: contents text owner) and ${sum('pseudos')} look pseudo(s) read, ${sum('reachers')} with a paint that reaches, ` +
+            `${sum('targets')} target(s), ${sum('pairs')} pair(s) judged, ${sum('seeks')} keyframe seek(s) (${sum('wide')} reading every reacher against every target; ${sum('needless')} animation(s) left out: nothing that reaches or moves; ${sum('unmoved')} more: a move of a box that holds nothing 1b reads; ${sum('offSurface')} more: a box under an open sheet's scrim) · ` +
+            `a blurred layer's offset and spread counted in full would add ${sum('softCore')} · ${(r.ms / 1000).toFixed(2)}s (seeks ${(r.seekMs / 1000).toFixed(2)}s)`,
+    ];
+    // A source said on many screens is one line: the sentence less its screen, its look and its place.
+    const grouped = new Map();
+    for (const w of r.would) {
+        const key = w.replace(/^[^:]*: /, '').replace(/ at -?\d+,-?\d+ \(\d+x\d+\)/, '').replace(/, composite [\d.]+/, '');
+        const g = grouped.get(key) ?? { n: 0, first: w };
+        g.n += 1;
+        grouped.set(key, g);
+    }
+    let printed = 0;
+    for (const [, g] of [...grouped].sort((a, b) => b[1].n - a[1].n)) {
+        if (printed === REACH_PRINTED) {
+            lines.push(`      … and ${grouped.size - printed} more source(s)`);
+            break;
+        }
+        lines.push(`      ${g.first}${g.n > 1 ? ` (×${g.n} on this pass)` : ''}`);
+        printed += 1;
+    }
+    if (r.would.length < sum('would')) lines.push(`      (${sum('would') - r.would.length} more counted and not kept word for word)`);
+    // The meets accepted by name (`REACH_ACCEPTED`): grouped as the failures are, each with the entry that accepted it.
+    const accepted = new Map();
+    for (const w of r.accepted ?? []) {
+        const key = w.replace(/^[^:]*: /, '').replace(/ at -?\d+,-?\d+ \(\d+x\d+\)/, '').replace(/, composite [\d.]+/, '');
+        const g = accepted.get(key) ?? { n: 0, first: w };
+        g.n += 1;
+        accepted.set(key, g);
+    }
+    for (const [, g] of [...accepted].sort((a, b) => b[1].n - a[1].n).slice(0, REACH_PRINTED)) lines.push(`      accepted: ${g.first}${g.n > 1 ? ` (×${g.n} on this pass)` : ''}`);
+    // A throw ends 1b on its paint and fails the paint: said here too, so a 1b that read nothing is not read as a 1b that found nothing.
+    if (sum('throws') > 0) {
+        lines.push(`      1b threw on ${sum('throws')} paint(s) and stopped there (each a failure):`);
+        for (const w of (r.thrown ?? []).slice(0, 8)) lines.push(`        ${w}`);
+    }
+    return lines;
+}
+/*
+ * **3a, `the-ground-walk-reaches-the-stall`** (before 8g2; bound since
+ * D-2026-10-28-01, the ground the dress rule holds; `groundWalkRead` in the
+ * probe, the pure half in `layout/groundStack.ts`): the ground under every
+ * money figure's glyphs read to the stall, a box that paints nothing skipped,
+ * where a gradient's stops and a tile fall read. Its failures are the dress
+ * rule's, in the pass's own list. Printed per pass and look: what it read and
+ * what it failed, and what it left to the contrast pass (a box above's
+ * pictures, grouped).
+ */
+const walkGeometry = [];
+/** How many grouped pictures a pass prints. */
+const WALK_PRINTED = 40;
+function walkLines(pass, r) {
+    const classes = Object.keys(r.byClass).sort();
+    const sum = (key) => classes.reduce((n, cls) => n + (r.byClass[cls][key] ?? 0), 0);
+    const lines = [
+        `    ${pass}: ${sum('elements')} element(s) read (${classes.map((cls) => `${cls} ${r.byClass[cls].elements}`).join(', ') || 'no look'}), ${sum('failed')} failed · ` +
+            `${sum('layers')} reading a box above's gradient, ${sum('pictures')} a box above's picture, ${sum('skipped')} skipping a box that paints nothing; ` +
+            `${sum('unread')} with a picture left to the contrast pass, ${sum('tooMany')} of too many choices, ${sum('thrown')} thrown · ${(r.ms / 1000).toFixed(2)}s`,
+    ];
+    const groups = new Map();
+    for (const it of r.unread) {
+        const key = `${it.cls} · ${it.what}`;
+        const g = groups.get(key) ?? { n: 0, first: it, screens: new Set() };
+        g.n += 1;
+        g.screens.add(it.screen);
+        groups.set(key, g);
+    }
+    const sorted = [...groups].sort((a, b) => b[1].n - a[1].n || (a[0] < b[0] ? -1 : 1));
+    if (sorted.length > 0) {
+        lines.push('      left to the contrast pass, by look and what:');
+        for (const [key, g] of sorted.slice(0, WALK_PRINTED)) lines.push(`        ${key} ×${g.n} on ${g.screens.size} screen(s) — first: ${g.first.screen} ${g.first.look}: ${g.first.el}`);
+        if (sorted.length > WALK_PRINTED) lines.push(`        … and ${sorted.length - WALK_PRINTED} more`);
+    }
+    if (r.thrown.length > 0) {
+        lines.push(`      3a threw on ${r.thrown.length} element(s), each a failure:`);
+        for (const w of r.thrown.slice(0, 8)) lines.push(`        ${w}`);
+    }
+    return lines;
+}
+/*
  * How the contrast pass was walked, for the dump's `meta` and never its
  * `jobs` or `boxes` (which stay comparable byte for byte at any tab count):
  * the tab count and why, the tab each job ran on, and the canary's reads.
@@ -2738,6 +3467,23 @@ try {
      * (`unshownFailures`), whose red proof is a page whose
      * `document.hasFocus` answers false. Each tab has its own page, viewport
      * and emulated media; nothing a pass reads is another tab's.
+     *
+     * **Every tab's page runs on the fixed clock** (`FIXED_CLOCK`, shared
+     * with `looks-diff.mjs`), installed here before the geometry walk, so
+     * the geometry passes read it as the contrast passes do (the fourteenth
+     * review's item 1, the owner's D-2026-10-30-01). Until then only the
+     * contrast passes did, and the geometry passes kept the real clock: the
+     * pay fixtures stamp their rate at load and the pay sheet prints it to
+     * the second (`formatTriedAt`), and 1a's lattice asks a glyph's points
+     * from its ink box, so two tabs' pages loaded at different seconds asked
+     * different point counts of that line — 960 against 956 on the kit's
+     * skeleton, 4850 against 4830 on Modern, 6818 against 6762 on Rural, by
+     * the critic's pinned clock (`critic14/runs/qclock-pay-390-reduce-pinned.log`;
+     * Neo's mono face does not move) — and the canary
+     * (`the-geometry-passes-read-the-same-on-every-tab`) read the phone's
+     * reduced-motion pass again, `pay` among its screens, wherever no carried
+     * look had a sticky desk sign: the kit's skeleton went red in one run of
+     * five on the critic's machine, the Rural starter in two of two.
      */
     const tabs = [{ index: 0, cdp, sessionId, targetId: undefined }];
     for (let index = 1; index < CONTRAST_TABS; index += 1) {
@@ -2747,6 +3493,8 @@ try {
     }
     for (const tab of tabs) {
         Object.assign(tab, { step: undefined, geometry: [] });
+        await cdp.send('Page.enable', {}, tab.sessionId);
+        await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, tab.sessionId);
         await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, tab.sessionId);
     }
 
@@ -2866,6 +3614,7 @@ try {
             paidPrivateClasses: PAID_PRIVATE_CLASSES,
             skeleton: EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
             sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
+            kit: LOOKS === 'workshop',
         });
         if (gaps.length > 0) {
             g.failed = true;
@@ -2875,49 +3624,26 @@ try {
         const spent = g.took();
         /*
          * The clip tolerance's own arithmetic, on every run rather than only
-         * on a passing one. A `coveredBy` that skipped every point would be
-         * indistinguishable from one that found nothing wrong — §6's
-         * complaint about a guard that quietly does not run — and the skip
-         * count on its own has no denominator to say which it was. So the
-         * ratio is what is printed and what is held: `clipChecks` is the
-         * points this pass actually hit-tested, and a pass with none of them
-         * proved nothing at all whatever its failure list says.
+         * on a passing one, over 1a's points (7a; `coverClip`): a read that
+         * skipped every point would be indistinguishable from one that found
+         * nothing wrong — §6's complaint about a guard that quietly does not
+         * run — and the skip count on its own has no denominator to say
+         * which it was. So the ratio is what is printed and what is held,
+         * the public looks' here and each carried look's on its own
+         * (`look-tallies.mjs`), and a pass that hit-tested no point proved
+         * nothing at all whatever its failure list says.
          */
-        // The public looks' own points (8e2): a carried look's are held to
-        // the same ceiling on their own (`look-tallies.mjs`), and neither can
-        // mask nor trip the other.
-        const carriedClip = PRIVATE_SHEET_CLASSES.map((cls) => report.clipByClass?.[cls] ?? { skips: 0, checks: 0 });
-        g.clip = { viewport: vp.name, byClass: {} };
-        for (const cls of PRIVATE_SHEET_CLASSES) {
-            g.clip.byClass[cls] = report.clipByClass?.[cls] ?? { skips: 0, checks: 0 };
-        }
-        const skipped = (report.clipSkips ?? 0) - carriedClip.reduce((n, at) => n + at.skips, 0);
-        const checked = (report.clipChecks ?? 0) - carriedClip.reduce((n, at) => n + at.checks, 0);
-        const clipLine =
-            skipped + checked === 0
-                ? ''
-                : ` · ${skipped}/${skipped + checked} points behind a clip` +
-                  ` (${((skipped / (skipped + checked)) * 100).toFixed(0)}%)`;
-        if (skipped > 0 && checked === 0) {
+        const { line: clipSaid, faults: clipFaults } = coverClip(report.coverByClass);
+        if (clipFaults.length > 0) {
             g.failed = true;
-            g.error(
-                `✗ ${vp.name} (${measured}): every hit-test point was behind a clip —` +
-                    ' the cover check ran over nothing',
-            );
-        } else if (skipped + checked > 0 && skipped / (skipped + checked) > CLIP_SKIP_CEILING) {
-            g.failed = true;
-            g.error(
-                `✗ ${vp.name} (${measured}): ${clipLine.trim()} —` +
-                    ` above the ${(CLIP_SKIP_CEILING * 100).toFixed(0)}% ceiling;` +
-                    ' the clip tolerance is eating the cover check',
-            );
+            for (const why of clipFaults) g.error(`✗ ${vp.name} (${measured}): ${why}`);
         }
         const compared = probeCoverageLine(pass.coverage, report);
         if (report.failures.length === 0) {
-            if (gaps.length === 0) {
+            if (gaps.length === 0 && clipFaults.length === 0) {
                 g.log(
                     `✓ ${vp.name} (${measured}): ${ran.length} screens, every look — ${spent}` +
-                        clipLine +
+                        clipSaid +
                         (compared === '' ? '' : `\n    compared: ${compared}`) +
                         `\n    faces: ${facesLine(report.faces)}`,
                 );
@@ -2926,7 +3652,7 @@ try {
         }
         g.failed = true;
         g.error(
-            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipLine}` +
+            `✗ ${vp.name} (${measured}): ${report.failures.length} failure(s) — ${spent}${clipSaid}` +
                 `\n    faces: ${facesLine(report.faces)}`,
         );
         for (const f of report.failures) {
@@ -3045,17 +3771,19 @@ try {
                 g.outlined.push(...(wv.outlinedTargets ?? []));
                 g.worn.push(...(wv.wornClasses ?? []));
                 for (const code of wv.codesPainted ?? []) g.codes.push(`${vp.name}/${code}`);
-                const gaps = probeCoverageGaps(pass.coverage, wv, { privateClasses: PRIVATE_SHEET_CLASSES });
+                const gaps = probeCoverageGaps(pass.coverage, wv, { privateClasses: PRIVATE_SHEET_CLASSES, kit: LOOKS === 'workshop' });
                 const compared = probeCoverageLine(pass.coverage, wv);
-                if (wv.failures.length === 0 && gaps.length === 0) {
+                const { line: clipSaid, faults: clipFaults } = coverClip(wv.coverByClass);
+                if (wv.failures.length === 0 && gaps.length === 0 && clipFaults.length === 0) {
                     g.log(
-                        `✓ ${label}: ${wanted} screens, every look — ${g.took()}\n    compared: ${compared}` +
+                        `✓ ${label}: ${wanted} screens, every look — ${g.took()}${clipSaid}\n    compared: ${compared}` +
                             `\n    faces: ${facesLine(wv.faces)}`,
                     );
                 } else {
                     g.failed = true;
+                    for (const why of clipFaults) g.error(`✗ ${label}: ${why}`);
                     if (wv.failures.length > 0) {
-                        g.error(`✗ ${label}: ${wv.failures.length} failure(s) — ${g.took()}`);
+                        g.error(`✗ ${label}: ${wv.failures.length} failure(s) — ${g.took()}${clipSaid}`);
                         for (const f of wv.failures) {
                             g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                         }
@@ -3120,17 +3848,20 @@ try {
                 const gaps = probeCoverageGaps(pass.coverage, nv, {
                     privateClasses: PRIVATE_SHEET_CLASSES,
                     sheetedClasses: EXPECTED_SHEET_CLASSES.filter((cls) => cls !== 't-skeleton'),
+                    kit: LOOKS === 'workshop',
                 });
                 const compared = probeCoverageLine(pass.coverage, nv);
-                if (nv.failures.length === 0 && gaps.length === 0) {
+                const { line: clipSaid, faults: clipFaults } = coverClip(nv.coverByClass);
+                if (nv.failures.length === 0 && gaps.length === 0 && clipFaults.length === 0) {
                     g.log(
-                        `✓ ${label}: ${wanted} screens, every look — ${spent}\n    compared: ${compared}` +
+                        `✓ ${label}: ${wanted} screens, every look — ${spent}${clipSaid}\n    compared: ${compared}` +
                             `\n    faces: ${facesLine(nv.faces)}`,
                     );
                 } else {
                     g.failed = true;
+                    for (const why of clipFaults) g.error(`✗ ${label}: ${why}`);
                     if (nv.failures.length > 0) {
-                        g.error(`✗ ${label}: ${nv.failures.length} failure(s) — ${spent}`);
+                        g.error(`✗ ${label}: ${nv.failures.length} failure(s) — ${spent}${clipSaid}`);
                         for (const f of nv.failures) {
                             g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
                         }
@@ -3284,13 +4015,19 @@ try {
                             rm.screensWithQuote ?? [],
                         ).join(', ')} mounted no [data-role="seller-price"].`,
                     );
-                } else if (rm.failures.length === 0) {
-                    g.log(`✓ ${label}: every look — ${g.took()}\n    faces: ${facesLine(rm.faces)}`);
                 } else {
-                    g.failed = true;
-                    g.error(`✗ ${label}: ${rm.failures.length} failure(s) — ${g.took()}`);
-                    for (const f of rm.failures) {
-                        g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                    const { line: clipSaid, faults: clipFaults } = coverClip(rm.coverByClass);
+                    if (rm.failures.length === 0 && clipFaults.length === 0) {
+                        g.log(`✓ ${label}: every look — ${g.took()}${clipSaid}\n    faces: ${facesLine(rm.faces)}`);
+                    } else {
+                        g.failed = true;
+                        for (const why of clipFaults) g.error(`✗ ${label}: ${why}`);
+                        if (rm.failures.length > 0) {
+                            g.error(`✗ ${label}: ${rm.failures.length} failure(s) — ${g.took()}${clipSaid}`);
+                            for (const f of rm.failures) {
+                                g.error(`    ${f.screen} / ${f.theme}: ${f.check} — ${f.detail}`);
+                            }
+                        }
                     }
                 }
             } catch (err) {
@@ -3331,6 +4068,44 @@ try {
      * named.
      */
     const commitGeometryPass = (g) => {
+        if (g.report?.coverByClass !== undefined) {
+            coverGeometry.push({
+                pass: g.key,
+                byClass: g.report.coverByClass,
+                ms: g.report.coverMs ?? 0,
+                coveredBy: { calls: g.report.coveredByCalls, ms: g.report.coveredByMs },
+                end: g.report.coverEnd === undefined ? undefined : { ...g.report.coverEnd, ms: g.report.coverEndMs ?? 0 },
+                seek: g.report.dressSeek === undefined ? undefined : { ...g.report.dressSeek, ms: g.report.dressSeekMs ?? 0 },
+            });
+            if (coverTally(g.report.coverByClass).paints > 0) coverSeen[g.key] = g.report.coverByClass;
+        }
+        if (g.report?.reachByClass !== undefined) {
+            // Every pass whose page ran 1b ran its containing-block check too (the worn-only pass's report is its own job's, and runs neither).
+            outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0, trigger: g.report.triggerCheck, ground: g.report.groundCheck });
+            reachGeometry.push({
+                pass: g.key,
+                byClass: g.report.reachByClass,
+                would: g.report.reachWould ?? [],
+                accepted: g.report.reachAccepted ?? [],
+                literal: g.report.reachLiteral ?? [],
+                thrown: g.report.reachThrown ?? [],
+                soft: g.report.reachSoft ?? {},
+                ms: g.report.reachMs ?? 0,
+                seekMs: g.report.reachSeekMs ?? 0,
+                policy: g.report.reachBlurOpacity,
+            });
+            if (OWING_GEOMETRY.has(g.key)) reachSeen[g.key] = g.report.reachByClass;
+        }
+        if (g.report?.walkByClass !== undefined) {
+            if (OWING_GEOMETRY.has(g.key)) walkSeen[g.key] = g.report.walkByClass;
+            walkGeometry.push({
+                pass: g.key,
+                byClass: g.report.walkByClass,
+                unread: g.report.walkUnread ?? [],
+                thrown: g.report.walkThrown ?? [],
+                ms: g.report.walkMs ?? 0,
+            });
+        }
         for (const { err, text } of g.lines) (err ? console.error : console.log)(text);
         if (g.failed) failed = true;
         for (const kind of g.outlined) outlinedTargetsSeen.add(kind);
@@ -3338,9 +4113,6 @@ try {
         if (g.sticky !== undefined) stickySeen[g.sticky.viewport] = g.sticky.classes;
         for (const cls of g.worn) wornClassesSeen.add(cls);
         for (const code of g.codes) codesPaintedSeen.add(code);
-        if (g.clip !== undefined) {
-            for (const [cls, at] of Object.entries(g.clip.byClass)) (clipSeen[cls] ??= {})[g.clip.viewport] = at;
-        }
     };
     /*
      * The walk, on every tab at once (`CONTRAST_TABS`, the contrast pass's
@@ -3514,6 +4286,106 @@ try {
                       ? `; every tab's page after the walk the page before it (${Object.keys(printBefore ?? {}).join(', ')})`
                       : `; ${tabPrintFaults.length} of ${tabs.length} tab(s) on a page that is not the page before the walk`)),
     );
+    console.log(
+        `  1a (nothing-covers-money-or-a-protected-box), bound: what it read on each geometry pass, its failures in the pass's own list; ` +
+            `coveredBy (asked amount is covered, you-pay figure is covered, and the unbuyable label's) bound beside it, its calls and time per phase`,
+    );
+    for (const { pass, byClass, ms, coveredBy, end, seek } of coverGeometry) for (const line of coverLines(pass, byClass, ms, coveredBy, end, seek)) console.log(line);
+    console.log(
+        `  1b (${REACH_CHECK}), bound: what it read on each geometry pass — a paint with no hit area (a box-shadow, an outline, a border image's outset, ` +
+            `a text-shadow, a drop shadow or a blur, a decoration line, a look pseudo's region) reaching a money node's line boxes or a protected box; its failures in the pass's own list, ` +
+            `the meets accepted by name (REACH_ACCEPTED) counted apart`,
+    );
+    for (const r of reachGeometry) for (const line of reachLines(r.pass, r)) console.log(line);
+    console.log(
+        `  3a (the-ground-walk-reaches-the-stall), bound: the ground under a money figure's glyphs read to the stall on each geometry pass — where its gradient stops and tiles fall, a box that paints nothing skipped, ` +
+            `a box above's pictures named and left to the contrast pass; its failures in the pass's own list (the dress rule's)`,
+    );
+    for (const r of walkGeometry) for (const line of walkLines(r.pass, r)) console.log(line);
+    {
+        /*
+         * `holds-out-of-flow-agrees-with-this-chrome` (the tenth critic's item
+         * 2): every geometry pass's page held 1b's containing-block list to
+         * where this Chrome places an absolute and a fixed child. A
+         * disagreement is already one of that pass's failures; a page that
+         * read 1b and ran no check is a failure here, since 1b would then
+         * read its out-of-flow boxes' clips on a list nothing held.
+         */
+        const unchecked = outOfFlowGeometry.filter((o) => o.check === undefined || typeof o.check.cases !== 'number' || o.check.cases === 0).map((o) => o.pass);
+        const disagreed = outOfFlowGeometry.filter((o) => (o.check?.disagree?.length ?? 0) > 0);
+        const ms = outOfFlowGeometry.reduce((n, o) => n + o.ms, 0);
+        const first = outOfFlowGeometry.find((o) => o.check !== undefined)?.check;
+        if (unchecked.length > 0) {
+            failed = true;
+            console.error(`✗ holds-out-of-flow-agrees-with-this-chrome: no check on the page of ${unchecked.join(', ')}`);
+        }
+        console.log(
+            `    1b's containing blocks held to this Chrome (holds-out-of-flow-agrees-with-this-chrome): ` +
+                (first === undefined
+                    ? 'no page ran the check'
+                    : `${first.cases} wrapper(s), each with an absolute and a fixed child, on ${outOfFlowGeometry.length - unchecked.length} page(s); ` +
+                      `Chrome held ${first.held.absolute} absolute and ${first.held.fixed} fixed child(ren) a page; ` +
+                      (disagreed.length === 0 ? 'holdsOutOfFlow agreed on every one' : `disagreed on ${disagreed.map((o) => `${o.pass} (${o.check.disagree.length})`).join(', ')}`)) +
+                ` · ${ms.toFixed(1)}ms over the passes`,
+        );
+    }
+    {
+        /*
+         * `the-trigger-fires-on-a-planted-mover` (the sixteenth review's item 1): every page that ran 1b's check also painted a
+         * money node with a box moved over it and ran the real trigger on it; a miss is already one of that pass's failures, and a
+         * page with no record of the check is a failure here, so a trigger that walks and finds nothing cannot read as a clean run.
+         */
+        const unrun = outOfFlowGeometry.filter((o) => o.trigger === undefined || typeof o.trigger.fired !== 'number' || o.trigger.fired === 0).map((o) => o.pass);
+        const ms = outOfFlowGeometry.reduce((n, o) => n + (o.trigger?.ms ?? 0), 0);
+        if (unrun.length > 0) {
+            failed = true;
+            console.error(`✗ the-trigger-fires-on-a-planted-mover: no meet counted on the page of ${unrun.join(', ')}`);
+        }
+        console.log(
+            `    1c's trigger held to a planted mover (the-trigger-fires-on-a-planted-mover): ` +
+                (outOfFlowGeometry.length === 0 ? 'no page ran the check' : `${outOfFlowGeometry.length - unrun.length} of ${outOfFlowGeometry.length} page(s) counted ${outOfFlowGeometry[0].trigger?.fired ?? 0} meet(s) of a box moved over a money node`) +
+                ` · ${ms.toFixed(1)}ms over the passes`,
+        );
+    }
+    {
+        /*
+         * `the-ground-read-fails-a-planted-ground` (the seventeenth review's item 1): every page that ran 1b's check also put the real
+         * ground read through planted boxes; a wrong answer is already one of that pass's failures, and a page with no record of the
+         * check is a failure here, so a read that answers nothing cannot read as a clean run.
+         */
+        const unrun = outOfFlowGeometry.filter((o) => o.ground === undefined || typeof o.ground.cases !== 'number' || o.ground.cases === 0).map((o) => o.pass);
+        const ms = outOfFlowGeometry.reduce((n, o) => n + (o.ground?.ms ?? 0), 0);
+        if (unrun.length > 0) {
+            failed = true;
+            console.error(`✗ the-ground-read-fails-a-planted-ground: no planted case read on the page of ${unrun.join(', ')}`);
+        }
+        console.log(
+            `    3a's ground read held to planted grounds (the-ground-read-fails-a-planted-ground): ` +
+                (outOfFlowGeometry.length === 0 ? 'no page ran the check' : `${outOfFlowGeometry.length - unrun.length} of ${outOfFlowGeometry.length} page(s) read ${outOfFlowGeometry[0].ground?.cases ?? 0} planted case(s)`) +
+                ` · ${ms.toFixed(1)}ms over the passes`,
+        );
+    }
+    {
+        // The blur policy's measurement: the most each soft paint reached over a target past its own box, over every pass.
+        const soft = {};
+        for (const r of reachGeometry) for (const [source, c] of Object.entries(r.soft)) soft[source] = Math.max(soft[source] ?? 0, c);
+        const top = Object.entries(soft).sort((a, b) => b[1] - a[1]);
+        console.log(
+            `    the blur policy (a blurred tail counts at a composite of ${reachGeometry[0]?.policy ?? '?'} or more): the most each soft paint reached over a target past its own box, over every pass — ` +
+                (top.length === 0 ? 'none came within reach of a target' : top.slice(0, 16).map(([source, c]) => `${source} ${c.toFixed(3)}`).join('; ')),
+        );
+        const literal = new Map();
+        for (const r of reachGeometry) {
+            for (const l of r.literal) {
+                const key = l.replace(/^[^:]*: /, '').replace(/ at -?\d+,-?\d+ \(\d+x\d+\)/, '');
+                literal.set(key, (literal.get(key) ?? 0) + 1);
+            }
+        }
+        if (literal.size > 0) {
+            console.log(`    what a blurred layer's offset and spread counted in full (the literal reading, not the policy) would add, by source, not counted:`);
+            for (const [key, n] of [...literal].sort((a, b) => b[1] - a[1]).slice(0, 12)) console.log(`      ${key} (×${n} kept)`);
+        }
+    }
     took();
 
     /*
@@ -3534,9 +4406,9 @@ try {
      * (`FIXED_CLOCK`, shared with `looks-diff.mjs`): the pay fixtures stamp
      * their rate at load and a sheet prints it to the second, the quote's age
      * and the wall's freshness are read against "now", and the pay code turns
-     * stale 120 s after that stamp. Installed here, on every tab the pass
-     * drives, so the geometry passes above keep the real clock they were
-     * written against.
+     * stale 120 s after that stamp. It is installed once on every tab, before
+     * the geometry walk (above), so the geometry passes run on it too since
+     * the fourteenth review's item 1; it is not installed here again.
      *
      * The page is focused whether or not its window is: `render.ts` focuses a
      * sheet's close and a face's back control, and `:focus-visible` paints a
@@ -3549,7 +4421,6 @@ try {
      */
     const readyTab = async (tabSession) => {
         await cdp.send('Page.enable', {}, tabSession);
-        await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK }, tabSession);
         await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, tabSession);
     };
     /*
@@ -3682,10 +4553,42 @@ try {
     let quietPixels = 0;
     // The codes read dark on a job's capture and white on a fresh pair (`readQuietZones`), said whatever the verdict.
     const quietReadAgain = [];
+    // How many of those each tab read (`out.tab`), and of the canary's reads again: said and dumped with the run's tab count, since
+    // the flake they are for is a capture's (the tenth critic's item 4: count sightings per tab count before 1d binds).
+    const quietByTab = {};
+    const canaryQuietByTab = {};
     // The same, on the jobs the cross-tab canary read again (the probe-shard
     // critic's N6): those reads are compared and never folded, so their
     // sightings were lost.
     const canaryQuietReadAgain = [];
+    // 1d (before 8g2, bound since 7c; `code-modules.mjs`): every job's
+    // module read folded — its failures fail the pass — and the canary's
+    // reads again of it, said under the pass and never failed (the walk's
+    // read of each job decides).
+    const modulesRun = {
+        byVpClass: {},
+        stats: {},
+        would: [],
+        failures: [],
+        readAgain: [],
+        readAgainByTab: {},
+        tabs: CONTRAST_TABS,
+        faults: [],
+        thrown: [],
+        read: new Map(),
+        readByClass: {},
+        faultedByClass: {},
+        uprightByClass: {},
+        uprightTravel: new Map(),
+        unread: new Map(),
+        payloadChecked: 0,
+        leastModule: Infinity,
+    };
+    // 1c(c) (bound since 7d): every job's `digits`, folded (`char-read.mjs`'s `charReport` says it; its `failures` are the contrast pass's).
+    const digitsRun = { byVpClass: {}, triggers: [], would: [], readAgain: [], faults: [], empty: [], thrown: [], unwalked: [], failures: [], shares: {}, smallKinds: {}, movers: 0, elements: 0, triggerMs: 0, readMs: 0, frames: 0, shared: 0 };
+    const canaryModules = { would: [], readAgain: [], readAgainByTab: {}, thrown: [] };
+    // 1d's cut held to this Chrome (`the-module-read-agrees-with-this-chrome`): its readings, said with 1d's lines.
+    let moduleSnapRead;
     // D14: the least the sign's name read per look and decoration state
     // (line read, or ring read where it wears the outline), and how the
     // name was painted where it was read (`nameChrome`).
@@ -3726,6 +4629,7 @@ try {
         // D6(i): jobs whose look pseudos were hidden and compared, and the
         // protected-box pixels compared.
         let lookPseudoJobs = 0;
+        let shownApartJobs = 0;
         let lookPseudoPixels = 0;
         // 8f2: jobs whose shown marks were hidden and compared, and the jobs
         // read again with the look's file art failed, each per look class.
@@ -3821,6 +4725,37 @@ try {
             }
             quietPixels += out.quietPixels;
             quietReadAgain.push(...out.quietReadAgain);
+            if (out.quietReadAgain.length > 0) quietByTab[out.tab] = (quietByTab[out.tab] ?? 0) + out.quietReadAgain.length;
+            if (out.modules.readAgain.length > 0) modulesRun.readAgainByTab[out.tab] = (modulesRun.readAgainByTab[out.tab] ?? 0) + out.modules.readAgain.length;
+            for (const [key, t] of Object.entries(out.modules.byVpClass)) {
+                const into = (modulesRun.byVpClass[key] ??= { jobs: 0, codes: 0, modules: 0, wrong: 0, wouldCodes: 0, unread: 0 });
+                for (const k of Object.keys(into)) into[k] += t[k];
+            }
+            for (const [key, st] of Object.entries(out.modules.stats)) foldStats((modulesRun.stats[key] ??= {}), st);
+            modulesRun.would.push(...out.modules.would);
+            modulesRun.failures.push(...out.modules.failures);
+            modulesRun.readAgain.push(...out.modules.readAgain);
+            modulesRun.faults.push(...out.modules.faults);
+            modulesRun.thrown.push(...out.modules.thrown);
+            countInto(modulesRun.read, out.modules.read);
+            for (const key of ['readByClass', 'faultedByClass', 'uprightByClass']) {
+                for (const [cls, codes] of Object.entries(out.modules[key])) {
+                    const into = (modulesRun[key][cls] ??= new Set());
+                    for (const code of codes) into.add(code);
+                }
+            }
+            for (const [code, t] of out.modules.uprightTravel) if (!(t.px <= (modulesRun.uprightTravel.get(code)?.px ?? -1))) modulesRun.uprightTravel.set(code, t);
+            for (const [code, why] of out.modules.unread) modulesRun.unread.set(code, why);
+            modulesRun.payloadChecked += out.modules.payloadChecked;
+            modulesRun.leastModule = Math.min(modulesRun.leastModule, out.modules.leastModule);
+            for (const [key, t] of Object.entries(out.digits.byVpClass)) {
+                const into = (digitsRun.byVpClass[key] ??= { jobs: 0, money: 0, walked: 0, movers: 0, elements: 0, triggered: 0, by1a: 0, chars: 0, held: 0, small: 0, skipped: 0, would: 0, readAgain: 0 });
+                for (const k of Object.keys(into)) into[k] += t[k];
+            }
+            for (const key of ['triggers', 'would', 'readAgain', 'faults', 'empty', 'thrown', 'unwalked', 'failures']) digitsRun[key].push(...out.digits[key]);
+            for (const [key, byKind] of Object.entries(out.digits.shares)) mergeShares((digitsRun.shares[key] ??= {}), byKind);
+            for (const [kind, n] of Object.entries(out.digits.smallKinds)) digitsRun.smallKinds[kind] = (digitsRun.smallKinds[kind] ?? 0) + n;
+            for (const key of ['movers', 'elements', 'triggerMs', 'readMs', 'frames', 'shared']) digitsRun[key] += out.digits[key];
             ringTargets += out.ringTargets;
             ringPixels += out.ringPixels;
             ringLeastPerChar = Math.min(ringLeastPerChar, out.ringLeastPerChar);
@@ -3848,6 +4783,18 @@ try {
             horizonUnread.push(...out.horizonUnread);
             lookPseudoPixels += out.lookPseudoPixels;
             lookPseudoJobs += out.lookPseudoJobs;
+            shownApartJobs += out.shownApartJobs;
+            if (out.cover !== undefined) {
+                const into = (coverContrast[out.cover.cls] ??= Object.fromEntries(COVER_TALLY_KEYS.map((key) => [key, 0])));
+                into.paints += 1;
+                for (const key of COVER_TALLY_KEYS) if (key !== 'paints' && key !== 'failed') into[key] += out.cover[key];
+                into.failed += out.cover.faults.length;
+                coverFailed.push(...out.cover.faults);
+            } else if ((out.dumpJobs ?? []).some((record) => record.refused === undefined)) {
+                // Every job not refused owes its read (7a): one that ended
+                // without it read nothing a verdict can stand on.
+                coverUnread.push(out.dumpJobs.find((record) => record.refused === undefined).key);
+            }
             lookMarkJobs += out.lookMarkJobs;
             sumInto(lookMarkJobsByClass, out.lookMarkJobsByClass);
             for (const [state, byClass] of Object.entries(out.artOffFrames)) sumInto((artOffFrames[state] ??= {}), byClass);
@@ -4043,6 +4990,11 @@ try {
             contrastRun.canary = [...picks].sort(([a], [b]) => a - b).map(([n, why]) => {
                 const { tab, again } = readAgain.get(n);
                 for (const line of again.quietReadAgain ?? []) canaryQuietReadAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                for (const line of again.modules?.readAgain ?? []) canaryModules.readAgain.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                if ((again.quietReadAgain?.length ?? 0) > 0) canaryQuietByTab[tab] = (canaryQuietByTab[tab] ?? 0) + again.quietReadAgain.length;
+                if ((again.modules?.readAgain?.length ?? 0) > 0) canaryModules.readAgainByTab[tab] = (canaryModules.readAgainByTab[tab] ?? 0) + again.modules.readAgain.length;
+                for (const line of again.modules?.would ?? []) canaryModules.would.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
+                for (const line of again.modules?.thrown ?? []) canaryModules.thrown.push(`(the canary's read of ${queue[n].key} on tab ${tab}) ${line}`);
                 const sameRecord = JSON.stringify(again.dumpJobs) === JSON.stringify(answers[n].dumpJobs);
                 const sameBoxes = JSON.stringify(again.dumpBoxes) === JSON.stringify(answers[n].dumpBoxes);
                 const said = { key: queue[n].key, why, ranOn: ranOn[n], readOn: tab, same: sameRecord && sameBoxes };
@@ -4067,6 +5019,76 @@ try {
                 tab.reducedNow = false;
             }
         }
+        /*
+         * **`the-module-read-agrees-with-this-chrome`** (the tenth critic's
+         * item 1, decided by the window): 1d's cut held to the Chrome this run
+         * measures in. Once a run, on the first tab and after the walk and its
+         * canary, the page draws a sheet of codes with `qrSvg` at fractional
+         * module sizes under the cut and over it, each at seven sub-pixel
+         * offsets (`__moduleSnap`), on a white ground over everything at DPR 1,
+         * and the sheet is captured as a job is and read by 1d's own reader
+         * (`moduleSnapVerdict`): every code under `MODULE_MIN_PX` refused,
+         * every code from it up read right on every centre. A disagreement is
+         * read again once on a fresh capture after 250ms, the quiet zone's
+         * flake in mind, and believed only when the fresh capture reads every
+         * code as the cut says; otherwise the run fails, with both readings.
+         * It fails the run as 1d's own failures do: it holds the instrument,
+         * not a look.
+         */
+        currentStep = 'contrast: 1d held to this Chrome';
+        const moduleSnap = await timed('module snap', async () => {
+            const tab = tabs[0];
+            await cdp.send(
+                'Emulation.setDeviceMetricsOverride',
+                { width: MODULE_SNAP_VIEWPORT.width, height: MODULE_SNAP_VIEWPORT.height, deviceScaleFactor: 1, mobile: false },
+                tab.sessionId,
+            );
+            // Its page is at another size now: a later job on this tab would reopen its viewport.
+            tab.vp = undefined;
+            let sheet;
+            const read = async () => {
+                const img = await captureShot(cdp, tab.sessionId);
+                const zones = await evalJson(cdp, tab.sessionId, 'window.__quietZones()');
+                const matrices = await evalJson(cdp, tab.sessionId, 'window.__codeMatrices()');
+                const verdict = moduleSnapVerdict(img, withMatrices(zones, matrices));
+                if (sheet.bottom > MODULE_SNAP_VIEWPORT.height) verdict.faults.unshift(`the sheet reaches ${sheet.bottom}px down a ${MODULE_SNAP_VIEWPORT.height}px viewport`);
+                if (zones.length !== sheet.codes) verdict.faults.unshift(`the sheet drew ${sheet.codes} codes and the page read ${zones.length}`);
+                return verdict;
+            };
+            // A page that throws drawing or reading the sheet is a disagreement, said as one, never a pass that stops (the eleventh critic's P3: the draw stood outside the guard).
+            const threw = (err, doing = 'reading') => ({ codes: 0, under: 0, over: 0, centres: 0, below: { codes: 0, centres: 0, wrong: 0 }, faults: [`the page threw ${doing} the sheet: ${String(err?.message ?? err).slice(0, 200)}`] });
+            const readOrSay = async () => {
+                try {
+                    return await read();
+                } catch (err) {
+                    return threw(err);
+                }
+            };
+            const drawAndRead = async () => {
+                try {
+                    sheet = await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(true)');
+                } catch (err) {
+                    return { first: threw(err, 'drawing') };
+                }
+                const first = await readOrSay();
+                if (first.faults.length === 0) return { first };
+                await sleep(250);
+                return { first, again: await readOrSay() };
+            };
+            let out;
+            try {
+                out = await drawAndRead();
+            } finally {
+                try {
+                    await evalJson(cdp, tab.sessionId, 'window.__moduleSnap(false)');
+                } catch (err) {
+                    // Said on the reading that decides, so it fails the run as a disagreement does.
+                    if (out !== undefined) (out.again ?? out.first).faults.push(`the page threw taking the sheet away: ${String(err?.message ?? err).slice(0, 200)}`);
+                }
+            }
+            return out;
+        });
+        moduleSnapRead = moduleSnap;
         currentStep = 'contrast: the verdict';
         const planKeys = new Set(plan.map((j) => j.key));
         const missing = plan.filter((j) => !done.has(j.key)).map((j) => j.key);
@@ -4087,6 +5109,10 @@ try {
         // for one reason still names the others (round 8 — a missing rain
         // key used to hide the figures under the floor).
         const verdicts = [...canaryFaults];
+        {
+            const decided = moduleSnap.again ?? moduleSnap.first;
+            for (const fault of decided.faults) verdicts.push(`the-module-read-agrees-with-this-chrome: ${fault}`);
+        }
         // A refusal is said once, with how many times the pages met it: a
         // page-level one is met on every page every tab loads.
         for (const tab of tabs) await collectRefusals(tab);
@@ -4143,9 +5169,10 @@ try {
             }
         }
         const RAIN_REQUIRED = Array.isArray(owed?.rain) ? owed.rain : [];
-        const HORIZON_REQUIRED = [
-            ...new Set([...(Array.isArray(owed?.horizon) ? owed.horizon : []), ...(LOOKS === 'shipped' ? Object.values(HORIZON_WORST).map((at) => at.job) : [])]),
-        ];
+        // A shipped run owes the horizon's worst on the owner's three jobs
+        // (`HORIZON_PINNED_JOBS`), which it reads alone; a kit run owes it on
+        // every job the page names.
+        const HORIZON_REQUIRED = LOOKS === 'shipped' ? [...HORIZON_PINNED_JOBS] : [...new Set(Array.isArray(owed?.horizon) ? owed.horizon : [])];
         if (LOOKS === 'shipped' && (RAIN_REQUIRED.length === 0 || (owed?.horizon ?? []).length === 0)) {
             verdicts.push(
                 `the page owes the rain on ${RAIN_REQUIRED.length} and the horizon on ${(owed?.horizon ?? []).length} job(s) — a shipped run measures Neo, which carries both (__contrastOwed)`,
@@ -4165,7 +5192,7 @@ try {
         if (LOOKS === 'shipped') {
             // At the horizon's worst, held to the owner's numbers
             // (`horizonWorstVerdict`): the job each was read on is owed and
-            // must read it again, and no job may read lower. They are Neo's
+            // must read it again, and no other job is read. They are Neo's
             // as shipped; a kit look's are printed and not pinned.
             for (const line of horizonWorstVerdict(horizonWorst)) verdicts.push(line);
         }
@@ -4268,15 +5295,19 @@ try {
             // figure proved the rule over nothing.
             verdicts.push('an-outlined-money-figure-is-ring-read-at-its-worst read no outlined money figure — vacuous green');
         }
-        if (LOOKS === 'shipped' && codesRead.size === 0) {
+        if (codesRead.size === 0) {
             verdicts.push('a-code-keeps-its-quiet-zone-white read no code — vacuous green');
         }
-        if (LOOKS === 'shipped') {
+        {
             // The codes a buyer pays by are owed by name (the critic, step
             // 5a″ item 7): a fixture that stopped painting one would leave
             // the rule green over the rest.
             // Read on the public looks' own jobs (8e2): a carried look's codes
             // are its own to owe (`look-tallies.mjs`), and never stand in.
+            // On the kit's probe (`--looks workshop`), the kit's look's jobs
+            // owe them the same (the thirteenth review, the owner's
+            // D-2026-10-29-01: until then the kit owed no code by name, and a
+            // turn of 0.01° took every pay code out of both reads, KQT).
             const publicCodes = new Set(
                 Object.entries(codesReadByClass)
                     .filter(([cls]) => !PRIVATE_SHEET_CLASSES.includes(cls))
@@ -4286,19 +5317,78 @@ try {
             if (unreadCodes.length > 0) {
                 verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
             }
+            // 1d owes the same codes by name on the public looks' own jobs (7c).
+            const publicModules = new Set(
+                Object.entries(modulesRun.readByClass)
+                    .filter(([cls]) => !PRIVATE_SHEET_CLASSES.includes(cls))
+                    .flatMap(([, codes]) => [...codes]),
+            );
+            const unreadModules = CODES_REQUIRED.filter((code) => !publicModules.has(code));
+            if (unreadModules.length > 0) verdicts.push(`${MODULE_CHECK} read no module of ${unreadModules.join(', ')}`);
         }
+        /*
+         * 1d once a contrast job (7c): every failure fails the pass; and on
+         * every look, every code whose quiet zone was read on its jobs has its
+         * modules read there too — save one it failed closed on, a failure
+         * already (a code not read whole, every centre on screen inside its
+         * clips, is one since the thirteenth review's item 8). A code in a
+         * turned frame is read upright by both, every transform above it held
+         * off (B1), and is said by name in 1d's lines below (`moduleReport`).
+         */
+        if (modulesRun.failures.length > 0) verdicts.push(`${modulesRun.failures.length} failure(s) of ${MODULE_CHECK}`);
+        /*
+         * 1c once its trigger fires (7d, the owner's D-2026-10-30-02): every
+         * failure fails the pass — a character that stands under the cut, a
+         * read that cannot be had, a job its trigger fired on that read no
+         * character, a throw — and each public look owes, on each viewport,
+         * characters read where its jobs triggered (`charsOwedFaults`; each
+         * carried look on its own below, `look-tallies.mjs`).
+         */
+        if (digitsRun.failures.length > 0) verdicts.push(`${digitsRun.failures.length} failure(s) of ${CHAR_CHECK}`);
+        verdicts.push(
+            ...charsOwedFaults(
+                digitsRun.byVpClass,
+                [...new Set(Object.keys(digitsRun.byVpClass).map((key) => key.slice(key.indexOf(' ') + 1)))].filter((cls) => !PRIVATE_SHEET_CLASSES.includes(cls)),
+            ),
+        );
+        for (const [cls, codes] of Object.entries(codesReadByClass)) {
+            const owed = [...codes]
+                .filter((code) => !['readByClass', 'faultedByClass'].some((key) => modulesRun[key][cls]?.has(code) ?? false))
+                .sort();
+            if (owed.length > 0) verdicts.push(`${MODULE_CHECK} read no module centre of ${owed.join(', ')} on a ${cls} stall, where its quiet zone was read`);
+        }
+        /*
+         * 1a once a contrast job (7a): every failure fails the pass; every
+         * job not refused owes its read; and its points are held to the clip
+         * ceiling, the public looks' here and each carried look's below.
+         */
+        if (coverFailed.length > 0) {
+            verdicts.push(`${coverFailed.length} failure(s) of ${COVER_CHECK} once a job, at its full height`);
+        }
+        if (coverUnread.length > 0) {
+            verdicts.push(`${COVER_CHECK} read nothing on ${coverUnread.length} job(s) not refused: ${coverUnread.slice(0, 5).join(', ')}${coverUnread.length > 5 ? ', …' : ''}`);
+        }
+        const contrastClip = coverClip(coverContrast);
+        verdicts.push(...contrastClip.faults.map((why) => `${COVER_CHECK}: ${why}`));
+        if (coverTally(coverContrast).paints > 0) coverSeen.contrast = coverContrast;
         if (PRIVATE_SHEET_CLASSES.length > 0) {
             // Every carried look on its own tallies (8e2, the 8e2 critic's
             // item 1): its line skips against its own ceiling, its points
-            // behind a clip, the codes owed by name on its own jobs. A
-            // carried look with no ceiling of its own fails here.
+            // of 1a behind a clip on every pass that read it (7a), a read of
+            // 1b that held a target on every geometry pass (7b), the codes
+            // owed by name on its own jobs, their quiet zones and (7c) their
+            // modules. A carried look with no ceiling of its own fails here.
             const { faults, notes } = carriedTallyFaults({
                 carried: CARRIED.looks,
                 lineSkips: privateLineSkips,
-                clip: clipSeen,
+                cover: coverSeen,
+                reach: reachSeen,
+                walk: walkSeen,
                 clipCeiling: CLIP_SKIP_CEILING,
                 codesRead: codesReadByClass,
+                moduleCodesRead: modulesRun.readByClass,
                 codesRequired: CODES_REQUIRED,
+                chars: digitsRun.byVpClass,
             });
             verdicts.push(...faults);
             for (const note of notes) console.log(`  ${note}`);
@@ -4313,9 +5403,12 @@ try {
                     ['mobile', 'desktop', 'canvas']
                         .map((vp) => `${vp} ${privateLineSkips[cls]?.[vp]?.['clipped-away'] ?? 0}/${privateLineSkips[cls]?.[vp]?.['not-rendered'] ?? 0}`)
                         .join(', ') +
-                    ' · points behind a clip ' +
-                    ['mobile', 'desktop', 'canvas']
-                        .map((vp) => `${vp} ${clipSeen[cls]?.[vp]?.skips ?? 0}/${(clipSeen[cls]?.[vp]?.skips ?? 0) + (clipSeen[cls]?.[vp]?.checks ?? 0)}`)
+                    ' · 1a points behind a clip ' +
+                    Object.keys(coverSeen)
+                        .map((pass) => {
+                            const t = coverTally(coverSeen[pass], [cls]);
+                            return `${pass} ${t.clipSkips}/${t.clipSkips + t.checked} (wall scrollers ${t.wallScroll} apart)`;
+                        })
                         .join(', '),
                 );
                 console.log(`  carried looks on their own tallies (a-carried-look-is-held-to-its-own-skip-ceilings): ${PRIVATE_SHEET_CLASSES.map((cls, i) => `${cls}: line skips ${said[i]}`).join('; ')}`);
@@ -4360,6 +5453,7 @@ try {
                         `${ringTargets} outlined line(s) ring-read (${moneyRingRead} of them money; ${ringPixels} ring pixels, ` +
                         `at least ${Number.isFinite(ringLeastPerChar) ? ringLeastPerChar.toFixed(1) : '-'} glyph pixels a character), ` +
                         `${brokenFigures} broken figure(s) read digit by digit on ${brokenKeys.size} job(s) ` +
+                        `(the ring and the figures shown on frames of their own on ${shownApartJobs}, where an outlined line met a piece) ` +
                         `(the faintest piece ${Number.isFinite(brokenLeast) ? brokenLeast.toFixed(2) : '-'}:1; ${phases.get('broken figures')?.ms !== undefined ? `${(phases.get('broken figures').ms / 1000).toFixed(1)}s` : '-'}) — ${took()}` +
                         `\n    faces: every face loaded before the first job on all ${tabs.reduce((n, tab) => n + tab.faces.length, 0)} contrast pages` +
                         ` (the first: ${tabs[0].faces[0] ?? 'none'})` +
@@ -4374,6 +5468,16 @@ try {
             for (const line of dim) {
                 console.error(`    ${line}`);
             }
+            for (const line of coverFailed) {
+                console.error(`    ${line}`);
+            }
+            for (const line of modulesRun.failures) {
+                console.error(`    ${line}`);
+            }
+            for (const line of digitsRun.failures.slice(0, CHAR_SAID)) {
+                console.error(`    ${line}`);
+            }
+            if (digitsRun.failures.length > CHAR_SAID) console.error(`    … and ${digitsRun.failures.length - CHAR_SAID} more failure(s) of ${CHAR_CHECK} (counted by node in 1c's own lines below)`);
         }
     } catch (err) {
         failed = true;
@@ -4393,6 +5497,10 @@ try {
         failed = true;
         console.error(`✗ contrast: ${refused.length} job(s) refused — what the page answered is not the job:`);
         for (const line of refused) console.error(`    ${line}`);
+    }
+    if (Object.keys(coverContrast).length > 0) {
+        console.log(`  1a (nothing-covers-money-or-a-protected-box), bound: what it read once a contrast job, at its full height`);
+        for (const line of coverLines('contrast (its time summed over the tabs)', coverContrast, phases.get('cover (1a)')?.ms ?? 0)) console.log(line);
     }
     // The least ring read per kind of outlined line, whatever the verdict:
     // what the outline buys each kind at the rain's worst, and
@@ -4439,12 +5547,25 @@ try {
                 (notRead.length === 0 ? 'none' : notRead.map((code) => (codesUnread.has(code) ? `${code} (${codesUnread.get(code)})` : code)).join(', ')),
         );
         console.log(
-            `  quiet zone, read again on a fresh pair and white there: ` +
-                (quietReadAgain.length === 0 ? 'none' : `${quietReadAgain.length}${quietReadAgain.map((line) => `\n    ${line}`).join('')}`) +
+            `  quiet zone, read again on a fresh pair and white there, at ${CONTRAST_TABS} tab(s): ` +
+                (quietReadAgain.length === 0
+                    ? 'none'
+                    : `${quietReadAgain.length} (by tab: ${byTabSaid(quietByTab)})${quietReadAgain.map((line) => `\n    ${line}`).join('')}`) +
                 (canaryQuietReadAgain.length === 0
                     ? `; on the canary's reads again: none`
-                    : `; on the canary's reads again: ${canaryQuietReadAgain.length}${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
+                    : `; on the canary's reads again: ${canaryQuietReadAgain.length} (by tab: ${byTabSaid(canaryQuietByTab)})${canaryQuietReadAgain.map((line) => `\n    ${line}`).join('')}`),
         );
+    }
+    // 1d (bound since 7c): what the module read read and failed, whatever
+    // the verdict; its failures are the contrast pass's too.
+    if (Object.keys(modulesRun.byVpClass).length > 0 || codesPaintedSeen.size > 0) {
+        for (const line of moduleReport(modulesRun, canaryModules, codesPaintedSeen)) console.log(`  ${line}`);
+    }
+    if (Object.keys(digitsRun.byVpClass).length > 0) {
+        for (const line of charReport(digitsRun)) console.log(`  ${line}`);
+    }
+    if (moduleSnapRead !== undefined) {
+        for (const line of moduleSnapLines(moduleSnapRead)) console.log(`  ${line}`);
     }
     // Every prepared node that gave no box, by the page's reason, whatever
     // the verdict (step 5b: no silent drop): a picture tile, a box that
@@ -4750,9 +5871,29 @@ try {
                     // canary's reads again: how many, and which (each
                     // sighting's first line), so a reader comparing runs can
                     // find a code that recurs (the probe-shard critic's N6).
+                    // 1d (bound since 7c): how many code reads failed the
+                    // module read, and how many read wrong and then right on a
+                    // fresh pair, on the walk and on the canary's reads again.
+                    // Both counted by the run's tab count and by the tab that read
+                    // each (the tenth critic's item 4: a flake that hits both
+                    // captures is a false red now 1d is bound, so step 7c read
+                    // these counts first).
+                    codeModules: {
+                        tabs: CONTRAST_TABS,
+                        would: modulesRun.would.length,
+                        readAgain: modulesRun.readAgain.length,
+                        readAgainByTab: modulesRun.readAgainByTab,
+                        canaryWould: canaryModules.would.length,
+                        canaryReadAgain: canaryModules.readAgain.length,
+                        canaryReadAgainByTab: canaryModules.readAgainByTab,
+                        sightings: [...modulesRun.readAgain, ...canaryModules.readAgain].map((line) => line.split('\n')[0]),
+                    },
                     quietReadAgain: {
+                        tabs: CONTRAST_TABS,
                         walk: quietReadAgain.length,
+                        walkByTab: quietByTab,
                         canary: canaryQuietReadAgain.length,
+                        canaryByTab: canaryQuietByTab,
                         sightings: [...quietReadAgain, ...canaryQuietReadAgain].map((line) => line.split('\n')[0]),
                     },
                 },

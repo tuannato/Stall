@@ -5408,6 +5408,7 @@
       "rule": "@keyframes $C-ring { to { box-shadow: 0 0 0 40px; } }",
       "expect": "refused",
       "by": [
+        "keyframe:ground",
         "paint-reach"
       ]
     },
@@ -5824,8 +5825,7 @@
       "rule": ".$C .item-p::after { content: ''; -webkit-border-before: 40px solid; border-block-start: 40px solid; }",
       "expect": "refused",
       "by": [
-        "pseudo:host-paint",
-        "twin"
+        "pseudo:host-paint"
       ]
     },
     {
@@ -5967,22 +5967,22 @@
       "rule": ".$C .item-p::after { content: ''; -webkit-mask-box-image: var(--m); mask-border: var(--m); }",
       "expect": "refused",
       "by": [
-        "pseudo:host-paint",
-        "twin"
+        "pseudo:host-paint"
       ]
     },
     {
       "rule": ".$C .item-p::after { content: ''; -webkit-mask-box-image-source: var(--m); mask-border-source: var(--m); }",
       "expect": "refused",
       "by": [
-        "pseudo:host-paint",
-        "twin"
+        "pseudo:host-paint"
       ]
     },
     {
       "rule": ".$C .item-p::after { content: ''; fill: currentColor; stroke: currentColor; }",
-      "expect": "accepted",
-      "why": "fill and stroke apply to SVG shapes and have no effect on an HTML pseudo-element"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     }
   ],
   "f2": [
@@ -6023,7 +6023,8 @@
       "rule": ".$C .item-caret { overflow: visible; stroke-width: 300; pointer-events: none; color: transparent; }\n.$C .item-head:hover .item-caret { color: #ff00aa; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
@@ -6106,6 +6107,7 @@
       "rule": "@keyframes $C-ts { 50% { text-shadow: 0 4000px 0; } }",
       "expect": "refused",
       "by": [
+        "keyframe:ink",
         "paint-reach"
       ]
     },
@@ -6113,6 +6115,7 @@
       "rule": "@keyframes $C-bs { 50% { box-shadow: 0 0 0 4000px var(--g); } }",
       "expect": "refused",
       "by": [
+        "keyframe:ground",
         "paint-reach"
       ]
     },
@@ -6977,90 +6980,109 @@
     },
     {
       "rule": ".$C .item-caret { stroke-width: 3; }",
-      "expect": "accepted",
-      "why": "at the cap: 3 (the shipped glyphs paint 1.75 to 2)"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 3px; }",
-      "expect": "accepted",
-      "why": "px is read as the bare number is"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 1.75; }",
-      "expect": "accepted",
-      "why": "the width the shipped Rural sheet paints"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 0; }",
-      "expect": "accepted",
-      "why": "a stroke of no width draws nothing"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 3.5; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 300; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 300px; overflow: visible; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 0.5em; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: 10%; }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: var(--w); }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: calc(1 + 1); }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": ".$C .item-caret { stroke-width: inherit; }",
-      "expect": "accepted",
-      "why": "a CSS-wide keyword takes a value the cascade already holds"
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
     },
     {
       "rule": "@media (min-width: 680px) { .$C .item-caret { stroke-width: 300; } }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
       "rule": "@keyframes $C-sw { to { stroke-width: 300; } }",
       "expect": "refused",
       "by": [
-        "ink-reach"
+        "ink-reach",
+        "svg-paint"
       ]
     },
     {
@@ -7560,14 +7582,17 @@
     },
     {
       "rule": "@keyframes $C-m { to { color: red; } }\n.$C .item-a { animation: $C-m 1s; }",
-      "expect": "accepted",
-      "why": "the keyframe is declared in this sheet"
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
     },
     {
       "rule": "@media (min-width: 680px) { @keyframes $C-m { to { color: red; } } }\n.$C .item-a { animation: $C-m 1s; }",
       "expect": "refused",
       "by": [
         "keyframe:foreign",
+        "keyframe:ink",
         "keyframe:nested"
       ]
     },
@@ -7625,7 +7650,8 @@
       "rule": "@keyframes $C-ld { to { color: light-dark(#fff, #000); } }",
       "expect": "refused",
       "by": [
-        "colour-scheme"
+        "colour-scheme",
+        "keyframe:ink"
       ]
     },
     {
@@ -7811,6 +7837,7 @@
       "expect": "refused",
       "by": [
         "keyframe:foreign",
+        "keyframe:ink",
         "keyframe:nested"
       ]
     },
@@ -8003,6 +8030,687 @@
       "rule": ".$C .ic { stroke-linejoin: miter; stroke-miterlimit: 1000; }",
       "expect": "accepted",
       "why": "stated gap: stroke-miterlimit is uncapped, a miter join reaches that many stroke widths from a vertex (PLAN § Open)"
+    }
+  ],
+  "i1": [
+    {
+      "rule": "@keyframes $C-ink { 25%, 68% { color: transparent; } }\n.$C .item-head-q .item-a { animation: $C-ink 100s linear infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { color: transparent; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { COLOR: rgba(0, 0, 0, 0.05); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { color: var(--s-bg); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { color: currentColor; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { from { color: #fff; } to { color: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { text-shadow: 0 0 0 #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { text-shadow: 0 0 2px var(--s-bg), 0 0 2px var(--s-bg); } }\n.$C .item-a { animation: $C-ink 4s infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { caret-color: transparent; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { text-emphasis-color: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { -webkit-text-emphasis-color: #000; text-emphasis-color: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { text-emphasis: none; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { text-emphasis-position: under right; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { paint-order: stroke; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 50% { font-palette: dark; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { to { color: red; } }\n.$C .item-p::after { content: ''; animation: $C-ink 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { @keyframes $C-ink { to { color: transparent; } } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink",
+        "keyframe:nested"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ink { 0% { opacity: 1; } 50% { color: transparent; opacity: 1; } 100% { opacity: 1; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ink"
+      ]
+    },
+    {
+      "rule": ".$C .item-x { color: #fff; }",
+      "expect": "accepted",
+      "why": "an ink at rest: the belt reads keyframes alone, and a look sets its inks at rest"
+    },
+    {
+      "rule": "@keyframes $C-ink { from { opacity: 0.5; } to { opacity: 1; } }",
+      "expect": "accepted",
+      "why": "a keyframe that sets no inherited ink: an opacity is the probe's dress rule's at every keyframe, not this belt's"
+    },
+    {
+      "rule": "@keyframes $C-ink { to { background-position: 100% 0; } }",
+      "expect": "accepted",
+      "why": "a keyframe that moves a background, which no box below inherits"
+    },
+    {
+      "rule": "@keyframes $C-ink { to { background-color: red; } }\n.$C .item-a { animation: $C-ink 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    }
+  ],
+  "j1": [
+    {
+      "rule": "@keyframes $C-ground { 0% { background-color: transparent; } 25%, 68% { background-color: var(--s-text); } 80%, 100% { background-color: transparent; } }\n.$C .item-head-q .item-a { animation: $C-ground 100s linear infinite; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background-color: red; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { BACKGROUND-COLOR: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background-color: currentColor; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background: #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background: linear-gradient(#000, #000); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background-image: linear-gradient(var(--s-text), var(--s-text)); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { background-image: none; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { box-shadow: inset 0 0 0 100px var(--s-text); } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 50% { -webkit-box-shadow: inset 0 0 0 100px #000; box-shadow: inset 0 0 0 100px #000; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background-color: red; } }\n.$C .item-p::after { content: ''; animation: $C-ground 1s; }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { @keyframes $C-ground { to { background-color: #000; } } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground",
+        "keyframe:nested"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { 0% { opacity: 1; } 50% { background-color: #000; opacity: 1; } 100% { opacity: 1; } }",
+      "expect": "refused",
+      "by": [
+        "keyframe:ground"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-ground { to { background-position: 100% 0; } }",
+      "expect": "accepted",
+      "why": "a background that moves, which lays no new ground: the belt reads a colour, an image and a shadow; where a moving tile lands under a money figure's own glyphs the probe reads at each keyframe offset since the fifth review (SEEK_ON_OWN, PGpos), and a box above's background image is the contrast pass's alone (stated)"
+    },
+    {
+      "rule": "@keyframes $C-ground { from { background-size: 100% 100%; } to { background-size: 220% 100%; } }",
+      "expect": "accepted",
+      "why": "a background that grows, which lays no new ground: the belt reads a colour, an image and a shadow; where a growing tile lands under a money figure's own glyphs the probe reads at each keyframe offset since the fifth review (SEEK_ON_OWN, PGpos), and a box above's background image is the contrast pass's alone (stated)"
+    },
+    {
+      "rule": ".$C .item-a { background-color: var(--s-surface); }",
+      "expect": "accepted",
+      "why": "a ground at rest, which the belt does not read: the probe judges a ground under a figure on every pass, at rest and where a seek changed it"
+    }
+  ],
+  "k1": [
+    {
+      "rule": ".$C .qr path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr rect { fill: #000; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr path { fill-opacity: 0; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr path { stroke: #fff; stroke-width: 3; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .qr path { stroke-dasharray: 1; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C [data-role=\"pay-qr\"] path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "other",
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .ic, .$C .qr path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C :is(.ic, .qr) path { fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .ic + path { stroke: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-caret { stroke-width: 2; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .item-p::after { content: ''; fill: #fff; }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-fill { to { fill: #fff; } }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { .$C .qr path { fill: #fff; } }",
+      "expect": "refused",
+      "by": [
+        "svg-paint"
+      ]
+    },
+    {
+      "rule": ".$C .ic { stroke-width: 2; stroke-linecap: square; }",
+      "expect": "accepted",
+      "why": "the shape the shipped looks write: a drawn icon's line, on the .ic svg itself (theme-modern, theme-neo, theme-rural)"
+    },
+    {
+      "rule": ".$C .pay-pointer .ic { stroke-width: 2; }",
+      "expect": "accepted",
+      "why": "a drawn icon under another box: the subject is still the .ic svg"
+    },
+    {
+      "rule": ".$C .ic path { stroke-linejoin: round; }",
+      "expect": "accepted",
+      "why": "the drawn icon's own path, under the .ic svg by a descendant combinator"
+    },
+    {
+      "rule": ".$C .ic > path { stroke-width: 1.5; }",
+      "expect": "accepted",
+      "why": "the drawn icon's own path, under the .ic svg by a child combinator"
+    },
+    {
+      "rule": ".$C svg.ic { fill: none; }",
+      "expect": "accepted",
+      "why": "the .ic svg named with its type"
+    },
+    {
+      "rule": ".$C .item-caret.ic { stroke-width: 1.5; }",
+      "expect": "accepted",
+      "why": "a drawn icon named by its own class beside .ic"
+    }
+  ],
+  "l1": [
+    {
+      "rule": ".$C .qr { mask-box-image: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }",
+      "expect": "refused",
+      "by": [
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-font-smoothing: antialiased; font-smoothing: antialiased; }",
+      "expect": "refused",
+      "by": [
+        "twin:none"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-margin-start: 4px; margin-start: 4px; }",
+      "expect": "refused",
+      "by": [
+        "twin"
+      ]
+    },
+    {
+      "rule": ".$C .item-n { -webkit-user-drag: none; user-drag: none; }",
+      "expect": "refused",
+      "by": [
+        "twin:none"
+      ]
+    },
+    {
+      "rule": ".$C .qr { -webkit-mask-position-x: 0; mask-position-x: 0; }",
+      "expect": "refused",
+      "by": [
+        "twin:none"
+      ]
+    },
+    {
+      "rule": ".$C .qr { mask-border: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }",
+      "expect": "accepted",
+      "why": "the prefixed mask border beside its twin, mask-border, the property CSS Masking names for it, at the same value: the lint admits it, and the probe's code hold reads every mask source on a code (a-code-is-drawn-black-on-white, the fifth review's PQM)"
+    },
+    {
+      "rule": ".$C .item-n { -webkit-margin-start: 4px; margin-inline-start: 4px; }",
+      "expect": "accepted",
+      "why": "the control: a prefixed logical side beside the logical property that is its twin, at the same value"
+    },
+    {
+      "rule": ".$C .sheet { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+      "expect": "accepted",
+      "why": "the control: a prefixed property Chrome does not list (Safari's) beside its real twin, the shape the shipped looks write"
+    },
+    {
+      "rule": ".$C .item-n { -moz-osx-font-smoothing: grayscale; osx-font-smoothing: grayscale; }",
+      "expect": "accepted",
+      "why": "a stated gap: a -moz- property's twin is the name less its prefix and is not held to exist, PREFIXED_TWINS being measured in Chrome, which lists no -moz- property; it paints in no engine the probe runs"
+    }
+  ],
+  "a1": [
+    {
+      "rule": "@keyframes $C-pan { 0%, 29.9% { translate: 0 0; } 30%, 40% { translate: -600px 0; } 40.1%, 100% { translate: 0 0; } }\n@media (min-width: 680px) {\n    .$C .pay-x:not([data-price-tier='1'], [data-price-tier='2'], [data-price-tier='3']) { position: relative; anchor-scope: --$C-pan; justify-content: flex-end; min-height: 40px; overflow-x: clip; }\n    .$C .pay-x:not([data-price-tier='1'], [data-price-tier='2'], [data-price-tier='3']) .item-u { anchor-name: --$C-pan; animation: $C-pan 100s linear infinite; }\n    .$C .pay-x:not([data-price-tier='1'], [data-price-tier='2'], [data-price-tier='3']) .pay-x-n { position: absolute; position-anchor: --$C-pan; right: anchor(left); top: anchor(top); margin-inline-end: 8px; }\n}",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { anchor-name: --$C-a; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x { anchor-scope: all; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-anchor: --$C-a; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-area: top; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { inset-area: top; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try: --$C-t; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try-fallbacks: flip-block; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try-order: most-height; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-try-options: flip-block; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-visibility: anchors-visible; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position-fallback: --$C-t; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; right: anchor(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; top: anchor(--$C-a top); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { width: anchor-size(width); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { margin-left: calc(anchor-size(width) * 2); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; inset: anchor(top) auto auto anchor(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { justify-self: anchor-center; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x { align-items: anchor-center; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { ANCHOR-NAME: --$C-a; }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; Right: ANCHOR(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { anchor-name: --$C-a !important; }",
+      "expect": "refused",
+      "by": [
+        "anchor",
+        "important"
+      ]
+    },
+    {
+      "rule": "@media (min-width: 680px) { .$C .item-u { anchor-name: --$C-a; } }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-an { to { anchor-name: --$C-a; } }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": "@keyframes $C-an { to { right: anchor(left); } }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { --$C-x: anchor(left); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { --$C-x: anchor-size(width); width: var(--$C-x); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .pay-x-n { position: absolute; right: var(--$C-y, anchor(left)); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": ".$C .item-u { --$C-n: --$C-a; anchor-name: var(--$C-n); }",
+      "expect": "refused",
+      "by": [
+        "anchor"
+      ]
+    },
+    {
+      "rule": "@position-try --$C-t { top: anchor(bottom); }",
+      "expect": "refused",
+      "by": [
+        "at-rule"
+      ]
+    },
+    {
+      "rule": ".$C .item { --$C-anchor: 4px; }",
+      "expect": "accepted",
+      "why": "a custom property whose name says anchor and holds a length: no anchor function, property or keyword (the control)"
+    },
+    {
+      "rule": ".$C .item-anchor { color: red; }",
+      "expect": "accepted",
+      "why": "a class whose name says anchor: a selector, not anchor positioning (the control)"
+    },
+    {
+      "rule": ".$C .item { position: relative; left: 4px; }",
+      "expect": "accepted",
+      "why": "a relative offset with no anchor on the page: it moves the box and what it holds, which the walk reads (the control)"
+    },
+    {
+      "rule": "@keyframes $C-move { to { translate: 0 2px; } }",
+      "expect": "accepted",
+      "why": "a keyframe translate with no anchor to follow it: the probe's offset read seeks it where it moves another box (the control)"
     }
   ]
 }

@@ -105,6 +105,27 @@
  * - **`a-money-figure-never-clips-itself`** (CRITIC-WALL-CYCLE P2-1): every
  *   geometry pass owes, on every look it painted, money figures asked
  *   (`selfClipByClass`).
+ * - **`nothing-covers-money-or-a-protected-box`** (1a, bound since 7a):
+ *   every geometry pass owes, on every look it painted, a read of 1a on its
+ *   paints that hit-tested at least one point (`coverByClass`): a look whose
+ *   every point stood behind a clip, below the screen or past its side, or
+ *   that was never read, certified nothing about what covers its money. The
+ *   contrast pass owes a read on every job it did not refuse (the runner,
+ *   `coverUnread`), and both are held to the clip ceiling (`look-tallies.mjs`).
+ * - **`a-paint-with-no-hit-area-reaches-no-money`** (1b, bound since 7b):
+ *   every geometry pass owes, on every look it painted, a read of 1b on its
+ *   paints that held at least one target (`reachByClass`: a money node's line
+ *   boxes or a protected box, read past its clips): a look never read, or
+ *   read with every target cut away, certified nothing about what reaches its
+ *   money. A paint on which 1b threw is a failure of its own (`reachAtRest`).
+ * - **`the-ground-walk-reaches-the-stall`** (3a, bound since D-2026-10-28-01):
+ *   every geometry pass owes, on every look it painted, money figures' elements
+ *   read to the stall (`walkByClass`: an element read, its fails the dress
+ *   rule's): a look read on no figure certified nothing about what lies under
+ *   its money. A throw is a failure of its own.
+ * - **`the-kit-takes-no-anchor-positioning`** (D-2026-10-27-02): on the
+ *   kit's probe (`kit`), every geometry pass owes a read of the kit's look
+ *   (`kitAnchorPaints`); the ordinary probe owes nothing here.
  * - **`a-money-figure-is-never-misdressed`** (D-2026-10-19-01): every
  *   geometry pass owes, on every look it painted, money figures held to
  *   their dress on every surface it paints one (`DRESS_SURFACES_OWED`,
@@ -114,6 +135,18 @@
  *   Rural's notched tag is the subject, so a pass that read none stopped
  *   measuring the half of the rule that reads a clip's shape against the
  *   ink.
+ * - **`a-code-is-drawn-black-on-white`** (before 8g2, the fourth review's
+ *   item 4, the critic's PFQ): every geometry pass owes, on every look it
+ *   painted a code on, the colours of every code it painted read
+ *   (`qrColourByClass`: painted and read, per look), and a pass whose page
+ *   listed codes painted (`codesPainted`) and reported no such read owes one;
+ *   and, per screen (the fifth review's item 10: the per-look owe counted
+ *   painted and read under one filter, so a look that took a code's box
+ *   away owed nothing), every look whose paints of a screen built as many
+ *   codes painted as many of them with a box as the most any such look did
+ *   (`qrByScreen`: screen, look, codes built, the fewest and most over its
+ *   variants; a paid look's try-on builds no code on the name sheet), and a
+ *   report with no such count owes one.
  * - **`a-card-figure-stands-inside-its-row`** (2026-10-13; round 2): the
  *   narrow pass (360x800) and the phone pass owe, on every look they
  *   painted, a read of every step of the face's figure, "You pay", a pay
@@ -330,9 +363,13 @@ const WALL_ROLES = [
 export function probeCoverageGaps(
     pass,
     report,
-    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [] } = {},
+    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [], kit = false } = {},
 ) {
     const gaps = [];
+    // The kit's probe (`--looks workshop`): every geometry pass owes the kit's anchor refusal a read of the kit's look.
+    if (kit && GEOMETRY_PASSES.has(pass) && !((report.kitAnchorPaints?.read ?? 0) > 0)) {
+        gaps.push("the-kit-takes-no-anchor-positioning read no paint of the kit's look");
+    }
     if (!GEOMETRY_PASSES.has(pass) && !Object.hasOwn(PASSES_OWING_NO_GEOMETRY, pass)) {
         gaps.push(`the ${pass} pass is in no coverage table: name it in GEOMETRY_PASSES (and the surfaces it owes) or in PASSES_OWING_NO_GEOMETRY with why`);
     }
@@ -509,6 +546,80 @@ export function probeCoverageGaps(
             for (const surface of DRESS_SURFACES_OWED[pass] ?? []) {
                 if (!(((dress[cls] ?? {})[surface] ?? 0) > 0)) {
                     gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall's ${surface}`);
+                }
+            }
+        }
+        // 1a (7a): every look a pass painted read, and a point hit-tested on
+        // it — a read that hit-tested nothing on a look covered nothing.
+        const cover = report.coverByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            const read = Object.hasOwn(cover, cls) ? cover[cls] : undefined;
+            if (!((read?.paints ?? 0) > 0)) {
+                gaps.push(`nothing-covers-money-or-a-protected-box read no paint of a ${cls} stall`);
+            } else if (!((read?.checked ?? 0) > 0)) {
+                gaps.push(`nothing-covers-money-or-a-protected-box hit-tested no point on a ${cls} stall`);
+            }
+        }
+        // 1b (7b): every look a pass painted read, and a target held on it —
+        // a read that held no target on a look reached nothing it could fail.
+        const reach = report.reachByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            const read = Object.hasOwn(reach, cls) ? reach[cls] : undefined;
+            if (!((read?.paints ?? 0) > 0)) {
+                gaps.push(`a-paint-with-no-hit-area-reaches-no-money read no paint of a ${cls} stall`);
+            } else if (!((read?.targets ?? 0) > 0)) {
+                gaps.push(`a-paint-with-no-hit-area-reaches-no-money held no target on a ${cls} stall`);
+            }
+        }
+        // 3a (D-2026-10-28-01): every look a pass painted, read to its stall on some figure's element.
+        const walk = report.walkByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            const read = Object.hasOwn(walk, cls) ? walk[cls] : undefined;
+            if (!((read?.elements ?? 0) > 0)) gaps.push(`the-ground-walk-reaches-the-stall read no figure of a ${cls} stall`);
+        }
+        // A code drawn black on white (before 8g2's fourth review, item 4,
+        // the critic's PFQ): every code a pass painted on a look has its
+        // colours read — a pass that painted codes and read fewer read
+        // nothing about the ones it skipped.
+        const codes = report.qrColourByClass;
+        if (codes === undefined) {
+            if ((report.codesPainted ?? []).length > 0) gaps.push('a-code-is-drawn-black-on-white reported no read of a code on a pass that painted codes');
+        } else {
+            for (const cls of report.sheetClasses ?? []) {
+                const q = Object.hasOwn(codes, cls) ? codes[cls] : undefined;
+                const painted = q?.painted ?? 0;
+                const read = q?.read ?? 0;
+                if (painted > 0 && read !== painted) {
+                    gaps.push(`a-code-is-drawn-black-on-white read the colours of ${read} of the ${painted} codes a ${cls} stall painted`);
+                }
+            }
+            // And per screen (the fifth review's item 10): a look's owe
+            // compares its painted codes with its read ones under one filter,
+            // so a look that took a code's box away owed nothing for it.
+            // Among the looks whose paints of a screen built as many codes in
+            // the tree (the name sheet draws none for a paid look), every
+            // paint shows as many with a box as the most any of them showed
+            // (`qrByScreen`: screen, look, codes built, the fewest and most).
+            const byScreen = report.qrByScreen;
+            if (byScreen === undefined) {
+                gaps.push('a-code-is-drawn-black-on-white reported no per-screen count of the codes each look painted');
+            } else {
+                for (const screen of Object.keys(byScreen).sort()) {
+                    const looks = byScreen[screen];
+                    const classes = Object.keys(looks).sort();
+                    const builds = [...new Set(classes.flatMap((cls) => Object.keys(looks[cls])))].sort((a, b) => Number(a) - Number(b));
+                    for (const built of builds) {
+                        const these = classes.filter((cls) => Object.hasOwn(looks[cls], built));
+                        const most = Math.max(0, ...these.map((cls) => looks[cls][built].max));
+                        const top = these.find((cls) => looks[cls][built].max === most);
+                        for (const cls of these) {
+                            if (looks[cls][built].min < most) {
+                                gaps.push(
+                                    `a-code-is-drawn-black-on-white counted ${looks[cls][built].min} code(s) with a box a ${cls} stall painted on ${screen}, of the ${built} it built, where a ${top} stall painted ${most}`,
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -716,7 +827,10 @@ export function probeCoverageLine(pass, report) {
         (report.dressByClass === undefined
             ? ''
             : ` · money figures held to their dress: ${perClass(report.dressByClass)}` +
-              ` · under a clip: ${perClass(report.dressClipByClass)}`);
+              ` · under a clip: ${perClass(report.dressClipByClass)}`) +
+        (report.qrColourByClass === undefined
+            ? ''
+            : ` · codes held to black on white: ${perClass(Object.fromEntries(Object.entries(report.qrColourByClass).map(([cls, q]) => [cls, q.read])))}`);
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }

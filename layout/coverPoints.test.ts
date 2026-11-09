@@ -1,0 +1,362 @@
+import { describe, expect, it } from 'vitest';
+import {
+    EDGE_INSET,
+    INK_COLUMN_PITCH,
+    INK_LINE_PITCH,
+    INK_MAX_COLUMNS,
+    INK_MAX_ROWS,
+    INK_ROW_PITCH,
+    RUNNING_RIBBON,
+    SQUARE,
+    WALL_SCROLLERS,
+    clipVerdict,
+    columnExcuses,
+    columnPlace,
+    cornerInset,
+    fittedRadii,
+    framePoints,
+    gridPoints,
+    inkPoints,
+    insideRounded,
+    movedBy,
+    radiusOf,
+    reachWithin,
+    type ClipBox,
+    type Placement,
+    type Radii,
+    type Reach,
+} from './coverPoints';
+
+const round = (r: number): Radii => ({ tl: [r, r], tr: [r, r], br: [r, r], bl: [r, r] });
+const boxOf = (f: { cx: number; cy: number; w: number; h: number }) => ({ left: f.cx - f.w / 2, top: f.cy - f.h / 2, right: f.cx + f.w / 2, bottom: f.cy + f.h / 2 });
+
+describe('nothing-covers-money-or-a-protected-box: where it is hit-tested', () => {
+    /*
+     * The critic's census (before 8g2): a corner point two pixels in from a
+     * pill's edges stands outside the pill, and the hit falls to its parent.
+     * The pay sheet's Cashtab control is 362 by 51 with a 25.5px radius on
+     * Modern. Red with `cornerInset` answering `[EDGE_INSET, EDGE_INSET]`:
+     * the corner points fall outside the curve.
+     */
+    it('takes every corner point inside a rounded box', () => {
+        const pill = { cx: 195, cy: 558.5, w: 362, h: 51, angle: 0 };
+        const points = framePoints(pill, round(25.5));
+        expect(points.map((p) => p.kind)).toEqual(['centre', 'corner', 'corner', 'corner', 'corner']);
+        const fitted = fittedRadii(round(25.5), pill.w, pill.h);
+        for (const p of points) {
+            // Inside the curve with no rounding allowed, and a pixel to spare.
+            expect(insideRounded(boxOf(pill), fitted, p.x, p.y, -1)).toBe(true);
+        }
+    });
+
+    it('takes a square corner two pixels in, the five-point test’s own point', () => {
+        expect(cornerInset([0, 0])).toEqual([EDGE_INSET, EDGE_INSET]);
+        const points = framePoints({ cx: 50, cy: 20, w: 100, h: 40, angle: 0 });
+        expect(points.slice(1).map((p) => [p.x, p.y])).toEqual([
+            [2, 2],
+            [98, 2],
+            [2, 38],
+            [98, 38],
+        ]);
+    });
+
+    it('fits radii that overrun a side before it insets (a 50% radius on a short box)', () => {
+        const w = 80;
+        const h = 20;
+        const half = { tl: radiusOf('50%', w, h), tr: radiusOf('50%', w, h), br: radiusOf('50%', w, h), bl: radiusOf('50%', w, h) };
+        const fitted = fittedRadii(half, w, h);
+        for (const p of framePoints({ cx: 40, cy: 10, w, h, angle: 0 }, half)) {
+            expect(insideRounded({ left: 0, top: 0, right: w, bottom: h }, fitted, p.x, p.y, -1)).toBe(true);
+        }
+    });
+
+    it('never puts a corner past the centre of a box too small for the inset', () => {
+        const points = framePoints({ cx: 10, cy: 10, w: 3, h: 3, angle: 0 }, round(20));
+        for (const p of points) {
+            expect(p.x).toBe(10);
+            expect(p.y).toBe(10);
+        }
+    });
+
+    it('takes the points in the box’s own frame and turns them back', () => {
+        const angle = (0.8 * Math.PI) / 180;
+        const f = { cx: 200, cy: 100, w: 160, h: 40, angle };
+        const [, tl] = framePoints(f);
+        // The top-left corner, two pixels in, turned about the centre.
+        const dx = -78;
+        const dy = -18;
+        expect(tl!.x).toBeCloseTo(200 + dx * Math.cos(angle) - dy * Math.sin(angle), 9);
+        expect(tl!.y).toBeCloseTo(100 + dx * Math.sin(angle) + dy * Math.cos(angle), 9);
+    });
+
+    it('lays a grid over a code inside its rounded corners, at the pitch asked', () => {
+        const code = { cx: 195, cy: 916, w: 336, h: 336, angle: 0 };
+        const grid = gridPoints(code, 24, round(14));
+        expect(grid.length).toBeGreaterThan(40);
+        const fitted = fittedRadii(round(14), code.w, code.h);
+        for (const p of grid) {
+            expect(p.kind).toBe('grid');
+            expect(insideRounded(boxOf(code), fitted, p.x, p.y, -EDGE_INSET)).toBe(true);
+        }
+        // Square, it keeps every point of the lattice: 13 by 13 at 24px over 332px.
+        expect(gridPoints(code, 24, SQUARE)).toHaveLength(13 * 13);
+        expect(() => gridPoints(code, 0)).toThrow(/positive pitch/);
+    });
+
+    /*
+     * The critic's T5 (before 8g2, item 2): a band of the look's ground laid
+     * over the lower half of the Cycle card's digits, between the row of
+     * character centres and the box's bottom corners, hid "875" and "XEC"
+     * and met no point. Red with one centre point a glyph (the rule as it
+     * was): nothing stands in the band.
+     */
+    it('asks every glyph at several heights, so a band over half of it meets a point', () => {
+        // A 60px figure's digit: its box 36 by 73, its ink 4–32 across and
+        // 15–59 down (the baseline at 59, the cap height 44).
+        const f = { cx: 118, cy: 336.5, w: 36, h: 73, angle: 0 };
+        const ink = { left: 4, right: 32, top: 15, bottom: 59 };
+        const points = inkPoints(f, ink);
+        const top = f.cy - f.h / 2;
+        // The lower half of the ink, and a band 12px tall anywhere in it.
+        for (let from = 15; from + 12 <= 59; from += 1) {
+            expect(points.some((p) => p.y >= top + from && p.y <= top + from + 12)).toBe(true);
+        }
+        expect(points.every((p) => p.kind === 'ink')).toBe(true);
+    });
+
+    /*
+     * The critic's PB (the owner's D-2026-10-20-13): at 360px a band 4.531px
+     * tall laid in the strip's ground over 46% of the ink of "15,750.00 XEC"
+     * stood between the two rows a phone glyph had, and met no point. Red
+     * with the lattice alone: two rows at a quarter and three quarters of
+     * the ink leave its middle half unasked.
+     */
+    it('asks down the centre column and along the middle row at most INK_LINE_PITCH apart', () => {
+        const f = { cx: 50, cy: 50, w: 8, h: 15, angle: 0 };
+        const ink = { left: 1, right: 7, top: 2.6, bottom: 12.45 };
+        const points = inkPoints(f, ink);
+        const [left, top] = [f.cx - f.w / 2, f.cy - f.h / 2];
+        const column = points.filter((p) => Math.abs(p.x - (left + 4)) < 1e-9).map((p) => p.y).sort((a, b) => a - b);
+        const row = points.filter((p) => Math.abs(p.y - (top + (2.6 + 12.45) / 2)) < 1e-9).map((p) => p.x).sort((a, b) => a - b);
+        // From the ink's edge to the first point, between points, and to the far edge: never past the pitch.
+        const gaps = (at: number[], from: number, to: number) => [at[0]! - from, ...at.slice(1).map((v, i) => v - at[i]!), to - at[at.length - 1]!];
+        expect(column.length).toBeGreaterThan(1);
+        expect(Math.max(...gaps(column, top + 2.6, top + 12.45).map((g, i, all) => (i === 0 || i === all.length - 1 ? 2 * g : g)))).toBeLessThanOrEqual(INK_LINE_PITCH + 1e-9);
+        expect(Math.max(...gaps(row, left + 1, left + 7).map((g, i, all) => (i === 0 || i === all.length - 1 ? 2 * g : g)))).toBeLessThanOrEqual(INK_LINE_PITCH + 1e-9);
+        // The PB band, 4.531px tall, at every offset down the ink: a point of the column stands in it.
+        for (let from = 2.6; from + 4.531 <= 12.45 + 1e-9; from += 0.0625) {
+            expect(column.some((y) => y >= top + from && y <= top + from + 4.531)).toBe(true);
+        }
+        // Any band INK_LINE_PITCH tall across the column, anywhere in the ink.
+        for (let from = 2.6; from + INK_LINE_PITCH <= 12.45 + 1e-9; from += 0.0625) {
+            expect(column.some((y) => y >= top + from - 1e-9 && y <= top + from + INK_LINE_PITCH + 1e-9)).toBe(true);
+        }
+    });
+
+    it('asks a small glyph down its column and across its middle, and asks no point twice', () => {
+        // An 11px digit: its ink 6 by 8, one column wide, so the lattice is all on the centre column.
+        const points = inkPoints({ cx: 3.5, cy: 7, w: 7, h: 14, angle: 0 }, { left: 0.5, right: 6.5, top: 3, bottom: 11 });
+        const at = points.map((p) => [Number(p.x.toFixed(6)), Number(p.y.toFixed(6))]);
+        expect(at).toEqual([
+            [3.5, Number((3 + 8 / 6).toFixed(6))],
+            [3.5, 7],
+            [3.5, Number((3 + 40 / 6).toFixed(6))],
+            [2, 7],
+            [5, 7],
+        ]);
+        expect(new Set(at.map(([x, y]) => `${x},${y}`)).size).toBe(at.length);
+    });
+
+    it('keeps the lattice off the two lines on a glyph wider than one column', () => {
+        // A 28px-wide ink: three lattice columns, the middle one the centre column's.
+        const f = { cx: 118, cy: 336.5, w: 36, h: 73, angle: 0 };
+        const ink = { left: 4, right: 32, top: 15, bottom: 59 };
+        const points = inkPoints(f, ink);
+        const left = f.cx - f.w / 2;
+        const columns = Math.min(INK_MAX_COLUMNS, Math.ceil(28 / INK_COLUMN_PITCH));
+        const rows = Math.min(INK_MAX_ROWS, Math.ceil(44 / INK_ROW_PITCH));
+        const lattice = [...Array(columns).keys()].map((j) => left + 4 + ((j + 0.5) * 28) / columns).filter((x) => Math.abs(x - (left + 18)) > 1e-9);
+        for (const x of lattice) {
+            expect(points.filter((p) => Math.abs(p.x - x) < 1e-9 && Math.abs(p.y - (f.cy - f.h / 2 + 37)) > 1e-9)).toHaveLength(rows % 2 === 1 ? rows - 1 : rows);
+        }
+        // Every point is on the column, on the row, or on a lattice column off them.
+        const midX = left + 18;
+        const midY = f.cy - f.h / 2 + 37;
+        expect(points.every((p) => Math.abs(p.x - midX) < 1e-9 || Math.abs(p.y - midY) < 1e-9 || lattice.some((x) => Math.abs(p.x - x) < 1e-9))).toBe(true);
+    });
+
+    it('cuts the ink to the character’s own box, and reads the box where nothing is left', () => {
+        const f = { cx: 50, cy: 50, w: 20, h: 30, angle: 0 };
+        // An italic overhang and a mark above the box: cut to it.
+        for (const p of inkPoints(f, { left: -6, right: 26, top: -10, bottom: 25 })) {
+            expect(p.x).toBeGreaterThanOrEqual(40);
+            expect(p.x).toBeLessThanOrEqual(60);
+            expect(p.y).toBeGreaterThanOrEqual(35);
+            expect(p.y).toBeLessThanOrEqual(60);
+        }
+        // An ink wholly above the box: the box.
+        const above = inkPoints(f, { left: 2, right: 18, top: -20, bottom: -5 });
+        expect(Math.min(...above.map((p) => p.y))).toBeGreaterThan(35);
+        expect(Math.max(...above.map((p) => p.y))).toBeLessThan(65);
+    });
+
+    it('takes a turned glyph’s points in its own frame and turns them back', () => {
+        const angle = (0.8 * Math.PI) / 180;
+        const f = { cx: 200, cy: 100, w: 20, h: 30, angle };
+        const [first] = inkPoints(f, { left: 0, right: 20, top: 0, bottom: 30 });
+        // The centre column's first point, half a pitch below the ink's top, from the centre.
+        const dx = 0;
+        const dy = 30 / Math.ceil(30 / INK_LINE_PITCH) / 2 - 15;
+        expect(first!.x).toBeCloseTo(200 + dx * Math.cos(angle) - dy * Math.sin(angle), 9);
+        expect(first!.y).toBeCloseTo(100 + dx * Math.sin(angle) + dy * Math.cos(angle), 9);
+    });
+});
+
+describe('nothing-covers-money-or-a-protected-box: the price column', () => {
+    const still: Placement = {
+        position: 'static',
+        top: 'auto',
+        right: 'auto',
+        bottom: 'auto',
+        left: 'auto',
+        transform: 'none',
+        translate: 'none',
+        rotate: 'none',
+        scale: 'none',
+        marginTop: '0px',
+        marginRight: '0px',
+        marginBottom: '0px',
+        marginLeft: '0px',
+    };
+
+    it('reads a box in its place as unmoved, a relative box with no offset included', () => {
+        expect(movedBy(still)).toBeUndefined();
+        expect(movedBy({ ...still, position: 'relative', top: '0px', left: 'auto' })).toBeUndefined();
+    });
+
+    it('names every way a box is moved off its place', () => {
+        expect(movedBy({ ...still, position: 'relative', top: '-153px' })).toMatch(/top -153px/);
+        expect(movedBy({ ...still, position: 'sticky', bottom: '4px' })).toMatch(/bottom 4px/);
+        expect(movedBy({ ...still, transform: 'matrix(1, 0, 0, 1, 0, 40)' })).toMatch(/transform/);
+        expect(movedBy({ ...still, translate: '0px 40px' })).toMatch(/translate/);
+        expect(movedBy({ ...still, rotate: '2deg' })).toMatch(/rotate/);
+        expect(movedBy({ ...still, scale: '6' })).toMatch(/scale/);
+        expect(movedBy({ ...still, marginTop: '-3em' })).toMatch(/margin-top/);
+        expect(movedBy({ ...still, marginLeft: '-1px' })).toMatch(/margin-left/);
+        // A value this cannot read counts as a move.
+        expect(movedBy({ ...still, position: 'relative', top: 'anchor(top)' })).toMatch(/top/);
+    });
+
+    /*
+     * The critic's P1-1: `.item-p::after` moved over the figure reports as
+     * `.item-p` (a pseudo's paint is its host's), and `Node.contains` is
+     * inclusive, so the five-point test excused it. Red with the column
+     * answering 'inside': the first expectation fails.
+     */
+    it('never excuses a hit on the column itself', () => {
+        for (const kind of ['centre', 'corner', 'ink', 'grid'] as const) {
+            expect(columnExcuses(kind, 'column', undefined)).toBe(false);
+        }
+    });
+
+    /*
+     * The critic's item 7 (before 8g2): `.item-a` is the figure's parent,
+     * and a pseudo of it moved over the figure reports as `.item-a` — a box
+     * inside the column that is not the column, which the rule read as a
+     * sibling and excused at a corner. Red with the place read as it was
+     * (`hit === column` alone): `.item-a` answers 'inside'.
+     */
+    it('reads every box that holds the figure as the column, and never excuses it', () => {
+        // .item-p, .item-a and any box between them hold the figure.
+        expect(columnPlace(true, true)).toBe('column');
+        for (const kind of ['centre', 'corner', 'ink', 'grid'] as const) {
+            expect(columnExcuses(kind, columnPlace(true, true), undefined)).toBe(false);
+        }
+        // A true sibling in the column, and anything outside it.
+        expect(columnPlace(true, false)).toBe('inside');
+        expect(columnPlace(false, false)).toBe('outside');
+        // An ancestor outside the column (the stall, whose pseudo was T6) is outside, and covers.
+        expect(columnPlace(false, true)).toBe('outside');
+    });
+
+    it('excuses a sibling inside the column at a corner point alone, and never one that was moved', () => {
+        expect(columnExcuses('corner', 'inside', undefined)).toBe(true);
+        expect(columnExcuses('ink', 'inside', undefined)).toBe(false);
+        expect(columnExcuses('centre', 'inside', undefined)).toBe(false);
+        expect(columnExcuses('grid', 'inside', undefined)).toBe(false);
+        expect(columnExcuses('corner', 'inside', 'top -60px (position relative)')).toBe(false);
+        expect(columnExcuses('corner', 'outside', undefined)).toBe(false);
+    });
+});
+
+describe('nothing-covers-money-or-a-protected-box: a point behind a clip', () => {
+    /*
+     * 7a (the critic's third review, its item 3 and checklist item 8). A
+     * shelf 100px tall at y 100–200, cut or scrolled; its content runs to
+     * y 500. `reach` scrolls it by 300px down.
+     */
+    const shelf = { left: 0, top: 100, right: 400, bottom: 200 };
+    const box = (overflowY: string, wall = false, rect = shelf): ClipBox => ({ rect, overflowX: 'visible', overflowY, wall });
+    const scrolls: Reach = { x0: 0, x1: 400, y0: 100, y1: 500, pad: shelf };
+    const still: Reach = { x0: 0, x1: 400, y0: 100, y1: 200, pad: shelf };
+
+    it('hit-tests a point inside every clip', () => {
+        expect(clipVerdict(50, 150, [box('hidden')], () => still)).toEqual({ kind: 'clear' });
+    });
+
+    it('counts a point a scroller brings into view, and fails one past its reach', () => {
+        expect(clipVerdict(50, 300, [box('auto')], () => scrolls)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 600, [box('auto')], () => scrolls)).toEqual({ kind: 'unreached', at: 0 });
+    });
+
+    it('fails a point past a clip that cuts and does not scroll (the critic’s PH), and never one flush with its edge', () => {
+        expect(clipVerdict(50, 300, [box('hidden')], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        expect(clipVerdict(50, 300, [box('clip')], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        // Within a pixel inside the edge it is behind, as it always counted; within a pixel past it, not cut.
+        expect(clipVerdict(50, 199.5, [box('hidden')], () => still)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 200.8, [box('hidden')], () => still)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 201.5, [box('hidden')], () => still).kind).toBe('cut');
+        // A box that clips the other axis only does not cut this one.
+        expect(clipVerdict(50, 300, [box('visible')], () => still)).toEqual({ kind: 'behind', wall: false });
+    });
+
+    it('counts a point past a cutter that a scroller inside it brings in', () => {
+        // A scroller inside the cutter, scrolling the point up into the cutter's window.
+        const outer = box('hidden', false, { left: 0, top: 50, right: 400, bottom: 250 });
+        expect(clipVerdict(50, 300, [box('auto'), outer], (i) => (i === 0 ? scrolls : still))).toEqual({ kind: 'behind', wall: false });
+        // A scroller that scrolls the other axis only brings nothing in.
+        const sideways: ClipBox = { rect: shelf, overflowX: 'auto', overflowY: 'hidden', wall: false };
+        expect(clipVerdict(50, 300, [sideways, outer], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        // Inside the scroller's reach, past what it can bring into a narrower cutter's window (150–180, so up to 480): cut there.
+        expect(clipVerdict(50, 490, [box('auto'), box('hidden', false, { left: 0, top: 150, right: 400, bottom: 180 })], (i) => (i === 0 ? scrolls : still))).toEqual({
+            kind: 'cut',
+            at: 1,
+            axis: 'y',
+        });
+    });
+
+    it('reads a running ticker ribbon’s figure as cut sideways by design, and never from above or below', () => {
+        const cell: ClipBox = { rect: shelf, overflowX: 'hidden', overflowY: 'hidden', wall: false };
+        const bar: ClipBox = { ...cell, rect: { left: 0, top: 0, right: 420, bottom: 400 } };
+        const ribbon = { sidewaysByDesign: true };
+        expect(clipVerdict(450, 150, [cell, bar], () => still, ribbon)).toEqual({ kind: 'behind', wall: false });
+        expect(clipVerdict(50, 300, [cell, bar], () => still, ribbon)).toEqual({ kind: 'cut', at: 0, axis: 'y' });
+        // Off the ribbon the same point is cut, by the cell first.
+        expect(clipVerdict(450, 150, [cell, bar], () => still)).toEqual({ kind: 'cut', at: 0, axis: 'x' });
+        expect(RUNNING_RIBBON).toBe('[data-ribbon]:not([data-ribbon="still"])');
+    });
+
+    it('names a point apart where its innermost clip is a wall scroller', () => {
+        expect(clipVerdict(50, 300, [box('auto', true), box('hidden', false, { left: 0, top: 0, right: 400, bottom: 900 })], () => scrolls)).toEqual({ kind: 'behind', wall: true });
+        expect(clipVerdict(50, 300, [box('auto', false), box('auto', true, { left: 0, top: 0, right: 400, bottom: 150 })], () => scrolls)).toEqual({ kind: 'behind', wall: false });
+    });
+
+    it('names the two wall scrollers by value', () => {
+        expect(WALL_SCROLLERS).toBe('div.items.sw-strip, dl.sw-pay-lines');
+    });
+
+    it('brings content into a window as far as the box scrolls', () => {
+        expect(reachWithin(scrolls, 'y', 50, 250)).toEqual([100, 500]);
+        expect(reachWithin(scrolls, 'y', 120, 180)).toEqual([120, 480]);
+    });
+});

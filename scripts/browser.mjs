@@ -27,8 +27,12 @@ export const FIXED_CLOCK_MS = Date.UTC(2026, 8, 23, 12, 0, 0);
 
 /*
  * The page's clock, fixed, installed on every new document
- * (`Page.addScriptToEvaluateOnNewDocument`) by `looks-diff.mjs` and the
- * probe's contrast passes. `Date` reads `FIXED_CLOCK_MS` exactly until the
+ * (`Page.addScriptToEvaluateOnNewDocument`) by `looks-diff.mjs` and by the
+ * probe on every tab before its geometry walk, so its geometry passes and
+ * its contrast passes both run on it (the geometry passes since the
+ * fourteenth review's item 1: a pay sheet printing its rate to the real
+ * second gave two tabs' pages two widths of that line, and the canary that
+ * reads a pass again on another tab flaked on it). `Date` reads `FIXED_CLOCK_MS` exactly until the
  * document has loaded, and runs from that instant after it — so everything a
  * module stamps at evaluation (the pay fixtures' rate, which a sheet prints
  * to the second) is the same on every load, however long the load took, and

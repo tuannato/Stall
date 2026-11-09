@@ -767,9 +767,22 @@ const FIGURE_PIECE = /\.fig-(?:say|end)(?![\w-])/;
  * were left off D-07's own list; the lint-belts critic's P3), and neither are
  * `width`, `min-width`, `max-width`, `padding*`, `margin*` and `border-width`,
  * which move the box a figure stands in (a transition or a keyframe of any of
- * them is accepted: the third review's plants `n6`, stated), nor `opacity` or
- * `clip-path` in a keyframe, which the probe reads at one frozen instant
- * (CLAUDE.md §10, "moving inks"). **`display` and `content-visibility` in a
+ * them is accepted: the third review's plants `n6`, stated). The probe reads
+ * what a keyframe of any of them does to a money figure at each keyframe
+ * offset (before 8g2): `font-size-adjust` and a negative `text-indent` are
+ * held by the dress rule there where the keyframe runs on the figure or a
+ * box above it, and a figure's text that a keyframe of any of them cuts —
+ * a positive indent, a size, a padding or a margin, wherever the keyframe
+ * runs, a sibling's margin squeezing the figure inside its own clip among
+ * them — is the self-clip read's (the fifth review's PTI, the sixth
+ * review's PSQ2); a figure one spills over or covers, and a value between
+ * two offsets, is read by nothing. Nor are `opacity` or `clip-path` in a keyframe named, which the
+ * probe's dress rule holds on a money figure at each keyframe's written value
+ * and at each keyframe offset, and on a box above it at each keyframe's
+ * written value (a `clip-path` that moves refused, an opacity held at each
+ * offset too); off money a moving ink is read at one frozen instant
+ * (CLAUDE.md §10, "moving inks").
+ * **`display` and `content-visibility` in a
  * keyframe are refused** (D-2026-10-20-10, `declarationProblems`): a keyframe
  * that sets either takes a box out of the layout for part of a cycle. A
  * keyframe is refused wherever a rule runs it, so a `scale`, a `letter-spacing` or a
@@ -2887,12 +2900,96 @@ const REFUSED_PROPERTIES = Object.freeze({
 });
 
 /**
+ * The inherited longhands that paint text, which a first-party keyframe may
+ * not set (`declarationProblems`, the inherited-ink belt beside the probe's
+ * keyframe-offset read). The text's own fill colour and stroke,
+ * `-webkit-text-fill-color` and the `-webkit-text-stroke` family, are not
+ * here: they are refused everywhere (`REFUSED_PROPERTIES`). SVG `fill` and
+ * `stroke` are a different paint, an element's own, and inherited too: a
+ * first-party sheet sets them on a drawn icon alone, and never in a keyframe
+ * (`SVG_PAINT`, `isIconRule`; D-2026-10-26-04 (b)).
+ */
+const KEYFRAME_INK = new Set([
+    'color',
+    'text-shadow',
+    'caret-color',
+    'text-emphasis',
+    'text-emphasis-color',
+    'text-emphasis-style',
+    'text-emphasis-position',
+    '-webkit-text-emphasis',
+    '-webkit-text-emphasis-color',
+    '-webkit-text-emphasis-style',
+    '-webkit-text-emphasis-position',
+    'paint-order',
+    'font-palette',
+]);
+
+/**
+ * The grounds and shadows a first-party keyframe may not set
+ * (`declarationProblems`, before 8g2, the fourth review's item 2, the
+ * critic's PG; D-2026-10-26-04 (a)): a background's colour or image, the
+ * shorthand that sets them, and a box shadow, with its prefixed twin. A
+ * keyframe that paints a ground on a box above a figure puts the figure on
+ * that ground for part of a cycle — `background-color: var(--s-text)` from
+ * 25% to 68% of a loop on Rural's quote `.item-a` sets the figure on its own
+ * ink — and the probe reads the ground at rest, at the frozen instant and,
+ * since the same review, at every keyframe offset where a seek changed it
+ * (`offsetGroundFaults` in `layout/probe.ts`, the kit's road). The shipped
+ * keyframes move a background's position, an opacity or a transform, and
+ * none of these.
+ */
+const KEYFRAME_GROUND = new Set(['background', 'background-color', 'background-image', 'box-shadow', '-webkit-box-shadow']);
+
+/** The SVG paint longhands a first-party sheet sets on a drawn icon alone (`isIconRule`; D-2026-10-26-04 (b)). */
+const SVG_PAINT = /^(?:fill|stroke)(?:-|$)/;
+
+/** The SVG shapes a drawn icon is made of, which a rule may reach under `.ic` (`src/ui/glyphs.ts` draws one `path`). */
+const ICON_PARTS = /^(?:path|g|line|polyline|polygon|circle|ellipse|rect)$/;
+
+/**
  * The properties that make a box a query container, which a first-party look
  * sheet may not set (`declarationProblems`, the 8g0 critic's P2-2): the
  * shop window's `@container sw` conditions and `cqw` / `cqh` units are the
  * wall's, not the look's.
  */
 const CONTAINER_PROPERTIES = new Set(['container-name', 'container-type', 'container']);
+
+/**
+ * Anchor positioning, which a first-party look sheet may not write
+ * (`declarationProblems`; before 8g2, the seventh review's B1;
+ * D-2026-10-27-01, "Probe đọc + chặn trong lint"): a box placed by
+ * `anchor()` and sized by `anchor-size()` follows its anchor's transform,
+ * motion path and offsets in Chrome 156, so a keyframe `translate` on a box
+ * a money figure is anchored to carries the figure out of its row's clip
+ * with no longhand of the figure's own walk named (the critic's PAN, the
+ * pay figure the wallet signs anchored to its unit). The probe reads that
+ * road on the kit's side (`anchorCanFollow` in `layout/probe.ts`); a
+ * first-party look writes none of it: the properties below, the functions
+ * `anchor()` and `anchor-size()` in any value (a custom property's
+ * included, so none reaches a property through `var()`), and the
+ * `anchor-center` keyword. `@position-try` is an at-rule G4 refuses. No
+ * first-party sheet a run serves writes any of it (the shipped looks, the
+ * starters, the fixture look, the tracked private fixture, the canary);
+ * the kit keeps the rules its README states.
+ */
+const ANCHOR_PROPERTIES = new Set([
+    'anchor-name',
+    'anchor-scope',
+    'position-anchor',
+    'position-area',
+    'inset-area',
+    'position-try',
+    'position-try-fallbacks',
+    'position-try-order',
+    'position-try-options',
+    'position-visibility',
+    'position-fallback',
+]);
+/** An anchor function, `anchor()` or `anchor-size()`, in any case. */
+const ANCHOR_FUNCTION = /(?<![\w-])anchor(?:-size)?\s*\(/i;
+/** The `anchor-center` alignment keyword, which centres a box on its anchor. */
+const ANCHOR_KEYWORD = /(?<![\w-])anchor-center(?![\w-])/i;
 
 /**
  * Properties whose value these rules read for a keyword — a fixed box, a
@@ -2974,6 +3071,97 @@ const PREFIXED_EVERYWHERE = new Set(['-webkit-line-clamp', '-webkit-box-orient']
 
 /** The one prefixed property with no unprefixed twin that a first-party sheet may write, and only as `transparent`. */
 const TAP_HIGHLIGHT = '-webkit-tap-highlight-color';
+
+/**
+ * The prefixed properties whose name without the prefix is no property
+ * (G4's twin; before 8g2, the fifth review's side finding to item 6): the
+ * twin rule read the twin as the name less its prefix, so the critic's PQM
+ * wrote `mask-box-image:`, which nothing reads, beside
+ * `-webkit-mask-box-image:` and stood. Measured in headless Chrome 156:
+ * every `-webkit-` property it lists whose name less the prefix it neither
+ * lists nor reads (`CSS.supports`), save the two every engine reads under
+ * the prefix (`PREFIXED_EVERYWHERE`). Each maps to the property that is its
+ * twin and takes the same value — the mask border's standard name, and the
+ * logical box sides and sizes — or to `null` where none does, and then the
+ * property is refused outright: its sentence says the name less the prefix
+ * is none Chrome reads, which is what was measured — another engine may
+ * read one (Firefox's `mask-position-x` and `-y` were not checked, with no
+ * network; PLAN § Open). Read for a first-party sheet
+ * alone (`lintLookSheet`): the kit keeps the plain rule the workshop README
+ * states, and a twin there is the name less its prefix
+ * (`the-kit-twin-rule-passes-the-tap-highlight-beside-an-unread-twin`). A
+ * prefixed property Chrome does not list (`-webkit-backdrop-filter`, a
+ * `-moz-` one) is read as before: its twin is not held to exist.
+ */
+export const PREFIXED_TWINS = Object.freeze({
+    '-webkit-mask-box-image': 'mask-border',
+    '-webkit-mask-box-image-outset': 'mask-border-outset',
+    '-webkit-mask-box-image-repeat': 'mask-border-repeat',
+    '-webkit-mask-box-image-slice': 'mask-border-slice',
+    '-webkit-mask-box-image-source': 'mask-border-source',
+    '-webkit-mask-box-image-width': 'mask-border-width',
+    '-webkit-border-before': 'border-block-start',
+    '-webkit-border-before-color': 'border-block-start-color',
+    '-webkit-border-before-style': 'border-block-start-style',
+    '-webkit-border-before-width': 'border-block-start-width',
+    '-webkit-border-after': 'border-block-end',
+    '-webkit-border-after-color': 'border-block-end-color',
+    '-webkit-border-after-style': 'border-block-end-style',
+    '-webkit-border-after-width': 'border-block-end-width',
+    '-webkit-border-start': 'border-inline-start',
+    '-webkit-border-start-color': 'border-inline-start-color',
+    '-webkit-border-start-style': 'border-inline-start-style',
+    '-webkit-border-start-width': 'border-inline-start-width',
+    '-webkit-border-end': 'border-inline-end',
+    '-webkit-border-end-color': 'border-inline-end-color',
+    '-webkit-border-end-style': 'border-inline-end-style',
+    '-webkit-border-end-width': 'border-inline-end-width',
+    '-webkit-margin-before': 'margin-block-start',
+    '-webkit-margin-after': 'margin-block-end',
+    '-webkit-margin-start': 'margin-inline-start',
+    '-webkit-margin-end': 'margin-inline-end',
+    '-webkit-padding-before': 'padding-block-start',
+    '-webkit-padding-after': 'padding-block-end',
+    '-webkit-padding-start': 'padding-inline-start',
+    '-webkit-padding-end': 'padding-inline-end',
+    '-webkit-logical-width': 'inline-size',
+    '-webkit-logical-height': 'block-size',
+    '-webkit-min-logical-width': 'min-inline-size',
+    '-webkit-min-logical-height': 'min-block-size',
+    '-webkit-max-logical-width': 'max-inline-size',
+    '-webkit-max-logical-height': 'max-block-size',
+    '-webkit-border-horizontal-spacing': null,
+    '-webkit-border-vertical-spacing': null,
+    '-webkit-box-align': null,
+    '-webkit-box-direction': null,
+    '-webkit-box-flex': null,
+    '-webkit-box-ordinal-group': null,
+    '-webkit-box-pack': null,
+    '-webkit-box-reflect': null,
+    '-webkit-column-break-after': null,
+    '-webkit-column-break-before': null,
+    '-webkit-column-break-inside': null,
+    '-webkit-font-smoothing': null,
+    '-webkit-locale': null,
+    '-webkit-mask-position-x': null,
+    '-webkit-mask-position-y': null,
+    '-webkit-perspective-origin-x': null,
+    '-webkit-perspective-origin-y': null,
+    '-webkit-rtl-ordering': null,
+    '-webkit-tap-highlight-color': null,
+    '-webkit-text-combine': null,
+    '-webkit-text-decorations-in-effect': null,
+    '-webkit-text-fill-color': null,
+    '-webkit-text-security': null,
+    '-webkit-text-stroke': null,
+    '-webkit-text-stroke-color': null,
+    '-webkit-text-stroke-width': null,
+    '-webkit-transform-origin-x': null,
+    '-webkit-transform-origin-y': null,
+    '-webkit-transform-origin-z': null,
+    '-webkit-user-drag': null,
+    '-webkit-user-modify': null,
+});
 
 /**
  * `-webkit-mask-composite` takes the legacy compositing keywords, the
@@ -3074,6 +3262,71 @@ function compoundsOf(selector) {
 /** Whether a selector's look compound keeps it off the wall: `.t-x:not(.shop-window)`. */
 function offTheWall(selector) {
     return compoundsOf(selector).some((compound) => /\.t-[a-z0-9-]+/.test(compound) && /:not\(\s*\.shop-window\s*\)/.test(compound));
+}
+
+/**
+ * A selector as its top-level compounds and the combinators between them:
+ * `['.t-x', ' ', '.ic', '>', 'path']`, a descendant combinator as `' '`.
+ */
+function compoundsAndCombinators(selector) {
+    const out = [];
+    let depth = 0;
+    let cur = '';
+    let comb = null;
+    const text = selector.trim();
+    for (let i = 0; i < text.length; i += 1) {
+        const c = text[i];
+        if (c === '"' || c === "'") {
+            const j = skipString(text, i);
+            if (comb !== null) {
+                out.push(comb);
+                comb = null;
+            }
+            cur += text.slice(i, j);
+            i = j - 1;
+            continue;
+        }
+        if (c === '(' || c === '[') depth += 1;
+        else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+        if (depth === 0 && (c === '>' || c === '+' || c === '~' || /\s/.test(c))) {
+            if (cur !== '') {
+                out.push(cur);
+                cur = '';
+                comb = ' ';
+            }
+            if (!/\s/.test(c)) comb = c;
+            continue;
+        }
+        if (comb !== null) {
+            out.push(comb);
+            comb = null;
+        }
+        cur += c;
+    }
+    if (cur !== '') out.push(cur);
+    return out;
+}
+
+/** Whether a compound is the drawn icon itself: classes alone (an `svg` type before them at most), `.ic` among them, no state, attribute or id. */
+const isIconCompound = (compound) => /^(?:svg)?(?:\.[a-z_][a-z0-9_-]*)+$/i.test(compound) && compound.split('.').slice(1).includes('ic');
+
+/**
+ * Whether every selector of a rule names a drawn icon (`SVG_PAINT`'s one
+ * home): its subject is the `.ic` svg (`isIconCompound`), or a shape
+ * (`ICON_PARTS`) under one by a descendant or child combinator. A keyframe
+ * (no selectors) names none.
+ */
+function isIconRule(selectors) {
+    return (
+        selectors !== undefined &&
+        selectors.length > 0 &&
+        selectors.every((selector) => {
+            const parts = compoundsAndCombinators(selector);
+            const subject = parts[parts.length - 1] ?? '';
+            if (isIconCompound(subject)) return true;
+            return ICON_PARTS.test(subject) && parts.length >= 3 && (parts[parts.length - 2] === ' ' || parts[parts.length - 2] === '>') && isIconCompound(parts[parts.length - 3]);
+        })
+    );
 }
 
 /** Whether every selector of a rule names a box `STICKY_BOXES` admits, at rest and off the wall. */
@@ -3216,6 +3469,83 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
         if (firstParty && selectors === undefined && prop.startsWith('--')) {
             out.push(
                 `${shown} — a custom property in a keyframe: it animates a value under no property name, so a rule that reads it as a letter-spacing, a clip or a size moves a money node past every check that reads the names a keyframe sets`,
+            );
+        }
+        /*
+         * An inherited ink in a keyframe (before 8g2; the critic's third
+         * review, item 1, the belt beside PT2; D-2026-10-26-03): a keyframe
+         * that sets `color`, a shadow or an emphasis mark on a box repaints
+         * the text of every box below it, a money figure's among them, for
+         * part of a cycle — `color: transparent` from 25% to 68% of a loop on
+         * a quote's `.item-a` clears the figure under it, which the
+         * custom-property refusal above does not see, since the keyframe
+         * names a real property. The probe reads a figure's held dress at
+         * every keyframe offset of every animation on its ancestry
+         * (`offsetDressFaults` in `layout/probe.ts`); this refuses the road
+         * where it is written, in a first-party sheet, wherever a rule runs
+         * the keyframe. `KEYFRAME_INK`: the inherited longhands that paint
+         * text — the ink, a text shadow, the caret, the emphasis marks (each
+         * prefixed twin too), the order a stroke and a fill are painted in,
+         * a colour font's palette. The text's fill colour and stroke
+         * (`-webkit-text-fill-color`, `-webkit-text-stroke*`) are refused
+         * everywhere already (`REFUSED_PROPERTIES`), SVG `fill` and `stroke`
+         * off a drawn icon and in any keyframe below (`SVG_PAINT`), and the
+         * tap highlight is `transparent` everywhere. No first-party sheet a run
+         * serves sets one in a keyframe (the shipped looks, the starters, the
+         * fixture look, the tracked private fixture and the canary;
+         * `refuses-an-inherited-ink-in-a-keyframe`); stall.css does (the
+         * sign's failing lamp, `att-hum-gutter`, and the door's pin demo),
+         * and it is no look sheet. The kit keeps the rules its README states.
+         */
+        if (firstParty && selectors === undefined && KEYFRAME_INK.has(prop)) {
+            out.push(
+                `${shown} — ${prop} in a keyframe is inherited: it changes how the text of every box below the one that runs it is painted, a money figure's among them, for part of a cycle; a look sets its inks, shadows and marks at rest`,
+            );
+        }
+        /*
+         * A ground or a shadow in a keyframe (before 8g2, the fourth review's
+         * item 2, the critic's PG; D-2026-10-26-04 (a), "Chặn cả hai"): a
+         * keyframe that sets a background's colour or image, or a box shadow,
+         * on a box above a money figure lays a ground under it for part of a
+         * cycle, where the probe's reads at rest and at the frozen instant do
+         * not look — PG puts Rural's quote figure on its own ink from 25% to
+         * 68% of a loop. `KEYFRAME_GROUND`, wherever a rule runs the keyframe;
+         * a background that moves (`background-position`, `background-size`)
+         * is not here. No first-party sheet a run serves sets one in a
+         * keyframe (the shipped looks, the starters, the fixture look, the
+         * tracked private fixture and the canary;
+         * `a-keyframe-never-sets-a-ground-or-a-shadow`); stall.css does (the
+         * Neo card's pulse and the door's breathing button, a box shadow; the
+         * yard's beetle and the door's pin demo, a background), and it is no
+         * look sheet. The kit keeps the rules its README states: the probe
+         * reads a kit look's keyframe ground at every offset where a seek
+         * changed it.
+         */
+        if (firstParty && selectors === undefined && KEYFRAME_GROUND.has(prop)) {
+            out.push(
+                `${shown} — a ground or a shadow in a keyframe lays a ground under every box inside the one that runs it, a money figure's among them, for part of a cycle; a look sets its grounds and shadows at rest`,
+            );
+        }
+        /*
+         * SVG paint off a drawn icon (before 8g2, the fourth review's item 4,
+         * the critic's PFQ; D-2026-10-26-04 (b)): an author `fill` beats the
+         * presentation attribute `qrSvg` draws a code with, so
+         * `.t-modern .qr path { fill: #fff }` blanked every pay and share
+         * code on the look, its quiet zone white and its modules gone, and
+         * passed the whole runner. In a first-party sheet `fill`, `stroke`
+         * and every `fill-*` and `stroke-*` longhand stand only on a rule
+         * whose every selector's subject is a drawn icon — the `.ic` svg
+         * (`src/ui/glyphs.ts`), or a shape under it by a descendant or child
+         * combinator (`isIconRule`) — the one shape the shipped looks write
+         * (`.t-modern .ic { stroke-width: 2 }`, Neo's, Rural's); refused in a
+         * keyframe, which has no selector. The probe holds every code's
+         * colours computed (`qrColourFaults` in `layout/probe.ts`), the
+         * kit's road. `-webkit-text-stroke` and `-webkit-text-fill-color`
+         * are refused everywhere already (`REFUSED_PROPERTIES`).
+         */
+        if (firstParty && SVG_PAINT.test(prop) && !isIconRule(selectors)) {
+            out.push(
+                `${shown} — SVG paint stands only on a drawn icon (a rule whose every selector's subject is .ic, or a shape under it): an author fill or stroke beats the colours a code is drawn with, and a code with its modules painted white scans as nothing`,
             );
         }
         /*
@@ -3437,6 +3767,19 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
                 `${shown} — ${prop} would re-point the wall's container queries (window.css's @container sw conditions and its cqw and cqh units) at a box the look picks, one the probe does not choose; @container is refused for the same reason`,
             );
         }
+        /*
+         * Anchor positioning (the seventh review's B1, `ANCHOR_PROPERTIES`):
+         * read on the property name, which `declarationsOf` gives lower
+         * case, and on the value with its strings blanked, in any case, so
+         * `!important`, a media block, a keyframe and a custom property
+         * that holds the function are read alike. A first-party sheet's
+         * rule; the kit keeps the rules its README states.
+         */
+        if (firstParty && (ANCHOR_PROPERTIES.has(prop) || ANCHOR_FUNCTION.test(bare) || ANCHOR_KEYWORD.test(bare))) {
+            out.push(
+                `${shown} — anchor positioning: a box placed against an anchor follows the anchor's transform, motion path and offsets, so a keyframe on another box carries it, a money figure among them, where the reads of the figure's own walk do not look; a look positions nothing against an anchor`,
+            );
+        }
         if (prop === 'position' && /(?<![\w-])(fixed|sticky|-webkit-sticky)(?![\w-])/i.test(keywords)) {
             const sign = firstParty && /^sticky$/i.test(keywords.trim()) && isStickyBox(selectors);
             if (!sign) {
@@ -3465,8 +3808,14 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
             out.push(`${shown} — a tap highlight paints a colour over whatever is tapped, a money control among them, where no pass looks; only transparent stands`);
         }
         const prefixed = PREFIXED_EVERYWHERE.has(prop) || (firstParty && prop === TAP_HIGHLIGHT) ? null : VENDOR_PREFIX.exec(prop);
-        if (prefixed !== null) {
-            const twin = prop.slice(prefixed[0].length);
+        // In a first-party sheet the twin is a property that exists (`PREFIXED_TWINS`): `mask-box-image` is no twin of `-webkit-mask-box-image`.
+        const known = prefixed !== null && firstParty && Object.hasOwn(PREFIXED_TWINS, prop);
+        if (known && PREFIXED_TWINS[prop] === null) {
+            out.push(
+                `${shown} — ${prop.slice(prefixed[0].length)} names no property Chrome reads, and ${prop} has no unprefixed twin there: it paints only in the engines that read the prefix, and this lint holds it to no twin`,
+            );
+        } else if (prefixed !== null) {
+            const twin = known ? PREFIXED_TWINS[prop] : prop.slice(prefixed[0].length);
             const same = decls.some((d) => {
                 if (d.prop !== twin) return false;
                 const theirs = d.value.replace(/\s*!\s*important\s*$/i, '');

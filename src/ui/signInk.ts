@@ -206,7 +206,7 @@ const STRETCH: Readonly<Record<string, string>> = {
  * Case is mapped without a locale: the app's documents are `lang="en"`.
  * `full-width` and `full-size-kana` are not applied, stated.
  */
-function painted(text: string, transform: string): string {
+export function painted(text: string, transform: string): string {
     return transform === 'uppercase'
         ? text.toUpperCase()
         : transform === 'lowercase'
@@ -217,13 +217,33 @@ function painted(text: string, transform: string): string {
 }
 
 /**
+ * The canvas's measure of `text` — already `painted` — set in the face,
+ * weight, size, small caps and width `cs` computes; undefined where no
+ * canvas measures (a test's DOM). The one road to the ink model's glyph
+ * metrics: `inkLines` below takes a line's word through it, and the layout
+ * probe one character at a time (before 8g2, 1a's points over each glyph's
+ * ink, `layout/probe.ts`).
+ */
+export function measurePainted(text: string, cs: CSSStyleDeclaration): TextMetrics | undefined {
+    const ctx = (measure ??= document.createElement('canvas').getContext('2d'));
+    if (ctx === null) return undefined;
+    ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    // Small caps and a width as painted; a stretch only a percentage states
+    // falls back to normal (canvas takes the nine keywords alone), which
+    // moves an advance, not the reach above and below the baseline this
+    // measure reads.
+    ctx.fontVariantCaps = cs.fontVariantCaps as CanvasFontVariantCaps;
+    ctx.fontStretch = (STRETCH[cs.fontStretch] ?? 'normal') as CanvasFontStretch;
+    return ctx.measureText(text);
+}
+
+/**
  * The ink of every line of `el`'s text: one box per line of each text
  * node, across the lines from the glyphs' measured reach about the
  * baseline, along them the advance less trailing letter-spacing. Where no
  * canvas measures (a test's DOM), the line box itself.
  */
 export function inkLines(el: Element): Box[] {
-    const ctx = (measure ??= document.createElement('canvas').getContext('2d'));
     const out: Box[] = [];
     const range = document.createRange();
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
@@ -255,21 +275,9 @@ export function inkLines(el: Element): Box[] {
         lines.forEach((r, i) => {
             const word = painted(words[i]!.trim(), cs.textTransform);
             if (word === '') return;
-            let up = 0;
-            let down = 0;
-            let ascent = 0;
-            if (ctx !== null) {
-                ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-                // Small caps and a width as painted; a stretch only a
-                // percentage states falls back to normal (canvas takes the
-                // nine keywords alone), which moves an advance, not the reach
-                // above and below the baseline this measure reads.
-                ctx.fontVariantCaps = cs.fontVariantCaps as CanvasFontVariantCaps;
-                ctx.fontStretch = (STRETCH[cs.fontStretch] ?? 'normal') as CanvasFontStretch;
-                const m = ctx.measureText(word);
-                [up, down, ascent] = [m.actualBoundingBoxAscent, m.actualBoundingBoxDescent, m.fontBoundingBoxAscent];
-            }
-            if (ctx === null || !(up + down > 0)) {
+            const m = measurePainted(word, cs);
+            const [up, down, ascent] = m === undefined ? [0, 0, 0] : [m.actualBoundingBoxAscent, m.actualBoundingBoxDescent, m.fontBoundingBoxAscent];
+            if (m === undefined || !(up + down > 0)) {
                 out.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
             } else if (vertical) {
                 const base = r.right - ascent;

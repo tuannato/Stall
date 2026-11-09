@@ -104,12 +104,13 @@ export function readQuietZone(img, z) {
 /**
  * Every code of one job read, and a code that reads dark read again on a
  * fresh pair before the reading is believed — the ring read's own rule (the
- * money-guards round-7 critic's P2-3). A pay screen's code has read part of
- * its quiet zone non-white and then white on a rerun, four times, once on
- * main (`pay` @mobile, Neo worn, 4,572 of 21,420 pixels; `pay-several`
- * @mobile, Modern worn, 4,500 of 21,312, `rgb(18,21,26)`), and the cause is
- * not known; so a read that fails says what it read on, and a retry that
- * passes says both readings (`quietReadingLine`), to find it.
+ * money-guards round-7 critic's P2-3). A phone pay sheet's code has read part
+ * of its quiet zone the page's ground and then white again, thirteen times in
+ * the kept logs by 2026-10-27, eleven at two tabs and two at three (four failed
+ * runs before this read existed; nine since, each white on its fresh pair:
+ * `PROBE-RULES.md`, "The quiet-zone flake, sighting by sighting"), and the
+ * cause is not known; so a read that fails says what it read on, and a retry
+ * that passes says both readings (`quietReadingLine`), to find it.
  *
  * `first` is `{ img, zones, at }`: the capture the job's boxes were read
  * on, the zones the page reported after it (`__quietZones`), and what the
@@ -165,7 +166,25 @@ function movedBy(a, b, when = 'during the fresh pair') {
 }
 
 export async function readQuietZones(first, again) {
-    const reads = first.zones.map((z) => (z.turned ? { z, turned: true } : { z, r: readQuietZone(first.img, z) }));
+    return readAgainOnFreshPair(first, again, readQuietZone);
+}
+
+/**
+ * The read-again itself, for any read of a code's pixels: the quiet zone's
+ * (`readQuietZones`) and, since before 8g2's 1d, its modules'
+ * (`readCodeModules`, `code-modules.mjs`), which share it rather than copy
+ * it. `read(img, z)` answers `{ px, bad, fault? }` — how much of the code it
+ * read, how much of that read wrong — and a code read wrong is read again on
+ * the fresh pair under exactly the conditions above. `unit` names what `px`
+ * counts, in the sentence that refuses a fresh pair that read less of it,
+ * and `nothing` says a fresh pair that read none of it.
+ * `same(a, b)`, when given, says why the code the fresh pair read is not the
+ * code the first did beside its geometry (1d: its matrix), or undefined.
+ * `again` may be shared by several reads of one job — the caller makes the
+ * fresh pair once — and each read decides by its own rule.
+ */
+export async function readAgainOnFreshPair(first, again, read, { unit = 'ring pixels', nothing = 'no pixel of its quiet zone is on screen', same } = {}) {
+    const reads = first.zones.map((z) => (z.turned ? { z, turned: true } : { z, r: read(first.img, z) }));
     const dark = reads.flatMap((read, i) => (read.r !== undefined && read.r.fault === undefined && read.r.px > 0 && read.r.bad > 0 ? [i] : []));
     if (dark.length === 0) return reads;
     const pair = await again();
@@ -181,16 +200,17 @@ export async function readQuietZones(first, again) {
             continue;
         }
         const z = pair.zones[i];
-        const r = z.turned ? undefined : readQuietZone(pair.img, z);
+        const r = z.turned ? undefined : read(pair.img, z);
         if (r === undefined || r.fault !== undefined || r.px === 0) {
-            const said = r === undefined ? 'its frame is turned' : r.fault ?? 'no pixel of its quiet zone is on screen';
+            const said = r === undefined ? 'its frame is turned' : r.fault ?? nothing;
             reads[i] = { ...reads[i], retry: { first: firstRead, why: [`the fresh pair could not read it: ${said}`] } };
             continue;
         }
         // Still from the job's own zone read through the fresh pair: a code
         // that scrolled between the two captures and then stood still read
         // another stretch of its ring (the probe-shard critic's d1).
-        const moved = movedBy(firstRead.z, pair.before?.[i], "between the job's capture and the fresh pair") ?? movedBy(pair.before?.[i], z);
+        const moved =
+            movedBy(firstRead.z, pair.before?.[i], "between the job's capture and the fresh pair") ?? movedBy(pair.before?.[i], z) ?? same?.(firstRead.z, z);
         if (moved !== undefined || r.px < firstRead.r.px) {
             reads[i] = {
                 ...reads[i],
@@ -198,7 +218,7 @@ export async function readQuietZones(first, again) {
                     first: firstRead,
                     why: [
                         ...(moved === undefined ? [] : [`the fresh pair cannot be believed: ${moved}`]),
-                        ...(r.px < firstRead.r.px ? [`the fresh pair read ${r.px} of the ${firstRead.r.px} ring pixels the first read`] : []),
+                        ...(r.px < firstRead.r.px ? [`the fresh pair read ${r.px} of the ${firstRead.r.px} ${unit} the first read`] : []),
                     ],
                     // What the fresh pair read, said and never believed.
                     unbelieved: { z, r, at: pair.at, ...(pair.before === undefined ? {} : { before: pair.before[i] }) },
@@ -224,16 +244,25 @@ const boxSaid = (z) => `${z.x.toFixed(1)},${z.y.toFixed(1)} side ${z.side.toFixe
  * what the runner knew of the capture (`at`, as it is). Pure.
  */
 export function quietReadingLine({ z, r, at }, before) {
-    const parts = [];
-    parts.push(
+    const said =
         r.bad === 0
             ? `0 of ${r.px} dark`
-            : `${r.bad} of ${r.px} dark (the first at ${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}), spanning ${r.dark.join(',')})`,
-    );
+            : `${r.bad} of ${r.px} dark (the first at ${r.first.x},${r.first.y} rgb(${r.first.rgb.join(',')}), spanning ${r.dark.join(',')})`;
+    return [said, ...readingContext(z, at, before)].join(' — ');
+}
+
+/**
+ * Where a reading of a code was taken, said after what it read: the code's
+ * box and clip, where it stood just before its capture when that differs,
+ * the scrolled boxes above it, and what the runner knew of the capture. The
+ * quiet zone's and 1d's readings both end with it. Pure.
+ */
+export function readingContext(z, at, before) {
+    const parts = [];
     parts.push(`the code at ${boxSaid(z)}, clip ${[z.clip.x0, z.clip.y0, z.clip.x1, z.clip.y1].map((v) => Math.round(v)).join(',')}`);
     if (before !== undefined && boxSaid(before) !== boxSaid(z)) parts.push(`at ${boxSaid(before)} just before its capture`);
     const scrolled = (z.scrolled ?? []).map((s) => `${s.at} ${s.top},${s.left}`);
     parts.push(scrolled.length === 0 ? 'nothing above it scrolled' : `scrolled ${scrolled.join('; ')}`);
     if (at !== undefined) parts.push(JSON.stringify(at));
-    return parts.join(' — ');
+    return parts;
 }

@@ -20,19 +20,27 @@
  *   look's numbers arrive by a reviewed diff that names what is clipped and
  *   why, never by a run that read them and said nothing;
  * - **points behind a clip** (`CLIP_SKIP_CEILING`'s rule): the same ratio on
- *   its own points, on every geometry pass, and a pass that hit-tested none
- *   of its points measured nothing of it;
+ *   its own points of 1a (`nothing-covers-money-or-a-protected-box`, its
+ *   `coverByClass`; since 7a, `coveredBy`'s before), on every pass that read
+ *   1a — every geometry pass but the short ones, and the contrast pass —
+ *   the two wall scrollers' points apart (`WALL_SCROLLERS`), and a pass
+ *   that hit-tested none of its points measured nothing of it;
  * - **the codes owed by name** (`CODES_REQUIRED`): every one read on its own
  *   jobs, but the record sheet's code under a paid look — the name sheet
  *   composes no record naming a paid look in step 8 (8b2), so under the
  *   look the sheet shows its refusal and no code (`PAID_LOOK_UNPAINTED_CODES`);
  * - **the wall's controls** (`WALL_ROLES`): owed on its own walls, in
- *   `probe-coverage.mjs` beside the public count.
+ *   `probe-coverage.mjs` beside the public count;
+ * - **1c's characters** (7d, `every-money-character-reads-where-a-mover-is-near`):
+ *   on each viewport where its own contrast jobs triggered 1c, characters
+ *   read there (`charsOwedFaults` in `char-read.mjs`, the public looks' rule).
  *
- * Pure: tallies in, sentences out. Node built-ins only; no `.d.mts`, no TS
- * test imports it. Test: `a-carried-look-is-held-to-its-own-skip-ceilings`
+ * Pure: tallies in, sentences out. It imports `char-read.mjs` alone, pure
+ * too; no `.d.mts`, no TS test imports it. Test: `a-carried-look-is-held-to-its-own-skip-ceilings`
  * (`scripts/look-tallies.test.mjs`).
  */
+
+import { charsOwedFaults } from './char-read.mjs';
 
 /** The two kinds of line skip the contrast pass counts (`LINE_SKIP_CEILING`'s). */
 export const LINE_SKIP_KINDS = Object.freeze(['clipped-away', 'not-rendered']);
@@ -40,8 +48,113 @@ export const LINE_SKIP_KINDS = Object.freeze(['clipped-away', 'not-rendered']);
 /** The contrast pass's viewports, whose skips a ceiling states. */
 export const SKIP_VIEWPORTS = Object.freeze(['mobile', 'desktop', 'canvas']);
 
-/** The geometry passes whose points a carried look is held to. */
-export const CLIP_PASSES = Object.freeze(['mobile', 'desktop', 'canvas']);
+/**
+ * **1a's points, summed and held to the clip ceiling** (7a; the critic's
+ * third review, its checklist item 8). A tally is 1a's per look on a pass
+ * (`coverByClass` in the page's verdict, `coverTally` in the probe): its
+ * reads (`paints`), the points hit-tested (`checked`), behind a clip a
+ * scroller brings them out from (`clipSkips`), and behind one of the two
+ * wall scrollers (`wallScroll`, `WALL_SCROLLERS` in `layout/coverPoints.ts`),
+ * which scroll by design and are counted apart, outside the ratio.
+ */
+export const COVER_TALLY_KEYS = Object.freeze(['paints', 'nodes', 'points', 'checked', 'below', 'offSide', 'above', 'clipSkips', 'wallScroll', 'appHidden', 'failed']);
+
+/** 1a's tallies of `classes` (or every class) on one pass, summed. */
+export function coverTally(byClass, classes = Object.keys(byClass ?? {})) {
+    const sum = Object.fromEntries(COVER_TALLY_KEYS.map((key) => [key, 0]));
+    for (const cls of classes) {
+        const at = Object.hasOwn(byClass ?? {}, cls) ? byClass[cls] : undefined;
+        if (at === undefined) continue;
+        for (const key of COVER_TALLY_KEYS) sum[key] += at[key] ?? 0;
+    }
+    return sum;
+}
+
+/**
+ * **1b's tallies, summed** (7b): a look's 1b reads on a pass
+ * (`reachByClass` in the page's verdict, `ReachTally` in the probe) — its
+ * paints read, elements and look pseudos read, reachers with a paint that
+ * reaches, targets held, pairs judged, keyframe seeks (`wide`: those that read
+ * every reacher against every target), animations left out (`needless`,
+ * `unmoved`: a move of a box that holds nothing 1b reads, and `offSurface`: a
+ * box under an open sheet's scrim, its paints read from its keyframes) or
+ * read from their keyframes' own values (`fromValues`), failures (`would`),
+ * meets accepted by name (`accepted`), a blurred layer's core alone
+ * (`softCore`, not counted), and the paints it threw on (`throws`, each a
+ * failure).
+ */
+export const REACH_TALLY_KEYS = Object.freeze([
+    'paints',
+    'elements',
+    'contents',
+    'pseudos',
+    'reachers',
+    'targets',
+    'pairs',
+    'seeks',
+    'wide',
+    'unmoved',
+    'offSurface',
+    'needless',
+    'fromValues',
+    'would',
+    'accepted',
+    'softCore',
+    'throws',
+]);
+
+/** 1b's tallies of `classes` (or every class) on one pass, summed. */
+export function reachTally(byClass, classes = Object.keys(byClass ?? {})) {
+    const sum = Object.fromEntries(REACH_TALLY_KEYS.map((key) => [key, 0]));
+    for (const cls of classes) {
+        const at = Object.hasOwn(byClass ?? {}, cls) ? byClass[cls] : undefined;
+        if (at === undefined) continue;
+        for (const key of REACH_TALLY_KEYS) sum[key] += at[key] ?? 0;
+    }
+    return sum;
+}
+
+/** 3a's tallies of `classes` (or every class) on one pass, summed (`walkByClass`, D-2026-10-28-01): figures' elements read, failures, throws. */
+export function walkTally(byClass, classes = Object.keys(byClass ?? {})) {
+    const sum = { elements: 0, failed: 0, thrown: 0 };
+    for (const cls of classes) {
+        const at = Object.hasOwn(byClass ?? {}, cls) ? byClass[cls] : undefined;
+        if (at === undefined) continue;
+        for (const key of Object.keys(sum)) sum[key] += at[key] ?? 0;
+    }
+    return sum;
+}
+
+/**
+ * Why a tally breaks the clip ceiling, as a sentence, or undefined: a tally
+ * that read but hit-tested no point ran over nothing; one whose points
+ * behind a clip (the wall scrollers' apart) are more than `ceiling` of
+ * those and the points hit-tested is a tolerance eating the check.
+ */
+export function clipCeilingFault(tally, ceiling) {
+    if (!(tally.checked > 0)) {
+        return tally.clipSkips + tally.wallScroll > 0
+            ? `every one of its ${tally.clipSkips + tally.wallScroll} points inside the viewport was behind a clip — the cover check ran over nothing`
+            : 'it hit-tested no point — the cover check ran over nothing';
+    }
+    const ratio = tally.clipSkips / (tally.clipSkips + tally.checked);
+    if (ratio > ceiling) {
+        return (
+            `${tally.clipSkips}/${tally.clipSkips + tally.checked} points behind a clip (${(ratio * 100).toFixed(0)}%), ` +
+            `above the ${(ceiling * 100).toFixed(0)}% ceiling — the clip tolerance is eating the cover check`
+        );
+    }
+    return undefined;
+}
+
+/** A tally's clip arithmetic as it is printed: behind a clip over behind or hit-tested, and the wall scrollers' apart. */
+export function clipLine(tally) {
+    const all = tally.clipSkips + tally.checked;
+    return (
+        `${tally.clipSkips}/${all} points behind a clip (${all === 0 ? 0 : ((tally.clipSkips / all) * 100).toFixed(0)}%)` +
+        `, ${tally.wallScroll} behind a wall scroller, apart`
+    );
+}
 
 /**
  * Each carried look's line skips, per viewport, as measured — exact
@@ -150,19 +263,35 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  *
  * - `carried`: `[{ cls, paid }]`, every private look the run carries;
  * - `lineSkips`: `{ [cls]: { [viewport]: { 'clipped-away', 'not-rendered' } } }`;
- * - `clip`: `{ [cls]: { [pass]: { skips, checks } } }`, the geometry passes';
+ * - `cover`: `{ [pass]: coverByClass }`, 1a's tallies per look on every pass
+ *   that read it (`coverTally`'s shape);
+ * - `reach`: `{ [pass]: reachByClass }`, 1b's tallies per look on every
+ *   geometry pass that owes it (`reachTally`'s shape): a carried look owes a
+ *   read that held a target on each (7b);
+ * - `walk`: `{ [pass]: walkByClass }`, 3a's tallies per look on every geometry
+ *   pass that owes it (`walkTally`'s shape): a carried look owes a figure's
+ *   element read to its stall on each (D-2026-10-28-01);
  * - `clipCeiling`: the ratio the public looks are held to (`CLIP_SKIP_CEILING`);
  * - `codesRead`: `{ [cls]: Set<'viewport/screen:code'> }`, the quiet-zone reads;
+ * - `moduleCodesRead`: the same, 1d's reads (`a-codes-modules-read-as-its-matrix`,
+ *   7c), owed on the same codes;
  * - `codesRequired`: the codes owed by name (`CODES_REQUIRED`);
+ * - `chars`: 1c's fold by viewport and look (`vp cls` → `triggered`, `chars`,
+ *   …; 7d): a carried look owes characters read on each viewport where its
+ *   jobs triggered (`charsOwedFaults`);
  * - `ceilings`: the table (`CARRIED_LINE_SKIP_CEILING` by default).
  */
 export function carriedTallyFaults({
     carried,
     lineSkips = {},
-    clip = {},
+    cover = {},
+    reach = {},
+    walk = {},
     clipCeiling,
     codesRead = {},
+    moduleCodesRead = {},
     codesRequired = [],
+    chars = {},
     ceilings = CARRIED_LINE_SKIP_CEILING,
 }) {
     const faults = [];
@@ -195,17 +324,17 @@ export function carriedTallyFaults({
                 }
             }
         }
-        for (const pass of CLIP_PASSES) {
-            const at = own(clip, cls)?.[pass] ?? { skips: 0, checks: 0 };
-            const all = at.skips + at.checks;
-            if (at.checks === 0) {
-                faults.push(`${cls}: the ${pass} pass hit-tested none of its points — the cover check ran over nothing of it`);
-            } else if (at.skips / all > clipCeiling) {
-                faults.push(
-                    `${cls}: ${at.skips}/${all} of its points behind a clip at ${pass} (${((at.skips / all) * 100).toFixed(0)}%), ` +
-                        `above the ${(clipCeiling * 100).toFixed(0)}% ceiling — the clip tolerance is eating the cover check`,
-                );
-            }
+        for (const pass of Object.keys(cover)) {
+            const why = clipCeilingFault(coverTally(cover[pass], [cls]), clipCeiling);
+            if (why !== undefined) faults.push(`${cls} at ${pass}: ${why}`);
+        }
+        for (const pass of Object.keys(reach)) {
+            const t = reachTally(reach[pass], [cls]);
+            if (t.paints === 0) faults.push(`${cls} at ${pass}: a-paint-with-no-hit-area-reaches-no-money read no paint of it`);
+            else if (t.targets === 0) faults.push(`${cls} at ${pass}: a-paint-with-no-hit-area-reaches-no-money held no target on it`);
+        }
+        for (const pass of Object.keys(walk)) {
+            if (walkTally(walk[pass], [cls]).elements === 0) faults.push(`${cls} at ${pass}: the-ground-walk-reaches-the-stall read no figure of it`);
         }
         const owed = codesRequired.filter((code) => !(paid && PAID_LOOK_UNPAINTED_CODES.includes(code)));
         const read = own(codesRead, cls) ?? new Set();
@@ -213,6 +342,12 @@ export function carriedTallyFaults({
         if (unread.length > 0) {
             faults.push(`${cls}: a-code-keeps-its-quiet-zone-white read no quiet zone on ${unread.join(', ')} under it`);
         }
+        const modulesRead = own(moduleCodesRead, cls) ?? new Set();
+        const modulesUnread = owed.filter((code) => !modulesRead.has(code));
+        if (modulesUnread.length > 0) {
+            faults.push(`${cls}: a-codes-modules-read-as-its-matrix read no module of ${modulesUnread.join(', ')} under it`);
+        }
+        for (const why of charsOwedFaults(chars, [cls])) faults.push(`${cls}: ${why}`);
     }
     return { faults, notes };
 }

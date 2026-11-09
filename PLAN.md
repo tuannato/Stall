@@ -296,6 +296,186 @@ working accept, and there is no accept.
   underline on hover. The kit lint is unchanged; a pointer's hover is checked
   at intake. Probe and lint cannot be a complete fence against a look written
   to cheat; what they leave is stated and checked at intake.
+- **Nothing covers money, with or without a hit area (1a and 1b; owner,
+  2026-10-20 to 2026-10-29: D-2026-10-20-13 (1) and (2), D-2026-10-26-01,
+  D-2026-10-27-03 and D-2026-10-29-01, all as recommended).** The probe asks
+  every money node and every protected box, on every geometry pass, with
+  `pointer-events` forced on (1a), and reads every paint that has no hit
+  area (a shadow, an outline, a neighbour's underline, a blur) for how far
+  it reaches past its box (1b). Both fail the run. The points over a glyph's
+  ink are at most 3px apart down its centre and along its middle row
+  (`INK_LINE_PITCH`): a thin band over half a digit of a price at a phone's
+  width had passed until then (the critic's PB). A finite animation filled
+  forwards is asked again at its end. A blurred layer counts where the
+  composite reaches 0.2 (`BLUR_OPACITY`), and a reach that meets a protected
+  box by more than 1px fails. One reach is accepted by name: Rural's sign
+  board over the address plate at the desk (a real overlap, 142 would-be
+  failures at 1280, a plate that stays legible), keyed on the kind, the
+  tags, the classes, the computed shadow and the target, with a composite
+  ceiling of **0.25** (D-2026-10-29-01: at 0.23 half a pixel of drift turned
+  142 passes into failures). Raising the general threshold to 0.25 was
+  refused, since it would take a 4.5:1 figure to about 2.9:1. **Costs,
+  stated:** the denser points added about 6.5 to 7 seconds (2.17 million
+  probes to 4.66 million), paid back by cutting the horizon's worst-case
+  read to its three pinned jobs (about 15 to 17 seconds; its guard against
+  a lower reading is gone on about 92 jobs). 1a does not hit-test a point
+  behind a scroller's clip (it is counted, and `CLIP_SKIP_CEILING`, 0.3,
+  fails a pass over it; D3 (a) of D-2026-10-20-06, the owner's), so a pay
+  code below the first screen is hit-tested only on a contrast job, whose
+  shot is grown to hold the page; at 360 and on a geometry-only screen it is
+  hit-tested by nothing (the eighteenth review's correction).
+- **A code's modules are read in pixels, and a turned code is read upright
+  or fails closed (1d; owner, 2026-10-26, 2026-10-29 and 2026-11-09:
+  D-2026-10-26-04, D-2026-10-29-01 and D-2026-11-09-01, all as recommended;
+  by recommendation under the owner's standing instruction of 2026-10-30:
+  D-2026-10-30-01 and D-2026-10-31-01).** On every contrast job each
+  module's centre pixel of every code is held to the matrix `qrSvg` drew: a
+  dark centre above 10 or a light one under 245 on any channel fails, and a
+  module under 3 device pixels fails closed. A rule on every geometry pass
+  holds every code to black on white with its modules where `qrSvg` put
+  them, and the quiet zone is read white. The kit's probe owes every
+  `CODES_REQUIRED` code to both reads, as the public looks do (a turn of
+  0.01° had taken a pay code out of both). A code in a turned frame is read
+  on a frame with every transform held off, and only where its frame does
+  nothing but turn (2D, orthonormal, positive determinant), no corner of
+  the code moves more than 1.5 modules when the turn is held off
+  (`UPRIGHT_TRAVEL_MODULES`) and no mask, mask border or clip stands on its
+  chain; otherwise it fails closed and says why. **Cost, stated:** a look
+  that wants a mask over a turned code is red until a read on the painted
+  frame at rotated sample points exists (D-2026-11-09-01 (a); its option
+  (c) was not built). A code on a geometry-only screen, at the wall sizes
+  the contrast pass does not paint and at 360 is not read in pixels.
+  Builder choices cited here: D-2026-10-30-03, D-2026-10-31-02 and
+  D-2026-11-09-03.
+- **Every money character is read where a mover is near, and not on every
+  money job (1c; owner, 2026-10-20: D-2026-10-20-06 D1; by recommendation
+  from 2026-10-30: D-2026-10-30-02 and D-2026-10-31-01; owner, 2026-11-09:
+  D-2026-11-09-02).** On a contrast job whose paint holds a moved,
+  sticky or absolute box, a motion path or an animation that sets more
+  than an ink, a ground or an opacity near a money node, each character of
+  the node is read on its own against a reference drawn in the page: under
+  half of it (`CHAR_KEEP_CUT`, 0.5) fails, and a reference under 6 pixels
+  (`CHAR_REF_MIN`) is counted and not held, **so a decimal point or a comma
+  at a small size is not held: stated, and kept.** On a turned frame the
+  reference is the largest count among the phases whose masks match within
+  0.2 (`TURN_MATCH_MARGIN`). A job the trigger fired on that read no
+  character, a touched node with every character dropped and a job whose
+  prepare answered no trigger all fail, and the trigger is owed per look
+  and per viewport. Each run plants a mover and the trigger must find it
+  (`the-trigger-fires-on-a-planted-mover`). Each character's share is
+  divided by its node's median where that is over 1 (D-2026-11-09-02):
+  measured on the clean tree with every money job read, 0 characters under
+  the cut and the least normalised share 0.545. The critic's figure of
+  three quarters of a stroke passing was not what the measurement found;
+  the true gap was a band of 0.375 to 0.5, and it is closed. **The owner's
+  D1 (a), reading every money job, is measured and not built** (+27 to +37
+  seconds on a run of about 222 to 241 against a ceiling of 300); the
+  trigger costs about 0.4 seconds of wall time at three tabs. **Not read,
+  stated:** a cover placed by stacking alone, an unmoved box's reach and a
+  cover of under half a glyph.
+- **The ground under a money figure is read to the stall, where its stops
+  and tiles fall (3a; owner, 2026-10-28: D-2026-10-28-01 J1, J3 and J4; by
+  recommendation, 2026-11-09: D-2026-11-09-04, D-2026-11-09-05 and
+  D-2026-11-09-07).** The dress rule reads every paint under the figure up
+  to and including its stall, and a ground under 3:1 against the ink (a
+  cell of half opacity or more, `DRESS_GROUND_ALPHA`) fails. A tile stands
+  where its size and position put it, a stop bears on a cell only where its
+  gradient line falls, and a value the read cannot parse is read the strict
+  way. One model serves the dress rule and the older ground read
+  (`groundStackFault` is replaced); on the clean tree 3,339 false failures,
+  3,324 of them Rural's punch-hole ring, went to 0. A box that stands in
+  more than one fragment is read strictly and none of its tiles counts as
+  covering (D-2026-11-09-05 and D-2026-11-09-06). **Each paint is read by what separates it from
+  the figure** (D-2026-11-09-07, the eighteenth review): every box is held
+  upright in one flat frame, each box's transform read first, and a paint on
+  a box is placed in the ink's frame through the transforms strictly below
+  that box, per piece of ink (a transform at the painting box or above moves
+  paint and figure both and cancels; a shift or a scale is exact, a turn is
+  cut into pieces it moves by about a pixel). It replaced holding each box
+  at one place (D-2026-11-09-06), which went wrong three times for one
+  reason, a figure needs two places, one for a paint inside a transformed box
+  and one for a paint above it (UP2d, SCL3, CASE-E, CASE-F). Each run plants
+  grounds and the read must fail and pass them
+  (`the-ground-read-fails-a-planted-ground`). **Costs, stated:** about 4.5
+  seconds of wall time at the bind (the per-pair read's own is in
+  PROBE-RULES); a clip on a box above a transform is read in the flat frame,
+  and a gradient's stops under a scale between it and the figure are read
+  strictly; and **a background that moves on a box
+  above a figure (its position or size, between two reads) is not read**
+  (D-2026-11-09-04: reading it would add about 7.5 seconds, 225.2 to 234.8,
+  and doing it after the port, when time allows, was the recommendation;
+  § Open has it).
+- **Money is read at every keyframe and at the end of a lasting animation
+  (owner, 2026-10-26: D-2026-10-26-03 (1), as recommended).** Every
+  animation on a money node, on an element under it with text or on a box
+  above it is seeked alone to each keyframe offset and to 0 and 1, and the
+  figure's held dress, its ground and its cut text are read there. This
+  closes PT2 (a keyframe that made the ink transparent for part of a cycle)
+  and PF2 (a cover that slides in at the end of a run and stays). The end
+  read is pruned where nothing asked can be covered. **Cost, stated:** the
+  end read cost about 7 to 8 seconds of page time over the geometry passes
+  before the prune and about 1 second after, and the keyframe offsets 4.2;
+  what lies between two offsets, and two animations at once, are not read.
+- **First-party look sheets are fenced where no pass paints (owner,
+  2026-10-20 to 2026-10-27: D-2026-10-20-07, D-2026-10-20-13 (3),
+  D-2026-10-26-03 (2), D-2026-10-26-04, D-2026-10-27-01 and
+  D-2026-10-27-02, all as recommended).** In a first-party look sheet no
+  transition or keyframe changes the size, spacing, zoom or scale of a
+  money node (D-2026-10-20-07, widened from `font-size`); no keyframe sets
+  `display`, `content-visibility`, `visibility` or `all`
+  (D-2026-10-20-13 (3) added `visibility`), an inherited ink or a custom
+  property (D-2026-10-26-03 (2)), a background or a shadow; SVG paint
+  stands only on a drawn icon (D-2026-10-26-04); and there is no anchor
+  positioning at all (D-2026-10-27-01), because a box placed by `anchor()`
+  follows its anchor's transform and carried the pay figure out of its clip
+  (the critic's PAN). The probe reads that road too, and the kit's
+  `workshop:probe` refuses every paint whose sheet declares `anchor-name`
+  (D-2026-10-27-02), which closes the family on the kit's side and drops
+  about 28 seconds of extra measuring. **Costs, stated:** no first-party
+  look uses any of these, and the private look at 0x04 passes them; a
+  creator's look cannot use anchor positioning, and the kit's lint admits
+  the rest and leaves it to the probe and to intake. D-2026-10-20-07 also
+  kept, on the owner's word, six Cycle figures at 26 to 31.6px at 1024x768
+  and 11 cards whose wrapped figure stands under half a pixel from the
+  status line.
+- **The probe runs three tabs by default on six cores (owner, 2026-10-27:
+  D-2026-10-27-04; CI's two tabs, 2026-10-20: D-2026-10-20-06 D6).** A
+  machine with at least 6 cores and 8 GiB runs three tabs, 4 or 5 cores two,
+  and anything smaller one (`LAYOUT_CONTRAST_TABS` overrides, and the reason
+  is printed). CI's manual job stays on two. The two further trials the
+  owner asked for passed: 231.0 to 231.6 seconds against 253.4 to 255.5 on
+  two tabs, every verdict identical byte for byte, and memory pressure never
+  reached critical. **Cost, stated:** on 8 GiB the margin is memory (up to
+  about 480 MiB swapped at three tabs), and the run's ceiling stays 300
+  seconds.
+- **The kit README's labels, and what stays "most" (owner, 2026-10-20:
+  D-2026-10-20-06 D1 (c), D2, D3 (a) and D4 (b), as recommended; the money
+  label's wording by recommendation, 2026-11-09: D-2026-11-09-07; done at
+  step 10 of the before-8g2 chapter and scoped at the eighteenth review).**
+  "Most" was kept until the reads above bound. "Money is never covered, cut
+  or faded" now says the kit's probe reads whether anything cuts or fades
+  the prices and text on every screen and state it paints, and whether
+  anything covers them on the first screen there; and, at 390, 1280 and 1920
+  wide on the screens it samples, what stands below the first screen, the
+  codes, the contrast, and the digits where a box is moved near a figure or
+  a figure is broken. That is weaker than the wording it replaced ("covers,
+  cuts or fades this on every screen and state it paints"), which promised
+  more than the kit reads: a cover below the first screen on a geometry-only
+  screen passes the kit's probe (`kit-BF1`) and so does a fade on a box
+  above a code on one (`kit-KQF1`). 1c reads where its trigger finds a
+  mover, and the contrast pass skips the geometry-only screens. **The QR
+  paragraph keeps "most" for covering** (D4 (b)): 1a hit-tests nothing
+  behind a scroller's clip, so below the first screen a pay code is
+  hit-tested only on a contrast job and at 360 and on a geometry-only
+  screen not at all, and reading it at scroll stops (D3 (b)) was not chosen.
+  **Whose wording:** D4 (b) is the split of the README's label and "most"
+  on the QR paragraph. The QR paragraph's clause on what the probe reads of
+  a code ("reads a code's colours, and on the screens it samples its margin
+  and modules") and "The whole price is never dressed to misread" taking
+  the label of "A price is dressed as one piece" are the window's, under
+  the owner's standing instruction of 2026-10-30. D5 (a) of D-2026-10-20-06
+  was the block list for a state rule, which D-2026-10-20-08 replaced with
+  the allow-list (the state belt, above).
 - **The ticker preset carries the quotes rail, and rule 5 of § D is amended
   for it (owner, 2026-09-21, "theo toàn bộ đề xuất").** On the stream's
   one-line ticker (`preset=ticker`, design `private/design/ticker-2026-09-21/`)
@@ -1008,9 +1188,11 @@ money path this app can have, because nothing on it is derived.
      critic's PC2, PC3′, SVs, PW; PQ over a pay code). The fix to measure
      first: a hit test with `pointer-events` forced on over every money
      node and every protected box, on every pass, false reds counted
-     before it binds; and the digit read on every money node on the
-     sampled screens. Then whether the README's "most" can go is the
-     owner's (D-2026-10-20-02, -03).
+     before it binds (1a, bound since 7a); and the digit read on every
+     money node on the sampled screens (1c(c), bound since 7d, on the jobs
+     where a mover is near: "Before 8g2, 1c(c)'s open list" below). The
+     README's "most" went at step 10 where the reads bound, and stays on
+     the QR paragraph's covering clause (D4(b) of D-2026-10-20-06, § Decided).
   2. **A run under the private look at 0x04's selection** (`pnpm test` and
      the whole runner), with its sheet grepped first for a `fixed` or
      `local` background attachment near money (now read as possibly
@@ -1018,8 +1200,10 @@ money path this app can have, because nothing on it is derived.
      near money, animated pseudos, and a look pseudo on a sheet's scrim.
   3. **Round 4's P2s:** a box above's background image off the sampled
      screens and the walk's stop at an invisible or `display: contents`
-     box; a static belt in the look lint for clips scoped to hover, focus,
-     the tap highlight or a turned wall; a neighbour's far shadow.
+     box (bound since 3a's binding, D-2026-10-28-01: "Before 8g2, 3a's open list" below);
+     a static belt in the look lint for clips scoped to hover, focus, the
+     tap highlight or a turned wall; a neighbour's far shadow (failed by
+     1b since 7b: N6, "Before 8g2, 1b's open list" below).
   4. **Smaller, stated:** a look pseudo animated invisible at the frozen
      instant (PSa2); a gradient between its stops off the sampled screens
      and at a device pixel ratio over 1 (G2); `markLookPseudos` never
@@ -1033,6 +1217,613 @@ money path this app can have, because nothing on it is derived.
   entry each (`OFF_SIZE_WALLS`), named in `WALL_PASS_NAMES`, from which
   `GEOMETRY_PASSES` and both money surface tables are derived, and shot at
   their sizes. The flake's cause is still unknown.
+
+- **Before 8g2, the fourth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-4.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fourth review's fixes"). Not built:
+  1. **Points below the screen skip the clip and reach checks.** They need
+     no hit test, so the cut and the reach can be read for them where they
+     stand (this closes D3's cut half).
+  2. **A point past a box on an axis whose `overflow` is `visible` is counted
+     "behind a clip" and never hit-tested.** The unit test pins this as
+     intended; nothing has asked whether it should be.
+  3. **The running ribbon's exception excuses every sideways clip of a
+     ribbon figure, a look's own clip included**, and a look can dress
+     `.tk-run:not(.still)` alone, which no pass reads with its figures in
+     view.
+  4. **A keyframe on `left`, `top`, `inset` or a margin of a box above money
+     moves it between instants.** `keyframeHeld` refuses a moving `translate`
+     for that reason, and not these. Since the fifth review the offset read
+     seeks them and the self-clip read reads at each offset whether the
+     figure's text is cut; what the moved box covers there is not read (1a
+     reads at rest and at the end of a lasting animation, and over time only
+     the price and "You pay" are hit-tested).
+  5. **A size keyframe on the money node itself is held by nothing** but,
+     since the fifth review, the self-clip read at each offset (it is
+     seeked there, `SEEK_ON_OWN`): a size that cuts the figure is read, one
+     that spills it or lays it under something is not.
+  6. **`keepsItsEnd` ignores CSS transitions, whose end state lasts.** The
+     critic's PTR went red through other reads, and why it was caught at
+     rest is not known.
+  7. **An outline in a keyframe on a box above is unread between instants.**
+     (Its `line-through` half is read since `4264938`: the offset read holds
+     `-webkit-text-decorations-in-effect`; the fifth review's PLT is red at
+     390, 28.)
+  8. **A cover keyed to a class only a press adds (`.sel-enter`) is never
+     painted.** And the day a fixture paints a press, the app's own one-shot
+     entrance (`sel-unfold`, `sel-fade`, `sel-line-in`) goes red on
+     `keyframeHeld` and on 1a at rest: such a fixture lands with a read of
+     the entrance at its end.
+
+- **Before 8g2, the fifth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-5.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fifth review's fixes"). Not built:
+  1. **The end read's prune ignores stacking** (the critic's item 11): it
+     compares a clip box with 1a's asked boxes and points in viewport
+     coordinates, so a marquee's cell behind an open sheet or poster that
+     overlaps the sheet's Pay, Close, code or tag figure on screen is read at
+     its end though the sheet stands over it. Conservative (it reads more),
+     and the clean tree's 161 end reads are such paints; a prune that knew
+     which surface stands over which would leave them out.
+  2. **`outerShadowOnly` reads the figure's box, not its ink, and reads the
+     animated box's corners square** (the critic's item 12): a rounded box
+     whose shadow pulses outside a corner the figure's box stands near is
+     taken as outside every glyph. Kit-only: the first-party belt refuses a
+     shadow in a keyframe. Not planted.
+  3. **The kit's twin rule accepts a twin nothing reads** (`mask-box-image`
+     beside `-webkit-mask-box-image`, `tap-highlight-color` beside
+     `-webkit-tap-highlight-color`): the first-party lint holds the twin to a
+     property since the fifth review (`PREFIXED_TWINS`), and the kit keeps
+     the rule its README states. A README line for the owner. Beside it, in
+     both: a prefixed property Chrome does not list (a `-moz-` one) keeps the
+     name less its prefix as its twin, not held to exist.
+  4. **A code's size is held by nothing but its squareness and the pay
+     code's width gate** (the critic's PQZ, read on page passes only): a
+     look that shrinks a share, studio or record code to a few pixels, with
+     a box kept, passes the code hold and the per-screen owe.
+  5. **What the self-clip read at an offset does not read**: a figure a
+     keyframe spills (the spill rules read the instants alone) or lays
+     under another box (1a); a `.fig-say` parent that is no money node (the
+     self-clip rule's own subjects); a value between two offsets; two
+     animations at once. And the end read's prune rests on Chrome's clipping
+     as measured per display (`CLIPPING_DISPLAYS`, Chrome 156 only). Its
+     positioned-descendant condition bears no load there: the sixth review
+     measured that a transform animation filled forwards keeps its box the
+     containing block at a computed `none`, and its PPD read the same with
+     and without it; it stands as a belt for another engine.
+
+- **Before 8g2, the sixth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-6.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  sixth review's fixes"). Not built:
+  1. **`mask-position-x` as a twin** (the critic's P3): `PREFIXED_TWINS`
+     maps `-webkit-mask-position-x` and `-y` to no twin, measured in Chrome
+     156 alone; Firefox may read `mask-position-x` and `-y` (not checked:
+     no network). The refusal now says the name less the prefix "names no
+     property Chrome reads", true either way; whether a first-party sheet
+     should instead be held to write `mask-position-x` beside it is open. No
+     served sheet writes either.
+  2. **The `offsetHeld` pins hold text, not choice**: they pin the blocks
+     that make the offset reads, guards and style reads included,
+     `movesOtherBoxes`, and since the seventh review the lines that take an
+     animation in (a pseudo-element's among them), the off-walk gate, the
+     moves cache, `inkSignature` and the gather and report of the figures
+     the dress rule does not read; not which animations on a figure's walk
+     reach the reads by `seekNeedless`, `outerShadowOnly`, `groundOnly` or
+     the timing set for the seek, nor the helpers the reads call. A
+     mutation there is caught only where a red proof exercises the branch
+     it breaks.
+  3. **What a keyframe off a figure's walk does to it, but cut its text**:
+     such an animation is seeked for the self-clip read alone, so one that
+     spills the figure over another box, lays a box over it or changes its
+     ground between the instants is read by nothing.
+  4. **A ground box above that moves while the glyphs stand still**: its
+     offsets or a margin over a figure positioned against a box above it
+     (a size there is refused at its written value) changes no
+     `GROUND_SIGNATURE` longhand and no text rect, and the ground is not
+     read again.
+  5. **`MOVES_NO_OTHER_BOX` rests on one engine's measurement**: the
+     seventh review found it false twice (a table row's `visibility`, PVC;
+     an anchor's transform carrying a box placed by `anchor()`, PAN), and
+     since then every longhand on it was measured one at a time in Chrome
+     156 on a page of its own (with an anchor, and on a flex, block and grid
+     item with no anchor), not in the probe and not in another engine; a
+     figure not rendered at the pass's last instant is not read at an
+     offset (a keyframe that renders it is refused in a first-party sheet;
+     the kit's road is unread).
+  6. **A code's modules between instants**: the code hold, its place read
+     included, reads a code at the pass's last instant; a keyframe that
+     carries the modules off the matrix between the instants is read by
+     nothing (not planted).
+
+- **Before 8g2, the seventh review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-7.md`; its
+  B1 and its pins are built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  seventh review's fixes"). Not built:
+  1. **The older reads that assume a transform or an offset moves only its
+     own subtree**: `endMoot`'s prune (a lasting transform inside a clip
+     that meets nothing 1a asked is left out of the end read), the
+     transforms `SEEK_NEEDLESS` leaves unseeked on a box above (where the
+     dress reads are not made at an offset; the self-clip read is, where an
+     anchor can follow them), the turns `BOX_HELD` lets a box above keep,
+     and the end read itself. A box placed by `anchor()` elsewhere on the
+     page follows them. **Closed for first-party looks by the lint** (they
+     write no anchor positioning, `a-look-never-positions-against-an-anchor`)
+     **and on the kit's road by its probe** since D-2026-10-27-02: the
+     kit's probe fails every paint of the kit's look while its sheet
+     declares `anchor-name` (`the-kit-takes-no-anchor-positioning`), so no
+     named anchor reaches a kit look the probe passes. Not planted beyond
+     that refusal's own red proof (`layout/PROBE-RULES.md`, "The kit's
+     probe refuses a sheet that names an anchor").
+  2. **The probe's hidden scrollbars**: the probe's Chrome runs with
+     scrollbars hidden, so a scrollbar a transform's or a keyframe's
+     overflow adds where scrollbars take room (a classic scrollbar) — which
+     narrows the box it scrolls and can squeeze a figure in it — is
+     measured by no pass. An older assumption of the environment, not of a
+     read.
+  3. **What an anchored box does that the self-clip read does not read**: a
+     figure an anchor carries over another box or off screen with no clip
+     to cut it, and **a figure `position-visibility` hides**. Chrome 156
+     stops painting an anchored box when its anchor is carried out of a
+     clip that does not cut the box itself, and when its anchor is
+     `visibility: hidden`; the anchor's `opacity: 0`, `clip-path` and
+     `scale: 0` do not (the eighth critic,
+     `private/design/workshop-2026-09-23/before-8g2/critic8/pages/`). No
+     read the probe makes sees it: the hidden box still computes `visible`,
+     `checkVisibility()` answers true, and hit testing skips it, so 1a
+     reads the box under it. Plant PAV (PAN's anchor with the move taken
+     out, a keyframe `visibility: hidden` on `.item-u` from 30% to 40%):
+     the six pay screens at 1280 read 0 failures on `8bdd315` (a quick
+     read) while the shot at 35% shows the line "Your wallet signs" over
+     nothing. The kit's road only: first-party looks write no
+     `anchor-name`, `position-anchor` or `position-visibility`. **Closed for
+     a named anchor** by D-2026-10-27-02: `workshop:probe` refuses every
+     paint of the kit's look while the kit's sheet declares `anchor-name`,
+     and the workshop README says so in one line.
+  4. **`sheetFacts` can go stale**: an `@import` still loading
+     (`styleSheet === null`) is skipped rather than counted as unreadable,
+     and the cache is keyed by the sheet counts alone, so a sheet whose
+     rules change without the count changing is not read again. Neither is
+     reachable today (both lints refuse `@import`, and the probe's own
+     `replaceSync` sheets set no `anchor-name`); not planted.
+
+- **Before 8g2, 1b's open list** (paints with no hit area; bound since step
+  7b, `layout/PROBE-RULES.md`, "Before 8g2, 1b", "Before 8g2, 7b: 1b binds"
+  and "Before 8g2: the thirteenth review's fixes"). Built at 7b and off this
+  list: Rural's board over the address plate accepted by name
+  (D-2026-10-27-03, `REACH_ACCEPTED`), UL2 failed by the bind (the lint's
+  underline cap is left as it is), and the keyframe seek widened (the ninth
+  critic's L1 and K1). Built at the thirteenth review's fixes and off it: a
+  look pseudo an animated box holds is seeked (B2, KTSK2), a box under an
+  open sheet's scrim is not read from its keyframes' values (B3, BKV's 30
+  false failures), `reachersOn`'s look-pseudo hosts under `only` held to the
+  open surface, the accepted meet's own key held by a test
+  (`an-accepted-meet-does-not-stand-for-its-pair`), a keyframe's text-shadow
+  read on the owners that inherit it (`textShadowHeirs`), the accepted list
+  judging the most over all the target's boxes, the board's ceiling raised
+  to 0.25 (D-2026-10-29-01), and the run under the private look at 0x04's
+  selection (the thirteenth critic's: 1b 0 failures and 0 wide seeks on
+  every pass). Built at the fourteenth review's fixes and off it: an heir
+  with a transition on its text-shadow is an heir (M1, KTSH;
+  `textShadowHeirs` holds the transitions of every element under the box).
+  Open:
+  1. **Pseudo text past its width is under-read** (the ninth critic's P2,
+     not planted): a pseudo's region is its own resolved width (an inline
+     one's, a font size a character), grown by one font size; text that
+     runs past that width (`white-space: nowrap`, a `letter-spacing`)
+     stands outside the region.
+  2. **The region model is proved by structure alone** (the ninth critic's
+     P3): PW is a pseudo of a box whose region holds the figure's ancestor;
+     a plant of a pseudo that is not an ancestor of the figure's row, moved
+     onto it by its offsets alone, is still to be made.
+  3. **Not read by 1b, stated:** paint order (a meet is a meet whichever
+     paints last); several reachers' blurs together (each reacher's layers
+     are composited alone); a pseudo-element's exact box, and a decoration
+     line on a pseudo's text; a reach between two keyframe offsets, and two
+     animations at once; a box inside a scroller held to one the scroller
+     does not carry, or to a sticky box, at any scroll but the one the paint
+     stands at; a column rule; an SVG element's own overflow; a glyph's
+     shape and text over several lines (its line boxes, an ink box an upper
+     bound); the contrast pass's paints (1b runs on the geometry passes
+     alone); and a box behind an open sheet's scrim, raised over it by a
+     `z-index`, whose paint with no hit area lies over the sheet's money
+     (every road holds its reachers to the open surface; the fourteenth
+     critic's item 3, not planted).
+  4. **The accepted reach is keyed on exact strings** (`REACH_ACCEPTED`):
+     a Chrome that serialises a computed shadow or colour another way, or a
+     change to Rural's board, plate or mood, takes the 142 back to
+     failures. That fails closed (red, never silent), and is the cost of a
+     key no look's class is in.
+  5. **The board's ceiling is still a tripwire, with a margin now**: at
+     0.25 (it was 0.23) the board composites 0.2285 at rest; with the
+     address plate moved up by a relative offset, 0.2389 at 2px, 0.2438 at
+     3px and 0.2486 at 4px stand accepted, and 0.2532 at 5px fails (7 on
+     the desk's `offers`, a quick read; `critic13-fixes/runs/q-BUP*.log`).
+     So between 4 and 5px of drift toward the board turns the 142 red,
+     where half a pixel did at 0.23. It fails closed. The pinned shadow caps the
+     composite at its own alpha, 0.322 as the probe reads it.
+  6. **A move of a box that holds nothing 1b reads is left out** (`unmoved`:
+     no reacher, no target, no look pseudo at rest): sound by mechanism, a
+     transform, an offset or a motion path carrying only the box and what it
+     holds where no anchor can follow; no plant proves the gate itself.
+  7. **`an-accepted-meet-does-not-stand-for-its-pair` pins `judgeReacher` by
+     its text** (the fourteenth critic's item 4): `sayReach` is held by
+     behaviour, but `judgeReacher` only by what its body says, so a key
+     added to the pair in the accepted branch some way the pin does not
+     name (`Set.prototype.add.call(said, key)`, the critic's mutation)
+     restores `87ee812`'s bug with the three files' 34 tests green. A
+     behavioural test would drive `judgeReacher` itself, which lives in
+     `layout/probe.ts`, whose module runs the probe page's own top-level
+     code when it is imported; not built.
+
+- **Before 8g2, 1d's open list** (a code's modules read in pixels; bound
+  since step 7c, `layout/PROBE-RULES.md`, "Before 8g2, 1d: the code's
+  modules", "Before 8g2, 7c: 1d binds" and "Before 8g2: the thirteenth
+  review's fixes"). Built at 7c and off this list: the bind, its codes owed
+  by name (the quiet zone's `CODES_REQUIRED`, every look's own quiet-zone
+  reads, each carried look on its own), and the flake count read first —
+  seventeen sightings in the kept logs, eleven at two tabs and six at three
+  (7c counted fifteen and four at three; the thirteenth critic found the two
+  this step's own plant runs held), every one since the read-again existed
+  white on its fresh pair. 1d read again five times in those logs, each
+  right on the pair and each on a quiet-zone sighting's own code: 1d is hit
+  exactly when the quiet zone is. Three tabs stay the default, and go back
+  to two if a sighting ever fails a run (now a failure of 1d and the quiet
+  zone together). Built at the thirteenth review's fixes and off it: a code
+  in a turned frame read upright by both reads, every transform above it
+  held off, or failed closed (B1, the owner's D-2026-10-29-01); a code read
+  whole or failed closed (item 8); the kit's look owing `CODES_REQUIRED` on
+  its probe (D-2026-10-29-01); and the run under the private look at 0x04's
+  selection (the thirteenth critic's: 1d read no code wrong). Open:
+  1. **The canary's reads again of 1d are said, not failed**: 1d is not in
+     the job's record the canary compares, so a 1d reading that differs on
+     the canary's tab fails nothing; the walk's read of the job decides.
+  2. **A contrast target's glyphs laid over a code are not read** (PQG: the
+     code's own lede moved up over the modules, 44px black glyphs and no
+     ground, reads 0; 1a fails it, both lints admit it): the prepare blanks a
+     target's glyphs on the capture 1d and the quiet zone read. Reading the
+     code on a capture with no glyph blanked would close it; its cost is not
+     measured.
+  3. **Codes not read in pixels**: every code on a geometry-only screen, at
+     the wall sizes the contrast pass does not paint, and at 360 — the
+     quiet zone's own list, 507 painted codes on the clean tree. So the QR
+     paragraph keeps "most" for covering (D4(b), the critic's P2-7) unless a
+     pay code below the first screen is read at scroll stops too (D3(b)).
+  4. **The payload is held only on the wall's plate.** 1d reads the matrix
+     off the path's `d`, the one `qrSvg` drew from `qrMatrix(text)`; the app
+     carries a code's text in the DOM only on the touch wall's plate
+     (`data-pay-uri`). A `data-*` attribute on every code would let 1d hold
+     each to its payload: an app change (every visitor's bundle, and a link in
+     the DOM the pay sheets keep out of it on purpose). **Not added**
+     (CRITIC-10's judgement 2, decided by the window): it would catch only
+     an app bug that hands `qrSvg` the wrong text, which the composers'
+     tests hold, and a look cannot change the `d` attribute; the owner's
+     to reopen.
+  5. **A paint that misses every centre** (a line thinner than half a module
+     along the seams, a cover smaller than a module between centres) is not
+     read; whether a camera reads through it is not measured.
+  6. **A turned code is read upright, not as it stands, and only where its
+     frame only turns and holding the turn off moves it at most 1.5
+     modules.** The frame the two reads take holds off every
+     transform on the code and the boxes above it, and nothing else: a box
+     whose place a transform there decides (an absolute or fixed box whose
+     containing block the transform made) can stand elsewhere on that frame
+     than it does on the job's, and a cover laid that way over a turned code
+     is read where it moved to (1a reads the job's own frame). **The code
+     itself stands where the held frame puts it** (the fifteenth review's
+     B1, the owner's D-2026-10-31-01): holding off a `translate`, or a turn
+     about a far origin, moves it, and a mask or a clip that did not move
+     with it was read in the wrong place — PTO2 (every Modern pay code
+     carried 140px down into a masked band) passed the whole runner, and
+     P45 (a 45° turn about the code's own centre, its corners past a mask)
+     passed a check of the centre alone. Since then a code that holding the
+     turn off moves at any corner more than 1.5 modules fails closed for
+     both reads (`uprightCornerTravel`). **A mask, a mask border, a clip-path
+     or a clip on the chain fails the code closed** (the sixteenth review's
+     B1, D-2026-11-09-01): the held frame puts the masking box back with
+     everything else, so it moves the mask against the code while the code
+     stands still (PRM2: 45px of every Modern pay code masked off at travel
+     0.00 modules; PCT: the matrix's first two rows at 1.45), and the 1.5
+     module bound said nothing of it. What the bound still covers is a box
+     whose place the held frame changes with no mask on the chain; on the clean tree a corner of Rural's
+     Cycle codes moves 0.99 modules, of its wall code 0.55. A transition
+     already running on one of those boxes is cancelled by the hold and does
+     not resume (observed in Chrome by the fifteenth critic on the heirs
+     `textShadowHeirs` holds through the same `holdOff`, not on a code's
+     box). The box placed by a transform and the transition are not
+     planted. Since the fourteenth review's M2 (the owner's
+     D-2026-10-30-01) a code whose frame also scales, skews, mirrors or
+     leaves the plane (`turnOnly`: every box from the code up with `scale`
+     none or 1, a `translate` with no z, a `rotate` with no axis, a
+     `transform` 2D and orthonormal with a determinant above 0) fails
+     closed for both reads unread, where the held frame read it as a code
+     the page does not paint (PSCT and PMIR passed the whole runner). A
+     turn `angleOf` does not read adds no turn: a code turned only by a
+     `transform` about another axis, a `rotate` about the x or y axis or a
+     motion path is read as it stands on the job's frame (P3X and PMP read
+     red there; PMP20, a motion path's 20°, reads dark there, a false red on
+     a code that would scan), and one turned edge-on (P3Y,
+     `rotateY(89deg)`) leaves `codeZones` and is read by no pixel read and
+     said by no line (the geometry fails it, 40 at 390; item 7).
+  7. **A code can leave `codeZones` with nothing said** (the fourteenth
+     critic's PZ and P3Y): `quietZoneOf` subtracts the svg's padding, read
+     unscaled, from its box, read scaled, so a padded code shrunk uniformly
+     or squashed edge-on has no content side and is no zone — read by
+     neither pixel read and owed by neither (the critic's PZ: the share code
+     at 5% read on 7 jobs, not 9). Latent: no wrapper holds a padded code
+     alone, and the pay codes are gated. A line, or a failure, for a painted
+     code with a box and no zone would close it; not built.
+
+- **Before 8g2, the fourteenth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-14.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fourteenth review's fixes"). Built and off it: M1 (1b's list above), M2
+  (1d's list above, item 6), and the kit probe's geometry canary flake,
+  traced and fixed — the pay sheet printed its rate to the real second on
+  the geometry passes, so two tabs' pages asked 1a different point counts of
+  that line (960 against 956 on the kit's skeleton at the critic's two
+  pinned times); every tab now runs on the fixed clock from before the
+  walk. Open:
+  1. **PZ and P3Y**: 1d's list above, item 7.
+  2. **The worn-only sheet's "the look's own art was never fetched"** (the
+     fourteenth critic's item 6): printed once in two runs under the private
+     look at 0x04's selection, and seen once before in the 8g1f critic's log
+     under load; seen again in the fifteenth critic's run under the
+     selection (`critic15/runs/w-selected.log`), its third sighting there.
+     Its cause is not known.
+  3. **`judgeReacher`'s pin pins text**: 1b's list above, item 7.
+
+- **Before 8g2, the sixteenth review's open list** (`private/design/workshop-2026-09-23/before-8g2/CRITIC-16.md`
+  §6; built at its fixes round, `layout/PROBE-RULES.md`, "Before 8g2: the
+  sixteenth review's fixes", D-2026-11-09-01 and -02). Closed: B1 (a mask, a
+  mask border, a clip-path or a clip on a turned code's chain fails the code
+  closed), the dead-trigger self-check, the asymmetric-padding centre and the
+  canvas undercount (1c(c)'s item 4). Open:
+  1. **A mask over a turned code is red** until option (c) of the critic's J1
+     exists: read a turned code on the painted frame at rotated sample points,
+     dropping the held frame for it. A round's work; wanted only if a look
+     ever needs a mask above a turned code.
+  2. **Not verified**: Linux and CI, a device pixel ratio over 1, WebKit and
+     Firefox, a real phone scanning a masked code, PRM2 and PCT on the kit's
+     probe.
+
+- **Before 8g2, the fifteenth review's open list** (the critic's "For PLAN §
+  Open", `private/design/workshop-2026-09-23/before-8g2/CRITIC-15.md`; the
+  rest of that review is built, `layout/PROBE-RULES.md`, "Before 8g2: the
+  fifteenth review's fixes"). Built and off it: B1 (1d's list above, item
+  6), the trigger's walk owed and the per-node empty read (1c(c)'s list
+  below), and the closing of that list's PL and selection items. Open:
+  1. **The canvas reference's undercount, for the owner**: 1c(c)'s list
+     below, item 4.
+  2. **J5's remainder and its thin clean margin**: 1c(c)'s list below, item
+     3 (99 of 923, the 3-of-11 "l"; 0.588, 0.088 above the cut).
+  3. **The worn-only sheet's flake**: the fourteenth review's list above,
+     item 2 (its third sighting under the selection).
+
+- **Before 8g2, 1c(c)'s open list** (every money character read on its own,
+  only on a contrast job where a mover is near money; bound since step 7d,
+  the owner's D-2026-10-20-06 D1 (c) and D-2026-10-30-02;
+  `layout/PROBE-RULES.md`, "Before 8g2, 1c(c): every digit, where a mover is
+  near", "…: the eleventh review's fixes" and "Before 8g2, 7d: 1c binds").
+  Built at 7d and off this list: the bind — a character under the cut after
+  the fresh pair, a read that cannot be had, a triggered job that read no
+  character and a throw each fail the contrast pass — with each look owing
+  characters read where its jobs triggered (each carried look on its own),
+  and red proofs on the bound read through the whole runner. Built at the
+  fourteenth review's fixes round and off this list (`layout/PROBE-RULES.md`,
+  "Before 8g2: 1c's two holes"): the twelfth critic's two blocking holes — a
+  turned character is held to the largest phase within 0.2 of its best match
+  (J5), measured with every money job read (0 under the cut; the least
+  turned letter 0.588), and the trigger reads the look pseudos of every box
+  a mover holds (HRP2). Built at the fifteenth review's fixes and off this
+  list (`layout/PROBE-RULES.md`, "Before 8g2: the fifteenth review's
+  fixes"): a prepare that answers no trigger fails its job, and each look
+  owes the trigger's walk over every job of it holding money (its item 1);
+  a node the trigger met none of whose characters was read, some left out
+  turned past 2° or too big, fails (its item 2); and two items closed by the
+  fifteenth critic's runs — PL, 1c's alone among the contrast reads (a box
+  over one digit of the strip's total), through the whole runner bound,
+  exits 1 with 4 1c failures, on the bare jobs 1c the only contrast read
+  that fails it (`critic15/runs/p-PL.log`), and the run under the private
+  look at 0x04's selection triggers 46 jobs and fails none
+  (`critic15/runs/w-selected.log`). Open:
+  1. **D1 (a), every money job, is measured and not built** (the owner's
+     D-2026-10-30-02 keeps it open as an option). From 1c's own clock in
+     scratch runs that read every one of the 697 jobs holding money:
+     80.4–111.8s of tab time over four such runs at the eleventh review, and
+     117.8s on the forced run before 7d, so about +27 to +39s of wall time
+     at three tabs (a third of the tab time), against the runs' 222–242s and
+     the 300s ceiling. It
+     would also read the covers the trigger does not see (2, below).
+  2. **What the trigger does not see** (stated, not fixed): a box placed
+     over money by stacking alone — `position: relative` and a `z-index` with
+     no offset, its content overflowing a zero-height box — unless 1a fails
+     it (P1A, read by 1a's failures). MISS, a spread shadow with no hit area,
+     triggers nothing, so 1c never reads it, but it is not unread: 1b, bound
+     since 7b, reads it on the geometry passes (131 would-be failures at 390
+     and 137 at 1280 when 1b was report-only) and the contrast pass fails it (92 figures under 3:1, the broken-figure
+     read 16, `a-halo-never-reaches-a-neighbours-text` 29 a page pass;
+     `private/design/workshop-2026-09-23/before-8g2/1c/runs/w-MISS-shadow-modern.log`). Also unseen: an unmoved
+     box's paint that reaches past it (1b's); an app sheet's pseudo-element
+     (only a look's are read); a contrast target's own glyphs moved over money
+     (blanked in both captures, SVs, 1a's); a held box's text overflowing its
+     box (each held box is read by its border box and, since the eleventh
+     review, its sharp reach, not by its text's own lines); a blurred layer
+     past its core.
+  3. **What the read does not read**: the geometry-only screens, the wall
+     sizes the contrast pass does not paint, 360 and a turned wall; a frame
+     turned past 2° (a node the trigger met that it leaves out whole fails,
+     since the fifteenth review's item 2); a character behind a scroller or
+     past the shot (a node the trigger met whose every character stands
+     behind a scroller fails only where the job reads no character at all,
+     stated); a cover
+     of less than half a glyph (it keeps half its reference); a character with
+     a reference under six pixels (counted by kind, never held; on the clean
+     measurement run after the eleventh review 2,081 of 62,318 characters,
+     every one punctuation or a symbol, 12 of them on a turn, below).
+     **Decimal points and thousands commas are among them, by decision** (the
+     window, on the eleventh critic's recommendation): a full stop or a comma
+     at up to about 16px in its face covers fewer than six reference pixels (a
+     full stop of 4 at 15px and 5 at 16px in Inter, the critic's tally), so a
+     cover over a decimal point, which moves the figure a hundredfold, is not
+     held by 1c; at a floor of 4 a full stop read 0.50, on the cut itself.
+     **A turned frame** (Rural's swaying tag and tilted rows) is held to the
+     largest phase of its turn within 0.2 of the one its shown pixels match
+     best (J5, since the fourteenth review's fixes round), a model of
+     Chrome's resample (an upright glyph drawn on a canvas and resampled
+     bilinearly into the frame's turn) measured on Rural alone; the 0.2 was
+     fitted in mask space on Rural's 2,350 turned characters and measured
+     again in Chrome with every money job read, on this Mac alone. **J5's
+     margin is thin on clean glyphs and still lets some covers choose**
+     (the fifteenth critic): on clean turned glyphs J5's reference is never
+     below the best match's, and the least share kept, 0.588 (an "e" on
+     Rural's surcharge line), is 0.088 above the cut; where no full phase
+     comes within 0.2 the cover still chooses its phase — of TRN's 923
+     turned characters that keep under half the page's own clean count,
+     paired by place with their clean read, 99 pass (307 under the best
+     match alone), the worst an "l" keeping 3 of its 11 pixels, held to a
+     phase of 4 against a clean reference of 10. A floor at 0.7 of the
+     upright reference would drop that one (97 pass) with 0 clean under the
+     cut; the window kept 0.2 and no floor (D-2026-10-31-01). A character some phase
+     leaves under `CHAR_TURN_FLOOR` (3) pixels is too small "on a turn" (12
+     on the clean run: the "=" on Rural's Pay several strip and its like).
+     The five digits the least of sixteen phases called too small (Rural's
+     "+5% surcharge" "5" and its selection line's "7") were artefacts of that
+     least: they keep 12–18 pixels on the page and are held now. Chrome
+     only, DPR 1.
+  4. **The canvas reference undercounts the page — built, narrowed**
+     (the eleventh critic's P2; the owner's D-2026-11-09-02): each held
+     character's share is divided by `max(1, its node's median share)`
+     (`nodeScale` in `scripts/char-read.mjs`), and a failure says both the
+     raw and the normalised share. Measured on the clean tree with every
+     money job read (697 jobs): no character stands under the cut, the least
+     normalised share upright digit 0.75, letter 0.75, other 0.67, turned
+     digit 0.72, letter 0.55 (0.545, Rural, the quote surcharge's "e": 0.045
+     over the cut), other 0.67. What is left, stated: node medians are
+     1.15–1.33 at most (118 of 2,299 nodes over 1.3), so the blind band
+     narrows from a true share of 0.375–0.5 to nothing above 0.5 at the
+     worst node, and **the brief's "three quarters of a glyph" was the
+     99th-percentile share of single thin glyphs, not a node's median**: a
+     whole glyph is not undercounted by two. A node mostly covered pulls
+     its own median under 1 and is lifted not at all (it reads as before,
+     no weaker). TRN's 99 passes (of 923 under-half turned covers) stay 99
+     under the normalisation (Rural, scales to 1.25, thin turned glyphs), so
+     **the fifteenth critic's reading that most of them came from the
+     undercount is not borne out**; they are J5's residue (item 3).
+  5. **The self-checks on Linux** (the eleventh critic): 1d's cut held to
+     this Chrome (`the-module-read-agrees-with-this-chrome`) and
+     `holds-out-of-flow-agrees-with-this-chrome` have run on this Mac alone;
+     CI's layout job on `ubuntu-latest` has not run them.
+
+- **Before 8g2, 3a's open list** (the ground under a money figure's glyphs
+  walked to the stall; the plan's item 3a; bound since D-2026-10-28-01, which
+  took J1(a), J3 and J4 by recommendation; `layout/PROBE-RULES.md`, "Before 8g2:
+  3a binds"). Open:
+  1. **A box above's moving background at a keyframe offset, the owner's call.**
+     A keyframe that moves only `background-position` or `background-size` on a
+     box above stays `SEEK_NEEDLESS`: a look can slide a tile under a figure there
+     between the instants, and no rule reads it. Seeking them too was built and
+     measured: 1,227 animations at 390 against 177, the geometry passes summed
+     336.9s of tab time against 314.5s, about +7.5s of wall on a whole run at
+     three tabs, on top of the bind's own +4.5s. The plan's item was the whole
+     signature on a box above alone (the aurora's tide and the sunburst's angle,
+     built, about +2.4s). Option (a), seek them: the gap closes for +7.5s (a first
+     whole run with them read 234.8s against the bind's 225.2s, of 300). Option
+     (b), leave it stated, as it is: free, the gap stands, and a first-party
+     keyframe moving a background on a box above is admitted by the lint. A cheaper
+     seek (one upright hold per seek where one per figure is made, skipping a move
+     that cannot reach an ink) was not tried. Recommendation: (a) when the margin
+     under 300 allows, after the port.
+  2. **A box above's pictures stay the contrast pass's** (named where one shows,
+     composited as absent: the rain, the confetti, the sunburst and the fixture's
+     pictures under the activity amount on the bare ground, printed under the
+     pass and owed to nothing).
+  3. **Not read, stated:** a part of a figure out of its scroller's view at any
+     scroll but the one to the view's nearest edge; a clip above a scroller; an
+     in-flow pseudo-element of a box above; rounded corners; a gradient between
+     its stops; a conic or repeating gradient's stops, one with an interpolation
+     written out, and the other values `placeTile` and `placeGradient` refuse,
+     which are read strictly.
+  4. **Read under the private look at 0x04's selection at the bind:** 0 failures
+     of this read, 0 of too many choices, every pass read; the run's known
+     failures are unchanged (PROBE-RULES names them by rule).
+  5. **A keyframe that turns a box above stays unread.** `transform`, `rotate`,
+     `scale`, `translate` and the offset longhands are `SEEK_NEEDLESS` on a box
+     above. A written shift in a keyframe is refused at its value (`keyframeHeld`;
+     KF2, `transform: translateY(34px)` between two instants: 14 failures, "a
+     transform that moves it"), but a turn about a far origin has no shift in its
+     matrix and carries the figure with nothing reading it (KF3, `rotate: 0.5deg`
+     about an origin 3,850px off, between two instants, over a band of its ink: 0
+     failures, lint clean). A `scale` is in the same list and was not planted.
+     The per-pair read (D-2026-11-09-07) reads a transform at the frozen instant
+     and at an offset seeked for another reason (KF1), not this.
+  6. **The geometry check against Chrome lives only in scratch files**
+     (`placeTile`, `tileBand`, `placeGradient`, `stopsOver` against Chrome's
+     paint: the bind's 24 cases, the seventeenth critic's 34 more, 0 wrong). Not
+     in `test:layout`; worth a place there as a self-check.
+  7. **A split inline's borders and shadows stand on its bounding box.** IN3 (a
+     bottom border on the quote face's inline figure): Chrome draws it per
+     fragment, line 1's band lies under line 2's glyphs, 0 failures at `82bfd46`,
+     `5330e91` and now, the second line ink on ink. The seventeenth review's B2
+     fix is about tiles. Option (a), read each side's band per client rect; (b),
+     state it. Recommendation: (a).
+  8. **A clip above a transform is read in the flat frame.** The per-pair read
+     (D-2026-11-09-07) places paints, and the clips that cut the ink and each
+     paint are still read with every box upright: a figure a scale or a tilt
+     carries past an `overflow` on a box above the transform is read as if it
+     stood where layout puts it. A figure cut there on the page is read as
+     ink the page does not paint, and one the flat clip cuts and the page
+     does not is left unread. Reading each clip through the transforms below
+     its box, as the paints are, is the fix; not built.
+  **Closed by the seventeenth review's fixes** (D-2026-11-09-05): a tile on a box
+  in more than one fragment, placed on the bounding box (B2, IN1b); a dead
+  ground read that exited 0 (`the-ground-read-fails-a-planted-ground`).
+  **Closed by the eighteenth review's fix** (D-2026-11-09-07, the per-pair
+  read): a shift, a scale or a tilt between a paint and the figure. This list
+  said CASE-E "reads 0 failures at `82bfd46`", and CLAUDE.md §6 "the same at
+  `82bfd46`", as if the tilt were never read: true only of CASE-E's gradient
+  tile band. CASE-F, the same 10-degree tilt with a band the old read did place
+  (an inset box shadow on the row), was 14 failures at `82bfd46` and 0 through
+  the whole runner at `6d49b6e`, so it was a regression like UP2d (B1 of the
+  seventeenth review) and SCL3 (a `scale`, B1 of the eighteenth), all three the
+  one hold giving a box one place. All of them fail now.
+
+- **Before 8g2, after the eighteenth review: what the money reads still do not
+  say** (`private/design/workshop-2026-09-23/before-8g2/CRITIC-18.md`). Open:
+  1. **Liveness for 1a, 1b, the keyframe offsets, the end read and the ground
+     read's call site.** The critic's `tools/mut-dead-reads-1a-1b-keyframes-end.py`
+     drops 1a's verdict in `coverScan`, 1b's failure in `judgeReacher`, makes
+     `offsetDressFaults` and `coverAtEnd` answer nothing and drops the ground
+     verdict at its call site in the dress rule: the whole runner exits 0.
+     `groundSelfCheck` calls `groundWalkRead` directly, so it cannot see that
+     call site, and `dressSeek` and `coverEnd` are printed and owed by nothing.
+     A one-page liveness check for each, about 80 lines; a code regression and
+     not a look, so it did not block (D-2026-11-09-07: after the merge).
+  2. **A cover below the first screen on a geometry-only screen, at 360 and at
+     the wall sizes the contrast pass does not paint** (`kit-BF1`: the last
+     row's picture slid over its own price on `crowded`, the kit's probe exits
+     0; the same plant on the first row exits 1). 1a hit-tests nothing behind a
+     scroller's clip (`clipVerdict`, `layout/coverPoints.ts`), and the contrast
+     pass, which grows its shot to hold the page, does not sample those.
+  3. **A fade on a box above a code on a geometry-only screen** (`kit-KQF1`: a
+     stream code's plate at opacity 0.3 under one `[data-tier]`, the kit's probe
+     exits 0; on a sampled screen 1d fails it). The dress rule's box read
+     (`BOX_HELD`) holds a box above a money figure; `a-code-is-drawn-black-on-white`
+     reads the code's own boxes and no box above them.
+  4. **CI's two-tab dispatch** (D6 of D-2026-10-20-06): 263.6s of 300 on this
+     Mac at load 2.32 (the eighteenth review), unmeasured on `ubuntu-latest`.
+  5. **The strict read's false red under a scale** (the nineteenth review,
+     `before-8g2/CRITIC-19.md`; `critic19/plants/kit-STRIPE2-scale.css`). A
+     gradient with a stop under 3:1 against the figure's ink, on a box above a
+     `scale`, is tried at every stop over the tile's own band, so a look with a
+     6px accent rule in its own tokens and `scale: 1.02` on `.item-head` fails
+     the Modern starter with 1,581 lines of "the ground under its glyphs", where
+     the figure stands on the card (the control with no scale exits 0). It takes
+     both a stop under 3:1 and a scale between it and the figure; no shipped look
+     or starter has that. Fix: read the stops through the pair's map instead of
+     strictly. Not built.
 
 - **A landscape touch wall under about 900 wide is not supported yet, and
   its stepper runs past its row** (D-2026-10-20-12; the touch-wall critic,

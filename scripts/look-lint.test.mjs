@@ -17,6 +17,7 @@ import {
     MASK_COMPOSITE_LEGACY,
     MAX_FLASHES_PER_SECOND,
     MONEY_NODE_CLASSES,
+    PREFIXED_TWINS,
     OUTLINE_OFFSET_MAX_PX,
     OUTLINE_OFFSET_MIN_PX,
     OUTLINE_WIDTH_MAX_PX,
@@ -89,6 +90,8 @@ const REDUCE_AT = NEO_CSS.lastIndexOf('@media (prefers-reduced-motion: reduce)')
  */
 const PLANTS = JSON.parse(read('scripts/look-lint-plants.json'));
 const PLANT_SETS = Object.entries(PLANTS);
+/** The critic's PAN (`a1:0`, the seventh review's B1) on a copy of Neo, for `a-look-never-positions-against-an-anchor`. */
+const ANCHOR_PAN = PLANTS.a1[0].rule.replaceAll('$C', 't-neo');
 
 /** A copy of theme-neo.css with `rule` planted before its reduce block, as `.t-neo` wrote it. */
 const plantedNeo = (rule) => `${NEO_CSS.slice(0, REDUCE_AT)}${rule}\n\n${NEO_CSS.slice(REDUCE_AT)}`;
@@ -2055,6 +2058,46 @@ describe('a-look-state-rule-sets-only-what-a-state-may', () => {
     });
 });
 
+describe('a-prefixed-twin-is-a-property-that-exists', () => {
+    /**
+     * G4's twin, before 8g2, the fifth review's side finding to item 6: the
+     * twin rule read a prefixed property's twin as its name less the prefix,
+     * so the critic's PQM wrote `mask-box-image:`, which nothing reads,
+     * beside `-webkit-mask-box-image:` and stood. In a first-party sheet the
+     * twin is one that exists (`PREFIXED_TWINS`, measured in headless Chrome
+     * 156): the mask border's is `mask-border`, a logical side's its logical
+     * property, and a prefixed property with none is refused outright. The
+     * kit keeps the plain rule the workshop README states.
+     */
+    const PQM = '.t-neo .qr { mask-box-image: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }';
+
+    it('refuses a twin that is no property in a first-party sheet, and names the one that exists', () => {
+        const problems = lintLookSheet(plantedNeo(PQM), { lookClass: 't-neo' });
+        assert.ok(problems.some((p) => /-webkit-mask-box-image: .* write mask-border: with the same value beside it/.test(p)), problems.join('\n'));
+        accepts('.t-neo .qr { mask-border: linear-gradient(#0000, #0000) 1; -webkit-mask-box-image: linear-gradient(#0000, #0000) 1; }');
+        const none = lintLookSheet(plantedNeo('.t-neo .item-n { -webkit-font-smoothing: antialiased; font-smoothing: antialiased; }'), { lookClass: 't-neo' });
+        assert.ok(none.some((p) => /font-smoothing names no property Chrome reads, and -webkit-font-smoothing has no unprefixed twin there/.test(p)), none.join('\n'));
+    });
+
+    it('maps every twin to a property, or to none, and leaves out the two every engine reads under the prefix', () => {
+        for (const [prop, twin] of Object.entries(PREFIXED_TWINS)) {
+            assert.match(prop, /^-webkit-/, prop);
+            assert.ok(twin === null || (typeof twin === 'string' && !twin.startsWith('-') && twin !== prop.slice('-webkit-'.length)), `${prop} → ${twin}`);
+        }
+        assert.equal(PREFIXED_TWINS['-webkit-mask-box-image'], 'mask-border');
+        assert.ok(!Object.hasOwn(PREFIXED_TWINS, '-webkit-line-clamp') && !Object.hasOwn(PREFIXED_TWINS, '-webkit-box-orient'));
+        // Every prefixed property a served first-party sheet writes has a twin that is its name less the prefix.
+        for (const sheet of LOOKS) {
+            for (const [, prop] of read(sheet.path).matchAll(/(?:^|[;{\s])(-webkit-[a-z-]+)\s*:/g)) assert.ok(!Object.hasOwn(PREFIXED_TWINS, prop), `${sheet.path} writes ${prop}`);
+        }
+    });
+
+    it('leaves the kit on the plain rule, as the README states it', () => {
+        // The kit reads the twin as the name less its prefix, a twin nothing reads included: a README line for the owner.
+        assert.deepEqual(lintSheet(plantedKit(PQM)), []);
+    });
+});
+
 describe('a-cursor-is-a-keyword', () => {
     /**
      * D-2026-10-20-11 (the lint-belts critic's third review, P2): `cursor:
@@ -2199,6 +2242,258 @@ describe('a-keyframe-never-takes-a-box-out-of-the-layout', () => {
             const options = sheet.role === 'private' ? { lookClass: sheet.lookClass, load: 'worn', ownArt: sheet.ownArt } : { lookClass: sheet.lookClass, load: sheet.load, ownArt: sheet.load === 'worn' ? ownArtOf(sheet) : undefined };
             assert.ok(!lintLookSheet(sheet.css, options).some((p) => GONE.test(p)), sheet.path);
         }
+    });
+});
+
+describe('a-keyframe-never-sets-an-inherited-ink', () => {
+    /**
+     * Before 8g2 (the critic's third review, item 1, the belt beside PT2;
+     * D-2026-10-26-03): a first-party look's keyframes may not set an
+     * inherited longhand that paints text — the ink, a text shadow, the
+     * caret, the emphasis marks and their prefixed twins, the paint order, a
+     * colour font's palette (`KEYFRAME_INK` in `scripts/workshop-css.mjs`).
+     * A keyframe that sets one on a box changes how the text of every box
+     * below it is painted, a money figure's among them, for part of a cycle:
+     * PT2's shape with a real property, `color: transparent` from 25% to 68%
+     * of a loop on a quote's `.item-a`, was accepted until this belt (the
+     * plant `g1:130`, `color: red`, with it), since the custom-property
+     * refusal reads only `--` names. The probe reads the held dress at every
+     * keyframe offset (`offsetDressFaults`, `layout/probe.ts`); this refuses
+     * the road where it is written. The text's fill colour and stroke
+     * (`-webkit-text-fill-color`, `-webkit-text-stroke*`) are refused
+     * everywhere already, SVG `fill` and `stroke` off a drawn icon and in a
+     * keyframe (`svg-paint-stands-only-on-a-drawn-icon`), and the tap
+     * highlight is `transparent` everywhere. The kit is unchanged.
+     */
+    const INK = /in a keyframe is inherited: it changes how the text of every box below the one that runs it is painted, a money figure's among them, for part of a cycle/;
+
+    it('refuses every inherited ink, shadow and mark in a keyframe, on PT2\'s shape and in every position the keyframe refusals read', () => {
+        for (const rule of [
+            '@keyframes t-neo-ink { 25%, 68% { color: transparent; } }\n.t-neo .item-head-q .item-a { animation: t-neo-ink 100s linear infinite; }',
+            '@keyframes t-neo-ink { to { color: transparent; } }',
+            '@keyframes t-neo-ink { from { color: #fff; } to { color: #000; } }',
+            '@keyframes t-neo-ink { 50% { COLOR: rgba(0, 0, 0, 0.05); } }',
+            '@keyframes t-neo-ink { 50% { color: var(--s-bg); } }',
+            '@keyframes t-neo-ink { 50% { color: currentColor; } }',
+            '@keyframes t-neo-ink { 50% { color: transparent !important; } }',
+            '@keyframes t-neo-ink { 50% { text-shadow: 0 0 0 #000; } }',
+            '@keyframes t-neo-ink { 50% { caret-color: transparent; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis: none; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis-color: #000; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis-style: none; } }',
+            '@keyframes t-neo-ink { 50% { text-emphasis-position: under right; } }',
+            '@keyframes t-neo-ink { 50% { -webkit-text-emphasis-color: #000; text-emphasis-color: #000; } }',
+            '@keyframes t-neo-ink { 50% { paint-order: stroke; } }',
+            '@keyframes t-neo-ink { 50% { font-palette: dark; } }',
+            // A pseudo-element runs it: the keyframe is refused wherever a rule runs it.
+            "@keyframes t-neo-ink { to { color: red; } }\n.t-neo .item-p::after { content: ''; animation: t-neo-ink 1s; }",
+            // Inside a media block (refused there on its own too) and beside a longhand a keyframe may set.
+            '@media (min-width: 680px) { @keyframes t-neo-ink { to { color: transparent; } } }',
+            '@keyframes t-neo-ink { 0% { opacity: 1; } 50% { color: transparent; opacity: 1; } 100% { opacity: 1; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => INK.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        // The text's fill colour and stroke (`-webkit-text-fill-color`, `-webkit-text-stroke*`) stay refused everywhere, by their own rule.
+        for (const stop of ['-webkit-text-fill-color: transparent', '-webkit-text-stroke-color: #000', '-webkit-text-stroke-width: 1px']) {
+            const problems = lintLookSheet(plantedNeo(`@keyframes t-neo-ink { 50% { ${stop}; } }`), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => /contrast pass never reads/.test(p)) && !problems.some((p) => INK.test(p)), `${stop}:\n  ${problems.join('\n  ')}`);
+        }
+    });
+
+    it('leaves an ink at rest, a keyframe that sets none, and the kit as they were', () => {
+        accepts('.t-neo .item-x { color: #fff; }');
+        accepts('@keyframes t-neo-ink { from { opacity: 0.5; } to { opacity: 1; } }');
+        accepts('@keyframes t-neo-ink { to { background-position: 100% 0; } }');
+        // A ground and not an ink: refused by the ground belt, never as an ink (`a-keyframe-never-sets-a-ground-or-a-shadow`).
+        const ground = lintLookSheet(plantedNeo('@keyframes t-neo-ink { to { background-color: red; } }\n.t-neo .item-a { animation: t-neo-ink 1s; }'), { lookClass: 't-neo' });
+        assert.ok(!ground.some((p) => INK.test(p)) && ground.some((p) => /a ground or a shadow in a keyframe/.test(p)), ground.join('\n'));
+        for (const stop of ['25%, 68% { color: transparent; }', '50% { text-shadow: 0 0 0 #000; }', '50% { caret-color: transparent; }']) {
+            const kit = lintSheet(plantedKit(`@keyframes wk-ink { ${stop} }`));
+            assert.ok(!kit.some((p) => INK.test(p)), kit.join('\n'));
+        }
+    });
+
+    it('costs nothing: no first-party sheet a run serves, no starter and the canary sets one in a keyframe', () => {
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        const roles = new Set(lookRows(SERVED).filter((row) => row.role !== 'kit').map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        let stops = 0;
+        for (const { name, css, options } of sheets) {
+            stops += everyRule(css).filter((rule) => rule.selectors === undefined).length;
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => INK.test(p)), [], name);
+        }
+        // The shipped looks' keyframes and the starters' renamed copies, read stop by stop.
+        assert.ok(stops >= 30, `${stops} keyframe stops read`);
+    });
+});
+
+describe('a-keyframe-never-sets-a-ground-or-a-shadow', () => {
+    /**
+     * Before 8g2 (the fourth review's item 2, the critic's PG;
+     * D-2026-10-26-04 (a)): a first-party look's keyframes may not set a
+     * background's colour or image, the `background` shorthand, or a box
+     * shadow with its prefixed twin (`KEYFRAME_GROUND` in
+     * `scripts/workshop-css.mjs`). PG, `background-color: var(--s-text)` from
+     * 25% to 68% of a loop on Rural's quote `.item-a`, set the figure on its
+     * own ink for most of the cycle and passed the whole runner and both
+     * lints: the probe read the ground at rest and at the frozen instant
+     * alone. The probe reads it at every keyframe offset now
+     * (`offsetGroundFaults`, `layout/probe.ts`), the kit's road; this refuses
+     * the road where it is written. A background that moves stays accepted;
+     * the kit is unchanged.
+     */
+    const GROUND = /a ground or a shadow in a keyframe lays a ground under every box inside the one that runs it, a money figure's among them, for part of a cycle/;
+
+    it('refuses a background\'s colour or image, the shorthand and a box shadow in a keyframe, on PG\'s shape and in every position the keyframe refusals read', () => {
+        for (const rule of [
+            '@keyframes t-neo-ground { 0% { background-color: transparent; } 25%, 68% { background-color: var(--s-text); } 80%, 100% { background-color: transparent; } }\n.t-neo .item-head-q .item-a { animation: t-neo-ground 100s linear infinite; }',
+            '@keyframes t-neo-ground { to { background-color: red; } }',
+            '@keyframes t-neo-ground { 50% { BACKGROUND-COLOR: #000; } }',
+            '@keyframes t-neo-ground { 50% { background-color: currentColor; } }',
+            '@keyframes t-neo-ground { 50% { background: #000; } }',
+            '@keyframes t-neo-ground { 50% { background: linear-gradient(#000, #000); } }',
+            '@keyframes t-neo-ground { 50% { background-image: linear-gradient(var(--s-text), var(--s-text)); } }',
+            '@keyframes t-neo-ground { 50% { background-image: none; } }',
+            '@keyframes t-neo-ground { 50% { box-shadow: inset 0 0 0 100px var(--s-text); } }',
+            '@keyframes t-neo-ground { 50% { box-shadow: 0 0 0 4px #000; } }',
+            '@keyframes t-neo-ground { 50% { -webkit-box-shadow: inset 0 0 0 100px #000; box-shadow: inset 0 0 0 100px #000; } }',
+            // A pseudo-element runs it: the keyframe is refused wherever a rule runs it.
+            "@keyframes t-neo-ground { to { background-color: red; } }\n.t-neo .item-p::after { content: ''; animation: t-neo-ground 1s; }",
+            // Inside a media block (refused there on its own too) and beside a longhand a keyframe may set.
+            '@media (min-width: 680px) { @keyframes t-neo-ground { to { background-color: #000; } } }',
+            '@keyframes t-neo-ground { 0% { opacity: 1; } 50% { background-color: #000; opacity: 1; } 100% { opacity: 1; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => GROUND.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('leaves a ground at rest, a background that moves and the kit as they were', () => {
+        accepts('.t-neo .item-a { background-color: var(--s-surface); }');
+        accepts('@keyframes t-neo-ground { to { background-position: 100% 0; } }');
+        accepts('@keyframes t-neo-ground { from { background-size: 100% 100%; } to { background-size: 220% 100%; } }');
+        accepts('@keyframes t-neo-ground { from { opacity: 0.5; } to { opacity: 1; } }');
+        for (const stop of ['25%, 68% { background-color: #000; }', '50% { background: #000; }', '50% { box-shadow: inset 0 0 0 100px #000; }']) {
+            const kit = lintSheet(plantedKit(`@keyframes wk-ground { ${stop} }`));
+            assert.ok(!kit.some((p) => GROUND.test(p)), kit.join('\n'));
+        }
+    });
+
+    it('costs nothing: no first-party sheet a run serves, no starter and the canary sets one in a keyframe', () => {
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        const roles = new Set(lookRows(SERVED).filter((row) => row.role !== 'kit').map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        let stops = 0;
+        for (const { name, css, options } of sheets) {
+            stops += everyRule(css).filter((rule) => rule.selectors === undefined).length;
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => GROUND.test(p)), [], name);
+        }
+        // The shipped looks' keyframes and the starters' renamed copies, read stop by stop.
+        assert.ok(stops >= 30, `${stops} keyframe stops read`);
+    });
+});
+
+describe('svg-paint-stands-only-on-a-drawn-icon', () => {
+    /**
+     * Before 8g2 (the fourth review's item 4, the critic's PFQ;
+     * D-2026-10-26-04 (b)): `qrSvg` colours a code by presentation
+     * attributes, which an author rule beats, so `.t-modern .qr path { fill:
+     * #fff }` blanked every code on the look and passed the whole runner and
+     * both lints. A first-party look sheet sets `fill`, `stroke` and every
+     * `fill-*` and `stroke-*` longhand only on a rule whose every selector's
+     * subject is a drawn icon — the `.ic` svg, or a shape under it by a
+     * descendant or child combinator (`isIconRule` in
+     * `scripts/workshop-css.mjs`), the shape the shipped looks write. The probe
+     * holds every code to black on white (`a-code-is-drawn-black-on-white`),
+     * the kit's road. The kit is unchanged.
+     */
+    const SVG = /SVG paint stands only on a drawn icon/;
+
+    it('refuses SVG paint on a code, on any rule that is not a drawn icon\'s, and in a keyframe', () => {
+        for (const rule of [
+            '.t-neo .qr path { fill: #fff; }',
+            '.t-neo .qr rect { fill: #000; }',
+            '.t-neo .qr { fill: #fff; }',
+            '.t-neo .qr path { fill-opacity: 0; }',
+            '.t-neo .qr path { FILL: #fff; }',
+            '.t-neo .qr path { stroke: #fff; stroke-width: 3; }',
+            '.t-neo .qr path { stroke-dasharray: 1; }',
+            '.t-neo .qr path { fill-rule: evenodd; }',
+            '.t-neo .ic, .t-neo .qr path { fill: #fff; }',
+            '.t-neo :is(.ic, .qr) path { fill: #fff; }',
+            '.t-neo .ic + path { stroke: #fff; }',
+            '.t-neo .ic ~ path { stroke: #fff; }',
+            '.t-neo .ic:hover { stroke-width: 2; }',
+            '.t-neo .ic[hidden] { stroke-width: 2; }',
+            '.t-neo .item-caret { stroke-width: 2; }',
+            ".t-neo .item-p::after { content: ''; fill: #fff; }",
+            '@keyframes t-neo-fill { to { fill: #fff; } }',
+            '@media (min-width: 680px) { .t-neo .qr path { fill: #fff; } }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => SVG.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('takes the shape the shipped looks write, and a drawn icon\'s own shapes under it', () => {
+        for (const rule of [
+            '.t-neo .ic { stroke-width: 2; stroke-linecap: square; }',
+            '.t-neo .pay-pointer .ic { stroke-width: 2; }',
+            '.t-neo .ic path { stroke-linejoin: round; }',
+            '.t-neo .ic > path { stroke-width: 1.5; }',
+            '.t-neo svg.ic { fill: none; }',
+            '.t-neo .item-caret.ic { stroke-width: 1.5; }',
+            '.t-neo .ic.item-caret, .t-neo .fold-caret .ic { stroke-width: 1.5; }',
+            '@media (min-width: 680px) { .t-neo .ic { stroke-width: 2; } }',
+        ]) {
+            accepts(rule);
+        }
+    });
+
+    it('is first party only, and costs nothing: every first-party sheet a run serves, every starter and the canary set SVG paint on .ic alone', () => {
+        for (const rule of ['.t-neo .qr path { fill: #fff; }', '@keyframes wk-fill { to { fill: #fff; } }']) {
+            const kit = lintSheet(plantedKit(rule));
+            assert.ok(!kit.some((p) => SVG.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ')}`);
+        }
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        let painted = 0;
+        for (const { name, css, options } of sheets) {
+            painted += everyRule(css).filter((rule) => rule.decls.some((decl) => /^(?:fill|stroke)(?:-|$)/.test(decl.prop))).length;
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => SVG.test(p)), [], name);
+        }
+        // The shipped looks' `.ic` rules and the starters' copies of them, read.
+        assert.ok(painted >= 6, `${painted} rules setting SVG paint read`);
     });
 });
 
@@ -2785,7 +3080,9 @@ describe('a-paint-past-its-box-names-its-own-colour', () => {
         ]) {
             accepts(rule);
         }
-        accepts('@keyframes t-neo-glow { from { box-shadow: 0 0 4px red; } to { box-shadow: 0 0 12px red; } }');
+        // A shadow that names its colour passes this rule in a keyframe too; the ground belt refuses a box shadow in a keyframe on its own (`a-keyframe-never-sets-a-ground-or-a-shadow`).
+        const glow = lintLookSheet(plantedNeo('@keyframes t-neo-glow { from { box-shadow: 0 0 4px red; } to { box-shadow: 0 0 12px red; } }'), { lookClass: 't-neo' });
+        assert.ok(!glow.some((p) => /it reaches past its box, where a state that changes the ink/.test(p)) && glow.some((p) => /a ground or a shadow in a keyframe/.test(p)), glow.join('\n'));
     });
 
     it('is first party only, and reads a pseudo-element\'s rule once, by pseudoHostPaintProblems', () => {
@@ -3104,10 +3401,14 @@ describe('a-line-and-a-stroke-are-capped-per-declaration', () => {
             'stroke-width: initial',
             'stroke-width: inherit',
         ]) {
-            accepts(`.t-neo .guide-link { ${decl}; }`);
+            // A stroke stands on a drawn icon alone (`svg-paint-stands-only-on-a-drawn-icon`): the cap is read there.
+            accepts(`${decl.startsWith('stroke') ? '.t-neo .ic' : '.t-neo .guide-link'} { ${decl}; }`);
         }
-        accepts('@keyframes t-neo-ring { from { text-underline-offset: -2px; text-decoration-thickness: 1px; stroke-width: 1; } to { text-underline-offset: 4px; text-decoration-thickness: 3px; stroke-width: 3; } }');
-        accepts('@media (min-width: 680px) { .t-neo .item-caret { stroke-width: 2; } }');
+        accepts('@keyframes t-neo-ring { from { text-underline-offset: -2px; text-decoration-thickness: 1px; } to { text-underline-offset: 4px; text-decoration-thickness: 3px; } }');
+        accepts('@media (min-width: 680px) { .t-neo .ic { stroke-width: 2; } }');
+        // A stroke within the cap in a keyframe passes the cap and is refused as SVG paint off a drawn icon.
+        const ring = lintLookSheet(plantedNeo('@keyframes t-neo-ring { from { stroke-width: 1; } to { stroke-width: 3; } }'), { lookClass: 't-neo' });
+        assert.ok(!ring.some((p) => /is drawn in the ink of its box and reaches past it/.test(p)) && ring.some((p) => /SVG paint stands only on a drawn icon/.test(p)), ring.join('\n'));
     });
 
     it('is first party only, leaves a state rule to the belt, and costs the shipped looks, the starters, the fixtures and the canary nothing: they set a stroke of 1.75 to 2 and no underline', () => {
@@ -3507,8 +3808,9 @@ describe('a-rule-runs-only-the-keyframes-its-own-sheet-declares', () => {
         ]) {
             accepts(`.t-neo .item-a { ${decl}; }`);
         }
-        accepts('@keyframes t-neo-here { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
-        accepts('@keyframes t-neo-here { to { color: red; } }\n@media (min-width: 680px) { .t-neo .item-a { animation: t-neo-here 1s; } }');
+        // A background that moves, no ink and no ground: an inherited ink in a keyframe is the ink belt's (`a-keyframe-never-sets-an-inherited-ink`), a ground or a shadow the ground belt's (`a-keyframe-never-sets-a-ground-or-a-shadow`).
+        accepts('@keyframes t-neo-here { to { background-position: 100% 0; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
+        accepts('@keyframes t-neo-here { to { background-position: 100% 0; } }\n@media (min-width: 680px) { .t-neo .item-a { animation: t-neo-here 1s; } }');
     });
 
     it('counts only a top-level keyframe as the sheet\'s own, and refuses one inside a media block, quoted or not, or with no block (the sixth review\'s M2)', () => {
@@ -3528,8 +3830,8 @@ describe('a-rule-runs-only-the-keyframes-its-own-sheet-declares', () => {
         // A statement is no keyframes at all: a browser drops it, and the base sheet's keyframe of the name is the one that runs.
         refusedName('@keyframes pin-demo-land;\n.t-neo .item-a { animation: pin-demo-land 1s 120s reverse forwards; }');
         // A top-level keyframe stands, quoted or not, and the rule that runs it is the sheet's own.
-        accepts('@keyframes "t-neo-here" { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
-        accepts("@keyframes 't-neo-here' { to { color: red; } }\n.t-neo .item-a { animation: t-neo-here 1s; }");
+        accepts('@keyframes "t-neo-here" { to { background-position: 100% 0; } }\n.t-neo .item-a { animation: t-neo-here 1s; }');
+        accepts("@keyframes 't-neo-here' { to { background-position: 100% 0; } }\n.t-neo .item-a { animation: t-neo-here 1s; }");
         // The kit keeps its own reading: its keyframes are `wk-…` and the README states the rest.
         const kit = lintSheet(plantedKit('@media (min-width: 680px) { @keyframes wk-here { to { color: red; } } }'));
         assert.ok(!kit.some((p) => NESTED.test(p)), kit.join('\n'));
@@ -3891,6 +4193,12 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         ['size:transition', /which may be a money node — the wall fits its figure by its size/],
         ['size:keyframe', /animates .* — any box a rule runs it on, a money node among them/],
         ['keyframe:custom-property', /a custom property in a keyframe/],
+        // The ink belt beside the probe's keyframe-offset read (before 8g2, the critic's third review, item 1; D-2026-10-26-03).
+        ['keyframe:ink', /in a keyframe is inherited: it changes how the text of every box below/],
+        // The ground belt beside the probe's keyframe-offset ground read (before 8g2, the fourth review's item 2, PG; D-2026-10-26-04 (a)).
+        ['keyframe:ground', /a ground or a shadow in a keyframe lays a ground under every box inside the one that runs it/],
+        // SVG paint off a drawn icon (before 8g2, the fourth review's item 4, PFQ; D-2026-10-26-04 (b)).
+        ['svg-paint', /SVG paint stands only on a drawn icon/],
         ['role-redeclared', /palette role the theme table writes on the stall/],
         ['tap-highlight', /a tap highlight paints a colour/],
         ['file-mask', /a file's mask or clip in a/],
@@ -3900,17 +4208,60 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         ['nested', /holds a nested rule/],
         ['at-rule', /is not a condition the probe enters|is not allowed in a look sheet/],
         ['escape', /a CSS escape outside a string/],
+        // A prefixed property whose name less the prefix is no property (before 8g2, the fifth review's PQM: `mask-box-image` stood as `-webkit-mask-box-image`'s twin).
+        ['twin:none', /names no property Chrome reads, and .* has no unprefixed twin there/],
         ['twin', /a prefixed property paints only in the engines/],
+        // Anchor positioning (before 8g2, the seventh review's B1, PAN; D-2026-10-27-01).
+        ['anchor', /— anchor positioning: a box placed against an anchor follows/],
         ['other', /./],
     ];
     const waysOf = (problems) => [...new Set(problems.map((p) => WAYS.find(([, re]) => re.test(p))[0]))].sort();
 
-    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158 and 40 (`h1`, the sixth round) and the selected check\'s 24, with an outcome each', () => {
+    it('holds the critic\'s forty-three plant files, 857 plants, the window\'s thirteen, the builder\'s 108, 158, 40 (`h1`, the sixth round), 22 (`i1`, the ink belt), 16 (`j1`, the ground belt), 20 (`k1`, the SVG paint belt), 9 (`l1`, a twin that exists) and 34 (`a1`, anchor positioning) and the selected check\'s 24, with an outcome each', () => {
         assert.deepEqual(Object.keys(PLANTS), [
             'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'w1', 'w2',
-            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'b1', 'c1', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'g1', 'h1', 'i1', 'j1', 'k1', 'l1', 'a1',
         ]);
-        assert.equal(Object.values(PLANTS).flat().length, 1200);
+        assert.equal(Object.values(PLANTS).flat().length, 1301);
+        // `a1`: anchor positioning (the seventh review's B1): thirty refused, PAN's sheet first, and four controls. It moved no older plant.
+        assert.equal(PLANTS.a1.length, 34);
+        assert.equal(PLANTS.a1.filter((entry) => entry.expect === 'accepted').length, 4);
+        assert.match(PLANTS.a1[0].rule, /anchor-name: --\$C-pan; animation: \$C-pan 100s linear infinite;/);
+        assert.match(PLANTS.a1[0].rule, /translate: -600px 0;/);
+        // `l1`: a prefixed property's twin is a property that exists (five refused, PQM's shape first, and four accepted: the mask border's standard twin, a logical twin,
+        // a prefixed property Chrome does not list, and the stated gap of a `-moz-` property's twin).
+        assert.equal(PLANTS.l1.length, 9);
+        assert.equal(PLANTS.l1.filter((entry) => entry.expect === 'accepted').length, 4);
+        assert.match(PLANTS.l1[0].rule, /mask-box-image: linear-gradient\(#0000, #0000\) 1; -webkit-mask-box-image:/);
+        // It moved three older plants, each refused before for its twin as well as for its host's paint, and for its host's paint alone now: `f1:11`, `-webkit-border-before`
+        // beside `border-block-start` (the rule asked for `border-before`, which nothing reads), and `f1:33` and `f1:34`, the mask border and its source beside
+        // `mask-border` and `mask-border-source` (it asked for `mask-box-image` and `mask-box-image-source`).
+        for (const i of [11, 33, 34]) assert.deepEqual(PLANTS.f1[i].by, ['pseudo:host-paint']);
+        // `i1`: an inherited ink, shadow or mark in a keyframe (eighteen refused, PT2's shape first, and four controls). The belt moved five older plants with it: `g1:130`, the
+        // sheet's own keyframe setting `color` on a quote's `.item-a`, accepted until it, and `f2:18`, `g1:131`, `g1:139` and `h1:9`, each refused by the belt as well.
+        // The ground belt (`j1`, the fourth review's PG) moved three: `i1:21`, the ink belt's control, a keyframe `background-color` on `.item-a`, accepted until it, and
+        // `b1:78` and `f2:19`, a keyframe box shadow refused by the paint reach before and by the ground belt as well.
+        assert.equal(PLANTS.i1.length, 22);
+        assert.equal(PLANTS.i1.filter((entry) => entry.expect === 'accepted').length, 3);
+        assert.deepEqual(PLANTS.i1[21].by, ['keyframe:ground']);
+        assert.deepEqual(PLANTS.b1[78].by, ['keyframe:ground', 'paint-reach']);
+        assert.deepEqual(PLANTS.f2[19].by, ['keyframe:ground', 'paint-reach']);
+        // `j1`: a ground or a shadow in a keyframe (thirteen refused, PG's shape first, and three controls: a background that moves or grows, and a ground at rest).
+        assert.equal(PLANTS.j1.length, 16);
+        assert.equal(PLANTS.j1.filter((entry) => entry.expect === 'accepted').length, 3);
+        assert.match(PLANTS.j1[0].rule, /^@keyframes \$C-ground \{ 0% \{ background-color: transparent; \} 25%, 68% \{ background-color: var\(--s-text\); \}/);
+        // `k1`: SVG paint off a drawn icon (fourteen refused, PFQ's shape first, and six controls in the shape the shipped looks write). The belt moved sixteen older plants:
+        // `g1:39`–`g1:52` and `f2:5` set a stroke on `.item-caret`, a drawn icon whose rule does not name `.ic` (five of them the stroke cap's controls, accepted until it), and
+        // `f1:35` a fill and a stroke on a pseudo-element, accepted until it.
+        assert.equal(PLANTS.k1.length, 20);
+        assert.equal(PLANTS.k1.filter((entry) => entry.expect === 'accepted').length, 6);
+        assert.equal(PLANTS.k1[0].rule, '.$C .qr path { fill: #fff; }');
+        for (const i of [39, 40, 41, 42, 50]) assert.deepEqual(PLANTS.g1[i].by, ['svg-paint']);
+        for (const i of [43, 44, 45, 46, 47, 48, 49, 51, 52]) assert.deepEqual(PLANTS.g1[i].by, ['ink-reach', 'svg-paint']);
+        assert.deepEqual(PLANTS.f2[5].by, ['ink-reach', 'svg-paint']);
+        assert.deepEqual(PLANTS.f1[35].by, ['svg-paint']);
+        assert.match(PLANTS.i1[0].rule, /^@keyframes \$C-ink \{ 25%, 68% \{ color: transparent; \} \}/);
+        assert.deepEqual(PLANTS.g1[130].by, ['keyframe:ink']);
         // The sixth review's round: `h1`, the shorthand's thickness through a math function (M1), a keyframe inside an at-rule or a statement (M2), a negated painted value, a blur past its cap and `unset` on a custom property.
         assert.equal(PLANTS.h1.length, 40);
         // The fifth review's eight plant files (`f1`–`f8`: per-side colours, past the box, the outline cap, keyframes, the mask reader, the colour scheme and a custom property, the states, the underline) and the builder's own (`g1`).
@@ -3961,10 +4312,10 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
         });
     }
 
-    it('accepts, of the 1,200, only the 295 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
+    it('accepts, of the 1,301, only the 308 whose reason is written beside them: each a control, a form that sets nothing, or a stated gap', () => {
         const accepted = Object.values(PLANTS).flat().filter((entry) => entry.expect === 'accepted');
-        assert.equal(accepted.length, 295);
-        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 905, 'and refuses the other 905');
+        assert.equal(accepted.length, 308);
+        assert.equal(Object.values(PLANTS).flat().length - accepted.length, 993, 'and refuses the other 993');
         // The stated gaps are the ones whose reason says so, and each is in the belt\'s docblock or the size lint\'s.
         const gaps = accepted.filter((entry) => /\(stated\)|stated gap|a stated gap|belt\'s stated gap/.test(entry.why));
         assert.ok(gaps.length >= 12, `${gaps.length} stated gaps`);
@@ -4028,7 +4379,7 @@ describe('the-lint-belts-critics-plants-are-pinned', () => {
                 continue; // a rule the re-scoping cannot take (nesting): there is no kit sheet to lint
             }
             assert.ok(
-                !kit.some((p) => /is not a property a state rule may set|palette role the theme table|a custom property set under a state|may be a money node — the wall fits|a cursor that is not a keyword|in a keyframe takes a box|takes its paint from its host|prints text and states no colour|names no colour, and is drawn in currentColor|is its host's ink, which a state may change|reads a custom property that is not a palette role|all re-states every property from the host's or the initial value|names a side by the writing mode|it reaches past its box, where a state that changes the ink|an outline's ring reaches over the boxes beside its box|all in a keyframe re-states every property/.test(p)),
+                !kit.some((p) => /is not a property a state rule may set|palette role the theme table|a custom property set under a state|may be a money node — the wall fits|a cursor that is not a keyword|in a keyframe takes a box|takes its paint from its host|prints text and states no colour|names no colour, and is drawn in currentColor|is its host's ink, which a state may change|reads a custom property that is not a palette role|all re-states every property from the host's or the initial value|names a side by the writing mode|it reaches past its box, where a state that changes the ink|an outline's ring reaches over the boxes beside its box|all in a keyframe re-states every property|a ground or a shadow in a keyframe lays a ground|SVG paint stands only on a drawn icon/.test(p)),
                 `${JSON.stringify(entry.rule)}:\n  ${kit.join('\n  ')}`,
             );
         }
@@ -4092,21 +4443,34 @@ describe('a-look-may-not-dress-a-figures-pieces', () => {
         // the whole figure to, in the kit's words. D-2026-10-20-01 split
         // both labels: the probe paints no hover, no turned wall and not
         // every screen, so the rest is Stall's at intake. D-2026-10-20-02
-        // (round 8): the probe catches "most of this" there, not all — a box
-        // moved over a figure by a relative offset, or a target's glyph
-        // scaled over it, passes it (the critic's PC2, SVs and PW on round
-        // 7) — on this paragraph and the money one; the piece paragraph keeps
-        // its label, true as written.
+        // (round 8) kept "most of this" on this paragraph and the money one
+        // while a box moved over a figure by a relative offset, or a target's
+        // glyph scaled over it, passed the probe (the critic's PC2, SVs and
+        // PW on round 7). Step 10 of before-8g2 (D4(b) of D-2026-10-20-06)
+        // took "most" off both: the reads bound (1a, 1b, 1c, 1d, 3a). The
+        // piece paragraph keeps its label, true as written. The eighteenth
+        // review split the money label by what each read reaches
+        // (D-2026-11-09-07): cutting and fading on every screen, covering on
+        // the first screen, what stands below it on the sampled screens.
         const whole =
-            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe` catches most of this on the screens and states it paints; Stall checks the rest at intake, such as a pointer\'s hover, a turned wall and a screen the kit does not measure.)*';
+            '**The whole price is never dressed to misread:** no clip, mask, filter, fade, shrink, turn, line through it, far shadow, ground in its own colour or spacing that makes its digits touch, and a box around it may tilt up to 10° and take any shape only clear of its digits. *(The kit — `workshop:probe`, on the screens and states it paints; Stall at intake for the rest, such as a pointer\'s hover, a turned wall and a screen the kit does not measure.)*';
         // The money paragraph's label, pinned since round 8 (the critic's
         // P3-2 on round 7: reverted, it kept this test green), and the lint
         // sentence folded into it.
         const moneyLabel =
-            "*(The kit — `workshop:probe` catches most of this on the screens and states it paints; Stall checks the rest at intake, such as a pointer's hover, a turned wall and a screen the kit does not measure. And `workshop:lint` refuses the ways to paint text in a colour the probe does not read: `-webkit-text-fill-color`, `-webkit-text-stroke`, `background-clip: text`.)*";
+            "*(The kit — `workshop:probe` reads whether anything cuts or fades the prices and text here on every screen and state it paints, and whether anything covers them on the first screen there; and, at 390, 1280 and 1920 wide on the screens it samples, what stands below the first screen, the codes, the contrast, and the digits where a box is moved near a figure or a figure is broken; Stall checks the rest at intake, such as a pointer's hover, a turned wall and a screen the kit does not measure. And `workshop:lint` refuses the ways to paint text in a colour the probe does not read: `-webkit-text-fill-color`, `-webkit-text-stroke`, `background-clip: text`.)*";
         assert.ok(readme.includes(piece), 'the workshop README does not carry the piece line');
         assert.ok(readme.includes(whole), 'the workshop README does not carry the whole-price line');
         assert.ok(readme.includes(moneyLabel), 'the workshop README does not carry the money paragraph\'s label');
+        // D4(b) of D-2026-10-20-06, at step 10: the QR paragraph keeps "most"
+        // for covering (a pay code below the first screen is hit-tested only
+        // where a contrast job's taller shot brings it on screen, not at 360
+        // nor on a geometry-only screen), and says what the kit reads of a
+        // code; the eighteenth review's scope (D-2026-11-09-07): its margin
+        // and modules are read on the contrast jobs alone.
+        const qr =
+            "**QR codes stay black on white, with their quiet margin.** Only the box around a code may take your look. *(The kit — `workshop:probe` catches most of what could cover a code on the screens and states it paints, and reads a code's colours, and on the screens it samples its margin and modules; Stall checks the rest at intake.)*";
+        assert.ok(readme.includes(qr), 'the workshop README does not carry the QR paragraph');
         assert.ok(!readme.includes('shadow and everything around it are yours'), 'the README still says a shadow and everything around the price are a look\'s');
         const money = readme.indexOf('**Money is never covered, cut or faded.**');
         const at = readme.indexOf(piece);
@@ -5074,6 +5438,121 @@ describe('a-look-names-no-container-of-its-own', () => {
         // The kit keeps the rules its README states: a line there is the owner's to write.
         for (const rule of ['.t-neo .item { container-type: size; }', '.t-neo .item { container-name: sw; }', '.t-neo .item { container: sw / size; }']) {
             assert.ok(!lintSheet(plantedKit(rule)).some((p) => WHY.test(p)), `the kit, ${rule}`);
+        }
+    });
+});
+
+describe('a-look-never-positions-against-an-anchor', () => {
+    /**
+     * Before 8g2, the seventh review's B1 (D-2026-10-27-01, "Probe đọc +
+     * chặn trong lint"): a box placed by `anchor()` follows its anchor's
+     * transform, motion path and offsets in Chrome 156, and the critic's PAN
+     * — the pay figure the wallet signs anchored to its unit sibling, which a
+     * keyframe `translate` from 30% to 40% of a 100s loop carried 600px out
+     * of its row's clip — passed the first-party lint with no problem and the
+     * whole runner green. The probe reads the road since (`anchorCanFollow`
+     * in `layout/probe.ts`), on the kit's side; a first-party look sheet
+     * writes no anchor positioning at all (`ANCHOR_PROPERTIES`, the
+     * `anchor()` and `anchor-size()` functions in any value, `anchor-center`;
+     * `@position-try` is an at-rule G4 refuses). The kit is unchanged.
+     */
+    const WHY = /— anchor positioning: a box placed against an anchor follows the anchor's transform/;
+
+    it('refuses PAN, and each anchor property, function and keyword, in every case, with !important, in a media block, in a keyframe and through a custom property', () => {
+        assert.match(ANCHOR_PAN, /anchor-name: --t-neo-pan;/);
+        assert.match(ANCHOR_PAN, /right: anchor\(left\);/);
+        const problems = lintLookSheet(plantedNeo(ANCHOR_PAN), { lookClass: 't-neo' });
+        assert.ok(problems.length > 0 && problems.every((p) => WHY.test(p)), problems.join('\n') || '(no problem)');
+        for (const rule of [
+            '.t-neo .item-u { anchor-name: --t-neo-a; }',
+            '.t-neo .pay-x { anchor-scope: all; }',
+            '.t-neo .pay-x-n { position-anchor: --t-neo-a; }',
+            '.t-neo .pay-x-n { position-area: top; }',
+            '.t-neo .pay-x-n { inset-area: top; }',
+            '.t-neo .pay-x-n { position-try: --t-neo-t; }',
+            '.t-neo .pay-x-n { position-try-fallbacks: flip-block; }',
+            '.t-neo .pay-x-n { position-try-order: most-height; }',
+            '.t-neo .pay-x-n { position-try-options: flip-block; }',
+            '.t-neo .pay-x-n { position-visibility: anchors-visible; }',
+            '.t-neo .pay-x-n { position-fallback: --t-neo-t; }',
+            '.t-neo .pay-x-n { position: absolute; right: anchor(left); }',
+            '.t-neo .pay-x-n { position: absolute; top: anchor(--t-neo-a top); }',
+            '.t-neo .pay-x-n { width: anchor-size(width); }',
+            '.t-neo .pay-x-n { margin-left: calc(anchor-size(width) * 2); }',
+            '.t-neo .pay-x-n { position: absolute; inset: anchor(top) auto auto anchor(left); }',
+            '.t-neo .pay-x-n { justify-self: anchor-center; }',
+            '.t-neo .pay-x { align-items: anchor-center; }',
+            '.t-neo .item-u { ANCHOR-NAME: --t-neo-a; }',
+            '.t-neo .pay-x-n { position: absolute; Right: ANCHOR(left); }',
+            '.t-neo .pay-x-n { width: Anchor-Size(Width); }',
+            '.t-neo .item-u { anchor-name: --t-neo-a !important; }',
+            '@media (min-width: 680px) { .t-neo .item-u { anchor-name: --t-neo-a; } }',
+            '@keyframes t-neo-an { to { anchor-name: --t-neo-a; } }',
+            '@keyframes t-neo-an { to { right: anchor(left); } }',
+            '.t-neo .pay-x-n { --t-neo-x: anchor(left); }',
+            '.t-neo .pay-x-n { --t-neo-x: anchor-size(width); width: var(--t-neo-x); }',
+            '.t-neo .pay-x-n { position: absolute; right: var(--t-neo-y, anchor(left)); }',
+            '.t-neo .item-u { --t-neo-n: --t-neo-a; anchor-name: var(--t-neo-n); }',
+        ]) {
+            const found = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(found.some((p) => WHY.test(p)), `${rule}:\n  ${found.join('\n  ') || '(no problem)'}`);
+        }
+        // `@position-try` is refused as an at-rule a look sheet may not hold (G4), as every at-rule but `@media` and `@keyframes` is.
+        const tried = lintLookSheet(plantedNeo('@position-try --t-neo-t { top: anchor(bottom); }'), { lookClass: 't-neo' });
+        assert.ok(tried.some((p) => /@position-try is not allowed in a look sheet/.test(p)), tried.join('\n'));
+    });
+
+    it('leaves alone what only looks like it, and the transforms and offsets with no anchor', () => {
+        accepts('.t-neo .item { --t-neo-anchor: 4px; }');
+        accepts('.t-neo .item-anchor { color: red; }');
+        accepts('.t-neo .item { position: relative; left: 4px; }');
+        accepts('.t-neo .item { translate: 0 2px; }');
+        accepts('@keyframes t-neo-move { to { translate: 0 2px; } }');
+    });
+
+    it('is refused for the kit by its probe, as the workshop README says (D-2026-10-27-02)', () => {
+        // The kit's lint admits anchor positioning (below); its probe refuses every paint of the
+        // kit's look while the kit's sheet declares anchor-name (`kitAnchorFaults`), and every
+        // geometry pass of the kit's probe owes that rule a read (`probeCoverageGaps`' `kit`).
+        const readme = read('workshop/README.md').replace(/\s+/g, ' ');
+        assert.ok(
+            readme.includes('**No anchor positioning.** A box placed against an anchor follows it wherever it moves, so a sheet that names one (`anchor-name`) is refused. *(The kit — `workshop:probe`.)*'),
+            'the workshop README states the kit refuses anchor positioning, checked by workshop:probe',
+        );
+        const probe = read('layout/probe.ts');
+        assert.ok(probe.includes("const KIT_ANCHOR_CHECK = 'the-kit-takes-no-anchor-positioning';"));
+        assert.match(probe, /failures\.push\(\.\.\.lookSheetFaults\(screen, label\)\);\n\s+failures\.push\(\.\.\.kitAnchorFaults\(screen, label, look\)\);/);
+        assert.match(probe, /: named\n\s+\? `the kit's sheet declares anchor-name/);
+        assert.ok(probe.includes("const value = style.getPropertyValue('anchor-name').trim();\n        if (value !== '' && value !== 'none') named = true;"));
+        assert.ok(read('scripts/probe-coverage.mjs').includes("the-kit-takes-no-anchor-positioning read no paint of the kit's look"));
+        assert.ok(/kit: LOOKS === 'workshop'/.test(read('scripts/layout-check.mjs')));
+    });
+
+    it('leaves the kit as it was: PAN and each road pass the kit lint', () => {
+        assert.deepEqual(lintSheet(plantedKit(ANCHOR_PAN)), [], 'PAN in the kit');
+        for (const rule of ['.t-neo .item-u { anchor-name: --t-neo-a; }', '.t-neo .pay-x-n { position: absolute; right: anchor(left); width: anchor-size(width); }', '.t-neo .pay-x-n { justify-self: anchor-center; }']) {
+            assert.ok(!lintSheet(plantedKit(rule)).some((p) => WHY.test(p)), `the kit, ${rule}`);
+        }
+    });
+
+    it('costs nothing: no first-party sheet a run serves, no starter and the canary writes any of it', () => {
+        const sheets = lookRows(SERVED)
+            .filter((row) => row.role !== 'kit')
+            .map((row) => ({
+                name: `${row.role}: ${row.path}`,
+                css: row.css,
+                options: row.role === 'private' ? { lookClass: row.lookClass, load: 'worn', ownArt: row.ownArt } : { lookClass: row.lookClass, load: row.load, ownArt: row.load === 'worn' ? ownArtOf(row) : undefined },
+            }));
+        const roles = new Set(lookRows(SERVED).filter((row) => row.role !== 'kit').map((row) => row.role));
+        for (const role of ['look', 'fixture', 'private']) assert.ok(roles.has(role), `a ${role} sheet is read`);
+        for (const cls of ['t-modern', 't-neo', 't-rural']) {
+            sheets.push({ name: `starter: ${cls}`, css: rescopeSheet(read(LOOKS.find((sheet) => sheet.lookClass === cls).path), cls.slice(2), carried), options: { lookClass: 't-workshop' } });
+        }
+        sheets.push({ name: 'canary', css: canaryFiles()['canary/sheet.css'], options: { lookClass: 't-canary' } });
+        for (const { name, css, options } of sheets) {
+            assert.deepEqual(lintLookSheet(css, options).filter((p) => WHY.test(p)), [], name);
+            // Not a lint but a grep, comments out: a comment may say "anchored", as one does.
+            assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /(?<![\w-])(?:anchor-name|anchor-scope|position-anchor|position-area|inset-area|position-try[\w-]*|position-visibility|position-fallback)\s*:|(?<![\w-])anchor(?:-size)?\s*\(|anchor-center|@position-try/i, name);
         }
     });
 });

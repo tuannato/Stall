@@ -1905,6 +1905,13 @@ function paintUnresolvable(
 export const PAY_QR_NARROWEST_PX = 308;
 
 /**
+ * The quiet zone `qrSvg` draws around a code's matrix, in modules: the
+ * layout probe derives from it where a code's modules must land in its box
+ * (`a-code-is-drawn-black-on-white`, `layout/probe.ts`).
+ */
+export const QR_SVG_QUIET_MODULES = 4;
+
+/**
  * A QR of `text` as an SVG, drawn from the module matrix with one `<path>` built
  * through the DOM, not a markup string, and no external image. Always black on
  * white with a quiet zone: a QR that inherits a theme colour or loses its margin
@@ -1913,7 +1920,7 @@ export const PAY_QR_NARROWEST_PX = 308;
 export function qrSvg(text: string, title: string): SVGSVGElement {
     const matrix = qrMatrix(text);
     const n = matrix.length;
-    const quiet = 4;
+    const quiet = QR_SVG_QUIET_MODULES;
     const size = n + quiet * 2;
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('viewBox', `0 0 ${size} ${size}`);

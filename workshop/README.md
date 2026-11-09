@@ -77,7 +77,11 @@ code, the buy and pay controls, the seller's address, and the bytes of a
 record a seller is about to sign. Nothing may paint over them at any width,
 push them past the edge of the screen, or leave them below 3:1 contrast
 against what is actually painted behind them. *(The kit — `workshop:probe`
-catches most of this on the screens and states it paints; Stall checks the
+reads whether anything cuts or fades the prices and text here on every
+screen and state it paints, and whether anything covers them on the first
+screen there; and, at 390, 1280 and 1920 wide on the screens it samples,
+what stands below the first screen, the codes, the contrast, and the digits
+where a box is moved near a figure or a figure is broken; Stall checks the
 rest at intake, such as a pointer's hover, a turned wall and a screen the
 kit does not measure. And `workshop:lint` refuses the ways to paint text in
 a colour the probe does not read: `-webkit-text-fill-color`,
@@ -97,15 +101,15 @@ the kit does not measure.)*
 **The whole price is never dressed to misread:** no clip, mask, filter,
 fade, shrink, turn, line through it, far shadow, ground in its own colour or
 spacing that makes its digits touch, and a box around it may tilt up to 10°
-and take any shape only clear of its digits. *(The kit — `workshop:probe`
-catches most of this on the screens and states it paints; Stall checks the
-rest at intake, such as a pointer's hover, a turned wall and a screen the
-kit does not measure.)*
+and take any shape only clear of its digits. *(The kit — `workshop:probe`, on
+the screens and states it paints; Stall at intake for the rest, such as a
+pointer's hover, a turned wall and a screen the kit does not measure.)*
 
 **QR codes stay black on white, with their quiet margin.** Only the box
-around a code may take your look. *(The kit catches most of what could
-cover a code on the screens and states it paints; the rest, and a code's
-colours and margin, Stall at intake until the kit learns them.)*
+around a code may take your look. *(The kit — `workshop:probe` catches
+most of what could cover a code on the screens and states it paints, and
+reads a code's colours, and on the screens it samples its margin and
+modules; Stall checks the rest at intake.)*
 
 **No page scrolls sideways, and no words run under a control or past the
 edge of their box.** *(The kit.)*
@@ -151,6 +155,10 @@ and no engine-only selector; attribute selectors only on the state
 attributes the app sets, by their exact value — never on a link, a picture,
 a label or anything that carries a token or an address. *(The kit —
 `workshop:lint`.)*
+
+**No anchor positioning.** A box placed against an anchor follows it
+wherever it moves, so a sheet that names one (`anchor-name`) is refused.
+*(The kit — `workshop:probe`.)*
 
 **Keyframes are named `wk-…`**, so they never collide with Stall's own.
 *(The kit.)*

@@ -3,7 +3,7 @@
  * `a-money-figure-is-never-misdressed`, the critic's P1-1 and P1-2 on round
  * 4). The pure half: reading the colours a computed value writes, putting
  * paints together the way a browser does, and judging what lands under the
- * glyphs. The probe (`groundStackFault` in `layout/probe.ts`) reads the
+ * glyphs. The probe (`groundWalkRead` in `layout/probe.ts`) reads the
  * paints off the page, resolves every colour through the engine and hands
  * them here.
  *
@@ -227,6 +227,21 @@ function tileOffset(value: string, free: number): number | undefined {
     return sum;
 }
 
+/** One layer's computed `background-repeat`, axis by axis, or undefined. */
+function repeatKeys(repeat: string): readonly [string, string] | undefined {
+    const keys = repeat.trim().split(/\s+/);
+    if (keys.length === 2) return [keys[0]!, keys[1]!];
+    if (keys.length !== 1) return undefined;
+    return keys[0] === 'repeat-x' ? ['repeat', 'no-repeat'] : keys[0] === 'repeat-y' ? ['no-repeat', 'repeat'] : [keys[0]!, keys[0]!];
+}
+
+/** One layer's computed `background-size` against its positioning area, axis by axis: a dimension not taken apart (a `calc()`) undefined. */
+function tileOf(size: string, area: { w: number; h: number }, length: (token: string, extent: number) => number | undefined = tileLength): readonly [number | undefined, number | undefined] {
+    const tokens = size.trim().split(/\s+(?![^(]*\))/).filter((t) => t !== '');
+    if (tokens.length === 1 && (tokens[0] === 'cover' || tokens[0] === 'contain')) return [area.w, area.h];
+    return tokens.length === 1 || tokens.length === 2 ? [length(tokens[0]!, area.w), length(tokens[1] ?? 'auto', area.h)] : [undefined, undefined];
+}
+
 /**
  * Where a gradient layer of a background is proved to paint, axis by axis
  * (round 6, the critic's P1-2 on round 5: a white layer one pixel square,
@@ -273,10 +288,10 @@ function tileOffset(value: string, free: number): number | undefined {
  * viewport on each axis; one with no width or no height places no tile this
  * reader vouches for. The area is the element's bounding box, which for an
  * inline split over lines or a block split over columns is not the box
- * Chrome positions a tile in (it lays the fragments end to end); no money
- * glyph owner a look can tile wraps so today but a broken figure's pieces,
- * whose every longhand `a-broken-figure-wears-the-figures-own-ink` holds
- * (the critic's P3-1 on round 7, stated).
+ * Chrome positions a tile in (it lays the fragments end to end): the caller
+ * asks neither `placeTile` nor a lone tile's proof of a box in more than one
+ * fragment (`boxPaintsOf`, the seventeenth review's B2: `.pay-q` wraps on a
+ * tier-3 face, and a look may tile it).
  */
 export function layerCovers(
     repeat: string,
@@ -286,24 +301,8 @@ export function layerCovers(
     attachment = 'scroll',
 ): readonly [AxisCover, AxisCover] {
     const placed = attachment === 'scroll';
-    const keys = repeat.trim().split(/\s+/);
-    const pair: readonly [string, string] | undefined =
-        keys.length === 1
-            ? keys[0] === 'repeat-x'
-                ? ['repeat', 'no-repeat']
-                : keys[0] === 'repeat-y'
-                  ? ['no-repeat', 'repeat']
-                  : [keys[0]!, keys[0]!]
-            : keys.length === 2
-              ? [keys[0]!, keys[1]!]
-              : undefined;
-    const tokens = size.trim().split(/\s+(?![^(]*\))/).filter((t) => t !== '');
-    const tile: readonly [number | undefined, number | undefined] =
-        tokens.length === 1 && (tokens[0] === 'cover' || tokens[0] === 'contain')
-            ? [area.w, area.h]
-            : tokens.length === 1 || tokens.length === 2
-              ? [tileLength(tokens[0]!, area.w), tileLength(tokens[1] ?? 'auto', area.h)]
-              : [undefined, undefined];
+    const pair = repeatKeys(repeat);
+    const tile = tileOf(size, area);
     // A hundredth of a pixel of rounding either way: a strip that thin is
     // under what Chrome paints a tile in at all.
     const slack = 0.01;
@@ -334,6 +333,378 @@ export function tileArea(
     viewport: { w: number; h: number },
 ): { w: number; h: number } {
     return attachment === 'fixed' ? { w: Math.min(own.w, viewport.w), h: Math.min(own.h, viewport.h) } : own;
+}
+
+/**
+ * **Where a layer's tiles stand** (before 8g2, the binding of 3a; J1(a) of
+ * D-2026-10-28-01): the first tile's place from the positioning area's corner,
+ * its size, and which axes repeat. A tile that does not repeat on an axis
+ * paints there only over its own span, and one that repeats covers the whole
+ * clip area on that axis. Read only where every value is one this reader
+ * takes apart, and `undefined` otherwise: `layerCovers` then reads the layer
+ * as before, a paint that may be anywhere in its clip area and may be absent.
+ * So undefined for a `fixed` or `local` layer (whose area is not the box the
+ * caller holds, `layerCovers`'s FX), for `round` and `space` (which move and
+ * rescale the tiles), for a tile under `MIN_TILE_PX` (which the engine may
+ * not paint at all), and for a size or a position not taken apart (a `min()`).
+ */
+export type TilePlace = { x: number; y: number; w: number; h: number; repeatX: boolean; repeatY: boolean };
+
+export function placeTile(
+    repeat: string,
+    size: string,
+    position: readonly [string, string],
+    area: { w: number; h: number },
+    attachment = 'scroll',
+): TilePlace | undefined {
+    if (attachment !== 'scroll' || !(area.w > 0) || !(area.h > 0)) return undefined;
+    const keys = repeatKeys(repeat);
+    if (keys === undefined || !keys.every((k) => k === 'repeat' || k === 'no-repeat')) return undefined;
+    // A `calc()` of a length and a percentage is taken apart here (Chrome keeps `calc(100% - 32px)`), where `layerCovers` proves nothing by one.
+    const [w, h] = tileOf(size, area, (token, extent) => (token === 'auto' ? extent : tileOffset(token, extent)));
+    if (w === undefined || h === undefined || !(w >= MIN_TILE_PX) || !(h >= MIN_TILE_PX)) return undefined;
+    const x = tileOffset(position[0], area.w - w);
+    const y = tileOffset(position[1], area.h - h);
+    if (x === undefined || y === undefined) return undefined;
+    return { x, y, w, h, repeatX: keys[0] === 'repeat', repeatY: keys[1] === 'repeat' };
+}
+
+/** The strip of the page a tile plan can paint, the positioning area's corner at (`left`, `top`): the tile's own span on an axis that does not repeat, and every place on one that does. */
+export function tileBand(tile: TilePlace, left: number, top: number): Box {
+    return {
+        left: tile.repeatX ? -Infinity : left + tile.x,
+        right: tile.repeatX ? Infinity : left + tile.x + tile.w,
+        top: tile.repeatY ? -Infinity : top + tile.y,
+        bottom: tile.repeatY ? Infinity : top + tile.y + tile.h,
+    };
+}
+
+/**
+ * Whether one tile holds the whole of the gradient the area shows: on each
+ * axis that repeats, a tile at least the area long (it meets the next one
+ * only past the area, in the border's bands). Tiles smaller than that show
+ * the gradient many times over a line of ink, and the engine snaps their
+ * period to device pixels, so a stop's place is not read in them.
+ */
+export function tileHoldsItsGradient(tile: TilePlace, area: { w: number; h: number }): boolean {
+    const slack = 0.01;
+    return (!tile.repeatX || tile.w >= area.w - slack) && (!tile.repeatY || tile.h >= area.h - slack);
+}
+
+/**
+ * A gradient's computed text, read: which kind, what stands before its first
+ * stop, and its stops and transition hints in order (`colour` undefined for a
+ * hint, `at` a position as written). `undefined` for anything this reader
+ * does not place: a repeating or conic gradient, a prefixed form, an
+ * interpolation written out (`in oklch`: the colours between two stops are
+ * not a mix of them), or a stop it cannot split.
+ */
+export type GradientText = { kind: 'linear' | 'radial'; head: string; items: readonly { colour?: string; at?: string }[] };
+
+const GRADIENT_HEAD = /^(?:to\b|in\b|at\b|circle\b|ellipse\b|closest-|farthest-|[-+.\d]|calc\()/i;
+
+/** A value split at its top-level commas. */
+function topLevelCommas(value: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let from = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        if (value[i] === '(') depth += 1;
+        else if (value[i] === ')') depth -= 1;
+        else if (value[i] === ',' && depth === 0) {
+            out.push(value.slice(from, i).trim());
+            from = i + 1;
+        }
+    }
+    out.push(value.slice(from).trim());
+    return out;
+}
+
+/** A value split at its top-level spaces. */
+function topLevelWords(value: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let from = 0;
+    for (let i = 0; i < value.length; i += 1) {
+        if (value[i] === '(') depth += 1;
+        else if (value[i] === ')') depth -= 1;
+        else if (/\s/.test(value[i]!) && depth === 0) {
+            if (i > from) out.push(value.slice(from, i));
+            from = i + 1;
+        }
+    }
+    if (value.length > from) out.push(value.slice(from));
+    return out;
+}
+
+/** The colour a stop starts with and what stands after it, or undefined for a bare position (a hint). */
+function leadingColour(arg: string): { colour: string; rest: string } | undefined {
+    if (arg[0] === '#') {
+        const hex = /^#[0-9A-Fa-f]+/.exec(arg)?.[0];
+        return hex === undefined ? undefined : { colour: hex, rest: arg.slice(hex.length).trim() };
+    }
+    const name = /^-{0,2}[A-Za-z_][A-Za-z0-9_-]*/.exec(arg)?.[0];
+    if (name === undefined || name.toLowerCase() === 'calc') return undefined;
+    if (arg[name.length] !== '(') return { colour: name, rest: arg.slice(name.length).trim() };
+    if (!COLOUR_FUNCTIONS.has(name.toLowerCase())) return undefined;
+    const close = closing(arg, name.length);
+    return close < 0 ? undefined : { colour: arg.slice(0, close + 1), rest: arg.slice(close + 1).trim() };
+}
+
+export function readGradient(layer: string): GradientText | undefined {
+    const m = /^(linear|radial)-gradient\(/i.exec(layer.trim());
+    if (m === null) return undefined;
+    const text = layer.trim();
+    const open = m[0].length - 1;
+    if (closing(text, open) !== text.length - 1) return undefined;
+    const args = topLevelCommas(text.slice(open + 1, -1));
+    const head = GRADIENT_HEAD.test(args[0] ?? '') ? args.shift()! : '';
+    if (/(?:^|\s)in\s/i.test(head)) return undefined;
+    const items: { colour?: string; at?: string }[] = [];
+    for (const arg of args) {
+        const stop = leadingColour(arg);
+        if (stop === undefined) {
+            // A hint is one position and nothing else.
+            if (topLevelWords(arg).length !== 1) return undefined;
+            items.push({ at: arg });
+            continue;
+        }
+        const at = topLevelWords(stop.rest);
+        if (at.length > 2) return undefined;
+        if (at.length === 0) items.push({ colour: stop.colour });
+        for (const one of at) items.push({ colour: stop.colour, at: one });
+    }
+    if (items.filter((i) => i.colour !== undefined).length < 2) return undefined;
+    return { kind: m[1]!.toLowerCase() as 'linear' | 'radial', head, items };
+}
+
+/** A gradient's shape in its tile: its line (where 0% to 100% run, `length` px long, through the centre along (`ux`, `uy`)), or its centre and the ending shape's radii. */
+export type GradientShape =
+    | { kind: 'linear'; cx: number; cy: number; ux: number; uy: number; length: number }
+    | { kind: 'radial'; cx: number; cy: number; rx: number; ry: number };
+
+/** A linear gradient's direction as a unit vector, from what stands before its stops (`''` is `to bottom`): undefined for a head this reader does not take apart. */
+function linearDirection(head: string, w: number, h: number): readonly [number, number] | undefined {
+    if (head === '') return [0, 1];
+    const deg = new RegExp(`^(${NUMBER})deg$`, 'i').exec(head);
+    if (deg !== null) {
+        const a = (Number(deg[1]) * Math.PI) / 180;
+        return [Math.sin(a), -Math.cos(a)];
+    }
+    const to = /^to\s+(.*)$/i.exec(head);
+    if (to === null) return undefined;
+    const sides = to[1]!.trim().toLowerCase().split(/\s+/);
+    let sx = 0;
+    let sy = 0;
+    for (const side of sides) {
+        if (side === 'left') sx = -1;
+        else if (side === 'right') sx = 1;
+        else if (side === 'top') sy = -1;
+        else if (side === 'bottom') sy = 1;
+        else return undefined;
+    }
+    if (sides.length > 2 || (sx === 0 && sy === 0)) return undefined;
+    if (sx === 0 || sy === 0) return [sx, sy];
+    // To a corner: perpendicular to the line through the two other corners.
+    const norm = Math.hypot(h, w);
+    return [(sx * h) / norm, (sy * w) / norm];
+}
+
+/** A radial gradient's ending shape from what stands before its stops, in a tile `w` × `h`: undefined for a head this reader does not take apart, and for a shape with no extent (the engine draws those another way). */
+function radialShape(head: string, w: number, h: number): GradientShape | undefined {
+    const at = /^(.*?)(?:^|\s)at\s+(.*)$/i.exec(head);
+    const size = (at === null ? head : at[1]!).trim();
+    let cx = w / 2;
+    let cy = h / 2;
+    if (at !== null) {
+        const place = topLevelWords(at[2]!);
+        if (place.length !== 2) return undefined;
+        const x = tileOffset(place[0]!, w);
+        const y = tileOffset(place[1]!, h);
+        if (x === undefined || y === undefined) return undefined;
+        cx = x;
+        cy = y;
+    }
+    const tokens = size === '' ? [] : topLevelWords(size).map((t) => t.toLowerCase());
+    const shapeWord = tokens.find((t) => t === 'circle' || t === 'ellipse');
+    const rest = tokens.filter((t) => t !== 'circle' && t !== 'ellipse');
+    const extent = rest.length === 1 && /^(?:closest|farthest)-(?:side|corner)$/.test(rest[0]!) ? rest[0]! : undefined;
+    const lengths = extent === undefined ? rest : [];
+    if (lengths.length > 2) return undefined;
+    const circle = shapeWord === 'circle' || lengths.length === 1;
+    if (circle && (lengths.length > 1 || shapeWord === 'ellipse')) return undefined;
+    const done = (rx: number, ry: number): GradientShape | undefined => (rx > 0 && ry > 0 && Number.isFinite(rx) && Number.isFinite(ry) ? { kind: 'radial', cx, cy, rx, ry } : undefined);
+    if (lengths.length > 0) {
+        if (circle) {
+            const r = PX.exec(lengths[0]!);
+            return r === null ? undefined : done(Number(r[1]), Number(r[1]));
+        }
+        const rx = tileOffset(lengths[0]!, w);
+        const ry = tileOffset(lengths[1] ?? '', h);
+        return rx === undefined || ry === undefined ? undefined : done(rx, ry);
+    }
+    const near = (extent ?? 'farthest-corner').startsWith('closest');
+    const pick = near ? Math.min : Math.max;
+    const sideX = pick(Math.abs(cx), Math.abs(w - cx));
+    const sideY = pick(Math.abs(cy), Math.abs(h - cy));
+    if ((extent ?? 'farthest-corner').endsWith('side')) {
+        const r = pick(sideX, sideY);
+        return circle ? done(r, r) : done(sideX, sideY);
+    }
+    const corners = [
+        [cx, cy],
+        [w - cx, cy],
+        [cx, h - cy],
+        [w - cx, h - cy],
+    ].map(([dx, dy]) => [Math.abs(dx!), Math.abs(dy!)] as const);
+    const corner = corners.reduce((a, b) => {
+        const closer = Math.hypot(b[0], b[1]) < Math.hypot(a[0], a[1]);
+        return closer === near ? b : a;
+    });
+    if (circle) return done(Math.hypot(corner[0], corner[1]), Math.hypot(corner[0], corner[1]));
+    if (!(sideX > 0) || !(sideY > 0)) return undefined;
+    const aspect = sideX / sideY;
+    const rx = Math.hypot(corner[0], corner[1] * aspect);
+    return done(rx, rx / aspect);
+}
+
+/**
+ * A gradient placed in a tile `w` × `h`: its shape and each colour stop's
+ * position in units of the gradient line (0 to 1, a radial's at the ending
+ * shape), in order, by the rules CSS gives: a first or last stop with no
+ * position at 0 or 1, a position under one written before it raised to that
+ * one, and a run with none spaced evenly. `undefined` for anything this
+ * reader does not take apart (a `min()`, a head it cannot read).
+ */
+export function placeGradient(text: GradientText, w: number, h: number): { shape: GradientShape; at: number[] } | undefined {
+    let shape: GradientShape | undefined;
+    let length: number;
+    if (text.kind === 'linear') {
+        const dir = linearDirection(text.head, w, h);
+        if (dir === undefined) return undefined;
+        length = Math.abs(w * dir[0]) + Math.abs(h * dir[1]);
+        if (!(length > 0)) return undefined;
+        shape = { kind: 'linear', cx: w / 2, cy: h / 2, ux: dir[0], uy: dir[1], length };
+    } else {
+        shape = radialShape(text.head, w, h);
+        if (shape === undefined || shape.kind !== 'radial') return undefined;
+        length = shape.rx;
+    }
+    const raw: { at: number | undefined; stop: boolean }[] = [];
+    for (const item of text.items) {
+        if (item.at === undefined) {
+            raw.push({ at: undefined, stop: true });
+            continue;
+        }
+        const px = tileOffset(item.at, length);
+        if (px === undefined) return undefined;
+        raw.push({ at: px / length, stop: item.colour !== undefined });
+    }
+    const stopsAt = raw.flatMap((r, i) => (r.stop ? [i] : []));
+    raw[stopsAt[0]!]!.at ??= 0;
+    raw[stopsAt[stopsAt.length - 1]!]!.at ??= 1;
+    let most = -Infinity;
+    for (const r of raw) {
+        if (r.at === undefined) continue;
+        r.at = Math.max(r.at, most);
+        most = r.at;
+    }
+    for (let i = 0; i < raw.length; i += 1) {
+        if (raw[i]!.at !== undefined) continue;
+        let j = i;
+        while (raw[j]!.at === undefined) j += 1;
+        const from = raw[i - 1]!.at!;
+        const to = raw[j]!.at!;
+        for (let k = i; k < j; k += 1) raw[k]!.at = from + ((to - from) * (k - i + 1)) / (j - i + 1);
+    }
+    return { shape, at: raw.filter((r) => r.stop).map((r) => r.at!) };
+}
+
+/**
+ * A gradient where it stands on the page: its shape in its tile, the first
+ * tile's corner and size, which axes repeat, and its stops in order. The
+ * paints of `layout/probe.ts` carry one where every value was read.
+ */
+export type GradientPlace = {
+    shape: GradientShape;
+    tile: { left: number; top: number; w: number; h: number; repeatX: boolean; repeatY: boolean };
+    stops: readonly { at: number; colour: Colour }[];
+};
+
+/** The gradient moved with what carries it. */
+export function shiftPlace(place: GradientPlace, dx: number, dy: number): GradientPlace {
+    return { ...place, tile: { ...place.tile, left: place.tile.left + dx, top: place.tile.top + dy } };
+}
+
+/**
+ * A pixel either way on where a stop falls: the engine snaps a box to device
+ * pixels, and a stop a pixel off a stretch of ink is not one this read may
+ * prove elsewhere.
+ */
+export const STOP_SLACK_PX = 1;
+
+/** The stretch of a gradient's line a box (in its tile) lies on, in units of that line, a pixel wider each way (`STOP_SLACK_PX`). */
+function rangeOver(shape: GradientShape, b: Box): readonly [number, number] {
+    if (shape.kind === 'linear') {
+        const ts = [b.left, b.right].flatMap((x) => [b.top, b.bottom].map((y) => 0.5 + ((x - shape.cx) * shape.ux + (y - shape.cy) * shape.uy) / shape.length));
+        const slack = STOP_SLACK_PX / shape.length;
+        return [Math.min(...ts) - slack, Math.max(...ts) + slack];
+    }
+    const norm = (x: number, y: number): number => Math.hypot((x - shape.cx) / shape.rx, (y - shape.cy) / shape.ry);
+    const nearX = Math.min(b.right, Math.max(b.left, shape.cx));
+    const nearY = Math.min(b.bottom, Math.max(b.top, shape.cy));
+    const far = Math.max(...[b.left, b.right].flatMap((x) => [b.top, b.bottom].map((y) => norm(x, y))));
+    const slack = STOP_SLACK_PX / Math.min(shape.rx, shape.ry);
+    return [norm(nearX, nearY) - slack, far + slack];
+}
+
+/** The tiles of one axis a span meets, by index: the one tile on an axis that does not repeat. */
+function tilesMet(from: number, to: number, origin: number, size: number, repeats: boolean): number[] {
+    if (!repeats) return [0];
+    const out: number[] = [];
+    for (let i = Math.floor((from - origin) / size); origin + i * size < to; i += 1) out.push(i);
+    return out;
+}
+
+/** The most tiles of a gradient one cell is read over before all its stops are taken (`stopsOver`). */
+const STOPS_TILES_CAP = 16;
+
+/**
+ * The stops of a gradient that bear on a cell: every stop whose position
+ * falls on the stretch of the line the cell lies on, and the stop on either
+ * side of that stretch, whose colour the ramp there is still a mix of. A stop
+ * past them is proved elsewhere, and is no candidate. Read in every tile the
+ * cell meets (a tile repeats only past its own area: `tileHoldsItsGradient`).
+ */
+export function stopsOver(place: GradientPlace, cell: Box): readonly Colour[] {
+    const { tile, stops } = place;
+    const xs = tilesMet(cell.left, cell.right, tile.left, tile.w, tile.repeatX);
+    const ys = tilesMet(cell.top, cell.bottom, tile.top, tile.h, tile.repeatY);
+    if (xs.length * ys.length > STOPS_TILES_CAP || xs.length * ys.length === 0) return stops.map((s) => s.colour);
+    let low = Infinity;
+    let high = -Infinity;
+    for (const ix of xs) {
+        for (const iy of ys) {
+            const left = tile.left + ix * tile.w;
+            const top = tile.top + iy * tile.h;
+            const part = {
+                left: Math.max(cell.left, left) - left,
+                right: Math.min(cell.right, left + tile.w) - left,
+                top: Math.max(cell.top, top) - top,
+                bottom: Math.min(cell.bottom, top + tile.h) - top,
+            };
+            if (part.right < part.left || part.bottom < part.top) continue;
+            const [a, b] = rangeOver(place.shape, part);
+            low = Math.min(low, a);
+            high = Math.max(high, b);
+        }
+    }
+    if (low > high) return stops.map((s) => s.colour);
+    let first = 0;
+    for (let i = 0; i < stops.length; i += 1) if (stops[i]!.at <= low) first = i;
+    let last = stops.length - 1;
+    for (let i = stops.length - 1; i >= 0; i -= 1) if (stops[i]!.at >= high) last = i;
+    return stops.slice(first, Math.max(first, last) + 1).map((s) => s.colour);
 }
 
 /** A colour's relative luminance, read off the one contrast formula the app uses (black's luminance is 0). */
@@ -412,11 +783,341 @@ export function mostOpaque(paints: readonly (readonly Colour[])[]): number {
     return 1 - paints.reduce((keep, candidates) => keep * (1 - Math.max(0, ...candidates.map((c) => c.alpha))), 1);
 }
 
-/** One paint as the judge reads it: its name, its candidate colours (one, or a gradient's stops) and where it paints. */
-export type StackPaint = { what: string; candidates: readonly Colour[]; rects: readonly Box[] };
+/**
+ * One paint as the judge reads it: its name, its candidate colours (one, or a
+ * gradient's stops), where it paints and, for a gradient whose every value was
+ * read, where its stops fall (`gradient`: only the stops that bear on a cell
+ * are candidates there, `stopsOver`). `picture` marks a paint whose colours no
+ * read here takes (a `url()` layer, a box this rule cannot read), which the
+ * judge composites as absent and `picturesShowing` names where it shows; `fault`
+ * is the sentence a picture fails with where it shows (the figure's own
+ * background picture, a border image that is one, a box above that cannot be
+ * read), and a picture with none is named and left to the contrast pass (a box
+ * above's background picture).
+ */
+export type StackPaint = { what: string; candidates: readonly Colour[]; rects: readonly Box[]; gradient?: GradientPlace; picture?: boolean; fault?: string };
 
-/** What the judge found under a stretch of ink: the composite, its ratio and the paints in it, top first. */
+/** What the judge found under a stretch of ink: the composite, its ratio and the paints in it, top first; or how many ways of choosing its stops one cell had, over the cap, where no cell failed. */
 export type StackVerdict = { ground: Colour; ratio: number; paints: string[] } | { tooMany: number };
+
+/**
+ * The alpha at which a paint is taken to hide everything below it, the walk's
+ * own threshold for an opaque background colour (the read's before the binding,
+ * `bg.alpha >= 0.999`).
+ */
+export const OPAQUE_ALPHA = 0.999;
+
+/** Whether a paint hides what is below it wherever it paints: every colour it may be is opaque (one that may be absent, a picture, or none at all, does not). */
+export function hidesBelow(p: { candidates: readonly Colour[]; picture?: boolean }): boolean {
+    return p.picture !== true && p.candidates.length > 0 && p.candidates.every((c) => c.alpha >= OPAQUE_ALPHA);
+}
+
+/**
+ * The paints over one cell from the topmost one that hides what is below it,
+ * bottom first (before 8g2, 3a): source-over paints nothing of a layer under
+ * an opaque one, so every paint below the topmost opaque paint that covers
+ * the cell is no part of its ground, and is not tried. `over` is bottom
+ * first; the whole list when none hides.
+ */
+export function fromTopmostOpaque<T extends { candidates: readonly Colour[]; picture?: boolean }>(over: readonly T[]): T[] {
+    for (let i = over.length - 1; i >= 0; i -= 1) if (hidesBelow(over[i]!)) return over.slice(i);
+    return [...over];
+}
+
+/**
+ * Why a box on the walk paints none of its own paints, or undefined (before
+ * 8g2, 3a; the critic's V and DC): a box whose `visibility` is not
+ * `visible` paints no ground, no edge and no shadow (a child set `visible`
+ * still paints its own), and one whose `display` is `contents` has no box at
+ * all. Either still computes a background colour, and the walk took an
+ * opaque one for a ground that hid every paint above it.
+ */
+export function paintsNothing(visibility: string, display: string): 'invisible' | 'no box' | undefined {
+    if (display === 'contents') return 'no box';
+    return visibility === 'visible' ? undefined : 'invisible';
+}
+
+/** The part of `a` inside `b`, or undefined when it is under half a pixel either way. */
+function within(a: Box, b: Box): Box | undefined {
+    const i = { left: Math.max(a.left, b.left), right: Math.min(a.right, b.right), top: Math.max(a.top, b.top), bottom: Math.min(a.bottom, b.bottom) };
+    return i.right - i.left > 0.5 && i.bottom - i.top > 0.5 ? i : undefined;
+}
+
+/** Box `outer` less its part `inner` (inside it), as up to four bands, none under half a pixel either way. */
+function around(outer: Box, inner: Box): Box[] {
+    return [
+        { left: outer.left, right: outer.right, top: outer.top, bottom: inner.top },
+        { left: outer.left, right: outer.right, top: inner.bottom, bottom: outer.bottom },
+        { left: outer.left, right: inner.left, top: inner.top, bottom: inner.bottom },
+        { left: inner.right, right: outer.right, top: inner.top, bottom: inner.bottom },
+    ].filter((b) => b.right - b.left > 0.5 && b.bottom - b.top > 0.5);
+}
+
+/** A scroll this read takes for a part of an ink: the paints the scroller numbered `by` carries move by (`dx`, `dy`) with it. */
+export type ScrollMove = { by: number; dx: number; dy: number };
+
+/**
+ * A stretch of ink split by the scrollers that carry it, innermost first
+ * (before 8g2, 3a), each part where it stands once scrolled into view: a part
+ * inside every scroller's view as it stands, and a part outside one moved
+ * into its view by the least scroll that brings it there (`moves`) — the
+ * paints that scroller carries moving with it, the scroller's own and every
+ * paint it does not carry standing still, so a row below the fold is read
+ * over the stall's own paints where it will stand, and never over the
+ * scroller's edge, which no content stands over. A scroller moves a part only
+ * on an axis it scrolls (`sx`, `sy`); on an axis it clips and cannot scroll
+ * (`overflow-x: hidden` beside `overflow-y: auto`) it cuts, as any clip does.
+ * `at` numbers the scroller (`ScrollMove`'s `by`). One scroll is taken for
+ * each part, the one to the nearest edge of the view; a part larger than the
+ * view keeps what fits.
+ */
+export function byScroller(
+    ink: Box,
+    scrollers: readonly { at: number; box: Box; sx: boolean; sy: boolean; cx: boolean; cy: boolean }[],
+): { part: Box; moves: ScrollMove[] }[] {
+    let pieces: { part: Box; moves: ScrollMove[] }[] = [{ part: ink, moves: [] }];
+    for (const s of scrollers) {
+        const view: Box = {
+            left: s.sx ? s.box.left : -Infinity,
+            right: s.sx ? s.box.right : Infinity,
+            top: s.sy ? s.box.top : -Infinity,
+            bottom: s.sy ? s.box.bottom : Infinity,
+        };
+        const cut: Box = {
+            left: !s.sx && s.cx ? s.box.left : -Infinity,
+            right: !s.sx && s.cx ? s.box.right : Infinity,
+            top: !s.sy && s.cy ? s.box.top : -Infinity,
+            bottom: !s.sy && s.cy ? s.box.bottom : Infinity,
+        };
+        const next: { part: Box; moves: ScrollMove[] }[] = [];
+        for (const piece of pieces) {
+            const part = within(piece.part, cut);
+            if (part === undefined) continue;
+            const kept = within(part, view);
+            if (kept !== undefined) next.push({ part: kept, moves: piece.moves });
+            for (const band of kept === undefined ? [part] : around(part, kept)) {
+                const dy = band.top < view.top ? view.top - band.top : band.bottom > view.bottom ? view.bottom - band.bottom : 0;
+                const dx = band.left < view.left ? view.left - band.left : band.right > view.right ? view.right - band.right : 0;
+                const moved = within({ left: band.left + dx, right: band.right + dx, top: band.top + dy, bottom: band.bottom + dy }, view);
+                if (moved !== undefined) next.push({ part: moved, moves: [...piece.moves, { by: s.at, dx, dy }] });
+            }
+        }
+        pieces = next;
+    }
+    return pieces;
+}
+
+/** How far a paint moves with a part scrolled into view: by every scroll of a scroller that carries it (`carried`, numbered as `byScroller`'s `at`). */
+export function shiftFor(carried: ReadonlySet<number>, moves: readonly ScrollMove[]): { dx: number; dy: number } {
+    let dx = 0;
+    let dy = 0;
+    for (const m of moves) {
+        if (carried.has(m.by)) {
+            dx += m.dx;
+            dy += m.dy;
+        }
+    }
+    return { dx, dy };
+}
+
+/**
+ * **A transform as a map of the flat frame** (before 8g2, D-2026-11-09-07; the
+ * eighteenth review's blocker 1 and CASE-F). The probe reads the ground under a
+ * figure with every box on its walk held upright (`withFramesUpright`), so a
+ * paint and a stretch of ink each have a place in one flat frame. A transform
+ * on a box moves that box and everything inside it, so what separates a paint
+ * on box j from the figure is only the transforms strictly below j: every
+ * transform at j and above moves both and cancels. So each pair is read by its
+ * own map, the transforms from the figure up to (not including) the painting
+ * box, composed innermost first.
+ */
+export type Affine = { readonly a: number; readonly b: number; readonly c: number; readonly d: number; readonly e: number; readonly f: number };
+
+const IDENTITY: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
+/** A computed `transform` as a map, or undefined for a 3D matrix or a value this read does not take apart. */
+export function readMatrix(value: string): Affine | undefined {
+    if (value.trim() === 'none') return IDENTITY;
+    const m = /^matrix\(([^)]*)\)$/.exec(value.trim());
+    if (m === null) return undefined;
+    const n = m[1]!.split(',').map((v) => Number(v));
+    if (n.length !== 6 || !n.every(Number.isFinite)) return undefined;
+    return { a: n[0]!, b: n[1]!, c: n[2]!, d: n[3]!, e: n[4]!, f: n[5]! };
+}
+
+/** A computed `transform-origin` as two lengths in px (a third, for depth, is not read), or undefined. */
+export function readOrigin(value: string): readonly [number, number] | undefined {
+    const m = /^(-?[\d.]+(?:e[-+]?\d+)?)px\s+(-?[\d.]+(?:e[-+]?\d+)?)px(?:\s+-?[\d.]+(?:e[-+]?\d+)?px)?$/.exec(value.trim());
+    return m === null ? undefined : [Number(m[1]), Number(m[2])];
+}
+
+/**
+ * A box's computed transform longhands as one transform list, in CSS's order
+ * (`translate`, `rotate`, `scale`, then `transform`), for the engine to compose
+ * with percentages and `calc()` resolved against the box; `transform` alone
+ * when no longhand stands. Undefined for a value that leaves the plane or that
+ * this read does not take apart (the probe fails closed on it). The motion
+ * path, which CSS applies between `scale` and `transform`, is not here: a box
+ * on a figure's walk may not have one (`BOX_HELD`).
+ */
+export function writtenTransform(w: { transform: string; rotate: string; scale: string; translate: string }): string | undefined {
+    const list: string[] = [];
+    if (w.translate !== 'none') {
+        const [x, y = '0px', z, ...more] = topLevelWords(w.translate.trim());
+        if (x === undefined || more.length > 0 || (z !== undefined && Number.parseFloat(z) !== 0)) return undefined;
+        list.push(`translate(${x}, ${y})`);
+    }
+    if (w.rotate !== 'none') {
+        const m = /^(?:z\s+)?(-?[\d.]+(?:e[-+]?\d+)?)deg$/.exec(w.rotate.trim());
+        if (m === null) return undefined;
+        list.push(`rotate(${m[1]}deg)`);
+    }
+    if (w.scale !== 'none') {
+        const [x, y = x, z = 1, ...more] = w.scale.trim().split(/\s+/).map(Number);
+        if (more.length > 0 || x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y) || z !== 1) return undefined;
+        list.push(`scale(${x}, ${y})`);
+    }
+    if (w.transform !== 'none') list.push(w.transform);
+    return list.join(' ');
+}
+
+/** `outer` after `inner`. */
+function composeAffine(outer: Affine, inner: Affine): Affine {
+    return {
+        a: outer.a * inner.a + outer.c * inner.b,
+        b: outer.b * inner.a + outer.d * inner.b,
+        c: outer.a * inner.c + outer.c * inner.d,
+        d: outer.b * inner.c + outer.d * inner.d,
+        e: outer.a * inner.e + outer.c * inner.f + outer.e,
+        f: outer.b * inner.e + outer.d * inner.f + outer.f,
+    };
+}
+
+/** A transform's matrix about its origin, as a map of the flat frame (`ox`, `oy` in that frame). */
+export function aboutOrigin(m: Affine, ox: number, oy: number): Affine {
+    return composeAffine({ a: 1, b: 0, c: 0, d: 1, e: ox, f: oy }, composeAffine(m, { a: 1, b: 0, c: 0, d: 1, e: -ox, f: -oy }));
+}
+
+/** Where a map puts a point. */
+export function applyAffine(m: Affine, x: number, y: number): readonly [number, number] {
+    return [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f];
+}
+
+/**
+ * What separates one paint from the figure: the map from the flat frame into
+ * the painting box's frame, its uniform scale, and how far its turn moves a
+ * point one pixel from the centre (the turn's chord, `2 sin(θ / 2)`; a scale
+ * and a shift do not count).
+ */
+export type PairFrame = { readonly map: Affine; readonly scale: number; readonly chord: number };
+
+/** A scale this close to 1 is none: a place's stops are shifted, not read strictly. */
+const PAIR_UNSCALED = 0.001;
+
+/**
+ * The frame between a paint and the figure, from the maps of the boxes from
+ * the figure up to, and not including, the painting box, innermost first; or
+ * undefined for a map that collapses the plane (a scale of zero).
+ */
+export function pairFrame(chain: readonly Affine[]): PairFrame | undefined {
+    let map = IDENTITY;
+    for (const t of chain) map = composeAffine(t, map);
+    const scale = Math.sqrt(Math.abs(map.a * map.d - map.b * map.c));
+    if (!(scale > 1e-6)) return undefined;
+    return { map, scale, chord: Math.hypot(map.a / scale - 1, map.b / scale) };
+}
+
+/** A shift a scroll gives (`shiftFor`). */
+export type ScrollShift = { readonly dx: number; readonly dy: number };
+
+/**
+ * A paint in the ink's frame, for one piece of the ink (the shape of
+ * `shiftFor`'s move, per piece): `rect' = c + (rect − mapped) / scale`, where
+ * `c` is the piece's centre and `mapped` where that centre stands in the
+ * painting box's frame. A scroll is taken first: the paint stands where the
+ * scrollers that carry it put it (`paintMove`), and the piece's flat place is
+ * its place with the ink's scroll taken off (`inkMove`). A gradient's place
+ * shifts with the paint at scale 1; on a scaled pair its stops take the strict
+ * read, every stop over the tile's own band, because a stop's distance in the
+ * paint's frame is not one in the ink's.
+ */
+export function paintAtPiece(p: StackPaint, frame: PairFrame, piece: Box, paintMove: ScrollShift, inkMove: ScrollShift): StackPaint {
+    const cx = (piece.left + piece.right) / 2;
+    const cy = (piece.top + piece.bottom) / 2;
+    const [mx, my] = applyAffine(frame.map, cx - inkMove.dx, cy - inkMove.dy);
+    const { scale } = frame;
+    const place = (r: Box): Box => ({
+        left: cx + (r.left + paintMove.dx - mx - inkMove.dx) / scale,
+        right: cx + (r.right + paintMove.dx - mx - inkMove.dx) / scale,
+        top: cy + (r.top + paintMove.dy - my - inkMove.dy) / scale,
+        bottom: cy + (r.bottom + paintMove.dy - my - inkMove.dy) / scale,
+    });
+    const { gradient, ...rest } = p;
+    return {
+        ...rest,
+        rects: p.rects.map(place),
+        ...(gradient === undefined || Math.abs(scale - 1) > PAIR_UNSCALED
+            ? {}
+            : { gradient: shiftPlace(gradient, cx + paintMove.dx - mx - inkMove.dx, cy + paintMove.dy - my - inkMove.dy) }),
+    };
+}
+
+/** The most pieces a turn cuts one stretch of ink into (`turnPieces`). */
+export const TURN_PIECES_CAP = 64;
+
+/**
+ * A stretch of ink cut so a turn moves no point of a piece more than about a
+ * pixel from where the piece's own centre says (`paintAtPiece` moves paints by
+ * that centre and turns nothing): half a piece's side at most `1 / chord` on
+ * each axis, 5.7px at the 10-degree tilt `DRESS_TILT_DEG` allows. No turn, no
+ * cut. Bounded by `TURN_PIECES_CAP`: past it the pieces grow, and the turn
+ * inside one is more than a pixel.
+ */
+export function turnPieces(ink: Box, chord: number): Box[] {
+    if (chord < 1e-4) return [ink];
+    const pitch = 2 / chord;
+    let nx = Math.max(1, Math.ceil((ink.right - ink.left) / pitch));
+    let ny = Math.max(1, Math.ceil((ink.bottom - ink.top) / pitch));
+    if (nx * ny > TURN_PIECES_CAP) {
+        const k = Math.sqrt((nx * ny) / TURN_PIECES_CAP);
+        nx = Math.max(1, Math.floor(nx / k));
+        ny = Math.max(1, Math.floor(ny / k));
+    }
+    if (nx === 1 && ny === 1) return [ink];
+    const out: Box[] = [];
+    const w = (ink.right - ink.left) / nx;
+    const h = (ink.bottom - ink.top) / ny;
+    for (let i = 0; i < nx; i += 1) {
+        for (let j = 0; j < ny; j += 1) {
+            out.push({ left: ink.left + i * w, right: ink.left + (i + 1) * w, top: ink.top + j * h, bottom: ink.top + (j + 1) * h });
+        }
+    }
+    return out;
+}
+
+/** A paint as it stands over one cell: a placed gradient's candidates are the stops that bear on it (`stopsOver`). */
+function atCell(p: StackPaint, cell: Box): StackPaint {
+    return p.gradient === undefined ? p : { ...p, candidates: stopsOver(p.gradient, cell) };
+}
+
+/**
+ * The picture paints (`picture`) that show over any cell of a stretch of ink
+ * (before 8g2, 3a; a border image that is a picture since the binding, the
+ * twelfth critic's BIP): a picture paint covering a cell, with no paint over
+ * it there that hides what is below it. A picture's colours are not read, so
+ * it is named, not judged: the contrast pass's, on the screens it samples,
+ * unless it carries a `fault` of its own, which the caller fails with.
+ */
+export function picturesShowing(paints: readonly StackPaint[], ink: Box): StackPaint[] {
+    const meeting = paints.filter((p) => p.rects.some((r) => meets(ink, r)) && (p.picture === true || p.candidates.some((c) => c.alpha > 0)));
+    if (!meeting.some((p) => p.picture === true)) return [];
+    const out = new Set<StackPaint>();
+    for (const cell of cellsOf(ink, meeting.flatMap((p) => p.rects))) {
+        const over = fromTopmostOpaque(meeting.filter((p) => p.rects.some((r) => covers(r, cell))).map((p) => atCell(p, cell)));
+        for (const p of over) if (p.picture === true) out.add(p);
+    }
+    return [...out];
+}
 
 /** The largest number of ways the gradients over one cell may be chosen before the stack is called unreadable. */
 export const STACK_CHOICES_CAP = 256;
@@ -458,51 +1159,69 @@ const covers = (r: Box, cell: Box): boolean => {
     return x > r.left && x < r.right && y > r.top && y < r.bottom;
 };
 
+/** A paint's candidates less those that composite alike: every colour at alpha 0 is nothing at all, and two equal colours are one (a gradient's repeated stops, its transparent ends, and the absence of a tile that may not paint). */
+function distinct(candidates: readonly Colour[]): Colour[] {
+    const out: Colour[] = [];
+    const keys = new Set<string>();
+    for (const c of candidates) {
+        const key = c.alpha === 0 ? 'none' : `${c.rgb.join(',')}/${c.alpha}`;
+        if (keys.has(key)) continue;
+        keys.add(key);
+        out.push(c);
+    }
+    return out;
+}
+
 /**
  * The worst ground the paints put under one stretch of ink (`ink`, a glyph
  * line's ink box), or `undefined` when every cell reads: the stretch is cut
  * into cells by every paint's edges; on each, the paints that cover it are
- * composited source-over in paint order (`paints` is bottom first; a blend
- * is the probe's to hold to `normal`), a gradient tried at
- * each of its stops, and a cell whose composite is at least `alphaFloor`
- * opaque and reads under `floor` against the ink fails. Under `alphaFloor`
- * the cell's ground is mostly what lies below the stack — the contrast
- * pass's. More than `STACK_CHOICES_CAP` ways of choosing the gradients'
- * stops over one cell is a stack this judge cannot read (`tooMany`).
+ * read from the topmost one that hides what is below it (`fromTopmostOpaque`),
+ * composited source-over in paint order (`paints` is bottom first; a blend is
+ * the probe's to hold to `normal`), a gradient tried at each stop that bears
+ * on the cell (`stopsOver`; every stop where none is placed), and a cell whose
+ * composite is at least `alphaFloor` opaque and reads under `floor` against
+ * the ink fails. Under `alphaFloor` the cell's ground is mostly what lies below
+ * the stack, the contrast pass's. A paint's candidates that composite alike
+ * are tried once (`distinct`), and a cell no blend of whose paints can read
+ * under the floor passes without its stops being enumerated (`everyMixReads`):
+ * neither passes a cell that fails. A picture paint (`picture`) has no colour
+ * here, and is composited as absent. More than `STACK_CHOICES_CAP` ways of
+ * choosing one cell's stops is a stack this judge cannot read: `tooMany`, and
+ * only where no other cell of the ink fails (the twelfth critic's P2: it
+ * returned at the first such cell, and hid a failure found in another).
  */
-export function worstGround(
-    paints: readonly StackPaint[],
-    ink: Box,
-    inkColour: readonly [number, number, number],
-    floor: number,
-    alphaFloor: number,
-): StackVerdict | undefined {
-    const meeting = paints.filter((p) => p.rects.some((r) => meets(ink, r)) && p.candidates.some((c) => c.alpha > 0));
+export function worstGround(paints: readonly StackPaint[], ink: Box, inkColour: readonly [number, number, number], floor: number, alphaFloor: number): StackVerdict | undefined {
+    const meeting = paints.filter((p) => p.picture !== true && p.rects.some((r) => meets(ink, r)) && p.candidates.some((c) => c.alpha > 0));
     if (meeting.length === 0) return undefined;
-    let worst: StackVerdict | undefined;
+    let worst: { ground: Colour; ratio: number; paints: string[] } | undefined;
+    let tooMany = 0;
     const seen = new Set<string>();
     for (const cell of cellsOf(ink, meeting.flatMap((p) => p.rects))) {
-        const over = meeting.filter((p) => p.rects.some((r) => covers(r, cell)));
-        const key = over.map((p) => meeting.indexOf(p)).join(',');
+        const over = fromTopmostOpaque(meeting.filter((p) => p.rects.some((r) => covers(r, cell))).map((p) => atCell(p, cell)));
+        const key = over.map((p) => `${p.what}/${p.candidates.length}/${p.candidates.map((c) => `${c.rgb.join(',')}/${c.alpha}`).join(';')}`).join('|');
         if (over.length === 0 || seen.has(key)) continue;
         seen.add(key);
-        const choices = over.reduce((n, p) => n * Math.max(1, p.candidates.length), 1);
-        if (choices > STACK_CHOICES_CAP) return { tooMany: choices };
+        if (everyMixReads(over.map((p) => p.candidates), inkColour, floor, alphaFloor)) continue;
+        const candidates = over.map((p) => distinct(p.candidates));
+        const choices = candidates.reduce((n, c) => n * Math.max(1, c.length), 1);
+        if (choices > STACK_CHOICES_CAP) {
+            tooMany = Math.max(tooMany, choices);
+            continue;
+        }
         for (let k = 0; k < choices; k += 1) {
             let rest = k;
-            const layers = over.map((p) => {
-                const n = Math.max(1, p.candidates.length);
-                const c = p.candidates[rest % n]!;
+            const layers = candidates.map((c) => {
+                const n = Math.max(1, c.length);
+                const one = c[rest % n]!;
                 rest = Math.floor(rest / n);
-                return c;
+                return one;
             });
             const ground = composite(layers);
             if (ground.alpha < alphaFloor) continue;
             const ratio = contrastRatio({ r: ground.rgb[0], g: ground.rgb[1], b: ground.rgb[2] }, { r: inkColour[0], g: inkColour[1], b: inkColour[2] });
-            if (ratio < floor && (worst === undefined || ('ratio' in worst && ratio < worst.ratio))) {
-                worst = { ground, ratio, paints: [...over].reverse().map((p) => p.what) };
-            }
+            if (ratio < floor && (worst === undefined || ratio < worst.ratio)) worst = { ground, ratio, paints: [...over].reverse().map((p) => p.what) };
         }
     }
-    return worst;
+    return worst ?? (tooMany > 0 ? { tooMany } : undefined);
 }
