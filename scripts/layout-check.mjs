@@ -3023,7 +3023,7 @@ function geometryRecordDiffers(walked, again) {
     const verdictOf = (report) => {
         if (report === undefined || report === null) return report;
         // 1a's own time is a clock too (before 8g2), and so is `coveredBy`'s (7a), its end-state read's and the dress rule's keyframe-offset read's.
-        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined, triggerCheck: undefined, walkMs: undefined };
+        const untimed = { ...report, coverMs: undefined, coveredByMs: undefined, coverEndMs: undefined, dressSeekMs: undefined, reachMs: undefined, reachSeekMs: undefined, reachSeekNames: undefined, outOfFlowMs: undefined, triggerCheck: undefined, groundCheck: undefined, walkMs: undefined };
         return untimed.faces === undefined || untimed.faces === null ? untimed : { ...untimed, faces: { ...untimed.faces, waitedMs: undefined } };
     };
     const reportOf = (g) => (g.report === undefined ? '' : JSON.stringify(verdictOf(g.report)));
@@ -4081,7 +4081,7 @@ try {
         }
         if (g.report?.reachByClass !== undefined) {
             // Every pass whose page ran 1b ran its containing-block check too (the worn-only pass's report is its own job's, and runs neither).
-            outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0, trigger: g.report.triggerCheck });
+            outOfFlowGeometry.push({ pass: g.key, check: g.report.outOfFlowCheck, ms: g.report.outOfFlowMs ?? 0, trigger: g.report.triggerCheck, ground: g.report.groundCheck });
             reachGeometry.push({
                 pass: g.key,
                 byClass: g.report.reachByClass,
@@ -4344,6 +4344,24 @@ try {
         console.log(
             `    1c's trigger held to a planted mover (the-trigger-fires-on-a-planted-mover): ` +
                 (outOfFlowGeometry.length === 0 ? 'no page ran the check' : `${outOfFlowGeometry.length - unrun.length} of ${outOfFlowGeometry.length} page(s) counted ${outOfFlowGeometry[0].trigger?.fired ?? 0} meet(s) of a box moved over a money node`) +
+                ` · ${ms.toFixed(1)}ms over the passes`,
+        );
+    }
+    {
+        /*
+         * `the-ground-read-fails-a-planted-ground` (the seventeenth review's item 1): every page that ran 1b's check also put the real
+         * ground read through planted boxes; a wrong answer is already one of that pass's failures, and a page with no record of the
+         * check is a failure here, so a read that answers nothing cannot read as a clean run.
+         */
+        const unrun = outOfFlowGeometry.filter((o) => o.ground === undefined || typeof o.ground.cases !== 'number' || o.ground.cases === 0).map((o) => o.pass);
+        const ms = outOfFlowGeometry.reduce((n, o) => n + (o.ground?.ms ?? 0), 0);
+        if (unrun.length > 0) {
+            failed = true;
+            console.error(`✗ the-ground-read-fails-a-planted-ground: no planted case read on the page of ${unrun.join(', ')}`);
+        }
+        console.log(
+            `    3a's ground read held to planted grounds (the-ground-read-fails-a-planted-ground): ` +
+                (outOfFlowGeometry.length === 0 ? 'no page ran the check' : `${outOfFlowGeometry.length - unrun.length} of ${outOfFlowGeometry.length} page(s) read ${outOfFlowGeometry[0].ground?.cases ?? 0} planted case(s)`) +
                 ` · ${ms.toFixed(1)}ms over the passes`,
         );
     }

@@ -7256,6 +7256,71 @@ function groundVerdict(screen: string, label: string, el: HTMLElement, figure: H
     }
 }
 
+/**
+ * **`the-ground-read-fails-a-planted-ground`** (the seventeenth review's item
+ * 1; D-2026-11-09-05): the clean tree's run reads "0 failed", and so does a
+ * `groundWalkRead` that answers nothing or reads no ink (the critic's M1 and
+ * M3, both exit 0, the owe asking only that an element was counted). Once a
+ * page, the real read runs over planted boxes, each hand-built and removed
+ * before this returns, under the real hold (`withFramesUpright`):
+ * - a figure on a ground of its own ink must fail;
+ * - a figure with a band of its ink elsewhere on its box must pass, or a read
+ *   that fails everything would read as a live one;
+ * - the same figure carried onto that band by a transform on a box between
+ *   them must fail (the seventeenth review's B1, UP2d);
+ * - a figure under a 10-degree tilt, on a band its tilted box paints, its own
+ *   box carrying a no-op turn, must fail: the tilt turns band and figure
+ *   together, so it is not folded into the figure's place (the same round's
+ *   NEST).
+ * Nothing here is painted: the boxes live inside one synchronous task, on a
+ * fixed root at the viewport's corner (`visibility` stays visible, which the
+ * walk asks).
+ */
+function groundSelfCheck(): { cases: number; ms: number; problems: string[] } {
+    const t0 = performance.now();
+    const INK = 'rgb(20, 23, 26)';
+    const FIGURE_AT = 'position: absolute; top: 30px; right: 0px; width: 60px; height: 20px; margin: 0px; padding: 0px';
+    const band = (top: number, height: number): string => `background: linear-gradient(${INK}, ${INK}) 0px ${top}px / 100% ${height}px no-repeat`;
+    const cases: readonly { name: string; box: string; carrier: string; fails: boolean }[] = [
+        { name: 'a figure on a ground of its own ink', box: `background: ${INK}`, carrier: '', fails: true },
+        { name: 'a figure with a band of its ink off it', box: band(70, 20), carrier: '', fails: false },
+        { name: 'a figure a transform carries onto that band', box: band(70, 20), carrier: 'transform: translateY(45px)', fails: true },
+        { name: 'a figure on a band of a box tilted above it', box: `${band(36, 8)}; transform: rotate(10deg)`, carrier: 'rotate: 0.01deg', fails: true },
+    ];
+    const kept = { own: ownPaintsSeen, above: abovePaintsSeen };
+    const stall = document.createElement('div');
+    stall.style.cssText = `position: fixed; top: 0px; left: 0px; width: 340px; margin: 0px; padding: 0px; visibility: visible; background: rgb(255, 255, 255); color: ${INK}; font: 16px/20px monospace`;
+    const problems: string[] = [];
+    try {
+        document.body.append(stall);
+        for (const c of cases) {
+            const box = document.createElement('div');
+            box.style.cssText = `position: relative; width: 340px; height: 100px; margin: 0px; padding: 0px; ${c.box}`;
+            const carrier = document.createElement('div');
+            carrier.style.cssText = `${FIGURE_AT}; ${c.carrier}`;
+            const figure = document.createElement('div');
+            figure.style.cssText = 'width: 60px; height: 20px; margin: 0px; padding: 0px';
+            figure.textContent = '1234';
+            carrier.append(figure);
+            box.append(carrier);
+            stall.append(box);
+            ownPaintsSeen = new Map();
+            abovePaintsSeen = new Map();
+            const read = withFramesUpright([figure, carrier, box, stall], () => groundWalkRead(figure, getComputedStyle(figure), stall, new Map()));
+            const failedOnGround = read.fault?.includes('the ground under its glyphs') ?? false;
+            if (failedOnGround !== c.fails) problems.push(`${c.name} ${c.fails ? 'must fail the ground read, and it read' : 'must pass the ground read, and it read'} ${read.fault === undefined ? 'nothing wrong' : `"${read.fault.slice(0, 160)}"`}`);
+            box.remove();
+        }
+    } catch (e) {
+        problems.push(`the self-check threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+    } finally {
+        ownPaintsSeen = kept.own;
+        abovePaintsSeen = kept.above;
+        stall.remove();
+    }
+    return { cases: cases.length, ms: performance.now() - t0, problems };
+}
+
 /** Why a decoration line is drawn across or over the text, or undefined. */
 function decorationFault(cs: CSSStyleDeclaration): string | undefined {
     const lines = cs.textDecorationLine.split(/\s+/);
@@ -15589,6 +15654,8 @@ const outOfFlowMs = performance.now() - outOfFlowStart;
 for (const detail of outOfFlowCheck.disagree) failures.push({ screen: 'probe page', theme: '-', check: 'holds-out-of-flow-agrees-with-this-chrome', detail });
 const triggerCheck = triggerSelfCheck();
 if (triggerCheck.problem !== undefined) failures.push({ screen: 'probe page', theme: '-', check: 'the-trigger-fires-on-a-planted-mover', detail: triggerCheck.problem });
+const groundCheck = groundSelfCheck();
+for (const detail of groundCheck.problems) failures.push({ screen: 'probe page', theme: '-', check: 'the-ground-read-fails-a-planted-ground', detail });
 const verdict = {
     viewport: window.innerWidth,
     reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -15709,6 +15776,8 @@ const verdict = {
     outOfFlowMs,
     /* `the-trigger-fires-on-a-planted-mover`: the meets the real trigger counted over a planted box, whether it named the node (a failure otherwise), and its time (a clock). */
     triggerCheck,
+    /* `the-ground-read-fails-a-planted-ground`: the planted cases the real ground read went through, what each read wrongly (also failures), and its time (a clock). */
+    groundCheck,
     reachSeekMs,
     reachSeekNames,
     /* The dress rule's keyframe-offset read (`offsetDressFaults`): its counts, and its own time (a clock). */
