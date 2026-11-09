@@ -15,7 +15,6 @@ import {
     colourTokens,
     composite,
     cellsOf,
-    cutsBelowScroller,
     everyMixReads,
     fromTopmostOpaque,
     hidesBelow,
@@ -112,7 +111,7 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
         ];
         expect(cellsOf(GLYPHS, paints.flatMap((p) => p.rects))).toHaveLength(2);
         const v = worstGround(paints, GLYPHS, INK, 3, 0.5);
-        expect(v !== undefined && 'paints' in v ? v.paints : []).toEqual(['dark half', 'card']);
+        expect(v !== undefined && 'paints' in v ? v.paints : []).toEqual(['dark half']);
         // The same patch over the whole stretch hides the dark half: it reads.
         expect(worstGround([paints[0]!, paints[1]!, { ...paints[2]!, rects: OVER }], GLYPHS, INK, 3, 0.5)).toBeUndefined();
     });
@@ -120,8 +119,8 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
     it('tries a gradient at every stop, and refuses a stack of too many choices', () => {
         const gradient = { what: 'gradient', candidates: [CREAM, ink(0.9)], rects: OVER };
         expect(worstGround([{ what: 'card', candidates: [CREAM], rects: OVER }, gradient], GLYPHS, INK, 3, 0.5)).toBeDefined();
-        const many = Array.from({ length: 9 }, (_, i) => ({ what: `g${i}`, candidates: [CREAM, c(250, 250, 250)], rects: OVER }));
-        expect(worstGround(many, GLYPHS, INK, 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
+        const many = Array.from({ length: 9 }, (_, i) => ({ what: `g${i}`, candidates: [c(0, 0, 0, 0.3), c(255, 255, 255, 0.3)], rects: OVER }));
+        expect(worstGround([{ what: 'card', candidates: [c(119, 119, 119)], rects: OVER }, ...many], GLYPHS, [90, 90, 90], 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
         expect(2 ** 9).toBeGreaterThan(STACK_CHOICES_CAP);
     });
 
@@ -255,7 +254,7 @@ describe('a-money-figure-is-never-misdressed: the ground stack', () => {
 
 /**
  * 3a's pure half (before 8g2, item 3a; `the-ground-walk-reaches-the-stall`,
- * report-only): the walk to the stall, a box that paints nothing skipped,
+ * bound since the binding, D-2026-10-28-01): the walk to the stall, a box that paints nothing skipped,
  * each cell read from its topmost opaque paint, a box above's pictures named.
  * The critic's plants given as the numbers the probe hands the judge: N2 (an
  * opaque white clipped to its content box, the figure moved off it onto a
@@ -288,15 +287,14 @@ describe('the-ground-walk-reaches-the-stall: the walk to the stall', () => {
     });
 
     it('reads a cell from its topmost opaque paint, so the stall under a card adds no choices', () => {
-        // Nine gradients of the stall's own under an opaque card: 2⁹ ways, which
-        // the bound judge refuses; read from the card up, one.
+        // Nine gradients of the stall's own under an opaque card: 2⁹ ways as
+        // written; read from the card up, one.
         const stall = Array.from({ length: 9 }, (_, i) => ({ what: `stall gradient ${i}`, candidates: [CREAM, ink(1)], rects: OVER }));
         const paints: StackPaint[] = [...stall, { what: 'card', candidates: [CREAM], rects: OVER }];
-        expect(worstGround(paints, GLYPHS, INK, 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
-        expect(worstGround(paints, GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toBeUndefined();
+        expect(worstGround(paints, GLYPHS, INK, 3, 0.5)).toBeUndefined();
         // A card that does not cover the glyphs hides nothing there.
         const half = [...stall.slice(0, 1), { what: 'card', candidates: [CREAM], rects: [box(60, 0, 200, 100)] }];
-        const v = worstGround(half, GLYPHS, INK, 3, 0.5, { fromOpaque: true });
+        const v = worstGround(half, GLYPHS, INK, 3, 0.5);
         expect(v !== undefined && 'paints' in v ? v.paints : []).toEqual(['stall gradient 0']);
     });
 
@@ -306,30 +304,27 @@ describe('the-ground-walk-reaches-the-stall: the walk to the stall', () => {
         // eight such layers fit under the cap.
         const nothing = c(0, 0, 0, 0);
         const layer = (i: number) => ({ what: `bracket ${i}`, candidates: [ink(1), ink(1), c(9, 9, 9, 0), nothing], rects: OVER });
-        expect(worstGround(Array.from({ length: 9 }, (_, i) => layer(i)), GLYPHS, INK, 3, 0.5)).toEqual({ tooMany: 4 ** 9 });
-        expect(worstGround(Array.from({ length: 9 }, (_, i) => layer(i)), GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toEqual({ tooMany: 2 ** 9 });
-        const v = worstGround([{ what: 'card', candidates: [CREAM], rects: OVER }, ...Array.from({ length: 8 }, (_, i) => layer(i))], GLYPHS, INK, 3, 0.5, { fromOpaque: true });
+        expect(worstGround(Array.from({ length: 9 }, (_, i) => layer(i)), GLYPHS, INK, 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
+        const v = worstGround([{ what: 'card', candidates: [CREAM], rects: OVER }, ...Array.from({ length: 8 }, (_, i) => layer(i))], GLYPHS, INK, 3, 0.5);
         expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
     });
 
     it('passes a cell no blend of whose paints can read under the floor without enumerating its stops', () => {
         const light = Array.from({ length: 9 }, (_, i) => ({ what: `wash ${i}`, candidates: [CREAM, WHITE, c(250, 245, 235, 0.5)], rects: OVER }));
-        expect(worstGround(light, GLYPHS, INK, 3, 0.5)).toEqual({ tooMany: 3 ** 9 });
-        expect(worstGround(light, GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toBeUndefined();
+        expect(worstGround(light, GLYPHS, INK, 3, 0.5)).toBeUndefined();
     });
 
     it('fails the critic’s N2: an opaque white clipped to its content box does not hide the dark ground the figure was moved onto', () => {
         // `.item-p`'s dark ground over the whole row, `.item-a`'s white over its
         // content box only (x 60–200), the glyphs moved 50px left of it.
         const paints: StackPaint[] = [
-            { what: "span.item-p's ground", candidates: [DARK], rects: OVER, source: 'past the bound stop' },
+            { what: "span.item-p's ground", candidates: [DARK], rects: OVER },
             { what: "span.item-a's ground", candidates: [WHITE], rects: [box(60, 0, 200, 100)] },
         ];
-        const v = worstGround(paints, GLYPHS, INK, 3, 0.5, { fromOpaque: true });
+        const v = worstGround(paints, GLYPHS, INK, 3, 0.5);
         expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
-        expect(v !== undefined && 'sources' in v ? v.sources : []).toEqual(['past the bound stop']);
         // Where the white does cover the glyphs, it hides the dark ground.
-        expect(worstGround([paints[0]!, { ...paints[1]!, rects: OVER }], GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toBeUndefined();
+        expect(worstGround([paints[0]!, { ...paints[1]!, rects: OVER }], GLYPHS, INK, 3, 0.5)).toBeUndefined();
     });
 
     it('fails the critic’s V and DC once the box that paints nothing is left out of the walk', () => {
@@ -337,62 +332,78 @@ describe('the-ground-walk-reaches-the-stall: the walk to the stall', () => {
         // is not there, and the dark ground above it is the figure's.
         const skipped = { what: "span.item-a's ground", candidates: [WHITE], rects: OVER };
         const dark = { what: "span.item-p's ground", candidates: [DARK], rects: OVER };
-        expect(worstGround([dark, skipped], GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toBeUndefined();
-        const v = worstGround([dark], GLYPHS, INK, 3, 0.5, { fromOpaque: true });
+        expect(worstGround([dark, skipped], GLYPHS, INK, 3, 0.5)).toBeUndefined();
+        const v = worstGround([dark], GLYPHS, INK, 3, 0.5);
         expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
     });
 
-    it('cuts an ink by the clips below the nearest scroller, and by none at or above it', () => {
-        const at = (b: ReturnType<typeof box>) => () => b;
-        const walk = [
-            { clips: true, scrolls: false, box: at(box(0, 0, 50, 50)) },
-            { clips: false, scrolls: false, box: at(box(0, 0, 60, 60)) },
-            { clips: true, scrolls: true, box: at(box(0, 0, 70, 70)) },
-            { clips: true, scrolls: false, box: at(box(0, 0, 80, 80)) },
-        ];
-        expect(cutsBelowScroller(walk)).toEqual([box(0, 0, 50, 50)]);
-        expect(cutsBelowScroller(walk.slice(1))).toEqual([]);
-        expect(cutsBelowScroller([walk[0]!, walk[3]!])).toEqual([box(0, 0, 50, 50), box(0, 0, 80, 80)]);
-    });
-
     it('splits an ink by the scrollers above it, each part read where a scroll brings it into view', () => {
-        // An ink 10–110 × 10–40 in a scroller (the walk's link 2) whose view is
-        // x 0–60, inside another (link 5) whose view is y 0–30.
+        // An ink 10–110 × 10–40 in a scroller (numbered 2) whose view is
+        // x 0–60, inside another (numbered 5) whose view is y 0–30.
+        const both = { sx: true, sy: true, cx: true, cy: true };
         const parts = byScroller(GLYPHS, [
-            { at: 2, box: box(0, 0, 60, 100) },
-            { at: 5, box: box(0, 0, 200, 30) },
+            { at: 2, box: box(0, 0, 60, 100), ...both },
+            { at: 5, box: box(0, 0, 200, 30), ...both },
         ]);
         expect(parts).toEqual([
             // In both views: as it stands.
             { part: box(10, 10, 60, 30), moves: [] },
             // In the inner view, below the outer one: scrolled 10px up.
-            { part: box(10, 20, 60, 30), moves: [{ below: 5, dx: 0, dy: -10 }] },
+            { part: box(10, 20, 60, 30), moves: [{ by: 5, dx: 0, dy: -10 }] },
             // Past the inner view's right edge: scrolled 50px left into it, and
             // its lower 10px then up into the outer view.
-            { part: box(10, 10, 60, 30), moves: [{ below: 2, dx: -50, dy: 0 }] },
-            { part: box(10, 20, 60, 30), moves: [{ below: 2, dx: -50, dy: 0 }, { below: 5, dx: 0, dy: -10 }] },
+            { part: box(10, 10, 60, 30), moves: [{ by: 2, dx: -50, dy: 0 }] },
+            { part: box(10, 20, 60, 30), moves: [{ by: 2, dx: -50, dy: 0 }, { by: 5, dx: 0, dy: -10 }] },
         ]);
-        // A paint under the inner scroller moves with both scrolls, one between
-        // the two with the outer alone, one at or above the outer with neither.
-        const moves = [{ below: 2, dx: -50, dy: 0 }, { below: 5, dx: 0, dy: -10 }];
-        expect(shiftFor(1, moves)).toEqual({ dx: -50, dy: -10 });
-        expect(shiftFor(2, moves)).toEqual({ dx: 0, dy: -10 });
-        expect(shiftFor(5, moves)).toEqual({ dx: 0, dy: 0 });
+        // A paint moves with the scrollers that carry it, and no other.
+        const moves = [{ by: 2, dx: -50, dy: 0 }, { by: 5, dx: 0, dy: -10 }];
+        expect(shiftFor(new Set([2, 5]), moves)).toEqual({ dx: -50, dy: -10 });
+        expect(shiftFor(new Set([5]), moves)).toEqual({ dx: 0, dy: -10 });
+        expect(shiftFor(new Set(), moves)).toEqual({ dx: 0, dy: 0 });
         // Wholly below the view: brought up to its bottom edge.
-        expect(byScroller(box(10, 300, 110, 330), [{ at: 0, box: box(0, 0, 400, 100) }])).toEqual([{ part: box(10, 70, 110, 100), moves: [{ below: 0, dx: 0, dy: -230 }] }]);
+        expect(byScroller(box(10, 300, 110, 330), [{ at: 0, box: box(0, 0, 400, 100), ...both }])).toEqual([{ part: box(10, 70, 110, 100), moves: [{ by: 0, dx: 0, dy: -230 }] }]);
         expect(byScroller(GLYPHS, [])).toEqual([{ part: GLYPHS, moves: [] }]);
+    });
+
+    it('cuts an ink on an axis a scroller clips and cannot scroll, and never moves it along that axis (overflow-x: hidden beside overflow-y: auto)', () => {
+        const yOnly = { sx: false, sy: true, cx: true, cy: true };
+        // The view is x 0–60: the part past it is gone, the rest as it stands.
+        expect(byScroller(GLYPHS, [{ at: 0, box: box(0, 0, 60, 100), ...yOnly }])).toEqual([{ part: box(10, 10, 60, 40), moves: [] }]);
+        // Below the view, it is still scrolled up: that axis scrolls.
+        expect(byScroller(box(10, 300, 50, 330), [{ at: 0, box: box(0, 0, 60, 100), ...yOnly }])).toEqual([{ part: box(10, 70, 50, 100), moves: [{ by: 0, dx: 0, dy: -230 }] }]);
     });
 
     it('names a picture of a box above only where it shows, and composites it as absent', () => {
         const rain: StackPaint = { what: "div.stall's picture", candidates: [], rects: OVER, picture: true };
         const ground = { what: "div.stall's ground", candidates: [CREAM], rects: OVER };
         const card = { what: 'card', candidates: [WHITE], rects: [box(60, 0, 200, 100)] };
-        expect(picturesShowing([ground, rain, card], GLYPHS)).toEqual(["div.stall's picture"]);
+        expect(picturesShowing([ground, rain, card], GLYPHS).map((p) => p.what)).toEqual(["div.stall's picture"]);
         // Under an opaque card that covers the glyphs, it shows nowhere.
         expect(picturesShowing([ground, rain, { ...card, rects: OVER }], GLYPHS)).toEqual([]);
         // The judge reads the ground as if the picture were not there.
-        expect(worstGround([ground, rain], GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toBeUndefined();
-        expect(worstGround([{ ...ground, candidates: [DARK] }, rain], GLYPHS, INK, 3, 0.5, { fromOpaque: true })).toBeDefined();
+        expect(worstGround([ground, rain], GLYPHS, INK, 3, 0.5)).toBeUndefined();
+        expect(worstGround([{ ...ground, candidates: [DARK] }, rain], GLYPHS, INK, 3, 0.5)).toBeDefined();
+    });
+
+    it('holds a picture that fails to where it shows: the twelfth critic’s BIP, a filled border image under opaque cards', () => {
+        const border: StackPaint = { what: "div.items's border image", candidates: [], rects: OVER, picture: true, fault: 'a border image that is a picture' };
+        const card = { what: 'card', candidates: [WHITE], rects: OVER };
+        // Under the card it shows nowhere, and fails nothing.
+        expect(picturesShowing([border, card], GLYPHS)).toEqual([]);
+        // On bare ground, it shows and carries its sentence.
+        expect(picturesShowing([border], GLYPHS).map((p) => p.fault)).toEqual(['a border image that is a picture']);
+        // Over only half the ink, a card leaves the other half showing.
+        expect(picturesShowing([border, { ...card, rects: [box(0, 0, 60, 100)] }], GLYPHS).map((p) => p.fault)).toEqual(['a border image that is a picture']);
+    });
+
+    it('keeps scanning past a cell over the cap: a failure in another cell of the ink is the verdict (the twelfth critic’s P2)', () => {
+        const many = Array.from({ length: 9 }, (_, i) => ({ what: `g${i}`, candidates: [c(0, 0, 0, 0.3), c(255, 255, 255, 0.3)], rects: [box(0, 0, 60, 100)] }));
+        const cover = { what: 'dark half', candidates: [ink(1)], rects: [box(60, 0, 200, 100)] };
+        const card = { what: 'card', candidates: [c(119, 119, 119)], rects: OVER };
+        const v = worstGround([card, ...many, cover], GLYPHS, [74, 52, 30], 3, 0.5);
+        expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
+        // No other cell failing, the stack over the cap is the verdict.
+        expect(worstGround([card, ...many], box(10, 10, 50, 40), [90, 90, 90], 3, 0.5)).toEqual({ tooMany: 2 ** 9 });
     });
 });
 
@@ -544,5 +555,30 @@ describe('the-ground-walk-reaches-the-stall: where a tile stands and where a sto
         expect(stopsOver(wrap, box(8, 20, 10, 30))).toEqual([B, C]);
         // Inside the tile, its start.
         expect(stopsOver(wrap, box(12, 20, 20, 30))).toEqual([A, B]);
+    });
+
+    it('judges a cell by the stops that bear on it: a ring where it is not, and the wrong way round', () => {
+        const dark = c(158, 70, 32);
+        const card = c(240, 220, 190);
+        const ring = placed('radial-gradient(circle at 9px 50%, rgb(1, 1, 1) 2.2px, rgb(2, 2, 2) 3px, rgb(2, 2, 2) 4.4px, rgb(3, 3, 3) 5.4px)', 160, 40, [card, dark, dark, card]);
+        const paint: StackPaint = { what: 'its gradient', candidates: [card, dark, dark, card], rects: [box(0, 0, 160, 40)], gradient: ring };
+        const inkOn: [number, number, number] = [58, 42, 24];
+        // Not under the figure: the ring's stop is proved elsewhere.
+        expect(worstGround([paint], box(22, 10, 150, 30), inkOn, 3, 0.5)).toBeUndefined();
+        // Read as every stop anywhere (no place): the stricter read fails it.
+        expect(worstGround([{ ...paint, gradient: undefined }], box(22, 10, 150, 30), inkOn, 3, 0.5)).toBeDefined();
+        // A figure standing over the ring is red.
+        expect(worstGround([paint], box(10, 16, 150, 24), inkOn, 3, 0.5)).toBeDefined();
+        // A linear stop that does lie under the figure is red.
+        const down = placed('linear-gradient(rgb(1, 1, 1) 0%, rgb(2, 2, 2) 40%, rgb(3, 3, 3) 60%, rgb(4, 4, 4) 100%)', 160, 100, [card, dark, dark, card]);
+        const band: StackPaint = { what: 'its gradient', candidates: [card, dark, dark, card], rects: [box(0, 0, 160, 100)], gradient: down };
+        expect(worstGround([band], box(10, 45, 150, 55), inkOn, 3, 0.5)).toBeDefined();
+        expect(worstGround([band], box(10, 2, 150, 10), inkOn, 3, 0.5)).toBeDefined(); // The dark stop bears on the ramp up to it.
+        // A lone opaque tile placed under the figure hides the ground only where it stands.
+        const tile = { what: 'a white tile', candidates: [c(255, 255, 255)], rects: [box(0, 0, 20, 40)] };
+        const ground = { what: 'its ground', candidates: [c(58, 42, 24)], rects: [box(0, 0, 160, 40)] };
+        const v = worstGround([ground, tile], box(10, 10, 60, 30), inkOn, 3, 0.5);
+        expect(v !== undefined && 'ratio' in v ? v.ratio : 0).toBeCloseTo(1, 6);
+        expect(worstGround([ground, tile], box(2, 10, 18, 30), inkOn, 3, 0.5)).toBeUndefined();
     });
 });

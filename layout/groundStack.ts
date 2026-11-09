@@ -3,7 +3,7 @@
  * `a-money-figure-is-never-misdressed`, the critic's P1-1 and P1-2 on round
  * 4). The pure half: reading the colours a computed value writes, putting
  * paints together the way a browser does, and judging what lands under the
- * glyphs. The probe (`groundStackFault` in `layout/probe.ts`) reads the
+ * glyphs. The probe (`groundWalkRead` in `layout/probe.ts`) reads the
  * paints off the page, resolves every colour through the engine and hands
  * them here.
  *
@@ -785,20 +785,24 @@ export function mostOpaque(paints: readonly (readonly Colour[])[]): number {
 
 /**
  * One paint as the judge reads it: its name, its candidate colours (one, or a
- * gradient's stops) and where it paints. `source` names, for a report, why a
- * paint is one an earlier read did not take (before 8g2, 3a: a box above's
- * gradient, a box past where the walk used to stop); `picture` marks a paint
- * whose colours no read here takes (a `url()` layer of a box above), which
- * the judge composites as absent and `picturesShowing` names.
+ * gradient's stops), where it paints and, for a gradient whose every value was
+ * read, where its stops fall (`gradient`: only the stops that bear on a cell
+ * are candidates there, `stopsOver`). `picture` marks a paint whose colours no
+ * read here takes (a `url()` layer, a box this rule cannot read), which the
+ * judge composites as absent and `picturesShowing` names where it shows; `fault`
+ * is the sentence a picture fails with where it shows (the figure's own
+ * background picture, a border image that is one, a box above that cannot be
+ * read), and a picture with none is named and left to the contrast pass (a box
+ * above's background picture).
  */
-export type StackPaint = { what: string; candidates: readonly Colour[]; rects: readonly Box[]; source?: string; picture?: boolean };
+export type StackPaint = { what: string; candidates: readonly Colour[]; rects: readonly Box[]; gradient?: GradientPlace; picture?: boolean; fault?: string };
 
-/** What the judge found under a stretch of ink: the composite, its ratio and the paints in it, top first, with the `source` of each that has one. */
-export type StackVerdict = { ground: Colour; ratio: number; paints: string[]; sources: string[] } | { tooMany: number };
+/** What the judge found under a stretch of ink: the composite, its ratio and the paints in it, top first; or how many ways of choosing its stops one cell had, over the cap, where no cell failed. */
+export type StackVerdict = { ground: Colour; ratio: number; paints: string[] } | { tooMany: number };
 
 /**
  * The alpha at which a paint is taken to hide everything below it, the walk's
- * own threshold for an opaque background colour (`groundStackFault`'s
+ * own threshold for an opaque background colour (the read's before the binding,
  * `bg.alpha >= 0.999`).
  */
 export const OPAQUE_ALPHA = 0.999;
@@ -833,26 +837,6 @@ export function paintsNothing(visibility: string, display: string): 'invisible' 
     return visibility === 'visible' ? undefined : 'invisible';
 }
 
-/**
- * The boxes that cut what a stretch of ink shows, from the walk bottom first
- * (before 8g2, 3a): a box that clips what it holds (`clips`) cuts at its
- * padding box (`box`), below the nearest box that scrolls (`scrolls`, an
- * `overflow` of `auto` or `scroll` on either axis). A scroller carries its
- * content past its edges and back, so neither it nor a clip above it cuts
- * an ink it can bring into view (`byScroller` says what that ink stands on):
- * the walk that ran past a scroller and cut there would read none of a long
- * shop's rows below the fold, which the walk that stopped at a card's
- * opaque ground read.
- */
-export function cutsBelowScroller(walk: readonly { clips: boolean; scrolls: boolean; box: () => Box }[]): Box[] {
-    const out: Box[] = [];
-    for (const link of walk) {
-        if (link.scrolls) break;
-        if (link.clips) out.push(link.box());
-    }
-    return out;
-}
-
 /** The part of `a` inside `b`, or undefined when it is under half a pixel either way. */
 function within(a: Box, b: Box): Box | undefined {
     const i = { left: Math.max(a.left, b.left), right: Math.min(a.right, b.right), top: Math.max(a.top, b.top), bottom: Math.min(a.bottom, b.bottom) };
@@ -869,34 +853,53 @@ function around(outer: Box, inner: Box): Box[] {
     ].filter((b) => b.right - b.left > 0.5 && b.bottom - b.top > 0.5);
 }
 
-/** A scroll this read takes for a part of an ink: the paints of the boxes under the scroller at `below` on the walk move by (`dx`, `dy`) with it. */
-export type ScrollMove = { below: number; dx: number; dy: number };
+/** A scroll this read takes for a part of an ink: the paints the scroller numbered `by` carries move by (`dx`, `dy`) with it. */
+export type ScrollMove = { by: number; dx: number; dy: number };
 
 /**
- * A stretch of ink split by the scrollers above it (before 8g2, 3a), each
- * part where it stands once scrolled into view: a part inside every
- * scroller's padding box as it stands, and a part outside one moved into
- * its view by the least scroll that brings it there (`moves`) — the paints
- * of the boxes under that scroller (before `below` on the walk) moving with
- * it, the scroller's own and every box's above it standing still, so a
- * row below the fold is read over the stall's own paints where it will
- * stand, and never over the scroller's edge, which no content stands over.
- * `scrollers` are the walk's scrollers, innermost first, each with its index
- * and padding box. One scroll is taken for each part, the one to the
- * nearest edge of the view; a part larger than the view keeps what fits.
+ * A stretch of ink split by the scrollers that carry it, innermost first
+ * (before 8g2, 3a), each part where it stands once scrolled into view: a part
+ * inside every scroller's view as it stands, and a part outside one moved
+ * into its view by the least scroll that brings it there (`moves`) — the
+ * paints that scroller carries moving with it, the scroller's own and every
+ * paint it does not carry standing still, so a row below the fold is read
+ * over the stall's own paints where it will stand, and never over the
+ * scroller's edge, which no content stands over. A scroller moves a part only
+ * on an axis it scrolls (`sx`, `sy`); on an axis it clips and cannot scroll
+ * (`overflow-x: hidden` beside `overflow-y: auto`) it cuts, as any clip does.
+ * `at` numbers the scroller (`ScrollMove`'s `by`). One scroll is taken for
+ * each part, the one to the nearest edge of the view; a part larger than the
+ * view keeps what fits.
  */
-export function byScroller(ink: Box, scrollers: readonly { at: number; box: Box }[]): { part: Box; moves: ScrollMove[] }[] {
+export function byScroller(
+    ink: Box,
+    scrollers: readonly { at: number; box: Box; sx: boolean; sy: boolean; cx: boolean; cy: boolean }[],
+): { part: Box; moves: ScrollMove[] }[] {
     let pieces: { part: Box; moves: ScrollMove[] }[] = [{ part: ink, moves: [] }];
     for (const s of scrollers) {
+        const view: Box = {
+            left: s.sx ? s.box.left : -Infinity,
+            right: s.sx ? s.box.right : Infinity,
+            top: s.sy ? s.box.top : -Infinity,
+            bottom: s.sy ? s.box.bottom : Infinity,
+        };
+        const cut: Box = {
+            left: !s.sx && s.cx ? s.box.left : -Infinity,
+            right: !s.sx && s.cx ? s.box.right : Infinity,
+            top: !s.sy && s.cy ? s.box.top : -Infinity,
+            bottom: !s.sy && s.cy ? s.box.bottom : Infinity,
+        };
         const next: { part: Box; moves: ScrollMove[] }[] = [];
         for (const piece of pieces) {
-            const kept = within(piece.part, s.box);
+            const part = within(piece.part, cut);
+            if (part === undefined) continue;
+            const kept = within(part, view);
             if (kept !== undefined) next.push({ part: kept, moves: piece.moves });
-            for (const band of kept === undefined ? [piece.part] : around(piece.part, kept)) {
-                const dy = band.top < s.box.top ? s.box.top - band.top : band.bottom > s.box.bottom ? s.box.bottom - band.bottom : 0;
-                const dx = band.left < s.box.left ? s.box.left - band.left : band.right > s.box.right ? s.box.right - band.right : 0;
-                const moved = within({ left: band.left + dx, right: band.right + dx, top: band.top + dy, bottom: band.bottom + dy }, s.box);
-                if (moved !== undefined) next.push({ part: moved, moves: [...piece.moves, { below: s.at, dx, dy }] });
+            for (const band of kept === undefined ? [part] : around(part, kept)) {
+                const dy = band.top < view.top ? view.top - band.top : band.bottom > view.bottom ? view.bottom - band.bottom : 0;
+                const dx = band.left < view.left ? view.left - band.left : band.right > view.right ? view.right - band.right : 0;
+                const moved = within({ left: band.left + dx, right: band.right + dx, top: band.top + dy, bottom: band.bottom + dy }, view);
+                if (moved !== undefined) next.push({ part: moved, moves: [...piece.moves, { by: s.at, dx, dy }] });
             }
         }
         pieces = next;
@@ -904,12 +907,12 @@ export function byScroller(ink: Box, scrollers: readonly { at: number; box: Box 
     return pieces;
 }
 
-/** How far a paint at `depth` on the walk moves with a part scrolled into view (`byScroller`'s `moves`). */
-export function shiftFor(depth: number, moves: readonly ScrollMove[]): { dx: number; dy: number } {
+/** How far a paint moves with a part scrolled into view: by every scroll of a scroller that carries it (`carried`, numbered as `byScroller`'s `at`). */
+export function shiftFor(carried: ReadonlySet<number>, moves: readonly ScrollMove[]): { dx: number; dy: number } {
     let dx = 0;
     let dy = 0;
     for (const m of moves) {
-        if (depth < m.below) {
+        if (carried.has(m.by)) {
             dx += m.dx;
             dy += m.dy;
         }
@@ -917,19 +920,26 @@ export function shiftFor(depth: number, moves: readonly ScrollMove[]): { dx: num
     return { dx, dy };
 }
 
+/** A paint as it stands over one cell: a placed gradient's candidates are the stops that bear on it (`stopsOver`). */
+function atCell(p: StackPaint, cell: Box): StackPaint {
+    return p.gradient === undefined ? p : { ...p, candidates: stopsOver(p.gradient, cell) };
+}
+
 /**
  * The picture paints (`picture`) that show over any cell of a stretch of ink
- * (before 8g2, 3a): a picture paint covering a cell, with no paint over it
- * there that hides what is below it. A picture's colours are not read (the
- * contrast pass's, on the screens it samples), so it is named, not judged.
+ * (before 8g2, 3a; a border image that is a picture since the binding, the
+ * twelfth critic's BIP): a picture paint covering a cell, with no paint over
+ * it there that hides what is below it. A picture's colours are not read, so
+ * it is named, not judged: the contrast pass's, on the screens it samples,
+ * unless it carries a `fault` of its own, which the caller fails with.
  */
-export function picturesShowing(paints: readonly StackPaint[], ink: Box): string[] {
+export function picturesShowing(paints: readonly StackPaint[], ink: Box): StackPaint[] {
     const meeting = paints.filter((p) => p.rects.some((r) => meets(ink, r)) && (p.picture === true || p.candidates.some((c) => c.alpha > 0)));
     if (!meeting.some((p) => p.picture === true)) return [];
-    const out = new Set<string>();
+    const out = new Set<StackPaint>();
     for (const cell of cellsOf(ink, meeting.flatMap((p) => p.rects))) {
-        const over = fromTopmostOpaque(meeting.filter((p) => p.rects.some((r) => covers(r, cell))));
-        for (const p of over) if (p.picture === true) out.add(p.what);
+        const over = fromTopmostOpaque(meeting.filter((p) => p.rects.some((r) => covers(r, cell))).map((p) => atCell(p, cell)));
+        for (const p of over) if (p.picture === true) out.add(p);
     }
     return [...out];
 }
@@ -974,11 +984,8 @@ const covers = (r: Box, cell: Box): boolean => {
     return x > r.left && x < r.right && y > r.top && y < r.bottom;
 };
 
-/** A paint's candidates less those that composite alike: every colour at alpha 0 is nothing at all, and two equal colours are one (3a's walk: a gradient's repeated stops, its transparent ends, and the absence of a tile that may not paint). */
-const distinctSeen = new WeakMap<readonly Colour[], Colour[]>();
+/** A paint's candidates less those that composite alike: every colour at alpha 0 is nothing at all, and two equal colours are one (a gradient's repeated stops, its transparent ends, and the absence of a tile that may not paint). */
 function distinct(candidates: readonly Colour[]): Colour[] {
-    const known = distinctSeen.get(candidates);
-    if (known !== undefined) return known;
     const out: Colour[] = [];
     const keys = new Set<string>();
     for (const c of candidates) {
@@ -987,7 +994,6 @@ function distinct(candidates: readonly Colour[]): Colour[] {
         keys.add(key);
         out.push(c);
     }
-    distinctSeen.set(candidates, out);
     return out;
 }
 
@@ -995,62 +1001,52 @@ function distinct(candidates: readonly Colour[]): Colour[] {
  * The worst ground the paints put under one stretch of ink (`ink`, a glyph
  * line's ink box), or `undefined` when every cell reads: the stretch is cut
  * into cells by every paint's edges; on each, the paints that cover it are
- * composited source-over in paint order (`paints` is bottom first; a blend
- * is the probe's to hold to `normal`), a gradient tried at
- * each of its stops, and a cell whose composite is at least `alphaFloor`
- * opaque and reads under `floor` against the ink fails. Under `alphaFloor`
- * the cell's ground is mostly what lies below the stack — the contrast
- * pass's. More than `STACK_CHOICES_CAP` ways of choosing the gradients'
- * stops over one cell is a stack this judge cannot read (`tooMany`).
- *
- * With `fromOpaque` (before 8g2, 3a's walk to the stall), each cell is read
- * from its topmost paint that hides what is below it (`fromTopmostOpaque`),
- * a paint's candidates that composite alike are tried once (`distinct`), and
- * a cell no blend of whose paints can read under the floor (`everyMixReads`)
- * passes without its stops being enumerated: none of the three passes a cell
- * that fails, and the walk that reaches the stall's own gradients would
- * otherwise multiply every cell's choices by paints no pixel of it shows. A
- * picture paint (`picture`) has no colour here, and is composited as
- * absent.
+ * read from the topmost one that hides what is below it (`fromTopmostOpaque`),
+ * composited source-over in paint order (`paints` is bottom first; a blend is
+ * the probe's to hold to `normal`), a gradient tried at each stop that bears
+ * on the cell (`stopsOver`; every stop where none is placed), and a cell whose
+ * composite is at least `alphaFloor` opaque and reads under `floor` against
+ * the ink fails. Under `alphaFloor` the cell's ground is mostly what lies below
+ * the stack, the contrast pass's. A paint's candidates that composite alike
+ * are tried once (`distinct`), and a cell no blend of whose paints can read
+ * under the floor passes without its stops being enumerated (`everyMixReads`):
+ * neither passes a cell that fails. A picture paint (`picture`) has no colour
+ * here, and is composited as absent. More than `STACK_CHOICES_CAP` ways of
+ * choosing one cell's stops is a stack this judge cannot read: `tooMany`, and
+ * only where no other cell of the ink fails (the twelfth critic's P2: it
+ * returned at the first such cell, and hid a failure found in another).
  */
-export function worstGround(
-    paints: readonly StackPaint[],
-    ink: Box,
-    inkColour: readonly [number, number, number],
-    floor: number,
-    alphaFloor: number,
-    options: { fromOpaque?: boolean } = {},
-): StackVerdict | undefined {
+export function worstGround(paints: readonly StackPaint[], ink: Box, inkColour: readonly [number, number, number], floor: number, alphaFloor: number): StackVerdict | undefined {
     const meeting = paints.filter((p) => p.picture !== true && p.rects.some((r) => meets(ink, r)) && p.candidates.some((c) => c.alpha > 0));
     if (meeting.length === 0) return undefined;
-    let worst: StackVerdict | undefined;
+    let worst: { ground: Colour; ratio: number; paints: string[] } | undefined;
+    let tooMany = 0;
     const seen = new Set<string>();
     for (const cell of cellsOf(ink, meeting.flatMap((p) => p.rects))) {
-        const covering = meeting.filter((p) => p.rects.some((r) => covers(r, cell)));
-        const over = options.fromOpaque === true ? fromTopmostOpaque(covering) : covering;
-        const key = over.map((p) => meeting.indexOf(p)).join(',');
+        const over = fromTopmostOpaque(meeting.filter((p) => p.rects.some((r) => covers(r, cell))).map((p) => atCell(p, cell)));
+        const key = over.map((p) => `${p.what}/${p.candidates.length}/${p.candidates.map((c) => `${c.rgb.join(',')}/${c.alpha}`).join(';')}`).join('|');
         if (over.length === 0 || seen.has(key)) continue;
         seen.add(key);
-        if (options.fromOpaque === true && everyMixReads(over.map((p) => p.candidates), inkColour, floor, alphaFloor)) continue;
-        const choices = over.reduce((n, p) => n * Math.max(1, (options.fromOpaque === true ? distinct(p.candidates) : p.candidates).length), 1);
-        if (choices > STACK_CHOICES_CAP) return { tooMany: choices };
+        if (everyMixReads(over.map((p) => p.candidates), inkColour, floor, alphaFloor)) continue;
+        const candidates = over.map((p) => distinct(p.candidates));
+        const choices = candidates.reduce((n, c) => n * Math.max(1, c.length), 1);
+        if (choices > STACK_CHOICES_CAP) {
+            tooMany = Math.max(tooMany, choices);
+            continue;
+        }
         for (let k = 0; k < choices; k += 1) {
             let rest = k;
-            const layers = over.map((p) => {
-                const candidates = options.fromOpaque === true ? distinct(p.candidates) : p.candidates;
-                const n = Math.max(1, candidates.length);
-                const c = candidates[rest % n]!;
+            const layers = candidates.map((c) => {
+                const n = Math.max(1, c.length);
+                const one = c[rest % n]!;
                 rest = Math.floor(rest / n);
-                return c;
+                return one;
             });
             const ground = composite(layers);
             if (ground.alpha < alphaFloor) continue;
             const ratio = contrastRatio({ r: ground.rgb[0], g: ground.rgb[1], b: ground.rgb[2] }, { r: inkColour[0], g: inkColour[1], b: inkColour[2] });
-            if (ratio < floor && (worst === undefined || ('ratio' in worst && ratio < worst.ratio))) {
-                const top = [...over].reverse();
-                worst = { ground, ratio, paints: top.map((p) => p.what), sources: [...new Set(top.flatMap((p) => (p.source === undefined ? [] : [p.source])))] };
-            }
+            if (ratio < floor && (worst === undefined || ratio < worst.ratio)) worst = { ground, ratio, paints: [...over].reverse().map((p) => p.what) };
         }
     }
-    return worst;
+    return worst ?? (tooMany > 0 ? { tooMany } : undefined);
 }

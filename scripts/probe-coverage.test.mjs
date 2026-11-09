@@ -81,6 +81,7 @@ const moneyRead = {
     coverByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, nodes: 200, points: 9000, checked: 6000, clipSkips: 300, wallScroll: 0, failed: 0 }])),
     // 7b: 1b read on every look, a target held on each.
     reachByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, elements: 3000, reachers: 200, targets: 180, pairs: 90, would: 0, accepted: 0, throws: 0 }])),
+    walkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { elements: 300, failed: 0, layers: 300, pictures: 0, skipped: 0, unread: 0, tooMany: 0, thrown: 0 }])),
     // The fourth review's PFQ: every code a pass painted, its colours read.
     qrColourByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { painted: 20, read: 20 }])),
     // The fifth review's item 10: every look painted as many codes on a screen as any other.
@@ -983,6 +984,34 @@ describe('1a-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
 });
 
 const REACH_RULE = /^a-paint-with-no-hit-area-reaches-no-money /;
+
+const WALK_RULE = /^the-ground-walk-reaches-the-stall /;
+
+describe('3a-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
+    /**
+     * D-2026-10-28-01: 3a is the ground the dress rule holds, so every
+     * geometry pass owes, on every look it painted, a figure's element read
+     * to its stall. The short, reduced-motion and contrast passes owe nothing
+     * here, as for 1b.
+     */
+    it('passes a geometry pass that read every look, and names the look it did not', () => {
+        for (const pass of GEOMETRY) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => WALK_RULE.test(gap)), [], pass);
+            const { 't-neo': _neo, ...rest } = read.walkByClass;
+            const short = { ...read, walkByClass: { ...rest, 't-rural': { ...rest['t-rural'], elements: 0 } } };
+            assert.deepEqual(
+                probeCoverageGaps(pass, short).filter((gap) => WALK_RULE.test(gap)),
+                ['the-ground-walk-reaches-the-stall read no figure of a t-neo stall', 'the-ground-walk-reaches-the-stall read no figure of a t-rural stall'],
+                pass,
+            );
+            assert.equal(probeCoverageGaps(pass, { ...read, walkByClass: undefined }).filter((gap) => WALK_RULE.test(gap)).length, CARD_LOOKS.length, pass);
+        }
+        for (const pass of ['short-phone', 'short-desk', 'reduced-motion', 'contrast']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...painted }).filter((gap) => WALK_RULE.test(gap)), [], pass);
+        }
+    });
+});
 
 describe('1b-is-owed-a-read-on-every-look-of-every-geometry-pass', () => {
     /**

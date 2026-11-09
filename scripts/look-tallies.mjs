@@ -114,6 +114,17 @@ export function reachTally(byClass, classes = Object.keys(byClass ?? {})) {
     return sum;
 }
 
+/** 3a's tallies of `classes` (or every class) on one pass, summed (`walkByClass`, D-2026-10-28-01): figures' elements read, failures, throws. */
+export function walkTally(byClass, classes = Object.keys(byClass ?? {})) {
+    const sum = { elements: 0, failed: 0, thrown: 0 };
+    for (const cls of classes) {
+        const at = Object.hasOwn(byClass ?? {}, cls) ? byClass[cls] : undefined;
+        if (at === undefined) continue;
+        for (const key of Object.keys(sum)) sum[key] += at[key] ?? 0;
+    }
+    return sum;
+}
+
 /**
  * Why a tally breaks the clip ceiling, as a sentence, or undefined: a tally
  * that read but hit-tested no point ran over nothing; one whose points
@@ -257,6 +268,9 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  * - `reach`: `{ [pass]: reachByClass }`, 1b's tallies per look on every
  *   geometry pass that owes it (`reachTally`'s shape): a carried look owes a
  *   read that held a target on each (7b);
+ * - `walk`: `{ [pass]: walkByClass }`, 3a's tallies per look on every geometry
+ *   pass that owes it (`walkTally`'s shape): a carried look owes a figure's
+ *   element read to its stall on each (D-2026-10-28-01);
  * - `clipCeiling`: the ratio the public looks are held to (`CLIP_SKIP_CEILING`);
  * - `codesRead`: `{ [cls]: Set<'viewport/screen:code'> }`, the quiet-zone reads;
  * - `moduleCodesRead`: the same, 1d's reads (`a-codes-modules-read-as-its-matrix`,
@@ -272,6 +286,7 @@ export function carriedTallyFaults({
     lineSkips = {},
     cover = {},
     reach = {},
+    walk = {},
     clipCeiling,
     codesRead = {},
     moduleCodesRead = {},
@@ -317,6 +332,9 @@ export function carriedTallyFaults({
             const t = reachTally(reach[pass], [cls]);
             if (t.paints === 0) faults.push(`${cls} at ${pass}: a-paint-with-no-hit-area-reaches-no-money read no paint of it`);
             else if (t.targets === 0) faults.push(`${cls} at ${pass}: a-paint-with-no-hit-area-reaches-no-money held no target on it`);
+        }
+        for (const pass of Object.keys(walk)) {
+            if (walkTally(walk[pass], [cls]).elements === 0) faults.push(`${cls} at ${pass}: the-ground-walk-reaches-the-stall read no figure of it`);
         }
         const owed = codesRequired.filter((code) => !(paid && PAID_LOOK_UNPAINTED_CODES.includes(code)));
         const read = own(codesRead, cls) ?? new Set();

@@ -3271,6 +3271,8 @@ const REACH_CHECK = 'a-paint-with-no-hit-area-reaches-no-money';
 const reachGeometry = [];
 /** 1b's tallies per look on every geometry pass that owes it (`OWING_GEOMETRY`), for each carried look's own (`carriedTallyFaults`). */
 const reachSeen = {};
+/** 3a's tallies per look, by pass (each carried look owes a read on its own). */
+const walkSeen = {};
 /** `holds-out-of-flow-agrees-with-this-chrome`, per geometry pass: the page's record of it (`outOfFlowCheck`) and its time. */
 const outOfFlowGeometry = [];
 /** How many grouped failure sentences of 1b a pass prints word for word (1b fails since 7b; the rest are counted). */
@@ -3324,56 +3326,42 @@ function reachLines(pass, r) {
     return lines;
 }
 /*
- * **3a, `the-ground-walk-reaches-the-stall`, report-only** (before 8g2;
- * `groundWalkRead` in the probe, the pure half in `layout/groundStack.ts`):
- * the ground under every money figure's glyphs read to the stall — a box
- * that paints nothing (`visibility` not `visible`, `display: contents`)
- * skipped, a box above's gradient layers read as the figure's own are, its
- * pictures named where one shows — beside the bound read
- * (`groundStackFault`), which stops at the first opaque background colour.
- * Printed per pass and per look: its would-be failures grouped by the paints
- * new to it that made them (`sources`), up to `WALK_PRINTED` groups a pass
- * with the first sentence of each; the bound read's failures it would not
- * make; and what it could not read, grouped. It moves no verdict.
+ * **3a, `the-ground-walk-reaches-the-stall`** (before 8g2; bound since
+ * D-2026-10-28-01, the ground the dress rule holds; `groundWalkRead` in the
+ * probe, the pure half in `layout/groundStack.ts`): the ground under every
+ * money figure's glyphs read to the stall, a box that paints nothing skipped,
+ * where a gradient's stops and a tile fall read. Its failures are the dress
+ * rule's, in the pass's own list. Printed per pass and look: what it read and
+ * what it failed, and what it left to the contrast pass (a box above's
+ * pictures, grouped).
  */
-const WALK_CHECK = 'the-ground-walk-reaches-the-stall';
 const walkGeometry = [];
-/** How many grouped sources, unread kinds and dropped sentences a pass prints. */
+/** How many grouped pictures a pass prints. */
 const WALK_PRINTED = 40;
 function walkLines(pass, r) {
     const classes = Object.keys(r.byClass).sort();
     const sum = (key) => classes.reduce((n, cls) => n + (r.byClass[cls][key] ?? 0), 0);
     const lines = [
-        `    ${pass}: ${sum('would')} would-be failure(s) (${classes.map((cls) => `${cls} ${r.byClass[cls].would}`).join(', ') || 'no look'}), ` +
-            `${sum('both')} failing in both, ${sum('dropped')} the bound read makes and this one would not · ` +
-            `${sum('elements')} element(s) read: ${sum('past')} reading a paint past the bound stop, ${sum('layers')} a box above's gradient, ${sum('pictures')} a box above's picture, ` +
-            `${sum('skipped')} skipping a box that paints nothing; ${sum('unread')} with something unread (${sum('tooMany')} of too many choices) · ${(r.ms / 1000).toFixed(2)}s`,
+        `    ${pass}: ${sum('elements')} element(s) read (${classes.map((cls) => `${cls} ${r.byClass[cls].elements}`).join(', ') || 'no look'}), ${sum('failed')} failed · ` +
+            `${sum('layers')} reading a box above's gradient, ${sum('pictures')} a box above's picture, ${sum('skipped')} skipping a box that paints nothing; ` +
+            `${sum('unread')} with a picture left to the contrast pass, ${sum('tooMany')} of too many choices, ${sum('thrown')} thrown · ${(r.ms / 1000).toFixed(2)}s`,
     ];
-    const group = (items, keyOf) => {
-        const out = new Map();
-        for (const it of items) {
-            const key = keyOf(it);
-            const g = out.get(key) ?? { n: 0, first: it, screens: new Set() };
-            g.n += 1;
-            g.screens.add(it.screen);
-            out.set(key, g);
-        }
-        return [...out].sort((a, b) => b[1].n - a[1].n || (a[0] < b[0] ? -1 : 1));
-    };
-    const print = (title, groups, say) => {
-        if (groups.length === 0) return;
-        lines.push(`      ${title}:`);
-        for (const [key, g] of groups.slice(0, WALK_PRINTED)) lines.push(`        ${say(key, g)}`);
-        if (groups.length > WALK_PRINTED) lines.push(`        … and ${groups.length - WALK_PRINTED} more`);
-    };
-    print('would-be, by look and source', group(r.would, (w) => `${w.cls} · ${w.sources.join(' + ')}`), (key, g) =>
-        `${key} ×${g.n} on ${g.screens.size} screen(s) — first: ${g.first.screen} ${g.first.look}: ${g.first.el} "${g.first.text}": ${g.first.fault}`,
-    );
-    print('unread, by look and what', group(r.unread, (u) => `${u.cls} · ${u.what}`), (key, g) => `${key} ×${g.n} on ${g.screens.size} screen(s) — first: ${g.first.screen} ${g.first.look}: ${g.first.el}`);
-    print('the bound read fails and this one would not', group(r.dropped, (d) => `${d.cls} · ${d.bound}`), (key, g) => `${key} ×${g.n} — first: ${g.first.screen} ${g.first.look}: ${g.first.el} "${g.first.text}"`);
-    if (r.would.length < sum('would')) lines.push(`      (${sum('would') - r.would.length} more would-be counted and not kept)`);
+    const groups = new Map();
+    for (const it of r.unread) {
+        const key = `${it.cls} · ${it.what}`;
+        const g = groups.get(key) ?? { n: 0, first: it, screens: new Set() };
+        g.n += 1;
+        g.screens.add(it.screen);
+        groups.set(key, g);
+    }
+    const sorted = [...groups].sort((a, b) => b[1].n - a[1].n || (a[0] < b[0] ? -1 : 1));
+    if (sorted.length > 0) {
+        lines.push('      left to the contrast pass, by look and what:');
+        for (const [key, g] of sorted.slice(0, WALK_PRINTED)) lines.push(`        ${key} ×${g.n} on ${g.screens.size} screen(s) — first: ${g.first.screen} ${g.first.look}: ${g.first.el}`);
+        if (sorted.length > WALK_PRINTED) lines.push(`        … and ${sorted.length - WALK_PRINTED} more`);
+    }
     if (r.thrown.length > 0) {
-        lines.push(`      3a threw on ${r.thrown.length} element(s) (it fails nothing):`);
+        lines.push(`      3a threw on ${r.thrown.length} element(s), each a failure:`);
         for (const w of r.thrown.slice(0, 8)) lines.push(`        ${w}`);
     }
     return lines;
@@ -4109,11 +4097,10 @@ try {
             if (OWING_GEOMETRY.has(g.key)) reachSeen[g.key] = g.report.reachByClass;
         }
         if (g.report?.walkByClass !== undefined) {
+            if (OWING_GEOMETRY.has(g.key)) walkSeen[g.key] = g.report.walkByClass;
             walkGeometry.push({
                 pass: g.key,
                 byClass: g.report.walkByClass,
-                would: g.report.walkWould ?? [],
-                dropped: g.report.walkDropped ?? [],
                 unread: g.report.walkUnread ?? [],
                 thrown: g.report.walkThrown ?? [],
                 ms: g.report.walkMs ?? 0,
@@ -4311,8 +4298,8 @@ try {
     );
     for (const r of reachGeometry) for (const line of reachLines(r.pass, r)) console.log(line);
     console.log(
-        `  3a (${WALK_CHECK}), report-only: the ground under a money figure's glyphs read to the stall on each geometry pass — a box that paints nothing skipped, ` +
-            `a box above's gradients read, its pictures named — beside the bound read, which stops at the first opaque ground; it fails nothing`,
+        `  3a (the-ground-walk-reaches-the-stall), bound: the ground under a money figure's glyphs read to the stall on each geometry pass — where its gradient stops and tiles fall, a box that paints nothing skipped, ` +
+            `a box above's pictures named and left to the contrast pass; its failures in the pass's own list (the dress rule's)`,
     );
     for (const r of walkGeometry) for (const line of walkLines(r.pass, r)) console.log(line);
     {
@@ -5378,6 +5365,7 @@ try {
                 lineSkips: privateLineSkips,
                 cover: coverSeen,
                 reach: reachSeen,
+                walk: walkSeen,
                 clipCeiling: CLIP_SKIP_CEILING,
                 codesRead: codesReadByClass,
                 moduleCodesRead: modulesRun.readByClass,

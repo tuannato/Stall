@@ -118,6 +118,11 @@
  *   boxes or a protected box, read past its clips): a look never read, or
  *   read with every target cut away, certified nothing about what reaches its
  *   money. A paint on which 1b threw is a failure of its own (`reachAtRest`).
+ * - **`the-ground-walk-reaches-the-stall`** (3a, bound since D-2026-10-28-01):
+ *   every geometry pass owes, on every look it painted, money figures' elements
+ *   read to the stall (`walkByClass`: an element read, its fails the dress
+ *   rule's): a look read on no figure certified nothing about what lies under
+ *   its money. A throw is a failure of its own.
  * - **`the-kit-takes-no-anchor-positioning`** (D-2026-10-27-02): on the
  *   kit's probe (`kit`), every geometry pass owes a read of the kit's look
  *   (`kitAnchorPaints`); the ordinary probe owes nothing here.
@@ -565,6 +570,12 @@ export function probeCoverageGaps(
             } else if (!((read?.targets ?? 0) > 0)) {
                 gaps.push(`a-paint-with-no-hit-area-reaches-no-money held no target on a ${cls} stall`);
             }
+        }
+        // 3a (D-2026-10-28-01): every look a pass painted, read to its stall on some figure's element.
+        const walk = report.walkByClass ?? {};
+        for (const cls of report.sheetClasses ?? []) {
+            const read = Object.hasOwn(walk, cls) ? walk[cls] : undefined;
+            if (!((read?.elements ?? 0) > 0)) gaps.push(`the-ground-walk-reaches-the-stall read no figure of a ${cls} stall`);
         }
         // A code drawn black on white (before 8g2's fourth review, item 4,
         // the critic's PFQ): every code a pass painted on a look has its

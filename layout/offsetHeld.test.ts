@@ -124,23 +124,18 @@ function readsOf(body: string): Set<string> {
  * one they read of a figure's own elements alone to the whole list. No
  * longhand is left out today; one left out is named in `GROUND_EXCLUDED`
  * with its reason, and an exclusion they do not read fails. **What this
- * does not parse, stated** (the seventh review's P3): `groundStackFault`,
- * the ground read itself, also reads a box's `overflow-x`, `overflow-y` and
- * `contain` (where a box clips the ink it reads under) and the ink's own
- * lines; a clip only narrows what is read, and where the glyphs stand is
- * `inkSignature`'s. The background image's block also runs for a box above
- * in 3a's report-only walk to the stall (`layersAbove`, before 8g2), which
- * no keyframe offset reads (`offsetGroundFaults` reads the bound ground
- * alone): the day 3a binds, a box above is compared on the whole list, and
- * `GROUND_ABOVE`'s pin moves with it.
+ * does not parse, stated** (the seventh review's P3): `groundWalkRead`, the
+ * ground read itself, also reads a box's clips (`reachClipChain`, where a box
+ * clips the ink it reads under) and the ink's own lines; a clip only narrows
+ * what is read, and where the glyphs stand is `inkSignature`'s. A box above is
+ * compared on the whole list since the binding of 3a.
  */
 const GROUND_EXCLUDED: Record<string, string> = {};
 
 describe('the-ground-signature-names-every-longhand-boxPaintsOf-and-borderImageReach-read', () => {
     const signature = setOf('GROUND_SIGNATURE');
     const paints = bodyOf('boxPaintsOf');
-    const ownBlock = blockOf(paints, "if ((own || layersAbove) && cs.backgroundImage !== 'none') {");
-
+    const ownBlock = blockOf(paints, "if (cs.backgroundImage !== 'none') {");
     it('hands its style to no helper but borderImageReach, and reads that one too', () => {
         const helpers = new Set([...paints.matchAll(/\b(\w+)\((?:[^()]*,\s*)?cs\s*[,)]/g)].map((m) => m[1]!));
         expect([...helpers].sort()).toEqual(['borderImageReach']);
@@ -217,7 +212,7 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
      * animations on a figure's walk reach the reads by `seekNeedless`,
      * `outerShadowOnly`, `groundOnly` or the timing set for the seek, nor
      * the helpers the reads call (`dressHeldFault`, `boxHeldFault`,
-     * `selfClipSentences`, `groundStackFault`); a mutation of those is caught
+     * `selfClipSentences`, `groundWalkRead`); a mutation of those is caught
      * only where a red proof of `layout/PROBE-RULES.md` exercises the branch
      * it breaks, and not every branch has one. An equivalent rewrite fails
      * the pin, and the pin is rewritten with it.
@@ -273,7 +268,7 @@ describe('the-keyframe-offset-read-holds-every-held-longhand-the-value-decides',
         const ground = flatBody('offsetGroundFaults');
         for (const block of [
             'const inkMoved = inkSignature(r.node) !== restInk.get(r.node); if (!inkMoved && !groundWalk(r, target).some(([el, own]) => groundSignature(el, own) !== restGround.get(groundKey(el, own)))) return [];',
-            'for (const el of r.own) { if (el !== target && !target.contains(el)) continue; const why = groundStackFault(el, getComputedStyle(el), r.stall, () => inkLines(el));',
+            'for (const el of r.own) { if (el !== target && !target.contains(el)) continue; const why = groundVerdict(r.screen, r.label, el, r.node, r.stall, paintsHere.chains, false);',
         ]) {
             expect(ground, block).toContain(block);
         }
