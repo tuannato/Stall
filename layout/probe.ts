@@ -6700,9 +6700,11 @@ function borderImageReach(cs: CSSStyleDeclaration): number {
  * listed lowest), its background colour over the last layer's clip box, its
  * background image's layers (the last listed lowest: a gradient by its stops
  * where its tiles stand, `placeTile`, and where every value of it was read by
- * where each stop falls, `placeGradient`; where a value could not be read, by
- * every stop where its tiles are proved to paint and as absent too over the
- * rest of its clip area, `layerCovers`; a picture by its place — the figure's
+ * where each stop falls, `placeGradient`; where the tile is read and only the
+ * gradient is not, by every stop over the tile's own band; where the tile is
+ * not read, or the box stands in more than one fragment, by every stop where
+ * its tiles are proved to paint and as absent too over the rest of its clip
+ * area, `layerCovers`; a picture by its place — the figure's
  * own, which fails where it shows, and a box above's, tagged `layer`, which is
  * named and left to the contrast pass), its inset shadows, every border side
  * that has a width, and a border image (over the padding box where its slice
@@ -6776,6 +6778,12 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
         const attachments = splitLayers(cs.backgroundAttachment);
         const positionsX = splitLayers(cs.backgroundPositionX);
         const positionsY = splitLayers(cs.backgroundPositionY);
+        // A box in more than one fragment (an inline split over lines, a block
+        // over columns) has no tile this reads where it stands: Chrome lays the
+        // fragments end to end and positions the tile on that strip, not on the
+        // bounding box held here (the seventeenth review's B2, IN1b). Its
+        // layers take the strict read below.
+        const fragmented = at.getClientRects().length > 1;
         for (let i = layers.length - 1; i >= 0; i -= 1) {
             const layer = layers[i]!;
             const clip = clips[i % clips.length] ?? 'border-box';
@@ -6799,7 +6807,7 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
             // Where every value is read, the tiles stand where their size and
             // position put them, and the stops fall where the gradient's own
             // geometry puts them (the binding of 3a, J1(a) of D-2026-10-28-01).
-            const tile = placeTile(repeat, size, position, extent, attachment);
+            const tile = fragmented ? undefined : placeTile(repeat, size, position, extent, attachment);
             if (tile !== undefined) {
                 const band = tileBand(tile, a.left, a.top);
                 const parsed = tileHoldsItsGradient(tile, extent) ? readGradient(layer) : undefined;
@@ -6822,7 +6830,7 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
                 });
                 continue;
             }
-            // A value not read: the strict read. Where a layer's tiles are
+            // A tile not read: the strict read. Where a layer's tiles are
             // proved to paint (`layerCovers`: each axis's tile resolved against
             // the positioning area — tiles that repeat at 1px or more cover
             // the whole clip area, one tile at least the area long and placed
@@ -6837,7 +6845,10 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
             // against the smaller of the origin box and the viewport
             // (`tileArea`).
             const [coverX, coverY] = layerCovers(repeat, size, position, tileArea(attachment, extent, { w: window.innerWidth, h: window.innerHeight }), attachment);
-            const proved = coverX !== 'none' && coverY !== 'none';
+            // A lone tile proves its span of the area only where the area is
+            // the box Chrome positions it in: on a fragmented box the strip is
+            // longer than the bounding box, and the tile can stop short of it.
+            const proved = coverX !== 'none' && coverY !== 'none' && !(fragmented && (coverX === 'positioning-area' || coverY === 'positioning-area'));
             let parts: { inside: Box[]; outside: Box[] } | undefined;
             const part = (): { inside: Box[]; outside: Box[] } => {
                 if (parts !== undefined) return parts;
@@ -6928,9 +6939,11 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
  *   that is not `visible`, or `display: contents`, which has no box): its
  *   paints are none, and it ends nothing;
  * - **a box's gradient layers** by their stops: where their tiles stand and
- *   where each stop falls where every value could be read, and at every stop,
- *   absent too over the rest of the clip area, where one could not
- *   (`boxPaintsOf`);
+ *   where each stop falls where every value could be read; at every stop over
+ *   the tile's own band where the tile could be read and only the gradient
+ *   could not; and at every stop, absent too over the rest of the clip area,
+ *   where the tile could not be read or the box stands in more than one
+ *   fragment (`boxPaintsOf`);
  * - **a picture**: a box above's background picture is named where it shows
  *   (`picturesShowing`) and composited as absent, not judged (the contrast
  *   pass's, on the screens it samples); the figure's own picture, a border
@@ -6968,7 +6981,11 @@ function boxPaintsOf(at: Element, cs: CSSStyleDeclaration, own: boolean): BoxPai
  * gradient between its stops (the stops on either side of a cell are tried,
  * not what they blend to); a conic or repeating gradient's stops, one with an
  * interpolation written out, a size or position this reader does not take
- * apart (all read strictly).
+ * apart (all read strictly); a border or a box shadow of a box in more than
+ * one fragment, which the read stands on the bounding box where Chrome draws
+ * them per fragment (the bottom border of a line lies under the next line's
+ * glyphs: IN3); and a tilt's turn relative to what is painted above the
+ * tilted box (`withFramesUpright`).
  */
 const WALK_THROWN_KEPT = 40;
 /** One look's tallies on a pass: figures' elements read, failures, a box above's gradient read, a box above's picture met, walks that skipped a box that paints nothing, elements with a picture left to the contrast pass, stacks of too many choices, throws. */

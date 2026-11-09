@@ -288,10 +288,10 @@ function tileOf(size: string, area: { w: number; h: number }, length: (token: st
  * viewport on each axis; one with no width or no height places no tile this
  * reader vouches for. The area is the element's bounding box, which for an
  * inline split over lines or a block split over columns is not the box
- * Chrome positions a tile in (it lays the fragments end to end); no money
- * glyph owner a look can tile wraps so today but a broken figure's pieces,
- * whose every longhand `a-broken-figure-wears-the-figures-own-ink` holds
- * (the critic's P3-1 on round 7, stated).
+ * Chrome positions a tile in (it lays the fragments end to end): the caller
+ * asks neither `placeTile` nor a lone tile's proof of a box in more than one
+ * fragment (`boxPaintsOf`, the seventeenth review's B2: `.pay-q` wraps on a
+ * tier-3 face, and a look may tile it).
  */
 export function layerCovers(
     repeat: string,
