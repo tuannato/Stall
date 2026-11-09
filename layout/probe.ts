@@ -9587,6 +9587,8 @@ function moneyDressFaults(screen: string, label: string): Failure[] {
  */
 const QR_COLOUR_CHECK = 'a-code-is-drawn-black-on-white';
 const qrColourByClass: Record<string, { painted: number; read: number }> = {};
+/** Every mask source the code's colour check holds `none`, and `turnOnly` fails a turned code closed under (the sixteenth review's B1). */
+const MASK_SOURCES = ['mask-image', '-webkit-mask-image', 'mask-border-source', '-webkit-mask-box-image-source', '-webkit-mask-box-image'] as const;
 /** The longhands a code's svg, rect and path each compute `none` for (`qrColourFault`): a filter, a clip, every mask source, every transform and a motion path. */
 const QR_NONE = [
     'filter',
@@ -13159,6 +13161,11 @@ function turnOnly(el: Element | null): true | string {
     for (let at = el; at !== null && at !== document.documentElement; at = at.parentElement) {
         const cs = getComputedStyle(at);
         const who = describe(at);
+        // A mask, a mask border or a clip-path on the chain is held to a box the held frame puts back, so the frame held upright
+        // moves it against the code (or the code against it): the code is failed closed (the sixteenth review's B1, PRM2 and PCT).
+        const masked = [...MASK_SOURCES, 'clip-path'].find((prop) => (cs.getPropertyValue(prop) || 'none') !== 'none');
+        if (masked !== undefined) return `${who} has ${masked}: ${cs.getPropertyValue(masked).slice(0, 60)}, which held upright does not stand where the page paints it`;
+        if (cs.clip !== 'auto' && cs.clip !== '') return `${who} has clip: ${cs.clip.slice(0, 60)}, which held upright does not stand where the page paints it`;
         if (cs.scale !== 'none' && !cs.scale.trim().split(/\s+/).every((v) => Number(v) === 1)) return `${who} has scale: ${cs.scale}`;
         if (cs.translate !== 'none') {
             const parts = cs.translate.trim().split(/\s+/);
