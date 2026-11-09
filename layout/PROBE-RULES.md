@@ -12563,7 +12563,8 @@ some phase leaves under three pixels; and the turned reference is a model of
 Chrome's resample (bilinear on a canvas), measured on Rural alone. The canvas
 reference undercounts the page (the critic's P2: the upright 99th-percentile
 share is 1.75–2.15), so "a cover of under half a glyph" understates what can go
-unread there; not built (PLAN § Open). D1 (a) is decided at 7d.
+unread there; built since D-2026-11-09-02 (each share divided by max(1, its
+node's median), "Round 16", below). D1 (a) is decided at 7d.
 
 ## Before 8g2, 3a: the walk to the stall (2026-10-27; the plan's item 3a, round 4's P2-1 and round 5's V and DC; report-only)
 
@@ -13989,6 +13990,108 @@ contrast dumps are identical, 15,018 boxes over 823 jobs
 computation per code read upright (its corner travel, from numbers the
 zones already carry), the trigger's list of the nodes it met, and one
 `getAnimations` read before and after each call of `textShadowHeirs`.
+
+## Before 8g2: the sixteenth review's fixes (2026-11-09; CRITIC-16, the owner's D-2026-11-09-01 and D-2026-11-09-02)
+
+Evidence is under `private/design/workshop-2026-09-23/before-8g2/critic16-fixes/`
+(`runs/`, `plants/`, `tools/`); the paths below are relative to it. Scratch
+clone at `/private/tmp/c16f/tree`, ports 4391/9411, one probe at a time.
+
+**B1: a mask on a turned code's chain fails the code closed.**
+`uprightCornerTravel` bounded how far the held frame moves the code against
+the viewport; the held frame also puts every box on the chain back, a masking
+box among them, so a mask can move against the code while the code stands
+still. PRM2 (the ticket reaches 45px up, is turned .001deg, moved 45px down
+and carries a mask over its top 70px, the code inside moving 45px up) and
+PCT (the code 1.45 modules up, a mask from the ticket's top to 4.45 modules
+into the code) passed the whole runner on `e2dcb27`. `turnOnly` now fails a
+turned code closed, for both reads, where a box on the chain carries a mask
+source (`MASK_SOURCES`: the ones `QR_NONE` holds `none` on the code), a
+`clip-path` or a `clip` other than `auto`, with a sentence naming the box. The
+1.5-module bound's sentence "a mask or a clip the held frame does not see cuts
+at most 1.5 modules of the painted code's edge" was false (PRM2 6 to 9
+modules at travel 0.00) and is corrected in CLAUDE.md §6, here (the fifteenth
+review's B1 section) and in PLAN. Rural's codes carry overflow only, no mask:
+0.99 and 0.55 modules, read upright, unchanged. A look that wants a mask over
+a turned code is red until option (c) of the critic's J1 (a turned code read on
+the painted frame at rotated sample points) is built; PLAN § Open.
+
+**The overflow control** (`plants/PRM2-overflow-modern.css`): PRM2's shape with
+`overflow: hidden` on the ticket in place of the mask (the ticket 45px up,
+moved 80px down, the code 80px up, its top 21px outside the ticket's clip as
+painted, travel 0): **red through 1a**, `nothing-covers-money-or-a-protected-box`,
+"a clip that cuts there and does not scroll", 27 failures at 390 and 27 at 1280,
+20 at 360, 5 at reduced motion and 24 contrast jobs. A hit test sees an
+overflow clip and does not see a mask, as the critic's PRM control suggested.
+
+**Item 1: `the-trigger-fires-on-a-planted-mover`** (`triggerSelfCheck`, beside
+`outOfFlowSelfCheck`): once a page, two money nodes (`data-role="price"`) and a
+box moved over the second alone are painted in a fixed, hidden box, the real
+`digitTrigger` runs over them (`preparedNodes` swapped and put back, the box
+removed in a `finally`), and the page fails unless it counted a meet and met
+exactly the second node. Two nodes because the wrong-node mutation holds every
+mover to `money[0]`: with one node the check could not tell it apart (that
+mutant exited 0 with one node). The runner fails a page with no record of the
+check or a count of 0 and prints "1c's trigger held to a planted mover" beside
+the out-of-flow line (15 of 15 pages, 1 meet, 17.6ms over the passes). It
+changes no verdict and no contrast box on the clean tree (the check's DOM is
+gone before anything measures).
+
+**Item 2: the painted centre is the content box's.** `quietZoneOf` takes
+`x` and `y` from the turned bounds plus the unturned padding, which is the
+border box's centre plus the content box's offset unturned; the code stands at
+that offset turned. The zone carries `pad` and `uprightCornerTravel` turns it
+by the zone's angle, so the travel is exact for asymmetric padding too (the
+error was 2·sin(θ/2) times half the padding difference). Unit case in
+`scripts/code-modules.test.mjs`.
+
+**Item 3:** the held frame's modules are 6.061 and 7.273 (the fifteenth
+review's section said 7.24, from the rounded 0.55); corrected there.
+
+**Item 5 (D-2026-11-09-02): each node's shares are divided by its median where
+that is over 1.** `readMoneyChars` collects a node's held characters, takes
+`nodeScale` (the median share, or 1 where it is under 1 or there is nothing to
+take it of), and holds `share / scale` to `CHAR_KEEP_CUT`; the failure sentence
+carries the raw share and the normalised one. A one-character node's median is
+its own share, so it is divided by itself where over 1 and left alone below.
+Measured on the clean tree, every money job forced (`runs/q-item5-all-clean.log`,
+697 jobs): 0 characters under the cut; the least normalised share, upright:
+digit 0.75, letter 0.75, other 0.67; turned: digit 0.72, letter 0.55 (0.545,
+Rural), other 0.67. Node medians 1.33 at most (118 of 2,299 nodes over 1.3).
+TRN (`runs/TRN-n5.jsonl` against `TRN-clean-n5.jsonl`, `tools/trn-n5.py`): of
+923 under-half turned covers, 99 pass the raw read (as at the fifteenth
+review) and **99 pass the normalised read**: they are thin turned glyphs on
+Rural, node scales to 1.25, and the fifteenth critic's reading that most of
+them came from the undercount is not borne out (they are item 3 of the
+1c(c) list, J5's residue). A node with a light ink on a dark ground losing a
+true 0.52 of a glyph: `plants/LDh68-modern.css` (a ground-coloured box over the
+bottom 0.68em of the strip total's last digit, Modern under After hours, scale
+1.17): raw share 0.57, normalised 0.48, **green on `e2dcb27`'s read
+(`runs/q-item5-LDh68-before.log`, no failure) and red with the change (1
+failure, `runs/q-item5-LDh68.log`)**. The brief's three quarters is not
+reachable by this change's reading: node medians are 1.15 to 1.33, not 2, the
+75% figure was the 99th-percentile share of single thin glyphs. The width
+sweep of the same plant (0.22 to 0.34em) never lands between the digit's 26
+and 36 kept pixels, so the sweep gave no case in the band. PL: red as before
+(4 failures, `runs/q-item5-PL.log`). TRN: 834 failures over its screens
+(`runs/q-item5-TRN.log`). **The hole this leaves, stated:** a cover over more
+than half a node's characters pulls its median under 1, nothing is lifted, and
+the node reads as it did (a unit case pins [2, 0.8, 0.8] unchanged); it is read
+by the old rule, no weaker than before.
+
+### Red proofs
+
+| Plant or mutation | Road | Result | Exit | Runtime, load at start |
+|---|---|---|---|---|
+| PRM2 | whole runner | 1d 24 and the quiet zone 24 failed closed, "div.publish-qr.pay-qr-body has mask-image: …, which held upright does not stand where the page paints it"; geometry passes green | 1 | 227.7s, 5.11 (`runs/plant-PRM2.log`) |
+| PCT (`PCT-lint-variant`) | whole runner | the same, 24 and 24 | 1 | 227.2s, 8.15 (`runs/plant-PCT.log`) |
+| PRM2 with overflow | whole runner | red by 1a (the geometry passes, 24 contrast jobs) | 1 | 231.5s, 6.65 (`runs/overflow-PRM2.log`) |
+| `mut-dead-meet.py` | whole runner | `the-trigger-fires-on-a-planted-mover` on 15 pages | 1 | 229.0s, 5.71 (`runs/mut-dead-meet-2.log`) |
+| `mut-wrong-node.py` | whole runner | the same, 15 pages (one-node plant: exit 0, 226.6s, `runs/mut-wrong-node.log`) | 1 | 233.0s, 5.79 (`runs/mut-wrong-node-2.log`) |
+| `mut-no-movers.py` | whole runner | the same, 15 pages | 1 | 228.6s, 6.27 (`runs/mut-no-movers-2.log`) |
+
+The first three ran at `c405c05`/`028e70d`, before item 5; the mutations at
+`028e70d`.
 
 ## CI's layout job on two tabs (2026-10-20, D-2026-10-20-06 D6)
 

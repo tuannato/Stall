@@ -1499,17 +1499,25 @@ money path this app can have, because nothing on it is derived.
      "+5% surcharge" "5" and its selection line's "7") were artefacts of that
      least: they keep 12–18 pixels on the page and are held now. Chrome
      only, DPR 1.
-  4. **The canvas reference undercounts the page — for the owner** (the
-     eleventh critic's P2, not built; it said "decide at 7d", and 7d's
-     decisions, D-2026-10-30-02 and -03, do not mention it): on upright
-     frames the 99th percentile share is 1.75–2.15 (a light ink on a dark
-     ground most), so "a cover of under half a glyph" understates what can
-     go unread on those nodes — under the bind a node with a light ink on a
-     dark ground can lose about three quarters of a glyph and still pass,
-     and the fifteenth critic reads most of TRN's 99 passes above (3) as
-     coming from this undercount, not from J5. Normalising each node's
-     shares by its own median share would close it; its cost is not
-     measured.
+  4. **The canvas reference undercounts the page — built, narrowed**
+     (the eleventh critic's P2; the owner's D-2026-11-09-02): each held
+     character's share is divided by `max(1, its node's median share)`
+     (`nodeScale` in `scripts/char-read.mjs`), and a failure says both the
+     raw and the normalised share. Measured on the clean tree with every
+     money job read (697 jobs): no character stands under the cut, the least
+     normalised share upright digit 0.75, letter 0.75, other 0.67, turned
+     digit 0.72, letter 0.55 (0.545, Rural, the quote surcharge's "e": 0.045
+     over the cut), other 0.67. What is left, stated: node medians are
+     1.15–1.33 at most (118 of 2,299 nodes over 1.3), so the blind band
+     narrows from a true share of 0.375–0.5 to nothing above 0.5 at the
+     worst node, and **the brief's "three quarters of a glyph" was the
+     99th-percentile share of single thin glyphs, not a node's median**: a
+     whole glyph is not undercounted by two. A node mostly covered pulls
+     its own median under 1 and is lifted not at all (it reads as before,
+     no weaker). TRN's 99 passes (of 923 under-half turned covers) stay 99
+     under the normalisation (Rural, scales to 1.25, thin turned glyphs), so
+     **the fifteenth critic's reading that most of them came from the
+     undercount is not borne out**; they are J5's residue (item 3).
   5. **The self-checks on Linux** (the eleventh critic): 1d's cut held to
      this Chrome (`the-module-read-agrees-with-this-chrome`) and
      `holds-out-of-flow-agrees-with-this-chrome` have run on this Mac alone;
