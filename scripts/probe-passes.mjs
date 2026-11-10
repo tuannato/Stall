@@ -145,7 +145,12 @@ export const TABLET = { name: 'tablet', width: 768, height: 1024 };
  *   either side of the re-flow's cut (`quote-row-1m`, `row-15-16`,
  *   `row-17`, `quote-row-18`, `row-21`); and the selection strip at the
  *   longest total (`pay-several-strip-long-figure`) and at 18 and 21
- *   characters (`pay-several-strip-18`, `-21`, round 4).
+ *   characters (`pay-several-strip-18`, `-21`, round 4);
+ * - the figure steps no fixture painted (step 8g3-pre,
+ *   `FIGURE_STEP_CEILINGS`): the two faces at 11 characters
+ *   (`item-listing-figure-11`, `item-quote-figure-11`), Pay several over
+ *   lines of 11 and 14 (`pay-several-figure-steps`) and the strip's total at
+ *   11 and 17 (`pay-several-strip-11`, `-17`).
  * The QR gate's rule reads every pay sheet's code here
  * (`PAY_QR_NARROWEST_PX`). `layout/PROBE-RULES.md`, "The narrow phone".
  */
@@ -202,6 +207,12 @@ export const NARROW_SCREENS = [
     // characters, either side of where ` XEC` stood alone on its line.
     'pay-several-strip-18',
     'pay-several-strip-21',
+    // Step 8g3-pre: the figure steps no fixture painted (`FIGURE_STEP_CEILINGS`).
+    'item-listing-figure-11',
+    'item-quote-figure-11',
+    'pay-several-figure-steps',
+    'pay-several-strip-11',
+    'pay-several-strip-17',
 ].join(',');
 /*
  * The short screens (the 8g1 critic's P2-2): two heights shorter than the

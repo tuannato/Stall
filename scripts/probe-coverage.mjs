@@ -153,7 +153,11 @@
  *   sheet's figure and a Pay several line (`CARD_FIGURES_OWED`,
  *   `cardFigureByClass`, per look and per place:tier), and
  *   **`a-card-figure-steps-down-on-every-look`** the four figures' painted
- *   ladders compared (`CARD_LADDERS_OWED`, `cardLadderByClass`).
+ *   ladders compared (`CARD_LADDERS_OWED`, `cardLadderByClass`); and, since
+ *   step 8g3-pre, every length step of the face, "You pay", a pay sheet's
+ *   figure and the strip total read (`FIGURE_STEPS_OWED`,
+ *   `cardFigureStepByClass`) and those figures' step ladders compared over
+ *   all six (`CARD_STEP_LADDERS_OWED`, `cardStepLadderByClass`).
  *
  * The phone and desk passes owe the page rules, the canvas the overlay's
  * places and the wall's controls and Cycle steps, the portrait, tablet, two
@@ -322,6 +326,21 @@ export const CARD_FIGURES_OWED = Object.freeze([
  * never counted, so a fifth figure can never stand in for a missing one.
  */
 export const CARD_LADDERS_OWED = Object.freeze(['face:price', 'face:seller-price', 'paid:figure', 'pay:price']);
+/**
+ * The figure steps the same passes owe on every look (step 8g3-pre,
+ * D-2026-11-10-16): `data-figure-step` '1'–'6' (`FIGURE_STEP_CEILINGS` in
+ * src/ui/render.ts) on every place that carries it — the face, "You pay", a
+ * pay sheet's figure and the strip total — each painted at its widest
+ * (`item-listing-figure-11`, `item-quote-figure-11`, `pay-several-figure-steps`,
+ * `pay-several-strip-11` and `-17` beside the ladder's own fixtures). A look
+ * may size a figure by its step, so a step no fixture paints is a rule no
+ * pass measures, and a gap.
+ */
+export const FIGURE_STEPS_OWED = Object.freeze(
+    ['face', 'paid', 'pay', 'strip'].flatMap((place) => ['1', '2', '3', '4', '5', '6'].map((step) => `${place}:${step}`)),
+);
+/** The step ladders owed compared over all six steps: the four card ladders and the strip total, by name. */
+export const CARD_STEP_LADDERS_OWED = Object.freeze([...CARD_LADDERS_OWED, 'strip:selection-total']);
 /**
  * The money tiers the stream card's price row (`data-tier` on `.bc-p`) is
  * owed on each look the canvas pass paints, **per rail** (the lint-belts
@@ -649,6 +668,19 @@ export function probeCoverageGaps(
                     );
                 }
             }
+            for (const place of FIGURE_STEPS_OWED) {
+                if (!((((report.cardFigureStepByClass ?? {})[cls] ?? {})[place] ?? 0) > 0)) {
+                    gaps.push(`a-card-figure-stands-inside-its-row read no ${place.replace(':', ' figure at step ')} on a ${cls} stall`);
+                }
+            }
+            for (const figure of CARD_STEP_LADDERS_OWED) {
+                const steps = ((report.cardStepLadderByClass ?? {})[cls] ?? {})[figure] ?? '';
+                if (steps !== '123456') {
+                    gaps.push(
+                        `a-card-figure-steps-down-on-every-look compared the ${figure} step ladder over ${steps === '' ? 'no step' : `steps ${steps.split('').join(', ')}`} on a ${cls} stall, not all six`,
+                    );
+                }
+            }
         }
     }
     // The stream card's money tiers (the fifth and sixth reviews): the canvas pass owes each look the tiers its ladder is painted at, per rail.
@@ -814,9 +846,21 @@ export function probeCoverageLine(pass, report) {
         (a, figures) => a + Object.values(figures).filter((tiers) => tiers === '0123').length,
         0,
     );
+    const stepSums = {};
+    for (const read of Object.values(report.cardFigureStepByClass ?? {})) {
+        for (const [place, n] of Object.entries(read)) stepSums[place] = (stepSums[place] ?? 0) + n;
+    }
+    const stepLadderSum = Object.values(report.cardStepLadderByClass ?? {}).reduce(
+        (a, figures) => a + Object.values(figures).filter((steps) => steps === '123456').length,
+        0,
+    );
     const cards = CARD_FIGURE_PASSES.has(pass)
         ? ` · card figures read: ${Object.entries(cardSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}` +
-          ` · ladders compared: ${ladderSum}`
+          ` · ladders compared: ${ladderSum}` +
+          (report.cardFigureStepByClass === undefined
+              ? ''
+              : ` · figure steps read: ${Object.entries(stepSums).sort(([a], [b]) => a.localeCompare(b)).map(([place, n]) => `${place} ${n}`).join(', ') || 'none'}` +
+                ` · step ladders compared: ${stepLadderSum}`)
         : '';
     // The money rules of D-2026-10-14-02, on every geometry pass whose page reported them.
     const money =

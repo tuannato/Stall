@@ -4987,10 +4987,20 @@ function wallCuts(screen: string, label: string): Failure[] {
  * read of the row's content box. A Pay several line and the total keep the
  * strict read at every length: a line carries a tier only from 18
  * characters (a line of 15–17 still sits beside its name and reads as
- * tier 0 here), and the total carries none. A hidden figure (a sheet with
- * no rate yet) has no line box and is not read. Counted per look and per
- * place and tier (`cardFigureByClass`, `face:3` for a face figure on the
- * ladder's last rung), so the runner owes every step a read.
+ * tier 0 here), and the total carries none. **The selection strip's total**
+ * (`strip`, step 8g3-pre) is read strictly too, against its own
+ * `.sel-totalblk`: no card rule read it before, and the strict read was run
+ * alone on main's tree first (2026-11-10, every pass green on every look).
+ * A hidden figure (a sheet with no rate yet) has no line box and is not
+ * read. Counted per look and per place and tier (`cardFigureByClass`,
+ * `face:3` for a face figure on the ladder's last rung), so the runner owes
+ * every step a read.
+ *
+ * **And per length step** (step 8g3-pre, D-2026-11-10-16): the face, "You
+ * pay", a pay sheet's figure and the strip total carry `data-figure-step`
+ * (`markFigureStep`), which a look may size by, so each is counted per look
+ * and per place and step (`cardFigureStepByClass`, `strip:2`), and a row
+ * holding a figure with no step fails (the writer missed a call site).
  */
 const CARD_FIGURE_CHECK = 'a-card-figure-stands-inside-its-row';
 const cardFigureByClass: Record<string, Record<string, number>> = {};
@@ -5001,7 +5011,11 @@ const CARD_FIGURES: readonly (readonly [string, string, string])[] = [
     ['pay', '.pay-x', ':scope > [data-role="price"]'],
     ['line', '.pay-line', '.pay-line-x'],
     ['total', '[data-role="pay-total"]', ':scope'],
+    ['strip', '.sel-totalblk', ':scope > [data-role="selection-total"]'],
 ];
+/** The places whose row carries the figure's length step (`markFigureStep`, `FIGURE_STEP_CEILINGS`). */
+const STEP_PLACES: ReadonlySet<string> = new Set(['face', 'paid', 'pay', 'strip']);
+const cardFigureStepByClass: Record<string, Record<string, number>> = {};
 /** The places whose tier 0 is the owner's "14 characters or fewer, unchanged", read against the card's padding box. */
 const TIER_0_IN_CARD: ReadonlySet<string> = new Set(['face', 'paid', 'pay']);
 
@@ -5041,6 +5055,27 @@ type LadderTiers = Record<string, { min: number; max: number }>;
 /** Per look class, per variant (the paint's label), per figure, per tier. */
 const cardLadderSizes: Record<string, Record<string, Record<string, LadderTiers>>> = {};
 const cardLadderByClass: Record<string, Record<string, string>> = {};
+
+/*
+ * **A card figure never grows with its length step** (step 8g3-pre,
+ * D-2026-11-10-16). A look may size a figure by `data-figure-step`, and a
+ * look that dressed one length apart — a short figure smaller than a long
+ * one, or one band blown up — would pass every rule that reads a figure
+ * where it stands. So the step half of the ladder compare: on a phone, per
+ * look, per variant on its own, for the four ladder figures and the strip
+ * total (`CARD_STEP_LADDER_FIGURES`), no step paints larger than the
+ * smallest size the step before it painted. Unlike the tiers there is no
+ * "the last is smaller" half: the shipped looks size none of these by step,
+ * and steps 1 to 3 are one tier. Read at the end of the page from the sizes
+ * every paint collected (`cardStepSizes`), reported per look and figure as
+ * the most steps one variant compared (`cardStepLadderByClass`, `"123456"`),
+ * which the runner owes over all six. **On the phone passes only** (the
+ * critic's P3): a desk rule keyed on a step is held by every rule that reads
+ * a figure where it stands, and by no ladder compare.
+ */
+const CARD_STEP_LADDER_FIGURES: ReadonlySet<string> = new Set([...CARD_LADDER_FIGURES, 'strip:selection-total']);
+const cardStepSizes: Record<string, Record<string, Record<string, LadderTiers>>> = {};
+const cardStepLadderByClass: Record<string, Record<string, string>> = {};
 
 /*
  * **The stream card's money tiers are read, per rail** (the lint-belts
@@ -5103,11 +5138,30 @@ function cardFigureFaults(screen: string, label: string): Failure[] {
             const right = box.right - inset('Right');
             byLook[`${place}:${tier}`] = (byLook[`${place}:${tier}`] ?? 0) + 1;
             const ladder = `${place}:${figure.getAttribute('data-role') ?? 'figure'}`;
+            const size = Number.parseFloat(getComputedStyle(figure).fontSize);
             if (phone && CARD_LADDER_FIGURES.has(ladder)) {
-                const size = Number.parseFloat(getComputedStyle(figure).fontSize);
                 const at = (((cardLadderSizes[measuringClass] ??= {})[label] ??= {})[ladder] ??= {});
                 const was = at[tier];
                 at[tier] = was === undefined ? { min: size, max: size } : { min: Math.min(was.min, size), max: Math.max(was.max, size) };
+            }
+            if (STEP_PLACES.has(place)) {
+                const step = row.getAttribute('data-figure-step');
+                if (step === null) {
+                    out.push({
+                        screen,
+                        theme: label,
+                        check: CARD_FIGURE_CHECK,
+                        detail: `the ${place} figure "${(figure.textContent ?? '').slice(0, 40)}" stands in a row that carries no length step (${describe(row)})`,
+                    });
+                } else {
+                    const steps = (cardFigureStepByClass[measuringClass] ??= {});
+                    steps[`${place}:${step}`] = (steps[`${place}:${step}`] ?? 0) + 1;
+                    if (phone && CARD_STEP_LADDER_FIGURES.has(ladder)) {
+                        const at = (((cardStepSizes[measuringClass] ??= {})[label] ??= {})[ladder] ??= {});
+                        const was = at[step];
+                        at[step] = was === undefined ? { min: size, max: size } : { min: Math.min(was.min, size), max: Math.max(was.max, size) };
+                    }
+                }
             }
             const over = Math.max(...lines.map((r) => r.right)) - right;
             const under = left - Math.min(...lines.map((r) => r.left));
@@ -5157,6 +5211,31 @@ function cardLadderFaults(): Failure[] {
         }
         for (const [key, tiers] of Object.entries(compared)) {
             (cardLadderByClass[cls] ??= {})[key] = tiers.join('');
+        }
+    }
+    return out;
+}
+
+/** Every look's painted step ladder, each variant on its own, read once at the end of the page (the step half of `a-card-figure-steps-down-on-every-look`). */
+function cardStepLadderFaults(): Failure[] {
+    const out: Failure[] = [];
+    for (const [cls, variants] of Object.entries(cardStepSizes)) {
+        const compared: Record<string, string[]> = {};
+        for (const [variant, figures] of Object.entries(variants)) {
+            for (const [key, steps] of Object.entries(figures)) {
+                const painted = Object.keys(steps).sort((a, b) => Number(a) - Number(b));
+                if (painted.length > (compared[key]?.length ?? 0)) compared[key] = painted;
+                const at = (t: string): { min: number; max: number } => steps[t]!;
+                const sizes = painted.map((t) => `step ${t} ${at(t).min === at(t).max ? at(t).max : `${at(t).min}–${at(t).max}`}px`).join(', ');
+                for (let i = 1; i < painted.length; i += 1) {
+                    if (at(painted[i]!).max > at(painted[i - 1]!).min + 0.01) {
+                        out.push({ screen: 'probe page', theme: variant, check: CARD_LADDER_CHECK, detail: `the ${key} figure grows from step ${painted[i - 1]} to step ${painted[i]} (${sizes})` });
+                    }
+                }
+            }
+        }
+        for (const [key, steps] of Object.entries(compared)) {
+            (cardStepLadderByClass[cls] ??= {})[key] = steps.join('');
         }
     }
     return out;
@@ -12421,6 +12500,7 @@ for (const screen of measured) {
 
 failures.push(...doorMiniFaults());
 failures.push(...cardLadderFaults());
+failures.push(...cardStepLadderFaults());
 
 /*
  * **The sign's stress names on a try-on** (step 8f2; the 8f1 critic's item
@@ -15893,6 +15973,10 @@ const verdict = {
     cardFigureByClass,
     /* The tiers each figure's painted ladder was compared over, per look (`a-card-figure-steps-down-on-every-look`). */
     cardLadderByClass,
+    /* Card figures read per look and per place:step (`data-figure-step`, step 8g3-pre). */
+    cardFigureStepByClass,
+    /* The steps each figure's painted step ladder was compared over, per look (the step half of `a-card-figure-steps-down-on-every-look`). */
+    cardStepLadderByClass,
     /* The stream card's price rows read, per look and per money tier (`streamTierRead`). */
     streamTierByClass,
     /* Cycle figures read per look and per step (`a-cycle-card-shows-every-digit-at-every-wall-size`). */

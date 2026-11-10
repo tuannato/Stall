@@ -6556,6 +6556,7 @@ function selectionStrip(view: StallView, handlers: StallHandlers): HTMLElement {
                 // round 4, P3-4: from 18, where ` XEC` first stood alone).
                 const totalFigure = glance === undefined ? '' : quoteFigure(glance);
                 moneyFigure(total, totalFigure, totalFigure.length >= STRIP_BREAK_CHARS);
+                markFigureStep(totalBlock, totalFigure);
                 total.setAttribute('data-role', 'selection-total');
                 totalBlock.append(total);
                 if (selectionHasSurcharge(selection, view.prices)) {
@@ -8714,6 +8715,55 @@ export function cardFigureTier(figure: string): 0 | 1 | 2 | 3 {
 }
 
 /**
+ * A figure's length step, for a look's own sheet (step 8g3-pre, the window's
+ * D-2026-11-10-16): the card ladder's tier 0 holds every figure of 1 to 14
+ * characters, so a look that sizes the face's, a pay sheet's or the strip
+ * total's figure in its own sheet had to size it for 14 characters whatever
+ * it held. `data-figure-step` tells it the band instead, from one table:
+ *
+ *   step 1: 1–9   step 2: 10–11   step 3: 12–14
+ *   step 4: 15–17   step 5: 18–21   step 6: 22 and longer
+ *
+ * Steps 4, 5 and 6 are exactly the card ladder's tiers 1, 2 and 3 (the last
+ * three cuts are `CARD_FIGURE_CEILINGS`), so a step never crosses a tier and
+ * the floor's sizes and breaks are untouched; step 5 starts at 18,
+ * `STRIP_BREAK_CHARS`, so on the strip every total of step 5 or 6 is the one
+ * that breaks after its commas and no shorter one does. Counted as the card
+ * ladder counts (`cardFigureTier`): the figure handed to the money node, its
+ * sign or unit included where the node holds it, `from` and a listing's
+ * ` XEC` not. A look sizes each band for its widest figure, so a shorter one
+ * in it gives up width: at most 1/11 in step 2, 1/7 in steps 3 and 5 and
+ * 2/17 in step 4, counted in characters (a comma or a point is narrower than
+ * a digit, so this is not a width); step 1 holds everything up to 9, and a
+ * pay sheet paints 4, so there a look caps the size rather than reading the
+ * band's top; step 6 has no top.
+ *
+ * Written by `markFigureStep` alone, on the row a look compounds on:
+ * `.face-x` and `.pay-x` (`paintCardFigure`), the face's "You pay"
+ * `.row.big` (`sheetRow`) and the strip total's `.sel-totalblk`. A hook, not
+ * a state: no base sheet reads it, a look may match a step and nothing else
+ * (`LOOK_HOOK_ATTRIBUTES` in `scripts/workshop-css.mjs`), a first-party rule
+ * under it may size the figure and do nothing more (`a-figure-step-only-sizes-a-figure`),
+ * and the kit names it only once the workshop README does. Pinned by value
+ * (`pins the figure steps by value`); a fourth look may not move it.
+ */
+export const FIGURE_STEP_CEILINGS = [9, 11, 14, 17, 21] as const;
+
+/** Sets `data-figure-step` on a figure's row from its length (`FIGURE_STEP_CEILINGS`), or takes it off when the row holds no figure. */
+export function markFigureStep(row: HTMLElement, figure: string): void {
+    if (figure === '') {
+        row.removeAttribute('data-figure-step');
+        return;
+    }
+    let step = 1;
+    for (const ceiling of FIGURE_STEP_CEILINGS) {
+        if (figure.length <= ceiling) break;
+        step += 1;
+    }
+    row.setAttribute('data-figure-step', String(step));
+}
+
+/**
  * A money figure written into its node — with, when `breaks`, a soft break
  * after each comma and nowhere else. A group of digits is never split (a
  * free wrap prints two numbers), and the last group stays on one line with
@@ -8866,6 +8916,7 @@ function paintCardFigure(row: HTMLElement, node: HTMLElement, figure: string): v
     } else {
         row.removeAttribute('data-price-tier');
     }
+    markFigureStep(row, figure);
     moneyFigure(node, figure, tier === 3);
 }
 
@@ -9133,7 +9184,7 @@ function itemFace(
     // 2, the critic's P2-1): its row carries the figure's tier, stall.css
     // steps its size, and past the last ceiling it breaks after a comma.
     const youPay = formatXec(offer.askedSats);
-    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(youPay), true, cardFigureTier(youPay)));
+    how.append(sheetRow(copy.YOU_PAY, copy.payAmount(youPay), true, cardFigureTier(youPay), youPay));
     if (known !== undefined) {
         how.append(sheetRow(copy.THIS_STALLS_STOCK, copy.remainingAtoms(formatAtoms(offer.atoms, known))));
     }
@@ -9544,10 +9595,15 @@ function tokenFacts(
  * A labelled fact in a sheet or a face's fold. The face's "You pay" passes
  * its figure's tier on the card ladder (`cardFigureTier`): the row carries
  * it from tier 1, stall.css steps the size on a phone, and tier 3 breaks
- * after a comma (`moneyFigure`). Every other row is tier 0 and unchanged.
+ * after a comma (`moneyFigure`). It passes the figure too, without its
+ * ` XEC`, so the row carries its length step (`markFigureStep`). Every other
+ * row is tier 0, carries no step, and is unchanged.
  */
-function sheetRow(label: string, value: string, big = false, tier: 0 | 1 | 2 | 3 = 0): HTMLElement {
+function sheetRow(label: string, value: string, big = false, tier: 0 | 1 | 2 | 3 = 0, figure?: string): HTMLElement {
     const row = el('dl', big ? 'row big' : 'row');
+    if (figure !== undefined) {
+        markFigureStep(row, figure);
+    }
     if (tier > 0) {
         row.setAttribute('data-price-tier', String(tier));
     }
