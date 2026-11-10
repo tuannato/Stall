@@ -448,6 +448,22 @@ describe('the-kit-refuses-the-first-party-hooks', () => {
         }
     });
 
+    it('refuses each hook written in capitals', () => {
+        const CAPS = [
+            ".t-neo .sheet:has(.pay-x[DATA-FIGURE-STEP='4']) [data-role='pay-final'] { display: none; }",
+            '.t-neo .face-x[Data-Figure-Step] .x { font-size: 30px; }',
+            ".t-neo .stall-name[DATA-NAME-TIER='3'] { font-size: 20px; }",
+            ".t-neo .stall-name[DATA-SCRIPT='cjk'] { letter-spacing: 0.2em; }",
+            '.t-neo .MARK-FIGURE { display: block; }',
+            '.t-neo .Look-Mark { display: block; }',
+            '.t-neo [DATA-LOOK-MARK] { display: block; }',
+        ];
+        for (const rule of CAPS) {
+            const kit = lintSheet(plantedKit(rule));
+            assert.ok(kit.some((p) => /first-party hook/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
     it('names the figure step in its sentence', () => {
         const kit = lintSheet(plantedKit('.t-neo .face-x[data-figure-step="2"] .x { font-size: 30px; }'));
         assert.ok(kit.some((p) => /first-party hook \(a look's mark, data-script, data-name-tier or data-figure-step\)/.test(p)), kit.join('\n'));

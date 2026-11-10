@@ -15369,7 +15369,22 @@ and `:where()`, a sibling by `+` and by `~`, a pseudo-element, a `display`, a
 colour beside a size, a `font` shorthand, a custom property, the name in
 capitals and escaped, and the `:has()` plant inside a media block. Taken:
 `.t-x .face-x[data-figure-step='3'] { font-size: 30px }` and five more sizes.
-The kit refuses the hook outright (`FIRST_PARTY_HOOK`).
+The kit refuses the hook outright (`FIRST_PARTY_HOOK`, case-blind since the
+critic's P2-2: `[DATA-FIGURE-STEP]` and the other hooks in capitals are
+refused too).
+
+What the belt does not say, stated (the 8g3 build critic's P2-1 and P3): a
+step does not only size a figure. Its font size reaches every font-relative
+length (`em`, `lh`) a rule writes under its row, so a look can grow or move a
+box at one step only. The honest sentences on the pay sheets are read by the
+contrast pass only at steps 1 and 6; steps 2-5 are painted only on
+geometry-only screens (`pay-inr`, `pay-figure-14`, `pay-figure-17`,
+`pay-long-figure`, `pay-several-figure-steps`), to be closed in 8g3 (PLAN §
+Open). The belt accepts `font-size: 0` on non-money words under a step row (a
+face's "from", a unit, the strip's note), as at rest on main. The census test
+does not see an object-key write (`Object.assign(el.dataset, { figureStep })`).
+The owed counts are summed over variants, so a worn-only rule at one step is
+masked by the bare paint.
 
 ### Not read, stated
 - A length no fixture paints within a step: each step is painted at its

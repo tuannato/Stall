@@ -2208,6 +2208,20 @@ money path this app can have, because nothing on it is derived.
   `data-price-tier`, and over the stream card's `data-tier`, is not built. The
   shipped looks read `data-price-tier` on their own rows only, so the belt
   would cost them nothing; a private look's rules under it are unread here.
+- **The honest sentences on the pay sheets are not read at steps 2-5 of the
+  figure's length step** (the 8g3 build critic, 2026-11-10; general, true of
+  every look). A step's font size reaches every font-relative length (`em`,
+  `lh`) a rule writes under its row, so a first-party rule under
+  `data-figure-step` can still grow or move a box at one step only, and the
+  belt's "font-size and line-height alone" does not say otherwise. The
+  contrast pass reads `pay-final` and its kin only at steps 1 and 6; steps
+  2-5 are painted only on geometry-only screens (`pay-inr`, `pay-figure-14`,
+  `pay-figure-17`, `pay-long-figure`, `pay-several-figure-steps`). 8g3 adds
+  those pay screens to the contrast plan with `HONEST_OWED` entries
+  (D-2026-11-10-17); the estimate is about 60-100 jobs and 8-12 s at three
+  tabs, unmeasured, which crosses the 240 s sharding line and is the owner's
+  call. Also stated: the belt accepts `font-size: 0` on non-money words under
+  a step row (as at rest on main).
 
 ---
 

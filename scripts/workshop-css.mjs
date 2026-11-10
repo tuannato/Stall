@@ -692,7 +692,7 @@ function lastPseudoElement(selector) {
  * step 8g3-pre) joins them on the same terms: the workshop README does not
  * name it. Test: `the-kit-refuses-the-first-party-hooks`.
  */
-const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier|data-figure-step)(?![\w-])/;
+const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier|data-figure-step)(?![\w-])/i;
 
 /**
  * The classes the app writes on the pieces of a money figure it breaks after
@@ -2796,13 +2796,30 @@ function animationNameProblems(decls, own) {
  * descendant and child combinators alone, never `+` or `~`, never inside a
  * functional pseudo-class (`:has()`, `:not()`, `:is()`, `:where()`,
  * `:nth-child(… of …)`), and with no pseudo-element as the subject — and
- * the rule sets `font-size` and `line-height` and nothing else, so what a
- * step reaches is the size of the figure under its row. The same hole
- * through `data-price-tier` (tier 1 and up, 15 characters and longer) is
- * older and open (PLAN § Open). Test: `a-figure-step-only-sizes-a-figure`.
+ * the rule sets `font-size` and `line-height` and nothing else. That is not
+ * "only the figure's size": a step's font size reaches every font-relative
+ * length (`em`, `lh`, through `line-height`) that any rule writes under its
+ * row, a box's offset, a shadow's spread, a padding, so a look can still grow
+ * or move a box at one step only. The honest sentences on the pay sheets are
+ * read by the contrast pass only at steps 1 and 6; steps 2–5 are painted only
+ * on geometry-only screens (`pay-inr`, `pay-figure-14`, `pay-figure-17`,
+ * `pay-long-figure`, `pay-several-figure-steps`), to be closed in 8g3 (PLAN
+ * § Open). The belt also accepts `font-size: 0` on non-money words under a
+ * step row (a face's "from", a unit, the strip's note), as at rest on main.
+ * The same hole through `data-price-tier` (tier 1 and up, 15 characters and
+ * longer) is older and open (PLAN § Open). Test:
+ * `a-figure-step-only-sizes-a-figure` (its census does not see an object-key
+ * write, `Object.assign(el.dataset, { figureStep })`; its owed counts are
+ * summed over variants, so a worn-only rule at one step is masked by the bare
+ * paint).
  */
 const FIGURE_STEP_NAME = 'data-figure-step';
-/** The properties a rule under a figure's step may set. */
+/**
+ * The properties a rule under a figure's step may set. The rationale is the
+ * size and its line height, not "only a figure": the size reaches every
+ * font-relative length written under the row (`em`, `lh`), and non-money
+ * words under it may be sized to zero.
+ */
 export const FIGURE_STEP_SETS = Object.freeze(['font-size', 'line-height']);
 
 /** Where a selector names the figure step: `{ names, nested, sibling }`, read outside strings and escapes. */
