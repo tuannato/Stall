@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
     CARD_FIGURES_OWED,
     CARD_LADDERS_OWED,
+    CARD_STEP_LADDERS_OWED,
+    FIGURE_STEPS_OWED,
     CYCLE_STEPS_OWED,
     DRESS_SURFACES_OWED,
     FIGURE_SURFACES_OWED,
@@ -55,9 +57,14 @@ const EVERY_CARD_STEP = Object.fromEntries(
     ]),
 );
 const EVERY_LADDER = Object.fromEntries(['face:price', 'face:seller-price', 'paid:figure', 'pay:price'].map((figure) => [figure, '0123']));
+/* Every figure step (step 8g3-pre) of the face, You pay, a pay figure and the strip total, and the five step ladders compared over all six steps. */
+const EVERY_FIGURE_STEP = Object.fromEntries(['face', 'paid', 'pay', 'strip'].flatMap((place) => ['1', '2', '3', '4', '5', '6'].map((step) => [`${place}:${step}`, 2])));
+const EVERY_STEP_LADDER = Object.fromEntries(['face:price', 'face:seller-price', 'paid:figure', 'pay:price', 'strip:selection-total'].map((figure) => [figure, '123456']));
 const cardRead = {
     cardFigureByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_CARD_STEP])),
     cardLadderByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_LADDER])),
+    cardFigureStepByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_FIGURE_STEP])),
+    cardStepLadderByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, EVERY_STEP_LADDER])),
 };
 /*
  * D-2026-10-14-02: a broken figure held to its ink on every look a pass may
@@ -758,6 +765,40 @@ describe('the-narrow-pass-owes-the-long-card-figures', () => {
             probeCoverageLine('narrow', narrowRead),
             /^card figures read: face:0 10, face:1 10, face:2 10, face:3 10, line:0 20, line:2 10, line:3 20, paid:0 10, paid:1 10, paid:2 10, paid:3 10, pay:0 10, pay:1 10, pay:2 10, pay:3 10 · ladders compared: 20/,
         );
+        assert.match(probeCoverageLine('narrow', narrowRead), / · figure steps read: face:1 10, [^·]*strip:6 10 · step ladders compared: 25/);
+    });
+
+    it('owes every figure step of the face, You pay, a pay figure and the strip total, and five step ladders over all six steps, by value (step 8g3-pre)', () => {
+        assert.deepEqual(
+            [...FIGURE_STEPS_OWED],
+            ['face', 'paid', 'pay', 'strip'].flatMap((place) => ['1', '2', '3', '4', '5', '6'].map((step) => `${place}:${step}`)),
+        );
+        assert.equal(FIGURE_STEPS_OWED.length, 24);
+        assert.deepEqual([...CARD_STEP_LADDERS_OWED], ['face:price', 'face:seller-price', 'paid:figure', 'pay:price', 'strip:selection-total']);
+        const without = (cls, place) => ({
+            ...narrowRead,
+            cardFigureStepByClass: {
+                ...narrowRead.cardFigureStepByClass,
+                [cls]: Object.fromEntries(Object.entries(EVERY_FIGURE_STEP).filter(([key]) => key !== place)),
+            },
+        });
+        assert.deepEqual(probeCoverageGaps('narrow', without('t-rural', 'strip:4'), NARROW_OPTIONS), [
+            'a-card-figure-stands-inside-its-row read no strip figure at step 4 on a t-rural stall',
+        ]);
+        assert.deepEqual(probeCoverageGaps('mobile', { ...full, ...without('t-neo', 'face:2') }, NARROW_OPTIONS).filter((gap) => gap.startsWith('a-card-figure')), [
+            'a-card-figure-stands-inside-its-row read no face figure at step 2 on a t-neo stall',
+        ]);
+        const short = {
+            ...narrowRead,
+            cardStepLadderByClass: { ...narrowRead.cardStepLadderByClass, 't-modern': { ...EVERY_STEP_LADDER, 'strip:selection-total': '1256' } },
+        };
+        assert.deepEqual(probeCoverageGaps('narrow', short, NARROW_OPTIONS), [
+            'a-card-figure-steps-down-on-every-look compared the strip:selection-total step ladder over steps 1, 2, 5, 6 on a t-modern stall, not all six',
+        ]);
+        const none = probeCoverageGaps('narrow', { ...narrowRead, cardFigureStepByClass: {}, cardStepLadderByClass: {} }, NARROW_OPTIONS);
+        assert.equal(none.length, NARROW_LOOKS.length * (FIGURE_STEPS_OWED.length + CARD_STEP_LADDERS_OWED.length));
+        const desk = probeCoverageGaps('desktop', { ...full, ...narrowRead, cardFigureStepByClass: {}, cardStepLadderByClass: {} }, NARROW_OPTIONS);
+        assert.equal(desk.filter((gap) => gap.startsWith('a-card-figure')).length, 0);
     });
 });
 

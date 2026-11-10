@@ -12,6 +12,7 @@ import {
     FACE_DISPLAY,
     GENERATED_TEXT,
     LOOK_HOOK_ATTRIBUTES,
+    FIGURE_STEP_SETS,
     LOOK_MEDIA,
     ANGLE_CAP_DEG,
     MASK_COMPOSITE_LEGACY,
@@ -252,6 +253,17 @@ describe('a-look-cannot-target-one-seller', () => {
         assert.ok(read('src/ui/render.ts').includes("setAttribute('data-script', 'cjk')"), 'render.ts writes data-script');
         assert.match(read('src/domain/text.ts'), /export function scriptOf\(text: string\): 'cjk' \| undefined/);
         assert.deepEqual(LOOK_HOOK_ATTRIBUTES['data-script'], ['cjk']);
+        // The card figures' length step (step 8g3-pre): one value per step of
+        // render.ts's `FIGURE_STEP_CEILINGS`, read as its literal, written by
+        // `markFigureStep` alone (`the-figure-step-has-one-writer`).
+        const render = read('src/ui/render.ts');
+        const cuts = /export const FIGURE_STEP_CEILINGS = \[([\d, ]+)\] as const;/.exec(render)?.[1];
+        assert.equal(cuts, '9, 11, 14, 17, 21', 'render.ts states the figure steps as a literal');
+        assert.ok(render.includes("row.setAttribute('data-figure-step', String(step))"), 'render.ts writes data-figure-step');
+        assert.deepEqual(
+            LOOK_HOOK_ATTRIBUTES['data-figure-step'],
+            Array.from({ length: cuts.split(',').length + 1 }, (_, i) => String(i + 1)),
+        );
         // The narrow row dress (D-2026-10-13-04) is held to what writes it: a
         // look row's `narrowTag`, whose one value render.ts writes on the root
         // (and nothing else writes it: `the-narrow-tag-has-one-writer`, a parsed
@@ -417,6 +429,7 @@ describe('the-kit-refuses-the-first-party-hooks', () => {
         '.t-neo .stall-name[data-script="cjk"] { letter-spacing: 0.2em; }',
         '.t-neo .stall-name[data-name-tier="3"] { font-size: 20px; }',
         '.t-neo .stall-name { --name-rungs: 3; }',
+        '.t-neo .face-x[data-figure-step="2"] .x { font-size: 30px; }',
         '.t-neo .mark-figure { display: block; }',
         '.t-neo .item-ic .mark-tile { display: block; }',
         '.t-neo .items > .look-mark { display: block; }',
@@ -433,6 +446,64 @@ describe('the-kit-refuses-the-first-party-hooks', () => {
             const kit = lintSheet(plantedKit(rule));
             assert.ok(kit.some((p) => /first-party hook/.test(p)), `kit, ${rule}:\n  ${kit.join('\n  ') || '(no problem)'}`);
         }
+    });
+
+    it('names the figure step in its sentence', () => {
+        const kit = lintSheet(plantedKit('.t-neo .face-x[data-figure-step="2"] .x { font-size: 30px; }'));
+        assert.ok(kit.some((p) => /first-party hook \(a look's mark, data-script, data-name-tier or data-figure-step\)/.test(p)), kit.join('\n'));
+    });
+});
+
+describe('a-figure-step-only-sizes-a-figure', () => {
+    /**
+     * Step 8g3-pre (the critic's P1, D-2026-11-10-16): `data-figure-step`
+     * tells a look how long the price on screen is, so read through `:has()`
+     * a rule elsewhere could change with it — the pay sheet's final-payment
+     * line hidden when the XEC the wallet signs is 10 or 11 characters, a
+     * face's Buy hidden at one length, the whole stall restyled under a long
+     * figure — where no pass reads those lines at that step. A first-party
+     * rule names the step on the subject or an ancestor of it, outside every
+     * functional pseudo-class, and sets `font-size` and `line-height` alone.
+     * The first three are the critic's plants (`lint-plants-on-prototype.txt`);
+     * red: `lintLook` without its `figureStepProblems` line.
+     */
+    const REFUSED = [
+        ".t-neo .sheet:has(.pay-x[data-figure-step='4']) [data-role='pay-final'] { display: none; }",
+        ".t-neo .face:has(.face-x[data-figure-step='3']) .buy { display: none; }",
+        ".t-neo.stall:has([data-figure-step='6']) .stall-sign { visibility: hidden; }",
+        ".t-neo .pay-x:not([data-figure-step='1']) .pay-x-n { font-size: 20px; }",
+        ".t-neo :is(.face-x[data-figure-step='2']) .x { font-size: 20px; }",
+        ".t-neo :where(.pay-x[data-figure-step='2']) .pay-x-n { font-size: 20px; }",
+        ".t-neo .face-x[data-figure-step='3'] + .buy { font-size: 30px; }",
+        ".t-neo .face-x[data-figure-step='3'] ~ .face-words { font-size: 30px; }",
+        ".t-neo .face-x[data-figure-step='3']::after { font-size: 30px; }",
+        ".t-neo .face-x[data-figure-step='3'] .x { display: none; }",
+        ".t-neo .face-x[data-figure-step='3'] .x { font-size: 30px; color: #000; }",
+        ".t-neo .face-x[data-figure-step='3'] .x { font: 30px serif; }",
+        ".t-neo .face-x[data-figure-step='3'] .x { --s-text: #000; }",
+        ".t-neo .face-x[DATA-FIGURE-STEP='3'] .x { opacity: 0.5; }",
+        ".t-neo .face-x[data-figure-st\\65p='3'] .x { opacity: 0.5; }",
+        "@media (max-width: 679.98px) { .t-neo .sheet:has(.pay-x[data-figure-step='4']) .buy { display: none; } }",
+    ];
+
+    it('refuses a step read off the figure\'s own row, and a rule under one that sets more than a size', () => {
+        for (const rule of REFUSED) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => /data-figure-step/.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('takes the size of the figure under its row, at any step, on the subject or an ancestor of it', () => {
+        accepts(".t-x .face-x[data-figure-step='3'] { font-size: 30px; }".replaceAll('t-x', 't-neo'));
+        accepts(".t-neo .face-x[data-figure-step='2'] .x { font-size: 30px; }");
+        accepts(".t-neo .pay-x[data-figure-step='1'] > .pay-x-n { font-size: 34px; line-height: 1.1; }");
+        accepts(".t-neo .sel-totalblk[data-figure-step='5'] .sel-total { font-size: 18px; }");
+        accepts("@media (max-width: 679.98px) { .t-neo .row.big[data-figure-step='4'] dd { font-size: 20px; } }");
+        accepts(".t-neo .face-x[data-figure-step='3'] .x, .t-neo .pay-x[data-figure-step='3'] .pay-x-n { font-size: 26px; }");
+    });
+
+    it('lists the two properties by value', () => {
+        assert.deepEqual([...FIGURE_STEP_SETS], ['font-size', 'line-height']);
     });
 });
 

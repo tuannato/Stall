@@ -133,6 +133,14 @@ describe('every-attribute-value-a-look-may-match-is-painted-or-is-a-state', () =
         expect(STATE_EXCEPT_PAINTED).toEqual({ 'data-code': [], 'data-format': ['tag'] });
     });
 
+    it('paints every figure step a look may match, and reads none as a state: a step sizes a figure (step 8g3-pre)', () => {
+        for (const step of ['1', '2', '3', '4', '5', '6']) {
+            expect(painted.has(`data-figure-step=${step}`), `a probe screen paints data-figure-step=${step}`).toBe(true);
+            expect(namesAState(`[data-figure-step='${step}']`), `[data-figure-step='${step}'] is read at rest`).toBe(false);
+        }
+        expect(STATE_ATTRIBUTES['data-figure-step']).toEqual(['1', '2', '3', '4', '5', '6']);
+    });
+
     it('names the three states no fixture paints, and paints data-copied both ways (B3)', () => {
         for (const [name, value] of [
             ['data-state', 'stale'],

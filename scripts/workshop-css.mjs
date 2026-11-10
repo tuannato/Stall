@@ -424,11 +424,15 @@ export const LOOK_MEDIA = Object.freeze([
  * Part of `STATE_ATTRIBUTES`; listed apart because "matched by a served
  * sheet" cannot be their proof of use until a look that reads them is
  * served — `a-look-cannot-target-one-seller` holds each to the module that
- * writes it instead.
+ * writes it instead. Since step 8g3-pre also a card figure's length step
+ * (`data-figure-step`, `markFigureStep` in `src/ui/render.ts`, one value per
+ * step of `FIGURE_STEP_CEILINGS`): a first-party rule under it may size the
+ * figure and nothing more (`figureStepProblems`).
  */
 export const LOOK_HOOK_ATTRIBUTES = Object.freeze({
     'data-name-tier': Object.freeze(['1', '2', '3', '4', '5', '6']),
     'data-script': Object.freeze(['cjk']),
+    'data-figure-step': Object.freeze(['1', '2', '3', '4', '5', '6']),
 });
 
 /**
@@ -684,9 +688,11 @@ function lastPseudoElement(selector) {
  * paints carries a CJK name or a name that climbs a rung, and no rule yet
  * measures a mark shown, so a kit rule under any of them paints on a screen
  * no pass measures. The `--name-rungs` declaration is refused beside them
- * (`declarationProblems`). Test: `the-kit-refuses-the-first-party-hooks`.
+ * (`declarationProblems`). The card figures' length step (`data-figure-step`,
+ * step 8g3-pre) joins them on the same terms: the workshop README does not
+ * name it. Test: `the-kit-refuses-the-first-party-hooks`.
  */
-const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier)(?![\w-])/;
+const FIRST_PARTY_HOOK = /\.(?:look-mark|mark-(?:figure|shelf|tile))(?![\w-])|\[\s*(?:data-look-mark|data-script|data-name-tier|data-figure-step)(?![\w-])/;
 
 /**
  * The classes the app writes on the pieces of a money figure it breaks after
@@ -2775,11 +2781,101 @@ function animationNameProblems(decls, own) {
     return out;
 }
 
+/*
+ * **A figure's step sizes the figure and does nothing more** (step 8g3-pre,
+ * the critic's P1, D-2026-11-10-16; first party only — the kit refuses the
+ * hook outright). `data-figure-step` is a value a look may match
+ * (`LOOK_HOOK_ATTRIBUTES`), and it tells a look how long the price on the
+ * screen is. Read through `:has()` it would let a rule elsewhere on the
+ * screen change with the price — a pay sheet's final-payment line hidden, or
+ * a face's Buy, when the XEC the wallet signs is 10 or 11 characters — on
+ * screens whose honest sentences are read only where the contrast pass
+ * samples them, at other steps. So in a first-party sheet a selector that
+ * names `data-figure-step` (in any case, escapes decoded) names it on the
+ * subject's own compound or on an ancestor of the subject — joined to it by
+ * descendant and child combinators alone, never `+` or `~`, never inside a
+ * functional pseudo-class (`:has()`, `:not()`, `:is()`, `:where()`,
+ * `:nth-child(… of …)`), and with no pseudo-element as the subject — and
+ * the rule sets `font-size` and `line-height` and nothing else, so what a
+ * step reaches is the size of the figure under its row. The same hole
+ * through `data-price-tier` (tier 1 and up, 15 characters and longer) is
+ * older and open (PLAN § Open). Test: `a-figure-step-only-sizes-a-figure`.
+ */
+const FIGURE_STEP_NAME = 'data-figure-step';
+/** The properties a rule under a figure's step may set. */
+export const FIGURE_STEP_SETS = Object.freeze(['font-size', 'line-height']);
+
+/** Where a selector names the figure step: `{ names, nested, sibling }`, read outside strings and escapes. */
+function figureStepPlaces(selector) {
+    let depth = 0;
+    let names = false;
+    let nested = false;
+    let sibling = false;
+    let i = 0;
+    while (i < selector.length) {
+        const c = selector[i];
+        if (c === '\\') {
+            i += 2;
+            continue;
+        }
+        if (c === '"' || c === "'") {
+            i = skipString(selector, i);
+            continue;
+        }
+        if (c === '(') depth += 1;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (c === '[') {
+            let j = i + 1;
+            while (j < selector.length && selector[j] !== ']') {
+                j = selector[j] === '"' || selector[j] === "'" ? skipString(selector, j) : j + 1;
+            }
+            if (attributeNameOf(selector.slice(i + 1, j)) === FIGURE_STEP_NAME) {
+                if (depth > 0) nested = true;
+                else names = true;
+            }
+            i = j + 1;
+            continue;
+        } else if (depth === 0 && (c === '+' || c === '~') && names) {
+            sibling = true;
+        }
+        i += 1;
+    }
+    return { names, nested, sibling };
+}
+
+/** Why a first-party rule naming a figure's step may not stand (see above); a rule that names none has none. */
+function figureStepProblems(decls, selectors) {
+    const out = [];
+    let names = false;
+    for (const selector of selectors) {
+        const place = figureStepPlaces(selector);
+        if (!place.names && !place.nested) continue;
+        names = true;
+        const shown = `"${echo(selector)}"`;
+        if (place.nested) {
+            out.push(`${shown} names ${FIGURE_STEP_NAME} inside a functional pseudo-class (:has(), :not(), :is(), :where()) — a figure's step may choose the figure's own size and nothing else on the screen: name it on the subject or an ancestor of it`);
+        }
+        if (place.sibling) {
+            out.push(`${shown} names ${FIGURE_STEP_NAME} on a box joined to the subject by + or ~ — a figure's step may choose the size of what stands under its row, never of a neighbour`);
+        }
+        if (isPseudoElementSelector(selector)) {
+            out.push(`${shown} names ${FIGURE_STEP_NAME} over a pseudo-element — a figure's step sizes the figure, an element`);
+        }
+    }
+    if (!names) return out;
+    for (const { prop, value } of decls) {
+        if (!FIGURE_STEP_SETS.includes(prop)) {
+            out.push(`${prop}: ${echo(value, 48)} under ${FIGURE_STEP_NAME} — a rule under a figure's step sets ${FIGURE_STEP_SETS.join(' and ')} and nothing else: the step tells a look how long a price is, and what changes with it is the price's own size`);
+        }
+    }
+    return out;
+}
+
 function selectorProblems(selector, { kit = false } = {}) {
     const out = [];
     if (kit && FIRST_PARTY_HOOK.test(selector)) {
         out.push(
-            `"${echo(selector)}" names a first-party hook (a look's mark, data-script or data-name-tier): the kit names none until the workshop README does`,
+            `"${echo(selector)}" names a first-party hook (a look's mark, data-script, data-name-tier or data-figure-step): the kit names none until the workshop README does`,
         );
     }
     const piece = kit ? null : FIGURE_PIECE.exec(selector);
@@ -4041,6 +4137,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 for (const why of fontProblems(declarationsOf(node.body), ownFamilies)) at(node.start, why);
                 if (!kit) for (const why of moneySizeMotionProblems(declarationsOf(node.body), selectors, { scales: sheetScales })) at(node.start, why);
                 if (!kit) for (const why of stateBeltProblems(declarationsOf(node.body), selectors)) at(node.start, why);
+                if (!kit) for (const why of figureStepProblems(declarationsOf(node.body), selectors)) at(node.start, why);
                 if (!kit) for (const why of pseudoHostPaintProblems(declarationsOf(node.body), selectors)) at(node.start, why);
                 // The paints that reach past a box, and the outline's cap: on a rule that names no state (the belt
                 // refuses most of them by name under one and bounds the rest), the colours on one with no

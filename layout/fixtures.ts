@@ -983,6 +983,81 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'pay-several' },
     }),
     /*
+     * The figure steps no fixture painted (step 8g3-pre, D-2026-11-10-16):
+     * `data-figure-step` splits the card ladder's tier 0 at 9, 11 and 14
+     * characters (`FIGURE_STEP_CEILINGS`), and a look may size each step, so
+     * every step is painted on every surface that carries it, at the widest
+     * figure the step holds. Step 2 (10–11 characters) was painted on no face
+     * and no strip, step 4 (15–17) on no strip:
+     * - the listing face, which carries "You pay" at the same step: 11
+     *   characters of asked amount, `999,999,999`;
+     * - the quote face in the sign its face does not draw, so the machine's
+     *   fallback paints it at about 1em: `₩99,999,999` (11);
+     * - Pay several over two won quotes whose lines are 11 and 14 characters
+     *   (`₩99,999,999`, `₩9,999,999,999`): a sheet whose lines no fixture
+     *   painted between 6 and 17 characters, and whose figure, the XEC the
+     *   wallet signs, stands on step 5 (18 characters at 0.03 won a XEC);
+     * - the strip's total at 11 (`₩99,999,999`) and 17 characters
+     *   (`元9,999,999,999.99`).
+     * Geometry only: their ink is `item-listing`'s, `item-quote`'s,
+     * `pay-several`'s and `pay-several-strip`'s.
+     */
+    'item-listing-figure-11': base({
+        fetch: { kind: 'offers', offers: [offer(T1, 0, 99_999_999_900n), offer(T2, 1, 87_500n)] },
+        overlay: { kind: 'item', tokenId: T1, rail: 'listings' },
+    }),
+    'item-quote-figure-11': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([[T1, { code: 'krw', exponent: 0, amount: 99_999_999n }]]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        overlay: { kind: 'item', tokenId: T1, rail: 'quotes' },
+    }),
+    'pay-several-figure-steps': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'krw', exponent: 0, amount: 99_999_999n }],
+            [QUOTED, { code: 'krw', exponent: 0, amount: 9_999_999_999n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+        payRate: { rate: scaleRate(0.03)!, atMs: Date.now() },
+    }),
+    'pay-several-strip-11': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'krw', exponent: 0, amount: 99_999_999n }],
+            [QUOTED, { code: 'krw', exponent: 0, amount: 5_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
+    'pay-several-strip-17': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'cny', exponent: 2, amount: 999_999_999_999n }],
+            [QUOTED, { code: 'cny', exponent: 2, amount: 5_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: GENESIS,
+        quoteTimes: QUOTE_TIMES,
+        shopTab: 'quotes',
+        selectionOpen: true,
+        selection: new Map([[T1, 1n]]),
+    }),
+    /*
      * Rows at the longest figures (round 2, the critic's P2-6): an
      * eight-byte asked amount on a listing row and an eight-byte XEC quote
      * on a quote row. They re-flow on the rows' last rung and break after a
@@ -2501,6 +2576,12 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'pay-several-figure-lines',
     'row-longest-figure',
     'quote-row-longest-figure',
+    // Step 8g3-pre: the figure steps no fixture painted, on the same shapes.
+    'item-listing-figure-11',
+    'item-quote-figure-11',
+    'pay-several-figure-steps',
+    'pay-several-strip-11',
+    'pay-several-strip-17',
     // Round 3: the rows either side of the re-flow's cut.
     'quote-row-1m',
     'quote-row-18',
@@ -2728,6 +2809,12 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     // Round 4: the strip's total either side of its break (`pay-several-strip`'s ink).
     'pay-several-strip-18',
     'pay-several-strip-21',
+    // Step 8g3-pre: the figure steps no fixture painted (the ink of the screens they copy).
+    'item-listing-figure-11',
+    'item-quote-figure-11',
+    'pay-several-figure-steps',
+    'pay-several-strip-11',
+    'pay-several-strip-17',
     'quote-row-1m',
     'quote-row-18',
     'row-15-16',
