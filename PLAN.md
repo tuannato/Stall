@@ -2193,6 +2193,21 @@ money path this app can have, because nothing on it is derived.
   `:nth-child`, so `:nth-child(3n + 1 of .items)` counting a body's shelves
   (not a mark host's children) is a false red; a look writes it as
   `of :has(> .item)` today.
+- **A money figure's price tier can be read through `:has()`** (the 8g3-pre
+  critic, 2026-11-10; general, true of every look). `data-price-tier` is a
+  value a look may match (G3), and the look lint takes it anywhere in a
+  selector, so a first-party rule such as
+  `.t-x .sheet:has(.pay-x[data-price-tier='1']) [data-role='pay-final'] { display: none }`
+  hides a pay sheet's honest sentence whenever the XEC the wallet signs is 15
+  characters or longer, on screens whose honest sentences the contrast pass
+  reads only at shorter figures. The figure's length step
+  (`data-figure-step`) closed this road for itself with a belt of its own (a
+  step only on the subject or an ancestor of it, outside every functional
+  pseudo-class, and a rule under it that sets `font-size` and `line-height`
+  alone: `a-figure-step-only-sizes-a-figure`); the same belt over
+  `data-price-tier`, and over the stream card's `data-tier`, is not built. The
+  shipped looks read `data-price-tier` on their own rows only, so the belt
+  would cost them nothing; a private look's rules under it are unread here.
 
 ---
 

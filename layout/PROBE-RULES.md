@@ -15308,3 +15308,76 @@ a pay code below the first screen is hit-tested only on a contrast job, whose
 shot is grown to hold the page (at 360 and on a geometry-only screen not at
 all; D3(a)), and it says the probe reads a code's colours, and on the screens
 it samples its margin and modules. No rule changed.
+
+## Step 8g3-pre: a card figure's length step (2026-11-10; D-2026-11-10-16)
+`data-figure-step` (`markFigureStep`, `FIGURE_STEP_CEILINGS` = 9, 11, 14, 17,
+21 in `src/ui/render.ts`) splits the card ladder's tier 0 into three steps a
+look may size by, and keeps tiers 1–3 as steps 4–6, on the face's figure,
+"You pay", a pay sheet's figure and the selection strip's total. A look may
+size a figure at any step, so every step is a rule no pass measures until a
+fixture paints it.
+
+### What the probe reads
+- **Five geometry-only fixtures**, each at the widest figure its step holds:
+  `item-listing-figure-11` (`999,999,999`, and "You pay" at the same step),
+  `item-quote-figure-11` (`₩99,999,999`, the sign drawn by the machine's
+  fallback at about 1em), `pay-several-figure-steps` (two won quotes, lines of
+  11 and 14 characters, its XEC figure 18 characters at 0.03 won a XEC),
+  `pay-several-strip-11` (`₩99,999,999`) and `pay-several-strip-17`
+  (`元9,999,999,999.99`). On `STATE_SCREENS`, `GEOMETRY_ONLY_SCREENS` and the
+  narrow pass (45 → 50 screens). With the ladder's own fixtures they paint
+  every step on all four places on every look (`every-figure-step-is-painted-on-every-surface`
+  in happy-dom; in Chrome, the pass line below).
+- **`a-card-figure-stands-inside-its-row` reads the strip total**, strictly,
+  against its own `.sel-totalblk` (`strip`). No card rule read it before.
+  Run alone on main's tree first (2026-11-10, the whole runner, that one line
+  added to `CARD_FIGURES`): every pass green on every look, 54 strip reads on
+  the phone pass and on the narrow pass, the contrast dump unchanged. It also
+  counts the four places per step (`cardFigureStepByClass`) and fails a row
+  that holds a figure and carries no step.
+- **The step half of `a-card-figure-steps-down-on-every-look`**
+  (`cardStepLadderFaults`): per look, per variant, for the four ladder figures
+  and the strip total, no step paints larger than the smallest size the step
+  before it painted. No "the last is smaller" half. **On the phone passes
+  only** (390 and 360), as the tier half: a desk rule keyed on a step is held
+  by the rules that read a figure where it stands, and by no ladder compare.
+- **Owed** (`FIGURE_STEPS_OWED`, `CARD_STEP_LADDERS_OWED`): the phone and
+  narrow passes owe `face`, `paid`, `pay` and `strip` at steps 1–6 on every
+  look they painted, and the five step ladders compared over `123456`.
+
+### The clean tree
+Pass line at 390: figure steps read face:1 66, face:2–6 18 each, paid:1 57,
+paid:2–6 9 each, pay:1 60, pay:2 18, pay:3 9, pay:4 18, pay:5 9, pay:6 27,
+strip:1 18, strip:2–4 9 each, strip:5 18, strip:6 9 · step ladders compared:
+25 (five looks, five figures). At 360 the same but face:1 42 and paid:1 33.
+No failure. The contrast dump is the main tree's box for box (15,018 boxes
+over 823 jobs, `contrast-dump.mjs`: 0 moved, 0 added, 0 removed). The whole
+run 227.7s of 300 at three tabs, load 5.61 at the start and 5.80 at the end
+(main's tree with the strip read, the same hour: 234.5s, load 1.27 → 7.82;
+one run each, not an A/B pair). The narrow pass 28.3s on its tab (25.7s for 45
+screens on main's tree).
+
+### The belt
+A first-party rule naming the step names it on the subject's compound or an
+ancestor of it, joined by descendant or child combinators alone, never inside
+a functional pseudo-class, never over a pseudo-element, and sets `font-size`
+and `line-height` alone (`figureStepProblems` in `scripts/workshop-css.mjs`,
+`a-figure-step-only-sizes-a-figure`). Red: the critic's three plants (the
+final-payment line hidden under `:has(.pay-x[data-figure-step='4'])`, a
+face's Buy at step 3, the whole stall restyled at step 6), `:not()`, `:is()`
+and `:where()`, a sibling by `+` and by `~`, a pseudo-element, a `display`, a
+colour beside a size, a `font` shorthand, a custom property, the name in
+capitals and escaped, and the `:has()` plant inside a media block. Taken:
+`.t-x .face-x[data-figure-step='3'] { font-size: 30px }` and five more sizes.
+The kit refuses the hook outright (`FIRST_PARTY_HOOK`).
+
+### Not read, stated
+- A length no fixture paints within a step: each step is painted at its
+  band's widest in the widest glyphs, so a look that sizes by step is held at
+  each step's worst case, and within a step the tag does not vary. A fallback
+  glyph another machine draws wider (`₩`, `元`) is the per-OS gap §6 already
+  carries.
+- The step ladder at desk widths (above), and the Pay several line, the Pay
+  several total and the chosen line, which carry no step.
+- The same `:has()` road through `data-price-tier` (from 15 characters) and
+  the stream card's `data-tier`: older, open (PLAN § Open).
