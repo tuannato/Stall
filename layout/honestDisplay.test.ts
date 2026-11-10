@@ -17,9 +17,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as copy from '../src/ui/copy';
 import { renderStall } from '../src/ui/render';
-import { contrastPlan } from './contrastPlan';
+import { STEP_JOBS, contrastPlan } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, SCREENS, handlers } from './fixtures';
-import { HONEST_DISPLAY, HONEST_OWED, HONEST_SELECTOR, HONEST_SELECTORS, type HonestSheet } from './honestDisplay';
+import { HONEST_DISPLAY, HONEST_OWED, HONEST_SELECTOR, HONEST_STEP_OWED, HONEST_SELECTORS, type HonestSheet } from './honestDisplay';
 import { measuredLooks, paintView, wornAllFlags, wornOf } from './looks';
 import { MONEY } from './moneySet';
 
@@ -68,7 +68,7 @@ describe('the-honest-display-sentences-are-read', () => {
         const byRole = new Map(HONEST_DISPLAY.map((h) => [h.role, h]));
         const plan = contrastPlan(measuredLooks());
         expect(Object.keys(HONEST_OWED).sort()).toEqual(
-            ['describe', 'pay', 'pay-gone', 'pay-moved', 'pay-several', 'pay-xec', 'publish-name'],
+            ['describe', 'pay', 'pay-gone', 'pay-longest-figure', 'pay-moved', 'pay-several', 'pay-several-longest-figure', 'pay-xec', 'publish-name'],
         );
         for (const [screen, byViewport] of Object.entries(HONEST_OWED)) {
             expect(SCREENS[screen], `${screen} is a fixture`).toBeDefined();
@@ -92,12 +92,53 @@ describe('the-honest-display-sentences-are-read', () => {
         expect(HONEST_OWED['pay-gone']!.mobile).toContain('pay-lost');
     });
 
+    it('owes the step screens only as the plan samples them: for a look that names data-figure-step, at both widths', () => {
+        expect(Object.keys(HONEST_STEP_OWED).sort()).toEqual([...STEP_JOBS].sort());
+        const byRole = new Map(HONEST_DISPLAY.map((h) => [h.role, h]));
+        const looks = measuredLooks();
+        const none = contrastPlan(looks);
+        const plan = contrastPlan(looks, () => false, (look) => look.id === looks[0]!.id);
+        for (const [screen, byViewport] of Object.entries(HONEST_STEP_OWED)) {
+            expect(Object.keys(HONEST_OWED), `${screen} is not owed of every look`).not.toContain(screen);
+            expect(GEOMETRY_ONLY_SCREENS.has(screen), `${screen} is geometry only for a look that does not name the step`).toBe(true);
+            for (const viewport of ['mobile', 'desktop'] as const) {
+                expect(none.some((job) => job.screen === screen), `${screen} is in no job of a plan that names no step`).toBe(false);
+                expect(plan.some((job) => job.screen === screen && job.viewport === viewport), `${screen} is a ${viewport} job for a look that names it`).toBe(true);
+                for (const role of byViewport[viewport]) expect(byRole.get(role)?.on, `${role} is on ${sheetOf(screen)}`).toContain(sheetOf(screen));
+            }
+        }
+    });
+
+    it('paints each step screen with its sheet\'s figure on the step it is there for, own mint on both Pay several items', () => {
+        const steps: Record<string, string> = {
+            'pay-inr': '2',
+            'pay-figure-14': '3',
+            'pay-figure-17': '4',
+            'pay-long-figure': '5',
+            'pay-several-figure-2': '2',
+            'pay-several-figure-3': '3',
+            'pay-several-figure-4': '4',
+            'pay-several-figure-5': '5',
+        };
+        expect(Object.keys(steps).sort()).toEqual([...STEP_JOBS].sort());
+        const root = document.createElement('div');
+        root.id = 'app';
+        document.body.append(root);
+        const look = measuredLooks()[0]!;
+        for (const [screen, step] of Object.entries(steps)) {
+            renderStall(root, paintView(SCREENS[screen]!, look, wornOf(look, 0)), handlers);
+            expect(root.querySelector('.sheet .pay-x')?.getAttribute('data-figure-step'), screen).toBe(step);
+            if (screen.startsWith('pay-several-')) expect(root.querySelector('.sheet [data-role="quote-not-minted"]'), `${screen} carries no borrowed-id warning`).toBeNull();
+        }
+        root.remove();
+    });
+
     it('is painted by every owed screen, on a sheet, shown, and in no money box, on every measured look bare and worn', () => {
         const root = document.createElement('div');
         root.id = 'app';
         document.body.append(root);
         let checked = 0;
-        for (const [screen, byViewport] of Object.entries(HONEST_OWED)) {
+        for (const [screen, byViewport] of [...Object.entries(HONEST_OWED), ...Object.entries(HONEST_STEP_OWED)]) {
             for (const look of measuredLooks()) {
                 for (const flags of [0, ...wornAllFlags(look)]) {
                     renderStall(root, paintView(SCREENS[screen]!, look, wornOf(look, flags)), handlers);
@@ -124,12 +165,17 @@ describe('the-honest-display-sentences-are-read', () => {
     });
 
     it('is read by the probe and held by the runner (a tripwire: the browser half is the real guard)', () => {
-        expect(PROBE).toContain("import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';");
+        expect(PROBE).toContain("import { HONEST_OWED, HONEST_SELECTOR, HONEST_STEP_OWED } from './honestDisplay';");
         expect(PROBE).toContain('const CONTRAST = `${CONTRAST_TEXT}, ${HONEST_SELECTOR}`;');
         // An honest line with no layout box at a job's width is not taken.
         expect(PROBE).toMatch(/!node\.matches\(CONTRAST_TEXT\) && node\.getClientRects\(\)\.length > 0/);
-        expect(PROBE).toContain('window.__honestOwed = () => HONEST_OWED;');
+        expect(PROBE).toContain('window.__honestOwed = () => ({ ...HONEST_OWED, ...HONEST_STEP_OWED });');
         expect(RUNNER).toContain("honestOwed ??= await evalJson(cdp, sessionId, 'window.__honestOwed()');");
         expect(RUNNER).toContain('the-honest-display-sentences-are-read');
+        // The step screens are held the way the staged address ones are: page, plan and served sheets agree, and the owe follows the sheets.
+        expect(RUNNER).toContain('the-plan-follows-the-sheets-that-name-data-figure-step');
+        expect(RUNNER).toContain("sheetNamesAttribute(row.css, 'data-figure-step')");
+        expect(RUNNER).toContain('honestStepGaps(honestStepReads, [...contrastClasses], NAMES_STEP)');
+        expect(PROBE).toContain("loadedSheetNames('data-figure-step', look.theme.sheetClass)");
     });
 });

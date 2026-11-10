@@ -147,6 +147,9 @@ const PAY_CARD = [
     'pay-qr-lede',
 ];
 
+/** Pay several's lines on its own card. */
+const PAY_SEVERAL_CARD = ['pay-direct', 'pay-final', 'pay-memo-line', 'pay-tolerances-per-item', 'pay-delivery', 'pay-qr-lede'];
+
 /**
  * The roles each sampled sheet screen owes, per viewport: every contrast job
  * of that screen and viewport must read each of them, on every look and
@@ -164,9 +167,18 @@ export const HONEST_OWED: Readonly<Record<string, Readonly<Record<HonestViewport
     'pay-xec': both('pay-direct', 'pay-final', 'quote-not-minted', 'pay-memo', 'pay-some-wallets', 'pay-delivery', 'pay-qr-lede'),
     // `pay` with the valve's "moved" line.
     'pay-moved': both(...PAY_CARD, 'pay-valve'),
+    /*
+     * The pay sheet and Pay several at figure steps 1 and 6 (step
+     * 8g3-honest, D-2026-11-10-18): `pay` and `pay-several` are step 1, these
+     * two the widest figures, read on every look. Steps 2 to 5 are
+     * `HONEST_STEP_OWED`, sampled for a look whose sheet names
+     * `data-figure-step`.
+     */
+    'pay-longest-figure': both('pay-direct', 'pay-final', 'quote-minted', 'pay-memo', 'pay-some-wallets', 'pay-delivery', 'quote-age', 'pay-qr-lede'),
+    'pay-several-longest-figure': both(...PAY_SEVERAL_CARD),
     // A quote that left the stall: the one sentence.
     'pay-gone': both('pay-lost'),
-    'pay-several': both('pay-direct', 'pay-final', 'pay-memo-line', 'pay-tolerances-per-item', 'pay-delivery', 'pay-qr-lede'),
+    'pay-several': both(...PAY_SEVERAL_CARD),
     // Not `publish-qr-lede`: the name sheet composes no record for a look
     // the stall has not unlocked — a paid private look, painted as a
     // try-on — so neither the code nor its caption is painted there
@@ -197,4 +209,26 @@ export const HONEST_OWED: Readonly<Record<string, Readonly<Record<HonestViewport
             'describe-qr-lede',
         ],
     },
+};
+
+/**
+ * The roles the pay screens at figure steps 2 to 5 owe, per viewport, on every
+ * look whose sheet names `data-figure-step` (`STEP_JOBS`, `contrastPlan.ts`;
+ * step 8g3-honest, D-2026-11-10-18): a look that sizes a card figure by its
+ * step could grow a box over `pay-final` at one step only, and the screens
+ * that paint steps 2 to 5 are sampled for exactly those looks. Not in
+ * `HONEST_OWED`, which every look owes on every run. The pay sheet's steps are
+ * the geometry-only screens `pay-inr`, `pay-figure-14`, `pay-figure-17` and
+ * `pay-long-figure`; Pay several's the own-mint twins `pay-several-figure-2`
+ * to `-5`.
+ */
+export const HONEST_STEP_OWED: Readonly<Record<string, Readonly<Record<HonestViewport, readonly string[]>>>> = {
+    'pay-inr': both('pay-direct', 'pay-final', 'quote-minted', 'pay-memo', 'pay-some-wallets', 'pay-tolerance', 'pay-delivery', 'pay-qr-lede'),
+    'pay-figure-14': both('pay-direct', 'pay-final', 'quote-minted', 'pay-memo', 'pay-some-wallets', 'pay-delivery', 'quote-age', 'pay-qr-lede'),
+    'pay-figure-17': both('pay-direct', 'pay-final', 'quote-minted', 'pay-memo', 'pay-some-wallets', 'pay-delivery', 'quote-age', 'pay-qr-lede'),
+    'pay-long-figure': both('pay-direct', 'pay-final', 'quote-minted', 'pay-memo', 'pay-some-wallets', 'pay-tolerance', 'pay-delivery', 'quote-age', 'pay-qr-lede'),
+    'pay-several-figure-2': both(...PAY_SEVERAL_CARD),
+    'pay-several-figure-3': both(...PAY_SEVERAL_CARD),
+    'pay-several-figure-4': both(...PAY_SEVERAL_CARD),
+    'pay-several-figure-5': both(...PAY_SEVERAL_CARD),
 };

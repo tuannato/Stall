@@ -339,6 +339,45 @@ export const CARD_LADDERS_OWED = Object.freeze(['face:price', 'face:seller-price
 export const FIGURE_STEPS_OWED = Object.freeze(
     ['face', 'paid', 'pay', 'strip'].flatMap((place) => ['1', '2', '3', '4', '5', '6'].map((step) => `${place}:${step}`)),
 );
+/**
+ * The figure steps the pay sheets' honest-display sentences are owed at
+ * (step 8g3-honest, D-2026-11-10-17/18): `pay` and `pay-several` at
+ * `data-figure-step` '1'–'6'. On the contrast pass, some job must have READ
+ * `pay-final` ("a payment is final") with the sheet's figure at the step
+ * (`honestFigureStep` in the probe's prepare). **Per look**: every look owes
+ * the steps in `HONEST_STEPS_EVERY_LOOK` (1 and 6: the screens read for every
+ * look), and a look whose sheet names `data-figure-step` owes all six, because
+ * only such a look can dress a step and the screens for steps 2 to 5 are
+ * sampled for those looks alone (`STEP_JOBS`, `layout/contrastPlan.ts`).
+ */
+export const HONEST_STEPS_OWED = Object.freeze(
+    ['pay', 'pay-several'].flatMap((sheet) => ['1', '2', '3', '4', '5', '6'].map((step) => `${sheet}:${step}`)),
+);
+/** The steps every look owes, whatever its sheet names. */
+export const HONEST_STEPS_EVERY_LOOK = Object.freeze(['1', '6']);
+/**
+ * The gaps in what a contrast pass read of `pay-final` per figure step:
+ * `read` is `{ [sheetClass]: { 'pay:3': jobs } }`, `classes` the looks
+ * measured and `stepClasses` those among them whose sheet names
+ * `data-figure-step`.
+ */
+export function honestStepGaps(read, classes, stepClasses = []) {
+    const gaps = [];
+    for (const cls of classes) {
+        const owed = stepClasses.includes(cls)
+            ? HONEST_STEPS_OWED
+            : HONEST_STEPS_OWED.filter((place) => HONEST_STEPS_EVERY_LOOK.includes(place.split(':')[1]));
+        for (const place of owed) {
+            if (!(((read?.[cls] ?? {})[place] ?? 0) > 0)) {
+                gaps.push(
+                    `the honest-display line pay-final was read at no ${place.replace(':', ' figure at step ')} job on a ${cls} stall` +
+                        `${stepClasses.includes(cls) ? ', whose sheet names data-figure-step' : ''} (the-honest-display-sentences-are-read, HONEST_STEPS_OWED)`,
+                );
+            }
+        }
+    }
+    return gaps;
+}
 /** The step ladders owed compared over all six steps: the four card ladders and the strip total, by name. */
 export const CARD_STEP_LADDERS_OWED = Object.freeze([...CARD_LADDERS_OWED, 'strip:selection-total']);
 /**

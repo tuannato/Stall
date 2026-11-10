@@ -54,7 +54,7 @@ import {
     wornOf,
     type Look,
 } from './looks';
-import { COPIED_JOBS, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { COPIED_JOBS, STEP_JOBS, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import {
@@ -121,7 +121,7 @@ import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } fro
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { keyframeLonghands, meetsLines, moverKinds, type AnimationFacts } from './digitTrigger';
-import { HONEST_OWED, HONEST_SELECTOR } from './honestDisplay';
+import { HONEST_OWED, HONEST_SELECTOR, HONEST_STEP_OWED } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
 import { STICKY_SUBJECTS } from './stickyBoxes';
@@ -12975,6 +12975,22 @@ type RingLine = Hole & { chars: number; glyphs: number; ink: string };
  * paint that is not the job's is refused before anything is sampled, rather
  * than measured and counted as the job's.
  */
+/**
+ * Which figure step a pay sheet in scope stands on (step 8g3-honest,
+ * D-2026-11-10-17): `pay:N` for the pay sheet, `pay-several:N` for Pay
+ * several, N the `data-figure-step` its figure carries, and undefined where
+ * no sheet carries a `pay-final` line and a stepped figure. The runner folds
+ * it with whether the job READ `pay-final`, per look and step
+ * (`HONEST_STEPS_OWED`).
+ */
+function honestFigureStepOf(scope: ParentNode): string | undefined {
+    const sheet = scope.querySelector('.sheet');
+    if (sheet === null || sheet.querySelector('[data-role="pay-final"]') === null) return undefined;
+    const step = sheet.querySelector('.pay-x')?.getAttribute('data-figure-step');
+    if (step === null || step === undefined) return undefined;
+    return `${sheet.querySelector('[data-role="pay-lines"]') === null ? 'pay' : 'pay-several'}:${step}`;
+}
+
 type ContrastPrepared = {
     targets: ContrastTarget[];
     pageH: number;
@@ -12982,6 +12998,8 @@ type ContrastPrepared = {
     nodes: number;
     /** Honest-display lines in scope with no layout box at this width: not targets here (8e2). */
     honestUnrendered?: number;
+    /** The pay sheet's figure step when its `pay-final` line stands in scope: `pay:3`, `pay-several:5` (step 8g3-honest). */
+    honestFigureStep?: string;
     nonce: string;
     painted: { screen: string; look: number; flags: number };
     vw: number;
@@ -13075,6 +13093,10 @@ declare global {
         __namesCopied: () => string[];
         /** The screens the plan samples for those looks (`COPIED_JOBS`). */
         __copiedScreens: string[];
+        /** The measured looks whose sheet names `data-figure-step`, by class (`layout/sheetNaming.ts`). */
+        __namesStep: () => string[];
+        /** The screens the plan samples for those looks (`STEP_JOBS`). */
+        __stepScreens: string[];
         /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
         __contrastOwed: () => { rain: string[]; horizon: string[] };
         /** The honest-display roles each sampled sheet screen owes, per viewport (`layout/honestDisplay.ts`). */
@@ -13139,11 +13161,18 @@ declare global {
  * served sheets' text (`__namesCopied`).
  */
 const namesCopied = (look: Look): boolean => loadedSheetNames('data-copied', look.theme.sheetClass);
+/*
+ * Whether a measured look's sheet names `data-figure-step`, the same way: the
+ * pay screens at figure steps 2 to 5 are sampled for those looks alone
+ * (`STEP_JOBS`; step 8g3-honest, D-2026-11-10-18).
+ */
+const namesStep = (look: Look): boolean => loadedSheetNames('data-figure-step', look.theme.sheetClass);
 window.__contrastScreens = contrastScreens(
     window.innerWidth,
     new URLSearchParams(location.search).get('viewport') === 'canvas',
     measuredLooks(),
     namesCopied,
+    namesStep,
 );
 /*
  * The whole pass as a list of jobs (step 3a, the step-3 critic's item 7):
@@ -13151,10 +13180,12 @@ window.__contrastScreens = contrastScreens(
  * it at the end. The screens at this page's own width are `__contrastScreens`
  * above, which the runner compares with the plan's at every viewport.
  */
-window.__contrastPlan = () => contrastPlan(measuredLooks(), namesCopied);
+window.__contrastPlan = () => contrastPlan(measuredLooks(), namesCopied, namesStep);
 /* The classes of the measured looks whose sheet names `[data-copied]`, as this page reads them, and the screens sampled for them. */
 window.__namesCopied = () => measuredLooks().filter(namesCopied).map((look) => look.theme.sheetClass).sort();
 window.__copiedScreens = [...COPIED_JOBS];
+window.__namesStep = () => measuredLooks().filter(namesStep).map((look) => look.theme.sheetClass).sort();
+window.__stepScreens = [...STEP_JOBS];
 /*
  * The jobs the runner holds to having worn the rain and Grid horizon at
  * their worst, for every measured look whose rows carry them
@@ -13162,7 +13193,7 @@ window.__copiedScreens = [...COPIED_JOBS];
  * from Neo.
  */
 window.__contrastOwed = () => contrastOwed(measuredLooks());
-window.__honestOwed = () => HONEST_OWED;
+window.__honestOwed = () => ({ ...HONEST_OWED, ...HONEST_STEP_OWED });
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
 window.__themes = measuredLooks().map((look) => ({
@@ -15646,6 +15677,7 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
         // honest line not rendered at this width aside (`honestUnrendered`).
         nodes: preparedNodes.length,
         honestUnrendered,
+        honestFigureStep: honestFigureStepOf(scope),
         // The stalls that wore the rain, and how many had it at its brightest.
         rain,
         // The signs that wore Grid horizon, painted as they are.

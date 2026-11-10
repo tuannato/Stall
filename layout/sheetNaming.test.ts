@@ -44,3 +44,12 @@ describe('a-loaded-sheet-names-an-attribute-for-its-look', () => {
         expect(loadedSheetNames('data-copied', 't-x')).toBe(false);
     });
 });
+
+describe('a-loaded-sheet-names-data-figure-step-for-its-look', () => {
+    it('finds a rule naming the look and the figure step, and not a look that names none or another attribute (step 8g3-honest)', () => {
+        sheet(".t-x .face-x[data-figure-step='3'] { font-size: 20px; } .t-y .face-x { font-size: 20px; } .t-z .face-x[data-price-tier='1'] { font-size: 20px; }");
+        expect(loadedSheetNames('data-figure-step', 't-x')).toBe(true);
+        expect(loadedSheetNames('data-figure-step', 't-y')).toBe(false);
+        expect(loadedSheetNames('data-figure-step', 't-z')).toBe(false);
+    });
+});

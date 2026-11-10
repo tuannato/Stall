@@ -65,13 +65,13 @@ describe('the-figure-step-has-one-writer', () => {
      * in `scripts/workshop-css.mjs`, step 8g3-pre), so what writes it is held
      * here and not by a string match: parsed, every naming of it in code
      * under `src/`, `functions/`, `layout/` and `workshop/` is
-     * `markFigureStep`'s one write and one removal, and the probe's one read
-     * in `cardFigureFaults`. A second writer, a `dataset` write, or a literal
+     * `markFigureStep`'s one write and one removal, and the probe's two reads
+     * in `cardFigureFaults` and `honestFigureStepOf`, and the one literal the probe page asks the loaded stylesheets with (`namesStep`, `loadedSheetNames`: it reads a sheet's selectors, not an element; step 8g3-honest). A second writer, a `dataset` write, or a literal
      * held in a variable or a template anywhere turns it red. Not seen,
      * stated: a name built from pieces at run time.
      */
     it('is written and taken off by markFigureStep alone, and read by the probe', () => {
-        expect(namings().sort()).toEqual(['getAttribute in cardFigureFaults', 'removeAttribute in markFigureStep', 'setAttribute in markFigureStep'].sort());
+        expect(namings().sort()).toEqual(['getAttribute in cardFigureFaults', 'getAttribute in honestFigureStepOf', 'literal in (top level)', 'removeAttribute in markFigureStep', 'setAttribute in markFigureStep'].sort());
     });
 });
 

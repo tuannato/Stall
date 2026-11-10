@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { CHROMES, FIXED_CLOCK, decodePng, devtools, findChrome } from './browser.mjs';
 import { boxKey, dumpKindOf, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 import { payScreensMissingQuote } from './pay-screens.mjs';
-import { GEOMETRY_PASSES as OWING_GEOMETRY, TRACKED_FIXTURE_CLASS, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
+import { GEOMETRY_PASSES as OWING_GEOMETRY, TRACKED_FIXTURE_CLASS, honestStepGaps, owedFaults, probeCoverageGaps, probeCoverageLine, wornSheetJobFaults } from './probe-coverage.mjs';
 import { FACES_CHECK, declaredStallFaces, facesFaults, facesLine } from './probe-faces.mjs';
 import {
     earlyExit,
@@ -645,6 +645,20 @@ const CARRIED_FILE_ART =
  */
 const NAMES_COPIED = (await servedSheets({ env: CARRIED.env }))
     .filter((row) => ['look', 'kit', 'private'].includes(row.role) && EXPECTED_SHEET_CLASSES.includes(row.lookClass) && sheetNamesAttribute(row.css, 'data-copied'))
+    .map((row) => row.lookClass)
+    .sort();
+/**
+ * The measured looks whose own sheet names `data-figure-step` (step
+ * 8g3-honest, D-2026-11-10-18), read the same way as `NAMES_COPIED`: the
+ * contrast plan samples the pay screens at figure steps 2 to 5 for exactly
+ * these (`STEP_JOBS`, `layout/contrastPlan.ts`), the page derives the same
+ * list from the stylesheets it loaded, and the pass holds the page's list and
+ * the plan's to this one. They owe `pay-final` read at every step 1 to 6
+ * (`HONEST_STEPS_OWED`); every other look owes it at steps 1 and 6. No public
+ * look names it, so a public run's plan is unchanged.
+ */
+const NAMES_STEP = (await servedSheets({ env: CARRIED.env }))
+    .filter((row) => ['look', 'kit', 'private'].includes(row.role) && EXPECTED_SHEET_CLASSES.includes(row.lookClass) && sheetNamesAttribute(row.css, 'data-figure-step'))
     .map((row) => row.lookClass)
     .sort();
 /**
@@ -1439,6 +1453,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     let honestUnrendered = 0;
     const honestReads = new Map();
     const honestJobs = new Map();
+    const honestStepReads = {};
     try {
         await (async () => {
             currentStep = `contrast job ${plannedJob.key}`;
@@ -2757,6 +2772,11 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                  */
                 honestUnrendered += prep.honestUnrendered ?? 0;
                 for (const role of honestRead) honestReads.set(role, (honestReads.get(role) ?? 0) + 1);
+                // The pay sheet's `pay-final` read at this job's figure step (HONEST_STEPS_OWED).
+                if (prep.honestFigureStep !== undefined && honestRead.has('pay-final') && retryWhy.length === 0) {
+                    const byStep = (honestStepReads[plannedJob.sheetClass] ??= {});
+                    byStep[prep.honestFigureStep] = (byStep[prep.honestFigureStep] ?? 0) + 1;
+                }
                 const owedHere = honestOwed?.[screen]?.[vp.name];
                 if (owedHere !== undefined && retryWhy.length === 0) {
                     const at = `${screen}|${vp.name}`;
@@ -2847,6 +2867,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             honestUnrendered,
             honestReads,
             honestJobs,
+            honestStepReads,
             cover,
         });
     }
@@ -4673,8 +4694,11 @@ try {
          * honest lines in scope that were not rendered at a job's width.
          */
         let honestOwed;
+        // The pay screens planned only for a look naming `data-figure-step` (`STEP_JOBS`).
+        let stepScreens = [];
         const honestJobs = new Map();
         const honestReads = new Map();
+        const honestStepReads = {};
         let honestUnrendered = 0;
         /*
          * One job's answer folded into the pass's totals (`contrastJob`).
@@ -4804,6 +4828,7 @@ try {
             honestUnrendered += out.honestUnrendered;
             countInto(honestReads, out.honestReads);
             countInto(honestJobs, out.honestJobs);
+            for (const [cls, bySteps] of Object.entries(out.honestStepReads ?? {})) sumInto((honestStepReads[cls] ??= {}), bySteps);
         };
         const done = new Map();
         /*
@@ -4843,6 +4868,21 @@ try {
             if (pageNames.join(' ') !== NAMES_COPIED.join(' ') || planned.join(' ') !== NAMES_COPIED.join(' ')) {
                 throw new Error(
                     `the-plan-follows-the-sheets-that-name-data-copied: the served sheets name it on [${NAMES_COPIED.join(', ')}], the page reads it on [${pageNames.join(', ')}] and the plan samples ${copiedScreens.join(' and ')} for [${planned.join(', ')}]`,
+                );
+            }
+        }
+        /*
+         * The pay screens at figure steps 2 to 5 are planned for the looks
+         * whose sheet names `data-figure-step`, held the same way
+         * (`NAMES_STEP`).
+         */
+        {
+            stepScreens = await evalJson(cdp, sessionId, 'window.__stepScreens');
+            const planned = [...new Set(plan.filter((job) => stepScreens.includes(job.screen)).map((job) => job.sheetClass))].sort();
+            const pageNames = await evalJson(cdp, sessionId, 'window.__namesStep()');
+            if (pageNames.join(' ') !== NAMES_STEP.join(' ') || planned.join(' ') !== NAMES_STEP.join(' ')) {
+                throw new Error(
+                    `the-plan-follows-the-sheets-that-name-data-figure-step: the served sheets name it on [${NAMES_STEP.join(', ')}], the page reads it on [${pageNames.join(', ')}] and the plan samples ${stepScreens.join(', ')} for [${planned.join(', ')}]`,
                 );
             }
         }
@@ -5157,6 +5197,8 @@ try {
             verdicts.push('the page owes no honest-display line (__honestOwed) — the four money sheets carry them by role');
         }
         for (const [screen, byViewport] of honestScreens) {
+            // A step screen is planned for the looks naming `data-figure-step`, and for none else.
+            if (stepScreens.includes(screen) && NAMES_STEP.length === 0) continue;
             for (const [viewport, roles] of Object.entries(byViewport)) {
                 const planned = plan.filter((j) => j.screen === screen && j.viewport === viewport).length;
                 const checked = honestJobs.get(`${screen}|${viewport}`) ?? 0;
@@ -5168,6 +5210,9 @@ try {
                 }
             }
         }
+        // The pay sheets' `pay-final` line read at every figure step on every
+        // look a run measures (HONEST_STEPS_OWED, D-2026-11-10-17).
+        for (const fault of honestStepGaps(honestStepReads, [...contrastClasses], NAMES_STEP)) verdicts.push(fault);
         const RAIN_REQUIRED = Array.isArray(owed?.rain) ? owed.rain : [];
         // A shipped run owes the horizon's worst on the owner's three jobs
         // (`HORIZON_PINNED_JOBS`), which it reads alone; a kit run owes it on

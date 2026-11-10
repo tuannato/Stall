@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CONTRAST_VIEWPORTS, COPIED_JOBS, RAIN_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { CONTRAST_VIEWPORTS, COPIED_JOBS, RAIN_JOBS, STEP_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
@@ -297,5 +297,72 @@ describe('the-staged-address-screens-are-sampled-for-the-looks-that-name-them', 
         expect(jobs.filter((job) => RAIN_JOBS.includes(job.screen) && job.tide === undefined).map((job) => job.key)).toEqual(
             ['mobile', 'desktop'].flatMap((vp) => RAIN_JOBS.map((screen) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${WORN_ALL}`)),
         );
+    });
+});
+
+/**
+ * Step 8g3-honest (D-2026-11-10-18): the pay screens at figure steps 2 to 5
+ * are sampled for contrast, at the phone and the desk, bare and fully worn,
+ * only for a measured look whose sheet names `data-figure-step`
+ * (`NamesCopied`'s twin: the probe answers it from the loaded sheets,
+ * `layout/sheetNaming.ts`) — and for no other look, so the plan of a run that
+ * measures none is exactly the plan it was (796 jobs with the tracked
+ * fixture, 634 public).
+ */
+describe('the-pay-screens-at-figure-steps-are-sampled-for-the-looks-that-name-the-step', () => {
+    const looks = measuredLooks();
+    const neo = looks.find((look) => look.id === NEO_CITY_THEME_ID)!;
+    const rural = looks.find((look) => look.id === 3)!;
+    const named = (...ids: number[]) => (look: Look): boolean => ids.includes(look.id);
+    const never = () => false;
+
+    it('is eight geometry-only page screens, and plans nothing when no look names the attribute', () => {
+        expect([...STEP_JOBS]).toEqual([
+            'pay-inr',
+            'pay-figure-14',
+            'pay-figure-17',
+            'pay-long-figure',
+            'pay-several-figure-2',
+            'pay-several-figure-3',
+            'pay-several-figure-4',
+            'pay-several-figure-5',
+        ]);
+        for (const screen of STEP_JOBS) {
+            expect(GEOMETRY_ONLY_SCREENS.has(screen), `${screen} is geometry only`).toBe(true);
+            expect(CANVAS_SCREENS.has(screen), `${screen} is a page screen`).toBe(false);
+        }
+        const none = contrastPlan(looks);
+        expect(none.length).toBe(634);
+        expect(none.some((job) => STEP_JOBS.includes(job.screen))).toBe(false);
+        expect(contrastPlan(looks, never, never)).toEqual(none);
+        for (const vp of CONTRAST_VIEWPORTS) {
+            expect(contrastScreens(vp.width, vp.canvas, looks, never, never)).toEqual(contrastScreens(vp.width, vp.canvas, looks));
+        }
+    });
+
+    it('plans the eight screens, bare and fully worn, at both widths, for a look that names the attribute and for no other', () => {
+        const jobs = contrastPlan(looks, never, named(NEO_CITY_THEME_ID));
+        const stepped = jobs.filter((job) => STEP_JOBS.includes(job.screen));
+        expect(stepped.map((job) => job.key)).toEqual(
+            ['mobile', 'desktop'].flatMap((vp) => STEP_JOBS.flatMap((screen) => [0, WORN_ALL].map((flags) => `${vp}/${screen}/${NEO_CITY_THEME_ID}/${flags}`))),
+        );
+        // 8 screens x 2 widths x (bare + worn) = 32 jobs, and nothing else moves.
+        expect(stepped.length).toBe(32);
+        expect(stepped.every((job) => job.look === neo.id && job.sheetClass === neo.theme.sheetClass && job.reduced === undefined && job.tide === undefined)).toBe(true);
+        expect(jobs.filter((job) => !STEP_JOBS.includes(job.screen))).toEqual(contrastPlan(looks));
+        expect(new Set(jobs.map((job) => job.key)).size).toBe(jobs.length);
+        const two = contrastPlan(looks, never, named(NEO_CITY_THEME_ID, 3)).filter((job) => STEP_JOBS.includes(job.screen));
+        expect(new Set(two.map((job) => job.look))).toEqual(new Set([NEO_CITY_THEME_ID, rural.id]));
+        expect(two.length).toBe(stepped.length * 2);
+        // A look that also names `[data-copied]` gets both, each in its own place.
+        const both = contrastPlan(looks, named(NEO_CITY_THEME_ID), named(NEO_CITY_THEME_ID));
+        expect(both.length).toBe(634 + 8 + 32);
+    });
+
+    it('lists the screens the page samples at each width, after the staged address ones', () => {
+        for (const vp of CONTRAST_VIEWPORTS.filter((v) => !v.canvas)) {
+            const plain = contrastScreens(vp.width, vp.canvas, looks);
+            expect(contrastScreens(vp.width, vp.canvas, looks, never, named(NEO_CITY_THEME_ID))).toEqual([...plain, ...STEP_JOBS]);
+        }
     });
 });
