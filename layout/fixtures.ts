@@ -1031,6 +1031,94 @@ export const SCREENS: Record<string, StallView> = {
         overlay: { kind: 'pay-several' },
         payRate: { rate: scaleRate(0.03)!, atMs: Date.now() },
     }),
+    /*
+     * Pay several at each figure step 2 to 5 with both items this stall's own
+     * mint (step 8g3-honest, D-2026-11-10-17/18): the XEC the wallet signs at
+     * step 2 (`110,000,000`), 3 (`1,100,000,000`), 4 (`110,000,000,000`) and 5
+     * (`200,000,000,000,000`). Sampled for contrast only for a look whose
+     * sheet names `data-figure-step` (`STEP_JOBS` in `contrastPlan.ts`),
+     * geometry only for every other. Twins, never the screens already here
+     * (`pay-several-figure-lines`, `pay-several-figure-steps`): those keep
+     * another wallet's mint on the second item, whose borrowed-id warning
+     * stands inside `pay-lines` on a ground of its own that the money box
+     * read cannot be fair to (2.90:1 on Modern worn, 2.94:1 on Rural worn).
+     */
+    'pay-several-figure-2': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 1_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: new Map<string, GenesisAttribution>([
+            [T1, 'attributed'],
+            [QUOTED, 'attributed'],
+        ]),
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    'pay-several-figure-3': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 100_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 10_000_000_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: new Map<string, GenesisAttribution>([
+            [T1, 'attributed'],
+            [QUOTED, 'attributed'],
+        ]),
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    'pay-several-figure-4': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 10_000_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 1_000_000_000_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: new Map<string, GenesisAttribution>([
+            [T1, 'attributed'],
+            [QUOTED, 'attributed'],
+        ]),
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
+    'pay-several-figure-5': base({
+        fetch: { kind: 'offers', offers: SHOP_OFFERS },
+        prices: new Map([
+            [T1, { code: 'xec', exponent: 2, amount: 10_000_000_000_000_000n }],
+            [QUOTED, { code: 'xec', exponent: 2, amount: 10_000_000_000_000_000n }],
+        ]),
+        descriptions: QUOTE_WORDS,
+        genesis: new Map<string, GenesisAttribution>([
+            [T1, 'attributed'],
+            [QUOTED, 'attributed'],
+        ]),
+        quoteTimes: QUOTE_TIMES,
+        selectionOpen: true,
+        selection: new Map([
+            [T1, 1n],
+            [QUOTED, 1n],
+        ]),
+        overlay: { kind: 'pay-several' },
+    }),
     'pay-several-strip-11': base({
         fetch: { kind: 'offers', offers: SHOP_OFFERS },
         prices: new Map([
@@ -2580,6 +2668,10 @@ export const STATE_SCREENS: ReadonlySet<string> = new Set([
     'item-listing-figure-11',
     'item-quote-figure-11',
     'pay-several-figure-steps',
+    'pay-several-figure-2',
+    'pay-several-figure-3',
+    'pay-several-figure-4',
+    'pay-several-figure-5',
     'pay-several-strip-11',
     'pay-several-strip-17',
     // Round 3: the rows either side of the re-flow's cut.
@@ -2813,6 +2905,11 @@ export const GEOMETRY_ONLY_SCREENS: ReadonlySet<string> = new Set([
     'item-listing-figure-11',
     'item-quote-figure-11',
     'pay-several-figure-steps',
+    // Step 8g3-honest: own-mint twins of the Pay several steps, sampled only for a look whose sheet names `data-figure-step` (`STEP_JOBS`).
+    'pay-several-figure-2',
+    'pay-several-figure-3',
+    'pay-several-figure-4',
+    'pay-several-figure-5',
     'pay-several-strip-11',
     'pay-several-strip-17',
     'quote-row-1m',

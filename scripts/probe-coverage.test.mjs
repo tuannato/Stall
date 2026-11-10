@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { sheetNamesAttribute } from './workshop-css.mjs';
 import { before, describe, it } from 'node:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -10,6 +11,9 @@ import {
     CARD_LADDERS_OWED,
     CARD_STEP_LADDERS_OWED,
     FIGURE_STEPS_OWED,
+    HONEST_STEPS_EVERY_LOOK,
+    HONEST_STEPS_OWED,
+    honestStepGaps,
     CYCLE_STEPS_OWED,
     DRESS_SURFACES_OWED,
     FIGURE_SURFACES_OWED,
@@ -766,6 +770,40 @@ describe('the-narrow-pass-owes-the-long-card-figures', () => {
             /^card figures read: face:0 10, face:1 10, face:2 10, face:3 10, line:0 20, line:2 10, line:3 20, paid:0 10, paid:1 10, paid:2 10, paid:3 10, pay:0 10, pay:1 10, pay:2 10, pay:3 10 · ladders compared: 20/,
         );
         assert.match(probeCoverageLine('narrow', narrowRead), / · figure steps read: face:1 10, [^·]*strip:6 10 · step ladders compared: 25/);
+    });
+
+    it('owes the pay sheets pay-final at steps 1 and 6 on every look, and at every step on a look whose sheet names data-figure-step (step 8g3-honest)', () => {
+        assert.deepEqual(
+            [...HONEST_STEPS_OWED],
+            ['pay:1', 'pay:2', 'pay:3', 'pay:4', 'pay:5', 'pay:6', 'pay-several:1', 'pay-several:2', 'pay-several:3', 'pay-several:4', 'pay-several:5', 'pay-several:6'],
+        );
+        assert.deepEqual([...HONEST_STEPS_EVERY_LOOK], ['1', '6']);
+        const all = Object.fromEntries(HONEST_STEPS_OWED.map((place) => [place, 1]));
+        const ends = { 'pay:1': 1, 'pay:6': 1, 'pay-several:1': 1, 'pay-several:6': 1 };
+        // A look that names nothing owes the four end places; a look that names the step owes all twelve.
+        assert.deepEqual(honestStepGaps({ 't-modern': ends, 't-neo': all }, ['t-modern', 't-neo'], ['t-neo']), []);
+        assert.equal(honestStepGaps({}, ['t-modern'], []).length, 4);
+        assert.equal(honestStepGaps({}, ['t-modern', 't-neo'], ['t-neo']).length, 4 + 12);
+        assert.deepEqual(honestStepGaps({ 't-modern': { ...ends, 'pay:1': 0 } }, ['t-modern']), [
+            'the honest-display line pay-final was read at no pay figure at step 1 job on a t-modern stall (the-honest-display-sentences-are-read, HONEST_STEPS_OWED)',
+        ]);
+    });
+
+    it('goes red for a planted look sheet that names data-figure-step and paints a step 2 to 5 pay screen it does not read', () => {
+        // The same reader the runner uses (`NAMES_STEP`): a sheet naming the attribute makes its look owe all six steps.
+        const planted = '.t-planted .pay-x[data-figure-step=\'3\'] { font-size: 20px; }';
+        assert.equal(sheetNamesAttribute(planted, 'data-figure-step'), true);
+        assert.equal(sheetNamesAttribute('.t-planted .pay-x { font-size: 20px; }', 'data-figure-step'), false);
+        const stepClasses = ['t-planted'].filter(() => sheetNamesAttribute(planted, 'data-figure-step'));
+        const ends = { 'pay:1': 1, 'pay:6': 1, 'pay-several:1': 1, 'pay-several:6': 1 };
+        // It read steps 1 and 6 and every pay-several step but 4 and the pay sheet's steps 2 and 3: red, naming each.
+        const read = { 't-planted': { ...ends, 'pay:4': 1, 'pay:5': 1, 'pay-several:2': 1, 'pay-several:3': 1, 'pay-several:5': 1 } };
+        const gaps = honestStepGaps(read, ['t-planted'], stepClasses);
+        assert.deepEqual(gaps.map((gap) => gap.match(/step (\d) job/)[1]), ['2', '3', '4']);
+        assert.equal(gaps.length, 3);
+        assert.ok(gaps.every((gap) => gap.includes('whose sheet names data-figure-step')));
+        // Unnamed, the same read is green.
+        assert.deepEqual(honestStepGaps(read, ['t-planted'], []), []);
     });
 
     it('owes every figure step of the face, You pay, a pay figure and the strip total, and five step ladders over all six steps, by value (step 8g3-pre)', () => {

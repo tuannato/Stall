@@ -4815,6 +4815,73 @@ clipped-away at mobile, over its own 16" (92 at desktop); the `display:
 none` half — `pay-direct`, `pay-valve`, `pay-lost` — failed by this rule
 alone.
 
+**At every figure step** (step 8g3-honest, 2026-11-10, D-2026-11-10-17 and
+-18; the 8g3 length-tag build critic's P2-1). `data-figure-step` 1 to 6 is a
+state a look may size a card figure by, and a font size reaches every
+font-relative length under the row, so a look can grow a box over `pay-final`
+at one step only. The pay sheet's figure stood on steps 1 and 6 on the
+sampled screens (`pay`, `pay-longest-figure`) and on steps 2 to 5 only on
+geometry-only ones. The window chose the cheap shape (-18): only a look that
+can dress a step is sampled at the steps in between.
+- **Every look, as always**: step 1 (`pay`, `pay-several`) and step 6
+  (`pay-longest-figure`, `pay-several-longest-figure`, now owing their lines in
+  `HONEST_OWED`).
+- **A look whose sheet names `data-figure-step`** (`STEP_JOBS`,
+  `layout/contrastPlan.ts`; `HONEST_STEP_OWED`, `layout/honestDisplay.ts`): the
+  pay sheet's steps 2 to 5 (`pay-inr`, `pay-figure-14`, `pay-figure-17`,
+  `pay-long-figure`) and Pay several's, four new own-mint twins
+  (`pay-several-figure-2` `110,000,000`, `-3` `1,100,000,000`, `-4`
+  `110,000,000,000`, `-5` `200,000,000,000,000`), bare and fully worn at the
+  phone and the desk: 8 screens x 2 widths x 2 variants = 32 jobs a look at
+  the shipped rows' count (a look with more moods plans more). All eight stay
+  geometry-only for every other look. The existing screens are as they were,
+  borrowed-id warning kept (`pay-several-figure-lines` and `-steps` are not
+  sampled: the warning inside `pay-lines` is a ground the money box read
+  cannot be fair to, 2.90:1 on Modern worn and 2.94:1 on Rural worn when they
+  were tried); the twins carry this stall's own mint on both items, which a
+  unit test holds (`paints each step screen ... on the step it is there for`).
+- **Derived the way `[data-copied]` is**: the page reads the stylesheets it
+  loaded (`loadedSheetNames('data-figure-step', cls)`, `window.__namesStep`),
+  the runner reads the served sheets with the look lint's reader
+  (`sheetNamesAttribute`, `NAMES_STEP`) and fails a run whose page, plan and
+  served sheets differ
+  (`the-plan-follows-the-sheets-that-name-data-figure-step`). No public look,
+  starter or tracked private fixture sheet names it, so **a default run's plan
+  is exactly main's**: 796 jobs with the tracked fixture carried, 634 public.
+- **The owed check, per step** (`HONEST_STEPS_OWED`,
+  `HONEST_STEPS_EVERY_LOOK`, `honestStepGaps`, `scripts/probe-coverage.mjs`,
+  pinned by value in `scripts/probe-coverage.test.mjs`): the prepare reports
+  the figure step of the sheet in scope (`honestFigureStep`, from
+  `data-figure-step` on its `.pay-x`, only where `pay-final` stands), the
+  runner counts per look and step the jobs that READ `pay-final`, and fails
+  naming any look and step with none: steps 1 and 6 of both sheets for every
+  look, all twelve places for a look whose sheet names the step.
+- **Proved**, in unit tests and not in a full probe run carrying a stepping
+  look (none exists in the tree): the plan grows by exactly 32 jobs for a look
+  that names it and by none otherwise
+  (`the-pay-screens-at-figure-steps-are-sampled-for-the-looks-that-name-the-step`,
+  `layout/contrastPlan.test.ts`), the page's reader finds it
+  (`layout/sheetNaming.test.ts`), the runner's reader is `sheetNamesAttribute`
+  and its pieces are present (`layout/honestDisplay.test.ts`), and a planted
+  sheet that names the attribute makes its look owe all six steps and fail
+  naming the steps it paints and does not read (`goes red for a planted look
+  sheet ...`, `scripts/probe-coverage.test.mjs`). **Not run**: the browser half
+  for a stepping look, so whether such a look's step 2 to 5 screens pass
+  contrast is read by nobody until a look names the attribute.
+- Cost on the default run: none in jobs (796 as on main). `LINE_SKIP_CEILING`
+  and every other ceiling unchanged.
+Measured 2026-11-10 on this Mac at three tabs with the tracked fixture
+carried, one pair back to back, `main` (`2654f31`) then the branch: runtime
+228.3 s against 236.8 s of 300 (the load average at the starts 2.66 and
+2.78), the contrast plan 796 jobs on both, the contrast dump 15,018 boxes
+identical, 0 moved, 0 added, 0 removed. `looks:diff main`: 3,974 of 3,976
+shots identical and the two new screens' 48 shots listed as not compared
+(`pay-several-figure-2` to `-5`); two wall shots on Rural (`shop-window-cycle-quote-16`
+at the tall tablet, `shop-window-quotes-long-figures` at the narrow wall) were
+inconclusive because the working tree disagreed with itself (second pair 0 px),
+and read identical when those two screens were shot again alone. One sample
+each: none of it is a bound.
+
 ## Step 8f2: the shared hooks a look shows, measured (2026-10-06)
 
 Step 8f1 built the hooks a fourth look needs — marks, a sticky sign, the

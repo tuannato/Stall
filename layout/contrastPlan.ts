@@ -278,6 +278,27 @@ export function contrastOwed(looks: readonly Look[]): { rain: string[]; horizon:
  */
 export const COPIED_JOBS: readonly string[] = ['addr-shown', 'addr-copied'];
 
+/**
+ * The pay screens at figure steps 2 to 5 (step 8g3-honest, D-2026-11-10-18),
+ * sampled for contrast only for a look whose sheet names `data-figure-step`:
+ * the attribute a look may size a card figure by, so the pay sheets' honest
+ * sentences are read at the step a look dresses. Steps 1 and 6 are read for
+ * every look (`pay`, `pay-several`, `pay-longest-figure`,
+ * `pay-several-longest-figure`). The Pay several ones are own-mint twins
+ * (`pay-several-figure-2` to `-5`). All are page screens, planned at the
+ * phone and the desk, bare and fully worn, in the order they are listed here.
+ */
+export const STEP_JOBS: readonly string[] = [
+    'pay-inr',
+    'pay-figure-14',
+    'pay-figure-17',
+    'pay-long-figure',
+    'pay-several-figure-2',
+    'pay-several-figure-3',
+    'pay-several-figure-4',
+    'pay-several-figure-5',
+];
+
 /** Whether a look's sheet names `[data-copied]` — answered by the probe from the stylesheets the page loaded, by the tests from a stand-in. */
 export type NamesCopied = (look: Look) => boolean;
 const NEVER: NamesCopied = () => false;
@@ -291,7 +312,7 @@ export const OVERLAY_SAMPLED: ReadonlySet<string> = new Set(['broadcast', 'broad
  * that carries the rain is measured — in the order the plan walks them,
  * which the runner compares.
  */
-export function contrastScreens(width: number, canvas: boolean, looks: readonly Look[], namesCopied: NamesCopied = NEVER): string[] {
+export function contrastScreens(width: number, canvas: boolean, looks: readonly Look[], namesCopied: NamesCopied = NEVER, namesStep: NamesCopied = NEVER): string[] {
     const regular = sampledScreens(width, canvas, looks);
     const rainy = looks.filter((look) => carries(look, RAIN_CLASS));
     const at = screensAt(width, canvas);
@@ -301,7 +322,10 @@ export function contrastScreens(width: number, canvas: boolean, looks: readonly 
     const copied = COPIED_JOBS.filter(
         (screen) => at.includes(screen) && looks.some((look) => namesCopied(look) && canWear(look, screen)) && !regular.includes(screen),
     );
-    return [...regular, ...rain, ...copied];
+    const stepped = STEP_JOBS.filter(
+        (screen) => at.includes(screen) && looks.some((look) => namesStep(look) && canWear(look, screen)) && !regular.includes(screen),
+    );
+    return [...regular, ...rain, ...copied, ...stepped];
 }
 
 /** The screens every measured look is sampled on at one viewport. */
@@ -319,7 +343,7 @@ function sampledScreens(width: number, canvas: boolean, looks: readonly Look[]):
 }
 
 /** Every job of the pass over `looks`, viewport by viewport, in the order the runner walks them. */
-export function contrastPlan(looks: readonly Look[], namesCopied: NamesCopied = NEVER): ContrastJob[] {
+export function contrastPlan(looks: readonly Look[], namesCopied: NamesCopied = NEVER, namesStep: NamesCopied = NEVER): ContrastJob[] {
     const jobs: ContrastJob[] = [];
     for (const viewport of CONTRAST_VIEWPORTS) {
         for (const screen of sampledScreens(viewport.width, viewport.canvas, looks)) {
@@ -353,7 +377,7 @@ export function contrastPlan(looks: readonly Look[], namesCopied: NamesCopied = 
         // The rain's own screens, all worn, on every look that carries the
         // rain (`RAIN_JOBS`).
         const regular = sampledScreens(viewport.width, viewport.canvas, looks);
-        const pageScreens = contrastScreens(viewport.width, viewport.canvas, looks, namesCopied);
+        const pageScreens = contrastScreens(viewport.width, viewport.canvas, looks, namesCopied, namesStep);
         for (const screen of pageScreens.filter((name) => !regular.includes(name) && RAIN_JOBS.includes(name))) {
             for (const look of looks.filter((l) => carries(l, RAIN_CLASS) && canWear(l, screen))) {
                 jobs.push({
@@ -373,6 +397,26 @@ export function contrastPlan(looks: readonly Look[], namesCopied: NamesCopied = 
         // `contrastScreens` lists them.
         for (const screen of pageScreens.filter((name) => !regular.includes(name) && COPIED_JOBS.includes(name))) {
             for (const look of looks.filter((l) => namesCopied(l) && canWear(l, screen))) {
+                const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, ...wornAllFlags(look)];
+                for (const flags of variants) {
+                    jobs.push({
+                        key: `${viewport.name}/${screen}/${look.id}/${flags}`,
+                        viewport: viewport.name,
+                        width: viewport.width,
+                        height: viewport.height,
+                        screen,
+                        look: look.id,
+                        sheetClass: look.theme.sheetClass,
+                        flags,
+                    });
+                }
+            }
+        }
+        // The pay screens at figure steps 2 to 5, bare and all worn, on each
+        // look whose sheet names `data-figure-step` (`STEP_JOBS`), in the
+        // order `contrastScreens` lists them.
+        for (const screen of pageScreens.filter((name) => !regular.includes(name) && STEP_JOBS.includes(name))) {
+            for (const look of looks.filter((l) => namesStep(l) && canWear(l, screen))) {
                 const variants = look.rows.length === 0 || paintsBareOnly(screen) ? [0] : [0, ...wornAllFlags(look)];
                 for (const flags of variants) {
                     jobs.push({
