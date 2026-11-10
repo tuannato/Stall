@@ -2172,6 +2172,27 @@ money path this app can have, because nothing on it is derived.
   `stroke-miterlimit` is uncapped: a miter join with a large limit reaches that
   many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
   and the plants: `layout/PROBE-RULES.md`, "The state belt".
+- **Five public gaps the private look at 0x04's shelves found, stated and not
+  closed** (its 8g2b critics, 2026-11-10; general, true of every look).
+  (1) **A control keeps its points** (D-2026-11-10-07): no pass asks whether
+  a look's stacking takes the pointer from a control or a protected box that
+  stands beside it, before or after it in paint order; the look's own private
+  gate does, and a public rule would need a hit test that counts every element
+  that takes a point, not only covers. (2) **The genesis-link confirm
+  ("Leave Stall?") is mounted inside the item face's card** (`confirmLeaving`
+  through `tokenLink`), so a look that makes that card a stacking context holds
+  the confirm's fixed scrim under the sign and the dock; no fixture stages the
+  confirm (it needs two presses), so 1a never reads its controls. Either a
+  staged fixture (`stageScreen`) or mounting it at the stall root, as the zoom
+  sheet is. (3) **The Activity tile cuts a wide pair of initials** (`WW`:
+  23.5px of letters in a 22px box) on every look, the skeleton included.
+  (4) **`initials()` splits a surrogate pair** in its two-word branch
+  (`slice(0, 1)`), so a name opening with an emoji paints a replacement
+  character in the tile. (5) **The mark-host guard refuses an honest
+  selector**: `layout/lookMarks.test.ts` keys on the text `.items` beside an
+  `:nth-child`, so `:nth-child(3n + 1 of .items)` counting a body's shelves
+  (not a mark host's children) is a false red; a look writes it as
+  `of :has(> .item)` today.
 
 ---
 
