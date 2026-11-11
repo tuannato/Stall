@@ -382,7 +382,9 @@ export const CLEAR_SCREENS = ['broadcast-clear', 'broadcast-quotes-clear', 'broa
  * tables — the reduced-motion passes share one), and what its kind reads:
  * `vp`, `screens`, `block`, `after`. The worn-only road runs on the ordinary
  * probe alone (`looks: 'shipped'`): the kit's page is built from the same
- * probe, and the road is the app's, not the look's.
+ * probe, and the road is the app's, not the look's — and the look run
+ * (`looks: 'carried'`, `pnpm test:layout:look`) leaves it to the ordinary
+ * run for the same reason.
  */
 export function geometryPlan({ looks = 'shipped' } = {}) {
     return [

@@ -460,3 +460,26 @@ export function contrastPlan(looks: readonly Look[], namesCopied: NamesCopied = 
     }
     return jobs;
 }
+
+/**
+ * **The look run's plan** (`pnpm test:layout:look`, D-2026-11-11-04): of
+ * the ordinary plan over `all` (every look the page paints), the jobs of
+ * the looks it measures in full (`carried`) and every job on a listed
+ * screen (`screens`, `CARRIED_SCREENS`) — the same jobs, built the same
+ * way and in the same order, as the ordinary run gives them, so a box the
+ * look run reads is the ordinary run's box under the same key
+ * (`node scripts/contrast-dump.mjs --within`). That the ordinary plan is
+ * exactly the public looks' plan and each carried look's put together, so
+ * no job falls between the two commands, is
+ * `the-contrast-plan-splits-by-look` (`contrastPlan.test.ts`).
+ */
+export function carriedContrastPlan(
+    all: readonly Look[],
+    carried: readonly Look[],
+    screens: ReadonlySet<string>,
+    namesCopied: NamesCopied = NEVER,
+    namesStep: NamesCopied = NEVER,
+): ContrastJob[] {
+    const ids = new Set(carried.map((look) => look.id));
+    return contrastPlan(all, namesCopied, namesStep).filter((job) => ids.has(job.look) || screens.has(job.screen));
+}

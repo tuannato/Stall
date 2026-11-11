@@ -1,5 +1,6 @@
 import { mergeConfig } from 'vite';
 import appConfig, { forHarness } from './vite.config';
+import { probeInputsPlugin } from './scripts/probe-inputs.mjs';
 
 /**
  * The layout probe's build: the app's own config, unchanged, plus
@@ -22,10 +23,17 @@ import appConfig, { forHarness } from './vite.config';
  * deploy build would, and the dist check the build runs over `.probe-dist`
  * reads the step-6 fixture look's sheet and art as the harness's own rather
  * than a private look's strays.
+ *
+ * And one plugin of its own (`probeInputsPlugin`, D-2026-11-11-04): when the
+ * runner asks (`STALL_PROBE_INPUTS`), it lists the real files the build
+ * loaded, less the private looks' parts — what the probe's public verdict is
+ * a function of, which the look run compares with the last green ordinary
+ * run's (`scripts/probe-inputs.mjs`). It writes nothing into the build.
  */
 export default mergeConfig(forHarness(appConfig), {
     build: {
         rollupOptions: { input: { main: 'index.html', layoutProbe: 'layout/probe.html' } },
         outDir: '.probe-dist',
     },
+    plugins: [probeInputsPlugin()],
 });

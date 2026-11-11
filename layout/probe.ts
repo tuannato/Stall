@@ -45,7 +45,10 @@ import {
     lookById,
     looksFor,
     kitLook,
+    carriedOnlyScreens,
+    measureCarriedOnly,
     measuredLooks,
+    paintedLooks,
     paintView,
     privateLooks,
     recordView,
@@ -54,7 +57,8 @@ import {
     wornOf,
     type Look,
 } from './looks';
-import { COPIED_JOBS, STEP_JOBS, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { COPIED_JOBS, STEP_JOBS, carriedContrastPlan, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { CARRIED_SCREEN_SET } from './carriedScreens';
 import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
 import {
@@ -176,6 +180,18 @@ import {
     handlers,
     stageScreen,
 } from './fixtures';
+
+/*
+ * **The look run** (`?looks=carried`, `pnpm test:layout:look`;
+ * D-2026-11-11-04): set before anything below asks which looks this page
+ * measures. The private looks the build carries are measured in full, and
+ * the public looks on the listed screens alone (`CARRIED_SCREENS`); the
+ * verdict echoes the list (`carriedOnly`), and the runner refuses a pass
+ * whose echo is not the mode it asked for.
+ */
+if (new URLSearchParams(location.search).get('looks') === 'carried') {
+    measureCarriedOnly(CARRIED_SCREEN_SET);
+}
 
 /**
  * What a decoration may never touch. Wider than the price, because a QR that is
@@ -372,6 +388,17 @@ const coveredByMs: Record<CoveredByPhase, number> = { rest: 0, instants: 0, labe
 let coveredByPhase: CoveredByPhase = 'rest';
 /** The `t-*` class of the look the main loop is measuring now; `-` outside it. */
 let measuringClass = '-';
+/**
+ * Whether the look being measured is one this page measures in full — every
+ * look, but on the look run (`?looks=carried`) the carried looks alone: what
+ * a pass adds to the run's cross-look owes (the decorations it wore, the
+ * outlined targets the contrast pass must ring-read) is a fully measured
+ * look's, and the public looks painted on the listed screens owe theirs in
+ * the ordinary run.
+ */
+function measuredInFull(cls: string): boolean {
+    return carriedOnlyScreens() === undefined || measuredLooks().some((look) => look.theme.sheetClass === cls);
+}
 
 type Clip = {
     rect: DOMRect;
@@ -10973,7 +11000,7 @@ function outlineFaults(screen: string, label: string): Failure[] {
         if (target === null) {
             fail(node, 'wears the outline and is no contrast target — an outline nobody reads');
         } else {
-            outlinedTargets.add(describe(target));
+            if (measuredInFull(measuringClass)) outlinedTargets.add(describe(target));
         }
     }
     return out;
@@ -12388,13 +12415,28 @@ const qrByScreen: Record<string, Record<string, Record<string, { min: number; ma
  * carries the rain owes the outline rules whatever its class.
  */
 const wornClassesPainted = new Set<string>();
+/*
+ * **Where a pass's time goes, by look** (O1 of the probe-prune plan,
+ * D-2026-11-11-04): the wall clock each look's paints and reads took on
+ * this page — the main loop's screens, the try-on's stress names, the
+ * record road and the billboard — by the class it was measured under, and
+ * the measuring as a whole (`measureMs`, from the first paint to the
+ * verdict). Clocks, which the runner's tab check leaves out and no verdict
+ * reads; the runner prints each pass's split and its unattributed rest.
+ */
+const lookMs: Record<string, number> = {};
+const measureStartedAt = performance.now();
+const addLookMs = (cls: string, since: number): void => {
+    lookMs[cls] = (lookMs[cls] ?? 0) + (performance.now() - since);
+};
 for (const screen of measured) {
     for (const look of looksFor(screen)) {
         if (STICKY_ONLY !== undefined && !STICKY_ONLY.has(look.theme.sheetClass)) continue;
         measuringClass = look.theme.sheetClass;
+        const lookStartedAt = performance.now();
         for (const worn of variantsFor(screen, look)) {
             for (const row of worn) {
-                if (row.cls !== undefined) wornClassesPainted.add(row.cls);
+                if (row.cls !== undefined && measuredInFull(look.theme.sheetClass)) wornClassesPainted.add(row.cls);
             }
             const label =
                 worn.length === 0
@@ -12495,6 +12537,7 @@ for (const screen of measured) {
             // And 1a, after every other read (`coverAtRest`).
             failures.push(...coverAtRest(screen, label));
         }
+        addLookMs(look.theme.sheetClass, lookStartedAt);
     }
 }
 
@@ -12524,6 +12567,7 @@ if (STICKY_ONLY === undefined && measured.includes('publish-name')) {
     const behind = shippedLooks().find((look) => look.theme.sheetClass === DEFAULT_LOOK_CLASS)!;
     for (const look of privateLooks()) {
         measuringClass = look.theme.sheetClass;
+        const lookStartedAt = performance.now();
         for (const [what, name] of [['the 32-byte name', LONGEST_NAME], ['the CJK name', CJK_NAME], ['the stacked-mark name', STACKED_NAME]] as const) {
             const label = `${look.label}, tried on over ${behind.label} with ${what}`;
             dropCoverForPaint();
@@ -12548,6 +12592,7 @@ if (STICKY_ONLY === undefined && measured.includes('publish-name')) {
             tryOnNamesByClass[look.theme.sheetClass] = (tryOnNamesByClass[look.theme.sheetClass] ?? 0) + 1;
             failures.push(...nameWholeFaults('publish-name (tried on)', label));
         }
+        addLookMs(look.theme.sheetClass, lookStartedAt);
     }
 }
 // Out of the loop: no look is being measured.
@@ -12582,6 +12627,7 @@ if (STICKY_ONLY === undefined && measured.includes('offers')) {
     const root = document.getElementById('app')!;
     const defaultClass = DEFAULT_LOOK_CLASS;
     for (const look of privateLooks().filter((candidate) => HARNESS_LICENCE.has(candidate.id))) {
+        const lookStartedAt = performance.now();
         const fail = (detail: string): void => {
             failures.push({ screen: 'offers', theme: `${look.label} (its record)`, check: RECORD_ROAD_CHECK, detail });
         };
@@ -12605,6 +12651,7 @@ if (STICKY_ONLY === undefined && measured.includes('offers')) {
             fail(`a record naming ${look.theme.sheetClass}: its sign does not say this page does not show the look (THEME_NOT_UNLOCKED)`);
         }
         recordRoadChecks += 1;
+        addLookMs(look.theme.sheetClass, lookStartedAt);
     }
 }
 
@@ -12698,6 +12745,7 @@ function paintedGrounds(): { stall: MoodRgb | undefined; item: MoodRgb | undefin
 // measured against Modern's canvas (the workshop critic's P1). Not on the
 // short pass, which measures sticky signs alone.
 for (const look of STICKY_ONLY === undefined ? measuredLooks() : []) {
+    const lookStartedAt = performance.now();
     const theme = look.theme;
     paint('offers', look, []);
     const bare = paintSignature();
@@ -12822,6 +12870,7 @@ for (const look of STICKY_ONLY === undefined ? measuredLooks() : []) {
             }
         }
     }
+    addLookMs(look.theme.sheetClass, lookStartedAt);
 }
 
 /**
@@ -13180,7 +13229,12 @@ window.__contrastScreens = contrastScreens(
  * it at the end. The screens at this page's own width are `__contrastScreens`
  * above, which the runner compares with the plan's at every viewport.
  */
-window.__contrastPlan = () => contrastPlan(measuredLooks(), namesCopied, namesStep);
+window.__contrastPlan = () => {
+    const screens = carriedOnlyScreens();
+    return screens === undefined
+        ? contrastPlan(measuredLooks(), namesCopied, namesStep)
+        : carriedContrastPlan(paintedLooks(), measuredLooks(), screens, namesCopied, namesStep);
+};
 /* The classes of the measured looks whose sheet names `[data-copied]`, as this page reads them, and the screens sampled for them. */
 window.__namesCopied = () => measuredLooks().filter(namesCopied).map((look) => look.theme.sheetClass).sort();
 window.__copiedScreens = [...COPIED_JOBS];
@@ -15895,6 +15949,9 @@ const verdict = {
      * kit, the three shipped classes otherwise).
      */
     sheetClasses: [...sheetClassesPainted].sort(),
+    /* Where the measuring's time went, by look class, and its whole (O1; clocks, which the runner's tab check leaves out). */
+    lookMs,
+    measureMs: performance.now() - measureStartedAt,
     /* The look classes whose sheet named them on a painted stall (`a-look-is-measured-with-its-sheet`). */
     lookSheetsRead: [...lookSheetsRead].sort(),
     /* The kit's anchor refusal (`kitAnchorFaults`): paints of the kit's look read, and those it failed. */
@@ -15919,6 +15976,8 @@ const verdict = {
     stagedByClass,
     /* The short pass's looks as the page read them, and its paints measured and set aside (`?sticky=`). */
     stickyOnly: STICKY_ONLY === undefined ? null : [...STICKY_ONLY].sort(),
+    /* The look run's listed screens as this page read them (`?looks=carried`), or null on every other run. */
+    carriedOnly: carriedOnlyScreens() === undefined ? null : [...carriedOnlyScreens()!].sort(),
     shortPass,
     /* Pairs of sign lines compared, and signs read with the tagline invite in them, per class (`the-signs-words-never-stand-on-each-other`). */
     signWordsByClass,

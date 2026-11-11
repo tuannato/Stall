@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DUMPS_KEPT, dumpKindOf, dumpKindsDiffer, boxKey, compareDumps, comparisonLines, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
+import { DUMPS_KEPT, dumpKindOf, dumpKindsDiffer, boxKey, compareDumps, compareWithin, comparisonLines, dumpValue, jobKey, writeDump } from './contrast-dump.mjs';
 
 const job = { pass: 'contrast', viewport: 'mobile', screen: 'offers', look: 1, flags: 0 };
 const box = (i, worst, extra = {}) => ({
@@ -114,5 +114,39 @@ describe('a-contrast-change-is-lossless-only-box-for-box', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+// The look run's dump against the ordinary run's (`--within` (D-2026-11-11-04): a look run's dump against an ordinary run's carrying the same looks, on the look run's jobs.
+const withinJob = (key) => ({ key, pass: 'contrast', sampled: 1 });
+const withinBox = (jobKey, i, worst) => ({ key: `${jobKey}|${i}|x`, job: jobKey, i, sel: 'x', worst });
+const withinFull = {
+    meta: { kind: 'shipped+t-a' },
+    jobs: [withinJob('j1'), withinJob('j2'), withinJob('j3')],
+    boxes: [withinBox('j1', 0, 5), withinBox('j2', 0, 6), withinBox('j3', 0, 7)],
+};
+const withinLook = { meta: { kind: 'carried+t-a' }, jobs: [withinJob('j1'), withinJob('j3')], boxes: [withinBox('j1', 0, 5), withinBox('j3', 0, 7)] };
+
+describe('a-look-run-is-the-ordinary-run-on-its-own-jobs', () => {
+    it('compares the look run with the ordinary run cut to the look run’s jobs', () => {
+        const r = compareWithin(withinLook, withinFull);
+        assert.equal(r.jobs, 2);
+        assert.deepEqual([r.jobsMissing, r.jobsDiffer, r.moved, r.added, r.removed], [[], [], [], [], []]);
+        assert.equal(r.identical.length, 2);
+    });
+
+    it('names a moved box, a dropped box, a job the ordinary run has not and a job record that differs', () => {
+        const moved = compareWithin({ ...withinLook, boxes: [withinBox('j1', 0, 4), withinBox('j3', 0, 7)] }, withinFull);
+        assert.equal(moved.moved.length, 1);
+        assert.equal(compareWithin({ ...withinLook, boxes: [withinBox('j1', 0, 5)] }, withinFull).removed.length, 1);
+        assert.deepEqual(compareWithin({ ...withinLook, jobs: [...withinLook.jobs, withinJob('j9')] }, withinFull).jobsMissing, ['j9']);
+        assert.deepEqual(compareWithin({ ...withinLook, jobs: [withinJob('j1'), { ...withinJob('j3'), sampled: 2 }] }, withinFull).jobsDiffer, ['j3']);
+    });
+
+    it('refuses two runs that do not carry the same looks, or that are not a look run and an ordinary run', () => {
+        assert.match(compareWithin({ ...withinLook, meta: { kind: 'carried+t-b' } }, withinFull).refused, /not carried\+t-b with shipped\+t-a/);
+        assert.match(compareWithin(withinFull, withinFull).refused, /--within compares a look run/);
+        assert.equal(dumpKindOf('carried', ['t-a']), 'carried+t-a');
+        assert.notEqual(dumpKindsDiffer(withinLook, withinFull), undefined);
     });
 });

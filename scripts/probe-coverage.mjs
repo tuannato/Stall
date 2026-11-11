@@ -416,14 +416,24 @@ const WALL_ROLES = [
  * Why a pass compared less than it owes, as sentences — empty when it owes
  * nothing or compared everything. `shippedClasses` are the classes of the
  * looks whose rows must be read; `skeleton` is whether the skeleton was
- * measured (the ordinary run, not the kit's).
+ * measured (the ordinary run, not the kit's); `witnessClasses` are the look
+ * run's public looks, painted on its listed screens alone and owing no
+ * per-look read there (`--looks carried`, D-2026-11-11-04).
  */
 export function probeCoverageGaps(
     pass,
     report,
-    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [], kit = false } = {},
+    { shippedClasses = [], privateClasses = [], paidPrivateClasses = [], skeleton = false, sheetedClasses = [], witnessClasses = [], kit = false } = {},
 ) {
     const gaps = [];
+    /*
+     * The looks a pass owes per-look reads of: every look it painted, less
+     * the look run's witnesses (`witnessClasses`, `--looks carried`): the
+     * public looks it paints on the listed screens alone, which owe what
+     * they owe in the ordinary run — painted on one screen, they would owe
+     * a wall's Cycle steps or a pass's broken figures they were never asked.
+     */
+    const owing = (report.sheetClasses ?? []).filter((cls) => !witnessClasses.includes(cls));
     // The kit's probe (`--looks workshop`): every geometry pass owes the kit's anchor refusal a read of the kit's look.
     if (kit && GEOMETRY_PASSES.has(pass) && !((report.kitAnchorPaints?.read ?? 0) > 0)) {
         gaps.push("the-kit-takes-no-anchor-positioning read no paint of the kit's look");
@@ -441,7 +451,7 @@ export function probeCoverageGaps(
     // read hidden (step 8f1 after its critic, item 2): a pass that read no
     // mark on a look certified nothing about its marks.
     const marks = report.markChecksByClass ?? {};
-    for (const cls of (report.sheetClasses ?? []).filter((c) => !privateClasses.includes(c))) {
+    for (const cls of owing.filter((c) => !privateClasses.includes(c))) {
         if (!((marks[cls] ?? 0) > 0)) {
             gaps.push(`no-shipped-look-shows-a-mark read no mark on a ${cls} stall`);
         }
@@ -460,7 +470,8 @@ export function probeCoverageGaps(
                           for (const [role, n] of Object.entries(read)) sum[role] = (sum[role] ?? 0) + n;
                           return sum;
                       }, {});
-        for (const role of WALL_ROLES) {
+        // The public looks' sum is the ordinary run's: the look run paints no public look on a wall.
+        for (const role of witnessClasses.length > 0 ? [] : WALL_ROLES) {
             if (!((roles[role] ?? 0) > 0)) {
                 gaps.push(`nothing-on-the-wall-is-cut-from-below read no ${role} on a wall`);
             }
@@ -479,7 +490,7 @@ export function probeCoverageGaps(
     // look's name certified nothing about it.
     if (PAGE_PASSES.has(pass) || WALL_PASSES.has(pass)) {
         const lines = report.nameLinesByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             if (!((lines[cls] ?? 0) > 0)) {
                 gaps.push(`the-sellers-name-stands-whole read no line of the sign on a ${cls} stall`);
             }
@@ -490,7 +501,7 @@ export function probeCoverageGaps(
         // read in the sign beside the state line it exists to stand beside.
         if (PAGE_PASSES.has(pass)) {
             const words = report.signWordsByClass ?? {};
-            for (const cls of report.sheetClasses ?? []) {
+            for (const cls of owing) {
                 if (!((words[cls]?.pairs ?? 0) > 0)) {
                     gaps.push(`the-signs-words-never-stand-on-each-other compared no two lines of the sign on a ${cls} stall`);
                 }
@@ -555,7 +566,7 @@ export function probeCoverageGaps(
     // state on every look a pass painted.
     for (const [screen, state] of Object.entries({ 'addr-shown': 'shown', 'addr-copied': 'copied' })) {
         if (!(report.screensMeasured ?? []).includes(screen)) continue;
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             if (!((staged[cls]?.[screen] ?? 0) > 0)) {
                 gaps.push(`${screen} put no address in its ${state} state on a ${cls} stall`);
             }
@@ -572,7 +583,7 @@ export function probeCoverageGaps(
     // on every look a wall pass painted.
     if (WALL_PASSES.has(pass)) {
         const read = report.cycleFigureByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             for (const step of CYCLE_STEPS_OWED) {
                 if (!(((read[cls] ?? {})[step] ?? 0) > 0)) {
                     gaps.push(`a-cycle-card-shows-every-digit-at-every-wall-size read no step-${step} Cycle figure on a ${cls} wall`);
@@ -586,7 +597,7 @@ export function probeCoverageGaps(
     if (GEOMETRY_PASSES.has(pass)) {
         const ink = report.figureInkByClass ?? {};
         const clip = report.selfClipByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             for (const surface of FIGURE_SURFACES_OWED[pass] ?? []) {
                 if (!(((ink[cls] ?? {})[surface] ?? 0) > 0)) {
                     gaps.push(`a-broken-figure-wears-the-figures-own-ink read no broken figure on a ${cls} stall's ${surface}`);
@@ -600,7 +611,7 @@ export function probeCoverageGaps(
         // on every look, and — where the pass painted Rural — one read under
         // its tag's clip-path (D-2026-10-19-01; per surface since round 4).
         const dress = report.dressByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             for (const surface of DRESS_SURFACES_OWED[pass] ?? []) {
                 if (!(((dress[cls] ?? {})[surface] ?? 0) > 0)) {
                     gaps.push(`a-money-figure-is-never-misdressed read no money figure on a ${cls} stall's ${surface}`);
@@ -610,7 +621,7 @@ export function probeCoverageGaps(
         // 1a (7a): every look a pass painted read, and a point hit-tested on
         // it — a read that hit-tested nothing on a look covered nothing.
         const cover = report.coverByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             const read = Object.hasOwn(cover, cls) ? cover[cls] : undefined;
             if (!((read?.paints ?? 0) > 0)) {
                 gaps.push(`nothing-covers-money-or-a-protected-box read no paint of a ${cls} stall`);
@@ -621,7 +632,7 @@ export function probeCoverageGaps(
         // 1b (7b): every look a pass painted read, and a target held on it —
         // a read that held no target on a look reached nothing it could fail.
         const reach = report.reachByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             const read = Object.hasOwn(reach, cls) ? reach[cls] : undefined;
             if (!((read?.paints ?? 0) > 0)) {
                 gaps.push(`a-paint-with-no-hit-area-reaches-no-money read no paint of a ${cls} stall`);
@@ -631,7 +642,7 @@ export function probeCoverageGaps(
         }
         // 3a (D-2026-10-28-01): every look a pass painted, read to its stall on some figure's element.
         const walk = report.walkByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             const read = Object.hasOwn(walk, cls) ? walk[cls] : undefined;
             if (!((read?.elements ?? 0) > 0)) gaps.push(`the-ground-walk-reaches-the-stall read no figure of a ${cls} stall`);
         }
@@ -643,7 +654,7 @@ export function probeCoverageGaps(
         if (codes === undefined) {
             if ((report.codesPainted ?? []).length > 0) gaps.push('a-code-is-drawn-black-on-white reported no read of a code on a pass that painted codes');
         } else {
-            for (const cls of report.sheetClasses ?? []) {
+            for (const cls of owing) {
                 const q = Object.hasOwn(codes, cls) ? codes[cls] : undefined;
                 const painted = q?.painted ?? 0;
                 const read = q?.read ?? 0;
@@ -683,7 +694,7 @@ export function probeCoverageGaps(
         }
         // Rural's tag is a notched polygon on the figure's column: a pass that
         // painted Rural and read no figure under it read no clip's shape.
-        if ((report.sheetClasses ?? []).includes('t-rural') && !(((report.dressClipByClass ?? {})['t-rural'] ?? 0) > 0)) {
+        if (owing.includes('t-rural') && !(((report.dressClipByClass ?? {})['t-rural'] ?? 0) > 0)) {
             gaps.push('a-money-figure-is-never-misdressed read no money figure under a clip-path on a t-rural stall');
         }
     }
@@ -693,7 +704,7 @@ export function probeCoverageGaps(
     if (CARD_FIGURE_PASSES.has(pass)) {
         const read = report.cardFigureByClass ?? {};
         const ladders = report.cardLadderByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             for (const place of CARD_FIGURES_OWED) {
                 if (!(((read[cls] ?? {})[place] ?? 0) > 0)) {
                     gaps.push(`a-card-figure-stands-inside-its-row read no ${place} figure on a ${cls} stall`);
@@ -725,7 +736,7 @@ export function probeCoverageGaps(
     // The stream card's money tiers (the fifth and sixth reviews): the canvas pass owes each look the tiers its ladder is painted at, per rail.
     if (pass === 'canvas') {
         const read = report.streamTierByClass ?? {};
-        for (const cls of report.sheetClasses ?? []) {
+        for (const cls of owing) {
             for (const [rail, tiers] of Object.entries(STREAM_TIERS_OWED[cls] ?? {})) {
                 for (const tier of tiers) {
                     if (!((((read[cls] ?? {})[rail] ?? {})[tier] ?? 0) > 0)) {
