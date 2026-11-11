@@ -15765,10 +15765,18 @@ conditions; PLAN § Open lists the other 13).
 
 ### Cost and the dump
 
-The contrast dump is identical to main's at 3633e19 (15,018 boxes, 0 moved).
-`pnpm test:layout` 239.4s on the branch against main's 237.0s, one run each
-about 20 minutes apart, not back to back; the look run with no selection
-44.8s.
+The contrast dump is identical to main's at 3633e19 (15,018 boxes, 0 moved),
+on two branch runs. Back to back, branch then main on one machine at three
+tabs (one-minute load 1.44 at the start, 5.11 between, 4.98 at the end):
+`pnpm test:layout` 241.4s on the branch and 249.8s on main; an earlier pair
+20 minutes apart read 239.4s and 237.0s. So no cost this pair can tell from
+the machine. Main's second run itself moved one box against its first
+(`pay-longest-figure`'s `p.fine` at the desk, 7.60 to 7.36:1), and both
+branch dumps match main's first. The look run with no selection 44.8s;
+`pnpm workshop:probe` 18.6s, green. `pnpm looks:diff main`: 4,023 of 4,024
+shots identical, one inconclusive (`shop-window-cycle-cny-27`, Rural bare, on
+the tall tablet: main differed from itself by 9,799px, the branch from itself
+by 0), and that screen alone again: 54 of 54 identical.
 
 ### Not measured, stated
 

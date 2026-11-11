@@ -4559,8 +4559,8 @@ try {
             `    wall conditions entered, by look and pass (every-wall-cell-a-look-uses-is-painted; condition i is LOOK_CONTAINER[i]): ` +
                 (Object.keys(required).length === 0
                     ? 'no measured look uses one'
-                    : Object.entries(required).map(([cls, r]) => `${cls} uses ${r.conditions.join('+')}, ${r.vectors.length} combination(s) owed per variant`).join('; ')) +
-                (owedFaults.length === 0 ? ', every one painted' : `, ${owedFaults.length} unpainted`),
+                    : Object.entries(required).map(([cls, r]) => `${cls} uses ${r.conditions.join('+')}, ${r.vectors.length} combination(s) owed per variant`).join('; ') +
+                      (owedFaults.length === 0 ? ', every one painted' : `, ${owedFaults.length} look/variant(s) short of one`)),
         );
         for (const pass of Object.keys(wallConditionsByPass)) {
             const byVector = wallConditionsByPass[pass];
