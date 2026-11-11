@@ -10,7 +10,8 @@
  *
  *   SHADOWED  every base-sheet consumer of the var is overridden by all three
  *             theme files (same element under the .t-<look> class, same
- *             property or a shorthand that cancels it, outside any @media) —
+ *             property or a shorthand that cancels it, outside any @media
+ *             or @container block) —
  *             the var paints nothing anywhere and is a deletion candidate.
  *   PARTIAL   some look or some consumer still reads it.
  *   CLEAN     no theme file touches any of its consumers.
@@ -87,7 +88,14 @@ const SHORTHAND_COVERS = {
     gap: ['row-gap', 'column-gap'],
 };
 
-/** Flatten a stylesheet into rules; descend @media, skip other at-bodies. */
+/**
+ * Flatten a stylesheet into rules; descend @media and @container as
+ * conditional (a rule under either is reported with its prelude, and a
+ * theme's override there counts as partial), skip other at-bodies. Until
+ * STEP-WALL-CONTAINER this descended @media alone and read none of
+ * window.css's `@container sw` blocks: their consumers of a var were not
+ * counted, and a var read only there could be reported SHADOWED.
+ */
 function parseRules(css, media = '') {
     const out = [];
     const clean = media === '' ? css.replace(/\/\*[\s\S]*?\*\//g, '') : css;
@@ -104,7 +112,7 @@ function parseRules(css, media = '') {
             j++;
         }
         const body = clean.slice(open + 1, j - 1);
-        if (selector.startsWith('@media')) {
+        if (selector.startsWith('@media') || selector.startsWith('@container')) {
             out.push(...parseRules(body, selector));
         } else if (!selector.startsWith('@')) {
             const decls = [];

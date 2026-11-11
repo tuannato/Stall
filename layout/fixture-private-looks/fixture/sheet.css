@@ -180,5 +180,19 @@
     }
 }
 
+/*
+ * One wall composition, inert: the public CI subject of a first-party look's
+ * `@container sw` block (`a-look-queries-only-the-walls-own-conditions`,
+ * `a-container-block-lays-out-and-never-paints`,
+ * `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`,
+ * `every-wall-cell-a-look-uses-is-painted`). `order: 0` is the initial
+ * value, so nothing paints differently.
+ */
+@container sw (orientation: landscape) and (max-height: 900px) {
+    .t-fixture-private.shop-window .stall-head {
+        order: 0;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
 }

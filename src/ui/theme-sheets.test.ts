@@ -19,6 +19,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { beforeReduce, plantLooks, removePlants, PLANTED_CLASS } from '../../scripts/private-looks-plant.mjs';
 import { guardSheets, privateRows, servedSheets, type ServedSheetText } from '../../scripts/served-sheets.mjs';
 import { appSheets } from '../../scripts/sheet-roles.mjs';
+import { covers } from '../../scripts/wall-conditions.mjs';
 import {
     DEFAULT_THEME_ID,
     NEO_CITY_THEME_ID,
@@ -384,7 +385,18 @@ describe('a-container-rule-is-not-out-ranked-by-a-later-base-rule', () => {
      *   inside the selector list) — the text is compared after collapsing
      *   whitespace and nothing else.
      *
-     * Only the probe, which measures what painted, sees those.
+     * Only the probe, which measures what painted, sees those. And, since a
+     * first-party look may lay the wall out under window.css's own
+     * conditions (STEP-WALL-CONTAINER): for a bundled look `window.css`
+     * comes later and wins equal specificity; a worn look lands later and
+     * wins it; and a look rule at lower specificity than window.css's is
+     * dead, which only `looks:diff` of the look shows.
+     *
+     * **A later conditional rule whose condition covers the first** takes it
+     * back too (the second `it`): wherever the first holds, the second does,
+     * so the first never paints. Read for wall conditions alone, through the
+     * evaluator (`covers`, `scripts/wall-conditions.mjs`). Selector lists are
+     * split at their top-level commas (`topLevel`), never inside `:is()`.
      */
     type Rule = { selectors: string[]; props: string[]; cond: string; n: number };
     const rulesOf = (css: string): Rule[] => {
@@ -400,7 +412,7 @@ describe('a-container-rule-is-not-out-ranked-by-a-later-base-rule', () => {
                 const head = stack.pop();
                 if (head !== undefined && !head.startsWith('@') && !/^(from|to|[\d.]+%)/.test(head)) {
                     out.push({
-                        selectors: head.split(',').map((x) => x.trim().replace(/\s+/g, ' ')),
+                        selectors: topLevel(head).map((x) => x.trim().replace(/\s+/g, ' ')),
                         props: [...css.slice(start, i).matchAll(/(?:^|;)\s*([a-z-]+)\s*:/g)].map((m) => m[1]!),
                         cond: stack.filter((h) => h.startsWith('@')).join(' '),
                         n: (n += 1),
@@ -412,26 +424,78 @@ describe('a-container-rule-is-not-out-ranked-by-a-later-base-rule', () => {
         return out;
     };
 
-    it('finds no conditional declaration a later unconditional rule of the same selector takes back', () => {
-        const dead: string[] = [];
+    /** One wall condition of a rule's head (`@container sw <condition>` alone), or undefined. */
+    const wallCondition = (cond: string): string | undefined => {
+        const m = /^@container\s+sw\s+([^@]+)$/.exec(cond.trim());
+        return m === null ? undefined : m[1]!.trim();
+    };
+    /** Each conditional rule of `css` a later rule of the same selector and property takes back: `unconditional` where the later one has no condition, `covered` where its wall condition covers the first's. */
+    const takenBack = (css: string): { unconditional: string[]; covered: string[]; conditional: number } => {
+        const unconditional: string[] = [];
+        const covered: string[] = [];
         let conditional = 0;
-        for (const sheet of withPrivate(SHEETS)) {
-            const rules = rulesOf(stripped(sheet));
-            for (const r of rules) {
-                if (r.cond === '' || /prefers-reduced-motion|keyframes/.test(r.cond)) continue;
-                conditional += 1;
-                for (const u of rules) {
-                    if (u.n <= r.n || u.cond !== '') continue;
-                    const selectors = r.selectors.filter((x) => u.selectors.includes(x));
-                    const props = r.props.filter((p) => u.props.includes(p));
-                    if (selectors.length > 0 && props.length > 0) {
-                        dead.push(`${sheet}: ${r.cond} ${selectors.join(', ')} { ${props.join(', ')} }`);
+        const rules = rulesOf(css);
+        for (const r of rules) {
+            if (r.cond === '' || /prefers-reduced-motion|keyframes/.test(r.cond)) continue;
+            conditional += 1;
+            const inner = wallCondition(r.cond);
+            for (const u of rules) {
+                if (u.n <= r.n) continue;
+                const selectors = r.selectors.filter((x) => u.selectors.includes(x));
+                const props = r.props.filter((p) => u.props.includes(p));
+                if (selectors.length === 0 || props.length === 0) continue;
+                if (u.cond === '') {
+                    unconditional.push(`${r.cond} ${selectors.join(', ')} { ${props.join(', ')} }`);
+                } else {
+                    const outer = wallCondition(u.cond);
+                    if (inner !== undefined && outer !== undefined && covers(outer, inner)) {
+                        covered.push(`${r.cond} ${selectors.join(', ')} { ${props.join(', ')} } <- later ${u.cond}`);
                     }
                 }
             }
         }
+        return { unconditional, covered, conditional };
+    };
+
+    it('finds no conditional declaration a later unconditional rule of the same selector takes back', () => {
+        const dead: string[] = [];
+        let conditional = 0;
+        for (const sheet of withPrivate(SHEETS)) {
+            const read = takenBack(stripped(sheet));
+            conditional += read.conditional;
+            dead.push(...read.unconditional.map((line) => `${sheet}: ${line}`));
+        }
         expect(conditional, 'the test read no conditional rule at all').toBeGreaterThan(50);
         expect(dead).toEqual([]);
+    });
+
+    it('finds no conditional declaration a later rule whose wall condition covers it takes back', () => {
+        const dead: string[] = [];
+        for (const sheet of withPrivate(SHEETS)) {
+            dead.push(...takenBack(stripped(sheet)).covered.map((line) => `${sheet}: ${line}`));
+        }
+        expect(dead).toEqual([]);
+    });
+
+    it('is red on both shapes in a planted private look, and splits a selector list at its top-level commas', async () => {
+        const c = '(orientation: landscape) and (max-height: 900px)';
+        const unconditional = await plantedSheet(`@container sw ${c} { .${PLANTED_CLASS}.shop-window .stall-head { padding: 1px; } }\n.${PLANTED_CLASS}.shop-window .stall-head { padding: 2px; }`);
+        expect(takenBack(unconditional.css.replace(/\/\*[\s\S]*?\*\//g, '')).unconditional).toEqual([
+            `@container sw ${c} .${PLANTED_CLASS}.shop-window .stall-head { padding }`,
+        ]);
+        const coveredBy = await plantedSheet(
+            `@container sw ${c} { .${PLANTED_CLASS} .a { width: 1px; } }\n@container sw (orientation: landscape) { .${PLANTED_CLASS} .a { width: 2px; } }`,
+        );
+        expect(takenBack(coveredBy.css.replace(/\/\*[\s\S]*?\*\//g, '')).covered).toEqual([
+            `@container sw ${c} .${PLANTED_CLASS} .a { width } <- later @container sw (orientation: landscape)`,
+        ]);
+        // Narrow after broad is not a take-back; and a selector list is read at its top-level commas only.
+        expect(takenBack(`@container sw (orientation: landscape) { .x .a { width: 1px; } }\n@container sw ${c} { .x .a { width: 2px; } }`).covered).toEqual([]);
+        expect(takenBack('@container sw (orientation: landscape) { .x :is(.p, .q) { width: 1px; } }\n.x :is(.p, .q) { width: 2px; }').unconditional).toEqual([
+            '@container sw (orientation: landscape) .x :is(.p, .q) { width }',
+        ]);
+        // Split at every comma, `:is(.p, .q)` was read as two selectors, `.x :is(.p` and `.q)`, and a later `.q)` took it back.
+        expect(takenBack('@container sw (orientation: landscape) { .x :is(.p, .q) { width: 1px; } }\n.q) { width: 2px; }').unconditional).toEqual([]);
     });
 });
 
@@ -511,13 +575,14 @@ describe('the-raised-small-text-stays-at-eleven-px', () => {
  * Flatten a sheet's rules for a ladder read: comments out, at-rule blocks
  * unwrapped (the tier rules live inside the phone media query, and a flat
  * rule scan must not glue the first selector inside a block onto the
- * block's prelude), each selector of a list on its own, quotes made one
- * kind.
+ * block's prelude) — `@media` and, since a first-party look may lay the
+ * wall out under it (STEP-WALL-CONTAINER), `@container` — each selector of
+ * a list on its own, quotes made one kind.
  */
 const ladderRules = (css: string): { selector: string; body: string }[] =>
     [...css
         .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/@media[^{]*\{/g, '')
+        .replace(/@(?:media|container)[^{]*\{/g, '')
         .matchAll(/([^{}]+)\{([^}]*)\}/g)].flatMap(([, selectors, body]) =>
         topLevel(selectors!).map((selector) => ({ selector: selector.trim().replace(/"/g, "'").replace(/\s+/g, ' '), body: body! })),
     );
@@ -712,6 +777,9 @@ describe('a-look-never-sizes-inside-a-money-node', () => {
             // The critic's item 8: a money node named inside `:is()`, which a
             // split at every comma read as two selectors that sized nothing.
             `.${PLANTED_CLASS} :is(.item-x, .pay-x) span { font-size: 70px; }`,
+            // STEP-WALL-CONTAINER: a wall composition may set `font-size`, and the ladder read unwraps a container block,
+            // whose first selector it glued to the block's prelude before.
+            `@container sw (orientation: landscape) { .${PLANTED_CLASS} .item-x span { font-size: 9px; } }`,
         ]) {
             const planted = await plantedSheet(rule);
             const inside = ladderRules(planted.css).filter((r) => INSIDE_MONEY(r.selector) && /(?:^|[;\s])font(?:-size)?\s*:/.test(r.body));
