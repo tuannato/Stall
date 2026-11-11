@@ -2172,6 +2172,15 @@ money path this app can have, because nothing on it is derived.
   `stroke-miterlimit` is uncapped: a miter join with a large limit reaches that
   many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
   and the plants: `layout/PROBE-RULES.md`, "The state belt".
+- **Text enlargement cuts row figures on every look, accepted for now**
+  (D-2026-11-11-03, the owner's "Ok", 2026-11-11). With a phone's text
+  enlarged (measured as macOS WebKit text zoom, a stand-in for iOS and
+  Android text scaling, over 56 shop rows at 360, 390 and 430), rows whose
+  figure or unit crosses the row's clip: at 1.5x 12 on each of Modern, Neo
+  and Rural (5 / 9 / 9 at 1.25x, 26 / 29 / 27 at 2x); the private look at
+  0x04 is in the same range. No pass paints an enlarged text size. A fix is
+  app-wide (a row that re-flows by the figure's own width, as the wall's
+  Cycle card fits its figure), not a look's.
 - **Five public gaps the private look at 0x04's shelves found, stated and not
   closed** (its 8g2b critics, 2026-11-10; general, true of every look).
   (1) **A control keeps its points** (D-2026-11-10-07): no pass asks whether
