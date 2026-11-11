@@ -4829,9 +4829,16 @@ const SLIVER_ROLES = /^window-step-/;
 /**
  * The payment's two lines outside the lines' scroller (2026-09-24): what
  * they say is what the scroller may hide, so they are held whole like a
- * control.
+ * control. And the plate's own notes (`.sw-pay-note`: `PAY_NOTE_DIRECT`,
+ * `PAY_NOTE_FINAL`, and the feeds' disagreement where it stands; the
+ * wall-container build critic's P1-2, D-2026-11-11-09): a wall composition
+ * may lay the wall out per composition, and the contrast and honest-display
+ * reads run at 1280 and 1920 only, so a look that cut "the payment is
+ * final" to nothing on the portrait walls (`overflow: hidden` at rest,
+ * `max-height: 0` under the portrait ≤1500 condition) read green on every
+ * pass. Held whole here, on every wall pass.
  */
-const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"]';
+const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"], .sw-pay-note';
 let wallControlChecks = 0;
 const wallControlRoles: Record<string, number> = {};
 /** The same roles per look (8e2): a carried look owes every role on its own walls. */
@@ -4898,7 +4905,8 @@ function statusLineFaults(screen: string, label: string): Failure[] {
  * `@container sw` conditions (`LOOK_CONTAINER`, `scripts/workshop-css.mjs`),
  * and which of them a paint entered depends on the frame's CONTENT box —
  * a decoration or a look that pads the frame moves it (the Awning's 132px
- * puts 1280x800 under 740). So the page adopts one constructed sheet that
+ * puts 1280x800 under 740, a scratch-page measurement: 740 is not echoed,
+ * being excluded). So the page adopts one constructed sheet that
  * sets, for each condition `i`, a custom property `--probe-wall-cq-<i>` on
  * the frame's children under that condition, and reads it back: custom
  * properties only, which paint nothing, and which the dress and figure
@@ -4997,7 +5005,8 @@ function wallConditionsRead(variant: string): void {
  * floor was held only to window.css's text, and a look that shrank the code
  * to 200px (4.08px a module) passed 1d and the quiet zone; a look's
  * container rule could do it in one composition. A code with no box is not
- * read (`a-code-is-drawn-black-on-white` owes it). Counted per look
+ * read here: 1a fails it (`nothing-covers-money-or-a-protected-box`, "has no
+ * box at all"; the build critic's plant B at the tablet). Counted per look
  * (`wallCodeFloorByClass`); every wall pass owes a read on every look it
  * painted (`probe-coverage.mjs`).
  */
@@ -5036,6 +5045,30 @@ function wallCuts(screen: string, label: string): Failure[] {
     // them, and the cover check forgives a point outside its clips.
     for (const control of frame.querySelectorAll<HTMLElement>(`button, a[href], input, select, ${PROTECTED}, ${WALL_HELD}`)) {
         const own = control.getBoundingClientRect();
+        /*
+         * A held line is read whole by its own box too (the build critic's
+         * P1-2): a box laid out at no height, or one whose own overflow
+         * hides its text, cuts the sentence with every ancestor clip
+         * standing clear of it — `max-height: 0` under `overflow: hidden`
+         * left "the payment is final" at height 0, and a control check that
+         * skips a box with no area read it as absent. A line not rendered
+         * at all (`hidden`, no client rect) is absent, not cut.
+         */
+        if (control.matches(WALL_HELD) && control.getClientRects().length > 0 && (control.textContent ?? '').trim() !== '') {
+            const cs = getComputedStyle(control);
+            const cutOwn =
+                own.width === 0 || own.height === 0
+                    ? `is laid out at ${own.width.toFixed(1)}x${own.height.toFixed(1)}`
+                    : cs.overflowY !== 'visible' && control.scrollHeight > control.clientHeight + 1
+                      ? `hides ${control.scrollHeight - control.clientHeight}px of its own text from below (overflow-y: ${cs.overflowY})`
+                      : cs.overflowX !== 'visible' && control.scrollWidth > control.clientWidth + 1
+                        ? `hides ${control.scrollWidth - control.clientWidth}px of its own text sideways (overflow-x: ${cs.overflowX})`
+                        : undefined;
+            if (cutOwn !== undefined) {
+                out.push({ screen, theme: label, check: WALL_CUT_CHECK, detail: `${describe(control)} ${cutOwn}: a held line is read whole on the wall` });
+                continue;
+            }
+        }
         if (own.width === 0 || own.height === 0) {
             continue;
         }

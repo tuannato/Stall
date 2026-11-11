@@ -15696,7 +15696,7 @@ Chrome on every page by the echo's self-check (below):
 | `(orientation: landscape) and (max-width: 1919.98px)` | desk-wall, short-wall, side-tablet, hd-wall |
 | `(orientation: landscape) and (max-width: 1279.98px)` | side-tablet |
 | `(orientation: portrait) and (max-width: 1079.98px)` | tablet, tall-tablet, narrow-wall |
-| excluded: `(orientation: landscape) and (max-height: 740px)` | none (the Awning's 132px puts short-wall, side-tablet and hd-wall under it) |
+| excluded: `(orientation: landscape) and (max-height: 740px)` | none (the Awning's 132px puts short-wall, side-tablet and hd-wall under it, by the evaluator and a scratch page in Chrome; the probe's echo does not record 740, being excluded) |
 
 The twelve cut the wall's sizes (short side at least 680) into 21 cells, and
 the passes paint 8 (`cellsOf`, held to a dense 4px scan over all thirteen
@@ -15714,7 +15714,13 @@ conditions; PLAN § Open lists the other 13).
   every prelude, and the matrix and the scan go red with it); the parser made
   to accept an unknown feature (the refusals go red).
 - `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`: over every
-  first-party sheet a run reads; plants {landscape ≤900, landscape ≤1919.98}
+  first-party sheet a run reads; strict (it refuses). A cell is told apart by
+  the look's own conditions alone, so a cell its conditions do not separate
+  counts as painted by any pass inside it: window.css's own four main
+  compositions are refused (at 1500x1350, a landscape frame over 1200 tall no
+  pass paints), and {landscape ≤900, landscape ≤1919.98 wide} is refused
+  although the same passes enter both; 14 of the 66 pairs are refused (the
+  build critic's count). Plants {landscape ≤900, landscape ≤1919.98}
   and {landscape ≤900, 901–1200, landscape} refused, {landscape ≤900,
   portrait ≤1500} accepted, every single condition accepted. Red: the cell
   rule made to answer nothing, the two refused plants pass.
@@ -15757,11 +15763,50 @@ conditions; PLAN § Open lists the other 13).
   1920x880 entering ≤900 instead.
 - **`the-wall-code-never-paints-below-its-floor`**: every code under the
   frame paints at least `WINDOW_QR_MIN_PX` (280) on its side, its turn
-  undone, half a pixel allowed; every wall pass owes a read on every look.
+  undone, half a pixel allowed; every wall pass owes a read on every look. A
+  code with no box is not read here: 1a fails it ("has no box at all"; the
+  build critic's plant B, a code at 0x0 at the tablet, 84 failures, all 1a's).
   Clean tree: 0 failures. Red (planted looks through the look run): the code
   at 200px fails every wall pass (69–84 a pass) and the desktop page pass
   (15); the same rule inside the ≤900 landscape block fails only desktop,
   desk-wall, short-wall, side-tablet and hd-wall.
+
+### After the build critic (D-2026-11-11-09)
+
+The critic proved the promise "a container block only lays out, so nothing
+paints differently per composition" false three ways; each is closed or
+stated.
+
+- **`a-look-never-reads-the-rung-count`** (P1-1, look lint): a wall
+  composition may set `--name-rungs`, and a rule at rest that read it
+  (`opacity: calc((var(--name-rungs, 6) - 1) / 5)`, plant A) painted the
+  status line at opacity 0 on the portrait walls and 1 on the canvas, every
+  pass green. A first-party sheet reads `--name-rungs` nowhere (only the
+  ladder script does). Red: with the rule off, plant A and four other reads
+  (in a media block, a keyframe, a custom property) pass. Cost nil: no sheet
+  read it.
+- **The plate's notes are held lines** (P1-2, probe): `.sw-pay-note`
+  (`PAY_NOTE_DIRECT`, `PAY_NOTE_FINAL`, the feeds' disagreement) joins
+  `WALL_HELD`, and a held line is now read by its own box as well: laid out
+  at no height or width, or hiding its own text by its own overflow, while
+  rendered and holding text, it fails `nothing-on-the-wall-is-cut-from-below`
+  (the control check skipped a box with no area before, so the critic's
+  `max-height: 0` read as absent). Red through the look run on a planted
+  look (`overflow: hidden` at rest, `max-height: 0` under the portrait ≤1500
+  condition): 30 failures each at tablet, tall-tablet and narrow-wall, and
+  none elsewhere; with `max-height: 6px` instead, 90 ("hides 33px of its
+  own text from below"). Clean tree green, the controls read rising by 30 a
+  wall pass.
+- **`a-look-never-divides-by-a-length`** (P1-3, look lint): inside a math
+  function a first-party sheet divides only by a number; a divisor holding
+  a length or percentage, a `var()`, an `env()` or an `attr()` is refused
+  (`lengthDivisors`). The critic's plants (an opacity by `cqh`, an opacity by
+  `vh` on a money node, a colour by `cqw`) and five more are refused; red with
+  the rule off. Green on the shipped looks, stall.css, window.css, broadcast.css,
+  the fixtures, the canary and the private look at 0x04 (its 47 divisions are
+  by numbers). **Known gap, stated**: a steep `clamp()` of `cq` or viewport
+  units (`clamp(0px, (100cqh - 1050px) * 1000, 9999px)`) still makes a
+  layout step at any size; not closed (PLAN § Open).
 
 ### Cost and the dump
 
@@ -15776,12 +15821,17 @@ branch dumps match main's first. The look run with no selection 44.8s;
 `pnpm workshop:probe` 18.6s, green. `pnpm looks:diff main`: 4,023 of 4,024
 shots identical, one inconclusive (`shop-window-cycle-cny-27`, Rural bare, on
 the tall tablet: main differed from itself by 9,799px, the branch from itself
-by 0), and that screen alone again: 54 of 54 identical.
+by 0), and that screen alone again: 54 of 54 identical. Both are main's
+flakes, not this step's: the shot is a candidate for the machine's fallback
+face drawing `元` (no served face draws it), and the contrast box flips on
+main run to run (7.60 or 7.36:1; the critic read it too).
 
 ### Not measured, stated
 
 Sizes inside a painted cell between passes; a turned wall; a frame a
 decoration pads on a cell the static rule does not require; a look's
 container rule dead behind window.css's specificity (only `looks:diff` of the
-look shows it); a code with no box (another rule's); Safari's and Firefox's
-reading of a container `or`.
+look shows it); a code with no box (1a's); a steep `clamp()` of container or
+viewport units, which steps a layout at any size; layout per composition is
+read by the geometry rules alone (the contrast and honest-display reads run at
+1280 and 1920); Safari's and Firefox's reading of a container `or`.

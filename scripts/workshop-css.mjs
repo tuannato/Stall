@@ -3696,6 +3696,74 @@ function isStateSelector(selector) {
     return [...selector.matchAll(/\[\s*([\w-]+)/g)].some((m) => m[1].toLowerCase() !== 'data-role');
 }
 
+/** A read of the sign's rung count in a value (`var(--name-rungs` …), which a first-party sheet makes nowhere. */
+const NAME_RUNGS_READ = /var\(\s*--name-rungs(?![\w-])/;
+
+/** The math functions whose `/` divides (CSS Values 4). */
+const MATH_FUNCTIONS = new Set([
+    'calc', 'clamp', 'min', 'max', 'round', 'mod', 'rem', 'abs', 'sign', 'hypot', 'pow', 'sqrt', 'exp', 'log',
+    'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', '-webkit-calc',
+]);
+
+/** A length or percentage dimension: every length unit CSS has, the viewport and container units among them. */
+const LENGTH_DIMENSION =
+    /(?:^|[^\w.-])[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?(?:px|em|rem|ex|rex|ch|rch|cap|rcap|ic|ric|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|svi|svb|svmin|svmax|lvw|lvh|lvi|lvb|lvmin|lvmax|dvw|dvh|dvi|dvb|dvmin|dvmax|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc|%)(?![\w-])/i;
+
+/**
+ * Every divisor of a `/` inside a math function of `value` (strings already
+ * blanked) that is a length, or that this lint cannot resolve to a number:
+ * one holding a length or percentage dimension, a `var()`, an `env()`, an
+ * `attr()` or a keyword (`a-look-never-divides-by-a-length`). A `/` outside
+ * every math function (`grid-area: 1 / 2`, `aspect-ratio: 16 / 9`, a `font`
+ * shorthand's line height, a background's size) is not division.
+ */
+export function lengthDivisors(value) {
+    const out = [];
+    const stack = [];
+    for (let i = 0; i < value.length; i += 1) {
+        const c = value[i];
+        if (c === '(') {
+            const name = /([\w-]*)$/.exec(value.slice(0, i))[1].toLowerCase();
+            stack.push(name);
+        } else if (c === ')') {
+            stack.pop();
+        } else if (c === '/') {
+            const named = [...stack].reverse().find((name) => name !== '');
+            if (named === undefined || !MATH_FUNCTIONS.has(named)) continue;
+            const divisor = operandAt(value, i + 1);
+            const plain = divisor.trim();
+            const number = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/i.test(plain);
+            if (number) continue;
+            if (LENGTH_DIMENSION.test(divisor) || /(?:var|env|attr)\(/i.test(divisor) || !/^[\s\d.+\-*/()e]*$/i.test(divisor.replace(/(?<![\w-])(?:calc|min|max|clamp|round|abs|sign|pow|sqrt|exp|log)\(/gi, '('))) {
+                out.push(plain);
+            }
+        }
+    }
+    return out;
+}
+
+/** The operand that starts at `at` in `value`: a parenthesised group, a function with its arguments, or one token. */
+function operandAt(value, at) {
+    let i = at;
+    while (i < value.length && /\s/.test(value[i])) i += 1;
+    const start = i;
+    while (i < value.length && /[\w.%+\-]/.test(value[i]) && !(i > start && /[+\-]/.test(value[i]) && !/e/i.test(value[i - 1]))) i += 1;
+    if (value[i] === '(') {
+        let depth = 0;
+        for (; i < value.length; i += 1) {
+            if (value[i] === '(') depth += 1;
+            else if (value[i] === ')') {
+                depth -= 1;
+                if (depth === 0) {
+                    i += 1;
+                    break;
+                }
+            }
+        }
+    }
+    return value.slice(start, i);
+}
+
 function declarationProblems(decls, selectors, { firstParty = false } = {}) {
     const out = [];
     for (const { prop, value } of decls) {
@@ -4058,6 +4126,33 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * that holds the function are read alike. A first-party sheet's
          * rule; the kit keeps the rules its README states.
          */
+        /*
+         * The sign's rung count is read by script alone (STEP-WALL-CONTAINER,
+         * the build critic's P1-1): a wall composition may set
+         * `--name-rungs`, so a rule at rest that read it in a value
+         * (`opacity: calc((var(--name-rungs, 6) - 1) / 5)`) would paint
+         * differently per composition where no contrast pass looks. A
+         * first-party sheet reads it nowhere.
+         */
+        if (firstParty && NAME_RUNGS_READ.test(bare)) {
+            out.push(
+                `${shown} — reads --name-rungs: the sign's rung count is read by the ladder script alone, and a wall composition may set it, so a value that read it would paint differently per composition where no contrast pass looks (a-look-never-reads-the-rung-count)`,
+            );
+        }
+        /*
+         * Division by a length (the build critic's P1-3): a number made of a
+         * size (`(100cqh - 1050px) / 1px`) turns a container or viewport
+         * unit into a switch at any size — an opacity, a colour or a step
+         * no pass paints — and defeats the cells the wall's conditions are
+         * held to. A first-party sheet divides only by numbers.
+         */
+        if (firstParty) {
+            for (const divisor of lengthDivisors(bare)) {
+                out.push(
+                    `${shown} — divides by ${echo(divisor, 32)}, a length (or a value this lint cannot resolve): a number made of a size switches a paint or a layout at a size no pass paints; divide by a number (a-look-never-divides-by-a-length)`,
+                );
+            }
+        }
         if (firstParty && (ANCHOR_PROPERTIES.has(prop) || ANCHOR_FUNCTION.test(bare) || ANCHOR_KEYWORD.test(bare))) {
             out.push(
                 `${shown} — anchor positioning: a box placed against an anchor follows the anchor's transform, motion path and offsets, so a keyframe on another box carries it, a money figure among them, where the reads of the figure's own walk do not look; a look positions nothing against an anchor`,
@@ -4495,7 +4590,10 @@ export function lintSheet(css, { art = [] } = {}) {
  * `@container sw <condition>` block for exactly the conditions
  * `LOOK_CONTAINER` lists, holding style rules that only lay out
  * (`CONTAINER_LAYOUT`, `a-look-queries-only-the-walls-own-conditions`,
- * `a-container-block-lays-out-and-never-paints`); and no transition of a size, a
+ * `a-container-block-lays-out-and-never-paints`), no read of the rung count
+ * a composition may set (`a-look-never-reads-the-rung-count`) and no
+ * division by a length, which would make a unit a switch at any size
+ * (`a-look-never-divides-by-a-length`); and no transition of a size, a
  * letter or word spacing, a zoom or a scale on a money node, nor a keyframe
  * of any of them or of a transform that scales anywhere
  * (`a-look-never-animates-a-money-nodes-size`); and a rule under a state the
