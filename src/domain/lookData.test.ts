@@ -141,6 +141,51 @@ describe('a-private-look-row-names-its-token-or-none', () => {
 });
 
 /**
+ * A private look's mood moves the look's red (`MOOD_ONLY_PALETTE_KEYS`) with
+ * the rest of its palette: until it could, `--s-danger` stayed the base
+ * row's under every mood. The look's own palette keeps refusing the
+ * role — its danger ink is the base row's — and so does a kit mood, whose
+ * roles the workshop README lists. No shipped mood moves it, so every
+ * shipped look paints as before (`pnpm looks:diff main`).
+ */
+describe('a-private-mood-moves-the-looks-red', () => {
+    const lookWith = (palette: object, moodPalette: object) =>
+        JSON.stringify({
+            label: 'Red',
+            base: 'modern',
+            palette,
+            tierCeilings: [7, 9, 12],
+            overlayTierCeilings: [5, 7, 9],
+            moods: [{ bit: 0, slot: 'mood', label: 'Dusk', place: 'the palette', motion: false, palette: moodPalette }],
+            decorations: [],
+        });
+
+    it('reads a private mood’s danger onto the mood, and the base row’s red stays the look’s', () => {
+        const look = lookFromData(JSON.parse(lookWith({}, { bg: [40, 44, 48], danger: [120, 40, 160] })), FIXTURE_PLACE);
+        expect(look.rows[0]!.palette).toEqual({ bg: { r: 40, g: 44, b: 48 }, danger: { r: 120, g: 40, b: 160 } });
+        expect(look.theme.danger).toEqual(DEFAULT_THEME.danger);
+    });
+
+    it('refuses a danger that is not an opaque colour, in a private mood', () => {
+        for (const bad of [[120, 40, 160, 0], [120, 40], [120.5, 40, 160], '#7828a0', 'transparent', null]) {
+            expect(lookDataProblems(lookWith({}, { bg: [1, 1, 1], danger: bad }), FIXTURE_PLACE), JSON.stringify(bad)).toEqual([
+                'moods[0].palette.danger: must be three whole numbers 0–255, like [242, 242, 239]',
+            ]);
+        }
+    });
+
+    it('refuses the role in the look’s own palette, and in a kit mood', () => {
+        expect(lookDataProblems(lookWith({ danger: [0, 0, 0] }, { bg: [1, 1, 1] }), FIXTURE_PLACE)).toEqual([
+            'palette.danger: unknown field — the danger ink is the base row’s (allowed: bg, surface, text, muted, accent, accentTwo, shade)',
+        ]);
+        const { mintable: _m, ...kitLike } = FIXTURE_PLACE;
+        expect(lookDataProblems(lookWith({}, { bg: [1, 1, 1], danger: [0, 0, 0] }), kitLike)).toEqual([
+            'moods[0].palette.danger: unknown field — the danger ink is the base row’s (allowed: bg, surface, text, muted, accent, accentTwo, shade)',
+        ]);
+    });
+});
+
+/**
  * A private look's row classes are its own (the 8b2 critic's item 4):
  * `stall.css` paints `.stall.att-rainfall`, `.att-hum` and `.att-horizon` for
  * any look, so a private decoration named after a shipped row would wear its

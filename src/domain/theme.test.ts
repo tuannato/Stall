@@ -17,14 +17,16 @@ import {
     RURAL_THEME_ID,
     SHIPPED_THEMES,
     WORKSHOP_THEME_ID,
+    WARN_TINT,
     contrastRatio,
     decodeTheme,
     isShippedThemeId,
+    legibleOn,
     themeVars,
     type DecodedTheme,
     type Rgb,
 } from './theme';
-import { SHIPPED_ATTACHMENTS } from './attachments';
+import { SHIPPED_ATTACHMENTS, withMood } from './attachments';
 
 function rgbOf(cssValue: string): Rgb {
     const m = cssValue.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
@@ -49,6 +51,50 @@ describe('decodeTheme', () => {
         expect(t.id).toBe(DEFAULT_THEME_ID);
         expect(t.known).toBe(true);
         expect(t.bg).toEqual(DEFAULT_THEME.bg);
+    });
+});
+
+/**
+ * The danger ink is read on the surface and on the removal warning's own tint
+ * of it (`.warn`: 6% danger over the surface), which no probe pass reads. A
+ * private mood may move the red (`MOOD_ONLY_PALETTE_KEYS`), so a red that
+ * clears the surface and not the tint is corrected. Every shipped look and
+ * mood clears both: no shipped colour moves.
+ */
+describe('a-looks-red-reads-on-the-warnings-tint', () => {
+    const tint = (fg: Rgb, bg: Rgb): Rgb => ({
+        r: fg.r * WARN_TINT + bg.r * (1 - WARN_TINT),
+        g: fg.g * WARN_TINT + bg.g * (1 - WARN_TINT),
+        b: fg.b * WARN_TINT + bg.b * (1 - WARN_TINT),
+    });
+
+    it('moves no shipped look’s or mood’s red', () => {
+        let read = 0;
+        for (const { id } of SHIPPED_THEMES) {
+            const moods = SHIPPED_ATTACHMENTS.filter((a) => a.themeId === id && a.slot === 'mood');
+            for (const worn of [[], ...moods.map((mood) => [mood])]) {
+                const theme = withMood(decodeTheme(id), worn);
+                expect(themeVars(theme)['--s-danger'], `${id} ${worn.length === 0 ? 'bare' : worn[0]!.label}`).toBe(
+                    `rgb(${legibleOn(theme.danger, theme.surface).r}, ${legibleOn(theme.danger, theme.surface).g}, ${legibleOn(theme.danger, theme.surface).b})`,
+                );
+                read += 1;
+            }
+        }
+        expect(read).toBeGreaterThanOrEqual(5);
+    });
+
+    it('corrects a red that clears the surface and not the warning’s tint, and keeps one that clears both', () => {
+        const surface = { r: 28, g: 32, b: 34 };
+        const failing = { r: 176, g: 73, b: 58 };
+        expect(contrastRatio(failing, surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        expect(contrastRatio(failing, tint(failing, surface))).toBeLessThan(MIN_CONTRAST);
+        const painted = rgbOf(themeVars({ ...DEFAULT_THEME, surface, danger: failing })['--s-danger']!);
+        expect(painted).not.toEqual(failing);
+        expect(contrastRatio(painted, surface)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        expect(contrastRatio(painted, tint(painted, surface))).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        const reading = { r: 210, g: 110, b: 90 };
+        expect(contrastRatio(reading, tint(reading, surface))).toBeGreaterThanOrEqual(MIN_CONTRAST);
+        expect(rgbOf(themeVars({ ...DEFAULT_THEME, surface, danger: reading })['--s-danger']!)).toEqual(reading);
     });
 });
 

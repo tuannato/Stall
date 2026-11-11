@@ -954,6 +954,28 @@ export function legibleOn(fg: Rgb, ...backgrounds: Rgb[]): Rgb {
     return dark >= light ? INK_DARK : INK_LIGHT;
 }
 
+/** The share of the danger ink in the removal warning's ground (`.warn` in stall.css: `color-mix(in srgb, var(--s-danger) 6%, var(--s-surface))`). */
+export const WARN_TINT = 0.06;
+
+/** `a` mixed into `b` at `share`, per gamma-encoded channel, as `color-mix(in srgb, …)` mixes. */
+function mixSrgb(a: Rgb, share: number, b: Rgb): Rgb {
+    return { r: a.r * share + b.r * (1 - share), g: a.g * share + b.g * (1 - share), b: a.b * share + b.b * (1 - share) };
+}
+
+/**
+ * The danger ink, read where the base sheet paints it: on the surface and on
+ * the removal warning's own tint of it (`.warn`, `WARN_TINT`), which no
+ * probe pass reads (no fixture shows removal mode). A mood may move the red
+ * (`MOOD_ONLY_PALETTE_KEYS`), so a red that clears the surface and not the
+ * tint is corrected here. The tint is the candidate red's own; a shipped ink
+ * it falls back to tints the warning by 6% of itself, which this does not
+ * re-read. Every shipped look and mood clears both, so no shipped colour
+ * moves (`a-looks-red-reads-on-the-warnings-tint`).
+ */
+export function dangerInk(danger: Rgb, surface: Rgb): Rgb {
+    return legibleOn(danger, surface, mixSrgb(danger, WARN_TINT, surface));
+}
+
 /**
  * Look up a shipped row. Never throws: an id we do not ship falls back to the
  * default and carries `known: false`, so the screen can say the look is ours
@@ -980,7 +1002,7 @@ export function themeVars(theme: DecodedTheme): Record<string, string> {
         '--s-shade': rgbCss(theme.shade ?? theme.text),
         '--s-muted': rgbCss(legibleOn(theme.muted, bg, surface)),
         '--s-accent': rgbCss(legibleOn(theme.accent, bg)),
-        '--s-danger': rgbCss(legibleOn(theme.danger, surface)),
+        '--s-danger': rgbCss(dangerInk(theme.danger, surface)),
         /*
          * **The second accent is ornament, and ornament is not fenced as
          * ink** (owner, 2026-09-22). `legibleOn` answers with a shipped
