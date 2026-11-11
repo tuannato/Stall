@@ -26,6 +26,9 @@
  *   `the-wall-conditions-are-window-css-own-and-a-pass-enters-each`.
  * - `wallPassSizes()`: the sizes the wall passes paint, read from
  *   `geometryPlan()` (`scripts/probe-passes.mjs`) and never typed again.
+ * - `unpaintedLookCells(look, wall, sizes)`: the combination rule — the
+ *   cells a look's conditions cut TOGETHER with window.css's own, wherever
+ *   a look condition holds, that no wall pass paints.
  *
  * Pure, and importing only `probe-passes.mjs`, which imports nothing: the
  * probe page imports `holds` for its own self-check
@@ -204,11 +207,47 @@ export function cellsOf(conditions) {
  * The cells of `conditions` no size in `sizes` stands in: `[{ vector,
  * example }]`. `sizes` is `[{ name, width, height }]`, `wallPassSizes()`'s
  * shape. Empty when every combination the conditions cut the wall into is
- * one a wall pass paints (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`).
+ * one a wall pass paints. Over a look's conditions alone this is NOT the
+ * combination rule (it cannot see window.css's own conditions meeting the
+ * look's inside a cell): the rule is `unpaintedLookCells`.
  */
 export function unpaintedCells(conditions, sizes) {
     const painted = new Set(sizes.map(({ width, height }) => vectorAt(conditions, width, height)));
     return cellsOf(conditions).filter((cell) => !painted.has(cell.vector));
+}
+
+/**
+ * The cells where a look's wall conditions meet window.css's own that no
+ * size in `sizes` stands in: `[{ vector, example, look, wall }]`, `vector`
+ * one bit per look condition then one per wall condition, `look` and `wall`
+ * the conditions (as their text) that hold in the cell.
+ *
+ * The cells are cut over the look's conditions TOGETHER with
+ * `wallConditions` (window.css's `@container sw` preludes, every one, the
+ * excluded 740 among them), and only the cells where at least one of the
+ * look's conditions holds are asked: a look's rule applies there, and so do
+ * window.css's rules for every wall condition that also holds, so the
+ * layout there is the two together and is measured only if a wall pass
+ * paints that very combination. Cut over the look's conditions alone, a
+ * cell the look did not split counted as painted by any pass inside it, and
+ * `(orientation: landscape) and (min-height: 901px) and (max-height:
+ * 1200px)` passed on the canvas's 1920x1080 while at 1280x1024, where
+ * window.css's `(max-width: 1919.98px)` rules also hold, the look covered
+ * money with no pass there to see it (CRITIC-STEP-8G5's P2). Empty when
+ * every such cell is painted (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`).
+ */
+export function unpaintedLookCells(lookConditions, wallConditions, sizes) {
+    const look = parsedList(lookConditions);
+    const wall = parsedList(wallConditions);
+    const all = [...look, ...wall];
+    const painted = new Set(sizes.map(({ width, height }) => vectorAt(all, width, height)));
+    return cellsOf(all)
+        .filter((cell) => cell.vector.slice(0, look.length).includes('1') && !painted.has(cell.vector))
+        .map((cell) => ({
+            ...cell,
+            look: look.filter((_, i) => cell.vector[i] === '1').map((c) => c.text),
+            wall: wall.filter((_, i) => cell.vector[look.length + i] === '1').map((c) => c.text),
+        }));
 }
 
 /**

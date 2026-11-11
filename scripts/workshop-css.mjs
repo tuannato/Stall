@@ -425,9 +425,13 @@ export const LOOK_MEDIA = Object.freeze([
  * and the matrix to the passes by value, by
  * `the-wall-conditions-are-window-css-own-and-a-pass-enters-each`. Read by
  * `lintLookSheet` alone: the kit refuses `@container` (`REFUSED_AT_RULES`).
- * Inside such a block a look only lays out (`CONTAINER_LAYOUT`), and the
- * combinations its conditions cut the wall into must each be painted
- * (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`).
+ * Inside such a block a look only lays out (`CONTAINER_LAYOUT`), and every
+ * combination its conditions make with window.css's own, wherever one of
+ * them holds, must be painted
+ * (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`,
+ * `unpaintedLookCells`) — which, with today's nine wall passes, none of
+ * these twelve is alone: the lint admits the block, the combination rule
+ * refuses it, until the passes PLAN § Open names exist.
  */
 export const LOOK_CONTAINER = Object.freeze([
     // desk-wall, short-wall, side-tablet, hd-wall

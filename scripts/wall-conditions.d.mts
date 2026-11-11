@@ -16,6 +16,12 @@ export declare function holds(condition: string | WallCondition, width: number, 
 export declare function vectorAt(conditions: readonly (string | WallCondition)[], width: number, height: number): string;
 export declare function cellsOf(conditions: readonly (string | WallCondition)[]): WallCell[];
 export declare function unpaintedCells(conditions: readonly (string | WallCondition)[], sizes: readonly WallSize[]): WallCell[];
+export type LookCell = WallCell & { readonly look: readonly string[]; readonly wall: readonly string[] };
+export declare function unpaintedLookCells(
+    lookConditions: readonly (string | WallCondition)[],
+    wallConditions: readonly (string | WallCondition)[],
+    sizes: readonly WallSize[],
+): LookCell[];
 export declare function covers(outer: string | WallCondition, inner: string | WallCondition): boolean;
 export declare function wallPassSizes(): WallSize[];
 export declare function wallCellOwedFaults(

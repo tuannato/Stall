@@ -15700,7 +15700,9 @@ Chrome on every page by the echo's self-check (below):
 
 The twelve cut the wall's sizes (short side at least 680) into 21 cells, and
 the passes paint 8 (`cellsOf`, held to a dense 4px scan over all thirteen
-conditions; PLAN § Open lists the other 13).
+conditions; PLAN § Open lists the other 13). All thirteen, the excluded 740
+among them, cut 24 cells, of which the passes paint 9; the combination rule
+reads these (below).
 
 ### The static rules (pnpm test)
 
@@ -15714,16 +15716,40 @@ conditions; PLAN § Open lists the other 13).
   every prelude, and the matrix and the scan go red with it); the parser made
   to accept an unknown feature (the refusals go red).
 - `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`: over every
-  first-party sheet a run reads; strict (it refuses). A cell is told apart by
-  the look's own conditions alone, so a cell its conditions do not separate
-  counts as painted by any pass inside it: window.css's own four main
-  compositions are refused (at 1500x1350, a landscape frame over 1200 tall no
-  pass paints), and {landscape ≤900, landscape ≤1919.98 wide} is refused
-  although the same passes enter both; 14 of the 66 pairs are refused (the
-  build critic's count). Plants {landscape ≤900, landscape ≤1919.98}
-  and {landscape ≤900, 901–1200, landscape} refused, {landscape ≤900,
-  portrait ≤1500} accepted, every single condition accepted. Red: the cell
-  rule made to answer nothing, the two refused plants pass.
+  first-party sheet a run reads; strict (it refuses). **Since 2026-11-11
+  (CRITIC-STEP-8G5's P2) the cells are cut over the look's conditions
+  together with window.css's thirteen preludes** (`unpaintedLookCells`,
+  `scripts/wall-conditions.mjs`), and every cell where at least one of the
+  look's conditions holds must hold a wall pass size; a cell where none
+  holds is not asked. Before, the cells were the look's own conditions'
+  alone, so a cell the look did not split counted as painted by any pass
+  inside it and every single condition passed: the canvas's
+  `(orientation: landscape) and (min-height: 901px) and (max-height:
+  1200px)` passed on 1920x1080 alone, while at 1280x1024, where
+  window.css's `(max-width: 1919.98px)` rules also hold, the private look at
+  0x04 covered money in the critic's scratch run (63 failures; 0 with its
+  block out). Over all thirteen preludes the wall has 24 cells and the nine
+  passes paint 9 of them (the 740 cell and every cell 1920 wide and over
+  under 901 tall among the 15 they do not). **No condition is admitted
+  alone today**: each of the twelve meets window.css in at least one
+  unpainted cell, pinned by value (`VERDICTS`, one example size per cell):
+  landscape ≤900 8 cells, landscape 901–1200 2 (990x901 and 1389x901),
+  portrait 3, portrait ≤1500 1 (1139x1139), landscape 13, the `or` 9,
+  landscape ≤790 4, ≤870 6, portrait ≤767.98 wide 1 (680x1709), landscape
+  ≤1919.98 wide 8, ≤1279.98 wide 5, portrait ≤1079.98 wide 2. So the lint
+  admits the block and this rule refuses it: no first-party look may hold
+  an `@container sw` block until more wall passes exist, and the tracked
+  fixture's inert block (`order: 0` under landscape ≤900) was taken out —
+  the guard has no passing public subject. Plants: the canvas's condition
+  alone refused, its sentence naming 990x901 and 1389x901 with the
+  window.css conditions that meet it there (1280x1024 stands in the
+  1389x901 cell), and refused still with a 1280x1024 size added (990x901
+  left); {landscape ≤900, portrait ≤1500}, accepted before, refused (9
+  cells). The accepting branch, over sizes added in the test: the canvas's
+  condition with 1280x1024 and 1200x960, portrait ≤1500 with 1080x1080,
+  portrait ≤767.98 wide with 720x1600. Red: the rule put back to the old
+  cells (`unpaintedCells` over the look's conditions alone), the two plant
+  refusals fail (2 of 13, `combo-cells-tools/red-old-rule.log`).
 - `a-container-rule-is-not-out-ranked-by-a-later-base-rule` (theme-sheets):
   red on both shapes in a planted private look; the covering check off, red;
   selectors split at every comma, red (and a false take-back on a real sheet).
@@ -15754,8 +15780,13 @@ conditions; PLAN § Open lists the other 13).
   echo off the painted frame, by look and variant; the runner reads each
   measured look's own sheet and fails a look and variant whose combinations
   were not all entered on some wall paint of the run. Printed on every run
-  ("wall conditions entered, by look and pass"). Clean tree: the tracked
-  fixture uses one condition, both combinations painted on every variant;
+  ("wall conditions entered, by look and pass"). Clean tree when it landed:
+  the tracked fixture used one condition, both combinations painted on every
+  variant (since 2026-11-11 the fixture carries no block, the static rule
+  refusing every condition alone, and a default run prints "no measured look
+  uses one": this rule owes nothing on a public run; it still owes a look's
+  own cells, not the cells crossed with window.css's, which the static rule
+  now holds);
   Modern under the Awning enters 790 and 870 at 1280x900 and 790 at 1280x800,
   as the evaluator says for a content box 132px shorter. Red (a planted look
   using the 901–1200 condition and padding its own frame 200px, which the
