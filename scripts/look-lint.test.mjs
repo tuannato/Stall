@@ -4857,6 +4857,12 @@ describe('a-container-block-lays-out-and-never-paints', () => {
     });
 });
 
+/** The wall-container build critic's plant A, under Neo: the rung count set per composition and read in an opacity at rest. */
+const PLANT_A = [
+    '.t-neo .sw-state { opacity: calc((var(--name-rungs, 6) - 1) / 5); }',
+    '@container sw (orientation: portrait) { .t-neo .sw-state { --name-rungs: 1; } }',
+].join('\n');
+
 describe('a-look-never-reads-the-rung-count', () => {
     /**
      * The build critic's P1-1 (D-2026-11-11-09): a wall composition may set
@@ -4865,11 +4871,6 @@ describe('a-look-never-reads-the-rung-count', () => {
      * 0 on every portrait wall and 1 on the canvas, every pass green. Only
      * the ladder script reads it, so a first-party sheet reads it nowhere.
      */
-    const PLANT_A = [
-        '.t-neo .sw-state { opacity: calc((var(--name-rungs, 6) - 1) / 5); }',
-        '@container sw (orientation: portrait) { .t-neo .sw-state { --name-rungs: 1; } }',
-    ].join('\n');
-
     it("refuses the critic's plant A, and a read anywhere: at rest, in a media block, in a keyframe, in a custom property", () => {
         for (const rule of [
             PLANT_A,
