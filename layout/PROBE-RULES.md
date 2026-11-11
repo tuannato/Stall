@@ -15463,3 +15463,177 @@ masked by the bare paint.
   several total and the chosen line, which carry no step.
 - The same `:has()` road through `data-price-tier` (from 15 characters) and
   the stream card's `data-tier`: older, open (PLAN § Open).
+
+## The look run, and the probe's time by look (2026-11-11; D-2026-11-11-04)
+
+The probe-prune plan's O1 and O2, with its critic's fixes; not its O3: the
+tracked fixture stays in the default `pnpm test:layout`, which is unchanged.
+
+### O1: where the time goes, by look
+The runner timed passes and phases, never looks, so every per-look figure the
+plan priced was a subtraction. It now prints, on every run:
+
+- **`geometry by look`**: each geometry pass's measuring split by the look the
+  page was measuring (`lookMs` and `measureMs` in the probe's verdict: the
+  main loop's screens, the try-on's stress names, the record road and the
+  billboard), page seconds, with what is no look's (the faces, the reads after
+  the loop) as its own figure, and each pass's split under it. Clocks, left
+  out of the geometry canary's comparison (`geometryRecordDiffers`).
+- **`by look`** under the contrast phase table: every phase split by the look
+  of the job it ran inside (an `AsyncLocalStorage` around each job; a phase
+  outside any job, a page load or the plan reads, is `(shared)`), each look's
+  total, its jobs' own tab time, and an `(unattributed)` row that must read
+  0.0s. Every phase now goes through one adder (`addPhase`), the eight that
+  wrote `phases` by hand included. Phases nest (`art off` holds captures), so a
+  look's total can pass its jobs' time.
+- **`carried looks:`** each carried look's geometry (page seconds) and
+  contrast jobs (tab seconds) beside every look's.
+
+Pure halves: `scripts/look-timing.mjs`, test `look-timing.test.mjs`. Proved
+inert: the default run's contrast dump against main's, 15,018 boxes identical,
+0 moved, added or removed (`node scripts/contrast-dump.mjs`).
+
+Measured (this Mac, 6 cores, 8 GiB, three tabs), the default run with the
+private look at 0x04 selected (251.1s; load 3.3 to 6.3): its geometry 20.7s of
+296.8s page time, its contrast jobs 117.7s of 344.9s tab time (Neo 104.0s,
+Rural 57.4s, Modern 43.4s, the skeleton 22.4s); the art-off frames (30.6s), its
+look pseudos (19.0s) and 1c (8.2s) are its own. The default run without a
+selection (225.0s; load 2.8 to 6.2): the tracked fixture's geometry 50.6s of
+315.6s, its contrast jobs 60.4s of 253.5s.
+
+### O2: `pnpm test:layout:look`
+`node scripts/layout-check.mjs --looks carried`. Under a selection it measures
+the private looks the selection carries; with none, the tracked fixture. Each
+carried look is measured in full: every geometry pass, every screen, every
+variant and every contrast and transparency job the ordinary run gives it,
+held to every per-look owe it has there (`probeCoverageGaps`,
+`look-tallies.mjs`: its own line-skip ceiling, clip ratio, codes owed by name,
+wall controls, its sign's name, the try-on's stress names and, for a paid
+look, the record road). Of the public looks (the shipped three and the
+skeleton) it paints only the screens whose tree depends on what the build
+carries (`CARRIED_SCREENS`, `layout/carriedScreens.ts`), on every pass that
+measures them, bare and worn, and their contrast jobs there.
+
+**Which screens: found, not read off `render.ts`.**
+`a-public-screen-is-the-same-whatever-the-build-carries`
+(`layout/carriedScreensCheck.ts`, four files of a quarter of the screens each):
+every probe screen on every public look that can wear it, bare, each row alone
+and every all-worn state (`layout/variants.ts`, a superset of what any pass
+paints), painted in happy-dom in a build carrying no private look and again
+with the private-looks module mocked to the tracked fixture; the trees (the
+document head and the painted root, as a digest) must be identical except on
+the listed screens, and every listed screen must differ (a stale entry is
+red). The list today is one screen, `publish-name`: the name sheet's picker
+holds one button per carried look, and a carrying build adds its
+`look-status` line. The door differs too, but only on a look the door never
+wears (`canWear`), so it is not painted. Red: a planted `LOOK_ROWS.length` on
+the sign's box fails 700 paints of one quarter; `activity` planted on the list
+fails it as stale. Cost: about 27s a file on four workers, 62s on one.
+
+**The plan splits by look.** `the-contrast-plan-splits-by-look`
+(`layout/contrastPlanSplit.private.test.ts`): over the looks a build carrying
+the fixture measures, the ordinary plan's job keys are exactly the public
+looks' plan's and each carried look's, no key in two, for every way the
+sheet-naming inputs (`namesCopied`, `namesStep`) can fall; and the look run's
+plan (`carriedContrastPlan`) is the ordinary plan's own jobs of the carried
+looks and of every look on a listed screen, in its order. Red: a planted
+`looks.length > 1` on one screen fails 16 of its 18 cases.
+
+**The look run's boxes are the ordinary run's.** `node
+scripts/contrast-dump.mjs --within <look run> <ordinary run>` (kinds
+`carried+<classes>` and `shipped+<the same classes>`): every job of the look
+run is a job of the ordinary run with the same record, and every box of those
+jobs the same box with the same worst, both ways (`compareWithin`, test
+`a-look-run-is-the-ordinary-run-on-its-own-jobs`). Measured: the private look
+at 0x04, 119 jobs (its 105, the public looks' 14 on `publish-name`), 2,017
+boxes identical; the fixture, 182 jobs (168 and 14), 3,194 boxes identical.
+The geometry's per-look tallies for a carried look read the same in both runs
+(3a's elements per pass, the line skips, 1a's points behind a clip). One job
+record differed on the first try and was fixed: the look run read Grid
+horizon's worst on Neo's worn `publish-name` jobs, where the ordinary run reads
+it on the owner's three jobs alone (`readsHorizonWorst` now reads a public
+look's job as the shipped run does).
+
+**What changed in the guard, by name.**
+- The page (`?looks=carried`, `measureCarriedOnly` in `layout/looks.ts`):
+  `measuredLooks()` is the carried looks, `looksFor(screen)` every look on a
+  listed screen, `paintedLooks()` every look the page paints; the verdict
+  echoes the list (`carriedOnly`), and the runner refuses a pass whose echo is
+  not the mode it asked for or not the list another page read
+  (`carriedEchoWrong`). What a pass adds to the cross-look owes (the
+  decorations worn, the outlined targets owed a ring read) is a fully measured
+  look's (`measuredInFull`): on the first try Neo worn on `publish-name` owed
+  the rain and the horizon on no job, and six outlined lines nobody read.
+- Expected classes per pass: the public classes only on a pass that measured
+  a listed screen (`sheetClassesWrong(painted, witnessed)`); the transparency
+  pass the carried looks alone.
+- `probeCoverageGaps`' `witnessClasses`: the public looks painted on the
+  listed screens owe no per-look read (the 14 loops over `report.sheetClasses`
+  read `owing`), and the public looks' sum of the wall's controls is skipped;
+  `shippedClasses` is empty and `skeleton` false, so the door's minis, the
+  shipped rows' sizes and the skeleton's ladder are the ordinary run's.
+- The contrast verdict: the shipped run's pins stay `LOOKS === 'shipped'`
+  (Grid horizon's pinned jobs, `LINE_SKIP_CEILING`, the rain owed on Neo, the
+  look-pseudo and tide floors); the public looks' `CODES_REQUIRED`, their 1d
+  modules, their 1c characters and their 1a clip ratio are skipped; the honest
+  step owe (`HONEST_STEPS_OWED`) and the sign's names are owed by the carried
+  looks; `the-plan-follows-the-sheets-that-name-data-copied` and its step twin
+  read the carried looks' sheets (`FULL_CLASSES`); the page's plan must hold no
+  public job off a listed screen.
+- Passes: the worn-only road is left to the ordinary run (`geometryPlan` and
+  `runnerPasses` with `looks: 'carried'`, held in
+  `every-pass-the-runner-runs-is-in-a-coverage-table` and
+  `the-runner-runs-every-pass-the-module-lists`). The module-snap check, the
+  canaries and the transparency pass run as ever, over the look run's jobs.
+- The dump's kind is `carried+<classes>`, compared with its own kind or
+  `--within` an ordinary run's.
+
+**Its first line** (`scripts/probe-inputs.mjs`, test `probe-inputs.test.mjs`):
+the last green `pnpm test:layout` of this checkout and whether the probe's
+public inputs moved since: the probe build's public modules (every real file
+Rollup loaded, listed by `probeInputsPlugin` in `vite.probe.config.ts` where
+`STALL_PROBE_INPUTS` names, less the selection's directory, the private-looks
+build's own files and its virtual module), the configs and the lockfile, the
+runner's own scripts by their relative imports, Chrome's version, Node's and
+the tab count. A green ordinary run records them in
+`.layout-dump/public-green.json`; the look run re-hashes the recorded files
+before its build and compares the fresh list after it. Never a refusal. Two
+runs measured 213 public modules whether the build carried the fixture or the
+private look at 0x04, and called them the same; edits to two runner scripts
+were named.
+
+**Red.** The fixture planted with its figure in its ground's colour
+(`.item-x { color: var(--s-bg) }`, a planted repository, `plantLooks`): every
+geometry pass failed (105 to 577 failures a pass) and the contrast pass with
+324 figures below 3:1.
+
+**Runtimes** (this Mac, three tabs, back to back, one sample each): the
+default run 225.0s (load 2.8 at the start); the look run with no selection
+41.7s (load 3.8); the default run with the private look at 0x04 selected
+251.1s (load 3.3); its look run 63.0s (load 4.6), of which the geometry walk
+8.3s and the contrast pass about 45s.
+
+### What the look run does not measure, stated
+- **The public looks on every screen but `publish-name`.** They are measured
+  by the ordinary run, whose build carries the same private looks as the look
+  run's under the same selection — and under a selection, only if somebody runs
+  it: the look run's first line says when the last green one was and whether
+  the probe's public inputs moved since, and refuses nothing.
+- **A carried sheet reaching a public paint by layout.** The DOM test proves
+  the public trees do not depend on what the build carries; a carried sheet's
+  rule reaching a public element is held at build time by the look lint
+  (`lintLookSheet`: every selector under the look's class, never inside
+  `:not`, `:is` or `:has`, no sibling combinator after it) and the worn-only
+  rules (`wornSheetProblems`), not by a pass. A carried look's faces, masks
+  and memory on the page with the public looks (which the plan could not
+  separate from contention) are not on the look run's pages at all.
+- **The public looks together**: the door's minis, the codes owed by name on
+  the public looks' jobs, the shipped run's pinned jobs, the public clip and
+  line-skip ceilings, the worn-only road. The ordinary run's.
+- **A difference the DOM test does not see**: what a press makes after the
+  paint beyond the staging the probe does, a public stall's book naming a
+  private decoration's token (`category.ts`; painted on no fixture), and a
+  carried look other than the tracked fixture that lists its rows on a public
+  screen some other way.
+- **The canary reads**, which run through the same per-look clock, are inside
+  the per-look contrast figures.

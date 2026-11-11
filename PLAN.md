@@ -2172,6 +2172,16 @@ money path this app can have, because nothing on it is derived.
   `stroke-miterlimit` is uncapped: a miter join with a large limit reaches that
   many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
   and the plants: `layout/PROBE-RULES.md`, "The state belt".
+- **The look run's stop line, the owner's from O1's numbers**
+  (D-2026-11-11-04: build O1, then O2; the line is set after O1 measures).
+  Measured on this Mac at three tabs, one sample each: `pnpm test:layout`
+  225.0s with no selection and 251.1s with the private look at 0x04 selected;
+  `pnpm test:layout:look` 41.7s with the tracked fixture and 63.0s with the
+  private look at 0x04, whose own contrast jobs were 117.7s to 129.1s of tab
+  time and its geometry 13.4s to 20.7s of page time (`layout/PROBE-RULES.md`,
+  "The look run"). D-2026-11-10-12's two lines (the look adds at most 25s to
+  a pair, the selected run at most 270s) are still the ones written; which
+  line binds the look run, and at what figure, is open.
 - **Text enlargement cuts row figures on every look, accepted for now**
   (D-2026-11-11-03, the owner's "Ok", 2026-11-11). With a phone's text
   enlarged (measured as macOS WebKit text zoom, a stand-in for iOS and
