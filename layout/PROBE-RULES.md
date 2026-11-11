@@ -15482,10 +15482,14 @@ plan priced was a subtraction. It now prints, on every run:
 - **`by look`** under the contrast phase table: every phase split by the look
   of the job it ran inside (an `AsyncLocalStorage` around each job; a phase
   outside any job, a page load or the plan reads, is `(shared)`), each look's
-  total, its jobs' own tab time, and an `(unattributed)` row that must read
-  0.0s. Every phase now goes through one adder (`addPhase`), the eight that
-  wrote `phases` by hand included. Phases nest (`art off` holds captures), so a
-  look's total can pass its jobs' time.
+  total and its jobs' own tab time. Every phase now goes through one adder
+  (`addPhase`), the eight that wrote `phases` by hand included, which writes
+  the total and the look's part together, so they agree by construction (the
+  first build printed an `(unattributed)` row that "must read 0", which could
+  read nothing else; the critic's P3, dropped). Phases nest (`art off` holds
+  captures), so a look's total can pass its jobs' time. Tab time is read under
+  contention: the private look at 0x04's contrast jobs read 117.7s, 129.1s and
+  133.7s on three runs, so a figure is a run's, not the look's marginal cost.
 - **`carried looks:`** each carried look's geometry (page seconds) and
   contrast jobs (tab seconds) beside every look's.
 
@@ -15523,12 +15527,20 @@ paints), painted in happy-dom in a build carrying no private look and again
 with the private-looks module mocked to the tracked fixture; the trees (the
 document head and the painted root, as a digest) must be identical except on
 the listed screens, and every listed screen must differ (a stale entry is
-red). The list today is one screen, `publish-name`: the name sheet's picker
+red), for each build compared. With a selection named, the comparison is
+made a second time over the selected private looks, read as the build and the
+guards read them (`privateLookReads`), so a slice that gives the private look
+at 0x04 a row, a mood or a token is held to the list on the run that carries
+it (the probe-split critic's P2-2; with no selection, the fixture's alone).
+The list today is one screen, `publish-name`: the name sheet's picker
 holds one button per carried look, and a carrying build adds its
 `look-status` line. The door differs too, but only on a look the door never
 wears (`canWear`), so it is not painted. Red: a planted `LOOK_ROWS.length` on
 the sign's box fails 700 paints of one quarter; `activity` planted on the list
-fails it as stale. Cost: about 27s a file on four workers, 62s on one.
+fails it as stale; a selected build whose mock did not take (a module
+carrying nothing) fails as stale for that build. Cost, measured in `beforeAll`:
+27–29s a file on four workers with the fixture alone (62s on one worker), and
+45–48s with the private look at 0x04 selected; the timeout is 240s.
 
 **The plan splits by look.** `the-contrast-plan-splits-by-look`
 (`layout/contrastPlanSplit.private.test.ts`): over the looks a build carrying
@@ -15544,7 +15556,9 @@ scripts/contrast-dump.mjs --within <look run> <ordinary run>` (kinds
 `carried+<classes>` and `shipped+<the same classes>`): every job of the look
 run is a job of the ordinary run with the same record, and every box of those
 jobs the same box with the same worst, both ways (`compareWithin`, test
-`a-look-run-is-the-ordinary-run-on-its-own-jobs`). Measured: the private look
+`a-look-run-is-the-ordinary-run-on-its-own-jobs`); and every job the ordinary
+run gave a carried look, or any look on a listed screen, is a job of the look
+run (`jobsDropped`, the critic's P3: the first build checked one way). Measured: the private look
 at 0x04, 119 jobs (its 105, the public looks' 14 on `publish-name`), 2,017
 boxes identical; the fixture, 182 jobs (168 and 14), 3,194 boxes identical.
 The geometry's per-look tallies for a carried look read the same in both runs
@@ -15587,31 +15601,44 @@ look's job as the shipped run does).
   canaries and the transparency pass run as ever, over the look run's jobs.
 - The dump's kind is `carried+<classes>`, compared with its own kind or
   `--within` an ordinary run's.
+- Every branch above reads a field of one table (`lookMode`,
+  `scripts/probe-modes.mjs`): `carried`, `witnesses`, `publicTogether`,
+  `recordsGreen`, `saysGreen`. `the-default-run-turns-no-look-run-branch-on`
+  pins the table for every mode by value and holds the runner to it: no
+  `CARRIED_RUN`, no `'carried'` literal, every field read. A refactor that
+  turned a look-run branch on in the default run would have to change the
+  pinned table, or write a condition the test refuses (the critic's P3).
 
 **Its first line** (`scripts/probe-inputs.mjs`, test `probe-inputs.test.mjs`):
 the last green `pnpm test:layout` of this checkout and whether the probe's
-public inputs moved since: the probe build's public modules (every real file
-Rollup loaded, listed by `probeInputsPlugin` in `vite.probe.config.ts` where
-`STALL_PROBE_INPUTS` names, less the selection's directory, the private-looks
-build's own files and its virtual module), the configs and the lockfile, the
-runner's own scripts by their relative imports, Chrome's version, Node's and
-the tab count. A green ordinary run records them in
-`.layout-dump/public-green.json`; the look run re-hashes the recorded files
-before its build and compares the fresh list after it. Never a refusal. Two
-runs measured 213 public modules whether the build carried the fixture or the
-private look at 0x04, and called them the same; edits to two runner scripts
-were named.
+public inputs moved since. The inputs: every tracked file under `src/`,
+`layout/`, `public/`, `workshop/` and `scripts/` (`git ls-files`, hashed from
+the working bytes: sources, stylesheets, faces, every piece of art a stylesheet
+names, the harness and its fixture look's art, the runner's scripts), less the
+tracked fixture's private-look repository, the manuals and the tests; the probe
+build's modules outside the tree (the `node_modules` files Rollup loaded,
+listed by `probeInputsPlugin` in `vite.probe.config.ts` where
+`STALL_PROBE_INPUTS` names, less the private looks' parts); the configs and
+the lockfile; Chrome's version, Node's and the tab count. A green ordinary run
+records them in `.layout-dump/public-green.json`; the look run hashes them
+again before its build and after it. Never a refusal. The first build hashed
+the module graph alone, which holds no face and no CSS-only picture: the
+critic swapped two faces and the moon and the line said "the same" (P2-1).
+Now a planted face and a planted picture are named (`probe-inputs.test.mjs`),
+and a fixture, manual or test change is not.
 
 **Red.** The fixture planted with its figure in its ground's colour
 (`.item-x { color: var(--s-bg) }`, a planted repository, `plantLooks`): every
 geometry pass failed (105 to 577 failures a pass) and the contrast pass with
 324 figures below 3:1.
 
-**Runtimes** (this Mac, three tabs, back to back, one sample each): the
-default run 225.0s (load 2.8 at the start); the look run with no selection
-41.7s (load 3.8); the default run with the private look at 0x04 selected
-251.1s (load 3.3); its look run 63.0s (load 4.6), of which the geometry walk
-8.3s and the contrast pass about 45s.
+**Runtimes** (this Mac, three tabs; the one-minute load at each start): the
+default run 225.0s (2.8) and, after the review's fixes, 231.7s (2.1); the look
+run with no selection 41.7s (3.8) and 46.1s (6.5); the default run with the
+private look at 0x04 selected 251.1s (3.3); its look run 63.0s (4.6), of which
+the geometry walk 8.3s and the contrast pass about 45s, and after the fixes a
+back-to-back pair of 66.9s (4.9) and 67.6s (6.9). The stop lines set from
+these (D-2026-11-11-05) are PLAN § Open's.
 
 ### What the look run does not measure, stated
 - **The public looks on every screen but `publish-name`.** They are measured

@@ -2172,16 +2172,23 @@ money path this app can have, because nothing on it is derived.
   `stroke-miterlimit` is uncapped: a miter join with a large limit reaches that
   many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
   and the plants: `layout/PROBE-RULES.md`, "The state belt".
-- **The look run's stop line, the owner's from O1's numbers**
-  (D-2026-11-11-04: build O1, then O2; the line is set after O1 measures).
-  Measured on this Mac at three tabs, one sample each: `pnpm test:layout`
-  225.0s with no selection and 251.1s with the private look at 0x04 selected;
-  `pnpm test:layout:look` 41.7s with the tracked fixture and 63.0s with the
-  private look at 0x04, whose own contrast jobs were 117.7s to 129.1s of tab
-  time and its geometry 13.4s to 20.7s of page time (`layout/PROBE-RULES.md`,
-  "The look run"). D-2026-11-10-12's two lines (the look adds at most 25s to
-  a pair, the selected run at most 270s) are still the ones written; which
-  line binds the look run, and at what figure, is open.
+- **The probe's stop lines for the private look's slices, decided**
+  (D-2026-11-11-05, the window's, after D-2026-11-11-04 built O1 and O2):
+  `pnpm test:layout:look` under the selection is at most 120s, read as the
+  median of a back-to-back pair, and adds at most 15s per slice; past either,
+  prune by the by-look table (`by look` under the contrast phases; the private
+  look at 0x04's art-off frames and look pseudos are its largest costs) before
+  raising the line. The selected full `pnpm test:layout` is run at the end of
+  8g and whenever the private look gains a row shape (a row, a mood, a token),
+  under the 300s ceiling, which stays; D-2026-11-10-12's per-slice lines (the
+  look adds at most 25s to a pair, the selected run at most 270s) no longer
+  apply per slice. A slice that changes any tracked file the probe build or
+  runner reads runs `pnpm test:layout` as well; a fixture-only change needs
+  the look run alone. Measured when it was set (this Mac, three tabs, one
+  sample each but the pair): `pnpm test:layout` 225.0s and 231.7s with no
+  selection and 251.1s selected; the look run 41.7s and 46.1s with the
+  tracked fixture, and 66.9s and 67.6s back to back with the private look at
+  0x04, median 67.3s (`layout/PROBE-RULES.md`, "The look run").
 - **Text enlargement cuts row figures on every look, accepted for now**
   (D-2026-11-11-03, the owner's "Ok", 2026-11-11). With a phone's text
   enlarged (measured as macOS WebKit text zoom, a stand-in for iOS and
