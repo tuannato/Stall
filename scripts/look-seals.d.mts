@@ -5,6 +5,7 @@ type Seals = Readonly<Record<string, { readonly file: string; readonly sha256: s
 type ReadPublic = (sheetPath: string, target: string) => { name: string; bytes: Buffer } | undefined;
 
 export declare const SEAL_SUBJECTS: readonly { readonly cls: string; readonly where: string }[];
+export declare const BRAND_ROWS: readonly string[];
 export declare const SIGN_CLASSES: readonly string[];
 export declare const BRAND_FILES: readonly string[];
 export declare function sha256(bytes: Buffer | string): string;

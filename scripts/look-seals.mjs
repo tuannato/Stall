@@ -47,10 +47,15 @@ import { declarationsOf, decodeEscapes, parseSheet, splitTopLevel, urlTargets } 
  * - `stall-head`, `stall-sign`, `stall-headings`: the sign `header()`
  *   builds (`src/ui/render.ts`), on every page screen and on the wall,
  *   which builds the same sign (`src/ui/window.ts`);
- * - `bc-head`, `bc-brand`: the stream overlay's head plate and the row it
- *   opens with (`renderBroadcastView`, `src/ui/broadcast.ts`);
- * - `tk-lab`, `tk-brand`: the ticker's flag and the row it opens with
- *   (`renderTicker`), the overlay's other head.
+ * - `bc-head`: the stream overlay's head plate (`renderBroadcastView`,
+ *   `src/ui/broadcast.ts`);
+ * - `tk-lab`: the ticker's flag (`renderTicker`), the overlay's other head.
+ *
+ * **Never beside Stall's brand word** (D-2026-11-11-16): the plate's and
+ * the flag's first rows, `bc-brand` and `tk-brand`, carry `BROADCAST_BRAND`,
+ * and a look's seal there would read as Stall's own stamp — so a rule whose
+ * subject names one is refused with that sentence (`BRAND_ROWS`), even
+ * where the subject also names a box of the sign.
  *
  * The subject is the last compound of each selector, read with every
  * escape decoded and everything inside parentheses blanked, so a class
@@ -61,10 +66,11 @@ export const SEAL_SUBJECTS = Object.freeze([
     Object.freeze({ cls: 'stall-sign', where: "the sign's panel, on a page screen and on the wall" }),
     Object.freeze({ cls: 'stall-headings', where: "the sign's headings, on a page screen and on the wall" }),
     Object.freeze({ cls: 'bc-head', where: "the stream overlay's head plate" }),
-    Object.freeze({ cls: 'bc-brand', where: "the stream overlay's head plate's first row" }),
     Object.freeze({ cls: 'tk-lab', where: "the ticker's flag" }),
-    Object.freeze({ cls: 'tk-brand', where: "the ticker's flag's first row" }),
 ]);
+
+/** The overlay's rows that carry Stall's brand word, where no look's seal may stand (D-2026-11-11-16). */
+export const BRAND_ROWS = Object.freeze(['bc-brand', 'tk-brand']);
 
 /** The page's and the wall's sign, where no brand mark paints: the boxes and lines `header()` builds. */
 export const SIGN_CLASSES = Object.freeze(['stall-head', 'stall-sign', 'stall-headings', 'stall-name', 'stall-tagline', 'stall-sub', 'sign-lamp']);
@@ -164,6 +170,10 @@ export function sealSubjectProblem(selector) {
         return `"${text}" has no ::before or ::after as its subject: a seal is generated paint on the sign, never a box or a line of it`;
     }
     const named = classesOf(subject.replace(/:{1,2}(?:before|after)$/i, ''));
+    const brandRow = named.find((cls) => BRAND_ROWS.includes(cls));
+    if (brandRow !== undefined) {
+        return `"${text}" puts the seal on .${brandRow}, beside Stall's brand word, where a look's seal would read as Stall's own stamp`;
+    }
     if (!named.some((cls) => SEAL_SUBJECTS.some((s) => s.cls === cls))) {
         return `"${text}" does not have the sign as its subject (${SEAL_SUBJECTS.map((s) => `.${s.cls}`).join(', ')})`;
     }

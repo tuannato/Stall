@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { after, before, describe, it } from 'node:test';
-import { SEAL_SUBJECTS, sealPlacementProblems, sealProblems, sealSubjectProblem, servedBytes, sha256, sheetTargets } from './look-seals.mjs';
+import { BRAND_ROWS, SEAL_SUBJECTS, sealPlacementProblems, sealProblems, sealSubjectProblem, servedBytes, sha256, sheetTargets } from './look-seals.mjs';
 import { selectionFromEnv } from './looks-selection.mjs';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private-looks-plant.mjs';
 import { LOOK_SEALS, PRIVATE_LOOK_CLASS } from './private-looks.mjs';
@@ -31,7 +31,7 @@ const STAND_IN_SEALS = Object.freeze({ [SEALED]: Object.freeze({ file: 'seal.svg
 const ON_THE_SIGN = [
     `.${SEALED}:not(.shop-window) .stall-head::after { -webkit-mask-image: url(./art/seal.svg); mask-image: url(./art/seal.svg); }`,
     `.stall.${SEALED}.shop-window .stall-head::after { mask-image: url(./art/seal.svg); }`,
-    `.stall.${SEALED}.broadcast .bc-head .bc-brand::after { mask-image: url(./art/seal.svg); }`,
+    `.stall.${SEALED}.broadcast .bc-head::after { mask-image: url(./art/seal.svg); }`,
 ].join('\n');
 
 /**
@@ -110,6 +110,7 @@ describe('the-seal-paints-only-under-its-own-look', () => {
     let sealed;
     let offTheSign;
     let secondName;
+    let besideBrand;
     before(async () => {
         guard = await guardSheets();
         sealed = await sealedRows(ON_THE_SIGN, { 'seal.svg': STAND_IN });
@@ -123,17 +124,25 @@ describe('the-seal-paints-only-under-its-own-look', () => {
             ].join('\n'),
             { 'seal.svg': STAND_IN },
         );
+        besideBrand = await sealedRows(
+            [
+                `.stall.${SEALED}.broadcast .bc-head .bc-brand::after { mask-image: url(./art/seal.svg); }`,
+                `.stall.${SEALED}.broadcast .tk-lab .tk-brand::before { mask-image: url(./art/seal.svg); }`,
+            ].join('\n'),
+            { 'seal.svg': STAND_IN },
+        );
         secondName = await sealedRows(`.${SEALED} .item::after { mask-image: url(./art/stamp.svg); }`, { 'seal.svg': STAND_IN, 'stamp.svg': STAND_IN });
     });
 
     it('pins the sign’s subjects by value', () => {
         assert.deepEqual(
             SEAL_SUBJECTS.map((s) => s.cls),
-            ['stall-head', 'stall-sign', 'stall-headings', 'bc-head', 'bc-brand', 'tk-lab', 'tk-brand'],
+            ['stall-head', 'stall-sign', 'stall-headings', 'bc-head', 'tk-lab'],
         );
         assert.equal(sealSubjectProblem('.t-inkwash .stall-head::after'), undefined);
         assert.equal(sealSubjectProblem('.t-inkwash .stall-headings:before'), undefined);
-        assert.equal(sealSubjectProblem('.stall.t-inkwash.broadcast .tk-lab .tk-brand::after'), undefined);
+        assert.equal(sealSubjectProblem('.stall.t-inkwash.broadcast .tk-lab::after'), undefined);
+        assert.deepEqual(BRAND_ROWS, ['bc-brand', 'tk-brand']);
         assert.equal(sealSubjectProblem('.t-inkwash .stall-he\\61 d::after'), undefined, 'escapes are read decoded');
         assert.match(sealSubjectProblem('.t-inkwash .stall-head'), /no ::before or ::after/);
         assert.match(sealSubjectProblem('.t-inkwash .stall-head .stall-name::after'), /does not have the sign as its subject/);
@@ -160,6 +169,14 @@ describe('the-seal-paints-only-under-its-own-look', () => {
         assert.ok(problems.some((p) => /\.stall-name" has no ::before or ::after/.test(p)));
         assert.ok(problems.some((p) => /custom property --iw-seal/.test(p)));
         assert.ok(problems.some((p) => /inside @keyframes/.test(p)));
+    });
+
+    it('refuses it beside Stall’s brand word, where it would read as Stall’s own stamp', () => {
+        const { problems } = sealPlacementProblems(besideBrand, { seals: STAND_IN_SEALS });
+        assert.equal(problems.length, 2, problems.join('\n'));
+        assert.ok(problems.some((p) => /\.bc-head \.bc-brand::after" puts the seal on \.bc-brand, beside Stall's brand word, where a look's seal would read as Stall's own stamp/.test(p)), problems.join('\n'));
+        assert.ok(problems.some((p) => /puts the seal on \.tk-brand, beside Stall's brand word/.test(p)), problems.join('\n'));
+        assert.match(sealSubjectProblem('.t-inkwash .bc-head.bc-brand::after'), /would read as Stall's own stamp/, 'even where the subject also names the plate');
     });
 
     it('refuses the seal under a second name, read by its bytes', () => {
