@@ -2189,6 +2189,13 @@ money path this app can have, because nothing on it is derived.
   selection and 251.1s selected; the look run 41.7s and 46.1s with the
   tracked fixture, and 66.9s and 67.6s back to back with the private look at
   0x04, median 67.3s (`layout/PROBE-RULES.md`, "The look run").
+- **No fixture paints the quote face's borrowed-token warning** (the private
+  look at 0x04's 8g4 critic, 2026-11-11; D-2026-11-11-07). Every quote-face
+  fixture uses a token the stall minted, so `div.pay-sub.warn` (the "token
+  minted by another wallet" line a buyer reads on the face) is measured by
+  no pass on any look, before or after a look dresses `.warn`. A public
+  fixture with another wallet's token would close it, sampled for contrast
+  like the pay sheets; not built.
 - **Text enlargement cuts row figures on every look, accepted for now**
   (D-2026-11-11-03, the owner's "Ok", 2026-11-11). With a phone's text
   enlarged (measured as macOS WebKit text zoom, a stand-in for iOS and
