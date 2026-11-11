@@ -374,23 +374,69 @@ export const FIXTURE_LOOK: Look = {
  */
 const MEASURED: readonly Look[] = [...SHIPPED, ...PRIVATE, SKELETON];
 
+/**
+ * The public looks: the shipped looks and the skeleton, in the order the
+ * probe measures them — every look a build measures whatever it carries.
+ */
+export function publicLooks(): readonly Look[] {
+    return [...SHIPPED, SKELETON];
+}
+
+/**
+ * **The look run** (`pnpm test:layout:look`, `--looks carried` in
+ * `scripts/layout-check.mjs`; D-2026-11-11-04): the probe page measures
+ * the private looks the build carries in full, and of the public looks
+ * (`publicLooks()`) only the screens whose tree depends on what the build
+ * carries (`CARRIED_SCREENS`, `layout/carriedScreens.ts`, found by
+ * `a-public-screen-is-the-same-whatever-the-build-carries`) — every other
+ * paint of a public look is the same tree in the public run, whose build
+ * carries the same. Set once, by the probe page that was asked for it
+ * (`?looks=carried`), before anything is painted; never on a workshop
+ * page, whose look is the kit's alone, and never in a build that carries
+ * no private look, where there would be nothing to measure.
+ */
+let carriedOnly: ReadonlySet<string> | undefined;
+export function measureCarriedOnly(screens: ReadonlySet<string>): void {
+    if (kit !== undefined) throw new Error("the look run measures the private looks a build carries, and a workshop page measures the kit's look alone");
+    if (PRIVATE.length === 0) throw new Error('the look run was asked of a build that carries no private look — nothing to measure');
+    if (carriedOnly !== undefined) throw new Error('the look run is already set on this page');
+    carriedOnly = screens;
+}
+
+/** The screens the look run paints the public looks on, or undefined on every other page. */
+export function carriedOnlyScreens(): ReadonlySet<string> | undefined {
+    return carriedOnly;
+}
+
+/**
+ * Every look this page paints on some screen: what it measures in full,
+ * and on the look run the public looks it paints on the listed screens —
+ * in the order the ordinary probe measures them, so a job of the look run
+ * is the same job, built the same way, as the ordinary run's.
+ */
+export function paintedLooks(): readonly Look[] {
+    return carriedOnly === undefined ? measuredLooks() : MEASURED;
+}
+
 /** What the showroom offers: the shipped looks, the private looks the build carries, and the kit's when registered. */
 export function galleryLooks(): readonly Look[] {
     return kit === undefined ? [...SHIPPED, ...PRIVATE] : [...SHIPPED, ...PRIVATE, kit];
 }
 
 /**
- * What the probe measures: the kit's look **alone** on a workshop page — a
- * creator's run judges their look, not Stall's three again — and every
- * shipped look, every carried private look and the skeleton everywhere else.
+ * What the probe measures in full: the kit's look **alone** on a workshop
+ * page — a creator's run judges their look, not Stall's three again — the
+ * carried private looks alone on the look run (`measureCarriedOnly`), and
+ * every shipped look, every carried private look and the skeleton
+ * everywhere else.
  */
 export function measuredLooks(): readonly Look[] {
-    return kit === undefined ? MEASURED : [kit];
+    return kit !== undefined ? [kit] : carriedOnly !== undefined ? PRIVATE : MEASURED;
 }
 
 /** A look by id, from what this page can paint or measure. Throws on any other id. */
 export function lookById(id: number): Look {
-    const look = [...galleryLooks(), ...measuredLooks()].find((candidate) => candidate.id === id);
+    const look = [...galleryLooks(), ...paintedLooks()].find((candidate) => candidate.id === id);
     if (look === undefined) {
         throw new Error(
             id === WORKSHOP_THEME_ID
@@ -402,7 +448,8 @@ export function lookById(id: number): Look {
 }
 
 /**
- * The measured looks a screen can actually wear.
+ * The measured looks a screen can actually wear — on the look run, the
+ * carried looks, and every look on a listed screen (`measureCarriedOnly`).
  *
  * The apex paints the default look (no record) and never fetches, so the
  * door can only ever wear the default look. A door-under-Neo combination is
@@ -412,7 +459,7 @@ export function lookById(id: number): Look {
  * all, which is right: its deck is three shipped looks by design (Q8).
  */
 export function looksFor(screen: string): readonly Look[] {
-    return measuredLooks().filter((look) => canWear(look, screen));
+    return (carriedOnly?.has(screen) === true ? MEASURED : measuredLooks()).filter((look) => canWear(look, screen));
 }
 
 /** Whether `look` can wear `screen` at all — `looksFor`'s rule, for a caller holding its own list of looks. */

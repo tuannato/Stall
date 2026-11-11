@@ -1331,14 +1331,17 @@ describe('every-pass-the-runner-runs-is-in-a-coverage-table', () => {
      */
     it('reads every pass the runner runs, and each is in exactly the table its kind owes, both ways', () => {
         assert.deepEqual(passTableFaults(runnerPasses({ looks: 'shipped' })), []);
-        // The kit's probe runs a subset: the worn-only road is the ordinary run's alone.
-        const kit = runnerPasses({ looks: 'workshop' }).map((pass) => pass.key);
-        assert.deepEqual(
-            kit,
-            runnerPasses({ looks: 'shipped' })
-                .map((pass) => pass.key)
-                .filter((key) => key !== 'worn-only sheet'),
-        );
+        // The kit's probe and the look run (`--looks carried`) run a subset:
+        // the worn-only road is the ordinary run's alone.
+        for (const looks of ['workshop', 'carried']) {
+            assert.deepEqual(
+                runnerPasses({ looks }).map((pass) => pass.key),
+                runnerPasses({ looks: 'shipped' })
+                    .map((pass) => pass.key)
+                    .filter((key) => key !== 'worn-only sheet'),
+                looks,
+            );
+        }
         assert.deepEqual(Object.keys(FIGURE_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
         assert.deepEqual(Object.keys(DRESS_SURFACES_OWED).sort(), [...GEOMETRY_PASSES].sort());
         for (const [pass, why] of Object.entries(PASSES_OWING_NO_GEOMETRY)) {
@@ -1499,9 +1502,10 @@ describe('the-runner-runs-every-pass-the-module-lists', () => {
      * by nothing. The runner now holds the list to what it builds before it
      * builds (`passesNotRun`), and stops on any difference.
      */
-    it('lists exactly the passes the runner builds, by value and in order, on the ordinary probe and the kit’s', () => {
+    it('lists exactly the passes the runner builds, by value and in order, on the ordinary probe, the kit’s and the look run', () => {
         assert.deepEqual(passesNotRun(runnerPasses({ looks: 'shipped' }), builtFor('shipped')), []);
         assert.deepEqual(passesNotRun(runnerPasses({ looks: 'workshop' }), builtFor('workshop')), []);
+        assert.deepEqual(passesNotRun(runnerPasses({ looks: 'carried' }), builtFor('carried')), []);
     });
 
     it('refuses an entry the runner will not run, an entry it runs otherwise, a pass it runs that is not listed, and another order', () => {

@@ -126,6 +126,12 @@ describe('a-harness-command-reads-a-selection-or-refuses-it', () => {
             assert.match(out.stderr, /^workshop:probe: STALL_LOOKS_TARGET, STALL_LOOKS_DIR are set — the kit's probe measures the kit's look alone/m, args.join(' '));
         }
     });
+
+    it('stops the look run (--looks carried) on half a selection, before it builds, as the ordinary run', () => {
+        const out = run(['scripts/layout-check.mjs', '--looks', 'carried'], { [SELECTION_ENV.target]: 'preview' });
+        assert.equal(out.status, 2, out.stderr);
+        assert.match(out.stderr, /^test:layout: private looks: the selection is not whole/m);
+    });
 });
 
 const SPAWNERS = ['scripts/layout-check.mjs', 'scripts/looks-diff.mjs', 'scripts/print-measure.mjs', 'scripts/workshop.mjs'];

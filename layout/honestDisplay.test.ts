@@ -175,7 +175,8 @@ describe('the-honest-display-sentences-are-read', () => {
         // The step screens are held the way the staged address ones are: page, plan and served sheets agree, and the owe follows the sheets.
         expect(RUNNER).toContain('the-plan-follows-the-sheets-that-name-data-figure-step');
         expect(RUNNER).toContain("sheetNamesAttribute(row.css, 'data-figure-step')");
-        expect(RUNNER).toContain('honestStepGaps(honestStepReads, [...contrastClasses], NAMES_STEP)');
+        // Over every look a run measures in full (the look run's public looks painted on its listed screens alone owe theirs in the ordinary run).
+        expect(RUNNER).toContain('honestStepGaps(honestStepReads, [...contrastClasses].filter((cls) => FULL_CLASSES.includes(cls)), NAMES_STEP)');
         expect(PROBE).toContain("loadedSheetNames('data-figure-step', look.theme.sheetClass)");
     });
 });

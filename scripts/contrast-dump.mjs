@@ -148,6 +148,44 @@ export function dumpKindsDiffer(before, after) {
     return a === b ? undefined : `the dumps are two kinds of run (${a ?? 'unknown'} against ${b ?? 'unknown'}) — compare a run with one of its own kind`;
 }
 
+/**
+ * **A look run's dump against an ordinary run's, on the look run's jobs**
+ * (`--within`; D-2026-11-11-04). The look run (`--looks carried`, kind
+ * `carried+<classes>`) walks a subset of the ordinary run's plan — the
+ * carried looks' jobs and the public looks' jobs on the listed screens — so
+ * its dump is compared with the ordinary run's (kind `shipped+<the same
+ * classes>`) on exactly the jobs it ran: every one of them must be a job of
+ * the ordinary run, with the same record, and every box of those jobs the
+ * same box with the same worst, both ways (`compareDumps` over the ordinary
+ * dump cut to those jobs); and every job the ordinary run gave a carried
+ * look, or any look on a screen where the look run painted a public look,
+ * must be one of the look run's (`jobsDropped`). `refused` when the kinds
+ * cannot be compared so, else the comparison with `jobsMissing`,
+ * `jobsDiffer` and `jobsDropped` beside it.
+ */
+export function compareWithin(look, full) {
+    const kind = (dump) => dump?.meta?.kind ?? dump?.meta?.looks ?? '';
+    const [a, b] = [kind(look), kind(full)];
+    if (!a.startsWith('carried+') || b !== `shipped+${a.slice('carried+'.length)}`) {
+        return { refused: `--within compares a look run (carried+…) with an ordinary run carrying the same looks (shipped+…), not ${a || 'unknown'} with ${b || 'unknown'}` };
+    }
+    const fullJobs = new Map(full.jobs.map((job) => [job.key, job]));
+    const keys = new Set(look.jobs.map((job) => job.key));
+    const jobsMissing = [...keys].filter((key) => !fullJobs.has(key));
+    const jobsDiffer = look.jobs.filter((job) => fullJobs.has(job.key) && JSON.stringify(job) !== JSON.stringify(fullJobs.get(job.key))).map((job) => job.key);
+    // The other way (the probe-split critic's P3): every job the ordinary run
+    // gave a carried look, and every job it gave any look on a screen where
+    // the look run painted a public look, is a job of the look run.
+    const carried = new Set(look.meta?.carried ?? []);
+    const ofCarried = (job) => (job.classes ?? []).some((cls) => carried.has(cls));
+    const witnessScreens = new Set(look.jobs.filter((job) => !ofCarried(job)).map((job) => `${job.pass}|${job.viewport}|${job.screen}`));
+    const jobsDropped = full.jobs
+        .filter((job) => !keys.has(job.key) && (ofCarried(job) || witnessScreens.has(`${job.pass}|${job.viewport}|${job.screen}`)))
+        .map((job) => job.key);
+    const cut = { ...full, boxes: full.boxes.filter((box) => keys.has(box.job)) };
+    return { ...compareDumps(cut, look), jobs: keys.size, jobsMissing, jobsDiffer, jobsDropped };
+}
+
 /** How many timestamped dumps of one kind of run are kept; a dump is ~1.5 MB. */
 export const DUMPS_KEPT = 20;
 
@@ -175,12 +213,29 @@ export function writeDump(dump, { looks, stamp, rev, dir = DUMP_DIR }) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-    const [beforePath, afterPath, ...rest] = process.argv.slice(2);
+    const args = process.argv.slice(2);
+    const within = args[0] === '--within';
+    const [beforePath, afterPath, ...rest] = within ? args.slice(1) : args;
     if (beforePath === undefined || afterPath === undefined || rest.length > 0) {
-        console.error('usage: node scripts/contrast-dump.mjs <before.json> <after.json>');
+        console.error('usage: node scripts/contrast-dump.mjs <before.json> <after.json>\n       node scripts/contrast-dump.mjs --within <look-run.json> <ordinary-run.json>');
         process.exit(2);
     }
     const read = (path) => JSON.parse(readFileSync(path, 'utf8'));
+    if (within) {
+        const result = compareWithin(read(beforePath), read(afterPath));
+        if (result.refused !== undefined) {
+            console.error(`contrast-dump: ${result.refused}`);
+            process.exit(2);
+        }
+        console.log(
+            `within: the look run's ${result.jobs} job(s); ${result.jobsMissing.length} not jobs of the ordinary run, ${result.jobsDiffer.length} whose record differs, ` +
+                `${result.jobsDropped.length} of the ordinary run's jobs of a carried look or a listed screen not in the look run`,
+        );
+        for (const key of [...result.jobsMissing, ...result.jobsDiffer, ...result.jobsDropped].slice(0, 40)) console.log(`  ${key}`);
+        for (const line of comparisonLines(result, { list: Number(process.env.DUMP_LIST ?? 40) })) console.log(line);
+        const same = result.jobsMissing.length === 0 && result.jobsDiffer.length === 0 && result.jobsDropped.length === 0 && result.moved.length === 0 && result.added.length === 0 && result.removed.length === 0;
+        process.exit(same ? 0 : 1);
+    }
     const [before, after] = [read(beforePath), read(afterPath)];
     const differ = dumpKindsDiffer(before, after);
     if (differ !== undefined) {
