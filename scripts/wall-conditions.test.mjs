@@ -7,7 +7,7 @@ import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from './private
 import { WALL_PASS_NAMES } from './probe-coverage.mjs';
 import { guardSheets, privateRows, servedSheets } from './served-sheets.mjs';
 import { LOOK_CONTAINER, LOOK_CONTAINER_EXCLUDED, blankComments, containerConditionsOf } from './workshop-css.mjs';
-import { WALL_MIN_PX, cellsOf, covers, holds, parseWallCondition, unpaintedCells, vectorAt, wallCellOwedFaults, wallPassSizes } from './wall-conditions.mjs';
+import { WALL_MIN_PX, cellsOf, covers, holds, parseWallCondition, unpaintedCells, unpaintedLookCells, vectorAt, wallCellOwedFaults, wallPassSizes } from './wall-conditions.mjs';
 
 /**
  * The wall's own container conditions, and what a first-party look may do
@@ -152,8 +152,8 @@ describe('the-wall-conditions-are-window-css-own-and-a-pass-enters-each', () => 
 /** The first-party look sheets a run reads: the shipped looks, the harness's fixture look, the tracked fixture and every private look selected. */
 const FIRST_PARTY_ROLES = new Set(['look', 'fixture', 'private']);
 
-/** One sentence per first-party look sheet whose wall conditions cut the wall into a combination no wall pass paints. */
-function combinationProblems(sheets) {
+/** One sentence per first-party look sheet whose wall conditions, crossed with window.css's own, cut the wall into a combination no wall pass paints. */
+function combinationProblems(sheets, sizes = SIZES) {
     const out = [];
     for (const sheet of sheets) {
         if (!FIRST_PARTY_ROLES.has(sheet.role)) continue;
@@ -165,24 +165,49 @@ function combinationProblems(sheets) {
             out.push(`${sheet.path} (${sheet.lookClass}): ${e.message}`);
             continue;
         }
-        const unpainted = unpaintedCells(parsed, SIZES);
+        const unpainted = unpaintedLookCells(parsed, WINDOW_PRELUDES, sizes);
         if (unpainted.length > 0) {
+            const at = (cell) => {
+                const size = cell.example.map((v) => Math.round(v * 100) / 100).join('x');
+                const beside = cell.wall.filter((w) => !cell.look.includes(w));
+                return beside.length === 0 ? size : `${size} (with window.css's ${beside.join(', ')})`;
+            };
             out.push(
-                `${sheet.path} (${sheet.lookClass}) uses ${conditions.map((c) => `@container sw ${c}`).join(', ')}, which cut the wall into ` +
-                    `${unpainted.length} combination(s) no wall pass paints — e.g. ${unpainted.map((c) => c.example.map((v) => Math.round(v * 100) / 100).join('x')).join(', ')}`,
+                `${sheet.path} (${sheet.lookClass}) uses ${conditions.map((c) => `@container sw ${c}`).join(', ')}; where it holds, window.css's own conditions cut the wall into ` +
+                    `${unpainted.length} combination(s) beside it that no wall pass paints, so its layout there is measured by nothing — e.g. ${unpainted.map(at).join('; ')}`,
             );
         }
     }
     return out;
 }
 
+/**
+ * Every condition the table admits, alone, by value: the sizes (one per
+ * unpainted cell, `unpaintedLookCells`' examples) where it meets window.css's
+ * own conditions in a combination no wall pass paints. Not one is empty:
+ * with the nine wall passes there are today, no look may use any
+ * `@container sw` block (CRITIC-STEP-8G5's P2; PLAN § Open names the passes
+ * that would admit one).
+ */
+const VERDICTS = {
+    '(orientation: landscape) and (max-height: 900px)': ['709x680', '870x830', '900x885', '1389x680', '4799x680', '4799x753', '4799x830', '4799x885'],
+    '(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)': ['990x901', '1389x901'],
+    '(orientation: portrait)': ['680x1709', '778x1709', '1139x1139'],
+    '(orientation: portrait) and (max-height: 1500px)': ['1139x1139'],
+    '(orientation: landscape)': ['709x680', '870x830', '900x885', '1240x1239', '990x901', '1389x680', '1389x1239', '1389x901', '4799x680', '4799x753', '4799x830', '4799x885', '4799x1239'],
+    '((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1500px))': ['709x680', '870x830', '900x885', '1139x1139', '1389x680', '4799x680', '4799x753', '4799x830', '4799x885'],
+    '(orientation: landscape) and (max-height: 790px)': ['709x680', '1389x680', '4799x680', '4799x753'],
+    '(orientation: landscape) and (max-height: 870px)': ['709x680', '870x830', '1389x680', '4799x680', '4799x753', '4799x830'],
+    '(orientation: portrait) and (max-width: 767.98px)': ['680x1709'],
+    '(orientation: landscape) and (max-width: 1919.98px)': ['709x680', '870x830', '900x885', '1240x1239', '990x901', '1389x680', '1389x1239', '1389x901'],
+    '(orientation: landscape) and (max-width: 1279.98px)': ['709x680', '870x830', '900x885', '1240x1239', '990x901'],
+    '(orientation: portrait) and (max-width: 1079.98px)': ['680x1709', '778x1709'],
+};
+
 /** A planted private look whose sheet holds one `@container sw` block per condition, each laying nothing out but `order: 0`. */
 async function plantedWith(conditions) {
     const blocks = conditions.map((c) => `@container sw ${c} {\n    .${PLANTED_CLASS}.shop-window .stall-head { order: 0; }\n}`).join('\n');
-    // The fixture's own block (`order: 0` under the table's first condition) comes out by its exact text: a pattern would also match
-    // the comment above it, which names `@container sw`, and leave that comment open over every block planted after it.
-    const own = `@container sw ${C[0]} {\n    .${PLANTED_CLASS}.shop-window .stall-head {\n        order: 0;\n    }\n}\n`;
-    const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text.replace(own, ''), blocks) : text));
+    const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text, blocks) : text));
     const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
     const row = rows.find((sheet) => sheet.lookClass === PLANTED_CLASS);
     if (row === undefined) throw new Error('the planted look was not read');
@@ -190,13 +215,16 @@ async function plantedWith(conditions) {
 }
 
 const C = LOOK_CONTAINER;
+/** `SIZES` with more sizes added, as a pass would add them. */
+const withSizes = (...extra) => [...SIZES, ...extra.map(([width, height]) => ({ name: `${width}x${height}`, width, height }))];
 let SERVED;
 let PLANTED;
 before(async () => {
     SERVED = await guardSheets();
     PLANTED = {
-        wideAndShort: await plantedWith([C[0], C[9]]),
-        overTwelveHundred: await plantedWith([C[0], C[1], C[4]]),
+        // The critic's case: the canvas's own condition alone.
+        canvas: await plantedWith([C[1]]),
+        // Accepted before the cells were crossed with window.css's.
         landscapeAndPortrait: await plantedWith([C[0], C[3]]),
     };
 });
@@ -207,30 +235,61 @@ describe('a-look-uses-no-combination-of-wall-conditions-no-pass-paints', () => {
         assert.deepEqual(combinationProblems(SERVED), []);
         const fixture = privateRows(SERVED).find((sheet) => sheet.look.source === 'fixture');
         assert.ok(fixture !== undefined, 'the tracked fixture was not read');
-        // The fixture is the public CI subject: it uses one condition, and that one is admitted.
-        assert.deepEqual(containerConditionsOf(fixture.css), [C[0]]);
+        // No condition is admitted alone today (below), so the tracked fixture carries no block and the guard has no public subject that passes.
+        assert.deepEqual(containerConditionsOf(fixture.css), []);
     });
 
-    it('refuses a height step and a width step together, and a landscape split that leaves over 1200 tall unpainted', () => {
-        // Each plant holds exactly the conditions it names (the fixture's own block taken out first).
-        assert.deepEqual(containerConditionsOf(PLANTED.wideAndShort.css), [C[0], C[9]]);
-        assert.deepEqual(containerConditionsOf(PLANTED.overTwelveHundred.css), [C[0], C[1], C[4]]);
+    it('pins every admitted condition’s verdict by value: each, alone, meets window.css in a combination no pass paints', () => {
+        assert.deepEqual(Object.keys(VERDICTS), [...C]);
+        for (const condition of C) {
+            assert.deepEqual(
+                unpaintedLookCells([condition], WINDOW_PRELUDES, SIZES).map((cell) => cell.example.join('x')),
+                VERDICTS[condition],
+                condition,
+            );
+        }
+        assert.ok(Object.values(VERDICTS).every((sizes) => sizes.length > 0), 'a condition is admitted alone: say so in CLAUDE.md and the fixture');
+        // Cut over each condition alone, as the rule was before, every one passed.
+        for (const condition of C) assert.deepEqual(unpaintedCells([condition], SIZES), [], condition);
+    });
+
+    it('refuses the canvas’s condition alone, naming the unpainted size, where 1280x1024 meets window.css’s (max-width: 1919.98px) rules', () => {
+        assert.deepEqual(containerConditionsOf(PLANTED.canvas.css), [C[1]]);
+        const said = combinationProblems([PLANTED.canvas]);
+        assert.equal(said.length, 1, said.join('\n'));
+        assert.match(said[0], new RegExp(`\\(${PLANTED_CLASS}\\) uses @container sw \\(orientation: landscape\\) and \\(min-height: 901px\\) and \\(max-height: 1200px\\);`));
+        assert.match(said[0], /2 combination\(s\) beside it that no wall pass paints/);
+        assert.match(said[0], /990x901 \(with window\.css's \(orientation: landscape\), \(orientation: landscape\) and \(max-width: 1919\.98px\), \(orientation: landscape\) and \(max-width: 1279\.98px\)\)/);
+        assert.match(said[0], /1389x901 \(with window\.css's \(orientation: landscape\), \(orientation: landscape\) and \(max-width: 1919\.98px\)\)$/);
+        // 1280x1024 — where the critic's scratch run read the look covering money — stands in the 1389x901 cell.
+        const all = [C[1], ...WINDOW_PRELUDES];
+        const cells = unpaintedLookCells([C[1]], WINDOW_PRELUDES, SIZES);
+        assert.equal(cells[1].vector, vectorAt(all, 1280, 1024));
+        // One more pass at 1280x1024 is not enough: the landscape frame 901–1200 tall under 1280 wide is still unpainted.
+        assert.deepEqual(combinationProblems([PLANTED.canvas], withSizes([1280, 1024])).length, 1);
+        assert.match(combinationProblems([PLANTED.canvas], withSizes([1280, 1024]))[0], /1 combination\(s\).*990x901/);
+    });
+
+    it('refuses a pair it accepted when cells were cut over the look’s own conditions alone', () => {
         assert.deepEqual(containerConditionsOf(PLANTED.landscapeAndPortrait.css), [C[0], C[3]]);
-        const wide = combinationProblems([PLANTED.wideAndShort]);
-        assert.equal(wide.length, 1, wide.join('\n'));
-        assert.match(wide[0], new RegExp(`\\(${PLANTED_CLASS}\\) uses @container sw \\(orientation: landscape\\) and \\(max-height: 900px\\), @container sw \\(orientation: landscape\\) and \\(max-width: 1919\\.98px\\)`));
-        assert.match(wide[0], /cut the wall into 2 combination\(s\) no wall pass paints — e\.g\. \d+x\d+, \d+x\d+/);
-        // 908x904 (landscape, over 900 tall, under 1920 wide) is one of them; 1920x720 the other.
-        assert.ok(unpaintedCells([C[0], C[9]], SIZES).some((cell) => cell.vector === vectorAt([C[0], C[9]], 908, 904)));
-        assert.ok(unpaintedCells([C[0], C[9]], SIZES).some((cell) => cell.vector === vectorAt([C[0], C[9]], 1920, 720)));
-        const tall = combinationProblems([PLANTED.overTwelveHundred]);
-        assert.equal(tall.length, 1, tall.join('\n'));
-        assert.ok(unpaintedCells([C[0], C[1], C[4]], SIZES).some((cell) => cell.vector === vectorAt([C[0], C[1], C[4]], 1920, 1201)));
+        assert.deepEqual(unpaintedCells([C[0], C[3]], SIZES), []);
+        const said = combinationProblems([PLANTED.landscapeAndPortrait]);
+        assert.equal(said.length, 1, said.join('\n'));
+        assert.match(said[0], /9 combination\(s\) beside it that no wall pass paints/);
+        // The old refusals stand: the height step and the width step together; the landscape split over 1200 tall.
+        const pair = [C[0], C[9], ...WINDOW_PRELUDES];
+        for (const [w, h] of [[908, 904], [1920, 720]]) {
+            assert.ok(unpaintedLookCells([C[0], C[9]], WINDOW_PRELUDES, SIZES).some((cell) => cell.vector === vectorAt(pair, w, h)), `${w}x${h}`);
+        }
+        assert.ok(unpaintedLookCells([C[0], C[1], C[4]], WINDOW_PRELUDES, SIZES).some((cell) => cell.vector === vectorAt([C[0], C[1], C[4], ...WINDOW_PRELUDES], 1920, 1201)));
     });
 
-    it('accepts a landscape step beside a portrait one, and every single condition alone', () => {
-        assert.deepEqual(combinationProblems([PLANTED.landscapeAndPortrait]), []);
-        for (const condition of LOOK_CONTAINER) assert.deepEqual(unpaintedCells([condition], SIZES), [], condition);
+    it('accepts a condition once every combination it meets is painted: the canvas’s with 1280x1024 and 1200x960, portrait ≤1500 with 1080x1080', () => {
+        assert.deepEqual(combinationProblems([PLANTED.canvas], withSizes([1280, 1024], [1200, 960])), []);
+        assert.deepEqual(unpaintedLookCells([C[3]], WINDOW_PRELUDES, withSizes([1080, 1080])), []);
+        assert.deepEqual(unpaintedLookCells([C[8]], WINDOW_PRELUDES, withSizes([720, 1600])), []);
+        // A cell where none of the look's conditions holds is not asked: the canvas's condition never owes a portrait size.
+        assert.ok(unpaintedLookCells([C[1]], WINDOW_PRELUDES, SIZES).every((cell) => cell.look.length > 0));
     });
 });
 

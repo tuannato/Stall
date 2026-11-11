@@ -748,7 +748,10 @@ const NAMES_STEP = (await servedSheets({ env: CARRIED.env }))
  * reader (`containerConditionsOf`): `every-wall-cell-a-look-uses-is-painted`
  * fails a look whose combinations of them were not all entered on some
  * wall paint of the run, by the frame's own echo (`wallConditionsByClass`).
- * No shipped look uses one; the tracked fixture uses one.
+ * No shipped look uses one, and since the combination rule crosses a look's
+ * conditions with window.css's own (CRITIC-STEP-8G5's P2) no first-party
+ * look may: the tracked fixture carries none, so on a default run this
+ * rule owes nothing ("no measured look uses one").
  */
 const WALL_CONDITIONS_USED = Object.fromEntries(
     (await servedSheets({ env: CARRIED.env }))
