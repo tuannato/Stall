@@ -33,6 +33,9 @@ const SHEET_READERS = Object.freeze({
     'layout/workshopStarter.test.ts': 'not relevant: the kit starter; the kit refuses @container (REFUSED_AT_RULES)',
     'scripts/audit-shadowing.mjs': 'descends: `parseRules` descends @media and @container as conditional (fixed in STEP-WALL-CONTAINER)',
     'scripts/look-lint.test.mjs': 'descends: the look lint walks a container block\'s rules like a top-level rule\'s (`lintLook`)',
+    'scripts/look-seals.mjs':
+        "descends: `sheetTargets` walks every grouping node's children (`parseSheet`'s GROUPING holds container), so a seal named inside a @container block is read under its rule's selector",
+    'scripts/look-seals.test.mjs': 'not relevant: tests `sheetTargets` (look-seals.mjs, listed), a @container block among its cases',
     'scripts/looks-artifact.test.mjs': 'not relevant: counts "@" in an archive, reading no rule',
     'scripts/print-measure.mjs': 'not relevant: a docblock naming @media print; measures the print page, reading no sheet',
     'scripts/private-looks-build.test.mjs': 'not relevant: plants edit the reduce block by its text',

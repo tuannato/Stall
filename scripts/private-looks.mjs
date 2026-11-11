@@ -217,6 +217,28 @@ export const CANARY_TREE = '1a92f4fc0ed2c2b8ae2ae775455c867f54c90c13';
 export const CANARY_COMMIT = '760237c8e9f246c7b7f28a8a91ce933832100930';
 
 /**
+ * **A private look's seal, pinned by hash** (step 8g6; STEP-8G-PLAN §4.3):
+ * by the look's class — never its id, since the tracked fixture also sits
+ * at `0x04` and carries none — the one art file that names the look as
+ * artwork, and the SHA-256 of its **served** bytes: `sanitizeSvg`'s
+ * re-serialisation (`scripts/svg-allow.mjs`), what a build emits for an
+ * SVG, so a source edit that serves the same bytes keeps the pin. A hash
+ * is not the art and cannot be turned back into it; it lets someone who
+ * holds a candidate file confirm it. Here, beside `CANARY_TREE`, rather
+ * than beside the id lists in `src/domain/theme.ts`: it is a fact about a
+ * private repository's bytes that only the Node guards read, as
+ * `CANARY_TREE` is, while `theme.ts` is the table the app decodes a record
+ * against and ships to every visitor. Read by `the-seal-is-the-pinned-seal`
+ * and `the-seal-paints-only-under-its-own-look` (`scripts/look-seals.mjs`,
+ * tested in `scripts/look-seals.test.mjs`, which pins it by value).
+ * **What moves it**: a new seal, in one public commit beside the private
+ * one.
+ */
+export const LOOK_SEALS = Object.freeze({
+    't-inkwash': Object.freeze({ file: 'seal.svg', sha256: 'f6304c7adf9df768c4f36aea6bfd3f1e8316479696565b7d29a7ac6412c9a379' }),
+});
+
+/**
  * Why the preview road's gate no longer holds, or undefined: once
  * `RELEASED_LOOK_IDS` (`released`) names an id, a release carries a private
  * look, and the gate written for "only the canary until a look is sold"

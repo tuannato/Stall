@@ -41,6 +41,8 @@ export declare const PREVIEW_SLUGS: readonly string[];
 export declare const CANARY_TREE: string;
 /** The canary's commit: the one commit the preview road fetches before any release (40 lower-case hex). */
 export declare const CANARY_COMMIT: string;
+/** A private look's seal by its class: its art file's name and the SHA-256 of its served bytes (64 lower-case hex). */
+export declare const LOOK_SEALS: Readonly<Record<string, { readonly file: string; readonly sha256: string }>>;
 export declare function previewRoadProblem(released: readonly number[]): string | undefined;
 export declare const PRIVATE_LOOK_CLASS: RegExp;
 export declare const PRIVATE_LOOK_CLASS_MAX: number;
