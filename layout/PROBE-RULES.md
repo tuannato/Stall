@@ -15871,3 +15871,92 @@ look shows it); a code with no box (1a's); a steep `clamp()` of container or
 viewport units, which steps a layout at any size; layout per composition is
 read by the geometry rules alone (the contrast and honest-display reads run at
 1280 and 1920); Safari's and Firefox's reading of a container `or`.
+
+## A mood's variants, and the look run's line (2026-11-11; D-2026-11-11-17, D-2026-11-11-18)
+
+The private look at 0x04 gained two moods (8h). Each mood is an all-worn
+variant of every contrast job the look owes (`wornAllFlags`, one per mood),
+so the look's contrast jobs went from 116 to 316, and three things the probe
+read for one variant had to read for each.
+
+**The line-skip ceiling is per variant.** `CARRIED_LINE_SKIP_CEILING`
+(`scripts/look-tallies.mjs`) was one sum per viewport and kind, measured on
+the bare variant alone; with two moods the counts tripled, and a sum let a
+mood's skips absorb a bare-look regression or a mood's own clip ride under
+the bare count. It is keyed by variant now, as the probe names them
+(`skipVariantOf`: `bare`, `worn` for `0xffff`, `flags <n>` for each further
+mood's all-worn state, the names the 1d tallies already print), and a
+variant measured that its entry does not name fails the run, and so does a
+variant it names that the run measured no job of (a mood's jobs gone from
+the plan read as no skips; the critic's P3-1). The runner
+prints each carried look's sum, each variant beside it, and each variant's
+skips by screen. Test: `holds each variant to its own ceiling, so a mood’s
+skips cannot hide a bare look’s` (the trade of one line bare for one under
+the mood, sums equal, fails; a new mood's variant with no entry fails; a
+named variant with no job measured fails). The
+tracked fixture's entry was split from the default run's dump: bare and
+worn alike, mobile 8/5 and desktop 2/4, canvas 105/0 bare and 102/0 worn
+(the ticker's 3 are painted bare only). The private look at 0x04's, measured
+by the look run with its two moods: mobile 8/5 and desktop 3/4 under every
+variant, canvas 104/0 bare and 101/0 under each mood (sums 24/15, 9/12,
+306/0, the 8h builder's). Its bare desktop count fell from 7 to 3: the five
+`studio-items` lines of 2026-10-12, marked provisional then, are two today.
+
+**A private mood moves the look's red.** `PaletteDelta` names `danger`, read
+from a private look's mood alone (`MOOD_ONLY_PALETTE_KEYS`, `lookData.ts`).
+`--s-danger` is `legibleOn` the surface **and the removal warning's own tint
+of it** (`dangerInk`, `theme.ts`: `.warn` is danger text on 6% danger over
+the surface, and no fixture shows removal mode, so no pass reads it; the
+critic's P2-1, whose red rgb(176,73,58) on rgb(28,32,34) reads 3.02:1 on the
+surface and 2.89:1 on the tint, and is corrected now). Every shipped look
+and mood clears both, so no shipped colour moves
+(`a-looks-red-reads-on-the-warnings-tint`); the public entry script grows
+by the check. **What reads a danger line on any other ground is the contrast
+pass, and only through `.ctx` on two screens** (`publish-name`, `pay-gone`):
+`pay-quantity-why`, Pay several's `pay-lost` and the describe sheet's state
+lines are read only while a look dresses every `.ctx` alike (PLAN § Open).
+Seen on the look run with a stand-in mood red on `publish-name`'s `p.ctx`,
+and failed there, as it should be.
+
+**A private mood's art under text is listed, in its own sheet alone.**
+`PRIVATE_DECORATION_ART` (`decor-gate.test.ts`), keyed by the look's class,
+exempts the declarations a private look's own mood class lays as art, each
+with its reason, only in that look's sheet; a key is the root,
+`.stall.<look>.att-<mood>`, or an open `.sheet` under it, and
+`background-image` alone (the critic's P3-2: a descendant or a
+`background-color` key would let a later entry lay a slab under a figure).
+The private look at 0x04's mood class `att-rubbing` has two: a mood's own
+root art, and art on an open sheet's surface. **Read at rest only**: the art
+stands still while the content scrolls over it, so a line passes over every
+patch of it, and nothing flattens it to its worst as the rain is flattened
+(PLAN § Open; any look's own root art has the same gap).
+`a-mood-class-is-look-scoped` is unchanged, so those rules carry no
+`:not(.shop-window)`.
+
+**The look run's line is 240s, and the selected full run is no longer a
+gate** (D-2026-11-11-17, the owner's). With the two moods the look run read
+174s and 181s (the 8h builder's pair) against its 120s line, and the
+selected full `pnpm test:layout` hit the 300s watchdog at 303s. The owner
+took the selected full run out of the gate — a slice's Chrome reading is the
+default run (unchanged, 300s) plus the look run, the DOM test holding that
+only `publish-name` differs — and moved the look run's line to 240s, the
+median of a back-to-back pair, every mood on every screen. The cost: no
+single run measures the public looks and the carried look together in one
+build. No runner check enforced the 120s or enforces the 240s; the runner's
+own watchdog is the 300s it always was.
+
+**Measured with this step, before the warning tint's check** (this Mac,
+three tabs; the one-minute load at each start). The look run over a scratch commit of the private look at 0x04
+carrying both moods, the mood class with its art and a red in each mood,
+back to back: 181.5s (1.53) and 185.4s (7.35), median 183.5s, green, every
+variant at its ceiling exactly. The default run 230.9s (2.86) against main's
+235.6s just before, its contrast dump identical to main's (15,018 boxes, 0
+moved, added or removed). `pnpm looks:diff main`: 4,023 of 4,024 shots
+identical and one inconclusive (`shop-window-touch-quotes`, Rural bare, on the
+narrow wall: the working tree differed from itself by 5,622px, main from
+itself by 0); that screen alone again, 54 of 54 identical. The public build
+was then byte for byte main's, so the inconclusive shot is the machine's.
+The warning tint's check moved the public entry script and nothing else:
++137 bytes (+69 gzip), every visitor 884,838 → 884,975. With it, the
+default run 246.3s (load 4.26 at the start), its contrast dump still
+identical to main's (15,018 boxes, 0 moved, added or removed).

@@ -2173,22 +2173,62 @@ money path this app can have, because nothing on it is derived.
   many stroke widths from a vertex, and `stroke-width` is capped at 3. Detail
   and the plants: `layout/PROBE-RULES.md`, "The state belt".
 - **The probe's stop lines for the private look's slices, decided**
-  (D-2026-11-11-05, the window's, after D-2026-11-11-04 built O1 and O2):
-  `pnpm test:layout:look` under the selection is at most 120s, read as the
-  median of a back-to-back pair, and adds at most 15s per slice; past either,
-  prune by the by-look table (`by look` under the contrast phases; the private
-  look at 0x04's art-off frames and look pseudos are its largest costs) before
-  raising the line. The selected full `pnpm test:layout` is run at the end of
-  8g and whenever the private look gains a row shape (a row, a mood, a token),
-  under the 300s ceiling, which stays; D-2026-11-10-12's per-slice lines (the
+  (D-2026-11-11-05, the window's, after D-2026-11-11-04 built O1 and O2;
+  amended by D-2026-11-11-17, the owner's, when the private look at 0x04
+  gained two moods): `pnpm test:layout:look` under the selection is at most
+  **240s**, read as the median of a back-to-back pair, measuring every mood
+  on every screen; past it, prune by the by-look table (`by look` under the
+  contrast phases; the private look at 0x04's art-off frames and look
+  pseudos are its largest costs) before raising the line, and 8i may need a
+  cut. **The selected full `pnpm test:layout` is no longer a gate**: two
+  moods took the look's contrast jobs from 116 to 316 and the selected full
+  run past the 300s ceiling (303s, cut by the watchdog), so a slice's Chrome
+  reading is the default `pnpm test:layout` (no selection, unchanged, under
+  the 300s ceiling, which stays) plus the look run, which measures the
+  carried look in full and of the public looks the one screen whose tree
+  depends on what the build carries (`publish-name`, held by
+  `a-public-screen-is-the-same-whatever-the-build-carries`, which reads the
+  selection when one is named). The cost, stated: no single run measures the
+  public looks and the carried look together in one build any more (the
+  door's minis, the codes owed by name and the public ceilings stay the
+  default run's, over a build that carries the tracked fixture). The +15s
+  per slice of D-2026-11-11-05 and D-2026-11-10-12's per-slice lines (the
   look adds at most 25s to a pair, the selected run at most 270s) no longer
-  apply per slice. A slice that changes any tracked file the probe build or
-  runner reads runs `pnpm test:layout` as well; a fixture-only change needs
-  the look run alone. Measured when it was set (this Mac, three tabs, one
-  sample each but the pair): `pnpm test:layout` 225.0s and 231.7s with no
-  selection and 251.1s selected; the look run 41.7s and 46.1s with the
-  tracked fixture, and 66.9s and 67.6s back to back with the private look at
-  0x04, median 67.3s (`layout/PROBE-RULES.md`, "The look run").
+  apply. A slice that changes any tracked file the probe build or runner
+  reads runs `pnpm test:layout` as well; a fixture-only change needs the look
+  run alone. No runner check enforces either line: the runner holds its own
+  300s watchdog on every run, and the 240s is read by whoever runs the pair.
+  Measured when D-2026-11-11-05 was set (this Mac, three tabs): `pnpm
+  test:layout` 225.0s and 231.7s with no selection and 251.1s selected; the
+  look run 66.9s and 67.6s back to back with the private look at 0x04 (no
+  mood). With its two moods (8h, D-2026-11-11-17): the look run 174s and
+  181s, the selected full run 303s (cut); with the mood class and a mood red
+  each as well (the public step that let them land, back to back): 181.5s and
+  185.4s, median 183.5s, and the default run 230.9s (main 235.6s just
+  before); `layout/PROBE-RULES.md`, "The look run" and "A mood's variants,
+  and the look run's line".
+- **A danger line is read on another ground only through `.ctx`, on two
+  screens** (the mood-hooks critic's P2-1, 2026-11-11). A private mood may
+  move the look's red (`MOOD_ONLY_PALETTE_KEYS`), and `--s-danger` is
+  corrected against the surface and the removal warning's tint (`dangerInk`,
+  `theme.ts`), the warning being painted by no fixture. Every other danger
+  line is read by the contrast pass through `p.ctx` on `publish-name` and
+  `pay-gone` alone: `pay-quantity-why`, Pay several's `pay-lost` and the
+  describe sheet's state lines hold only while a look dresses every `.ctx`
+  alike, and a look that tints one of them differently is read on none. A
+  removal-mode `describe` fixture, sampled bare and under each mood, would
+  close the warning and cost a few contrast jobs a look and variant; not
+  built.
+- **A look's root art is read at rest, not at its worst** (the mood-hooks
+  critic's P3-3, 2026-11-11). A mood's own root art (`PRIVATE_DECORATION_ART`,
+  the private look at 0x04's first) and any look's own root art stand still
+  while the content scrolls over them, so a line passes over every patch of
+  the picture, as the rain's drops cross it in time. The rain is flattened to
+  its brightest drop in every job that wears it; nothing does the same for a
+  look's or a mood's art (the contrast pass reads it at one scroll position,
+  the dress rule names a `url()` picture and does not judge it). The fix
+  would flatten each listed art layer to its extreme over the ground in the
+  jobs that wear it; not built.
 - **No fixture paints the quote face's borrowed-token warning** (the private
   look at 0x04's 8g4 critic, 2026-11-11; D-2026-11-11-07). Every quote-face
   fixture uses a token the stall minted, so `div.pay-sub.warn` (the "token
