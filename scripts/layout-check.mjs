@@ -66,7 +66,7 @@ import {
     runnerPasses,
     viewportOffPlan,
 } from './probe-passes.mjs';
-import { COVER_TALLY_KEYS, carriedTallyFaults, clipCeilingFault, clipLine, coverTally, reachTally, skipsByScreen, skipsByScreenLine } from './look-tallies.mjs';
+import { COVER_TALLY_KEYS, carriedTallyFaults, clipCeilingFault, clipLine, coverTally, reachTally, skipVariantOf, skipsByScreen, skipsByScreenLine, sumVariants } from './look-tallies.mjs';
 import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
@@ -1732,10 +1732,11 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                 for (const [why, n] of Object.entries(record.skips)) skipTotals.set(why, (skipTotals.get(why) ?? 0) + n);
                 // The ceiling is the public run's own count (it was
                 // measured over the shipped looks and the skeleton); a
-                // private look's jobs are counted apart and printed —
-                // pinned by nobody yet, as a kit run's are (8e2).
+                // private look's jobs are counted apart, per variant
+                // (`skipVariantOf`), and held to its own ceilings (8e2;
+                // per variant since D-2026-11-11-18).
                 const skipsHere = PRIVATE_SHEET_CLASSES.includes(plannedJob.sheetClass)
-                    ? (privateLineSkips[plannedJob.sheetClass] ??= {})
+                    ? ((privateLineSkips[plannedJob.sheetClass] ??= {})[skipVariantOf(plannedJob.flags)] ??= {})
                     : lineSkips;
                 for (const why of ['clipped-away', 'not-rendered']) {
                     const at = (skipsHere[vp.name] ??= { 'clipped-away': 0, 'not-rendered': 0 });
@@ -4964,8 +4965,10 @@ try {
                 }
             };
             skipsInto(lineSkips, out.lineSkips);
-            for (const [cls, byViewport] of Object.entries(out.privateLineSkips)) {
-                skipsInto((privateLineSkips[cls] ??= {}), byViewport);
+            for (const [cls, byVariant] of Object.entries(out.privateLineSkips)) {
+                for (const [variant, byViewport] of Object.entries(byVariant)) {
+                    skipsInto(((privateLineSkips[cls] ??= {})[variant] ??= {}), byViewport);
+                }
             }
             boxes += out.boxes;
             lineTargets += out.lineTargets;
@@ -5689,18 +5692,25 @@ try {
             // Per screen, on every run (the 8g1 critic's P3-1): the ceiling
             // holds sums, and a sum that holds while its screens change is
             // only on screen here.
+            // And per variant, the ceilings' own keys (D-2026-11-11-18).
             for (const cls of PRIVATE_SHEET_CLASSES) {
                 console.log(`  ${cls} line skips by screen (clipped-away/not-rendered): ${skipsByScreenLine(skipsByScreen(runDumpJobs, cls))}`);
+                for (const variant of Object.keys(privateLineSkips[cls] ?? {}).sort()) {
+                    const records = runDumpJobs.filter((record) => skipVariantOf(record.flags) === variant);
+                    console.log(`    ${cls} (${variant}): ${skipsByScreenLine(skipsByScreen(records, cls))}`);
+                }
             }
             if (faults.length === 0) {
-                const said = PRIVATE_SHEET_CLASSES.map((cls) =>
-                    ['mobile', 'desktop', 'canvas']
-                        .map((vp) => `${vp} ${privateLineSkips[cls]?.[vp]?.['clipped-away'] ?? 0}/${privateLineSkips[cls]?.[vp]?.['not-rendered'] ?? 0}`)
-                        .join(', ') +
+                const said = PRIVATE_SHEET_CLASSES.map((cls) => {
+                    const sum = sumVariants(privateLineSkips[cls]);
+                    const line = (skips) => ['mobile', 'desktop', 'canvas'].map((vp) => `${vp} ${skips[vp]?.['clipped-away'] ?? 0}/${skips[vp]?.['not-rendered'] ?? 0}`).join(', ');
+                    const variants = Object.entries(privateLineSkips[cls] ?? {}).sort(([a], [b]) => a.localeCompare(b));
+                    return `${line(sum)} (${variants.map(([variant, skips]) => `${variant}: ${line(skips)}`).join('; ')})`;
+                }).map((said, i) => said +
                     ' · 1a points behind a clip ' +
                     Object.keys(coverSeen)
                         .map((pass) => {
-                            const t = coverTally(coverSeen[pass], [cls]);
+                            const t = coverTally(coverSeen[pass], [PRIVATE_SHEET_CLASSES[i]]);
                             return `${pass} ${t.clipSkips}/${t.clipSkips + t.checked} (wall scrollers ${t.wallScroll} apart)`;
                         })
                         .join(', '),

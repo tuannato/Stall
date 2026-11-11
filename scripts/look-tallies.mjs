@@ -14,11 +14,14 @@
  * ceilings they had — over their own jobs and points, so a carried look can
  * neither mask nor trip them — and holds **every carried look** to its own:
  *
- * - **line skips** (`LINE_SKIP_CEILING`'s rule, per look): a ceiling of its
- *   own in `CARRIED_LINE_SKIP_CEILING`, by value and with its reason, exact
- *   when set; **a carried look with no entry fails the run**, so a new
- *   look's numbers arrive by a reviewed diff that names what is clipped and
- *   why, never by a run that read them and said nothing;
+ * - **line skips** (`LINE_SKIP_CEILING`'s rule, per look **and per
+ *   variant**, `skipVariantOf`): a ceiling of its own in
+ *   `CARRIED_LINE_SKIP_CEILING`, by value and with its reason, exact when
+ *   set; **a carried look with no entry, a variant its entry does not
+ *   name, or a variant it names that the run measured no job of, fails the
+ *   run**, so a new look's or a new mood's numbers arrive by
+ *   a reviewed diff that names what is clipped and why, never by a run that
+ *   read them and said nothing;
  * - **points behind a clip** (`CLIP_SKIP_CEILING`'s rule): the same ratio on
  *   its own points of 1a (`nothing-covers-money-or-a-protected-box`, its
  *   `coverByClass`; since 7a, `coveredBy`'s before), on every pass that read
@@ -47,6 +50,19 @@ export const LINE_SKIP_KINDS = Object.freeze(['clipped-away', 'not-rendered']);
 
 /** The contrast pass's viewports, whose skips a ceiling states. */
 export const SKIP_VIEWPORTS = Object.freeze(['mobile', 'desktop', 'canvas']);
+
+/**
+ * The variant a contrast job paints, by its flags, as the probe names it
+ * everywhere it prints one: `bare` (no row worn), `worn` (`0xffff`: every
+ * row, with the look's lowest-bit mood) and `flags <n>` for each further
+ * mood's all-worn state (`wornAllFlags`, `layout/looks.ts`: `0xffff` with
+ * every other mood's bit cleared). A carried look's line-skip ceiling is
+ * kept per variant, so a mood's skips can neither hide a bare look's new
+ * one nor stand in for it.
+ */
+export function skipVariantOf(flags) {
+    return flags === 0 ? 'bare' : flags === 0xffff ? 'worn' : `flags ${flags}`;
+}
 
 /**
  * **1a's points, summed and held to the clip ceiling** (7a; the critic's
@@ -157,13 +173,19 @@ export function clipLine(tally) {
 }
 
 /**
- * Each carried look's line skips, per viewport, as measured — exact
- * ceilings, `LINE_SKIP_CEILING`'s rule: more fails and names the count;
- * fewer says so, and the entry comes down with the change that lowered it.
- * A carried class with no entry fails the run (`carriedTallyFaults`). The
- * ceiling holds sums; the run prints each carried look's skips per screen
- * beside them on every run (`skipsByScreen`), so an entry's reason can be
- * checked against the screens that make it.
+ * Each carried look's line skips, per variant (`skipVariantOf`) and
+ * viewport, as measured — exact ceilings, `LINE_SKIP_CEILING`'s rule: more
+ * fails and names the count; fewer says so, and the entry comes down with
+ * the change that lowered it. A carried class with no entry fails the run,
+ * and so does a variant measured that its entry does not name
+ * (`carriedTallyFaults`). **Per variant, not one sum per viewport**
+ * (D-2026-11-11-18): a look's moods each add a worn variant of every
+ * contrast job, and a sum let a mood's skips absorb a bare-look regression
+ * (one more clipped line on the bare look hidden by one fewer under a
+ * mood) or a mood's own new clip ride under the bare look's count. The
+ * ceiling holds sums over screens; the run prints each carried look's skips
+ * per screen beside them on every run (`skipsByScreen`), so an entry's
+ * reason can be checked against the screens that make it.
  */
 export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
     /*
@@ -182,38 +204,79 @@ export const CARRIED_LINE_SKIP_CEILING = Object.freeze({
      * more line scrolled out of view, on each of its two jobs.
      */
     't-fixture-private': Object.freeze({
-        mobile: Object.freeze({ 'clipped-away': 16, 'not-rendered': 10 }),
-        desktop: Object.freeze({ 'clipped-away': 4, 'not-rendered': 8 }),
-        canvas: Object.freeze({ 'clipped-away': 207, 'not-rendered': 0 }),
+        // Split per variant 2026-11-11 from the default run's dump (the
+        // sums were mobile 16/10, desktop 4/8, canvas 207/0): every skip
+        // falls on both variants alike but the ticker's 3, which is painted
+        // bare only (`paintsBareOnly`).
+        bare: Object.freeze({
+            mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
+            desktop: Object.freeze({ 'clipped-away': 2, 'not-rendered': 4 }),
+            canvas: Object.freeze({ 'clipped-away': 105, 'not-rendered': 0 }),
+        }),
+        worn: Object.freeze({
+            mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
+            desktop: Object.freeze({ 'clipped-away': 2, 'not-rendered': 4 }),
+            canvas: Object.freeze({ 'clipped-away': 102, 'not-rendered': 0 }),
+        }),
     }),
     /*
-     * The private look at 0x04, measured 2026-10-12 over the contrast
-     * targets as they stand, on its bare variant alone (it carries no
-     * worn variant yet, so each count is about half the fixture's). The
-     * counts are measured, and fall on these screens, from the run's own
-     * dump:
+     * The private look at 0x04, per variant, measured 2026-11-11 by the
+     * look run over the contrast targets as they stand, with its two moods
+     * (8h): `bare`, `worn` (`0xffff`, its bit-7 mood) and `flags 65407`
+     * (its bit-8 mood's all-worn state). The counts fall on these screens,
+     * alike under each variant but the ticker's, which is painted bare
+     * only (`paintsBareOnly`):
      *
      * - mobile clipped-away 8: `studio-items`;
      * - mobile not-rendered 5, desktop not-rendered 4: `shop-window-sheet`,
      *   the halves a phone hides (the desk-only controls, a closed
      *   switch's row);
-     * - desktop clipped-away 7: `shop-window-browse` 2 and `studio-items`
-     *   5 (2 → 7, 2026-10-12; the 5 are provisional);
-     * - canvas clipped-away 104: the wall payment's lines past its
-     *   plate's scroller (99 on `shop-window-touch-quotes-pay-35`, 2 on
-     *   the one-item `shop-window-touch-quotes-pay`) and the ticker's
-     *   ribbon past its cell (3).
+     * - desktop clipped-away 3: `shop-window-browse` 1 and `studio-items`
+     *   2 (7 → 3 on the bare look since 2026-10-12, when the 5 on
+     *   `studio-items` were provisional);
+     * - canvas clipped-away 104 bare, 101 under each mood: the wall
+     *   payment's lines past its plate's scroller (99 on
+     *   `shop-window-touch-quotes-pay-35`, 2 on the one-item
+     *   `shop-window-touch-quotes-pay`) and, bare, the ticker's ribbon
+     *   past its cell (3).
      *
      * Lowered as the port changes the screens they fall on, with the
      * change that lowers them; raised only by a reviewed diff that names
-     * what now clips and why.
+     * what now clips and why. A new mood is a new variant, with an entry of
+     * its own.
      */
     't-inkwash': Object.freeze({
-        mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
-        desktop: Object.freeze({ 'clipped-away': 7, 'not-rendered': 4 }),
-        canvas: Object.freeze({ 'clipped-away': 104, 'not-rendered': 0 }),
+        bare: Object.freeze({
+            mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
+            desktop: Object.freeze({ 'clipped-away': 3, 'not-rendered': 4 }),
+            canvas: Object.freeze({ 'clipped-away': 104, 'not-rendered': 0 }),
+        }),
+        worn: Object.freeze({
+            mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
+            desktop: Object.freeze({ 'clipped-away': 3, 'not-rendered': 4 }),
+            canvas: Object.freeze({ 'clipped-away': 101, 'not-rendered': 0 }),
+        }),
+        'flags 65407': Object.freeze({
+            mobile: Object.freeze({ 'clipped-away': 8, 'not-rendered': 5 }),
+            desktop: Object.freeze({ 'clipped-away': 3, 'not-rendered': 4 }),
+            canvas: Object.freeze({ 'clipped-away': 101, 'not-rendered': 0 }),
+        }),
     }),
 });
+
+/** A carried look's skips summed over its variants, per viewport: what the run prints beside the per-variant ceilings. */
+export function sumVariants(byVariant = {}) {
+    const out = {};
+    for (const skips of Object.values(byVariant)) {
+        for (const vp of SKIP_VIEWPORTS) {
+            for (const why of LINE_SKIP_KINDS) {
+                const at = (out[vp] ??= { 'clipped-away': 0, 'not-rendered': 0 });
+                at[why] += skips[vp]?.[why] ?? 0;
+            }
+        }
+    }
+    return out;
+}
 
 /**
  * A carried look's line skips by viewport and screen, from the contrast
@@ -262,7 +325,8 @@ export const PAID_LOOK_UNPAINTED_CODES = Object.freeze(['desktop/publish-name:pu
  * should print beside them (`notes`):
  *
  * - `carried`: `[{ cls, paid }]`, every private look the run carries;
- * - `lineSkips`: `{ [cls]: { [viewport]: { 'clipped-away', 'not-rendered' } } }`;
+ * - `lineSkips`: `{ [cls]: { [variant]: { [viewport]: { 'clipped-away', 'not-rendered' } } } }`,
+ *   the variant `skipVariantOf`'s name;
  * - `cover`: `{ [pass]: coverByClass }`, 1a's tallies per look on every pass
  *   that read it (`coverTally`'s shape);
  * - `reach`: `{ [pass]: reachByClass }`, 1b's tallies per look on every
@@ -300,26 +364,50 @@ export function carriedTallyFaults({
     const own = (map, key) => (Object.hasOwn(map, key) ? map[key] : undefined);
     for (const { cls, paid } of carried) {
         const table = own(ceilings, cls);
-        const skips = own(lineSkips, cls) ?? {};
+        const byVariant = own(lineSkips, cls) ?? {};
+        const measuredLine = (skips) =>
+            SKIP_VIEWPORTS.map((vp) => `${vp} ${skips[vp]?.['clipped-away'] ?? 0}/${skips[vp]?.['not-rendered'] ?? 0}`).join(', ');
         if (table === undefined) {
-            const read = SKIP_VIEWPORTS.map(
-                (vp) => `${vp} ${skips[vp]?.['clipped-away'] ?? 0}/${skips[vp]?.['not-rendered'] ?? 0}`,
-            ).join(', ');
+            const read = Object.keys(byVariant).length === 0 ? measuredLine({}) : Object.entries(byVariant).map(([variant, skips]) => `${variant}: ${measuredLine(skips)}`).join('; ');
             faults.push(
                 `${cls} is carried and has no line-skip ceiling of its own (CARRIED_LINE_SKIP_CEILING, scripts/look-tallies.mjs) — ` +
                     `measured clipped-away/not-rendered: ${read}; a look's ceiling is a reviewed entry that says what is clipped and why`,
             );
         } else {
-            for (const vp of SKIP_VIEWPORTS) {
-                for (const why of LINE_SKIP_KINDS) {
-                    const most = table[vp]?.[why] ?? 0;
-                    const n = skips[vp]?.[why] ?? 0;
-                    if (n > most) {
-                        faults.push(
-                            `${cls}: ${n} line target(s) ${why} at ${vp}, over its own ${most} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
-                        );
-                    } else if (n < most) {
-                        notes.push(`${cls}: ${n} line target(s) ${why} at ${vp}, under its own ${most} — lower it`);
+            // Every variant the run measured and every variant the entry names.
+            const variants = [...new Set([...Object.keys(table), ...Object.keys(byVariant)])];
+            for (const variant of variants) {
+                const ceiling = own(table, variant);
+                const skips = own(byVariant, variant) ?? {};
+                if (ceiling === undefined) {
+                    faults.push(
+                        `${cls}: its ${variant} variant was measured and has no line-skip ceiling of its own (CARRIED_LINE_SKIP_CEILING) — ` +
+                            `measured clipped-away/not-rendered: ${measuredLine(skips)}; a variant's ceiling is a reviewed entry, so a mood's skips cannot hide another variant's`,
+                    );
+                    continue;
+                }
+                // A variant the entry names and the run measured no job of:
+                // its jobs went missing (a mood dropped from the plan), and
+                // every count reading under its ceiling would say so only as
+                // notes (the critic's P3-1).
+                if (!Object.hasOwn(byVariant, variant)) {
+                    faults.push(
+                        `${cls}: its ${variant} variant has a line-skip ceiling (CARRIED_LINE_SKIP_CEILING) and the run measured no job of it — ` +
+                            `a variant's jobs gone from the plan read as no skips; remove the entry with the change that removed the variant`,
+                    );
+                    continue;
+                }
+                for (const vp of SKIP_VIEWPORTS) {
+                    for (const why of LINE_SKIP_KINDS) {
+                        const most = ceiling[vp]?.[why] ?? 0;
+                        const n = skips[vp]?.[why] ?? 0;
+                        if (n > most) {
+                            faults.push(
+                                `${cls} (${variant}): ${n} line target(s) ${why} at ${vp}, over its own ${most} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
+                            );
+                        } else if (n < most) {
+                            notes.push(`${cls} (${variant}): ${n} line target(s) ${why} at ${vp}, under its own ${most} — lower it`);
+                        }
                     }
                 }
             }

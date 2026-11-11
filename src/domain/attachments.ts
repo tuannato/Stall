@@ -50,9 +50,15 @@ export type AttachmentMount = (typeof ATTACHMENT_MOUNTS)[number];
 /** The slots whose rows stand a node by their slot alone, with no `mount` named. */
 const SLOT_MOUNTS: ReadonlySet<string> = new Set<AttachmentMount>(['fringe', 'crest', 'badge', 'trim', 'yard']);
 
-/** The palette roles a `mood` may move. Deliberately not the shape or the font. */
+/**
+ * The palette roles a `mood` may move. Deliberately not the shape or the
+ * font. `danger` is the look's red: no shipped mood moves it, and a look
+ * read from data moves it only from a private look's mood
+ * (`MOOD_ONLY_PALETTE_KEYS`, `lookData.ts`), so that a private mood moves
+ * `--s-danger` with the rest of its palette.
+ */
 export type PaletteDelta = Partial<
-    Pick<DecodedTheme, 'bg' | 'surface' | 'text' | 'muted' | 'accent' | 'accentTwo' | 'shade'>
+    Pick<DecodedTheme, 'bg' | 'surface' | 'text' | 'muted' | 'accent' | 'accentTwo' | 'shade' | 'danger'>
 >;
 
 export type ShippedAttachment = {

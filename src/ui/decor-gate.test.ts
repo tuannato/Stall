@@ -723,6 +723,42 @@ const DECORATION_ART: Readonly<Record<string, string>> = {
     '.att-beetle-bug | background-image': 'a decoration node’s own box: the beetle sprite, walking or flying, aria-hidden, no text in it',
 };
 
+/**
+ * **A private look's mood art**, by the look's class (D-2026-11-11-18): the
+ * declarations a private look's own mood class lays as its art, each with
+ * its reason, as `DECORATION_ART`'s entries have theirs. Unlike that table,
+ * an entry here exempts a declaration **only in the sheet of the private
+ * look whose class keys it** (`artFor`): the same selector written in any
+ * other sheet — shipped, screen, kit, harness, another private look — is
+ * refused as before. And an entry may name only the stall's root as its
+ * look's class and one of that look's own **mood** classes
+ * (`.stall.<look>.att-<mood>`) or an open sheet under it (`… .sheet`), and
+ * only `background-image`, so it is never a decoration's ground nor a slab
+ * under a figure; a key of another shape fails (`names a private look's mood art in its own
+ * look's shape alone`). A look no run reads is said on stderr, never
+ * checked against a sheet it cannot see; a look a run reads must still
+ * declare every entry and name each class as one of its moods.
+ */
+const PRIVATE_DECORATION_ART: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+    // The private look at 0x04.
+    't-inkwash': {
+        '.stall.t-inkwash.att-rubbing | background-image':
+            'a mood’s own root art: the stall’s own background, behind every card, as the aurora’s root stack is',
+        '.stall.t-inkwash.att-rubbing .sheet | background-image':
+            'a mood’s own art on an open sheet’s surface: the sheet’s own ground, behind every line on it, never a slab under one',
+    },
+};
+
+/** The art a sheet's decoration-scoped rules may lay: `DECORATION_ART`, and a private look's own mood art in its own sheet alone. */
+function artFor(sheet: { role: string; lookClass?: string }, table: typeof PRIVATE_DECORATION_ART = PRIVATE_DECORATION_ART): Readonly<Record<string, string>> {
+    if (sheet.role !== 'private' || sheet.lookClass === undefined || !Object.hasOwn(table, sheet.lookClass)) return DECORATION_ART;
+    return { ...DECORATION_ART, ...table[sheet.lookClass] };
+}
+
+/** The shape a `PRIVATE_DECORATION_ART` key must take under `lookClass`: `.stall.<look>.att-<mood>`, or an open `.sheet` under it, and `background-image`; the class captured. */
+const privateArtKey = (lookClass: string): RegExp =>
+    new RegExp(`^\\.stall\\.${lookClass.replace(/[-]/g, '\\-')}\\.(att-[a-z0-9]+(?:-[a-z0-9]+)*)(?: \\.sheet)? \\| background-image$`);
+
 /** Whether a rule reaches past a decoration class: its selector names one. */
 const DECORATION_SCOPED = /\.att-[a-z0-9-]/;
 
@@ -880,6 +916,7 @@ function groundsUnderText(
     css: string,
     defs: Map<string, string[]> = customProperties(css),
     usesOf: (name: string) => Set<string> = customUses(css),
+    art: Readonly<Record<string, string>> = DECORATION_ART,
 ): string[] {
     const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const frames = keyframesIn(clean);
@@ -907,7 +944,7 @@ function groundsUnderText(
                     const uses = usesOf(d.prop);
                     if (uses.size > 0 && ![...uses].some((use) => GROUND_PROPS.test(use))) continue;
                 }
-                if (!custom && DECORATION_ART[`${selector} | ${d.prop}`] !== undefined) continue;
+                if (!custom && Object.hasOwn(art, `${selector} | ${d.prop}`)) continue;
                 if (paints(d.value, d.prop, defs)) {
                     out.push(`${selector} { ${d.prop}: ${d.value.replace(/\s+/g, ' ')} }`);
                 }
@@ -1127,7 +1164,7 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         expect(PRIVATE.length).toBeGreaterThan(0);
         for (const sheet of SERVED) {
             const css = sheet.css;
-            expect(groundsUnderText(css), sheet.path).toEqual([]);
+            expect(groundsUnderText(css, undefined, undefined, artFor(sheet)), sheet.path).toEqual([]);
         }
         // A planted private look whose decoration lays a ground under a line: red.
         const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d; }`);
@@ -1146,6 +1183,84 @@ describe('a-decoration-lays-no-ground-under-text', () => {
             }
         }
         expect(Object.keys(DECORATION_ART).filter((key) => !declared.has(key))).toEqual([]);
+    });
+
+    it('names a private look\'s mood art in its own look\'s shape alone, and in that look\'s own sheet', () => {
+        for (const [lookClass, entries] of Object.entries(PRIVATE_DECORATION_ART)) {
+            const sheet = PRIVATE.find((row) => row.lookClass === lookClass);
+            const moods = ((sheet?.look.look as { moods?: { cls?: unknown }[] } | undefined)?.moods ?? []).map((mood) => mood.cls);
+            const declared = new Set<string>();
+            if (sheet !== undefined) {
+                const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+                for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+                    for (const selector of m[1]!.split(',').map((one) => one.replace(/\s+/g, ' ').trim())) {
+                        for (const d of declarationsOf(m[2]!)) declared.add(`${selector} | ${d.prop}`);
+                    }
+                }
+            } else {
+                console.error(`PRIVATE_DECORATION_ART names ${lookClass}, which this run does not read: its entries are checked against its sheet only under a selection that carries it`);
+            }
+            for (const [key, why] of Object.entries(entries)) {
+                const shape = privateArtKey(lookClass).exec(key);
+                expect(shape, `${key}: an entry names the root, as its look's class and one of its moods' classes, or an open .sheet under it, and background-image`).not.toBeNull();
+                expect(why.length, `${key}'s reason`).toBeGreaterThan(40);
+                if (sheet === undefined) continue;
+                expect(moods, `${key}: ${shape?.[1]} is one of ${lookClass}'s moods' classes`).toContain(shape?.[1]);
+                expect(declared.has(key), `${key} is declared in ${lookClass}'s own sheet`).toBe(true);
+            }
+        }
+        // The shape: a decoration's class, another look's class, a mood class in a later compound, or a non-ground property is no key.
+        const key = privateArtKey('t-inkwash');
+        expect(key.exec('.stall.t-inkwash.att-rubbing .sheet | background-image')?.[1]).toBe('att-rubbing');
+        for (const bad of [
+            '.stall.t-inkwashed.att-rubbing | background-image',
+            '.stall.t-modern.att-rubbing | background-image',
+            '.stall.t-inkwash .att-rubbing | background-image',
+            '.t-inkwash.att-rubbing | background-image',
+            '.stall.t-inkwash.att-rubbing | color',
+            '.stall.t-inkwash.att-rubbing:not(.shop-window) .sheet | background-image',
+            '.stall.t-inkwash.att-rubbing .pay-x | background-color',
+            '.stall.t-inkwash.att-rubbing .pay-x | background-image',
+            '.stall.t-inkwash.att-rubbing .sheet .item | background-image',
+            '.stall.t-inkwash.att-rubbing | background',
+            '.stall.t-inkwash.att-rubbing .sheet | background-color',
+        ]) {
+            expect(key.exec(bad), bad).toBeNull();
+        }
+    });
+
+    it('exempts a private look\'s mood art in its own sheet alone, and nothing beside it (red proofs)', async () => {
+        const art = `url(./art/ground.svg), repeating-linear-gradient(101deg, color-mix(in srgb, var(--s-text) 3%, transparent) 0 1px, transparent 1px 9px)`;
+        const rules = [
+            `.stall.${PLANTED_CLASS}.att-planted-dusk { background-image: ${art}; }`,
+            `.stall.${PLANTED_CLASS}.att-planted-dusk .sheet { background-image: ${art}; }`,
+        ].join('\n');
+        const served = await plantedServed(rules);
+        const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
+        // No entry for the planted look: its mood's art is a ground under text, both rules.
+        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toHaveLength(2);
+        // An entry for the planted look: its two rules pass in its own sheet.
+        const table = {
+            [PLANTED_CLASS]: {
+                [`.stall.${PLANTED_CLASS}.att-planted-dusk | background-image`]: 'a planted mood’s root art, for the red proof alone',
+                [`.stall.${PLANTED_CLASS}.att-planted-dusk .sheet | background-image`]: 'a planted mood’s sheet art, for the red proof alone',
+            },
+        };
+        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted, table))).toEqual([]);
+        // A selector the entry does not list, under the same mood: refused.
+        const unlisted = `.stall.${PLANTED_CLASS}.att-planted-dusk .item-n { background-image: ${art}; }`;
+        expect(groundsUnderText(unlisted, undefined, undefined, artFor(planted, table))).toHaveLength(1);
+        // Another property on a listed selector: refused.
+        expect(groundsUnderText(`.stall.${PLANTED_CLASS}.att-planted-dusk { box-shadow: 0 0 0 4px #05060d; }`, undefined, undefined, artFor(planted, table))).toHaveLength(1);
+        // The listed rules in any other sheet — a shipped look's, or another private look's — refused.
+        for (const other of [{ role: 'look', lookClass: 't-modern' }, { role: 'kit', lookClass: 't-workshop' }, { role: 'private', lookClass: 't-fixture-private' }]) {
+            expect(groundsUnderText(rules, undefined, undefined, artFor(other, table)), other.lookClass).toHaveLength(2);
+        }
+        // And the private look at 0x04's own entries reach no sheet but its own.
+        const inkwash = Object.keys(PRIVATE_DECORATION_ART['t-inkwash']!).map((k) => `${k.split(' | ')[0]} { background-image: ${art}; }`).join('\n');
+        expect(groundsUnderText(inkwash, undefined, undefined, artFor({ role: 'private', lookClass: 't-fixture-private' }))).toHaveLength(2);
+        expect(groundsUnderText(inkwash, undefined, undefined, artFor({ role: 'look', lookClass: 't-inkwash' }))).toHaveLength(2);
+        expect(groundsUnderText(inkwash, undefined, undefined, artFor({ role: 'private', lookClass: 't-inkwash' }))).toEqual([]);
     });
 
     it('refuses every shape of ground the rounds before it laid, and the critic’s plants', () => {

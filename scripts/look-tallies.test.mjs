@@ -9,8 +9,10 @@ import {
     coverTally,
     reachTally,
     walkTally,
+    skipVariantOf,
     skipsByScreen,
     skipsByScreenLine,
+    sumVariants,
 } from './look-tallies.mjs';
 
 /**
@@ -38,7 +40,7 @@ function measured() {
     const table = CARRIED_LINE_SKIP_CEILING[FIXTURE];
     return {
         carried: [{ cls: FIXTURE, paid: true }],
-        lineSkips: { [FIXTURE]: structuredClone({ mobile: table.mobile, desktop: table.desktop, canvas: table.canvas }) },
+        lineSkips: { [FIXTURE]: structuredClone(Object.fromEntries(Object.entries(table).map(([variant, at]) => [variant, { mobile: at.mobile, desktop: at.desktop, canvas: at.canvas }]))) },
         cover: {
             mobile: { [FIXTURE]: tally({ clipSkips: 100, checked: 2000 }) },
             desktop: { [FIXTURE]: tally({ clipSkips: 200, checked: 2500 }) },
@@ -64,29 +66,62 @@ describe('a-carried-look-is-held-to-its-own-skip-ceilings', () => {
     it('passes a carried look at its own ceilings, and says when it reads under them', () => {
         assert.deepEqual(carriedTallyFaults(measured()), { faults: [], notes: [] });
         const under = measured();
-        under.lineSkips[FIXTURE].canvas['clipped-away'] -= 5;
+        under.lineSkips[FIXTURE].bare.canvas['clipped-away'] -= 5;
         const { faults, notes } = carriedTallyFaults(under);
         assert.deepEqual(faults, []);
         assert.equal(notes.length, 1);
-        assert.match(notes[0], /^t-fixture-private: \d+ line target\(s\) clipped-away at canvas, under its own \d+ — lower it$/);
+        assert.match(notes[0], /^t-fixture-private \(bare\): \d+ line target\(s\) clipped-away at canvas, under its own \d+ — lower it$/);
     });
 
     it('fails the critic’s plant: lines clipped out of view on the phone and the desk', () => {
         const planted = measured();
-        planted.lineSkips[FIXTURE].mobile['clipped-away'] = 90;
-        planted.lineSkips[FIXTURE].desktop['clipped-away'] = 78;
+        planted.lineSkips[FIXTURE].bare.mobile['clipped-away'] = 90;
+        planted.lineSkips[FIXTURE].bare.desktop['clipped-away'] = 78;
         const { faults } = carriedTallyFaults(planted);
         assert.deepEqual(faults, [
-            `t-fixture-private: 90 line target(s) clipped-away at mobile, over its own ${CARRIED_LINE_SKIP_CEILING[FIXTURE].mobile['clipped-away']} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
-            `t-fixture-private: 78 line target(s) clipped-away at desktop, over its own ${CARRIED_LINE_SKIP_CEILING[FIXTURE].desktop['clipped-away']} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
+            `t-fixture-private (bare): 90 line target(s) clipped-away at mobile, over its own ${CARRIED_LINE_SKIP_CEILING[FIXTURE].bare.mobile['clipped-away']} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
+            `t-fixture-private (bare): 78 line target(s) clipped-away at desktop, over its own ${CARRIED_LINE_SKIP_CEILING[FIXTURE].bare.desktop['clipped-away']} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
         ]);
     });
 
+    it('holds each variant to its own ceiling, so a mood’s skips cannot hide a bare look’s (D-2026-11-11-18)', () => {
+        // The variant names are the probe's own (`skipVariantOf`).
+        assert.deepEqual([0, 0xffff, 65407].map(skipVariantOf), ['bare', 'worn', 'flags 65407']);
+        // One more line clipped on the bare look, one fewer under the mood: the sums hold, and it fails.
+        const traded = measured();
+        traded.lineSkips[FIXTURE].bare.mobile['clipped-away'] += 1;
+        traded.lineSkips[FIXTURE].worn.mobile['clipped-away'] -= 1;
+        assert.deepEqual(sumVariants(traded.lineSkips[FIXTURE]).mobile, sumVariants(measured().lineSkips[FIXTURE]).mobile);
+        const { faults, notes } = carriedTallyFaults(traded);
+        assert.deepEqual(faults, [
+            `t-fixture-private (bare): ${CARRIED_LINE_SKIP_CEILING[FIXTURE].bare.mobile['clipped-away'] + 1} line target(s) clipped-away at mobile, over its own ${CARRIED_LINE_SKIP_CEILING[FIXTURE].bare.mobile['clipped-away']} (CARRIED_LINE_SKIP_CEILING) — a line clipped out of view reads green unless this is held`,
+        ]);
+        assert.equal(notes.length, 1);
+        assert.match(notes[0], /^t-fixture-private \(worn\): /);
+        // A variant the entry does not name (a new mood) fails, naming what it measured.
+        const moodAdded = measured();
+        moodAdded.lineSkips[FIXTURE]['flags 65407'] = { mobile: { 'clipped-away': 2, 'not-rendered': 0 } };
+        const added = carriedTallyFaults(moodAdded).faults;
+        assert.equal(added.length, 1);
+        assert.match(added[0], /^t-fixture-private: its flags 65407 variant was measured and has no line-skip ceiling of its own \(CARRIED_LINE_SKIP_CEILING\) — measured clipped-away\/not-rendered: mobile 2\/0, desktop 0\/0, canvas 0\/0/);
+        // A variant the entry names that the run measured no job of fails (the critic's P3-1).
+        const moodGone = measured();
+        delete moodGone.lineSkips[FIXTURE].worn;
+        const gone = carriedTallyFaults(moodGone).faults;
+        assert.deepEqual(gone, [
+            't-fixture-private: its worn variant has a line-skip ceiling (CARRIED_LINE_SKIP_CEILING) and the run measured no job of it — a variant\'s jobs gone from the plan read as no skips; remove the entry with the change that removed the variant',
+        ]);
+        // A variant name is the entry's own key, never an inherited property.
+        const inherited = measured();
+        inherited.lineSkips[FIXTURE].constructor = { mobile: { 'clipped-away': 1, 'not-rendered': 0 } };
+        assert.equal(carriedTallyFaults(inherited).faults.some((f) => /its constructor variant was measured and has no line-skip ceiling/.test(f)), true);
+    });
+
     it('fails a carried look with no ceiling of its own, naming what it measured', () => {
-        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), reach: Object.fromEntries(Object.entries(measured().reach).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), walk: Object.fromEntries(Object.entries(measured().walk).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] }, moduleCodesRead: { 't-planted-look': measured().moduleCodesRead[FIXTURE] } });
+        const { faults } = carriedTallyFaults({ ...measured(), carried: [{ cls: 't-planted-look', paid: true }], lineSkips: { 't-planted-look': { bare: { mobile: { 'clipped-away': 3, 'not-rendered': 1 } } } }, cover: Object.fromEntries(Object.entries(measured().cover).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), reach: Object.fromEntries(Object.entries(measured().reach).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), walk: Object.fromEntries(Object.entries(measured().walk).map(([pass, byClass]) => [pass, { 't-planted-look': byClass[FIXTURE] }])), codesRead: { 't-planted-look': measured().codesRead[FIXTURE] }, moduleCodesRead: { 't-planted-look': measured().moduleCodesRead[FIXTURE] } });
         assert.equal(faults.length, 1);
         assert.match(faults[0], /^t-planted-look is carried and has no line-skip ceiling of its own \(CARRIED_LINE_SKIP_CEILING/);
-        assert.match(faults[0], /mobile 3\/1, desktop 0\/0, canvas 0\/0/);
+        assert.match(faults[0], /bare: mobile 3\/1, desktop 0\/0, canvas 0\/0/);
         // An entry is the table's own key, never an inherited property.
         assert.equal(carriedTallyFaults({ ...measured(), carried: [{ cls: 'constructor', paid: false }] }).faults.some((f) => /has no line-skip ceiling/.test(f)), true);
     });

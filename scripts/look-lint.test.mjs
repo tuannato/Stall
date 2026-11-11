@@ -4174,8 +4174,10 @@ describe('a-private-look-palette-role-is-opaque-by-construction', () => {
      * reads as RGB triples of whole numbers 0 to 255 and builds into the same
      * `Rgb` values `rgbCss` prints. This proves it over the tracked private
      * fixture (D-2026-10-20-08's P3 (9)): the fixture's own look and mood,
-     * the same look with every role the file may move set to an extreme, and
-     * every shape of colour the file may not carry refused.
+     * the same look with every role the file may move set to an extreme (a
+     * private mood's `danger`, `MOOD_ONLY_PALETTE_KEYS`, among them), and
+     * every shape of colour the file may not carry refused, in the look's
+     * palette, a mood's and a mood's danger.
      */
     const ROLES = ['--s-bg', '--s-surface', '--s-text', '--s-shade', '--s-muted', '--s-accent', '--s-danger', '--s-accent-2'];
     const OPAQUE = /^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/;
@@ -4201,12 +4203,20 @@ describe('a-private-look-palette-role-is-opaque-by-construction', () => {
         };
         // The fixture as it is tracked: a palette of one role, and a mood that moves one.
         assert.equal(readsOpaque(lookData.lookFromData(fixture, PLACE), 'the fixture'), 1);
-        // Every role the file may move, at the extremes, in the look and in a mood.
+        // Every role the file may move, at the extremes, in the look and in a mood — a private
+        // mood's danger among them (`MOOD_ONLY_PALETTE_KEYS`).
+        assert.deepEqual([...lookData.MOOD_ONLY_PALETTE_KEYS], ['danger']);
         for (const triple of [[0, 0, 0], [255, 255, 255], [0, 255, 0], [128, 7, 249]]) {
             const palette = Object.fromEntries(keys.map((key) => [key, triple]));
-            const look = { ...fixture, palette, moods: fixture.moods.map((mood) => ({ ...mood, palette })) };
+            const moodPalette = { ...palette, ...Object.fromEntries(lookData.MOOD_ONLY_PALETTE_KEYS.map((key) => [key, triple])) };
+            const look = { ...fixture, palette, moods: fixture.moods.map((mood) => ({ ...mood, palette: moodPalette })) };
             assert.equal(readsOpaque(lookData.lookFromData(look, PLACE), `every role at ${triple}`), 1);
         }
+        // And the mood's danger is the one `--s-danger` paints where it reads on the mood's surface.
+        const red = lookData.lookFromData({ ...fixture, moods: fixture.moods.map((mood) => ({ ...mood, palette: { surface: [255, 255, 255], danger: [120, 40, 160] } })) }, PLACE);
+        const redMood = red.rows.filter((row) => row.slot === 'mood');
+        assert.equal(theme.themeVars(attachments.withMood(red.theme, redMood))['--s-danger'], 'rgb(120, 40, 160)');
+        assert.notEqual(theme.themeVars(attachments.withMood(red.theme, []))['--s-danger'], 'rgb(120, 40, 160)');
     });
 
     it('refuses every colour that is not three whole numbers 0 to 255: an alpha, a fraction, a string, a function, a variable', async () => {
@@ -4232,15 +4242,17 @@ describe('a-private-look-palette-role-is-opaque-by-construction', () => {
             [Number.NaN, 0, 0],
             [1e400, 0, 0],
         ]) {
-            for (const place of ['palette', 'mood']) {
+            for (const place of ['palette', 'mood', 'mood danger']) {
                 const look =
                     place === 'palette'
                         ? { ...fixture, palette: { bg: bad } }
-                        : { ...fixture, moods: fixture.moods.map((mood) => ({ ...mood, palette: { bg: bad } })) };
+                        : place === 'mood'
+                          ? { ...fixture, moods: fixture.moods.map((mood) => ({ ...mood, palette: { bg: bad } })) }
+                          : { ...fixture, moods: fixture.moods.map((mood) => ({ ...mood, palette: { bg: [1, 1, 1], danger: bad } })) };
                 assert.throws(() => lookData.lookFromData(look, PLACE), /must be three whole numbers 0–255/, `${JSON.stringify(bad)} in the ${place}`);
             }
         }
-        // And a role the file may not move: the danger ink is the base row's.
+        // And a role the look's own palette may not move: its danger ink is the base row's.
         assert.throws(() => lookData.lookFromData({ ...fixture, palette: { danger: [0, 0, 0] } }, PLACE), /danger/);
     });
 });

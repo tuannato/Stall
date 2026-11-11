@@ -35,9 +35,11 @@
  *   rest, and `pnpm workshop:start <base>` copies that look's sheet to start
  *   from. A base is a shipped row by definition, so it is read from the
  *   public table (`decodeTheme`), never the merged one.
- * - `palette` — any of the roles a mood may move (`PaletteDelta`), each an
- *   RGB triple `[r, g, b]`. One colour notation in the whole file: the mood
- *   rows below take the same triples.
+ * - `palette` — any of the roles a kit mood may move (`PALETTE_KEYS`), each
+ *   an RGB triple `[r, g, b]`. One colour notation in the whole file: the
+ *   mood rows below take the same triples, and a private look's mood (a
+ *   `mintable` place) may move the look's red as well, `danger`
+ *   (`MOOD_ONLY_PALETTE_KEYS`).
  * - `fontIndex` — one of the shipped stacks (`FONT_STACKS`); `softness` — the
  *   radius in px.
  * - `shape` — **numbers only**: the shape fields that are one length
@@ -108,9 +110,20 @@ export const PALETTE_KEYS = [
     'shade',
 ] as const satisfies readonly (keyof PaletteDelta)[];
 type PaletteKey = (typeof PALETTE_KEYS)[number];
-// A role added to `PaletteDelta` and missing here fails `tsc` rather than
-// being refused by the validator in silence.
-const PALETTE_KEYS_COVER_THE_DELTA: Exclude<keyof PaletteDelta, PaletteKey> extends never
+/**
+ * The roles only a private look's mood may move (a `mintable` place's
+ * `moods`): the look's red, `danger`, so a private mood moves it with the
+ * rest of its palette. The look's own palette never moves it (its danger ink is the base
+ * row's), and a kit mood never does either: the workshop README lists the
+ * roles a kit mood moves, and this is not one of them. It is an RGB triple
+ * like every other role, so `--s-danger` stays `rgb(r, g, b)` under the
+ * mood (`a-private-look-palette-role-is-opaque-by-construction`).
+ */
+export const MOOD_ONLY_PALETTE_KEYS = ['danger'] as const satisfies readonly (keyof PaletteDelta)[];
+type MoodOnlyPaletteKey = (typeof MOOD_ONLY_PALETTE_KEYS)[number];
+// A role added to `PaletteDelta` and missing from both lists fails `tsc`
+// rather than being refused by the validator in silence.
+const PALETTE_KEYS_COVER_THE_DELTA: Exclude<keyof PaletteDelta, PaletteKey | MoodOnlyPaletteKey> extends never
     ? true
     : false = true;
 void PALETTE_KEYS_COVER_THE_DELTA;
@@ -310,14 +323,20 @@ function rgb(at: string, value: Json, problems: string[]): Rgb | undefined {
     return { r, g, b };
 }
 
-function palette(at: string, value: Json, problems: string[]): PaletteDelta | undefined {
+/**
+ * A palette of colour roles. `privateMood` is a private look's mood row (a
+ * `mintable` place's `moods`): the one place `MOOD_ONLY_PALETTE_KEYS` may be
+ * moved too. Everywhere else the danger ink is the base row's.
+ */
+function palette(at: string, value: Json, problems: string[], privateMood = false): PaletteDelta | undefined {
+    const keys: readonly (keyof PaletteDelta)[] = privateMood ? [...PALETTE_KEYS, ...MOOD_ONLY_PALETTE_KEYS] : PALETTE_KEYS;
     if (!isObject(value)) {
-        problems.push(`${at}: must be an object of colour roles (${PALETTE_KEYS.join(', ')})`);
+        problems.push(`${at}: must be an object of colour roles (${keys.join(', ')})`);
         return undefined;
     }
-    unknownKeys(at, value, PALETTE_KEYS, problems, { danger: 'the danger ink is the base row’s' });
+    unknownKeys(at, value, keys, problems, privateMood ? {} : { danger: 'the danger ink is the base row’s' });
     const out: PaletteDelta = {};
-    for (const key of PALETTE_KEYS) {
+    for (const key of keys) {
         if (value[key] === undefined) {
             continue;
         }
@@ -467,7 +486,7 @@ function rows(
                     `${here}.cls: must be one class starting with "att-", lower-case letters, digits and single hyphens`,
                 );
             }
-            moodPalette = palette(`${here}.palette`, raw['palette'], problems);
+            moodPalette = palette(`${here}.palette`, raw['palette'], problems, mintable);
             if (moodPalette !== undefined && Object.keys(moodPalette).length === 0) {
                 problems.push(`${here}.palette: a mood must move at least one colour role`);
             }
