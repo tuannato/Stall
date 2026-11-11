@@ -286,4 +286,20 @@ describe('the-audit-counts-a-private-look-as-a-look', () => {
         // Its `background` cancels the overlay's `background-color` on the same plate.
         assert.ok(worn.pairs.includes('.stall.broadcast .plate background-color'), JSON.stringify(worn));
     });
+
+    it("reads a base sheet's @container blocks as conditional consumers (STEP-WALL-CONTAINER)", async () => {
+        // Until this step the audit descended @media alone, so a var read only inside one of window.css's
+        // `@container sw` blocks was never counted as consumed there.
+        const sheets = await servedSheets({ env: {} });
+        const name = shadowingReport(sheets).SHADOWED[0].name;
+        const planted = sheets.map((sheet) =>
+            sheet.path === 'src/ui/window.css'
+                ? { ...sheet, css: `${sheet.css}\n@container sw (orientation: landscape) { .stall.shop-window .sw-planted { color: var(${name}); } }\n` }
+                : sheet,
+        );
+        const report = shadowingReport(planted);
+        assert.ok(!report.SHADOWED.some((e) => e.name === name), `${name} is read under a container block no look overrides, so it is no deletion candidate`);
+        const entry = report.PARTIAL.find((e) => e.name === name);
+        assert.ok(entry?.notes.some((note) => note.includes('.sw-planted { color } [@container sw (orientation: landscape)]')), JSON.stringify(entry));
+    });
 });

@@ -417,6 +417,176 @@ export const LOOK_MEDIA = Object.freeze([
 ]);
 
 /**
+ * The wall's own compositions a first-party look sheet may lay out under
+ * (STEP-WALL-CONTAINER, D-2026-11-11-08): the conditions `window.css` writes
+ * after `@container sw`, exactly as it writes them, that a wall pass enters
+ * on a bare frame. Each line names those passes (`wallPassSizes()`,
+ * `scripts/wall-conditions.mjs`). Held both ways to window.css's preludes,
+ * and the matrix to the passes by value, by
+ * `the-wall-conditions-are-window-css-own-and-a-pass-enters-each`. Read by
+ * `lintLookSheet` alone: the kit refuses `@container` (`REFUSED_AT_RULES`).
+ * Inside such a block a look only lays out (`CONTAINER_LAYOUT`), and the
+ * combinations its conditions cut the wall into must each be painted
+ * (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`).
+ */
+export const LOOK_CONTAINER = Object.freeze([
+    // desk-wall, short-wall, side-tablet, hd-wall
+    '(orientation: landscape) and (max-height: 900px)',
+    // canvas
+    '(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)',
+    // portrait, tablet, tall-tablet, narrow-wall
+    '(orientation: portrait)',
+    // tablet, tall-tablet, narrow-wall
+    '(orientation: portrait) and (max-height: 1500px)',
+    // canvas, desk-wall, short-wall, side-tablet, hd-wall
+    '(orientation: landscape)',
+    // tablet, desk-wall, short-wall, side-tablet, hd-wall, tall-tablet, narrow-wall
+    '((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1500px))',
+    // side-tablet, hd-wall
+    '(orientation: landscape) and (max-height: 790px)',
+    // short-wall, side-tablet, hd-wall
+    '(orientation: landscape) and (max-height: 870px)',
+    // narrow-wall
+    '(orientation: portrait) and (max-width: 767.98px)',
+    // desk-wall, short-wall, side-tablet, hd-wall
+    '(orientation: landscape) and (max-width: 1919.98px)',
+    // side-tablet
+    '(orientation: landscape) and (max-width: 1279.98px)',
+    // tablet, tall-tablet, narrow-wall
+    '(orientation: portrait) and (max-width: 1079.98px)',
+]);
+
+/** window.css's conditions a look may not use, with the reason a refusal says. */
+export const LOOK_CONTAINER_EXCLUDED = Object.freeze({
+    '(orientation: landscape) and (max-height: 740px)': 'entered by no wall pass on a bare frame',
+});
+
+/** The container a look's `@container` block must name: the shop window's frame (`window.css`). */
+export const WALL_CONTAINER_NAME = 'sw';
+
+/**
+ * What a declaration inside a look's `@container` block may set: layout.
+ * The contrast pass samples the wall at 1280 and 1920 only and the
+ * reduced-motion pass paints no wall, so a colour, a ground, a motion or a
+ * printed word that changed per composition would be one no pass reads
+ * (`a-container-block-lays-out-and-never-paints`). `display` is admitted for
+ * the values that lay out (`CONTAINER_DISPLAY`), never one that takes a box
+ * away; the one custom property is the sign's rung count, an integer read
+ * by script (`applyNameTiers`).
+ */
+export const CONTAINER_LAYOUT = Object.freeze([
+    'width', 'height', 'min-width', 'max-width', 'min-height', 'max-height',
+    'inline-size', 'block-size', 'min-inline-size', 'max-inline-size', 'min-block-size', 'max-block-size',
+    'aspect-ratio', 'box-sizing',
+    'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    'padding-block', 'padding-block-start', 'padding-block-end', 'padding-inline', 'padding-inline-start', 'padding-inline-end',
+    'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    'margin-block', 'margin-block-start', 'margin-block-end', 'margin-inline', 'margin-inline-start', 'margin-inline-end',
+    'gap', 'row-gap', 'column-gap',
+    'grid', 'grid-template', 'grid-template-areas', 'grid-template-columns', 'grid-template-rows',
+    'grid-auto-flow', 'grid-auto-rows', 'grid-auto-columns',
+    'grid-area', 'grid-row', 'grid-row-start', 'grid-row-end', 'grid-column', 'grid-column-start', 'grid-column-end',
+    'flex', 'flex-direction', 'flex-wrap', 'flex-flow', 'flex-grow', 'flex-shrink', 'flex-basis', 'order',
+    'justify-content', 'justify-items', 'justify-self', 'align-content', 'align-items', 'align-self',
+    'place-content', 'place-items', 'place-self',
+    'display',
+    'font-size', 'line-height', 'text-align', 'white-space', 'text-wrap', 'text-wrap-mode', 'text-wrap-style',
+    'overflow-wrap', 'word-break', 'writing-mode', 'text-orientation',
+    '--name-rungs',
+]);
+
+/** The `display` values a look's `@container` block may set: each lays a box out; `none`, `contents` and the rest are refused. */
+export const CONTAINER_DISPLAY = Object.freeze(['block', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 'flow-root']);
+
+/** The `@container` prelude's container name and condition (whitespace collapsed), or undefined when the prelude names no container. */
+function containerPrelude(prelude) {
+    const m = /^@container\s+([^\s(]+)\s+([\s\S]*)$/i.exec(prelude.trim());
+    if (m === null) return undefined;
+    return { name: m[1], condition: m[2].replace(/\s+/g, ' ').trim() };
+}
+
+/** The normalised condition of a wall condition: lower case, one space after each colon (`normaliseCondition`'s reading). */
+function containerCondition(text) {
+    return text
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/\(\s*/g, '(')
+        .replace(/\s*\)/g, ')')
+        .replace(/\s*:\s*/g, ': ')
+        .trim();
+}
+
+/**
+ * The wall conditions a sheet's top-level `@container sw` blocks use, each
+ * once, normalised, in the order the sheet first writes them — read with the
+ * lint's own parser, so `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`
+ * reads what the lint admitted. A block naming another container, or none,
+ * is not a wall condition and is the lint's to refuse.
+ */
+export function containerConditionsOf(css) {
+    const out = [];
+    for (const node of parseSheet(css).nodes) {
+        if (node.kind !== 'at' || node.name !== 'container' || node.statement) continue;
+        const head = containerPrelude(node.prelude);
+        if (head === undefined || head.name !== WALL_CONTAINER_NAME) continue;
+        const condition = containerCondition(head.condition);
+        if (!out.includes(condition)) out.push(condition);
+    }
+    return out;
+}
+
+/** Why a `@container` prelude may not stand in a first-party look sheet, or undefined. */
+function containerPreludeProblem(prelude) {
+    const head = containerPrelude(prelude);
+    const said = echo(prelude.replace(/^@container\s*/i, '').replace(/\s+/g, ' ').trim());
+    const list = LOOK_CONTAINER.map((c) => `${WALL_CONTAINER_NAME} ${c}`).join('; ');
+    if (head !== undefined && head.name === WALL_CONTAINER_NAME) {
+        const condition = containerCondition(head.condition);
+        if (LOOK_CONTAINER.includes(condition)) return undefined;
+        if (Object.hasOwn(LOOK_CONTAINER_EXCLUDED, condition)) {
+            return `@container ${said} is one of window.css's conditions, ${LOOK_CONTAINER_EXCLUDED[condition]} — a look may use ${list}`;
+        }
+    }
+    return `@container ${said} is not one of the wall's own compositions the probe paints — a look may use ${list}`;
+}
+
+/**
+ * `a-container-block-lays-out-and-never-paints`: what one rule inside a
+ * look's `@container` block may not do. No selector naming a state; and
+ * declarations from `CONTAINER_LAYOUT` alone, `display` only one of
+ * `CONTAINER_DISPLAY`, `--name-rungs` only a rung count (1 to 6) written in
+ * lower case — a custom property is read wherever a later rule asks, so any
+ * other one, or this one holding a colour, could change a paint per
+ * composition.
+ */
+function containerBlockProblems(body, selectors) {
+    const out = [];
+    for (const selector of selectors) {
+        if (namesAState(selector)) {
+            out.push(`"${echo(selector)}" names a state inside @container — a wall composition may only lay out at rest; no pass paints a state on the wall (a-container-block-lays-out-and-never-paints)`);
+        }
+    }
+    const why =
+        'a wall composition may only lay out: the contrast pass samples the wall at 1280 and 1920 only and the reduced-motion pass paints no wall, ' +
+        'so a colour, a ground, a motion or a printed word that changes per composition is one no pass reads (a-container-block-lays-out-and-never-paints)';
+    for (const part of splitTopLevel(body, ';')) {
+        const colon = part.indexOf(':');
+        if (colon <= 0) continue;
+        const raw = part.slice(0, colon).trim();
+        const prop = raw.toLowerCase();
+        const value = part.slice(colon + 1).trim().replace(/\s+/g, ' ');
+        if (!CONTAINER_LAYOUT.includes(prop) || (prop.startsWith('--') && raw !== prop)) {
+            out.push(`${echo(raw)} inside @container — ${why}`);
+        } else if (prop === 'display' && !CONTAINER_DISPLAY.includes(value.toLowerCase())) {
+            out.push(`display: ${echo(value, 32)} inside @container — a wall composition lays a box out (${CONTAINER_DISPLAY.join(', ')}); it never takes one away (a-container-block-lays-out-and-never-paints)`);
+        } else if (prop === '--name-rungs' && !/^[1-6]$/.test(value)) {
+            out.push(`--name-rungs: ${echo(value, 32)} inside @container — the sign's rung count is a whole number from 1 to 6, read by script; any other value could be read by a paint (a-container-block-lays-out-and-never-paints)`);
+        }
+    }
+    return out;
+}
+
+/**
  * State the app writes for a look's own sheet and no base sheet reads (step
  * 8f1, `src/ui/lookHooks.ts`): the rung of the sign name's measured ladder
  * (`applyNameTiers`, one value per rung up to its `NAME_TIER_MAX`) and the
@@ -3526,6 +3696,74 @@ function isStateSelector(selector) {
     return [...selector.matchAll(/\[\s*([\w-]+)/g)].some((m) => m[1].toLowerCase() !== 'data-role');
 }
 
+/** A read of the sign's rung count in a value (`var(--name-rungs` …), which a first-party sheet makes nowhere. */
+const NAME_RUNGS_READ = /var\(\s*--name-rungs(?![\w-])/;
+
+/** The math functions whose `/` divides (CSS Values 4). */
+const MATH_FUNCTIONS = new Set([
+    'calc', 'clamp', 'min', 'max', 'round', 'mod', 'rem', 'abs', 'sign', 'hypot', 'pow', 'sqrt', 'exp', 'log',
+    'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', '-webkit-calc',
+]);
+
+/** A length or percentage dimension: every length unit CSS has, the viewport and container units among them. */
+const LENGTH_DIMENSION =
+    /(?:^|[^\w.-])[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?(?:px|em|rem|ex|rex|ch|rch|cap|rcap|ic|ric|lh|rlh|vw|vh|vi|vb|vmin|vmax|svw|svh|svi|svb|svmin|svmax|lvw|lvh|lvi|lvb|lvmin|lvmax|dvw|dvh|dvi|dvb|dvmin|dvmax|cqw|cqh|cqi|cqb|cqmin|cqmax|cm|mm|q|in|pt|pc|%)(?![\w-])/i;
+
+/**
+ * Every divisor of a `/` inside a math function of `value` (strings already
+ * blanked) that is a length, or that this lint cannot resolve to a number:
+ * one holding a length or percentage dimension, a `var()`, an `env()`, an
+ * `attr()` or a keyword (`a-look-never-divides-by-a-length`). A `/` outside
+ * every math function (`grid-area: 1 / 2`, `aspect-ratio: 16 / 9`, a `font`
+ * shorthand's line height, a background's size) is not division.
+ */
+export function lengthDivisors(value) {
+    const out = [];
+    const stack = [];
+    for (let i = 0; i < value.length; i += 1) {
+        const c = value[i];
+        if (c === '(') {
+            const name = /([\w-]*)$/.exec(value.slice(0, i))[1].toLowerCase();
+            stack.push(name);
+        } else if (c === ')') {
+            stack.pop();
+        } else if (c === '/') {
+            const named = [...stack].reverse().find((name) => name !== '');
+            if (named === undefined || !MATH_FUNCTIONS.has(named)) continue;
+            const divisor = operandAt(value, i + 1);
+            const plain = divisor.trim();
+            const number = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/i.test(plain);
+            if (number) continue;
+            if (LENGTH_DIMENSION.test(divisor) || /(?:var|env|attr)\(/i.test(divisor) || !/^[\s\d.+\-*/()e]*$/i.test(divisor.replace(/(?<![\w-])(?:calc|min|max|clamp|round|abs|sign|pow|sqrt|exp|log)\(/gi, '('))) {
+                out.push(plain);
+            }
+        }
+    }
+    return out;
+}
+
+/** The operand that starts at `at` in `value`: a parenthesised group, a function with its arguments, or one token. */
+function operandAt(value, at) {
+    let i = at;
+    while (i < value.length && /\s/.test(value[i])) i += 1;
+    const start = i;
+    while (i < value.length && /[\w.%+\-]/.test(value[i]) && !(i > start && /[+\-]/.test(value[i]) && !/e/i.test(value[i - 1]))) i += 1;
+    if (value[i] === '(') {
+        let depth = 0;
+        for (; i < value.length; i += 1) {
+            if (value[i] === '(') depth += 1;
+            else if (value[i] === ')') {
+                depth -= 1;
+                if (depth === 0) {
+                    i += 1;
+                    break;
+                }
+            }
+        }
+    }
+    return value.slice(start, i);
+}
+
 function declarationProblems(decls, selectors, { firstParty = false } = {}) {
     const out = [];
     for (const { prop, value } of decls) {
@@ -3877,7 +4115,7 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          */
         if (firstParty && CONTAINER_PROPERTIES.has(prop)) {
             out.push(
-                `${shown} — ${prop} would re-point the wall's container queries (window.css's @container sw conditions and its cqw and cqh units) at a box the look picks, one the probe does not choose; @container is refused for the same reason`,
+                `${shown} — ${prop} would re-point the wall's container queries (window.css's @container sw conditions and its cqw and cqh units) at a box the look picks, one the probe does not choose; a look queries only the wall's own container, sw, on the conditions LOOK_CONTAINER lists (the kit none)`,
             );
         }
         /*
@@ -3888,6 +4126,33 @@ function declarationProblems(decls, selectors, { firstParty = false } = {}) {
          * that holds the function are read alike. A first-party sheet's
          * rule; the kit keeps the rules its README states.
          */
+        /*
+         * The sign's rung count is read by script alone (STEP-WALL-CONTAINER,
+         * the build critic's P1-1): a wall composition may set
+         * `--name-rungs`, so a rule at rest that read it in a value
+         * (`opacity: calc((var(--name-rungs, 6) - 1) / 5)`) would paint
+         * differently per composition where no contrast pass looks. A
+         * first-party sheet reads it nowhere.
+         */
+        if (firstParty && NAME_RUNGS_READ.test(bare)) {
+            out.push(
+                `${shown} — reads --name-rungs: the sign's rung count is read by the ladder script alone, and a wall composition may set it, so a value that read it would paint differently per composition where no contrast pass looks (a-look-never-reads-the-rung-count)`,
+            );
+        }
+        /*
+         * Division by a length (the build critic's P1-3): a number made of a
+         * size (`(100cqh - 1050px) / 1px`) turns a container or viewport
+         * unit into a switch at any size — an opacity, a colour or a step
+         * no pass paints — and defeats the cells the wall's conditions are
+         * held to. A first-party sheet divides only by numbers.
+         */
+        if (firstParty) {
+            for (const divisor of lengthDivisors(bare)) {
+                out.push(
+                    `${shown} — divides by ${echo(divisor, 32)}, a length (or a value this lint cannot resolve): a number made of a size switches a paint or a layout at a size no pass paints; divide by a number (a-look-never-divides-by-a-length)`,
+                );
+            }
+        }
         if (firstParty && (ANCHOR_PROPERTIES.has(prop) || ANCHOR_FUNCTION.test(bare) || ANCHOR_KEYWORD.test(bare))) {
             out.push(
                 `${shown} — anchor positioning: a box placed against an anchor follows the anchor's transform, motion path and offsets, so a keyframe on another box carries it, a money figure among them, where the reads of the figure's own walk do not look; a look positions nothing against an anchor`,
@@ -3985,7 +4250,7 @@ function mediaCondition(prelude) {
         .trim();
 }
 
-/** Why an at-rule a look sheet may not hold is refused (every at-rule but `@media` and `@keyframes` is). */
+/** Why an at-rule a look sheet may not hold is refused (every at-rule but `@media` and `@keyframes` is, and `@container` but a first-party look's on `LOOK_CONTAINER`). */
 const REFUSED_AT_RULES = Object.freeze({
     import: '@import is not allowed — a look sheet is one file',
     'font-face': '@font-face is not allowed — a look uses one of the shipped font stacks',
@@ -4138,9 +4403,15 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
     // The keyframes this sheet declares: the only ones a first-party rule may run (`animationNameProblems`).
     const ownKeyframes = kit ? undefined : keyframeNamesOf(nodes);
 
-    const walk = (list, nested = false) => {
+    const walk = (list, nested = false, container = false) => {
         for (const node of list) {
+            if (container && node.kind !== 'rule') {
+                // A wall composition holds style rules only: a keyframe, a face or a media block inside one is a motion, a face or a condition per composition.
+                at(node.start, `@${echo(node.name)} inside @container — a look's @container block holds style rules only (a-container-block-lays-out-and-never-paints)`);
+                continue;
+            }
             if (node.kind === 'rule') {
+                if (container) for (const why of containerBlockProblems(node.body, splitTopLevel(node.prelude, ','))) at(node.start, why);
                 if (braceOutsideStrings(node.body)) {
                     at(node.start, `"${echo(node.prelude)}" holds a nested rule — write it flat, under .${scope}`);
                 }
@@ -4207,6 +4478,14 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
                 }
             } else if (node.name === 'font-face' && load === 'worn' && !node.statement) {
                 for (const why of fontFaceProblems(node.body ?? '', scope)) at(node.start, why);
+            } else if (node.name === 'container' && !kit && !node.statement) {
+                // A first-party look may lay the wall out per composition (`LOOK_CONTAINER`), at the top level of its sheet.
+                const why = containerPreludeProblem(node.prelude);
+                if (why !== undefined) at(node.start, why);
+                if (nested) {
+                    at(node.start, `@container stands inside another at-rule — a look's @container block stands at the top level of its sheet, alone (a-container-block-lays-out-and-never-paints)`);
+                }
+                walk(node.children ?? [], true, true);
             } else if (node.name === 'media' && !node.statement) {
                 const condition = mediaCondition(node.prelude);
                 if (!LOOK_MEDIA.includes(condition)) {
@@ -4219,7 +4498,7 @@ function lintLook(css, { scope, kit, art, load = 'bundled', ownArt = undefined }
             } else {
                 const why = Object.hasOwn(REFUSED_AT_RULES, node.name)
                     ? REFUSED_AT_RULES[node.name]
-                    : `@${echo(node.name)} is not allowed in a look sheet — @media and @keyframes are`;
+                    : `@${echo(node.name)} is not allowed in a look sheet — @media and @keyframes are${kit ? '' : ', and @container on the wall\'s own conditions'}`;
                 at(node.start, node.name === 'container' && /style\s*\(/i.test(node.prelude) ? `${why} (here: style())` : why);
                 walk(node.children ?? [], true);
             }
@@ -4306,7 +4585,15 @@ export function lintSheet(css, { art = [] } = {}) {
  * (`a-look-names-no-container-of-its-own`); and no selector naming a piece
  * of a money figure the app breaks after its commas (`.fig-say`, `.fig-end`),
  * since a look dresses a figure only as a whole
- * (`a-look-may-not-dress-a-figures-pieces`); and no transition of a size, a
+ * (`a-look-may-not-dress-a-figures-pieces`); and — the one at-rule a
+ * first-party sheet may hold that the kit may not — a top-level
+ * `@container sw <condition>` block for exactly the conditions
+ * `LOOK_CONTAINER` lists, holding style rules that only lay out
+ * (`CONTAINER_LAYOUT`, `a-look-queries-only-the-walls-own-conditions`,
+ * `a-container-block-lays-out-and-never-paints`), no read of the rung count
+ * a composition may set (`a-look-never-reads-the-rung-count`) and no
+ * division by a length, which would make a unit a switch at any size
+ * (`a-look-never-divides-by-a-length`); and no transition of a size, a
  * letter or word spacing, a zoom or a scale on a money node, nor a keyframe
  * of any of them or of a transform that scales anywhere
  * (`a-look-never-animates-a-money-nodes-size`); and a rule under a state the

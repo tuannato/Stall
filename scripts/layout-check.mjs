@@ -71,6 +71,8 @@ import { SERVED_SHEETS } from './sheet-roles.mjs';
 import { privateRows, servedSheets } from './served-sheets.mjs';
 import { sheetMasksWithAFile } from './workshop-css.mjs';
 import { sheetNamesAttribute } from './workshop-css.mjs';
+import { LOOK_CONTAINER, containerConditionsOf } from './workshop-css.mjs';
+import { cellsOf, wallCellOwedFaults } from './wall-conditions.mjs';
 
 /*
  * The private looks this run measures (8e2): the selection the shell names,
@@ -740,6 +742,23 @@ const NAMES_STEP = (await servedSheets({ env: CARRIED.env }))
     .filter((row) => ['look', 'kit', 'private'].includes(row.role) && FULL_CLASSES.includes(row.lookClass) && sheetNamesAttribute(row.css, 'data-figure-step'))
     .map((row) => row.lookClass)
     .sort();
+/**
+ * The wall conditions each measured look's own sheet uses
+ * (STEP-WALL-CONTAINER), read from the sheets as served with the lint's
+ * reader (`containerConditionsOf`): `every-wall-cell-a-look-uses-is-painted`
+ * fails a look whose combinations of them were not all entered on some
+ * wall paint of the run, by the frame's own echo (`wallConditionsByClass`).
+ * No shipped look uses one; the tracked fixture uses one.
+ */
+const WALL_CONDITIONS_USED = Object.fromEntries(
+    (await servedSheets({ env: CARRIED.env }))
+        .filter((row) => ['look', 'kit', 'private'].includes(row.role) && FULL_CLASSES.includes(row.lookClass))
+        .map((row) => [row.lookClass, containerConditionsOf(row.css)]),
+);
+/** `the-wall-condition-echo-agrees-with-this-chrome` per geometry pass, and every echo a wall paint read: class → variant → vectors, and pass → vector → `class/variant`. */
+const wallConditionGeometry = [];
+const wallConditionsSeen = {};
+const wallConditionsByPass = {};
 /**
  * Every decoration class a geometry pass painted worn (the probe's
  * `wornClasses`): the contrast pass's owed jobs must follow it
@@ -4232,6 +4251,19 @@ try {
             });
             if (OWING_GEOMETRY.has(g.key)) reachSeen[g.key] = g.report.reachByClass;
         }
+        if (g.report?.reachByClass !== undefined) {
+            // Every page that ran the measuring loop's self-checks ran the wall conditions' echo check too.
+            wallConditionGeometry.push({ pass: g.key, check: g.report.wallConditionCheck, echo: g.report.wallConditionEcho });
+        }
+        for (const [cls, byVariant] of Object.entries(g.report?.wallConditionsByClass ?? {})) {
+            for (const [variant, vectors] of Object.entries(byVariant)) {
+                const seen = ((wallConditionsSeen[cls] ??= {})[variant] ??= new Set());
+                for (const vector of vectors) {
+                    seen.add(vector);
+                    ((wallConditionsByPass[g.key] ??= {})[vector] ??= new Set()).add(`${cls}/${variant}`);
+                }
+            }
+        }
         if (g.report?.walkByClass !== undefined) {
             if (OWING_GEOMETRY.has(g.key)) walkSeen[g.key] = g.report.walkByClass;
             walkGeometry.push({
@@ -4466,6 +4498,84 @@ try {
                       (disagreed.length === 0 ? 'holdsOutOfFlow agreed on every one' : `disagreed on ${disagreed.map((o) => `${o.pass} (${o.check.disagree.length})`).join(', ')}`)) +
                 ` · ${ms.toFixed(1)}ms over the passes`,
         );
+    }
+    {
+        /*
+         * `the-wall-condition-echo-agrees-with-this-chrome` (STEP-WALL-CONTAINER):
+         * every geometry pass's page held the echo the wall conditions are
+         * read by to `holds` on planted frames; a disagreement is already
+         * one of that pass's failures, a page with no record of the check is
+         * one here, and so is a page whose echo is not the table's order.
+         */
+        const unchecked = wallConditionGeometry.filter((o) => o.check === undefined || !(o.check.cases > 0)).map((o) => o.pass);
+        const misordered = wallConditionGeometry.filter((o) => JSON.stringify(o.echo) !== JSON.stringify(LOOK_CONTAINER)).map((o) => o.pass);
+        const disagreed = wallConditionGeometry.filter((o) => (o.check?.disagree?.length ?? 0) > 0);
+        if (unchecked.length > 0) {
+            failed = true;
+            console.error(`✗ the-wall-condition-echo-agrees-with-this-chrome: no check on the page of ${unchecked.join(', ')}`);
+        }
+        if (misordered.length > 0) {
+            failed = true;
+            console.error(`✗ the-wall-condition-echo-agrees-with-this-chrome: the page of ${misordered.join(', ')} echoes other conditions than LOOK_CONTAINER, in another order`);
+        }
+        const first = wallConditionGeometry.find((o) => o.check !== undefined)?.check;
+        console.log(
+            `    the wall's conditions echoed and held to holds() (the-wall-condition-echo-agrees-with-this-chrome): ` +
+                (first === undefined
+                    ? 'no page ran the check'
+                    : `${LOOK_CONTAINER.length} condition(s) over ${first.cases} planted frame(s), on ${wallConditionGeometry.length - unchecked.length} page(s); ` +
+                      (disagreed.length === 0 ? 'Chrome and holds() agreed on every one' : `disagreed on ${disagreed.map((o) => `${o.pass} (${o.check.disagree.length})`).join(', ')}`)),
+        );
+        /*
+         * `every-wall-cell-a-look-uses-is-painted`: each measured look whose
+         * own sheet uses wall conditions owes, per variant, a wall paint in
+         * every combination they cut the wall into (the cells
+         * `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`
+         * requires), read off the painted frame's echo — so a frame a
+         * decoration or the look pads is read where it really stands.
+         */
+        const required = {};
+        for (const [cls, conditions] of Object.entries(WALL_CONDITIONS_USED)) {
+            if (conditions.length === 0) continue;
+            const unknown = conditions.filter((c) => !LOOK_CONTAINER.includes(c));
+            if (unknown.length > 0) {
+                failed = true;
+                console.error(`✗ every-wall-cell-a-look-uses-is-painted: ${cls} uses ${unknown.map((c) => `@container sw ${c}`).join(', ')}, which the echo does not read (not on LOOK_CONTAINER)`);
+                continue;
+            }
+            required[cls] = { conditions: conditions.map((c) => LOOK_CONTAINER.indexOf(c)), vectors: cellsOf(conditions).map((cell) => cell.vector), names: conditions };
+        }
+        const observed = Object.fromEntries(Object.entries(wallConditionsSeen).map(([cls, byVariant]) => [cls, Object.fromEntries(Object.entries(byVariant).map(([v, set]) => [v, [...set]]))]));
+        const owedFaults = wallCellOwedFaults(required, observed);
+        for (const why of owedFaults) {
+            failed = true;
+            console.error(`✗ every-wall-cell-a-look-uses-is-painted: ${why}`);
+        }
+        const said = (vector) => {
+            const on = [...vector].flatMap((bit, i) => (bit === '1' ? [String(i)] : []));
+            return on.length === 0 ? 'none' : on.join('+');
+        };
+        console.log(
+            `    wall conditions entered, by look and pass (every-wall-cell-a-look-uses-is-painted; condition i is LOOK_CONTAINER[i]): ` +
+                (Object.keys(required).length === 0
+                    ? 'no measured look uses one'
+                    : Object.entries(required).map(([cls, r]) => `${cls} uses ${r.conditions.join('+')}, ${r.vectors.length} combination(s) owed per variant`).join('; ') +
+                      (owedFaults.length === 0 ? ', every one painted' : `, ${owedFaults.length} look/variant(s) short of one`)),
+        );
+        for (const pass of Object.keys(wallConditionsByPass)) {
+            const byVector = wallConditionsByPass[pass];
+            console.log(
+                `      ${pass}: ` +
+                    Object.keys(byVector)
+                        .sort()
+                        .map((vector) => {
+                            const who = [...byVector[vector]].sort();
+                            const looks = [...new Set(who.map((w) => w.slice(0, w.indexOf('/'))))];
+                            return `{${said(vector)}} ${looks.join(', ')} (${who.length} look/variant)`;
+                        })
+                        .join(' · '),
+            );
+        }
     }
     {
         /*

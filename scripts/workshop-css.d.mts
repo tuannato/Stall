@@ -17,3 +17,6 @@ export function namesAState(selector: string): boolean;
 
 /** The attributes that are states except for the values a probe screen paints (`data-format` but `tag`, `data-code`). */
 export const STATE_EXCEPT_PAINTED: Readonly<Record<string, readonly string[]>>;
+
+/** The wall's own container conditions a first-party look may lay out under (STEP-WALL-CONTAINER), in the order the probe echoes them. */
+export const LOOK_CONTAINER: readonly string[];

@@ -14,6 +14,12 @@ import {
     LOOK_HOOK_ATTRIBUTES,
     FIGURE_STEP_SETS,
     LOOK_MEDIA,
+    LOOK_CONTAINER,
+    LOOK_CONTAINER_EXCLUDED,
+    CONTAINER_LAYOUT,
+    CONTAINER_DISPLAY,
+    containerConditionsOf,
+    lengthDivisors,
     ANGLE_CAP_DEG,
     MASK_COMPOSITE_LEGACY,
     MAX_FLASHES_PER_SECOND,
@@ -185,7 +191,8 @@ describe('a-look-cannot-target-one-seller', () => {
             ['.t-neo [data-role="price" i] { color: red; }', /no "i" flag/],
             ['.t-neo [open="open"] { color: red; }', /open is matched by its presence alone/],
             ['.t-neo [svg|href] { color: red; }', /does not read \(a namespace/],
-            ['@container style(--x: 1) { .t-neo .item { color: red; } }', /@container .*style\(\)/],
+            // The kit refuses @container outright and says style(); a first-party sheet refuses every container query but the wall's own conditions (`a-look-queries-only-the-walls-own-conditions`).
+            ['@container style(--x: 1) { .t-neo .item { color: red; } }', /@container .*style\(\)|@container style\(--x: 1\) is not one of the wall's own compositions/],
         ]) {
             plant(rule, pattern);
         }
@@ -4678,7 +4685,7 @@ describe('every-media-block-in-a-look-is-one-the-probe-enters', () => {
     it('refuses every other condition, feature query, container, layer and registered property', () => {
         for (const [rule, pattern] of [
             ['@supports (display: grid) { .t-neo .item { color: red; } }', /@supports gates rules/],
-            ['@container (min-width: 400px) { .t-neo .item { color: red; } }', /@container sizes rules/],
+            ['@container (min-width: 400px) { .t-neo .item { color: red; } }', /@container sizes rules|@container \(min-width: 400px\) is not one of the wall's own compositions/],
             ['@layer look { .t-neo .item { color: red; } }', /@layer re-orders/],
             ['@property --t-neo-x { syntax: "<number>"; inherits: false; initial-value: 0; }', /@property changes/],
             ['@media (hover: none) { .t-neo .item { color: red; } }', /\(hover: none\) is not a condition the probe enters/],
@@ -4702,6 +4709,236 @@ describe('every-media-block-in-a-look-is-one-the-probe-enters', () => {
         accepts('@media (max-width: 679.98px) { .t-neo .item { color: red; } }');
         accepts('.t-neo .item { -webkit-mask: none; mask: none; }');
         accepts('.t-neo .item { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }');
+    });
+});
+
+describe('a-look-queries-only-the-walls-own-conditions', () => {
+    /**
+     * STEP-WALL-CONTAINER (D-2026-11-11-08): a first-party look sheet may
+     * hold a top-level `@container sw <condition>` block for exactly the
+     * conditions `LOOK_CONTAINER` lists — window.css's own, each one a wall
+     * pass enters on a bare frame — and no other container query. The kit
+     * keeps refusing `@container` outright (`REFUSED_AT_RULES`), as its
+     * README says.
+     */
+    const block = (condition, body = '.t-neo.shop-window .stall-head { order: 0; }') => `@container sw ${condition} { ${body} }`;
+
+    it('accepts every condition of the table under a shipped look, and the kit refuses each', () => {
+        assert.equal(LOOK_CONTAINER.length, 12);
+        for (const condition of LOOK_CONTAINER) {
+            accepts(block(condition));
+            const kit = lintSheet(plantedKit(block(condition)));
+            assert.ok(kit.some((p) => /@container sizes rules to a box the probe does not choose/.test(p)), `kit, ${condition}:\n  ${kit.join('\n  ')}`);
+        }
+        // Whitespace and case are the condition's, not the table's: read as CSS reads them.
+        accepts('@container   sw   (ORIENTATION:landscape)   and   (max-height:900px) { .t-neo.shop-window .stall-head { order: 0; } }');
+    });
+
+    it('refuses an unnamed query, another name, a condition off the table, the excluded one, style(), scroll-state() and a statement', () => {
+        const refused = (rule, pattern) => {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => pattern.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        };
+        const OFF = /is not one of the wall's own compositions the probe paints — a look may use sw \(orientation: landscape\)/;
+        refused('@container (orientation: landscape) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container x (orientation: landscape) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container SW (orientation: landscape) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container sw (orientation: landscape) and (max-height: 1000px) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container sw (min-aspect-ratio: 1/1) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container sw style(--x: 1) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container sw scroll-state(stuck: top) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container sw not (orientation: landscape) { .t-neo .item { width: 1px; } }', OFF);
+        refused('@container sw (orientation: landscape);', /@container sizes rules/);
+        const [excluded, why] = Object.entries(LOOK_CONTAINER_EXCLUDED)[0];
+        refused(block(excluded), new RegExp(`is one of window\\.css's conditions, ${why}`));
+    });
+
+    it('refuses a media block inside one, one inside a media block, and every other at-rule inside one', () => {
+        const refused = (rule, pattern) => {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => pattern.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        };
+        const c = LOOK_CONTAINER[0];
+        refused(`@container sw ${c} { @media (min-width: 680px) { .t-neo .item { width: 1px; } } }`, /@media inside @container — a look's @container block holds style rules only/);
+        refused(`@media (min-width: 680px) { @container sw ${c} { .t-neo .item { width: 1px; } } }`, /@container stands inside another at-rule/);
+        refused(`@container sw ${c} { @keyframes t-neo-x { to { width: 1px; } } }`, /@keyframes inside @container/);
+        refused(`@container sw ${c} { @font-face { font-family: t-neo-x; } }`, /@font-face inside @container/);
+        refused(`@container sw ${c} { @container sw ${c} { .t-neo .item { width: 1px; } } }`, /@container inside @container/);
+    });
+
+    it('reads the conditions a sheet uses with the lint parser, each once', () => {
+        assert.deepEqual(
+            containerConditionsOf(`${block(LOOK_CONTAINER[0])}\n@container sw (Orientation:Landscape) and (max-height:900px) { .t-neo .a { order: 0; } }\n${block(LOOK_CONTAINER[4])}\n@container x (orientation: portrait) {}`),
+            [LOOK_CONTAINER[0], LOOK_CONTAINER[4]],
+        );
+    });
+});
+
+describe('a-container-block-lays-out-and-never-paints', () => {
+    /**
+     * Inside a look's `@container` block, layout alone (`CONTAINER_LAYOUT`):
+     * the contrast pass samples the wall at 1280 and 1920 only and the
+     * reduced-motion pass paints no wall, so a colour, a ground, a motion or
+     * a printed word that changed per composition is one no pass reads.
+     */
+    const inBlock = (body, selector = '.t-neo.shop-window .stall-head') => `@container sw ${LOOK_CONTAINER[0]} { ${selector} { ${body} } }`;
+    const WHY = /inside @container — a wall composition may only lay out: the contrast pass samples the wall at 1280 and 1920 only/;
+
+    it('refuses every paint, motion, word, state and box taken away, one by one', () => {
+        for (const decl of [
+            'color: #fff',
+            'background: #000',
+            'background-color: #000',
+            'border-color: #000',
+            'box-shadow: 0 0 0 1px #000',
+            'text-shadow: 0 0 1px #000',
+            'opacity: 0.5',
+            'visibility: hidden',
+            'filter: saturate(2)',
+            'mask: none',
+            'clip-path: inset(0px)',
+            'transform: none',
+            'translate: 0 0',
+            'position: relative',
+            'top: 0px',
+            'z-index: 1',
+            'animation: none',
+            'transition: none',
+            'content: none',
+            'letter-spacing: 0px',
+            'word-spacing: 0px',
+            'text-indent: 0px',
+            "font-family: 'Stall Serif'",
+            'font-weight: 700',
+            '--s-text: #000',
+            '--x: 1',
+            '--Name-Rungs: 3',
+            'overflow: hidden',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(inBlock(`${decl};`)), { lookClass: 't-neo' });
+            const prop = decl.slice(0, decl.indexOf(':'));
+            assert.ok(problems.some((p) => p.includes(`${prop} inside @container`) && WHY.test(p)), `${decl}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+        for (const value of ['none', 'contents', 'table', 'inline', 'list-item']) {
+            const problems = lintLookSheet(plantedNeo(inBlock(`display: ${value};`)), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => p.includes(`display: ${value} inside @container — a wall composition lays a box out`)), `display: ${value}:\n  ${problems.join('\n  ')}`);
+        }
+        for (const value of ['0', '7', 'red', 'var(--x)', '3px']) {
+            const problems = lintLookSheet(plantedNeo(inBlock(`--name-rungs: ${value};`)), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => p.includes(`--name-rungs: ${value} inside @container`)), `--name-rungs: ${value}:\n  ${problems.join('\n  ')}`);
+        }
+        const hover = lintLookSheet(plantedNeo(inBlock('width: 10px;', '.t-neo.shop-window .stall-head:hover')), { lookClass: 't-neo' });
+        assert.ok(hover.some((p) => /names a state inside @container/.test(p)), hover.join('\n'));
+    });
+
+    it('accepts what lays out', () => {
+        for (const decl of [
+            "grid-template-areas: 'ic name' 'ic price'",
+            'width: min(100%, 40cqw)',
+            'padding: 12px 8px',
+            'font-size: 22px',
+            'writing-mode: vertical-rl',
+            'display: grid',
+            'display: flow-root',
+            '--name-rungs: 3',
+            'order: 0',
+            'gap: 2cqh',
+        ]) {
+            accepts(inBlock(`${decl};`));
+        }
+    });
+
+    it('lists layout alone, and the displays that lay a box out', () => {
+        for (const prop of ['color', 'background', 'opacity', 'visibility', 'transform', 'animation', 'transition', 'content', 'position', 'filter', 'mask', 'clip-path', 'letter-spacing', 'font-family']) {
+            assert.ok(!CONTAINER_LAYOUT.includes(prop), prop);
+        }
+        assert.deepEqual([...CONTAINER_DISPLAY].sort(), ['block', 'flex', 'flow-root', 'grid', 'inline-block', 'inline-flex', 'inline-grid']);
+        assert.deepEqual(CONTAINER_LAYOUT.filter((prop) => prop.startsWith('--')), ['--name-rungs']);
+    });
+});
+
+/** The wall-container build critic's plant A, under Neo: the rung count set per composition and read in an opacity at rest. */
+const PLANT_A = [
+    '.t-neo .sw-state { opacity: calc((var(--name-rungs, 6) - 1) / 5); }',
+    '@container sw (orientation: portrait) { .t-neo .sw-state { --name-rungs: 1; } }',
+].join('\n');
+
+describe('a-look-never-reads-the-rung-count', () => {
+    /**
+     * The build critic's P1-1 (D-2026-11-11-09): a wall composition may set
+     * `--name-rungs`, and its integer guard did not stop a rule at rest
+     * reading it — the critic's plant A painted the status line at opacity
+     * 0 on every portrait wall and 1 on the canvas, every pass green. Only
+     * the ladder script reads it, so a first-party sheet reads it nowhere.
+     */
+    it("refuses the critic's plant A, and a read anywhere: at rest, in a media block, in a keyframe, in a custom property", () => {
+        for (const rule of [
+            PLANT_A,
+            '.t-neo .item { color: rgb(calc(var(--name-rungs) * 40) 0 0); }',
+            '@media (min-width: 680px) { .t-neo .item { width: calc(var( --name-rungs ) * 10px); } }',
+            '@keyframes t-neo-r { to { opacity: calc(var(--name-rungs) / 6); } }',
+            '.t-neo .item { --t-neo-x: var(--name-rungs); }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => /reads --name-rungs: the sign's rung count is read by the ladder script alone/.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('accepts setting the count, at rest and in a wall composition, and leaves the kit as it was', () => {
+        accepts('.t-neo .stall-name { --name-rungs: 3; }');
+        accepts('@container sw (orientation: portrait) { .t-neo .stall-name { --name-rungs: 2; } }');
+        accepts('.t-neo .item { --name-rungs-x: 1; width: var(--name-rungs-x, 1px); }');
+        // The kit refuses the hook outright already (`the-kit-refuses-the-first-party-hooks`); this rule is first party only.
+        assert.ok(!lintSheet(plantedKit('.t-neo .item { opacity: calc(var(--name-rungs) / 6); }')).some((p) => /reads --name-rungs/.test(p)));
+    });
+});
+
+describe('a-look-never-divides-by-a-length', () => {
+    /**
+     * The build critic's P1-3 (D-2026-11-11-09): Chrome divides by a length
+     * (`clamp(0, (100cqh - 1050px) / 1px, 1)` is a number that steps at a
+     * frame height), so a container or viewport unit at rest switched a
+     * paint at a size no pass paints, with no `@container` block at all —
+     * which defeats the cells the wall's conditions are held to. A
+     * first-party sheet divides inside a math function only by a number;
+     * a divisor holding a length or percentage, a `var()`, an `env()` or an
+     * `attr()` is refused. Not closed, stated: a steep `clamp()` of `cq` or
+     * viewport units still makes a layout step at any size.
+     */
+    it("refuses the critic's plants: an opacity by cqh, an opacity by vh on a money node, a colour by cqw", () => {
+        for (const rule of [
+            '.t-neo .sw-state { opacity: clamp(0, (100cqh - 1050px) / 1px, 1); }',
+            '.t-neo .item-x { opacity: clamp(0, (100vh - 900px) / 1px, 1); }',
+            '.t-neo .sw-state { color: rgb(calc((100cqw - 1000px) / 1px) 0 0); }',
+            '.t-neo .sw-state { color: rgb(calc(100cqw / 10px) 0 0); }',
+            '.t-neo .item { --t-neo-o: calc(100cqh / 1px); }',
+            '@media (min-width: 680px) { .t-neo .item { opacity: calc(1 - 100vw / 100%); } }',
+            '@keyframes t-neo-d { to { opacity: calc(10 / 2px); } }',
+            '.t-neo .item { width: calc(10px / var(--t-neo-d)); }',
+            '.t-neo .item { width: calc(10px / (2 * 1px)); }',
+        ]) {
+            const problems = lintLookSheet(plantedNeo(rule), { lookClass: 't-neo' });
+            assert.ok(problems.some((p) => /divides by .*, a length \(or a value this lint cannot resolve\)/.test(p)), `${rule}:\n  ${problems.join('\n  ') || '(no problem)'}`);
+        }
+    });
+
+    it('accepts division by a number, and a / that is not division', () => {
+        accepts('.t-neo .item { width: calc((100% - 44px) / 2); }');
+        accepts('.t-neo .item { width: clamp(22px, calc((100vw - 640px) / 8.75), 26px); }');
+        accepts('.t-neo .item { width: calc(100% / 0.78); padding: calc(1px * 520 / 34); }');
+        accepts('.t-neo .item { grid-area: 1 / 2; aspect-ratio: 16 / 9; }');
+        accepts('.t-neo .item { width: calc(10px / (2 + 3)); }');
+        assert.deepEqual(lengthDivisors('calc(1px/-2) calc(1px / 2e1) calc(1px/ calc(2*3))'), []);
+        assert.deepEqual(lengthDivisors('calc(1px / 1e1px) calc(1px / 1%) calc(4 / 2px)'), ['1e1px', '1%', '2px']);
+    });
+
+    it('finds none in a look sheet a run serves, and none in stall.css or window.css', () => {
+        for (const sheet of SERVED) {
+            if (!['look', 'private', 'fixture', 'base', 'screen'].includes(sheet.role)) continue;
+            const found = [];
+            for (const m of blankComments(sheet.css).matchAll(/:([^;{}]+)[;}]/g)) found.push(...lengthDivisors(m[1]));
+            assert.deepEqual(found, [], sheet.path);
+        }
     });
 });
 

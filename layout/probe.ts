@@ -14,9 +14,11 @@
  */
 // First: it listens for the policy's refusals from the page's first module statement.
 import { cspRefusals, type CspRefusal } from './cspWatch';
+import { LOOK_CONTAINER } from '../scripts/workshop-css.mjs';
+import { holds, wallPassSizes } from '../scripts/wall-conditions.mjs';
 import { holdOff, textShadowHeirs } from './holdOff';
 import { PAY_QR_NARROWEST_PX, QR_SVG_QUIET_MODULES, cheapestOf, listingsInShopOrder, qrSvg, renderStall } from '../src/ui/render';
-import { wallFigureTier } from '../src/ui/window';
+import { WINDOW_QR_MIN_PX, wallFigureTier } from '../src/ui/window';
 import { TICKER_ITEMS_PER_PASS } from '../src/ui/broadcast';
 import { isUnbuyable } from '../src/domain/money';
 import type { StallView } from '../src/domain/state';
@@ -4827,9 +4829,16 @@ const SLIVER_ROLES = /^window-step-/;
 /**
  * The payment's two lines outside the lines' scroller (2026-09-24): what
  * they say is what the scroller may hide, so they are held whole like a
- * control.
+ * control. And the plate's own notes (`.sw-pay-note`: `PAY_NOTE_DIRECT`,
+ * `PAY_NOTE_FINAL`, and the feeds' disagreement where it stands; the
+ * wall-container build critic's P1-2, D-2026-11-11-09): a wall composition
+ * may lay the wall out per composition, and the contrast and honest-display
+ * reads run at 1280 and 1920 only, so a look that cut "the payment is
+ * final" to nothing on the portrait walls (`overflow: hidden` at rest,
+ * `max-height: 0` under the portrait ≤1500 condition) read green on every
+ * pass. Held whole here, on every wall pass.
  */
-const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"]';
+const WALL_HELD = '[data-role="pay-lines-more"], [data-role="pay-borrowed"], .sw-pay-note';
 let wallControlChecks = 0;
 const wallControlRoles: Record<string, number> = {};
 /** The same roles per look (8e2): a carried look owes every role on its own walls. */
@@ -4890,6 +4899,139 @@ function statusLineFaults(screen: string, label: string): Failure[] {
     return out;
 }
 
+/*
+ * **The wall's conditions, echoed** (STEP-WALL-CONTAINER, D-2026-11-11-08).
+ * A first-party look may lay the wall out under window.css's own
+ * `@container sw` conditions (`LOOK_CONTAINER`, `scripts/workshop-css.mjs`),
+ * and which of them a paint entered depends on the frame's CONTENT box —
+ * a decoration or a look that pads the frame moves it (the Awning's 132px
+ * puts 1280x800 under 740, a scratch-page measurement: 740 is not echoed,
+ * being excluded). So the page adopts one constructed sheet that
+ * sets, for each condition `i`, a custom property `--probe-wall-cq-<i>` on
+ * the frame's children under that condition, and reads it back: custom
+ * properties only, which paint nothing, and which the dress and figure
+ * rules leave aside. On for the whole page.
+ */
+const WALL_ECHO_CLASS = 'probe-wall-cq';
+const wallEchoSheet = new CSSStyleSheet();
+wallEchoSheet.replaceSync(
+    LOOK_CONTAINER.map((condition, i) => `@container sw ${condition}{.stall.shop-window>*,.${WALL_ECHO_CLASS}>*{--probe-wall-cq-${i}:1}}`).join('\n'),
+);
+document.adoptedStyleSheets = [...document.adoptedStyleSheets, wallEchoSheet];
+
+/** The echo vector of one element under a frame: one `'1'`/`'0'` per `LOOK_CONTAINER` condition, in order. */
+function wallEchoOf(child: Element): string {
+    const cs = getComputedStyle(child);
+    return LOOK_CONTAINER.map((_, i) => (cs.getPropertyValue(`--probe-wall-cq-${i}`).trim() === '1' ? '1' : '0')).join('');
+}
+
+/**
+ * **`the-wall-condition-echo-agrees-with-this-chrome`**: once a page, the
+ * echo held to the evaluator every reader of the conditions shares
+ * (`holds`, `scripts/wall-conditions.mjs`). Hidden boxes, `container: sw /
+ * size`, are laid out off screen at every wall pass's size, at 1280x900
+ * with 132px of top padding (the Awning's: the condition reads the content
+ * box), and at the edges the conditions draw (a square is portrait; 901 is
+ * the first height over 900; 767.98 is the narrow portrait's last width),
+ * each with one child whose echo is read; any condition on which Chrome and
+ * `holds` disagree fails the pass. Taken away in the same task.
+ */
+function wallConditionSelfCheck(): { cases: number; disagree: string[] } {
+    const disagree: string[] = [];
+    const cases: { width: number; height: number; pad: number; name: string }[] = [
+        ...wallPassSizes().map((s) => ({ ...s, pad: 0 })),
+        { name: '1280x900 under 132px of padding', width: 1280, height: 900, pad: 132 },
+        { name: 'a square', width: 1000, height: 1000, pad: 0 },
+        { name: '901 tall', width: 1280, height: 901, pad: 0 },
+        { name: '767.98 wide', width: 767.98, height: 1000, pad: 0 },
+        { name: '1279.98 wide', width: 1279.98, height: 800, pad: 0 },
+    ];
+    const host = document.createElement('div');
+    const set = (el: HTMLElement, css: string) => {
+        for (const decl of css.split(';')) {
+            const at = decl.indexOf(':');
+            if (at > 0) el.style.setProperty(decl.slice(0, at).trim(), decl.slice(at + 1).trim(), 'important');
+        }
+    };
+    set(host, 'position: fixed; top: 0px; left: -40000px; width: 0px; height: 0px; overflow: visible; visibility: hidden; margin: 0; padding: 0; transform: none; contain: none');
+    try {
+        const built = cases.map((c) => {
+            const box = document.createElement('div');
+            box.className = WALL_ECHO_CLASS;
+            set(box, `position: absolute; top: 0px; left: 0px; display: block; box-sizing: content-box; margin: 0; border: 0; padding: ${c.pad}px 0 0 0; width: ${c.width}px; height: ${c.height - c.pad}px; container-name: sw; container-type: size`);
+            const child = document.createElement('div');
+            box.append(child);
+            host.append(box);
+            return { c, child };
+        });
+        document.body.append(host);
+        for (const { c, child } of built) {
+            const chrome = wallEchoOf(child);
+            const said = LOOK_CONTAINER.map((condition) => (holds(condition, c.width, c.height - c.pad) ? '1' : '0')).join('');
+            if (chrome !== said) {
+                const off = LOOK_CONTAINER.flatMap((condition, i) => (chrome[i] === said[i] ? [] : [`${condition} (Chrome ${chrome[i] === '1' ? 'enters' : 'does not enter'} it)`]));
+                disagree.push(`${c.name} (${c.width}x${c.height}${c.pad > 0 ? `, padded ${c.pad}px` : ''}): the echo and holds() disagree on ${off.join('; ')}`);
+            }
+        }
+    } catch (e) {
+        disagree.push(`the self-check threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
+    } finally {
+        host.remove();
+    }
+    return { cases: cases.length, disagree };
+}
+
+/**
+ * **`every-wall-cell-a-look-uses-is-painted`**'s page half: on every wall
+ * paint, the echo read off the painted frame's first child, by look class
+ * and variant, each vector once. The runner reads each painted look's sheet,
+ * takes the conditions it uses and fails a look whose combinations were not
+ * all entered on some wall paint of the run (`wallCellOwedFaults`).
+ */
+const wallConditionsByClass: Record<string, Record<string, Set<string>>> = {};
+function wallConditionsRead(variant: string): void {
+    const frame = document.querySelector<HTMLElement>('#app .stall.shop-window');
+    const child = frame?.firstElementChild;
+    if (frame === null || child === null || child === undefined) return;
+    ((wallConditionsByClass[measuringClass] ??= {})[variant] ??= new Set()).add(wallEchoOf(child));
+}
+
+/**
+ * **`the-wall-code-never-paints-below-its-floor`** (STEP-WALL-CONTAINER): on
+ * every wall paint, every code under the frame — the Cycle card's, Browse's
+ * shop code, the payment plate's — painted at least `WINDOW_QR_MIN_PX` on
+ * its side, its turn undone (`min(width, height) / (|cos θ| + |sin θ|)`, θ
+ * as `angleOf` reads it), half a pixel of rounding allowed. Until then the
+ * floor was held only to window.css's text, and a look that shrank the code
+ * to 200px (4.08px a module) passed 1d and the quiet zone; a look's
+ * container rule could do it in one composition. A code with no box is not
+ * read here: 1a fails it (`nothing-covers-money-or-a-protected-box`, "has no
+ * box at all"; the build critic's plant B at the tablet). Counted per look
+ * (`wallCodeFloorByClass`); every wall pass owes a read on every look it
+ * painted (`probe-coverage.mjs`).
+ */
+const WALL_CODE_FLOOR_CHECK = 'the-wall-code-never-paints-below-its-floor';
+const wallCodeFloorByClass: Record<string, number> = {};
+function wallCodeFloorFaults(screen: string, label: string): Failure[] {
+    const out: Failure[] = [];
+    for (const svg of document.querySelectorAll<SVGElement>('#app .stall.shop-window svg.qr')) {
+        const r = svg.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        const angle = angleOf(svg);
+        const side = Math.min(r.width, r.height) / (Math.abs(Math.cos(angle)) + Math.abs(Math.sin(angle)));
+        wallCodeFloorByClass[measuringClass] = (wallCodeFloorByClass[measuringClass] ?? 0) + 1;
+        if (side < WINDOW_QR_MIN_PX - 0.5) {
+            out.push({
+                screen,
+                theme: label,
+                check: WALL_CODE_FLOOR_CHECK,
+                detail: `${codeName(svg)} paints ${side.toFixed(1)}px on its side, under the wall's ${WINDOW_QR_MIN_PX}px floor (WINDOW_QR_MIN_PX)`,
+            });
+        }
+    }
+    return out;
+}
+
 type Span = { lo: number; hi: number };
 
 function wallCuts(screen: string, label: string): Failure[] {
@@ -4903,6 +5045,30 @@ function wallCuts(screen: string, label: string): Failure[] {
     // them, and the cover check forgives a point outside its clips.
     for (const control of frame.querySelectorAll<HTMLElement>(`button, a[href], input, select, ${PROTECTED}, ${WALL_HELD}`)) {
         const own = control.getBoundingClientRect();
+        /*
+         * A held line is read whole by its own box too (the build critic's
+         * P1-2): a box laid out at no height, or one whose own overflow
+         * hides its text, cuts the sentence with every ancestor clip
+         * standing clear of it — `max-height: 0` under `overflow: hidden`
+         * left "the payment is final" at height 0, and a control check that
+         * skips a box with no area read it as absent. A line not rendered
+         * at all (`hidden`, no client rect) is absent, not cut.
+         */
+        if (control.matches(WALL_HELD) && control.getClientRects().length > 0 && (control.textContent ?? '').trim() !== '') {
+            const cs = getComputedStyle(control);
+            const cutOwn =
+                own.width === 0 || own.height === 0
+                    ? `is laid out at ${own.width.toFixed(1)}x${own.height.toFixed(1)}`
+                    : cs.overflowY !== 'visible' && control.scrollHeight > control.clientHeight + 1
+                      ? `hides ${control.scrollHeight - control.clientHeight}px of its own text from below (overflow-y: ${cs.overflowY})`
+                      : cs.overflowX !== 'visible' && control.scrollWidth > control.clientWidth + 1
+                        ? `hides ${control.scrollWidth - control.clientWidth}px of its own text sideways (overflow-x: ${cs.overflowX})`
+                        : undefined;
+            if (cutOwn !== undefined) {
+                out.push({ screen, theme: label, check: WALL_CUT_CHECK, detail: `${describe(control)} ${cutOwn}: a held line is read whole on the wall` });
+                continue;
+            }
+        }
         if (own.width === 0 || own.height === 0) {
             continue;
         }
@@ -12499,6 +12665,8 @@ for (const screen of measured) {
             failures.push(...unbuyableFaults(screen, label));
             failures.push(...wallCuts(screen, label));
             failures.push(...statusLineFaults(screen, label));
+            failures.push(...wallCodeFloorFaults(screen, label));
+            wallConditionsRead(worn.length === 0 ? 'bare' : worn.map((row) => row.cls ?? row.label).join('+'));
             failures.push(...payLinesSayWhatTheyHide(screen, label));
             failures.push(...cardFigureFaults(screen, label));
             streamTierRead();
@@ -15891,6 +16059,8 @@ const outOfFlowStart = performance.now();
 const outOfFlowCheck = outOfFlowSelfCheck();
 const outOfFlowMs = performance.now() - outOfFlowStart;
 for (const detail of outOfFlowCheck.disagree) failures.push({ screen: 'probe page', theme: '-', check: 'holds-out-of-flow-agrees-with-this-chrome', detail });
+const wallConditionCheck = wallConditionSelfCheck();
+for (const detail of wallConditionCheck.disagree) failures.push({ screen: 'probe page', theme: '-', check: 'the-wall-condition-echo-agrees-with-this-chrome', detail });
 const triggerCheck = triggerSelfCheck();
 if (triggerCheck.problem !== undefined) failures.push({ screen: 'probe page', theme: '-', check: 'the-trigger-fires-on-a-planted-mover', detail: triggerCheck.problem });
 const groundCheck = groundSelfCheck();
@@ -16018,6 +16188,15 @@ const verdict = {
     /* `holds-out-of-flow-agrees-with-this-chrome`: the cases read and how many of each kind of child Chrome held, its disagreements (also failures), and its own time (a clock). */
     outOfFlowCheck,
     outOfFlowMs,
+    /* `the-wall-condition-echo-agrees-with-this-chrome`: the planted frames read and the conditions Chrome and `holds` disagreed on (also failures). */
+    wallConditionCheck,
+    /* The wall conditions in the order the echo reads them (`LOOK_CONTAINER`), and the echoes each look's wall paints read, per variant (`every-wall-cell-a-look-uses-is-painted`). */
+    wallConditionEcho: [...LOOK_CONTAINER],
+    wallConditionsByClass: Object.fromEntries(
+        Object.entries(wallConditionsByClass).map(([cls, byVariant]) => [cls, Object.fromEntries(Object.entries(byVariant).map(([variant, vectors]) => [variant, [...vectors].sort()]))]),
+    ),
+    /* Wall codes held to their floor, per look (`the-wall-code-never-paints-below-its-floor`). */
+    wallCodeFloorByClass,
     /* `the-trigger-fires-on-a-planted-mover`: the meets the real trigger counted over a planted box, whether it named the node (a failure otherwise), and its time (a clock). */
     triggerCheck,
     /* `the-ground-read-fails-a-planted-ground`: the planted cases the real ground read went through, what each read wrongly (also failures), and its time (a clock). */
