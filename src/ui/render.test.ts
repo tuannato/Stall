@@ -3,6 +3,8 @@ import { encodeCashAddress } from 'ecashaddrjs';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { brandOnSignProblems, sealPlacementProblems } from '../../scripts/look-seals.mjs';
+import { guardSheets } from '../../scripts/served-sheets.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDoorTyping } from './doorTyping';
 import { ICON_HERO_SIZE, ICON_HOST, iconUrl } from '../domain/icons';
@@ -2635,6 +2637,33 @@ describe('the-sellers-sign-carries-no-brand-mark', () => {
         expect(mark.getAttribute('src'), 'the logo asset is wired').toBeTruthy();
         expect(mark.alt, 'decorative: the wordmark beside it announces identity').toBe('');
         expect(brand.firstElementChild).toBe(mark);
+    });
+
+    /**
+     * The DOM half above is one road; a sheet is the other. Widened by the
+     * static scan of step 8g6 (`scripts/look-seals.mjs`): no served sheet —
+     * a private look's included — paints one of Stall's brand marks
+     * (`BRAND_FILES`, read by their bytes) in a rule on the page's or the
+     * wall's sign, and a look's own seal, pinned by hash in `LOOK_SEALS`,
+     * paints only under its own look and only on the sign
+     * (`the-seal-paints-only-under-its-own-look`). **Stated limit**: the
+     * scan knows those files by their bytes; it cannot judge any other
+     * picture a look's sheet paints on the sign, which stays the private
+     * review's and step 9's release diff's.
+     */
+    it('no served sheet paints a brand mark on the sign, nor a seal off its own look', async () => {
+        const sheets = await guardSheets();
+        expect(brandOnSignProblems(sheets)).toEqual([]);
+        expect(sealPlacementProblems(sheets).problems).toEqual([]);
+        const planted = sheets.map((sheet) =>
+            sheet.path === 'src/ui/theme-modern.css'
+                ? { ...sheet, css: `${sheet.css}\n.t-modern .stall-sign::before { background-image: url(./logo-mark.png); }\n` }
+                : sheet,
+        );
+        expect(planted.some((sheet) => sheet.css.includes('logo-mark.png')), 'the shipped sheet is in the list').toBe(true);
+        expect(brandOnSignProblems(planted)).toEqual([
+            "src/ui/theme-modern.css: url(./logo-mark.png) paints Stall's brand mark on the seller's sign (.t-modern .stall-sign::before)",
+        ]);
     });
 });
 
