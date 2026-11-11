@@ -2210,29 +2210,40 @@ money path this app can have, because nothing on it is derived.
   three height bands (1920x720); portrait up to 1500 tall 1080 wide and over
   (1080x1080, 1200x1400); and portrait over 1500 tall under 768 wide and
   from 768 to 1079 wide (900x1600 and 864x1536, two of the sizes already
-  known red). A first-party look's conditions are held to these cells as
-  the look's OWN conditions tell sizes apart
-  (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`, strict:
-  it refuses): every combination of them must hold a wall pass size, and a
-  cell the look's conditions do not separate counts as painted by any pass
-  inside it (its rules at rest on a landscape frame over 1200 tall count as
-  painted by the portrait pass, which shares no condition of the look's
-  there). So it is not "a height step and a width step": {portrait ≤1500,
-  landscape ≤1919.98 wide} and {landscape ≤900, portrait ≤1079.98 wide} are
-  accepted, {landscape ≤900, landscape ≤1919.98 wide} is refused although
-  the same passes enter both, and window.css's own four main compositions
-  {landscape ≤900, landscape 901–1200, portrait, portrait ≤1500} are refused
-  at 1500x1350, a landscape frame over 1200 tall that no pass paints; the
-  way through is to write the canvas's rules at rest. 14 of the 66 pairs of
-  admitted conditions are refused (the build critic's count, 2026-11-11).
-  The sets the 8g0 spike for the private look at 0x04 needs, {landscape ≤900,
-  portrait ≤1500} with 901–1200 or ≤790 added, are accepted. **Two passes would open
-  most of it**: 1280x1024 and 2560x1440, every wall screen on every look, at
-  about 16s each (the four off-size walls took 15.7–16.7s each on their tabs
-  at two tabs, 2026-10-20); whether main is green there is not known (the
-  scratch runs of 2026-10-19 read 0 failures at both by that day's rules,
-  since superseded). Each added pass is a new size every wall money rule
-  then holds, and a red one cannot be added alone. The owner's call.
+  known red). **A first-party look's conditions are held to the cells they
+  make together with window.css's own** (since 2026-11-11, CRITIC-STEP-8G5's
+  P2; `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`,
+  `unpaintedLookCells`, strict: it refuses): every cell where one of the
+  look's conditions holds, cut over the look's conditions and all thirteen of
+  window.css's preludes (24 cells, 9 painted), must hold a wall pass size,
+  because there the look's rules and window.css's rules apply together. Cut
+  over the look's own conditions alone, as it was built, every single
+  condition passed, and the canvas's `(orientation: landscape) and
+  (min-height: 901px) and (max-height: 1200px)` let the private look at 0x04
+  cover money at 1280x1024 (the critic's scratch run, 63 failures). **Today
+  no look may use any `@container sw` block**: each of the twelve, alone,
+  meets window.css in an unpainted cell, so every set is refused too, the 8g0
+  spike's sets for the private look at 0x04 among them, and that look's block
+  is refused under its selection until the passes exist. The cheapest ways
+  in, by condition (one pass per unpainted cell, a size in each):
+  `(orientation: portrait) and (max-height: 1500px)` with one, a portrait
+  frame up to 1500 tall 1080 wide or more (1080x1080, 1200x1400);
+  `(orientation: portrait) and (max-width: 767.98px)` with one, portrait over
+  1500 tall under 768 wide (720x1600); **the canvas's condition with two,
+  1280x1024 and a landscape frame 901–1200 tall under 1280 wide (1200x960) —
+  1280x1024 alone is not enough**, since at 1024x960 window.css's
+  `(max-width: 1279.98px)` rules meet it too; `(orientation: portrait) and
+  (max-width: 1079.98px)` with two, 900x1600 and 864x1536's cells (both sizes
+  already known red); the landscape height steps need the 740 cell (1280x720,
+  known red) and walls 1920 wide and over at each height band. At about 16s
+  a pass (the four off-size walls took 15.7–16.7s each on their tabs at two
+  tabs, 2026-10-20), the canvas's condition costs about 32s and puts the run
+  further past the 240s shard line; whether main is green at those sizes is
+  not known (the scratch runs of 2026-10-19 read 0 failures at 1280x1024 by
+  that day's rules, since superseded). Each added pass is a new size every
+  wall money rule then holds, and a red one cannot be added alone. The
+  owner's call. Until then a look writes its wall rules at rest, as every
+  shipped look does.
 - **A steep `clamp()` of container or viewport units still steps a layout
   at any size** (the wall-container build critic's P1-3, D-2026-11-11-09).
   A first-party look sheet may no longer divide by a length
