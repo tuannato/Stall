@@ -93,6 +93,8 @@ const moneyRead = {
     // 7b: 1b read on every look, a target held on each.
     reachByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { paints: 40, elements: 3000, reachers: 200, targets: 180, pairs: 90, would: 0, accepted: 0, throws: 0 }])),
     walkByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { elements: 300, failed: 0, layers: 300, pictures: 0, skipped: 0, unread: 0, tooMany: 0, thrown: 0 }])),
+    // STEP-WALL-CONTAINER: every wall code held to its floor, on every look.
+    wallCodeFloorByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, 12])),
     // The fourth review's PFQ: every code a pass painted, its colours read.
     qrColourByClass: Object.fromEntries(CARD_LOOKS.map((cls) => [cls, { painted: 20, read: 20 }])),
     // The fifth review's item 10: every look painted as many codes on a screen as any other.
@@ -395,7 +397,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, qrColourByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, qrColourByClass, wallCodeFloorByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -406,6 +408,8 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · wall controls read: 24 · status line asked: 50',
         );
         assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24 · status line asked: 50');
+        // STEP-WALL-CONTAINER: the wall codes held to their floor, per look, where the page read any.
+        assert.match(probeCoverageLine('tablet', { ...quiet, wallCodeFloorByClass: { 't-neo': 3 } }), / · wall codes held to their floor: t-neo 3$/);
         assert.equal(
             probeCoverageLine('tablet', {
                 ...quiet,
@@ -880,6 +884,21 @@ describe('the-wall-passes-owe-the-cycle-cards-every-step', () => {
                 0,
                 pass,
             );
+        }
+    });
+
+    it('owes the wall code floor a read on every look every wall pass painted, and a page pass none (STEP-WALL-CONTAINER)', () => {
+        for (const pass of WALLS) {
+            const read = { ...full, ...painted, wallControlRolesByClass: undefined };
+            assert.deepEqual(probeCoverageGaps(pass, read).filter((gap) => gap.startsWith('the-wall-code')), [], pass);
+            assert.deepEqual(
+                probeCoverageGaps(pass, { ...read, wallCodeFloorByClass: { ...full.wallCodeFloorByClass, 't-neo': 0 } }).filter((gap) => gap.startsWith('the-wall-code')),
+                ['the-wall-code-never-paints-below-its-floor read no code on a t-neo wall'],
+                pass,
+            );
+        }
+        for (const pass of ['mobile', 'desktop', 'narrow']) {
+            assert.deepEqual(probeCoverageGaps(pass, { ...full, ...painted, wallCodeFloorByClass: {} }).filter((gap) => gap.startsWith('the-wall-code')), [], pass);
         }
     });
 

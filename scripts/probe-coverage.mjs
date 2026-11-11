@@ -579,6 +579,13 @@ export function probeCoverageGaps(
     if (WALL_PASSES.has(pass) && !((report.statusLineChecks ?? 0) > 0)) {
         gaps.push('nothing-in-the-body-reaches-the-status-line asked nothing on a wall');
     }
+    // The wall's code held to its floor (STEP-WALL-CONTAINER): on every look a wall pass painted, some code read.
+    if (WALL_PASSES.has(pass)) {
+        const floor = report.wallCodeFloorByClass ?? {};
+        for (const cls of owing) {
+            if (!((floor[cls] ?? 0) > 0)) gaps.push(`the-wall-code-never-paints-below-its-floor read no code on a ${cls} wall`);
+        }
+    }
     // The Cycle card's ladder (2026-10-13): every step at its widest figure,
     // on every look a wall pass painted.
     if (WALL_PASSES.has(pass)) {
@@ -924,7 +931,10 @@ export function probeCoverageLine(pass, report) {
               ` · under a clip: ${perClass(report.dressClipByClass)}`) +
         (report.qrColourByClass === undefined
             ? ''
-            : ` · codes held to black on white: ${perClass(Object.fromEntries(Object.entries(report.qrColourByClass).map(([cls, q]) => [cls, q.read])))}`);
+            : ` · codes held to black on white: ${perClass(Object.fromEntries(Object.entries(report.qrColourByClass).map(([cls, q]) => [cls, q.read])))}`) +
+        (report.wallCodeFloorByClass === undefined || Object.keys(report.wallCodeFloorByClass).length === 0
+            ? ''
+            : ` · wall codes held to their floor: ${perClass(report.wallCodeFloorByClass)}`);
     if (pass === 'narrow') {
         return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
     }

@@ -179,7 +179,10 @@ function combinationProblems(sheets) {
 /** A planted private look whose sheet holds one `@container sw` block per condition, each laying nothing out but `order: 0`. */
 async function plantedWith(conditions) {
     const blocks = conditions.map((c) => `@container sw ${c} {\n    .${PLANTED_CLASS}.shop-window .stall-head { order: 0; }\n}`).join('\n');
-    const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text.replace(/@container sw[^{]*\{[^{}]*\{[^{}]*\}\s*\}/g, ''), blocks) : text));
+    // The fixture's own block (`order: 0` under the table's first condition) comes out by its exact text: a pattern would also match
+    // the comment above it, which names `@container sw`, and leave that comment open over every block planted after it.
+    const own = `@container sw ${C[0]} {\n    .${PLANTED_CLASS}.shop-window .stall-head {\n        order: 0;\n    }\n}\n`;
+    const repo = plantLooks((path, text) => (path === 'fixture/sheet.css' ? beforeReduce(text.replace(own, ''), blocks) : text));
     const rows = privateRows(await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env }));
     const row = rows.find((sheet) => sheet.lookClass === PLANTED_CLASS);
     if (row === undefined) throw new Error('the planted look was not read');
@@ -209,6 +212,10 @@ describe('a-look-uses-no-combination-of-wall-conditions-no-pass-paints', () => {
     });
 
     it('refuses a height step and a width step together, and a landscape split that leaves over 1200 tall unpainted', () => {
+        // Each plant holds exactly the conditions it names (the fixture's own block taken out first).
+        assert.deepEqual(containerConditionsOf(PLANTED.wideAndShort.css), [C[0], C[9]]);
+        assert.deepEqual(containerConditionsOf(PLANTED.overTwelveHundred.css), [C[0], C[1], C[4]]);
+        assert.deepEqual(containerConditionsOf(PLANTED.landscapeAndPortrait.css), [C[0], C[3]]);
         const wide = combinationProblems([PLANTED.wideAndShort]);
         assert.equal(wide.length, 1, wide.join('\n'));
         assert.match(wide[0], new RegExp(`\\(${PLANTED_CLASS}\\) uses @container sw \\(orientation: landscape\\) and \\(max-height: 900px\\), @container sw \\(orientation: landscape\\) and \\(max-width: 1919\\.98px\\)`));
