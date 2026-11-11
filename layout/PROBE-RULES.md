@@ -15808,6 +15808,11 @@ stated.
   units (`clamp(0px, (100cqh - 1050px) * 1000, 9999px)`) still makes a
   layout step at any size; not closed (PLAN § Open).
 
+After these fixes: `pnpm test:layout` passed in 259.7s (one-minute load 4.7
+to 5.6, straight after `pnpm test`), its contrast dump identical to main's
+first at 3633e19 (15,018 boxes, 0 moved); the look run with no selection
+passed in 52.2s.
+
 ### Cost and the dump
 
 The contrast dump is identical to main's at 3633e19 (15,018 boxes, 0 moved),
