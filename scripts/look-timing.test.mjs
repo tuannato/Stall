@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { SHARED, contrastLookLines, geometryLookLines, lookTotals, unattributedPhases } from './look-timing.mjs';
+import { SHARED, contrastLookLines, geometryLookLines, lookTotals } from './look-timing.mjs';
 
 describe('look-timing (O1: where the probe’s time goes, by look)', () => {
     it('sums per-look maps', () => {
@@ -15,18 +15,15 @@ describe('look-timing (O1: where the probe’s time goes, by look)', () => {
         assert.equal(lines[1], '    mobile: t-a 1.0s, t-b 0.5s of 2.0s');
         assert.deepEqual(geometryLookLines([]), []);
     });
-    it('splits the contrast phases by look, shared last, and holds the parts to the totals', () => {
+    it('splits the contrast phases by look, shared last, with each look’s total and its jobs’ time', () => {
         const byLook = new Map([
             ['capture', new Map([['t-a', 1000], ['t-b', 2000]])],
             ['load: ready', new Map([[SHARED, 500]])],
         ]);
-        const totals = new Map([['capture', 3000], ['load: ready', 500]]);
-        const lines = contrastLookLines(byLook, totals, { 't-a': 1200 });
+        const lines = contrastLookLines(byLook, { 't-a': 1200 });
         assert.match(lines[1], /t-a.*t-b.*\(shared\)/);
-        assert.match(lines.at(-1), /\(unattributed\)\s+0\.0s/);
-        assert.deepEqual(unattributedPhases(byLook, totals), []);
-        totals.set('capture', 3100);
-        assert.deepEqual(unattributedPhases(byLook, totals), ['capture']);
-        assert.match(contrastLookLines(byLook, totals).at(-1), /0\.1s/);
+        assert.match(lines.at(-2), /total\s+1\.0s\s+2\.0s\s+0\.5s/);
+        assert.match(lines.at(-1), /jobs \(tab time\)\s+1\.2s/);
+        assert.equal(lines.some((line) => line.includes('unattributed')), false);
     });
 });

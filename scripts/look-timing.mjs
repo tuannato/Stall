@@ -10,9 +10,10 @@
  *   reads after the loop) as its own row;
  * - each contrast phase, split by the look of the job it ran inside (an
  *   `AsyncLocalStorage` around each job in the runner): a phase called
- *   outside any job (a page load, the plan reads) is `(shared)`. Every
- *   phase's per-look parts sum to its total by construction, and the table
- *   says so in a row that must read 0 (`(unattributed)`).
+ *   outside any job (a page load, the plan reads) is `(shared)`. One adder
+ *   (`addPhase` in the runner) writes a phase's total and its look's part
+ *   together, so the parts sum to the total by construction; no row checks
+ *   it, since none could read anything but that.
  *
  * Clocks only: nothing here is a verdict, and the contrast dump does not
  * move (`node scripts/contrast-dump.mjs`). Test: `look-timing.test.mjs`.
@@ -54,11 +55,10 @@ export function geometryLookLines(passes) {
 
 /**
  * The contrast phases split by look as a table: one row per phase, one
- * column per look and `(shared)`, then each look's total, the jobs' own
- * tab time per look (`jobMs`), and the row that must read 0 — a phase
- * whose parts do not sum to its total (`phaseTotals`).
+ * column per look and `(shared)`, then each look's total and the jobs' own
+ * tab time per look (`jobMs`).
  */
-export function contrastLookLines(byLook, phaseTotals, jobMs = {}) {
+export function contrastLookLines(byLook, jobMs = {}) {
     const classes = [...new Set([...byLook.values()].flatMap((m) => [...m.keys()]))].sort((a, b) =>
         a === SHARED ? 1 : b === SHARED ? -1 : a.localeCompare(b),
     );
@@ -66,30 +66,15 @@ export function contrastLookLines(byLook, phaseTotals, jobMs = {}) {
     const width = Math.max(10, ...classes.map((cls) => cls.length + 1));
     const lines = [`    by look (tab seconds; a phase outside any job is ${SHARED}; some phases run inside others, so a look's total can pass its jobs' own time; O1)`, `    ${'phase'.padEnd(16)} ${classes.map((cls) => cls.padStart(width)).join('')}`];
     const sums = Object.fromEntries(classes.map((cls) => [cls, 0]));
-    let unattributed = 0;
     for (const [phase, map] of byLook) {
-        let parts = 0;
         const cells = classes.map((cls) => {
             const ms = map.get(cls) ?? 0;
-            parts += ms;
             sums[cls] += ms;
             return (ms === 0 ? '' : s(ms)).padStart(width);
         });
-        unattributed += Math.abs((phaseTotals.get(phase) ?? 0) - parts);
         lines.push(`    ${phase.padEnd(16)} ${cells.join('')}`);
     }
     lines.push(`    ${'total'.padEnd(16)} ${classes.map((cls) => s(sums[cls]).padStart(width)).join('')}`);
     lines.push(`    ${'jobs (tab time)'.padEnd(16)} ${classes.map((cls) => (jobMs[cls] === undefined ? '' : s(jobMs[cls])).padStart(width)).join('')}`);
-    lines.push(`    ${'(unattributed)'.padEnd(16)} ${s(unattributed)} — every phase's per-look parts sum to its total`);
     return lines;
-}
-
-/** Every phase's per-look parts against its total: the phases whose parts do not sum to it (to a microsecond), or none. */
-export function unattributedPhases(byLook, phaseTotals) {
-    const out = [];
-    for (const [phase, total] of phaseTotals) {
-        const parts = [...(byLook.get(phase)?.values() ?? [])].reduce((a, b) => a + b, 0);
-        if (Math.abs(parts - total) > 0.001) out.push(phase);
-    }
-    return out;
 }

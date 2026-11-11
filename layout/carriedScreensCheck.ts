@@ -36,18 +36,45 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CARRIED_SCREENS } from './carriedScreens';
+import { privateLookReads } from '../scripts/served-sheets.mjs';
+import { selectionFromEnv } from '../scripts/looks-selection.mjs';
+import type { PrivateLookSource } from '../src/domain/lookData';
 
 /** Each paint's tree, as a digest of the document head and the painted root. */
 type Trees = Map<string, string>;
 
+/**
+ * The time a part's paints may take (`beforeAll`): measured 27–29s a file
+ * with the fixture alone and four files at once on this Mac (6 cores), and
+ * about twice that with a selection named; four times the slower, for a
+ * machine with half the cores.
+ */
+const BEFORE_ALL_MS = 240_000;
+
 /** The parts the screens are split into, one test file each. */
 export const PARTS = 4;
 
-/** Every public look's paint of this part's screens, by `screen|class|variant`, in a build carrying the fixture or none. */
-async function paintAll(carrying: boolean, part: number): Promise<{ trees: Trees; screens: string[] }> {
+/** What `virtual:stall-private-looks` answers a build carrying `looks`. */
+type CarryingModule = { carriesPrivateLooks: boolean; privateLooks: PrivateLookSource[] };
+
+/** The selected private looks as the build hands them to the app (`privateLookReads`, the build's own entries for the target). */
+async function selectedModule(): Promise<CarryingModule> {
+    const reads = await privateLookReads();
+    if (reads.length === 0) throw new Error('a selection is named and carries no private look');
+    return {
+        carriesPrivateLooks: true,
+        privateLooks: reads.map((read) => ({ id: read.entry.id, sheetClass: read.entry.cls as `t-${string}`, sheetUrl: `/assets/sheet-${read.entry.slug}.css`, look: read.look })),
+    };
+}
+
+/** The builds the comparison is made over: the tracked fixture, and the selection when one is named. */
+const BUILDS: readonly string[] = selectionFromEnv(process.env) === undefined ? ['the tracked fixture'] : ['the tracked fixture', 'the selected private looks'];
+
+/** Every public look's paint of this part's screens, by `screen|class|variant`, in a build carrying `carrying` or none. */
+async function paintAll(carrying: CarryingModule | undefined, part: number): Promise<{ trees: Trees; screens: string[] }> {
     vi.resetModules();
-    if (carrying) {
-        vi.doMock('virtual:stall-private-looks', async () => (await import('./fixturePrivateLooks')).fixturePrivateLooksModule());
+    if (carrying !== undefined) {
+        vi.doMock('virtual:stall-private-looks', () => carrying);
     } else {
         vi.doUnmock('virtual:stall-private-looks');
     }
@@ -86,38 +113,54 @@ async function paintAll(carrying: boolean, part: number): Promise<{ trees: Trees
 export function describeCarriedScreens(part: number): void {
     describe(`a-public-screen-is-the-same-whatever-the-build-carries (part ${part + 1} of ${PARTS})`, () => {
         let bare: Trees;
-        let carrying: Trees;
+        const carrying = new Map<string, Trees>();
         let screens: string[];
         beforeAll(async () => {
             vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T12:00:00Z') });
-            ({ trees: bare, screens } = await paintAll(false, part));
-            ({ trees: carrying } = await paintAll(true, part));
-        }, 120_000);
+            const startedAt = performance.now();
+            ({ trees: bare, screens } = await paintAll(undefined, part));
+            const { fixturePrivateLooksModule } = await import('./fixturePrivateLooks');
+            for (const build of BUILDS) {
+                const module = build === 'the tracked fixture' ? fixturePrivateLooksModule() : await selectedModule();
+                carrying.set(build, (await paintAll(module, part)).trees);
+            }
+            // Measured 2026-11-11 on this Mac: 27–29s a file with the fixture alone, four files at once.
+            console.log(`a-public-screen-is-the-same-whatever-the-build-carries part ${part + 1}: ${BUILDS.length + 1} paint sets in ${((performance.now() - startedAt) / 1000).toFixed(1)}s`);
+        }, BEFORE_ALL_MS);
         afterAll(() => {
             vi.useRealTimers();
             vi.doUnmock('virtual:stall-private-looks');
             vi.resetModules();
         });
 
-        it('paints the same paints in both builds', () => {
-            expect([...carrying.keys()]).toEqual([...bare.keys()]);
-            expect(bare.size, 'every screen of the part on every public look, bare and worn').toBeGreaterThan(400);
-        });
+        for (const build of BUILDS) {
+            it(`paints the same paints in a build carrying ${build}`, () => {
+                expect([...carrying.get(build)!.keys()]).toEqual([...bare.keys()]);
+                expect(bare.size, 'every screen of the part on every public look, bare and worn').toBeGreaterThan(400);
+            });
+        }
 
         it('paints every public screen identically, except the listed ones', () => {
-            const differs = new Set<string>();
+            const differs = new Map<string, Set<string>>();
             const unlisted: string[] = [];
-            for (const [key, tree] of bare) {
-                if (carrying.get(key) === tree) continue;
-                const screen = key.split('|')[0]!;
-                differs.add(screen);
-                if (!Object.hasOwn(CARRIED_SCREENS, screen)) unlisted.push(key);
+            for (const [build, trees] of carrying) {
+                differs.set(build, new Set());
+                for (const [key, tree] of bare) {
+                    if (trees.get(key) === tree) continue;
+                    const screen = key.split('|')[0]!;
+                    differs.get(build)!.add(screen);
+                    if (!Object.hasOwn(CARRIED_SCREENS, screen)) unlisted.push(`${key} (carrying ${build})`);
+                }
             }
             expect(unlisted, 'a public paint that depends on what the build carries, on a screen CARRIED_SCREENS does not list').toEqual([]);
-            // Both ways: a listed screen whose trees never differ is a stale
-            // entry the look run pays for.
-            const stale = Object.keys(CARRIED_SCREENS).filter((screen) => screens.includes(screen) && !differs.has(screen));
-            expect(stale, 'a listed screen whose trees do not differ').toEqual([]);
+            // Both ways, and for each build: a listed screen whose trees do not
+            // differ is a stale entry the look run pays for — and a build whose
+            // carried looks moved no listed screen was never the build it was
+            // said to be (a mock that did not take).
+            for (const build of carrying.keys()) {
+                const stale = Object.keys(CARRIED_SCREENS).filter((screen) => screens.includes(screen) && !differs.get(build)!.has(screen));
+                expect(stale, `a listed screen whose trees do not differ in a build carrying ${build}`).toEqual([]);
+            }
         });
     });
 }

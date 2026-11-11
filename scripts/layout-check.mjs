@@ -48,8 +48,9 @@ import { HORIZON_WORST, horizonWorstVerdict } from './horizon-worst.mjs';
 import { FIXTURE_LOOKS_DIR, harnessSelection, refuseSelection } from './looks-selection.mjs';
 import { harnessLooks } from './harness-looks.mjs';
 import { walkPlan } from './plan-walk.mjs';
-import { GREEN_RECORD, greenLine, hashFiles, inputsDiffer, inputsRecord, readGreen, runnerClosure } from './probe-inputs.mjs';
-import { SHARED, contrastLookLines, geometryLookLines, lookTotals, unattributedPhases } from './look-timing.mjs';
+import { LOOK_MODES, lookMode } from './probe-modes.mjs';
+import { FIXED_INPUTS, GREEN_RECORD, greenLine, hashFiles, inputsDiffer, inputsRecord, readGreen, runnerClosure, trackedInputs } from './probe-inputs.mjs';
+import { SHARED, contrastLookLines, geometryLookLines, lookTotals } from './look-timing.mjs';
 import {
     ALL_VIEWPORTS,
     CANVAS,
@@ -105,8 +106,10 @@ function flag(name, fallback) {
 }
 const PROBE_CONFIG = flag('--config', 'vite.probe.config.ts');
 const LOOKS = flag('--looks', 'shipped');
-if (LOOKS !== 'shipped' && LOOKS !== 'workshop' && LOOKS !== 'carried') {
-    console.error(`layout-check: --looks is "shipped", "workshop" or "carried", not "${LOOKS}"`);
+// Every mode's decisions, one pinned table (`probe-modes.mjs`).
+const MODE = lookMode(LOOKS);
+if (MODE === undefined) {
+    console.error(`layout-check: --looks is one of ${LOOK_MODES.join(', ')}, not "${LOOKS}"`);
     process.exit(1);
 }
 /*
@@ -123,9 +126,10 @@ if (LOOKS !== 'shipped' && LOOKS !== 'workshop' && LOOKS !== 'carried') {
  * first line names the last green ordinary run and whether the probe's
  * public inputs differ from it (`probe-inputs.mjs`), and it never refuses
  * on that. Every per-look owe a carried look has in the ordinary run it has
- * here (`probeCoverageGaps`' `witnessClasses`, `look-tallies.mjs`).
+ * here (`probeCoverageGaps`' `witnessClasses`, `look-tallies.mjs`). Every
+ * branch it takes reads a field of `MODE` (`probe-modes.mjs`), pinned by
+ * `the-default-run-turns-no-look-run-branch-on`.
  */
-const CARRIED_RUN = LOOKS === 'carried';
 if (LOOKS === 'workshop') {
     // The kit's probe judges a creator's look alone (`measuredLooks`), so a
     // selection would put a look in its build that no pass reads.
@@ -150,13 +154,13 @@ const MEASURED_SELECTION = LOOKS === 'workshop' ? undefined : (SELECTION ?? { ta
 const CARRIED = await harnessLooks(MEASURED_SELECTION);
 const selectionSaid = () => {
     console.log(
-        `  ${CARRIED_RUN ? 'test:layout:look' : 'test:layout'} measures the private looks of ${CARRIED.line}` +
+        `  ${MODE.saysGreen ? 'test:layout:look' : 'test:layout'} measures the private looks of ${CARRIED.line}` +
             (SELECTION === undefined ? ' — the tracked fixture, measured by default; a selection replaces it' : '') +
-            (CARRIED_RUN ? ' — them alone, and the public looks on the screens whose tree depends on what the build carries' : ''),
+            (MODE.witnesses ? ' — them alone, and the public looks on the screens whose tree depends on what the build carries' : ''),
     );
 };
 // The look run's first line is its public looks' (`probe-inputs.mjs`), said once Chrome is found; this follows it.
-if (MEASURED_SELECTION !== undefined && !CARRIED_RUN) selectionSaid();
+if (MEASURED_SELECTION !== undefined && !MODE.saysGreen) selectionSaid();
 const PROBE_PAGE = LOOKS === 'workshop' ? 'layout/probe-workshop.html' : 'layout/probe.html';
 /*
  * The preview server and Chrome this run starts are process groups of their
@@ -196,9 +200,9 @@ const EXPECTED_SHEET_CLASSES =
  * they owe in the ordinary run — and a pass that measured no listed screen
  * must not paint them at all. Empty on every other run.
  */
-const WITNESS_CLASSES = CARRIED_RUN ? [...SHIPPED_SHEET_CLASSES, 't-skeleton'] : [];
+const WITNESS_CLASSES = MODE.witnesses ? [...SHIPPED_SHEET_CLASSES, 't-skeleton'] : [];
 /** The classes a run measures in full: on the look run the carried looks, else every expected class. */
-const FULL_CLASSES = CARRIED_RUN ? PRIVATE_SHEET_CLASSES : EXPECTED_SHEET_CLASSES;
+const FULL_CLASSES = MODE.witnesses ? PRIVATE_SHEET_CLASSES : EXPECTED_SHEET_CLASSES;
 
 /*
  * The faces every probe page owes before it measures
@@ -263,7 +267,7 @@ function sheetClassesWrong(painted, witnessed = true) {
 let carriedListed;
 function carriedEchoWrong(report) {
     const echo = report?.carriedOnly ?? null;
-    if (!CARRIED_RUN) return echo === null ? undefined : `the page measured the look run (${JSON.stringify(echo)}) on a run that did not ask for it`;
+    if (!MODE.carried) return echo === null ? undefined : `the page measured the look run (${JSON.stringify(echo)}) on a run that did not ask for it`;
     if (!Array.isArray(echo) || echo.length === 0) return `the look run asked for ?looks=carried and the page read ${JSON.stringify(echo)}`;
     const said = echo.join(',');
     carriedListed ??= said;
@@ -271,7 +275,7 @@ function carriedEchoWrong(report) {
 }
 /** Whether a pass measured a screen the look run paints the public looks on (always, on every other run). */
 function witnessed(report) {
-    return !CARRIED_RUN || (report?.screensMeasured ?? []).some((screen) => (report?.carriedOnly ?? []).includes(screen));
+    return !MODE.carried || (report?.screensMeasured ?? []).some((screen) => (report?.carriedOnly ?? []).includes(screen));
 }
 /** The look run's echo, then the painted classes, for one pass's verdict. */
 function classesWrong(report) {
@@ -279,10 +283,10 @@ function classesWrong(report) {
 }
 /** What `probeCoverageGaps` is told about the looks, the same on every pass (the look run's witnesses left out of every per-look owe). */
 const COVERAGE_LOOKS = {
-    shippedClasses: CARRIED_RUN ? [] : SHIPPED_SHEET_CLASSES,
+    shippedClasses: MODE.witnesses ? [] : SHIPPED_SHEET_CLASSES,
     privateClasses: PRIVATE_SHEET_CLASSES,
     paidPrivateClasses: PAID_PRIVATE_CLASSES,
-    skeleton: !CARRIED_RUN && EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
+    skeleton: !MODE.witnesses && EXPECTED_SHEET_CLASSES.includes('t-skeleton'),
     sheetedClasses: FULL_CLASSES.filter((cls) => cls !== 't-skeleton'),
     witnessClasses: WITNESS_CLASSES,
     kit: LOOKS === 'workshop',
@@ -374,7 +378,7 @@ const GEOMETRY_KINDS_RUN = new Set(['page', 'wall', 'narrow', 'short', 'reduced'
 }
 
 const probeUrl = (vp, extra = '') =>
-    `http://localhost:${PORT}/${PROBE_PAGE}?viewport=${vp === CANVAS ? 'canvas' : 'page'}${CARRIED_RUN ? '&looks=carried' : ''}${extra}`;
+    `http://localhost:${PORT}/${PROBE_PAGE}?viewport=${vp === CANVAS ? 'canvas' : 'page'}${MODE.carried ? `&looks=${MODE.looks}` : ''}${extra}`;
 const PORT = process.env.LAYOUT_PORT ?? '4319';
 const DEVTOOLS_PORT = process.env.LAYOUT_CDP_PORT ?? '9339';
 /**
@@ -632,7 +636,7 @@ const HORIZON_PINNED_JOBS = new Set(Object.values(HORIZON_WORST).map((at) => at.
 // record and its boxes are then the ordinary run's under the same key
 // (`contrast-dump.mjs --within`) — and a carried look's as a kit run does.
 const readsHorizonWorst = (key, cls) =>
-    LOOKS === 'workshop' || HORIZON_PINNED_JOBS.has(key) || (CARRIED_RUN && !WITNESS_CLASSES.includes(cls));
+    LOOKS === 'workshop' || HORIZON_PINNED_JOBS.has(key) || (MODE.witnesses && !WITNESS_CLASSES.includes(cls));
 
 /*
  * **The ring read** (round 8, 2026-09-25). A line that wears the outline
@@ -2992,7 +2996,7 @@ const CLIP_SKIP_CEILING = 0.3;
  */
 function coverClip(byClass) {
     // The look run paints the public looks on the listed screens alone: their points are the ordinary run's to hold.
-    if (CARRIED_RUN) return { line: '', faults: [] };
+    if (!MODE.publicTogether) return { line: '', faults: [] };
     const publicTally = coverTally(
         byClass,
         Object.keys(byClass ?? {}).filter((cls) => !PRIVATE_SHEET_CLASSES.includes(cls)),
@@ -3248,8 +3252,9 @@ const phases = new Map();
  * **And by look** (O1, `look-timing.mjs`): every contrast job runs inside
  * `jobLook` with its look's class, so a phase timed during a job is that
  * look's, across every await and on whichever tab — and one timed outside
- * any job (a page load between jobs, the plan reads) is `(shared)`. Each
- * phase's parts sum to its total by construction; the table says so.
+ * any job (a page load between jobs, the plan reads) is `(shared)`. One
+ * adder writes the total and the part together, so they agree by
+ * construction.
  */
 const jobLook = new AsyncLocalStorage();
 const phasesByLook = new Map();
@@ -3490,12 +3495,12 @@ const CHROME_VERSION = (() => {
 })();
 const PROBE_INPUTS_FILE = join(mkdtempSync(join(tmpdir(), 'stall-probe-inputs-')), 'modules.json');
 onTeardown(() => rmSync(dirname(PROBE_INPUTS_FILE), { recursive: true, force: true }));
-const GREEN = CARRIED_RUN ? readGreen() : undefined;
-if (CARRIED_RUN) {
+const GREEN = MODE.saysGreen ? readGreen() : undefined;
+if (MODE.saysGreen) {
     const files = GREEN === undefined ? [] : Object.keys(GREEN.inputs.hashes);
     const closure = runnerClosure();
     console.log(
-        `  ${greenLine(GREEN, { hashes: hashFiles([...new Set([...files, ...closure])]), chrome: CHROME_VERSION, node: process.version, tabs: CONTRAST_TABS })}`,
+        `  ${greenLine(GREEN, { hashes: hashFiles([...new Set([...files, ...trackedInputs(), ...FIXED_INPUTS, ...closure])]), chrome: CHROME_VERSION, node: process.version, tabs: CONTRAST_TABS })}`,
     );
     selectionSaid();
 }
@@ -3513,10 +3518,10 @@ try {
             chrome: CHROME_VERSION,
             tabs: CONTRAST_TABS,
         });
-        if (CARRIED_RUN && GREEN !== undefined) {
+        if (MODE.saysGreen && GREEN !== undefined) {
             const differ = inputsDiffer(GREEN.inputs, probeInputs);
             console.log(
-                `  after the build: the probe build's ${probeInputs.modules.length} public module(s) and the runner's scripts ` +
+                `  after the build: the ${Object.keys(probeInputs.hashes).length} public input file(s) (every tracked file under src/, layout/, public/, workshop/ and scripts/ less the fixture's private-look repository, the manuals and the tests; the build's ${probeInputs.modules.length} modules; the configs and the lockfile) ` +
                     (differ.length === 0 ? 'are the last green pnpm test:layout\'s' : `differ from the last green pnpm test:layout's: ${differ.join('; ')}`),
             );
         }
@@ -4971,7 +4976,7 @@ try {
          * look's, or a public look's on a listed screen — a page that planned
          * the ordinary run's jobs would walk them all under this run's name.
          */
-        if (CARRIED_RUN) {
+        if (MODE.carried) {
             const listed = (carriedListed ?? '').split(',');
             const stray = plan.filter((job) => !PRIVATE_SHEET_CLASSES.includes(job.sheetClass) && !listed.includes(job.screen));
             if (stray.length > 0 || carriedListed === undefined) {
@@ -5487,7 +5492,7 @@ try {
                     .flatMap(([, codes]) => [...codes]),
             );
             // On the look run the public looks are painted on the listed screens alone: what they owe by name is the ordinary run's.
-            const unreadCodes = CARRIED_RUN ? [] : CODES_REQUIRED.filter((code) => !publicCodes.has(code));
+            const unreadCodes = !MODE.publicTogether ? [] : CODES_REQUIRED.filter((code) => !publicCodes.has(code));
             if (unreadCodes.length > 0) {
                 verdicts.push(`a-code-keeps-its-quiet-zone-white read no quiet zone on ${unreadCodes.join(', ')}`);
             }
@@ -5497,7 +5502,7 @@ try {
                     .filter(([cls]) => !PRIVATE_SHEET_CLASSES.includes(cls))
                     .flatMap(([, codes]) => [...codes]),
             );
-            const unreadModules = CARRIED_RUN ? [] : CODES_REQUIRED.filter((code) => !publicModules.has(code));
+            const unreadModules = !MODE.publicTogether ? [] : CODES_REQUIRED.filter((code) => !publicModules.has(code));
             if (unreadModules.length > 0) verdicts.push(`${MODULE_CHECK} read no module of ${unreadModules.join(', ')}`);
         }
         /*
@@ -5590,7 +5595,7 @@ try {
                 console.log(`  carried looks on their own tallies (a-carried-look-is-held-to-its-own-skip-ceilings): ${PRIVATE_SHEET_CLASSES.map((cls, i) => `${cls}: line skips ${said[i]}`).join('; ')}`);
             }
         }
-        if (LOOKS === 'shipped' || CARRIED_RUN) {
+        if (LOOKS === 'shipped' || MODE.witnesses) {
             // The sign's name is read on every shipped look, bare and worn
             // (D14): a name the pass stopped reading on one is named.
             const read = new Set([...nameLeast.keys()].map((at) => at.replace(/ \(ring\)$/, '')));
@@ -5599,7 +5604,7 @@ try {
             // no worn job to read).
             const wornInPlan = new Set(plan.filter((j) => j.flags === 0xffff).map((j) => j.sheetClass));
             const owed = [
-                ...(CARRIED_RUN ? [] : SHIPPED_SHEET_CLASSES).flatMap((cls) => [`name ${cls}`, `name ${cls} + worn`]),
+                ...(MODE.witnesses ? [] : SHIPPED_SHEET_CLASSES).flatMap((cls) => [`name ${cls}`, `name ${cls} + worn`]),
                 ...PRIVATE_SHEET_CLASSES.flatMap((cls) => [`name ${cls}`, ...(wornInPlan.has(cls) ? [`name ${cls} + worn`] : [])]),
             ];
             const unreadNames = owed.filter((at) => !read.has(at));
@@ -5786,13 +5791,7 @@ try {
     );
     for (const line of phaseTable(performance.now() - contrastStartedAt, tabs.length)) console.log(line);
     {
-        const totals = new Map([...phases].map(([phase, { ms }]) => [phase, ms]));
-        for (const line of contrastLookLines(phasesByLook, totals, jobMsByLook)) console.log(line);
-        const off = unattributedPhases(phasesByLook, totals);
-        if (off.length > 0) {
-            // A clock, never a verdict: said, so a split that stopped adding up is seen.
-            console.error(`  contrast by look: the per-look parts of ${off.join(', ')} do not sum to the phase's total`);
-        }
+        for (const line of contrastLookLines(phasesByLook, jobMsByLook)) console.log(line);
         /*
          * The seconds this run spent on the private looks it carries (O1):
          * their geometry measuring (page seconds) and their contrast jobs
@@ -6016,9 +6015,9 @@ try {
             failed = true;
             for (const f of clearRefusals) console.error(`✗ transparency: ${f.check}: ${f.detail}`);
         }
-        if (sheetClassesWrong([...clearClasses], !CARRIED_RUN) !== undefined) {
+        if (sheetClassesWrong([...clearClasses], !MODE.carried) !== undefined) {
             failed = true;
-            console.error(`✗ transparency: ${sheetClassesWrong([...clearClasses], !CARRIED_RUN)}`);
+            console.error(`✗ transparency: ${sheetClassesWrong([...clearClasses], !MODE.carried)}`);
         } else if (dim.length === 0 && clearRefusals.length === 0) {
             console.log(
                 `✓ transparency (${CLEAR_SCREENS.join(', ')} @canvas): RGBA capture, ${clearPct}% of the frame ` +
@@ -6131,7 +6130,7 @@ try {
 if (appConfigMoved()) failed = true;
 if (interruptedCode() !== undefined) failed = true;
 // A green ordinary run records what its public verdict was a function of, for the look run's first line (`probe-inputs.mjs`).
-if (!failed && LOOKS === 'shipped' && probeInputs !== undefined) {
+if (!failed && MODE.recordsGreen && probeInputs !== undefined) {
     mkdirSync(dirname(GREEN_RECORD), { recursive: true });
     writeFileSync(GREEN_RECORD, `${JSON.stringify({ at: new Date().toISOString(), rev: gitRev(), selection: CARRIED.line, inputs: probeInputs }, null, 1)}\n`);
     console.log(`  recorded as the last green pnpm test:layout of this checkout: ${GREEN_RECORD}`);

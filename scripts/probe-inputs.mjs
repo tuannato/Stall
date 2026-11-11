@@ -9,31 +9,38 @@
  * which a commit touching only a manual moves.
  *
  * The inputs:
- * - **the probe build's public modules**: every real file Rollup loaded for
- *   the probe build (`probeInputsPlugin`, in `vite.probe.config.ts`, which
- *   writes the list where the runner asks, `STALL_PROBE_INPUTS`), the
- *   app's sources, the harness's, the stylesheets, the faces and every
- *   `node_modules` file the bundle took — less the private parts: the
- *   selection's directory, the files the private-looks build writes for the
- *   looks it carries (`MATERIALISED_PREFIX`) and the virtual module that
- *   names them;
+ * - **every tracked file the probe build or the runner can read**
+ *   (`trackedInputs`): `git ls-files` under `src/`, `layout/`, `public/`,
+ *   `workshop/` and `scripts/`, hashed from the working bytes — the app's
+ *   sources and stylesheets, the faces, every piece of art a stylesheet
+ *   names (a `url()` is not a module, so Rollup's list never held one), the
+ *   harness and its fixture look's art, and the runner's scripts — less the
+ *   tracked fixture's private-look repository (`layout/fixture-private-looks/`,
+ *   which is a carried look's and changes only the look run's subject), the
+ *   manuals (`*.md`) and the tests (`*.test.*`, which neither reads);
+ * - **the probe build's modules outside the tree**: every real file Rollup
+ *   loaded that is not tracked (the `node_modules` files the bundle took),
+ *   listed by `probeInputsPlugin` in `vite.probe.config.ts` where
+ *   `STALL_PROBE_INPUTS` names, less the selection's directory, the files the
+ *   private-looks build writes for the looks it carries (`MATERIALISED_PREFIX`)
+ *   and the virtual module that names them;
  * - the configs and the lockfile, named (`FIXED_INPUTS`);
- * - **the runner's own scripts**: `layout-check.mjs` and every module it
- *   reaches by a relative import (`runnerClosure`);
+ * - the runner's own scripts by their relative imports (`runnerClosure`), a
+ *   belt over the tracked list;
  * - the Chrome, the Node and the tab count the run measured with.
  *
  * A green ordinary run records them (`.layout-dump/public-green.json`,
  * ignored by git, so any process on this machine can write it — it is a
- * printed pointer, never a gate), and the look run re-hashes the recorded
- * files from the disk before its build — a module added to the graph needs
- * an import added to a file already in it, so a change to the list is a
- * change to a recorded file — and compares the fresh list after it.
+ * printed pointer, never a gate), and the look run hashes the tracked list
+ * as it stands and the recorded files before its build, and the fresh
+ * module list after it.
  *
  * Not held, stated: the machine's own fonts (a CJK fallback the
  * `a-cjk-name-is-set-in-a-cjk-face` rule reads), Chrome's flags and
  * profile, the load on the machine, and anything a module reads at build
  * time that Rollup does not load as a module. Test: `probe-inputs.test.mjs`.
  */
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -98,6 +105,28 @@ export function probeInputsPlugin({ env = process.env, root = process.cwd() } = 
     };
 }
 
+/** The tracked directories whose files the probe build or the runner can read. */
+export const TRACKED_INPUT_DIRS = Object.freeze(['src', 'layout', 'public', 'workshop', 'scripts']);
+
+/** Whether a tracked path is one of the probe's public inputs (`trackedInputs`). */
+export function isTrackedInput(path) {
+    return (
+        TRACKED_INPUT_DIRS.some((dir) => path.startsWith(`${dir}/`)) &&
+        !path.startsWith('layout/fixture-private-looks/') &&
+        !path.endsWith('.md') &&
+        !/\.test\.[^/]*$/.test(path)
+    );
+}
+
+/** Every tracked file the probe build or runner can read, from `git ls-files` (throws when git cannot answer: a list read as empty would call every change "the same"). */
+export function trackedInputs(root = process.cwd()) {
+    const r = spawnSync('git', ['-C', root, 'ls-files', '-z', '--', ...TRACKED_INPUT_DIRS], { encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`probe-inputs: git ls-files did not answer in ${root}: ${r.stderr.trim()}`);
+    const files = r.stdout.split('\0').filter((path) => path !== '' && isTrackedInput(path));
+    if (files.length === 0) throw new Error(`probe-inputs: git ls-files listed no tracked input in ${root}`);
+    return files.sort();
+}
+
 /** `layout-check.mjs` and every module it reaches by a relative import, as paths relative to the root, sorted. */
 export function runnerClosure(entry = 'scripts/layout-check.mjs', root = process.cwd()) {
     const seen = new Set();
@@ -126,8 +155,8 @@ export function hashFiles(paths, root = process.cwd()) {
 }
 
 /** The record a run makes of its inputs: the module list it was built from, every file's hash, and the instruments. */
-export function inputsRecord({ modules, root = process.cwd(), chrome, node = process.version, tabs }) {
-    const files = [...new Set([...modules, ...FIXED_INPUTS, ...runnerClosure('scripts/layout-check.mjs', root)])].sort();
+export function inputsRecord({ modules = [], root = process.cwd(), chrome, node = process.version, tabs }) {
+    const files = [...new Set([...trackedInputs(root), ...modules, ...FIXED_INPUTS, ...runnerClosure('scripts/layout-check.mjs', root)])].sort();
     return { modules: [...modules].sort(), hashes: hashFiles(files, root), chrome, node, tabs };
 }
 
@@ -169,7 +198,9 @@ export function greenLine(green, now) {
     const differ = inputsDiffer(green.inputs, now);
     return (
         `the public looks: the last green pnpm test:layout of this checkout was ${green.at} (${green.rev ?? 'no git'}, ${green.selection ?? 'its selection not recorded'}); ` +
-        (differ.length === 0 ? "the probe's public inputs are the same as that run's" : `the probe's public inputs differ from that run's: ${differ.join('; ')}`) +
+        (differ.length === 0
+            ? "the probe's public inputs (every tracked file the build or the runner reads, faces and art included; the configs, the lockfile, Chrome, Node, the tabs) are the same as that run's"
+            : `the probe's public inputs differ from that run's: ${differ.join('; ')}`) +
         ' — this run measures the carried looks and refuses nothing on it'
     );
 }
