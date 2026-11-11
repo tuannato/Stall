@@ -2196,6 +2196,30 @@ money path this app can have, because nothing on it is derived.
   no pass on any look, before or after a look dresses `.warn`. A public
   fixture with another wallet's token would close it, sampled for contrast
   like the pay sheets; not built.
+- **The wall's container conditions cut sizes no pass paints**
+  (STEP-WALL-CONTAINER, D-2026-11-11-08: no new wall pass in that step). The
+  twelve conditions window.css composes the wall over that a pass enters
+  (`LOOK_CONTAINER`, `scripts/workshop-css.mjs`) cut the wall's sizes (short
+  side at least 680) into 21 combinations, and the nine wall passes paint 8
+  of them (`scripts/wall-conditions.mjs`, `cellsOf`). window.css's own rules
+  already meet in the other 13, measured by no pass: landscape 901–1200
+  tall from 1280 to 1919 wide (1280x1024, 1600x1000) and under 1280 wide
+  (1024x960); landscape over 1200 tall under 1280, from 1280 to 1919, and
+  1920 wide and over (2560x1440); landscape 791–870 and 871–900 tall under
+  1280 wide (1024x830); landscape under 901 tall 1920 wide and over, in its
+  three height bands (1920x720); portrait up to 1500 tall 1080 wide and over
+  (1080x1080, 1200x1400); and portrait over 1500 tall under 768 wide and
+  from 768 to 1079 wide (900x1600 and 864x1536, two of the sizes already
+  known red). A first-party look may not use a set of
+  conditions that separates any of them
+  (`a-look-uses-no-combination-of-wall-conditions-no-pass-paints`): a height
+  step and a width step together are refused today. **Two passes would open
+  most of it**: 1280x1024 and 2560x1440, every wall screen on every look, at
+  about 16s each (the four off-size walls took 15.7–16.7s each on their tabs
+  at two tabs, 2026-10-20); whether main is green there is not known (the
+  scratch runs of 2026-10-19 read 0 failures at both by that day's rules,
+  since superseded). Each added pass is a new size every wall money rule
+  then holds, and a red one cannot be added alone. The owner's call.
 - **Text enlargement cuts row figures on every look, accepted for now**
   (D-2026-11-11-03, the owner's "Ok", 2026-11-11). With a phone's text
   enlarged (measured as macOS WebKit text zoom, a stand-in for iOS and

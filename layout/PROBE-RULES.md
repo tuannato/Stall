@@ -15664,3 +15664,116 @@ these (D-2026-11-11-05) are PLAN § Open's.
   screen some other way.
 - **The canary reads**, which run through the same per-look clock, are inside
   the per-look contrast figures.
+
+## The wall's own container conditions, for a first-party look (2026-11-11; STEP-WALL-CONTAINER, D-2026-11-11-08)
+
+A first-party look sheet may now hold a top-level `@container sw <condition>`
+block for exactly the twelve conditions `LOOK_CONTAINER` lists
+(`scripts/workshop-css.mjs`): window.css's own preludes, each entered by a
+wall pass on a bare frame. The thirteenth, `(orientation: landscape) and
+(max-height: 740px)`, is entered by none and refused with that reason. Inside
+a block, layout alone (`CONTAINER_LAYOUT`). The kit still refuses
+`@container`; its README is unchanged. No served file changed: window.css,
+stall.css, the three look sheets and the app are as on main.
+
+### The table, and which passes enter each condition (bare frame)
+
+Computed by `holds` (`scripts/wall-conditions.mjs`), pinned by value in
+`the-wall-conditions-are-window-css-own-and-a-pass-enters-each`, and held to
+Chrome on every page by the echo's self-check (below):
+
+| condition | entered by |
+|---|---|
+| `(orientation: landscape) and (max-height: 900px)` | desk-wall, short-wall, side-tablet, hd-wall |
+| `(orientation: landscape) and (min-height: 901px) and (max-height: 1200px)` | canvas |
+| `(orientation: portrait)` | portrait, tablet, tall-tablet, narrow-wall |
+| `(orientation: portrait) and (max-height: 1500px)` | tablet, tall-tablet, narrow-wall |
+| `(orientation: landscape)` | canvas, desk-wall, short-wall, side-tablet, hd-wall |
+| `((orientation: landscape) and (max-height: 900px)) or ((orientation: portrait) and (max-height: 1500px))` | every wall pass but canvas and portrait |
+| `(orientation: landscape) and (max-height: 790px)` | side-tablet, hd-wall |
+| `(orientation: landscape) and (max-height: 870px)` | short-wall, side-tablet, hd-wall |
+| `(orientation: portrait) and (max-width: 767.98px)` | narrow-wall |
+| `(orientation: landscape) and (max-width: 1919.98px)` | desk-wall, short-wall, side-tablet, hd-wall |
+| `(orientation: landscape) and (max-width: 1279.98px)` | side-tablet |
+| `(orientation: portrait) and (max-width: 1079.98px)` | tablet, tall-tablet, narrow-wall |
+| excluded: `(orientation: landscape) and (max-height: 740px)` | none (the Awning's 132px puts short-wall, side-tablet and hd-wall under it) |
+
+The twelve cut the wall's sizes (short side at least 680) into 21 cells, and
+the passes paint 8 (`cellsOf`, held to a dense 4px scan over all thirteen
+conditions; PLAN § Open lists the other 13).
+
+### The static rules (pnpm test)
+
+- `a-look-queries-only-the-walls-own-conditions` and
+  `a-container-block-lays-out-and-never-paints` (`look-lint.test.mjs`). Red:
+  with the table check removed, the out-of-table plants pass; with the
+  allow-list removed, the `color` plant passes.
+- `the-wall-conditions-are-window-css-own-and-a-pass-enters-each`
+  (`wall-conditions.test.mjs`). Red: desk-wall planted at 1280x901 (the
+  matrix differs); a block added to window.css (the table no longer lists
+  every prelude, and the matrix and the scan go red with it); the parser made
+  to accept an unknown feature (the refusals go red).
+- `a-look-uses-no-combination-of-wall-conditions-no-pass-paints`: over every
+  first-party sheet a run reads; plants {landscape ≤900, landscape ≤1919.98}
+  and {landscape ≤900, 901–1200, landscape} refused, {landscape ≤900,
+  portrait ≤1500} accepted, every single condition accepted. Red: the cell
+  rule made to answer nothing, the two refused plants pass.
+- `a-container-rule-is-not-out-ranked-by-a-later-base-rule` (theme-sheets):
+  red on both shapes in a planted private look; the covering check off, red;
+  selectors split at every comma, red (and a false take-back on a real sheet).
+- `ladderRules` unwraps `@container`: reverted, the planted container-block
+  money size passes `a-look-never-sizes-inside-a-money-node`.
+- `audit-shadowing.mjs` descends `@container` as conditional; reverted, the
+  planted window.css consumer stays SHADOWED. Its output on main is identical
+  before and after (window.css's container blocks read no `--s-` var).
+- `every-sheet-reader-descends-a-container-block` (`sheet-readers.test.mjs`):
+  23 readers of `@media` in `scripts/`, `layout/` and the src tests, 7 listed
+  as descending `@container`, 16 not relevant with the reason; red on an
+  unlisted reader, a stale entry, an entry with no reason, and a descending
+  reader that never names `container` (in-test plants).
+
+### The probe rules (pnpm test:layout)
+
+- **`the-wall-condition-echo-agrees-with-this-chrome`**: the page adopts one
+  constructed sheet that sets `--probe-wall-cq-<i>` on the wall frame's
+  children under each `LOOK_CONTAINER` condition, on for the whole page; once
+  a page, hidden frames (`container: sw / size`) at every wall pass size, at
+  1280x900 under 132px of top padding, and at a square, 1280x901, 767.98 and
+  1279.98 wide, each have their echo held to `holds`. Clean tree: 12
+  conditions over 14 frames on 15 pages, every one agreed. Red (`holds` with
+  every max bound one pixel tight, through `pnpm test:layout:look`): three
+  disagreements on every one of the 15 pages (1280x900, 767.98 wide, 1279.98
+  wide). A page with no record fails the run.
+- **`every-wall-cell-a-look-uses-is-painted`**: every wall paint records the
+  echo off the painted frame, by look and variant; the runner reads each
+  measured look's own sheet and fails a look and variant whose combinations
+  were not all entered on some wall paint of the run. Printed on every run
+  ("wall conditions entered, by look and pass"). Clean tree: the tracked
+  fixture uses one condition, both combinations painted on every variant;
+  Modern under the Awning enters 790 and 870 at 1280x900 and 790 at 1280x800,
+  as the evaluator says for a content box 132px shorter. Red (a planted look
+  using the 901–1200 condition and padding its own frame 200px, which the
+  static rule cannot see): every variant fails, the canvas's content box
+  1920x880 entering ≤900 instead.
+- **`the-wall-code-never-paints-below-its-floor`**: every code under the
+  frame paints at least `WINDOW_QR_MIN_PX` (280) on its side, its turn
+  undone, half a pixel allowed; every wall pass owes a read on every look.
+  Clean tree: 0 failures. Red (planted looks through the look run): the code
+  at 200px fails every wall pass (69–84 a pass) and the desktop page pass
+  (15); the same rule inside the ≤900 landscape block fails only desktop,
+  desk-wall, short-wall, side-tablet and hd-wall.
+
+### Cost and the dump
+
+The contrast dump is identical to main's at 3633e19 (15,018 boxes, 0 moved).
+`pnpm test:layout` 239.4s on the branch against main's 237.0s, one run each
+about 20 minutes apart, not back to back; the look run with no selection
+44.8s.
+
+### Not measured, stated
+
+Sizes inside a painted cell between passes; a turned wall; a frame a
+decoration pads on a cell the static rule does not require; a look's
+container rule dead behind window.css's specificity (only `looks:diff` of the
+look shows it); a code with no box (another rule's); Safari's and Firefox's
+reading of a container `or`.
