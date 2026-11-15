@@ -46,6 +46,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOOK_FONTS_FILE } from './look-faces.mjs';
+import { LOOK_GUARD_FILE } from './private-guard.mjs';
 import { FIXTURE_LOOKS_DIR, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { PRIVATE_FILE_MODE, gitBlobAt, gitCommitOf, gitTextAt, publicLookFacts } from './private-looks.mjs';
 import { includedEntries, selectedIndex, selectedTree } from './private-looks-build.mjs';
@@ -99,6 +100,10 @@ function readLooks({ root, selection, facts, source, git, gitEnv }) {
             look,
             art,
             fontsText: plain.some((file) => file.path === at(LOOK_FONTS_FILE)) ? text(at(LOOK_FONTS_FILE)) : undefined,
+            // Its guard file (step 8i): the reasons the decor gate reads for
+            // its decorations, read beside the faces' and by tests alone
+            // (`scripts/private-guard.mjs`).
+            guardText: plain.some((file) => file.path === at(LOOK_GUARD_FILE)) ? text(at(LOOK_GUARD_FILE)) : undefined,
         });
     });
 }

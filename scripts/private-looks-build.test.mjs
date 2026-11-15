@@ -427,7 +427,7 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
         for (const [edit, pattern] of [
             [(path, text) => (path.endsWith('look.json') ? text.replace('"label"', '"script": "x", "label"') : text), /fixture\/look\.json: script: unknown field/],
             [(path, text) => (path.endsWith('look.json') ? text.replace('"f1f1', '"F1F1') : text), /fixture\/look\.json: decorations\[0\]\.tokenId/],
-            [(path, text) => (path.endsWith('sheet.css') ? text.replace('@media (prefers-reduced-motion: reduce) {\n}', '') : text), /fixture\/sheet\.css: /],
+            [(path, text) => (path.endsWith('sheet.css') ? text.replace(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*$/, '') : text), /fixture\/sheet\.css: /],
             [
                 (path, text) =>
                     path.endsWith('sheet.css')
@@ -577,7 +577,10 @@ describe('a-private-row-class-is-its-looks-own', () => {
             mkdirSync(dirname(to), { recursive: true });
             let text = execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT, encoding: 'utf8' })
                 .replaceAll('t-fixture-private', 't-other-look')
-                .replaceAll('att-fixture-dusk', 'att-other-dusk');
+                .replaceAll('att-fixture-dusk', 'att-other-dusk')
+                // The two rows below the goods (step 8i), the other look's own.
+                .replaceAll('att-fixture-low', 'att-other-low')
+                .replaceAll('att-fixture-turn', 'att-other-turn');
             if (path.endsWith('look.json')) {
                 text = text
                     .replaceAll('f1f1', 'e1e1')

@@ -17,7 +17,7 @@ export declare const PLANTED_CLASS: 't-planted-look';
 export declare const PLANTED_ROW_PREFIX: 'att-planted-';
 export declare function removePlants(): void;
 export declare function plantLooks(
-    edit?: (path: string, text: string) => string,
+    edit?: (path: string, text: string) => string | undefined,
     add?: Readonly<Record<string, string | Buffer>>,
     options?: { readonly slug?: string },
 ): PlantedLooks;

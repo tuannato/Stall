@@ -8,8 +8,9 @@
  * (ignored by exactly `/looks/` and refused by the look-art guard if forced in
  * — `scripts/licence-map-lib.mjs`). **Data only**: nothing in that repository
  * runs, so it may hold the index, its README and design log, and per look a
- * `look.json`, a `sheet.css`, an `og.png`, a `fonts.json` naming its faces
- * and an `art/` directory of SVGs, faces and the faces' OFL texts — no
+ * `look.json`, a `sheet.css`, an `og.png`, a `fonts.json` naming its faces,
+ * a `guard.json` holding its decorations' reasons for the decor gate, and
+ * an `art/` directory of SVGs, faces and the faces' OFL texts — no
  * script, no page, no symlink, no gitlink, no executable bit
  * (`privateFileProblems`).
  *
@@ -281,8 +282,14 @@ export const PRIVATE_ROOT_FILES = Object.freeze([PRIVATE_INDEX, 'README.md', 'LO
  * Files in a look's directory; the first two are required. `fonts.json`
  * names the faces its `art/` serves and the licence each travels with — the
  * build's alone, never the runtime's `look.json` (`scripts/look-faces.mjs`).
+ * `guard.json` (step 8i) holds the reasons the decor gate reads for the
+ * look's decorations — the colours each follows, art under a mood, a
+ * mover's reader, the art its own sheet lays — and is read by tests alone,
+ * never by the build or the app, so it never reaches a bundle; optional,
+ * and a look with none is judged in the one shape that needs no reason
+ * (`a-private-row-the-gate-cannot-judge-is-refused`).
  */
-export const PRIVATE_LOOK_FILES = Object.freeze(['look.json', 'sheet.css', 'og.png', 'fonts.json']);
+export const PRIVATE_LOOK_FILES = Object.freeze(['look.json', 'sheet.css', 'og.png', 'fonts.json', 'guard.json']);
 export const PRIVATE_LOOK_REQUIRED = Object.freeze(['look.json', 'sheet.css']);
 
 /** A face's licence text beside the face, in `art/`. */
@@ -322,7 +329,7 @@ const MODE_WHY = {
 };
 
 const SHAPES =
-    'index.json, README.md or LOG.md at the root; <slug>/look.json, <slug>/sheet.css, <slug>/og.png or <slug>/fonts.json; <slug>/art/<name>.svg, <name>.woff2 or LICENSE-OFL-<name>.txt';
+    'index.json, README.md or LOG.md at the root; <slug>/look.json, <slug>/sheet.css, <slug>/og.png, <slug>/fonts.json or <slug>/guard.json; <slug>/art/<name>.svg, <name>.woff2 or LICENSE-OFL-<name>.txt';
 
 /** Why `path` is not a file a private look repository may hold, or undefined. */
 function shapeProblem(path) {

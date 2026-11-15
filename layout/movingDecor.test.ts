@@ -8,22 +8,39 @@ import { fileURLToPath } from 'node:url';
 import { SHIPPED_ATTACHMENTS } from '../src/domain/attachments';
 import { PLANTED_CLASS, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
 import { guardSheets, privateRows, servedSheets } from '../scripts/served-sheets.mjs';
+import { parseGuard, type GuardMoving } from '../scripts/private-guard.mjs';
 import { MOVING_DECORATIONS } from './movingDecor';
 import { TIDE_CLASS } from './contrastPlan';
 
+type Sheets = Awaited<ReturnType<typeof guardSheets>>;
+
 /**
- * Every moving row of the private looks `sheets` carries that has no reader
- * (8e2): today every one — a private row's reader travels in its own
- * `look.json` (the plan's `guard` field, 8i), never in this public table,
- * and until that field exists a private look that moves is a look no rule
- * reads at its worst. Each `<class> (<look class>)`.
+ * Every moving row of the private looks `sheets` carries, with the reader
+ * or reason its look's guard gives it (step 8i): a private row's reader
+ * travels in its own repository's `guard.json` (`scripts/private-guard.mjs`),
+ * never in this public table. A mood that moves, and a row whose look has no
+ * guard or one refused whole, has none. Each `<class> (<look class>)`.
  */
-function privateMoversWithoutReader(sheets: Awaited<ReturnType<typeof guardSheets>>): string[] {
+function privateMovers(sheets: Sheets): { at: string; moving: GuardMoving | undefined }[] {
     return privateRows(sheets).flatMap((sheet) => {
         const look = (sheet.look.look ?? {}) as { moods?: unknown[]; decorations?: unknown[] };
-        const rows = [...(look.moods ?? []), ...(look.decorations ?? [])] as { cls?: string; motion?: boolean }[];
-        return rows.filter((row) => row.motion === true).map((row) => `${row.cls ?? '(no class)'} (${sheet.lookClass})`);
+        const guard = sheet.look.guardText === undefined ? undefined : parseGuard(sheet.look.guardText, sheet.look.look).guard;
+        const moods = (look.moods ?? []) as { cls?: string; motion?: boolean }[];
+        const decorations = (look.decorations ?? []) as { cls?: string; motion?: boolean }[];
+        return [
+            ...moods.filter((row) => row.motion === true).map((row) => ({ at: `${row.cls ?? '(no class)'} (${sheet.lookClass})`, moving: undefined })),
+            ...decorations
+                .filter((row) => row.motion === true)
+                .map((row) => ({ at: `${row.cls ?? '(no class)'} (${sheet.lookClass})`, moving: row.cls === undefined ? undefined : guard?.rows[row.cls]?.moving })),
+        ];
     });
+}
+
+/** Every moving row of the private looks `sheets` carries whose look's guard gives it no reader or reason (8e2; 8i). */
+function privateMoversWithoutReader(sheets: Sheets): string[] {
+    return privateMovers(sheets)
+        .filter((row) => row.moving === undefined)
+        .map((row) => row.at);
 }
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -94,10 +111,12 @@ describe('every-moving-decoration-has-a-reader-or-a-reason', () => {
     /*
      * The private looks a run reads (8e2): the tracked fixture always, the
      * selection when one is named. A private row's reader or reason lives
-     * with the row (8i's `guard` field), never in this public table, so the
-     * table names no private class, and a private row that moves fails here
-     * until its look carries one — red over the fixture planted with a
-     * moving trim.
+     * in its own repository's `guard.json` (step 8i), never in this public
+     * table, so the table names no private class, and a private row that
+     * moves fails here unless its look's guard gives it one, in words, and
+     * names a reader that exists — red over the fixture planted with a
+     * moving trim its guard says nothing of, and with its turn's reason
+     * taken out.
      */
     it('holds every private look a run reads: no moving row without its reader, and no private class in the public table', async () => {
         const sheets = await guardSheets();
@@ -107,16 +126,39 @@ describe('every-moving-decoration-has-a-reader-or-a-reason', () => {
         });
         expect(rows.length, 'the private looks a run reads carry rows').toBeGreaterThan(0);
         expect(privateMoversWithoutReader(sheets)).toEqual([]);
+        // The fixture's turn is a mover its guard gives a reason: the private half has a subject.
+        expect(privateMovers(sheets).map((row) => row.at)).toContain('att-fixture-turn (t-fixture-private)');
+        const files = sources();
+        for (const { at, moving } of privateMovers(sheets)) {
+            if (moving === undefined) continue;
+            if ('reader' in moving) {
+                const literal = new RegExp(`(?:'|"|\`)${moving.reader}(?:'|"|\`|\\b)`);
+                expect(files.filter((f) => literal.test(f.text)).map((f) => f.path), `${at}: ${moving.reader} is a string literal in code somewhere`).not.toEqual([]);
+                expect(moving.how.length, `${at}: how the reader reads it`).toBeGreaterThan(40);
+            } else {
+                expect(moving.reason.length, `${at}: why no reader is needed`).toBeGreaterThan(40);
+            }
+        }
         for (const row of rows) {
             if (row.cls !== undefined) expect(MOVING_DECORATIONS[row.cls], row.cls).toBeUndefined();
         }
-        const repo = plantLooks((path, text) =>
+        // A trim that moves and whose guard says nothing of it: the guard is refused whole, and every mover of the look goes without.
+        const trim = plantLooks((path, text) =>
             path === 'fixture/look.json' ? text.replace('"paint": "root",\n            "motion": false', '"paint": "root",\n            "motion": true') : text,
         );
-        const planted = await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env });
-        expect(privateMoversWithoutReader(planted).filter((entry) => entry.endsWith(`(${PLANTED_CLASS})`))).toEqual([
+        const moved = await servedSheets({ env: trim.selection, fixture: true, gitEnv: trim.env });
+        expect(privateMoversWithoutReader(moved).filter((entry) => entry.endsWith(`(${PLANTED_CLASS})`))).toEqual([
             `att-planted-trim (${PLANTED_CLASS})`,
+            `att-planted-turn (${PLANTED_CLASS})`,
         ]);
+        // The turn's reason taken out of its guard: refused.
+        const quiet = plantLooks((path, text) => (path === 'fixture/guard.json' ? text.replace(/,\s*"moving": \{[^}]*\}/, '') : text));
+        const silent = await servedSheets({ env: quiet.selection, fixture: true, gitEnv: quiet.env });
+        expect(privateMoversWithoutReader(silent).filter((entry) => entry.endsWith(`(${PLANTED_CLASS})`))).toEqual([`att-planted-turn (${PLANTED_CLASS})`]);
+        // And a look with no guard file at all.
+        const bare = plantLooks((path, text) => (path === 'fixture/guard.json' ? undefined : text));
+        const none = await servedSheets({ env: bare.selection, fixture: true, gitEnv: bare.env });
+        expect(privateMoversWithoutReader(none).filter((entry) => entry.endsWith(`(${PLANTED_CLASS})`))).toEqual([`att-planted-turn (${PLANTED_CLASS})`]);
     }, 60_000);
     afterAll(removePlants);
 

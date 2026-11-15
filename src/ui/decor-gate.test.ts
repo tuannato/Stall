@@ -44,6 +44,7 @@ import {
 } from '../domain/theme';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../../scripts/private-looks-plant.mjs';
 import { guardSheets, privateRows, servedSheets, type ServedSheetText } from '../../scripts/served-sheets.mjs';
+import { guardArtKeyProblem, guardedDecorations, parseGuard, type Guard } from '../../scripts/private-guard.mjs';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet } from '../../layout/outline';
 
 const UI_DIR = dirname(fileURLToPath(import.meta.url));
@@ -65,10 +66,30 @@ const SERVED: readonly ServedSheetText[] = await guardSheets();
 const PRIVATE = privateRows(SERVED);
 afterAll(removePlants);
 
-/** A planted private look (the fixture, renamed) with `rule` before its reduce block and `edit` over its look.json, as a run that selects it serves it. */
-async function plantedServed(rule: string, editLook: (json: string) => string = (json) => json): Promise<readonly ServedSheetText[]> {
+/** A test that plants several repositories (each a git repository read back through `servedSheets`) is given room: a loaded machine took one past vitest's 20s default. */
+const PLANTS_TIMEOUT_MS = 90_000;
+
+/**
+ * A planted private look (the fixture, renamed) with `rule` before its reduce
+ * block and `edit` over its look.json, as a run that selects it serves it;
+ * `editSheet` over its sheet first, `editGuard` over its guard file, and the
+ * files `drop` names left out.
+ */
+async function plantedServed(
+    rule: string,
+    editLook: (json: string) => string = (json) => json,
+    { drop = [], editGuard = (json) => json, editSheet = (css) => css }: { drop?: readonly string[]; editGuard?: (json: string) => string; editSheet?: (css: string) => string } = {},
+): Promise<readonly ServedSheetText[]> {
     const repo = plantLooks((path, text) =>
-        path === 'fixture/sheet.css' ? beforeReduce(text, rule) : path === 'fixture/look.json' ? editLook(text) : text,
+        drop.includes(path)
+            ? undefined
+            : path === 'fixture/sheet.css'
+              ? beforeReduce(editSheet(text), rule)
+              : path === 'fixture/look.json'
+                ? editLook(text)
+                : path === 'fixture/guard.json'
+                  ? editGuard(text)
+                  : text,
     );
     const sheets = await servedSheets({ env: repo.selection, fixture: true, gitEnv: repo.env });
     if (!privateRows(sheets).some((sheet) => sheet.lookClass === PLANTED_CLASS)) throw new Error('the planted look was not read');
@@ -259,12 +280,134 @@ const sizesOf = (body: string): string[] | undefined => {
  * in every one of them, or the rule would pass on whichever it found first.
  */
 function statesPx(name: string): boolean {
+    return statesPxIn(CSS, name);
+}
+
+/** `statesPx` over another sheet's text: a private look's (step 8i). */
+function statesPxIn(css: string, name: string): boolean {
     const decls = [
-        ...CSS.matchAll(new RegExp(`${name}\\s*:\\s*([^;}]+)`, 'g')),
+        ...css.matchAll(new RegExp(`${name}\\s*:\\s*([^;}]+)`, 'g')),
     ].map((m) => m[1] ?? '');
     // `\bpx\b` does not match `320px`: there is no word boundary between a
     // digit and a letter. A number followed by the unit is what a length is.
     return decls.length > 0 && decls.every((value) => /[\d.]px\b/.test(value));
+}
+
+/**
+ * Every background in `rules` that travels by a keyframe in `frames` and does
+ * not move a whole number of its own tile (`a background that travels moves
+ * a whole tile, or names its own proof`, whose reasons are below), with how
+ * many travelling layers it checked and the keyframes that moved one. `px`
+ * says whether a custom property is a length in the sheet the rules come
+ * from; `provesItsOwn` names the keyframes whose travel another guard
+ * proves. Shared by the shipped rows (stall.css) and, since step 8i, a
+ * guarded private row (its own look's sheet, `lookRuleProblems`).
+ */
+function travelProblems(
+    rules: readonly Rule[],
+    frames: Map<string, string>,
+    px: (name: string) => boolean,
+    provesItsOwn: ReadonlySet<string>,
+): { problems: string[]; checked: number; movers: Set<string> } {
+    const problems: string[] = [];
+    const movers = new Set<string>();
+    let checked = 0;
+    for (const rule of rules) {
+        const anim = decl(rule.body, 'animation') ?? decl(rule.body, 'animation-name');
+        const sizes = sizesOf(rule.body);
+        const declaredPos = decl(rule.body, 'background-position');
+        const rulePos = declaredPos === undefined ? undefined : parts(declaredPos);
+        if (anim === undefined) {
+            continue;
+        }
+        // Whole-token names: a keyframe called `fall` must not match
+        // `att-confetti-fall`.
+        const named = [...frames.keys()].filter((name) => new RegExp(`(?:^|[\\s,])${name}(?:[\\s,]|$)`).test(anim));
+        for (const name of named) {
+            if (provesItsOwn.has(name)) {
+                continue;
+            }
+            const body = frames.get(name)!;
+            const at = (end: string): string[] | undefined => {
+                const found = new RegExp(`${end}\\s*\\{[\\s\\S]*?background-position:\\s*([^;]+)`).exec(body)?.[1];
+                return found === undefined ? undefined : parts(found);
+            };
+            // `from` may be implicit: an absent end is the rule's own
+            // declared position, which is stationary by definition.
+            const to = at('to');
+            const from = at('from');
+            if (to === undefined && from === undefined) {
+                continue;
+            }
+            movers.add(name);
+            const ends = (to ?? from)!;
+            if (sizes === undefined) {
+                problems.push(`${name} moves ${rule.selector}'s background and that rule states no tile`);
+            }
+            ends.forEach((_, i) => {
+                const tile = (sizes?.[i] ?? 'auto').split(/\s+/);
+                const a = (from?.[i] ?? rulePos?.[i] ?? '0 0').split(/\s+/);
+                const b = (to?.[i] ?? rulePos?.[i] ?? '0 0').split(/\s+/);
+                for (let axis = 0; axis < 2; axis += 1) {
+                    const one = a[axis] ?? '0';
+                    const two = b[axis] ?? '0';
+                    // A layer that reads the same at both ends does not
+                    // travel: the aurora's wash is restated in the rain's
+                    // keyframes precisely so it stands still, and reading one
+                    // end alone called its `6%` a travel.
+                    if (one === two) {
+                        continue;
+                    }
+                    /*
+                     * A travel written as the SAME token the tile is written
+                     * in proves itself, and proves itself more strongly than
+                     * two numbers that happen to agree today: one
+                     * declaration, so they cannot drift. This is what lets a
+                     * decoration be written once and scale — `--att-rain-near`
+                     * is the tile in `background-size` and the travel in the
+                     * keyframe, and `--s-decor-scale` moves both.
+                     *
+                     * Only when the OTHER end is a true rest (`0`): `var(--a)`
+                     * → `var(--b)` is two tokens and this gate still cannot
+                     * tell whether they agree. And the token must be a
+                     * LENGTH: a percentage tile travelling that percentage is
+                     * not a lap — `background-position` resolves a percentage
+                     * against the positioning area, not the tile.
+                     */
+                    const token = /^var\(\s*(--[a-z0-9-]+)/i;
+                    const moved = token.exec(two)?.[1];
+                    if (moved !== undefined && one === '0' && token.exec(tile[axis] ?? '')?.[1] === moved && px(moved)) {
+                        checked += 1;
+                        continue;
+                    }
+                    const pxOf = (v: string): number | undefined => {
+                        if (v === '0') {
+                            return 0;
+                        }
+                        const n = /^(-?[\d.]+)px$/.exec(v)?.[1];
+                        return n === undefined ? undefined : Number(n);
+                    };
+                    const start = pxOf(one);
+                    const stop = pxOf(two);
+                    checked += 1;
+                    if (start === undefined || stop === undefined) {
+                        problems.push(`${name} layer ${i + 1} travels from "${one}" to "${two}", which this gate cannot turn into pixels — state a travel in px`);
+                        continue;
+                    }
+                    const s2 = /^([\d.]+)px$/.exec(tile[axis] ?? '')?.[1];
+                    if (s2 === undefined) {
+                        problems.push(`${name} layer ${i + 1} travels ${Math.abs(stop - start)}px with no tile stated on that axis`);
+                        continue;
+                    }
+                    const laps = Math.abs(stop - start) / Number(s2);
+                    if (!(Math.abs(laps - Math.round(laps)) < 0.001 && Math.round(laps) >= 1)) {
+                        problems.push(`${name} layer ${i + 1} travels ${Math.abs(stop - start)}px of a ${tile[axis]} tile — ${laps.toFixed(3)} laps, so it cannot wrap`);
+                    }
+                }
+            });
+        }
+    }
+    return { problems, checked, movers };
 }
 
 const SHEET_DEFINES: ReadonlySet<string> = new Set(
@@ -454,123 +597,14 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
         const frames = keyframes();
         let checked = 0;
         const movers = new Set<string>();
-
+        const problems: string[] = [];
         for (const row of paintable) {
-            for (const rule of anyRules(row.cls)) {
-                const anim = decl(rule.body, 'animation') ?? decl(rule.body, 'animation-name');
-                const sizes = sizesOf(rule.body);
-                const declaredPos = decl(rule.body, 'background-position');
-                const rulePos = declaredPos === undefined ? undefined : parts(declaredPos);
-                if (anim === undefined) {
-                    continue;
-                }
-                // Whole-token names: a keyframe called `fall` must not match
-                // `att-confetti-fall`.
-                const named = [...frames.keys()].filter((name) =>
-                    new RegExp(`(?:^|[\\s,])${name}(?:[\\s,]|$)`).test(anim),
-                );
-                for (const name of named) {
-                    if (PROVES_ITS_OWN.has(name)) {
-                        continue;
-                    }
-                    const body = frames.get(name)!;
-                    const at = (end: string): string[] | undefined => {
-                        const found = new RegExp(
-                            `${end}\\s*\\{[\\s\\S]*?background-position:\\s*([^;]+)`,
-                        ).exec(body)?.[1];
-                        return found === undefined ? undefined : parts(found);
-                    };
-                    // `from` may be implicit: an absent end is the rule's own
-                    // declared position, which is stationary by definition.
-                    const to = at('to');
-                    const from = at('from');
-                    if (to === undefined && from === undefined) {
-                        continue;
-                    }
-                    movers.add(name);
-                    const ends = (to ?? from)!;
-                    expect(
-                        sizes,
-                        `${name} moves ${rule.selector}'s background and that rule states no tile`,
-                    ).toBeDefined();
-                    ends.forEach((_, i) => {
-                        const tile = (sizes?.[i] ?? 'auto').split(/\s+/);
-                        const a = (from?.[i] ?? rulePos?.[i] ?? '0 0').split(/\s+/);
-                        const b = (to?.[i] ?? rulePos?.[i] ?? '0 0').split(/\s+/);
-                        for (let axis = 0; axis < 2; axis += 1) {
-                            const one = a[axis] ?? '0';
-                            const two = b[axis] ?? '0';
-                            // A layer that reads the same at both ends does
-                            // not travel: the aurora's wash is restated in
-                            // the rain's keyframes precisely so it stands
-                            // still, and reading one end alone called its
-                            // `6%` a travel.
-                            if (one === two) {
-                                continue;
-                            }
-                            /*
-                             * A travel written as the SAME token the tile is
-                             * written in proves itself, and proves itself more
-                             * strongly than two numbers that happen to agree
-                             * today: one declaration, so they cannot drift.
-                             * This is what lets a decoration be written once
-                             * and scale — `--att-rain-near` is the tile in
-                             * `background-size` and the travel in the
-                             * keyframe, and `--s-decor-scale` moves both.
-                             *
-                             * Only when the OTHER end is a true rest (`0`):
-                             * `var(--a)` → `var(--b)` is two tokens and this
-                             * gate still cannot tell whether they agree.
-                             */
-                            const token = /^var\(\s*(--[a-z0-9-]+)/i;
-                            const moved = token.exec(two)?.[1];
-                            if (
-                                moved !== undefined &&
-                                one === '0' &&
-                                token.exec(tile[axis] ?? '')?.[1] === moved &&
-                                // And the token must be a LENGTH. A percentage
-                                // tile travelling that percentage is not a lap
-                                // — `background-position` resolves a percentage
-                                // against the positioning area, not the tile —
-                                // so a shared `--x: 50%` would otherwise read
-                                // as proof of something it does not prove.
-                                statesPx(moved)
-                            ) {
-                                checked += 1;
-                                continue;
-                            }
-                            const px = (v: string): number | undefined => {
-                                if (v === '0') {
-                                    return 0;
-                                }
-                                const n = /^(-?[\d.]+)px$/.exec(v)?.[1];
-                                return n === undefined ? undefined : Number(n);
-                            };
-                            const start = px(one);
-                            const stop = px(two);
-                            checked += 1;
-                            expect(
-                                start !== undefined && stop !== undefined,
-                                `${name} layer ${i + 1} travels from "${one}" to "${two}", which this gate cannot turn into pixels — state a travel in px`,
-                            ).toBe(true);
-                            if (start === undefined || stop === undefined) {
-                                continue;
-                            }
-                            const s2 = /^([\d.]+)px$/.exec(tile[axis] ?? '')?.[1];
-                            expect(
-                                s2,
-                                `${name} layer ${i + 1} travels ${Math.abs(stop - start)}px with no tile stated on that axis`,
-                            ).toBeDefined();
-                            const laps = Math.abs(stop - start) / Number(s2);
-                            expect(
-                                Math.abs(laps - Math.round(laps)) < 0.001 && Math.round(laps) >= 1,
-                                `${name} layer ${i + 1} travels ${Math.abs(stop - start)}px of a ${tile[axis]} tile — ${laps.toFixed(3)} laps, so it cannot wrap`,
-                            ).toBe(true);
-                        }
-                    });
-                }
-            }
+            const read = travelProblems(anyRules(row.cls), frames, statesPx, PROVES_ITS_OWN);
+            problems.push(...read.problems);
+            checked += read.checked;
+            for (const name of read.movers) movers.add(name);
         }
+        expect(problems).toEqual([]);
         // Not one global count: every row that declares itself a mover and
         // moves a background must have contributed, or the sweep passed by
         // finding nothing on exactly the rows the rule is about.
@@ -608,18 +642,110 @@ describe('the-gate-a-submitted-decoration-must-pass', () => {
             ).toBe(true);
         }
     });
+
+    it('runs its checks over every private row its look\'s guard speaks for, the fixture\'s among them (step 8i)', () => {
+        /*
+         * A private row's reasons live in its look's `guard.json`
+         * (`scripts/private-guard.mjs`), and the five checks above read them
+         * there over its look's own sheet, a rule counted for the rows it is
+         * laid for (`rowsOwning`): per row (`guardedRowProblems`), it paints
+         * something of its own, its colours come from where its guard says,
+         * its art under a mood (any mood) carries a reason, and a node cannot
+         * be pressed — and a row that moves says so; per look
+         * (`lookRuleProblems`), a background that travels moves a whole tile
+         * (the shipped rule's own reader, `travelProblems`), a rule laid for
+         * two rows reaches art only where one of them says it ships any, and
+         * no rule names an `att-` class the look does not have. The red
+         * plants are `a-private-row-the-gate-cannot-judge-is-refused`'s and
+         * the four tests after it.
+         */
+        const rows = privateDecorations(SERVED).filter((row) => row.guard !== undefined);
+        expect(rows.filter((row) => row.lookClass === 't-fixture-private').length, 'the fixture\'s guarded rows').toBe(4);
+        expect(rows.some((row) => row.paint === 'node'), 'a guarded node row').toBe(true);
+        for (const row of rows) {
+            expect(guardedRowProblems(row, row.guard!), row.cls).toEqual([]);
+        }
+        expect(lookRuleProblems(privateLooksOf(SERVED))).toEqual([]);
+    });
 });
 
-/** A private decoration row as the gate reads it: its catalogue fields from its look's `look.json`, its look's class and sheet. */
-type PrivateDecoration = { cls: string; label: string; paint?: unknown; motion?: unknown; lookClass: string; css: string; path: string };
+/** A private decoration row as the gate reads it: its catalogue fields from its look's `look.json`, its look's class and sheet, and its look's guard (step 8i) when it has one read whole. */
+type PrivateDecoration = {
+    cls: string;
+    label: string;
+    paint?: unknown;
+    motion?: unknown;
+    lookClass: string;
+    css: string;
+    path: string;
+    guard: Guard | undefined;
+    /** The classes of its look's moods (a mood without a class has none here). */
+    moods: string[];
+    /** Whether its look has a mood at all, with a class or without (the decor-guard critic's P2-3). */
+    hasMood: boolean;
+    rows: string[];
+};
+
+/**
+ * A private look's guard file (`<slug>/guard.json`, step 8i;
+ * `scripts/private-guard.mjs`), read whole, or undefined: a look with none,
+ * or one whose file is refused (`a-private-guard-file-is-read-whole` names
+ * why) — whose rows are then judged in the shape that needs no reason.
+ */
+function guardOf(sheet: { role: string; look?: unknown }): Guard | undefined {
+    if (sheet.role !== 'private') return undefined;
+    const read = (sheet as Extract<ServedSheetText, { role: 'private' }>).look;
+    return read?.guardText === undefined ? undefined : parseGuard(read.guardText, read.look).guard;
+}
+
+/** The classes of a look's moods, as its `look.json` names them. */
+function moodClassesOf(look: unknown): string[] {
+    return ((look as { moods?: { cls?: unknown }[] } | undefined)?.moods ?? []).flatMap((mood) => (typeof mood.cls === 'string' ? [mood.cls] : []));
+}
 
 /** Every decoration row with a class of every private look in `sheets` (moods aside, as `paintable` sets them aside). */
 function privateDecorations(sheets: readonly ServedSheetText[]): PrivateDecoration[] {
-    return privateRows(sheets).flatMap((row) =>
-        ((row.look.look as { decorations?: Record<string, unknown>[] } | undefined)?.decorations ?? [])
-            .filter((d) => typeof d['cls'] === 'string')
-            .map((d) => ({ cls: d['cls'] as string, label: String(d['label']), paint: d['paint'], motion: d['motion'], lookClass: row.lookClass, css: row.css, path: row.path })),
-    );
+    return privateRows(sheets).flatMap((row) => {
+        const guard = guardOf(row);
+        const moods = moodClassesOf(row.look.look);
+        const hasMood = (((row.look.look as { moods?: unknown[] } | undefined)?.moods) ?? []).length > 0;
+        const decorations = ((row.look.look as { decorations?: Record<string, unknown>[] } | undefined)?.decorations ?? []).filter((d) => typeof d['cls'] === 'string');
+        const rows = decorations.map((d) => d['cls'] as string);
+        return decorations.map((d) => ({
+            cls: d['cls'] as string,
+            label: String(d['label']),
+            paint: d['paint'],
+            motion: d['motion'],
+            lookClass: row.lookClass,
+            css: row.css,
+            path: row.path,
+            guard,
+            moods,
+            hasMood,
+            rows,
+        }));
+    });
+}
+
+/** A private look as the gate's look-wide rules read it (`lookRuleProblems`): its class, sheet and guard, and its decorations' and moods' classes, none at all included. */
+type PrivateLook = Pick<PrivateDecoration, 'lookClass' | 'css' | 'path' | 'guard' | 'moods' | 'rows'>;
+
+/**
+ * Every private look in `sheets`, one each, **a look with no decoration rows
+ * among them** (the decor-guard critic's re-check): `privateDecorations`
+ * yields a row per decoration, so a look with none never reached the
+ * look-wide rules, and its sheet could name an `att-` class nobody's reason
+ * speaks for.
+ */
+function privateLooksOf(sheets: readonly ServedSheetText[]): PrivateLook[] {
+    return privateRows(sheets).map((row) => ({
+        lookClass: row.lookClass,
+        css: row.css,
+        path: row.path,
+        guard: guardOf(row),
+        moods: moodClassesOf(row.look.look),
+        rows: ((row.look.look as { decorations?: Record<string, unknown>[] } | undefined)?.decorations ?? []).flatMap((d) => (typeof d['cls'] === 'string' ? [d['cls']] : [])),
+    }));
 }
 
 /**
@@ -655,7 +781,7 @@ function privateRowProblems(row: PrivateDecoration): string[] {
     if (own.length > 0 && !bodies.includes('var(--s-')) {
         out.push(`${at} names no token: a private row with no declared reason follows the palette`);
     }
-    if (row.motion === true || /(?:^|;)\s*(?:animation|animation-name|transition)\s*:/.test(bodies)) {
+    if (row.motion === true || MOVES.test(bodies)) {
         out.push(`${at} moves — a mover's reader travels with the row's guard (8i), refused until then`);
     }
     if (row.paint !== 'root') {
@@ -664,20 +790,323 @@ function privateRowProblems(row: PrivateDecoration): string[] {
     return out;
 }
 
-describe('a-private-row-the-gate-cannot-judge-is-refused', () => {
-    it('judges every private decoration a run reads, the fixture\'s two among them, in the one shape that needs no reason', () => {
-        const rows = privateDecorations(SERVED);
-        expect(rows.filter((row) => row.lookClass === 't-fixture-private').map((row) => row.cls).sort()).toEqual(['att-fixture-crest', 'att-fixture-trim']);
-        for (const row of rows) {
-            expect(privateRowProblems(row), row.cls).toEqual([]);
+/**
+ * A rule's selector list as the gate reads a private row's own rules (step
+ * 8i): one selector at a time (`selectorsOf`), and **every `:is()` and
+ * `:where()` list read as one alternative per item**, in any compound of the
+ * selector, subject or ancestor — `.x > :is(.a, .b)` lays its declarations on
+ * `.a` and on `.b` each, and `.t:is(.a, .b) .n` dresses `.n` under `.a` and
+ * under `.b` each, so each row reads it as its own, where `.a.b` or `.a ~ .b`
+ * names both rows at once and is neither's own (the decor-guard critic's
+ * second P2: the first `:is()` of the subject alone was read so, and an
+ * ancestor list passed a palette row's art off as a composite). An item that
+ * is one compound starting with a class, an id, an attribute or a
+ * pseudo-class is spliced in bare; any other item (a type, `*`, an item with
+ * a combinator) stays wrapped as its own one-item list, which is the same
+ * selector. A list inside a `:not()` or `:has()` is a condition and is left
+ * alone (`ownerPart` drops it).
+ */
+function alternativesOf(selector: string): string[] {
+    let depth = 0;
+    let quote = '';
+    for (let i = 0; i < selector.length; i += 1) {
+        const ch = selector[i]!;
+        if (quote !== '') {
+            if (ch === quote) quote = '';
+            continue;
         }
+        if (ch === '"' || ch === "'") quote = ch;
+        else if (ch === '(' || ch === '[') depth += 1;
+        else if (ch === ')' || ch === ']') depth -= 1;
+        if (depth !== 0 || ch !== ':') continue;
+        const head = /^:(is|where)\(/i.exec(selector.slice(i));
+        if (head === null) continue;
+        let inner = 0;
+        let end = i + head[0].length - 1;
+        for (; end < selector.length; end += 1) {
+            if (selector[end] === '(') inner += 1;
+            if (selector[end] === ')' && --inner === 0) break;
+        }
+        if (end >= selector.length) return [selector];
+        const items = selectorsOf(selector.slice(i + head[0].length, end));
+        const bare = (item: string): boolean => compoundsOf(item).compounds.length === 1 && /^[.#[:]/.test(item);
+        if (items.length === 1 && !bare(items[0]!)) {
+            i = end;
+            continue;
+        }
+        const before = selector.slice(0, i);
+        const after = selector.slice(end + 1);
+        return items.flatMap((item) => alternativesOf(`${before}${bare(item) ? item : `:${head[1]!.toLowerCase()}(${item})`}${after}`));
+    }
+    return [selector];
+}
+
+/** A private look's innermost rules, one selector alternative each (`alternativesOf`), comments out. */
+function privateRulesOf(css: string): Rule[] {
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    return [...clean.matchAll(/([^{}]*)\{([^{}]*)\}/g)].flatMap((m) =>
+        selectorsOf(m[1]!)
+            .filter((selector) => !selector.startsWith('@'))
+            .flatMap(alternativesOf)
+            .map((selector) => ({ selector, body: m[2]! })),
+    );
+}
+
+/** A selector's compounds, and the combinator after each but the last (`' '`, `>`, `+` or `~`), split where no parenthesis, bracket or string is open. */
+function compoundsOf(selector: string): { compounds: string[]; combinators: string[] } {
+    const compounds: string[] = [];
+    const combinators: string[] = [];
+    let depth = 0;
+    let quote = '';
+    let cur = '';
+    let pending = '';
+    for (const ch of selector.trim()) {
+        if (quote !== '') {
+            cur += ch;
+            if (ch === quote) quote = '';
+            continue;
+        }
+        if (depth === 0 && /[\s>+~]/.test(ch)) {
+            if (cur !== '') {
+                compounds.push(cur);
+                cur = '';
+            }
+            if (ch !== ' ' || pending === '') pending = ch === ' ' ? (pending || ' ') : ch;
+            continue;
+        }
+        if (ch === '"' || ch === "'") quote = ch;
+        else if (ch === '(' || ch === '[') depth += 1;
+        else if (ch === ')' || ch === ']') depth -= 1;
+        if (cur === '' && compounds.length > 0) {
+            combinators.push(pending || ' ');
+            pending = '';
+        }
+        cur += ch;
+    }
+    if (cur !== '') compounds.push(cur);
+    return { compounds, combinators };
+}
+
+/** A compound with the arguments of its `:not()` and `:has()` taken out: a condition on the box, never the box (an `:is()` or `:where()` argument stays — the box must match it). */
+function ownerPart(compound: string): string {
+    let out = '';
+    for (let i = 0; i < compound.length; i += 1) {
+        const head = /^:(?:not|has)\(/.exec(compound.slice(i));
+        if (head === null) {
+            out += compound[i];
+            continue;
+        }
+        let depth = 0;
+        let j = i + head[0].length - 1;
+        for (; j < compound.length; j += 1) {
+            if (compound[j] === '(') depth += 1;
+            if (compound[j] === ')' && --depth === 0) break;
+        }
+        i = j;
+    }
+    return out;
+}
+
+/**
+ * The look's decoration rows a set of `att-` classes names, a mood's class
+ * aside (a mood is its look's palette and names no row:
+ * `a-mood-class-is-look-scoped`).
+ */
+function decorationRowsIn(text: string, row: Pick<PrivateDecoration, 'rows' | 'moods'>): string[] {
+    return [
+        ...new Set(
+            classesIn(text)
+                .filter((found) => !row.moods.some((mood) => ownedBy(mood, found)))
+                .map((found) => row.rows.find((cls) => ownedBy(cls, found)) ?? found),
+        ),
+    ];
+}
+
+/**
+ * The rows a private rule's alternative is laid for (step 8i; the
+ * decor-guard critic's P2-2), whose art and motion it counts as theirs:
+ *
+ * - **the rows its subject compound names**, outside a `:not()` or
+ *   `:has()`: `.a ~ .b` is `.b`'s rule (a compound joined to the subject by
+ *   `~` or `+` is a sibling, a condition), and `.x > .b:not(:is(.a, .b) ~
+ *   *)::after` is `.b`'s — it paints on `.b`'s box whenever `.b` stands
+ *   first, whatever else the selector names;
+ * - where the subject names none — a root row's rule dressing a box under
+ *   the stall, `.t-x.att-r .stall-name` — **the rows its ancestor compounds
+ *   name** the same way (a compound followed by a space or `>` is an
+ *   ancestor of the subject; one followed by `~` or `+` is not);
+ * - where neither names one, every row the rule names anywhere (a rule laid
+ *   only under a condition, `:has(> .att-a)`, is still that row's to answer
+ *   for).
+ *
+ * The shipped gate's `classesIn(selector)` reads every class in the
+ * selector, which was how a `:not()` could pass a row's own art off as a
+ * composite (the critic's plants, and the fixture's own shared tile).
+ */
+function rowsOwning(selector: string, row: Pick<PrivateDecoration, 'rows' | 'moods'>): string[] {
+    const { compounds, combinators } = compoundsOf(selector);
+    const known = (list: string[]): string[] => list.filter((cls) => row.rows.includes(cls));
+    const subject = known(decorationRowsIn(ownerPart(compounds.at(-1) ?? ''), row));
+    if (subject.length > 0) return subject;
+    const ancestors = known(
+        compounds.slice(0, -1).flatMap((compound, i) => (combinators[i] === ' ' || combinators[i] === '>' ? decorationRowsIn(ownerPart(compound), row) : [])),
+    );
+    if (ancestors.length > 0) return [...new Set(ancestors)];
+    return known(decorationRowsIn(selector, row));
+}
+
+/** Whether a rule's body moves its box: an animation or a transition, shorthand or any longhand (`animation-duration`, `transition-property`), prefixed or not — the guarded judge's test and the reason-free shape's (`privateRowProblems`; the decor-guard critic's P3). */
+const MOVES = /(?:^|;)\s*(?:-webkit-)?(?:animation|transition)(?:-[a-z-]+)?\s*:/i;
+
+/**
+ * Why the gate refuses a private row its look's guard speaks for, or
+ * nothing (step 8i, A item 4, and the decor-guard critic's fixes). What runs
+ * is the shipped gate's checks that read a row's reasons, over its look's
+ * own sheet and its guard, with a rule counted for the rows it is laid for
+ * (`rowsOwning`):
+ *
+ * - it **paints something of its own**: a rule laid for it alone declares a
+ *   paint;
+ * - **its colours come from where its guard says** (`follows`, cross-checked
+ *   against `reachesArt` as `FOLLOWS` is): a row whose own rules reach an
+ *   asset says `art`, and one that says `palette` names a token;
+ * - **art in a look that has a mood**, with a class or without, carries its
+ *   guard's `underMood` (`ART_UNDER_A_MOOD`'s twin);
+ * - **a node row cannot be pressed**: its own rules say `pointer-events: none`;
+ * - **a row that moves says so** (`a-guarded-row-that-moves-says-so`, the
+ *   critic's P1): a rule laid for it, alone or with another row, that
+ *   declares an animation or a transition is refused unless its `look.json`
+ *   says `motion: true` (and then its guard carries a mover's reader or
+ *   reason, `every-moving-decoration-has-a-reader-or-a-reason`).
+ *
+ * Per look, beside it (`lookRuleProblems`): a rule laid for two of its rows
+ * reaches art only where one of them says it ships any, a background that
+ * travels moves a whole tile (`travelProblems`, the shipped rule's own
+ * reader), and no rule names an `att-` class that is neither one of the
+ * look's rows nor its mood. The art its sheet lays under a box is
+ * `a-decoration-lays-no-ground-under-text`'s, through the guard's narrow keys.
+ */
+function guardedRowProblems(row: PrivateDecoration, guard: Guard): string[] {
+    const rules = privateRulesOf(row.css);
+    const laidFor = rules.filter((r) => rowsOwning(r.selector, row).includes(row.cls));
+    const own = laidFor.filter((r) => rowsOwning(r.selector, row).length === 1);
+    const bodies = own.map((r) => r.body).join(' ');
+    const defines = new Set([...row.css.toLowerCase().matchAll(/(--[a-z0-9_-]+)\s*:/g)].map((m) => m[1]!));
+    const at = `${row.label} (${row.cls}, ${row.path})`;
+    const entry = guard.rows[row.cls];
+    const out: string[] = [];
+    if (entry === undefined) return [`${at} has no entry in its look's guard`];
+    if (own.length === 0 || !own.some((r) => PAINTS.test(r.body))) {
+        out.push(`${at} has no rule of its own in its look's sheet that paints`);
+    }
+    const ships = reachesArt(bodies, defines);
+    if (ships && entry.follows !== 'art') {
+        out.push(`${at} reaches an asset, so it cannot follow a mood — its guard says ${entry.follows}`);
+    }
+    if (entry.follows === 'palette') {
+        if (own.length > 0 && !bodies.includes('var(--s-')) out.push(`${at} says it follows the palette and names no token`);
+    }
+    if (entry.follows === 'art' && row.hasMood && entry.underMood === undefined) {
+        out.push(`${at} is drawn art in a look with a mood — its guard writes down why that is acceptable (underMood), or it is drawn in tokens`);
+    }
+    if (row.paint === 'node' && !/pointer-events:\s*none/.test(bodies)) {
+        out.push(`${at} paints a node and never says it cannot be pressed`);
+    }
+    if (row.motion !== true) {
+        for (const r of laidFor.filter((one) => MOVES.test(one.body))) {
+            out.push(`${at} moves in ${r.selector} and its look.json says motion: false — a row that moves says so, and its guard gives the mover's reader or reason`);
+        }
+    }
+    return out;
+}
+
+/**
+ * Per guarded private look (step 8i, and the decor-guard critic's P2-2 and
+ * P2-4): every rule laid for two of its rows that reaches an asset with no
+ * participant whose guard says `art`; every background that travels and
+ * does not move a whole tile, read by the shipped rule's own reader over
+ * the rules each row takes part in and the look's own keyframes
+ * (`travelProblems`); and, for every private look a run reads, guarded or
+ * not, every `att-` class its sheet names that is neither one of its
+ * decorations nor one of its moods (or a child class of one) — a rule laid
+ * for a class the look does not have is a rule no reason speaks for. Fed
+ * every private look by `privateLooksOf`, a look with no decoration rows
+ * among them (the critic's re-check: `privateDecorations` never yields one).
+ */
+function lookRuleProblems(rows: readonly PrivateLook[]): string[] {
+    const out: string[] = [];
+    const looks = new Map<string, PrivateLook>();
+    for (const row of rows) looks.set(row.lookClass, row);
+    for (const row of looks.values()) {
+        const rules = privateRulesOf(row.css);
+        const known = (found: string): boolean => row.rows.some((cls) => ownedBy(cls, found)) || row.moods.some((mood) => ownedBy(mood, found));
+        for (const found of new Set(rules.flatMap((rule) => classesIn(rule.selector)))) {
+            if (!known(found)) out.push(`${row.path} names .${found}, which is neither one of ${row.lookClass}'s decorations nor its mood: a rule laid for it is a rule no reason speaks for`);
+        }
+        if (row.guard === undefined) continue;
+        const defines = new Set([...row.css.toLowerCase().matchAll(/(--[a-z0-9_-]+)\s*:/g)].map((m) => m[1]!));
+        for (const rule of rules) {
+            const named = rowsOwning(rule.selector, row);
+            if (named.length < 2 || !reachesArt(rule.body, defines)) continue;
+            if (!named.some((cls) => row.guard!.rows[cls]?.follows === 'art')) {
+                out.push(`${rule.selector} (${row.path}) reaches art and none of ${named.join(' + ')} says in its guard that it ships any`);
+            }
+        }
+        const clean = row.css.replace(/\/\*[\s\S]*?\*\//g, '');
+        const frames = keyframesIn(clean);
+        const px = (name: string): boolean => statesPxIn(clean, name);
+        for (const cls of row.rows) {
+            const takesPart = rules.filter((rule) => decorationRowsIn(rule.selector, row).includes(cls));
+            out.push(...travelProblems(takesPart, frames, px, new Set()).problems.map((problem) => `${cls} (${row.path}): ${problem}`));
+        }
+    }
+    return out;
+}
+
+/** What the gate says of a private row: by its guard where its look has one read whole, in the shape that needs no reason where it has none. */
+const privateJudged = (row: PrivateDecoration): string[] => (row.guard === undefined ? privateRowProblems(row) : guardedRowProblems(row, row.guard));
+
+describe('a-private-row-the-gate-cannot-judge-is-refused', () => {
+    /**
+     * A private row is judged by its look's guard (step 8i): a look with a
+     * guard file read whole (`a-private-guard-file-is-read-whole`) has every
+     * row held to the shipped gate's five per-row checks over its own sheet
+     * and its guard's reasons (`guardedRowProblems`, `lookRuleProblems`:
+     * its own paint, `follows`, `underMood` under any mood, a node that
+     * cannot be pressed, the travel of a background — and, beside them, a
+     * row that moves says so, a shared rule's art is claimed, and no rule
+     * names a class the look does not have); a look with none — or one whose
+     * file is refused — has every row judged in the one shape that needs no
+     * reason (`privateRowProblems`), and refused in any other, never skipped.
+     */
+    it('judges every private decoration a run reads, the fixture\'s among them, by its guard, or in the shape that needs no reason', () => {
+        const rows = privateDecorations(SERVED);
+        const fixture = rows.filter((row) => row.lookClass === 't-fixture-private');
+        expect(fixture.map((row) => row.cls).sort()).toEqual(['att-fixture-crest', 'att-fixture-low', 'att-fixture-trim', 'att-fixture-turn']);
+        expect(fixture.every((row) => row.guard !== undefined), 'the fixture carries a guard for every row').toBe(true);
+        for (const row of rows) {
+            expect(privateJudged(row), row.cls).toEqual([]);
+        }
+        expect(lookRuleProblems(privateLooksOf(SERVED))).toEqual([]);
     });
 
-    it('refuses a planted row with no rule, one with art or a literal colour, one that moves, and a node', async () => {
+    it('judges a look with no guard file in the shape that needs no reason: a node, art and a mover refused', async () => {
+        const planted = await plantedServed('', (json) => json, { drop: ['fixture/guard.json'] });
+        const rows = privateDecorations(planted).filter((row) => row.lookClass === PLANTED_CLASS);
+        expect(rows.every((row) => row.guard === undefined)).toBe(true);
+        const problems = rows.flatMap(privateJudged).join('\n');
+        expect(problems).toMatch(/att-planted-low.* paints node/);
+        expect(problems).toMatch(/att-planted-turn.* moves/);
+        expect(rows.filter((row) => row.paint === 'root').flatMap(privateJudged)).toEqual([]);
+    }, PLANTS_TIMEOUT_MS);
+
+    it('refuses a planted row with no rule, one with art or a literal colour, one that moves, and a node, where its look has no guard', async () => {
+        // The two rows the reason-free shape was written for, and the ghost a plant renames one to.
+        const ROOTS = ['att-planted-trim', 'att-planted-crest', 'att-planted-ghost'];
         const planted = async (rule: string, editLook?: (json: string) => string): Promise<string[]> =>
-            privateDecorations(await plantedServed(rule, editLook))
-                .filter((row) => row.lookClass === PLANTED_CLASS)
-                .flatMap(privateRowProblems);
+            privateDecorations(await plantedServed(rule, editLook, { drop: ['fixture/guard.json'] }))
+                .filter((row) => row.lookClass === PLANTED_CLASS && ROOTS.includes(row.cls))
+                .flatMap(privateJudged);
         const harmless = `.${PLANTED_CLASS} .item-n { letter-spacing: 0.01em; }`;
         expect(await planted(harmless)).toEqual([]);
         expect((await planted(harmless, (json) => json.replace('"att-planted-crest"', '"att-planted-ghost"'))).join('\n')).toMatch(/att-planted-ghost.* has no rule of its own/);
@@ -686,7 +1115,310 @@ describe('a-private-row-the-gate-cannot-judge-is-refused', () => {
         expect((await planted(harmless, (json) => json.replace('"motion": false,\n            "tokenId": "f1', '"motion": true,\n            "tokenId": "f1'))).join('\n')).toMatch(/att-planted-trim.* moves/);
         expect((await planted(`.${PLANTED_CLASS}.att-planted-crest .stall-name { transition: color 1s; }`)).join('\n')).toMatch(/att-planted-crest.* moves/);
         expect((await planted(harmless, (json) => json.replace('"paint": "root",\n            "motion": false\n', '"paint": "node",\n            "motion": false\n'))).join('\n')).toMatch(/att-planted-crest.* paints node/);
+    }, PLANTS_TIMEOUT_MS);
+
+    it('refuses, by its guard, art that says palette, a palette with no token, art under a mood with no reason, a node that can be pressed, a row that paints nothing, and an unclaimed composite', async () => {
+        type Edits = { rule?: string; guard?: (json: string) => string; look?: (json: string) => string; sheet?: (css: string) => string };
+        const guarded = async ({ rule = '', guard, look, sheet }: Edits = {}): Promise<{ problems: string; composite: string[] }> => {
+            const rows = privateDecorations(await plantedServed(rule, look, { ...(guard === undefined ? {} : { editGuard: guard }), ...(sheet === undefined ? {} : { editSheet: sheet }) })).filter(
+                (row) => row.lookClass === PLANTED_CLASS,
+            );
+            expect(rows.every((row) => row.guard !== undefined), 'the planted guard reads whole').toBe(true);
+            return { problems: rows.flatMap(privateJudged).join('\n'), composite: lookRuleProblems(rows) };
+        };
+        const clean = await guarded();
+        expect(clean.problems).toBe('');
+        expect(clean.composite).toEqual([]);
+        // A row whose guard says palette reaching an asset: the crest, a root row, on the box it dresses.
+        expect((await guarded({ rule: `.stall.${PLANTED_CLASS}.att-planted-crest .stall-name { mask-image: url(./art/ground.svg); }` })).problems).toMatch(
+            /att-planted-crest.* reaches an asset.* says palette/,
+        );
+        // A palette row naming no token.
+        expect((await guarded({ sheet: (css) => css.replace('.stall-tagline {\n    color: var(--s-accent);', '.stall-tagline {\n    color: #c0503f;') })).problems).toMatch(
+            /att-planted-trim.* follows the palette and names no token/,
+        );
+        // Art in a look with a mood, its reason taken out.
+        expect((await guarded({ guard: (json) => json.replace(/,\s*"underMood": "[^"]*"/, '') })).problems).toMatch(/att-planted-low.* drawn art in a look with a mood/);
+        // A node whose own rules never say it cannot be pressed.
+        expect((await guarded({ sheet: (css) => css.replace('height: 28px;\n    pointer-events: none;\n}', 'height: 28px;\n}') })).problems).toMatch(/att-planted-low.* paints a node and never says it cannot be pressed/);
+        // A rule laid for two rows at once (the root wears both, and the box it dresses names neither), reaching art, whose rows both say palette.
+        const unclaimed = await guarded({ rule: `.stall.${PLANTED_CLASS}.att-planted-trim.att-planted-crest .stall-name { background-image: url(./art/ground.svg); }` });
+        expect(unclaimed.composite.join('\n')).toMatch(/reaches art and none of att-planted-trim \+ att-planted-crest says in its guard that it ships any/);
+        // A row that paints nothing of its own: the crest's one rule taken out.
+        expect((await guarded({ sheet: (css) => css.replace(`.${PLANTED_CLASS}.att-planted-crest .stall-name {\n    color: var(--s-accent);\n}`, '') })).problems).toMatch(
+            /att-planted-crest.* has no rule of its own in its look's sheet that paints/,
+        );
+        // The shape a subject list reads as each row's own: `:is(.a, .b)` lays its rule on both.
+        expect(alternativesOf('.x > :is(.att-a, .att-b)::before')).toEqual(['.x > .att-a::before', '.x > .att-b::before']);
+        const root = `.stall.${PLANTED_CLASS}:not(.shop-window) > .stall-scroll > `;
+        expect(alternativesOf(`${root}:is(.att-a, .att-b):not(:is(.att-a, .att-b) ~ *)::after`)).toEqual([
+            `${root}.att-a:not(:is(.att-a, .att-b) ~ *)::after`,
+            `${root}.att-b:not(:is(.att-a, .att-b) ~ *)::after`,
+        ]);
+        expect(alternativesOf('.x > :is(.att-a, .item-n)')).toEqual(['.x > .att-a', '.x > .item-n']);
+        expect(alternativesOf('.x > :is(.att-a, [data-role="price"])')).toEqual(['.x > .att-a', '.x > [data-role="price"]']);
+    }, PLANTS_TIMEOUT_MS);
+});
+
+/** A planted look's guarded rows and what the gate says of them: each row's own judge, and the look's rules (`lookRuleProblems`). */
+async function guardedPlant(
+    rule: string,
+    { guard, look, sheet }: { guard?: (json: string) => string; look?: (json: string) => string; sheet?: (css: string) => string } = {},
+): Promise<{ rows: PrivateDecoration[]; problems: string; look: string[] }> {
+    const rows = privateDecorations(await plantedServed(rule, look, { ...(guard === undefined ? {} : { editGuard: guard }), ...(sheet === undefined ? {} : { editSheet: sheet }) })).filter(
+        (row) => row.lookClass === PLANTED_CLASS,
+    );
+    expect(rows.every((row) => row.guard !== undefined), 'the planted guard reads whole').toBe(true);
+    return { rows, problems: rows.flatMap(privateJudged).join('\n'), look: lookRuleProblems(rows) };
+}
+
+describe('a-guarded-row-that-moves-says-so', () => {
+    /**
+     * The decor-guard critic's P1: the shape that needs no reason refuses a
+     * private row that animates, whatever its `motion` flag says, and the
+     * guarded judge had no such check — so a row with a guard that said
+     * `motion: false` and moved needed no reader and no reason. A rule laid
+     * for the row (`rowsOwning`), alone or with another row, that declares
+     * an animation or a transition, shorthand or longhand (`MOVES`), is refused unless
+     * its `look.json` says `motion: true`, and then its guard carries the
+     * mover's reader or reason (`parseGuard`, `every-moving-decoration-has-a-reader-or-a-reason`).
+     */
+    it('passes the fixture, whose turn moves and says so', () => {
+        const rows = privateDecorations(SERVED).filter((row) => row.lookClass === 't-fixture-private');
+        expect(rows.find((row) => row.cls === 'att-fixture-turn')?.motion).toBe(true);
+        expect(rows.flatMap((row) => guardedRowProblems(row, row.guard!)).filter((line) => / moves in /.test(line))).toEqual([]);
     });
+
+    it('refuses a still row whose own rule transitions or animates', async () => {
+        for (const body of ['transition: color 1s;', 'animation: t-planted-look-turn 6s infinite alternate;', 'animation-name: t-planted-look-turn;']) {
+            const { problems } = await guardedPlant(`.stall.${PLANTED_CLASS}.att-planted-crest .stall-name { ${body} }`);
+            expect(problems, body).toMatch(/att-planted-crest.* moves in \.stall\.t-planted-look\.att-planted-crest \.stall-name and its look\.json says motion: false/);
+        }
+    }, PLANTS_TIMEOUT_MS);
+
+    it('reads a longhand as a move: animation-* and transition-*, prefixed or not, in the guarded judge and the reason-free shape', async () => {
+        // The decor-guard critic's re-check (P3): `animation-duration` and `transition-property` move a box as the shorthand does.
+        for (const body of ['transition-duration: 1s;', 'transition-property: color;', 'animation-duration: 2s;', 'animation-iteration-count: infinite;', '-webkit-animation-name: x;', 'color: red; TRANSITION-DELAY: 0s;']) {
+            expect(MOVES.test(`\n    ${body}\n`), body).toBe(true);
+        }
+        for (const body of ['color: var(--s-accent);', 'will-change: transform;', '--animation-x: 1;', 'background-image: url(./art/animation.svg);']) {
+            expect(MOVES.test(`\n    ${body}\n`), body).toBe(false);
+        }
+        const { problems } = await guardedPlant(`.stall.${PLANTED_CLASS}.att-planted-crest .stall-name { transition-duration: 1s; }`);
+        expect(problems).toMatch(/att-planted-crest.* moves in \.stall\.t-planted-look\.att-planted-crest \.stall-name and its look\.json says motion: false/);
+    }, PLANTS_TIMEOUT_MS);
+
+    it('refuses a still row that moves in a rule naming another row too: the fixture\'s own shape, and a rule laid for two rows', async () => {
+        // The turn's look.json says it is still and its guard drops its mover's reason; its animation stands in `.att-planted-low ~ .att-planted-turn`.
+        const { problems } = await guardedPlant('', {
+            look: (json) => json.replace('"mount": "below-goods",\n            "motion": true', '"mount": "below-goods",\n            "motion": false'),
+            guard: (json) => json.replace(/,\s*"moving": \{[^}]*\}/, ''),
+        });
+        expect(problems).toMatch(/att-planted-turn.* moves in \.stall\.t-planted-look:not\(\.shop-window\) > \.stall-scroll > \.att-planted-low ~ \.att-planted-turn and its look\.json says motion: false/);
+        // A rule the root lays for two rows at once: both refused.
+        const two = await guardedPlant(`.stall.${PLANTED_CLASS}.att-planted-trim.att-planted-crest .stall-name { transition: color 1s; }`);
+        expect(two.problems).toMatch(/att-planted-trim.* moves in/);
+        expect(two.problems).toMatch(/att-planted-crest.* moves in/);
+    }, PLANTS_TIMEOUT_MS);
+});
+
+describe('a-guarded-rows-art-is-counted-where-its-subject-is', () => {
+    /**
+     * The decor-guard critic's P2-2: the gate counted every class a selector
+     * names, so `.x > .b:not(.a ~ *)::after` named two rows and its art was
+     * excused as a composite whenever one of them said `art` — while it paints
+     * on `.b` whenever `.b` is worn without `.a` before it (the tracked
+     * fixture's own shared tile was such a rule, on a row whose guard said
+     * `palette`). A rule's art and motion are counted for the rows its
+     * subject compound names (`rowsOwning`; a root row's for the rows its
+     * ancestor compounds name), with every `:is()` and `:where()` list read
+     * as one alternative per item first (`alternativesOf`; the critic's
+     * re-check), and a private rule naming an `att-` class that is neither
+     * one of its look's rows nor its mood is refused (`lookRuleProblems`).
+     */
+    const row = { rows: ['att-a', 'att-b', 'att-r', 'att-s'], moods: ['att-m'] } as unknown as PrivateDecoration;
+
+    it('lays a rule for its subject\'s rows, a root row\'s for its ancestors\', and a sibling or a condition owns nothing', () => {
+        for (const [selector, owners] of [
+            ['.stall.t-x > .stall-scroll > .att-a ~ .att-b', ['att-b']],
+            ['.stall.t-x > .stall-scroll > .att-b:not(:is(.att-a, .att-b) ~ *)::after', ['att-b']],
+            ['.stall.t-x > .stall-scroll > .att-b:not(.att-a)::before', ['att-b']],
+            ['.stall.t-x.att-r .stall-name', ['att-r']],
+            ['.stall.t-x.att-r > .stall-scroll > .att-a::before', ['att-a']],
+            ['.stall.t-x.att-r.att-s .stall-name', ['att-r', 'att-s']],
+            ['.stall.t-x.att-m .att-a', ['att-a']],
+            ['.stall.t-x.att-m .stall-name', []],
+            ['.stall.t-x > .stall-scroll:has(> .att-a) .stall-foot', ['att-a']],
+            ['.stall.t-x .att-a ~ .stall-foot', ['att-a']],
+            ['.stall.t-x > :where(.att-b)::after', ['att-b']],
+            ['.stall.t-x .att-a-child', ['att-a']],
+        ] as const) {
+            expect(rowsOwning(selector, row).sort(), selector).toEqual([...owners].sort());
+        }
+    });
+
+    it('reads every :is() and :where() list, in the subject and in an ancestor, as one alternative per item', () => {
+        // The decor-guard critic's re-check: only the subject's first `:is()` was read so.
+        const root = '.stall.t-x:not(.shop-window) > .stall-scroll > ';
+        for (const [selector, alternatives] of [
+            ['.stall.t-x:is(.att-r, .att-s) .stall-name', ['.stall.t-x.att-r .stall-name', '.stall.t-x.att-s .stall-name']],
+            ['.stall.t-x:where(.att-r, .att-s) .stall-name', ['.stall.t-x.att-r .stall-name', '.stall.t-x.att-s .stall-name']],
+            [`${root}.att-a:is(.x, .y):is(.att-a, .att-b)`, [`${root}.att-a.x.att-a`, `${root}.att-a.x.att-b`, `${root}.att-a.y.att-a`, `${root}.att-a.y.att-b`]],
+            [`${root}:is(.att-a, .att-b):not(:is(.att-a, .att-b) ~ *)::after`, [`${root}.att-a:not(:is(.att-a, .att-b) ~ *)::after`, `${root}.att-b:not(:is(.att-a, .att-b) ~ *)::after`]],
+            ['.stall.t-x:has(:is(.att-r, .att-s)) .stall-name', ['.stall.t-x:has(:is(.att-r, .att-s)) .stall-name']],
+            ['.x > :is(:is(.att-a, .att-b), .att-r)', ['.x > .att-a', '.x > .att-b', '.x > .att-r']],
+            ['.x > :is(.att-a, [data-role="price"])', ['.x > .att-a', '.x > [data-role="price"]']],
+            ['.x :is(div, .att-a)', ['.x :is(div)', '.x .att-a']],
+            ['.x :is(.att-r .y, .att-a)', ['.x :is(.att-r .y)', '.x .att-a']],
+            ['.x :is(.att-r .y)', ['.x :is(.att-r .y)']],
+        ] as const) {
+            expect(alternativesOf(selector), selector).toEqual(alternatives);
+        }
+    });
+
+    it('refuses a palette row\'s art laid through an ancestor :is() or :where() list beside a row that says art', async () => {
+        for (const list of [':is', ':where']) {
+            const { problems, look } = await guardedPlant(`.stall.${PLANTED_CLASS}${list}(.att-planted-crest, .att-planted-low) .stall-name { mask-image: url(./art/ground.svg); }`);
+            expect(problems, list).toMatch(/att-planted-crest.* reaches an asset, so it cannot follow a mood — its guard says palette/);
+            expect(problems, list).not.toMatch(/att-planted-low.* reaches an asset/);
+            expect(look, list).toEqual([]);
+        }
+    }, PLANTS_TIMEOUT_MS);
+
+    it('counts the fixture\'s shared tile for each row that carries it, so both say they draw art', () => {
+        const rows = privateDecorations(SERVED).filter((one) => one.lookClass === 't-fixture-private');
+        const tile = privateRulesOf(rows[0]!.css).filter((rule) => /::after$/.test(rule.selector) && rule.body.includes('url('));
+        expect(tile.map((rule) => rowsOwning(rule.selector, rows[0]!))).toEqual([['att-fixture-low'], ['att-fixture-turn']]);
+        expect(rows.filter((one) => one.paint === 'node').map((one) => one.guard!.rows[one.cls]!.follows)).toEqual(['art', 'art']);
+    });
+
+    it('refuses a palette row whose art a :not() named another row for, the fixture\'s tile on a row that says palette, and a class the look does not have', async () => {
+        // The crest, a palette row, laying art the old count would have excused beside the low row, which says art.
+        for (const tail of [':not(.att-planted-low)', ':not(.att-planted-low ~ *)']) {
+            const { problems } = await guardedPlant(`.stall.${PLANTED_CLASS}.att-planted-crest${tail} .stall-name { mask-image: url(./art/ground.svg); }`);
+            expect(problems, tail).toMatch(/att-planted-crest.* reaches an asset, so it cannot follow a mood — its guard says palette/);
+        }
+        // The turn told it draws no art: worn alone it carries the shared tile, so it is refused.
+        const turn = await guardedPlant('', { guard: (json) => json.replace(/"att-planted-turn": \{\s*"follows": "art",\s*"underMood": "[^"]*",/, '"att-planted-turn": { "follows": "palette",') });
+        expect(turn.problems).toMatch(/att-planted-turn.* reaches an asset, so it cannot follow a mood — its guard says palette/);
+        // A class that is neither one of the look's rows nor its mood.
+        const stray = await guardedPlant(`.stall.${PLANTED_CLASS}:not(.shop-window) > .stall-scroll > .att-planted-turn:not(.att-zz)::before { content: ''; mask-image: url(./art/ground.svg); background-color: var(--s-accent); }`);
+        expect(stray.look.join('\n')).toMatch(/names \.att-zz, which is neither one of t-planted-look's decorations nor its mood/);
+    }, PLANTS_TIMEOUT_MS);
+
+    it('names no foreign class in any private sheet a run reads, the fixture\'s among them, a look with no decoration rows included', () => {
+        const looks = privateLooksOf(SERVED);
+        expect(looks.some((one) => one.lookClass === 't-fixture-private')).toBe(true);
+        expect(looks.map((one) => one.lookClass).sort(), 'every private look a run reads, with decoration rows or none').toEqual(privateRows(SERVED).map((row) => row.lookClass).sort());
+        expect(lookRuleProblems(looks).filter((line) => / names \.att-/.test(line))).toEqual([]);
+    });
+
+    it('refuses a foreign class in a private look with no decoration rows, and passes its own mood class and a child of it', async () => {
+        // The planted look with its decorations taken out of its look.json: its sheet still names them, and they are no longer its rows.
+        const noRows = (json: string): string => JSON.stringify({ ...(JSON.parse(json) as Record<string, unknown>), decorations: [] }, null, 4);
+        const planted = await plantedServed('', noRows);
+        expect(privateDecorations(planted).filter((row) => row.lookClass === PLANTED_CLASS)).toEqual([]);
+        const looks = privateLooksOf(planted).filter((one) => one.lookClass === PLANTED_CLASS);
+        expect(looks.map((one) => one.rows)).toEqual([[]]);
+        expect(lookRuleProblems(looks).join('\n')).toMatch(/names \.att-planted-low, which is neither one of t-planted-look's decorations nor its mood/);
+        const bare = (css: string): PrivateLook[] => [{ lookClass: 't-x', css, path: 'x/sheet.css', guard: undefined, moods: ['att-x-dusk'], rows: [] }];
+        expect(lookRuleProblems(bare('.stall.t-x.att-x-dusk .stall-name { color: var(--s-text); } .stall.t-x.att-x-dusk-sky .stall-sign { color: var(--s-text); }'))).toEqual([]);
+    }, PLANTS_TIMEOUT_MS);
+});
+
+describe('a-guarded-row-under-any-mood-says-why-its-art-may-disagree', () => {
+    /**
+     * The decor-guard critic's P2-3: `underMood` was required only where a
+     * mood had a class (`moodClassesOf` skips one without), where the
+     * shipped rule asks whether the look has any mood at all. A look with a
+     * mood, with a class or without, owes the reason for every art row.
+     */
+    it('refuses art under a mood with no class and no reason', async () => {
+        const { problems } = await guardedPlant('', {
+            look: (json) => json.replace('"cls": "att-planted-dusk",', ''),
+            guard: (json) => json.replace(/,\s*"underMood": "[^"]*"/, ''),
+        });
+        expect(problems).toMatch(/att-planted-low.* drawn art in a look with a mood/);
+    }, PLANTS_TIMEOUT_MS);
+});
+
+describe('a-guarded-rows-background-that-travels-moves-a-whole-tile', () => {
+    /**
+     * The decor-guard critic's P2-4: the shipped gate's fifth per-row rule,
+     * `a background that travels moves a whole tile, or names its own proof`,
+     * runs over guarded private rows too: its reader (`travelProblems`) over
+     * the rules each row takes part in, the look's own keyframes and the
+     * look's own custom properties (`lookRuleProblems`).
+     */
+    it('passes the fixture, whose turn turns and travels no background', () => {
+        const rows = privateDecorations(SERVED).filter((row) => row.lookClass === 't-fixture-private');
+        expect(lookRuleProblems(rows).filter((line) => / travels /.test(line))).toEqual([]);
+    });
+
+    it('refuses a planted row whose background travels part of its tile, and passes one that travels a whole tile', async () => {
+        const drift = (to: string): string =>
+            `@keyframes t-planted-look-drift { to { background-position: ${to}; } } .stall.${PLANTED_CLASS}:not(.shop-window) > .stall-scroll > .att-planted-low::before { background-size: 24px 24px; animation: t-planted-look-drift 4s linear infinite; }`;
+        const moving = (json: string): string => json.replace('"mount": "below-goods",\n            "motion": false', '"mount": "below-goods",\n            "motion": true');
+        const reason = (json: string): string =>
+            json.replace('"att-planted-low": {', '"att-planted-low": { "moving": { "reason": "a planted drift for the red proof alone, whose travel is the test\'s subject" },');
+        const part = await guardedPlant(drift('10px 0'), { look: moving, guard: reason });
+        expect(part.look.join('\n')).toMatch(/att-planted-low .*t-planted-look-drift layer 1 travels 10px of a 24px tile — 0\.417 laps, so it cannot wrap/);
+        const whole = await guardedPlant(drift('48px 0'), { look: moving, guard: reason });
+        expect(whole.look.filter((line) => / travels /.test(line))).toEqual([]);
+    }, PLANTS_TIMEOUT_MS);
+});
+
+describe('no-guard-problem-prints-a-reason', () => {
+    /**
+     * A private look's reasons are its own and say something of its design,
+     * so no line the gate or the reader prints carries one (the decor-guard
+     * critic's item 9: after a release `guard.json` travels on the deploy
+     * road, and a test log there is public): the reader's problems name
+     * keys, classes and lengths, and the gate's name the row, its class, the
+     * selector and the sheet. Held over the fixture's every reason, a planted
+     * look's lines, and the reader's refusals.
+     */
+    const SENTINEL = 'a-sentinel-reason-that-no-problem-line-may-print-whatever-it-says';
+
+    it('prints no reason in the reader\'s refusals', () => {
+        const fx = PRIVATE.find((row) => row.lookClass === 't-fixture-private')!;
+        const json = JSON.parse(fx.look.guardText!) as { rows: Record<string, Record<string, unknown>>; art: Record<string, string> };
+        const planted = [
+            { ...json, notes: SENTINEL },
+            { ...json, rows: { ...json.rows, 'att-elsewhere': { follows: 'palette', underMood: SENTINEL } } },
+            { ...json, rows: { ...json.rows, 'att-fixture-crest': { follows: 'palette', underMood: SENTINEL } } },
+            { ...json, rows: { ...json.rows, 'att-fixture-crest': { follows: 'palette', moving: { reason: SENTINEL } } } },
+            { ...json, rows: { ...json.rows, 'att-fixture-turn': { follows: 'art', underMood: SENTINEL, moving: { reader: 'Not A Name', how: SENTINEL } } } },
+            { ...json, art: { ...json.art, 'no shape at all': SENTINEL } },
+        ];
+        for (const one of planted) {
+            const { problems } = parseGuard(JSON.stringify(one), fx.look.look);
+            expect(problems.length).toBeGreaterThan(0);
+            expect(problems.filter((line) => line.includes(SENTINEL.slice(0, 24))), JSON.stringify(problems)).toEqual([]);
+        }
+    });
+
+    it('prints none of a guard\'s reasons in the gate\'s lines, clean or planted', async () => {
+        const reasons = (guard: Guard): string[] => [
+            ...Object.values(guard.art),
+            ...Object.values(guard.rows).flatMap((entry) => [entry.underMood ?? '', ...(entry.moving === undefined ? [] : Object.values(entry.moving))]),
+        ].filter((reason) => reason.length > 40);
+        const lines = async (rule: string, edits?: Parameters<typeof guardedPlant>[1]): Promise<{ lines: string[]; guard: Guard }> => {
+            const { rows, look } = await guardedPlant(rule, edits);
+            const sheet = privateRows(await plantedServed(rule, edits?.look, { ...(edits?.guard === undefined ? {} : { editGuard: edits.guard }) })).find((one) => one.lookClass === PLANTED_CLASS)!;
+            return { lines: [...rows.flatMap((one) => guardedRowProblems(one, one.guard!)), ...look, ...guardArtProblems(sheet)], guard: rows[0]!.guard! };
+        };
+        for (const [rule, edits] of [
+            [`.stall.${PLANTED_CLASS}.att-planted-crest .stall-name { transition: color 1s; mask-image: url(./art/ground.svg); }`, undefined],
+            ['', { guard: (json: string) => json.replace(/,\s*"underMood": "[^"]*"/, '').replace('"art": {', `"art": { ".stall.${PLANTED_CLASS} .item-n | background-color": "a planted key on a name node, for the red proof alone and never printed",`) }],
+        ] as const) {
+            const read = await lines(rule, edits);
+            expect(read.lines.length).toBeGreaterThan(0);
+            for (const reason of reasons(read.guard)) {
+                expect(read.lines.filter((line) => line.includes(reason.slice(0, 24))), reason.slice(0, 24)).toEqual([]);
+            }
+        }
+    }, PLANTS_TIMEOUT_MS);
 });
 
 /*
@@ -749,10 +1481,47 @@ const PRIVATE_DECORATION_ART: Readonly<Record<string, Readonly<Record<string, st
     },
 };
 
-/** The art a sheet's decoration-scoped rules may lay: `DECORATION_ART`, and a private look's own mood art in its own sheet alone. */
-function artFor(sheet: { role: string; lookClass?: string }, table: typeof PRIVATE_DECORATION_ART = PRIVATE_DECORATION_ART): Readonly<Record<string, string>> {
-    if (sheet.role !== 'private' || sheet.lookClass === undefined || !Object.hasOwn(table, sheet.lookClass)) return DECORATION_ART;
-    return { ...DECORATION_ART, ...table[sheet.lookClass] };
+/**
+ * The art a sheet's decoration-scoped rules may lay: `DECORATION_ART`, and in
+ * a private look's own sheet alone its mood art (`PRIVATE_DECORATION_ART`)
+ * and the art its guard names (step 8i) — each guard key only in the narrow
+ * shape (`guardArtKeyProblem`): a key in any other shape exempts nothing, and
+ * `a-private-decoration-art-key-names-its-own-box` names it.
+ */
+function artFor(sheet: { role: string; lookClass?: string; look?: unknown }, table: typeof PRIVATE_DECORATION_ART = PRIVATE_DECORATION_ART): Readonly<Record<string, string>> {
+    if (sheet.role !== 'private' || sheet.lookClass === undefined) return DECORATION_ART;
+    const mood = Object.hasOwn(table, sheet.lookClass) ? table[sheet.lookClass] : {};
+    return { ...DECORATION_ART, ...mood, ...guardArtOf(sheet) };
+}
+
+/** A private look's class and its node decoration rows' classes, as a guard key's shape reads them. */
+function keyShapeOf(sheet: { lookClass?: string; look?: unknown }): { lookClass: string; nodeClasses: string[] } {
+    const rows = guardedDecorations((sheet.look as { look?: unknown } | undefined)?.look);
+    return {
+        lookClass: sheet.lookClass ?? '',
+        nodeClasses: rows.filter((row) => row.paint === 'node').map((row) => row.cls),
+    };
+}
+
+/** The art a private look's guard names in the narrow shape alone, each with its reason. */
+function guardArtOf(sheet: { role: string; lookClass?: string; look?: unknown }): Readonly<Record<string, string>> {
+    const guard = guardOf(sheet);
+    if (guard === undefined) return {};
+    const shape = keyShapeOf(sheet);
+    return Object.fromEntries(Object.entries(guard.art).filter(([key]) => guardArtKeyProblem(key, shape) === undefined));
+}
+
+/** Every art key of a private look's guard that is not in the narrow shape, or that its own sheet does not declare. */
+function guardArtProblems(sheet: { role: string; lookClass?: string; look?: unknown; css: string; path: string }): string[] {
+    const guard = guardOf(sheet);
+    if (guard === undefined) return [];
+    const shape = keyShapeOf(sheet);
+    const declared = declaredKeys(sheet.css);
+    return Object.keys(guard.art).flatMap((key) => {
+        const why = guardArtKeyProblem(key, shape);
+        if (why !== undefined) return [`${sheet.path}: ${key} — ${why}`];
+        return declared.has(key) ? [] : [`${sheet.path}: ${key} — its own sheet declares no such selector and property`];
+    });
 }
 
 /** The shape a `PRIVATE_DECORATION_ART` key must take under `lookClass`: `.stall.<look>.att-<mood>`, or an open `.sheet` under it, and `background-image`; the class captured. */
@@ -917,12 +1686,13 @@ function groundsUnderText(
     defs: Map<string, string[]> = customProperties(css),
     usesOf: (name: string) => Set<string> = customUses(css),
     art: Readonly<Record<string, string>> = DECORATION_ART,
+    split: (head: string) => string[] = selectorsOf,
 ): string[] {
     const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const frames = keyframesIn(clean);
     const out: string[] = [];
     for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const selectors = m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim());
+        const selectors = split(m[1]!);
         const own = declarationsOf(m[2]!);
         const run = own
             .filter((d) => d.prop === 'animation' || d.prop === 'animation-name')
@@ -952,6 +1722,35 @@ function groundsUnderText(
         }
     }
     return out;
+}
+
+/**
+ * A rule's selector list, one selector each, whitespace folded: split at the
+ * commas a browser splits a list at — never one inside a parenthesis, a
+ * bracket or a string (`a-selector-list-is-split-where-a-browser-splits-it`).
+ * `.a:is(.b, .c)` is one selector, and a key naming it names it whole; a
+ * plain split on every comma cut it into `.a:is(.b` and `.c)`, which no key
+ * names and which name a different set of classes each.
+ */
+function selectorsOf(head: string): string[] {
+    return splitTop(head, (ch) => ch === ',').map((one) => one.replace(/\s+/g, ' ').trim());
+}
+
+/** The comma split the gate used before step 8i, kept only to prove the paren-aware split moved no verdict (`a-selector-list-is-split-where-a-browser-splits-it`). */
+function plainSelectorsOf(head: string): string[] {
+    return head.split(',').map((one) => one.replace(/\s+/g, ' ').trim());
+}
+
+/** Every `selector | property` a sheet declares, one selector of a list at a time (`selectorsOf`), as the art tables key them. */
+function declaredKeys(css: string, split: (head: string) => string[] = selectorsOf): Set<string> {
+    const declared = new Set<string>();
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        for (const selector of split(m[1]!)) {
+            for (const d of declarationsOf(m[2]!)) declared.add(`${selector} | ${d.prop}`);
+        }
+    }
+    return declared;
 }
 
 /** `text` split at `sep` where no bracket, parenthesis or quote is open. */
@@ -1169,18 +1968,13 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         // A planted private look whose decoration lays a ground under a line: red.
         const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d; }`);
         const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
-        expect(groundsUnderText(planted.css)).toEqual([`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`]);
+        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toEqual([`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`]);
     });
 
     it('names only art a served sheet still declares', () => {
         const declared = new Set<string>();
         for (const sheet of SERVED) {
-            const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
-            for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-                for (const selector of m[1]!.split(',').map((s) => s.replace(/\s+/g, ' ').trim())) {
-                    for (const d of declarationsOf(m[2]!)) declared.add(`${selector} | ${d.prop}`);
-                }
-            }
+            for (const key of declaredKeys(sheet.css)) declared.add(key);
         }
         expect(Object.keys(DECORATION_ART).filter((key) => !declared.has(key))).toEqual([]);
     });
@@ -1189,15 +1983,8 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         for (const [lookClass, entries] of Object.entries(PRIVATE_DECORATION_ART)) {
             const sheet = PRIVATE.find((row) => row.lookClass === lookClass);
             const moods = ((sheet?.look.look as { moods?: { cls?: unknown }[] } | undefined)?.moods ?? []).map((mood) => mood.cls);
-            const declared = new Set<string>();
-            if (sheet !== undefined) {
-                const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
-                for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-                    for (const selector of m[1]!.split(',').map((one) => one.replace(/\s+/g, ' ').trim())) {
-                        for (const d of declarationsOf(m[2]!)) declared.add(`${selector} | ${d.prop}`);
-                    }
-                }
-            } else {
+            const declared = sheet === undefined ? new Set<string>() : declaredKeys(sheet.css);
+            if (sheet === undefined) {
                 console.error(`PRIVATE_DECORATION_ART names ${lookClass}, which this run does not read: its entries are checked against its sheet only under a selection that carries it`);
             }
             for (const [key, why] of Object.entries(entries)) {
@@ -1332,6 +2119,274 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         // Read by nothing a sheet here shows: judged by what it holds (the plant above).
         expect(groundsUnderText('.stall.att-rainfall { --wk-nobody-reads: var(--s-bg); }')).toHaveLength(1);
     });
+});
+
+/** Whether a selector holds a comma inside a parenthesis or a bracket — one a plain comma split cuts. */
+const holdsNestedComma = (selector: string): boolean => splitTop(selector, (ch) => ch === ',').length === 1 && selector.includes(',');
+
+describe('a-selector-list-is-split-where-a-browser-splits-it', () => {
+    /**
+     * The gate reads a rule's selector list one selector at a time: the
+     * ground under text (`groundsUnderText`), and the keys a sheet declares
+     * (`declaredKeys`), which the art tables are held to. It split the list
+     * at every comma, so `.a > :is(.b, .c)::after` was read as two pieces,
+     * `.a > :is(.b` and `.c)::after`: no key could name the selector, and
+     * each piece named a different set of classes (the 8i plan critic's
+     * P1-2). Split where a browser splits a list (`selectorsOf`, over
+     * `splitTop`), the selector is one key. Step 8i, A item 1.
+     */
+    it('moves no verdict over any served sheet, a private look\'s among them, but for a selector a key names whole', () => {
+        /*
+         * The grounds the paren-aware split refuses are the plain split's,
+         * and the plain split refuses more only where a key names a selector
+         * whole that it cut: each extra refusal is a piece of such a selector
+         * (today the tracked fixture's shared painter, `:is(…):not(:is(…) ~ *)`,
+         * which no table could key before; at d572b86, before it existed, the
+         * two splits read every served sheet alike — the 8i plan's spike (a)).
+         */
+        expect(PRIVATE.length).toBeGreaterThan(0);
+        let cut = 0;
+        for (const sheet of SERVED) {
+            const art = artFor(sheet);
+            const whole = groundsUnderText(sheet.css, undefined, undefined, art);
+            const plain = groundsUnderText(sheet.css, undefined, undefined, art, plainSelectorsOf);
+            expect(whole.filter((g) => !plain.includes(g)), `${sheet.path}: refused only by the paren-aware split`).toEqual([]);
+            const pieces = new Set(
+                Object.keys(art)
+                    .map((key) => key.slice(0, key.lastIndexOf(' | ')))
+                    .filter(holdsNestedComma)
+                    .flatMap(plainSelectorsOf),
+            );
+            for (const g of plain.filter((one) => !whole.includes(one))) {
+                expect(pieces.has(g.slice(0, g.indexOf(' { '))), `${sheet.path}: ${g} is refused only by the plain split, and is no piece of a selector a key names whole`).toBe(true);
+                cut += 1;
+            }
+        }
+        // The fixture's shared painter is such a selector, so this compared something.
+        expect(cut).toBeGreaterThan(0);
+    });
+
+    it('declares the same keys as the plain split, but for a selector a plain split cut, which it keeps whole', () => {
+        let nested = 0;
+        for (const sheet of SERVED) {
+            const whole = declaredKeys(sheet.css);
+            const plain = declaredKeys(sheet.css, plainSelectorsOf);
+            for (const key of [...whole].filter((k) => !plain.has(k))) {
+                expect(holdsNestedComma(key.slice(0, key.lastIndexOf(' | '))), `${sheet.path}: ${key} is only the paren-aware split's`).toBe(true);
+                nested += 1;
+            }
+            // And every key only the plain split finds is a piece it cut out of one of those, same property.
+            const cut = new Set(
+                [...whole]
+                    .filter((k) => !plain.has(k))
+                    .flatMap((k) => plainSelectorsOf(k.slice(0, k.lastIndexOf(' | '))).map((piece) => `${piece}${k.slice(k.lastIndexOf(' | '))}`)),
+            );
+            for (const key of [...plain].filter((k) => !whole.has(k))) {
+                expect(cut.has(key), `${sheet.path}: ${key} is only the plain split's, and is no piece of a selector it cut`).toBe(true);
+            }
+        }
+        // The served sheets do hold such a selector, so the comparison above compared something.
+        expect(nested).toBeGreaterThan(0);
+        // Every table key is found both ways.
+        const all = new Set(SERVED.flatMap((sheet) => [...declaredKeys(sheet.css)]));
+        const allPlain = new Set(SERVED.flatMap((sheet) => [...declaredKeys(sheet.css, plainSelectorsOf)]));
+        for (const key of Object.keys(DECORATION_ART)) {
+            expect(all.has(key), key).toBe(true);
+            expect(allPlain.has(key), key).toBe(true);
+        }
+    });
+
+    it('keeps a planted :is(a, b) selector whole, so its key names it — and the plain split does not', () => {
+        const selector = '.stall.att-rainfall > .stall-scroll > :is(.att-wk-a, .att-wk-b):not(:is(.att-wk-a, .att-wk-b) ~ *)::after';
+        const css = `${selector} { background-color: var(--s-text); }`;
+        const art = { ...DECORATION_ART, [`${selector} | background-color`]: 'a planted key, for the red proof alone' };
+        expect(selectorsOf(selector)).toEqual([selector]);
+        expect(plainSelectorsOf(selector)).toHaveLength(3);
+        expect(declaredKeys(css).has(`${selector} | background-color`)).toBe(true);
+        expect(declaredKeys(css, plainSelectorsOf).has(`${selector} | background-color`)).toBe(false);
+        expect(groundsUnderText(css, undefined, undefined, art)).toEqual([]);
+        // The plain split refuses its pieces, which no key names.
+        expect(groundsUnderText(css, undefined, undefined, art, plainSelectorsOf).length).toBeGreaterThan(0);
+        // A list is still split at its own commas.
+        expect(selectorsOf('.a:is(.b, .c), .d')).toEqual(['.a:is(.b, .c)', '.d']);
+        expect(selectorsOf('.a[title="x, y"], .b')).toEqual(['.a[title="x, y"]', '.b']);
+    });
+
+    it('leaves no rule head in this file on the plain split', () => {
+        const own = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+        expect(own.match(/m\[1\]!?\.split\(\s*','\s*\)/g) ?? []).toEqual([]);
+    });
+});
+
+describe('a-private-guard-file-is-read-whole', () => {
+    /**
+     * A private look's `guard.json` (step 8i, `scripts/private-guard.mjs`):
+     * the reasons the gate reads for its decorations, read by tests alone.
+     * Read whole or not at all — a file refused has its rows judged as if
+     * the look had none, the stricter shape, and this test names why.
+     */
+    const fixture = (): Extract<ServedSheetText, { role: 'private' }> => PRIVATE.find((row) => row.lookClass === 't-fixture-private')!;
+    const read = (edit: (json: Record<string, unknown>) => unknown): string[] => {
+        const json = JSON.parse(fixture().look.guardText!) as Record<string, unknown>;
+        return parseGuard(JSON.stringify(edit(json)), fixture().look.look).problems;
+    };
+    const rows = (json: Record<string, unknown>): Record<string, Record<string, unknown>> => json['rows'] as Record<string, Record<string, unknown>>;
+
+    it('reads every guard a run reads, the fixture\'s among them, with no problem', () => {
+        const guarded = PRIVATE.filter((row) => row.look.guardText !== undefined);
+        expect(guarded.map((row) => row.lookClass)).toContain('t-fixture-private');
+        for (const row of guarded) {
+            expect(parseGuard(row.look.guardText!, row.look.look).problems, row.path).toEqual([]);
+        }
+        // Every look a run reads that carries a guard has one entry per decoration.
+        const { guard } = parseGuard(fixture().look.guardText!, fixture().look.look);
+        expect(Object.keys(guard!.rows).sort()).toEqual(guardedDecorations(fixture().look.look).map((row) => row.cls).sort());
+    });
+
+    it('refuses the whole file on a field it does not know, a class not one of the look\'s rows, a missing entry, or a short reason', () => {
+        expect(parseGuard('{', fixture().look.look).problems.join()).toMatch(/not JSON/);
+        expect(read(() => [])).toEqual(['guard.json: not an object']);
+        expect(read((json) => ({ ...json, notes: 'x' })).join()).toMatch(/an unknown field "notes"/);
+        expect(read((json) => ({ rows: json['rows'] })).join()).toMatch(/art is not an object/);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-dusk': { follows: 'palette' } } })).join()).toMatch(/"att-fixture-dusk"\]: not one of the look's decorations/);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-elsewhere': { follows: 'palette' } } })).join()).toMatch(/not one of the look's decorations/);
+        const { 'att-fixture-crest': _crest, ...withoutCrest } = rows(JSON.parse(fixture().look.guardText!));
+        expect(read((json) => ({ ...json, rows: withoutCrest }))).toEqual(['guard.json: no entry for the look\'s decoration "att-fixture-crest"']);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-crest': {} } })).join()).toMatch(/follows: one of palette, art/);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-crest': { follows: 'palette', note: 'x' } } })).join()).toMatch(/an unknown field "note"/);
+        // A reason of 40 characters or fewer, under a mood, on a mover and on the art.
+        const forty = 'x'.repeat(40);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-low': { follows: 'art', underMood: forty } } })).join()).toMatch(/underMood is 40 characters/);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-turn': { follows: 'palette', moving: { reason: forty } } } })).join()).toMatch(/moving.reason is 40 characters/);
+        expect(read((json) => ({ ...json, art: Object.fromEntries(Object.keys(json['art'] as object).map((key) => [key, forty])) })).join()).toMatch(/reason is 40 characters/);
+        // 41 is a reason.
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-low': { follows: 'art', underMood: 'x'.repeat(41) } } }))).toEqual([]);
+    });
+
+    it('holds a mover\'s reason to its motion, both ways, and an art exemption to a row that draws art', () => {
+        // The turn moves and says nothing: refused.
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-turn': { follows: 'palette' } } })).join()).toMatch(/the row moves .* no moving reader or reason/);
+        // A still row given a mover's reason: refused.
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-crest': { follows: 'palette', moving: { reason: 'x'.repeat(60) } } } })).join()).toMatch(/the row does not move/);
+        // A reader is a name, and says how.
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-turn': { follows: 'palette', moving: { reader: 'Not A Name', how: 'x'.repeat(60) } } } })).join()).toMatch(/moving.reader: a rule or test name/);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-turn': { follows: 'palette', moving: { reader: 'a-rule', how: 'x'.repeat(60), why: 'y' } } } })).join()).toMatch(/unknown field "why" beside a reader/);
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-turn': { follows: 'palette', moving: { reader: 'a-rule', how: 'x'.repeat(60) } } } }))).toEqual([]);
+        // An art exemption on a row that says it follows the palette.
+        expect(read((json) => ({ ...json, rows: { ...rows(json), 'att-fixture-crest': { follows: 'palette', underMood: 'x'.repeat(60) } } })).join()).toMatch(/underMood: an exemption for art under a mood, on a row that says it draws none/);
+        // An art key in the wrong shape of text.
+        expect(read((json) => ({ ...json, art: { '.stall.t-fixture-private  >  .x | background-image': 'x'.repeat(60) } })).join()).toMatch(/whitespace folded/);
+        expect(read((json) => ({ ...json, art: { '.stall.t-fixture-private > .x': 'x'.repeat(60) } })).join()).toMatch(/"<selector> \| <property>"/);
+    });
+
+    it('reads a look with no guard file as one with none, and a refused file the same way', async () => {
+        const served = await plantedServed('', undefined, { drop: ['fixture/guard.json'] });
+        const planted = privateRows(served).find((row) => row.lookClass === PLANTED_CLASS)!;
+        expect(planted.look.guardText).toBeUndefined();
+        expect(guardOf(planted)).toBeUndefined();
+        const refused = privateRows(await plantedServed('', undefined, { editGuard: (json) => json.replace('"rows"', '"rowz"') })).find((row) => row.lookClass === PLANTED_CLASS)!;
+        expect(refused.look.guardText).toBeDefined();
+        expect(guardOf(refused)).toBeUndefined();
+    }, PLANTS_TIMEOUT_MS);
+});
+
+describe('a-private-decoration-art-key-names-its-own-box', () => {
+    /**
+     * A guard's art key (step 8i, the plan critic's P2-5) exempts a ground
+     * on its row's own box and nowhere else (`guardArtKeyProblem`): the
+     * stall's root (`.stall.<look>`, optionally `:not(.shop-window)`), the
+     * app's own structure between, and the subject a node row's own class
+     * (or `:is()` of the look's node rows, optionally `:not(<them> ~ *)`,
+     * optionally `::before` or `::after`); `background-image` or
+     * `background-color` only; and declared in the look's own sheet. **A
+     * root row has no key** (D-2026-11-15-06: the row that wanted one was
+     * dropped from 8i, so no look carries a subject for it). The fixture's
+     * guard is its subject.
+     */
+    const shape = { lookClass: 't-x', nodeClasses: ['att-x-a', 'att-x-b'] };
+    const ok = (key: string): string | undefined => guardArtKeyProblem(key, shape);
+
+    it('holds every guard\'s keys a run reads to the row\'s own box and to its own look\'s sheet, the fixture\'s among them', () => {
+        let keys = 0;
+        for (const sheet of PRIVATE) {
+            expect(guardArtProblems(sheet), sheet.path).toEqual([]);
+            keys += Object.keys(guardOf(sheet)?.art ?? {}).length;
+        }
+        expect(keys, 'the fixture\'s guard names art').toBeGreaterThan(0);
+        // And each key the fixture names is one its own decoration rules lay, so it exempts something.
+        const fx = PRIVATE.find((row) => row.lookClass === 't-fixture-private')!;
+        const plain = groundsUnderText(fx.css, undefined, undefined, { ...artFor({ role: 'private', lookClass: fx.lookClass }) });
+        expect(plain.length).toBe(Object.keys(guardOf(fx)!.art).length);
+    });
+
+    it('takes a node\'s own box, its pseudo-elements and a shared first-worn painter', () => {
+        for (const key of [
+            '.stall.t-x > .stall-scroll > .att-x-a | background-color',
+            '.stall.t-x:not(.shop-window) > .stall-scroll > .att-x-a::before | background-image',
+            '.stall.t-x:not(.shop-window) .stall-headings > .att-x-b | background-color',
+            '.stall.t-x:not(.shop-window) > .stall-scroll > :is(.att-x-a, .att-x-b):not(:is(.att-x-a, .att-x-b) ~ *)::after | background-color',
+            '.stall.t-x > .stall-scroll > .att-x-a:not(.att-x-b ~ *) | background-image',
+        ]) {
+            expect(ok(key), key).toBeUndefined();
+        }
+    });
+
+    it('refuses a name or a figure, a ring or a shadow, another look\'s or a mood\'s class, a root row\'s root, and a key its sheet does not declare (red plants)', async () => {
+        for (const [key, why] of [
+            ['.stall.t-x > .stall-scroll .item-n | background-color', /no node row of t-x/],
+            ['.stall.t-x .item-x | background-color', /no node row of t-x/],
+            ['.stall.t-x > .stall-scroll > .att-x-a .item-x | background-color', /passes through \.att-x-a/],
+            ['.stall.t-x > .stall-scroll > .att-x-a [data-role="price"] | background-color', /cannot read/],
+            ['.stall.t-x > .stall-scroll > .att-x-a | border', /border is no ground/],
+            ['.stall.t-x > .stall-scroll > .att-x-a | box-shadow', /box-shadow is no ground/],
+            ['.stall.t-x > .stall-scroll > .att-x-a | background', /background is no ground/],
+            ['.stall.t-modern > .stall-scroll > .att-x-a | background-color', /does not open with the stall's root/],
+            ['.stall.t-x.att-x-dusk > .stall-scroll > .att-x-a | background-color', /root compound names \.att-x-dusk/],
+            ['.stall.t-x > .stall-scroll > .att-x-dusk | background-color', /no node row of t-x/],
+            // A root row has no key: on the root, above the region, or above anything.
+            ['.stall.t-x.att-x-r | background-image', /root compound names \.att-x-r.*a root row has no key/],
+            ['.stall.t-x:not(.shop-window).att-x-r > .stall-scroll | background-image', /root compound names \.att-x-r/],
+            ['.stall.t-x.att-x-r .stall-sign | background-image', /root compound names \.att-x-r/],
+            ['.stall.t-x > .stall-scroll | background-image', /no node row of t-x/],
+            ['.stall.t-x > .stall-scroll > :is(.att-x-a, .item-n) | background-color', /no node row of t-x/],
+            ['.stall.t-x > .stall-scroll > .att-x-a:hover | background-color', /goes on with :hover/],
+            ['.stall.t-x > .stall-scroll > .att-x-a + .att-x-b | background-color', /\+ or ~/],
+            ['.stall.t-x > .stall-scroll > .att-x-a:not(.item-n ~ *) | background-color', /is not ":not\(<the look's node rows> ~ \*\)"/],
+            ['.stall.t-x | background-color', /names a node row's own box \(a root row has no key\)/],
+            ['.t-x > .stall-scroll > .att-x-a | background-color', /does not open with the stall's root/],
+            ['.stall.t-x > .stall-body > .att-x-a | background-color', /passes through \.stall-body/],
+        ] as const) {
+            expect(ok(key), key).toMatch(why);
+        }
+        // A planted guard naming a key its own sheet does not declare: refused, and it exempts nothing.
+        const undeclared = `.stall.${PLANTED_CLASS}:not(.shop-window) > .stall-scroll > .att-planted-low | background-color`;
+        const served = await plantedServed('', undefined, {
+            editGuard: (json) => json.replace('"art": {', `"art": { ${JSON.stringify(undeclared)}: "a planted key its sheet does not declare, for the red proof alone",`),
+        });
+        const planted = privateRows(served).find((row) => row.lookClass === PLANTED_CLASS)!;
+        expect(guardArtProblems(planted)).toEqual([`${planted.path}: ${undeclared} — its own sheet declares no such selector and property`]);
+        // A planted guard naming a name node: refused, and the ground it would have covered is refused too.
+        const nameKey = `.stall.${PLANTED_CLASS} .item-n | background-color`;
+        const nameRule = `.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d; }`;
+        const named = privateRows(
+            await plantedServed(nameRule, undefined, { editGuard: (json) => json.replace('"art": {', `"art": { ${JSON.stringify(nameKey)}: "a planted key on a name node, for the red proof alone",`) }),
+        ).find((row) => row.lookClass === PLANTED_CLASS)!;
+        expect(guardArtProblems(named).join()).toMatch(/no node row of t-planted-look/);
+        expect(groundsUnderText(named.css, undefined, undefined, artFor(named))).toEqual([`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`]);
+    }, PLANTS_TIMEOUT_MS);
+
+    it('exempts a guard\'s key in its own look\'s sheet alone', async () => {
+        const fx = PRIVATE.find((row) => row.lookClass === 't-fixture-private')!;
+        expect(groundsUnderText(fx.css, undefined, undefined, artFor(fx))).toEqual([]);
+        // The same rules read as any other sheet: refused.
+        for (const other of [{ role: 'look', lookClass: 't-modern' }, { role: 'kit', lookClass: 't-workshop' }, { role: 'private', lookClass: 't-fixture-private' }]) {
+            expect(groundsUnderText(fx.css, undefined, undefined, artFor(other)).length, other.role).toBe(Object.keys(guardOf(fx)!.art).length);
+        }
+        // Another private look's guard reaches no sheet but its own.
+        const served = await plantedServed('');
+        const planted = privateRows(served).find((row) => row.lookClass === PLANTED_CLASS)!;
+        expect(groundsUnderText(fx.css, undefined, undefined, artFor(planted)).length).toBe(Object.keys(guardOf(fx)!.art).length);
+    }, PLANTS_TIMEOUT_MS);
 });
 
 /*

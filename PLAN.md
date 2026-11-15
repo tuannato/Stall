@@ -2326,6 +2326,37 @@ money path this app can have, because nothing on it is derived.
   `:nth-child`, so `:nth-child(3n + 1 of .items)` counting a body's shelves
   (not a mark host's children) is a false red; a look writes it as
   `of :has(> .item)` today.
+- **Five public gaps the 8h critics found, stated and not closed** (2026-11-15,
+  D-2026-11-15-01; recorded with step 8i's public step; general, true of every
+  look). (1) **A control's glyph ink is read without the element's own
+  opacity**: the contrast pass samples a drawn glyph on a control (a disabled
+  stepper's `−`) at its computed colour, so a look that fades the control by
+  `opacity` is read as if it had not. (2) **A line on Pay several's quote
+  lines is measured for geometry only**: the borrowed-id warning inside
+  `pay-lines` stands on a ground of its own, and no sampled screen reads its
+  ink. (3) **No fixture stages the describe sheet's removal warning**: removal
+  mode needs a press, so `.warn` is painted by no pass and only the static
+  tint check holds it (`a-looks-red-reads-on-the-warnings-tint`; see the
+  danger lines' entry, read only through `.ctx`). (4) **A carried look's mood
+  rule that sets a property to `none` wins only by specificity, and no pass
+  measures that race**: a mood that takes a layer off holds while its
+  selector outranks every rule that restates the property, and nothing reads
+  the order. (5) **A `mask-position` loop is not held to whole-tile travel**:
+  the decor gate's travel rule (`a background that travels moves a whole
+  tile, or names its own proof`) reads `background-position` keyframes alone,
+  so a mask that travels in a loop that does not wrap a whole tile snaps
+  unchecked, shipped rows included (a mover that alternates never wraps).
+- **A keyed decoration box is not held off text that is not money** (the
+  decor-guard critic's P3, 2026-11-15, D-2026-11-15-09). A private guard's art
+  key ties a ground's exemption to a node row's own box
+  (`a-private-decoration-art-key-names-its-own-box`), but the probe's
+  decoration sweep holds a node's box off the protected boxes alone, so a keyed
+  node, or its in-flow `::before` or `::after`, that layout puts under an
+  item's name, the "Wearing" line or the seller's name (a key through
+  `.stall-headings` is accepted) is read only for the contrast of the text over
+  it. Every reason in the tracked fixture's guard says no line of text stands
+  on its box; nothing checks it. A probe rule holding every keyed decoration
+  box off every line of text would.
 - **A money figure's price tier can be read through `:has()`** (the 8g3-pre
   critic, 2026-11-10; general, true of every look). `data-price-tier` is a
   value a look may match (G3), and the look lint takes it anywhere in a

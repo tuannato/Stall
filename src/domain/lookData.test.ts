@@ -52,6 +52,8 @@ describe('a-look-is-read-under-the-place-it-is-given', () => {
             [0, 0x04, 'f1'.repeat(32)],
             [1, 0x04, 'f2'.repeat(32)],
             [2, 0x04, undefined],
+            [3, 0x04, undefined],
+            [4, 0x04, undefined],
         ]);
 
         const rows = lookFromData(

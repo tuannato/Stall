@@ -61,6 +61,7 @@ export const PRIVATE_PATHS_ADMITTED = Object.freeze([
     'some-look/sheet.css',
     'some-look/og.png',
     'some-look/fonts.json',
+    'some-look/guard.json',
     'some-look/art/mark.svg',
     'some-look/art/face-latin.woff2',
     'some-look/art/LICENSE-OFL.txt',
@@ -78,6 +79,9 @@ export const PRIVATE_PATHS_REFUSED = Object.freeze([
     'some-look/extra.css',
     'some-look/README.md',
     'some-look/og.jpg',
+    'some-look/guard.yaml',
+    'guard.json',
+    'some-look/art/guard.json',
     'some-look/art/shot.png',
     'some-look/art/face.ttf',
     'some-look/art/face.woff',
@@ -134,7 +138,9 @@ function fixtureAtHead() {
 
 /**
  * A private look repository outside this checkout: the fixture, renamed,
- * edited and added to, committed once. See the module's docblock.
+ * edited and added to, committed once. See the module's docblock. An `edit`
+ * that answers `undefined` for a path leaves that file out (a look with no
+ * `guard.json`, step 8i).
  */
 export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fixture' } = {}) {
     const files = {};
@@ -144,7 +150,8 @@ export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fix
         if (path === 'index.json') {
             text = text.replace('"slug": "fixture"', `"slug": "${slug}"`);
         }
-        files[path] = edit(path, text);
+        const edited = edit(path, text);
+        if (edited !== undefined) files[path] = edited;
     }
     return committed({ ...files, ...add });
 }

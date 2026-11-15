@@ -180,5 +180,71 @@
     }
 }
 
+/*
+ * Two node rows below the goods (step 8i), so the decor gate's guarded rows,
+ * the guard's narrow art keys and the probe's below-the-goods rules have a
+ * subject in public CI: their reasons are in `guard.json` beside this sheet.
+ *
+ * - Each paints its own box or its own `::before`, in the tokens.
+ * - **One still painter for both**: the first of them worn carries the
+ *   shared tile on its `::after`, so the file is named by one box however
+ *   many of them are worn (`a-file-below-the-goods-is-painted-once-on-a-still-box`).
+ * - **The second turns, and never carries the painter**: it turns its own
+ *   node (the probe reads a look's pseudo-element moved by a transform as
+ *   standing nowhere it can name, and fails it where it paints), and only
+ *   where it stands after the first, which then carries the painter; worn
+ *   alone it carries the painter and stands still.
+ * - Nothing of either paints on the wall.
+ */
+.stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    height: 28px;
+    pointer-events: none;
+}
+
+.stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low::before {
+    content: '';
+    grid-area: 1 / 1;
+    background-image: linear-gradient(90deg, var(--s-accent), transparent);
+}
+
+.stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-turn {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    width: 160px;
+    height: 28px;
+    pointer-events: none;
+    background-color: color-mix(in srgb, var(--s-accent) 30%, transparent);
+    transform-origin: 0 100%;
+}
+
+.stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low ~ .att-fixture-turn {
+    animation: t-fixture-private-turn 6s ease-in-out infinite alternate;
+}
+
+@keyframes t-fixture-private-turn {
+    from {
+        rotate: 0deg;
+    }
+    to {
+        rotate: 1deg;
+    }
+}
+
+.stall.t-fixture-private:not(.shop-window) > .stall-scroll > :is(.att-fixture-low, .att-fixture-turn):not(:is(.att-fixture-low, .att-fixture-turn) ~ *)::after {
+    content: '';
+    grid-area: 1 / 1;
+    background-image: url(./art/ground.svg);
+    background-size: 24px 24px;
+}
+
+.stall.t-fixture-private.shop-window > .stall-scroll > :is(.att-fixture-low, .att-fixture-turn) {
+    display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+    .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low ~ .att-fixture-turn {
+        animation: none;
+    }
 }

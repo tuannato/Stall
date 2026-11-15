@@ -98,6 +98,54 @@ describe('a-node-below-the-goods-and-above-the-dock-stands-where-its-mount-says'
     });
 });
 
+describe('the-nodes-below-the-goods-mount-only-what-is-worn', () => {
+    /**
+     * Step 8i, A item 6: the nodes a look stands below the goods are its
+     * worn rows' and no other's — one each, in bit order, after the goods
+     * and before the foot — and a row taken off takes its node with it
+     * (`placeAttachmentNodes`, which a repaint and the name sheet's try-on
+     * both run). (The plan named this
+     * test for the private look at 0x04's own rows; it is named here for
+     * what it holds.)
+     */
+    const below = (root: Element): string[] => {
+        const scroller = [...root.querySelector('.stall')!.children].find((c) => c.classList.contains('stall-scroll'))!;
+        return [...scroller.children].filter((c) => c.classList.contains('att-hk-first') || c.classList.contains('att-hk-second')).map((c) => c.className);
+    };
+
+    it('stands a node for each worn row below the goods, in bit order, after the goods and before the foot, and none for a row not worn', () => {
+        expect(below(paint(tryOn(0)))).toEqual([]);
+        expect(below(paint(tryOn(bits(1))))).toEqual(['att-hk-second']);
+        expect(below(paint(tryOn(bits(0))))).toEqual(['att-hk-first']);
+        const root = paint(tryOn(bits(1, 0, 2)));
+        expect(below(root)).toEqual(['att-hk-first', 'att-hk-second']);
+        const scroller = [...root.querySelector('.stall')!.children].find((c) => c.classList.contains('stall-scroll'))!;
+        const kids = [...scroller.children];
+        const body = kids.findIndex((c) => c.classList.contains('stall-body'));
+        const foot = kids.findIndex((c) => c.classList.contains('stall-foot'));
+        const nodes = kids.map((c, i) => [c, i] as const).filter(([c]) => c.classList.contains('att-hk-first') || c.classList.contains('att-hk-second')).map(([, i]) => i);
+        expect(body).toBeGreaterThanOrEqual(0);
+        expect(foot, 'the shop paints its foot inside the scroller').toBeGreaterThan(body);
+        expect(nodes.every((i) => i > body), 'after the goods').toBe(true);
+        expect(nodes.every((i) => i < foot), 'before the foot').toBe(true);
+        // Each an empty, aria-hidden box: nothing in it to read or press.
+        for (const node of scroller.querySelectorAll('.att-hk-first, .att-hk-second')) {
+            expect(node.childNodes.length).toBe(0);
+            expect(node.getAttribute('aria-hidden')).toBe('true');
+        }
+    });
+
+    it('takes a row\'s node off when the row is taken off, and stands it again when it is worn', () => {
+        const root = paint(tryOn(bits(0, 1)));
+        renderStall(root, tryOn(bits(1)), handlers);
+        expect(below(root)).toEqual(['att-hk-second']);
+        renderStall(root, tryOn(0), handlers);
+        expect(below(root)).toEqual([]);
+        renderStall(root, tryOn(bits(0, 1)), handlers);
+        expect(below(root)).toEqual(['att-hk-first', 'att-hk-second']);
+    });
+});
+
 describe('a-row-that-excludes-slots-is-worn-and-picked-by-its-bit', () => {
     it('wears the lower bit when a record carries both sides', () => {
         const root = paint(tryOn(bits(0, 3)));
