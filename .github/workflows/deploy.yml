@@ -158,7 +158,7 @@ jobs:
             ok = 0
             if ($1 ~ /^100644 blob [0123456789abcdef]+$/) {
               if (n == 1) ok = $2 == "index.json" || $2 == "README.md" || $2 == "LOG.md"
-              else if (s && n == 2) ok = p[2] == "look.json" || p[2] == "sheet.css" || p[2] == "og.png" || p[2] == "fonts.json"
+              else if (s && n == 2) ok = p[2] == "look.json" || p[2] == "sheet.css" || p[2] == "og.png" || p[2] == "fonts.json" || p[2] == "guard.json"
               else if (s && n == 3 && p[2] == "art") {
                 m = split(p[3], q, /[.]/)
                 ok = m == 2 && q[1] ~ /^[abcdefghijklmnopqrstuvwxyz0123456789-]+$/ && length(q[1]) <= 64 && (q[2] == "svg" || q[2] == "woff2")

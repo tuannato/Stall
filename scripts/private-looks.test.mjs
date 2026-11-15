@@ -119,7 +119,8 @@ describe('a-private-file-outside-the-allow-list-fails', () => {
     /**
      * A private look repository is data: the index, its README and design
      * log, and per look a `look.json`, a `sheet.css`, an `og.png`, a
-     * `fonts.json` naming its faces and an
+     * `fonts.json` naming its faces, a `guard.json` of its decorations'
+     * reasons (optional, read by tests alone) and an
      * `art/` of SVGs, faces and the faces' OFL texts. Nothing else, nothing
      * nested deeper, and nothing that is not a plain file — a script, a page,
      * a symlink, a gitlink or an executable bit is refused, because nothing in
