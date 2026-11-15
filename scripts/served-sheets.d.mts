@@ -23,6 +23,8 @@ export type PrivateLookRead = {
     readonly art: readonly { readonly name: string; readonly bytes: Buffer }[];
     /** Its `fonts.json` (the faces it serves, `scripts/look-faces.mjs`), or undefined when it has none. */
     readonly fontsText: string | undefined;
+    /** Its `guard.json` (the decor gate's reasons for its decorations, `scripts/private-guard.mjs`), or undefined when it has none. */
+    readonly guardText: string | undefined;
 };
 
 /** A served sheet with its text; a private look's row carries its read. */

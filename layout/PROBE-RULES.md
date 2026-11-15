@@ -15960,3 +15960,173 @@ The warning tint's check moved the public entry script and nothing else:
 +137 bytes (+69 gzip), every visitor 884,838 → 884,975. With it, the
 default run 246.3s (load 4.26 at the start), its contrast dump still
 identical to main's (15,018 boxes, 0 moved, added or removed).
+
+## Step 8i, A: nodes below the goods, and a private row's reasons (2026-11-15; D-2026-11-15-05)
+
+The public half of step 8i's first step (STEP-8I-PLAN v2.4, A). Two probe
+rules and the decor gate's read of a private look's `guard.json`; the static
+half is in `src/ui/decor-gate.test.ts` and `layout/movingDecor.test.ts`, and
+CLAUDE.md §4 and §6 say where each lives. The plan named the two probe rules
+and the render test after one look's own rows; in tracked files they are
+named for the mechanism (the words rule): the still-box rule is
+`a-file-below-the-goods-is-painted-once-on-a-still-box`, and the render test
+`the-nodes-below-the-goods-mount-only-what-is-worn`.
+
+### `a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall`
+
+The billboard's first-fold rule is a product rule (the beetle was found below
+the fold, which is why the yard moved under the sign), and a node a look
+stands after the goods (`below-goods`, step 8f1) is below the fold of a long
+shop by construction. The owner's rule for it (Q4): **worn alone, its box
+stands wholly inside the scroll region's showing part** (the region's box
+inside the viewport, above the dock) **at rest on the two short screens**,
+`sparse` and `empty`, **and once `offers` is scrolled to its end**; some part
+of it inside the showing part across, so a node pushed sideways off the page
+is not read as shown. `above-dock` keeps the billboard's own first fold on
+`offers`. Read on every page the billboard paints (every pass but the short
+ones), per look (`belowGoodsByClass`, short/end); the tracked fixture, whose
+two node rows stand below the goods, owes reads of both on both page passes
+(`probe-coverage.mjs`).
+
+### `a-file-below-the-goods-is-painted-once-on-a-still-box`
+
+Rows that stand below the goods may share a piece of art, painted once on the
+first of them worn (the 8i plan's spike (a): a mask on the node clips its own
+pseudo-elements, so the shared piece goes on the first node's `::after`). On
+every paint, among the below-the-goods nodes the paint wears and their
+`::before` and `::after`: **a file is named by one box at most** (any
+property that draws one: a background or border image, a mask or mask
+border, a list marker, a pseudo's `content`; every `url()` the computed value
+names), and **a box that names a file runs no animation, nor does the node it
+hangs on** (an animation on the node carries its pseudo-elements; read from
+the computed `animation-name` and the document's running animations). A box
+with no box (`display: none`, a pseudo with no `content`) names nothing.
+Per look (`stillPainterByClass`, the boxes naming a file read); the tracked
+fixture owes reads on both page passes.
+
+### The fixture's subjects
+
+Two unminted node rows below the goods (bits 3 and 4, slots of the look's
+own), and a `guard.json` for all four rows. The first worn carries one still
+tile on its `::after` (`:is(<both>):not(:is(<both>) ~ *)::after`, the
+fixture's `ground.svg`); the first paints its own `::before` and the second
+its own box, in the tokens. **The second turns its own node** by a degree
+about its foot, **and only where it stands after the first**, which then
+carries the tile: worn alone it carries the tile and stands still. The turn
+is on the node and not on its `::before` because 1b reads a look's
+pseudo-element moved by a transform as standing anywhere and fails it where
+it paints (`pseudoRegion`; measured below). Nothing of either paints on the
+wall (`display: none` under `.shop-window`). The default run's contrast plan
+does not move (796 jobs with the fixture, 634 public: the fixture's jobs are
+the skeleton's cells, bare and all worn, and its new rows are worn in the
+all-worn variant); its boxes do.
+
+### Red proofs (the look run, the fixture alone; each plant on a throwaway commit, then reset)
+
+- **Pushed below the fold**: `margin-top: 2400px` on the first row. Exit 1;
+  the rule alone, 2 failures on every pass that runs the billboard (`sparse`
+  and `empty` at rest; e.g. "at 2775..2803 … where the region shows 0..764
+  at 390x844").
+- **Never reached**: `order: -1` on the first row, so it stands first in the
+  region. Exit 1; the rule alone, 1 failure ("offers, scrolled to its end —
+  never reached at -461..-433") on 12 of the 14 passes; the portrait and
+  tall-tablet passes, where `offers` fits its region, stay green.
+- **The tile named twice**: the same file on the second row's own
+  `::before`. Exit 1; 476 failures, every one this rule's (named by 2 boxes;
+  and, in the all-worn variant, a box naming it on the turning node).
+- **The painter animated**: the first row's node set turning. Exit 1; 256 of
+  this rule ("names ground-….svg and hangs on a node that runs an
+  animation"), and 9 of the reduced-motion pass's own (the plant has no
+  reduce kill).
+- **An experiment, not a rule of this step: the turn on the second row's
+  `::before`**. Exit 1, about 990 failures of 1b
+  (`a-paint-with-no-hit-area-reaches-no-money`): "div.att-fixture-turn::before's
+  unresolved reaches span.item-x[price] … it is moved by rotate 0deg, which
+  no box model here follows: it reaches anywhere", against every money node
+  and protected box on the surface, even at rest. A look whose movers turn or
+  shift a `::before` fails 1b closed today.
+- **The gate's**, in `pnpm test`: the plain comma split put back in
+  `selectorsOf`, 10 tests red; put back at `groundsUnderText`'s call alone, 8
+  red (`leaves no rule head in this file on the plain split` among them). The
+  guard's, the narrow key's, the guarded row's and the mover's plants are the
+  tests' own (`a-private-guard-file-is-read-whole`,
+  `a-private-decoration-art-key-names-its-own-box`,
+  `a-private-row-the-gate-cannot-judge-is-refused`,
+  `every-moving-decoration-has-a-reader-or-a-reason`, and after the
+  decor-guard critic `a-guarded-row-that-moves-says-so`,
+  `a-guarded-rows-art-is-counted-where-its-subject-is`,
+  `a-guarded-row-under-any-mood-says-why-its-art-may-disagree`,
+  `a-guarded-rows-background-that-travels-moves-a-whole-tile`,
+  `no-guard-problem-prints-a-reason`). Each of the critic's fixes taken back
+  turns its test red: the motion check (2 red), the count by subject (3), the
+  refusal of a foreign class (1), `underMood` under a mood with no class (1),
+  the travel over guarded rows (1), and a reason printed by the reader or the
+  gate (1 each). After the critic's re-check: every `:is()` and `:where()`
+  list read as one alternative per item, in any compound (`alternativesOf`;
+  the first `:is()` of the subject alone put back, 3 red, the ancestor
+  `:is(.crest, .low)` plant and its `:where()` twin among them), a longhand
+  read as a move (`MOVES`; the shorthand-only pattern put back, 1 red), and
+  the foreign-class refusal fed a look with no decoration rows
+  (`privateLooksOf`; such looks dropped, 1 red).
+
+### Not read, stated
+
+- Across, only that some part of a node shows; a node wider than the region
+  (a negative side margin) passes.
+- The screens a node below the goods reaches beyond the three (the studio,
+  Activity, the item faces): the geometry passes read them as any paint, and
+  the first-fold rule does not.
+- A shared piece of art drawn by no `url()` (a gradient, a token colour) is
+  not this rule's: it names no file. A transition is not an animation here. An
+  animation on a box above the node (the scroll region, the stall) is not
+  read.
+- The nodes on the wall: the fixture hides them there, and a look that does
+  not leaves empty boxes in the wall's grid that no rule here reads.
+- **Rows worn together**: the billboard paints each row alone, so the
+  first-fold rule never reads two nodes below the goods at once (the fixture's
+  two together are read by the geometry passes' all-worn variant, which holds
+  their boxes off every protected box, and by the still-box rule, which reads
+  every paint).
+- **The short passes** (375x667, 1280x720) never run the billboard, so the
+  first fold of a short stall is read at 844 and 900 tall and the other page
+  sizes, never at 667 or 720.
+- **Who owes them**: the tracked fixture alone, on both page passes; a carried
+  private look with no node below the goods owes nothing, and one with nodes
+  is read, owing no count.
+
+### A contrast box that read two ways (a sighting, 2026-11-15)
+
+`contrast|desktop|pay-several|1|65535|13|p.fine` (Modern, all worn, the
+Pay several sheet's memo line, role `pay-memo-line`) read 6.3046 on 4af5a2d's
+default run and 5.7256 on b2f6c56's, both on contrast tab 0, the box the same
+(374,1212.890625 532x34.5, 8,177 pixels, two rects, ink rgb(140, 153, 168)).
+The two commits differ in the decor gate's test, this file and
+`scripts/private-guard.mjs` with its `.d.mts`; of those only the reader is a
+probe input (`scripts/probe-inputs.mjs`), and the runner takes from it one
+constant, the guard file's name, through `served-sheets.mjs`, reading a
+guard's text into a row no verdict asks. So nothing either run painted or
+read could differ, and main's run read 6.3046 on tab 2: the box is not
+hermetic, and something under the line differs between two loads of one page.
+Not chased: which pixel, and what paints it (the sheet's code timer and its
+rate stamp are candidates). The canary read six other jobs on each run, the
+same on every tab, and none of them is this one. A run that compares dumps
+names this box as moved when nothing moved it.
+
+### Cost and the dump
+
+Measured on this Mac at three tabs, each run alone (no other probe runner
+up from its start to its end), back to back. The default run: main 243.2s
+(load 5.08 at the start), the step 247.6s (load 6.53), the geometry walk
+130.8 → 134.1s; the contrast plan 796 jobs both (634 public). Its dump
+against main's: only the tracked fixture's boxes move — 95 moved (the lines
+under the two new nodes, 56px lower), 24 added and 16 removed (the name
+sheet's decoration chips) — none crossing 3:1; one Modern box (`pay-several`,
+worn, a fine line's worst 6.30 → 5.73) read 6.30 on another run of the same
+probe code, so it is the run's and not the step's. The look run under the
+private look at 0x04's selection: main 152.5s, the step 152.7s, its dump
+identical (5,502 boxes, 0 moved). `pnpm looks:diff main`: 4,023 of 4,024
+shots identical and one inconclusive (main differed from itself on the
+narrow wall's `shop-window-quotes`), that screen alone again 48 of 48
+identical. With no selection looks:diff shoots the shipped looks alone, and
+under one it reads one private commit on both sides, so the fixture's own
+change is never in its comparison.

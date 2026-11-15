@@ -36,7 +36,7 @@ import horizonFillSvg from '../src/ui/decor/horizon-sky-fill.svg?raw';
 import horizonStarsSvg from '../src/ui/decor/horizon-stars.svg?raw';
 import { MOOD_VISIBLE_MIN, moodDistance, paintedDistance, type Rgb as MoodRgb } from './moodVisible';
 import { OUTLINE_1, OUTLINE_2, OUTLINE_2_UNDER_PX, outlineSet, type Offset } from './outline';
-import type { ShippedAttachment } from '../src/domain/attachments';
+import { attachmentMount, type ShippedAttachment } from '../src/domain/attachments';
 import {
     DEFAULT_LOOK_CLASS,
     FIXTURE_LOOK,
@@ -12581,6 +12581,90 @@ const qrByScreen: Record<string, Record<string, Record<string, { min: number; ma
  * carries the rain owes the outline rules whatever its class.
  */
 const wornClassesPainted = new Set<string>();
+/**
+ * **A file below the goods is painted once, on a still box**
+ * (`a-file-below-the-goods-is-painted-once-on-a-still-box`; step 8i, A item
+ * 7, the 8i plan critic's P1-2 and its spike (a)). Rows that stand below the
+ * goods may share one piece of art — the first of them worn carries it, so it
+ * is painted once however many are worn — and a shared piece that rode a
+ * moving box would move under every row beside it. So on every paint, among
+ * the below-the-goods decoration nodes the paint wears and their
+ * `::before` and `::after`: **a file is named by one box at most** (by any
+ * property that draws a file: a background or border image, a mask or mask
+ * border, a list marker, a pseudo's `content`), and **a box that names a
+ * file runs no animation, nor does the node it hangs on** (an animation on
+ * the node carries its pseudo-elements with it). Read from the computed
+ * style, every `url()` it names, and the document's running animations; a
+ * box with no box (`display: none`, a pseudo with no `content`) names
+ * nothing. Counted per look (`stillPainterByClass`: the boxes naming a file
+ * that were read), and the tracked fixture, whose two below-the-goods rows
+ * share one tile on the first worn's `::after`, owes reads on both page
+ * passes (`probe-coverage.mjs`).
+ */
+const STILL_PAINTER_CHECK = 'a-file-below-the-goods-is-painted-once-on-a-still-box';
+
+/** Per look class, the below-the-goods boxes naming a file that were read. */
+const stillPainterByClass: Record<string, number> = {};
+
+/** The computed properties that draw a file. */
+const FILE_PROPS = ['background-image', 'mask-image', '-webkit-mask-image', 'mask-border-source', '-webkit-mask-box-image-source', 'border-image-source', 'list-style-image', 'content'];
+
+/** Every file a computed style names, by its resolved URL. */
+function filesNamed(cs: CSSStyleDeclaration): Set<string> {
+    const out = new Set<string>();
+    for (const prop of FILE_PROPS) {
+        for (const m of (cs.getPropertyValue(prop) ?? '').matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)/g)) {
+            const url = m[1] ?? m[2] ?? m[3] ?? '';
+            if (url !== '' && !url.startsWith('#')) out.add(url);
+        }
+    }
+    return out;
+}
+
+/** Whether `el` (or its `pseudo`) runs an animation: a running one in the document, or one its style names. */
+function runsAnAnimation(el: Element, pseudo: '::before' | '::after' | null): boolean {
+    const cs = getComputedStyle(el, pseudo);
+    if (cs.animationName.split(',').some((name) => name.trim() !== 'none')) return true;
+    return document.getAnimations().some((a) => {
+        const effect = a.effect as KeyframeEffect | null;
+        return effect !== null && effect.target === el && (effect.pseudoElement ?? null) === pseudo && a.playState !== 'finished';
+    });
+}
+
+function stillPainterFaults(screen: string, label: string, worn: readonly ShippedAttachment[]): Failure[] {
+    const below = worn.filter((row) => row.paint === 'node' && row.cls !== undefined && attachmentMount(row) === 'below-goods');
+    if (below.length === 0) return [];
+    const out: Failure[] = [];
+    const fail = (detail: string): void => {
+        out.push({ screen, theme: label, check: STILL_PAINTER_CHECK, detail: `${detail} at ${window.innerWidth}x${window.innerHeight}` });
+    };
+    const byFile = new Map<string, string[]>();
+    for (const stall of document.querySelectorAll('#app .stall:not(.deck-stall)')) {
+        const scroller = [...stall.children].find((child) => child.classList.contains('stall-scroll'));
+        if (scroller === undefined) continue;
+        for (const row of below) {
+            for (const node of scroller.querySelectorAll(`:scope > .${row.cls}`)) {
+                for (const pseudo of [null, '::before', '::after'] as const) {
+                    const cs = getComputedStyle(node, pseudo);
+                    if (cs.display === 'none' || (pseudo !== null && (cs.content === 'none' || cs.content === 'normal'))) continue;
+                    const files = filesNamed(cs);
+                    if (files.size === 0) continue;
+                    stillPainterByClass[measuringClass] = (stillPainterByClass[measuringClass] ?? 0) + 1;
+                    const who = `.${row.cls}${pseudo ?? ''}`;
+                    for (const file of files) byFile.set(file, [...(byFile.get(file) ?? []), who]);
+                    if (runsAnAnimation(node, pseudo) || (pseudo !== null && runsAnAnimation(node, null))) {
+                        fail(`${who} names ${[...files].map((f) => f.slice(f.lastIndexOf('/') + 1)).join(', ')} and ${pseudo !== null && !runsAnAnimation(node, pseudo) ? 'hangs on a node that runs' : 'runs'} an animation`);
+                    }
+                }
+            }
+        }
+    }
+    for (const [file, boxes] of byFile) {
+        if (boxes.length > 1) fail(`${file.slice(file.lastIndexOf('/') + 1)} is named by ${boxes.length} boxes below the goods (${boxes.join(', ')}), where it is painted once`);
+    }
+    return out;
+}
+
 /*
  * **Where a pass's time goes, by look** (O1 of the probe-prune plan,
  * D-2026-11-11-04): the wall clock each look's paints and reads took on
@@ -12621,6 +12705,7 @@ for (const screen of measured) {
                 continue;
             }
             failures.push(...checkOverTime(screen, look, label, worn));
+            failures.push(...stillPainterFaults(screen, label, worn));
             failures.push(...lookSheetFaults(screen, label));
             failures.push(...kitAnchorFaults(screen, label, look));
             failures.push(...fileClipFaults(screen, label));
@@ -12824,6 +12909,77 @@ if (STICKY_ONLY === undefined && measured.includes('offers')) {
 }
 
 /**
+ * **A node below the goods shows in the first fold of a short stall**
+ * (`a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall`; step
+ * 8i, D-2026-11-15-05 Q4, the 8i plan critic's P2-6). The billboard's
+ * first-fold rule is a product rule — the beetle was found below the fold,
+ * which is why the yard moved under the sign — and a node a look stands
+ * after the goods (`below-goods`, step 8f1) is below the fold of a long shop
+ * by construction. So the owner's rule for it: worn alone, its box stands
+ * wholly inside the scroll region's showing part (the region's box inside
+ * the viewport, above the dock) **at rest on the two short screens**, the
+ * one-item shop (`sparse`) and the empty one (`empty`), and **once the long
+ * shop (`offers`) is scrolled to its end**; and some part of it inside the
+ * showing part across, so a node pushed sideways off the page is not read as
+ * shown. A node above the dock (`above-dock`) keeps the billboard's own
+ * first-fold rule on `offers`. Read on every page the billboard paints;
+ * counted per look (`belowGoodsByClass`), and the tracked fixture, whose two
+ * node rows stand below the goods, owes reads on both page passes
+ * (`probe-coverage.mjs`).
+ */
+const BELOW_GOODS_CHECK = 'a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall';
+
+/** Per look class, the below-the-goods nodes read on the short screens at rest and at the long one's end. */
+const belowGoodsByClass: Record<string, { short: number; end: number }> = {};
+
+/** The scroll region a decoration node stands in, and the part of it that shows: its box inside the viewport. */
+function regionOf(node: Element): { region: HTMLElement; shows: { top: number; bottom: number; left: number; right: number } } | undefined {
+    const region = node.closest('.stall-scroll');
+    if (!(region instanceof HTMLElement)) return undefined;
+    const r = region.getBoundingClientRect();
+    return {
+        region,
+        shows: { top: Math.max(r.top, 0), bottom: Math.min(r.bottom, window.innerHeight), left: Math.max(r.left, 0), right: Math.min(r.right, window.innerWidth) },
+    };
+}
+
+/** Why a below-the-goods node is not seen where the owner's rule says it is, worn alone (`BELOW_GOODS_CHECK`). */
+function belowGoodsFaults(look: Look, row: ShippedAttachment): string[] {
+    const out: string[] = [];
+    const tally = (belowGoodsByClass[look.theme.sheetClass] ??= { short: 0, end: 0 });
+    const seen = (where: string, scrolled: boolean): boolean => {
+        const node = document.querySelector(`.stall:not(.deck-stall) .stall-scroll > .${row.cls}`);
+        if (node === null) {
+            out.push(`${row.label} stands nowhere on ${where}`);
+            return false;
+        }
+        const at = regionOf(node);
+        if (at === undefined) {
+            out.push(`${row.label} stands in no scroll region on ${where}`);
+            return false;
+        }
+        if (scrolled) at.region.scrollTop = at.region.scrollHeight;
+        const box = node.getBoundingClientRect();
+        const { shows } = scrolled ? regionOf(node)! : at;
+        if (scrolled) at.region.scrollTop = 0;
+        const across = Math.min(box.right, shows.right) - Math.max(box.left, shows.left) > 0;
+        if (box.top < shows.top - 0.5 || box.bottom > shows.bottom + 0.5 || !across) {
+            out.push(
+                `${row.label} on ${where} at ${Math.round(box.top)}..${Math.round(box.bottom)} (${Math.round(box.left)}..${Math.round(box.right)} across), where the region shows ${Math.round(shows.top)}..${Math.round(shows.bottom)} (${Math.round(shows.left)}..${Math.round(shows.right)}) at ${window.innerWidth}x${window.innerHeight}`,
+            );
+        }
+        return true;
+    };
+    for (const screen of ['sparse', 'empty']) {
+        paint(screen, look, [row]);
+        if (seen(`${screen}, at rest — the first fold of a short stall`, false)) tally.short += 1;
+    }
+    paint('offers', look, [row]);
+    if (seen('offers, scrolled to its end — never reached', true)) tally.end += 1;
+    return out;
+}
+
+/**
  * The billboard: a decoration nobody can see is not a product.
  *
  * Every catalogue row is worn alone on the offers screen and asked to show
@@ -12953,7 +13109,10 @@ for (const look of STICKY_ONLY === undefined ? measuredLooks() : []) {
             if (box.width * box.height < 100) {
                 bill('too small to sell', `${row.label} is ${Math.round(box.width)}x${Math.round(box.height)}`);
             }
-            if (box.top < 0 || box.bottom > window.innerHeight) {
+            if (attachmentMount(row) === 'below-goods') {
+                // Below the goods it is the short stall's first fold, and the long one's end (step 8i, Q4).
+                for (const detail of belowGoodsFaults(look, row)) bill(BELOW_GOODS_CHECK, detail);
+            } else if (box.top < 0 || box.bottom > window.innerHeight) {
                 bill(
                     'not in the first fold',
                     `${row.label} at ${Math.round(box.top)}..${Math.round(box.bottom)}`,
@@ -16144,6 +16303,10 @@ const verdict = {
     tryOnNamesByClass,
     /* Nodes each staged screen put in its pressed state, per look class (`STAGED` in `fixtures.ts`). */
     stagedByClass,
+    /* Below-the-goods nodes read on the short screens and at the long one's end, per class (`a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall`, 8i). */
+    belowGoodsByClass,
+    /* Below-the-goods boxes naming a file that were read, per class (`a-file-below-the-goods-is-painted-once-on-a-still-box`, 8i). */
+    stillPainterByClass,
     /* The short pass's looks as the page read them, and its paints measured and set aside (`?sticky=`). */
     stickyOnly: STICKY_ONLY === undefined ? null : [...STICKY_ONLY].sort(),
     /* The look run's listed screens as this page read them (`?looks=carried`), or null on every other run. */

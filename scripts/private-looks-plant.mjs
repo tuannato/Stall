@@ -138,7 +138,9 @@ function fixtureAtHead() {
 
 /**
  * A private look repository outside this checkout: the fixture, renamed,
- * edited and added to, committed once. See the module's docblock.
+ * edited and added to, committed once. See the module's docblock. An `edit`
+ * that answers `undefined` for a path leaves that file out (a look with no
+ * `guard.json`, step 8i).
  */
 export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fixture' } = {}) {
     const files = {};
@@ -148,7 +150,8 @@ export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fix
         if (path === 'index.json') {
             text = text.replace('"slug": "fixture"', `"slug": "${slug}"`);
         }
-        files[path] = edit(path, text);
+        const edited = edit(path, text);
+        if (edited !== undefined) files[path] = edited;
     }
     return committed({ ...files, ...add });
 }

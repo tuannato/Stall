@@ -91,7 +91,9 @@
  *   that carries it owes a region scrolled under its sticky sign, a mark it
  *   shows and a vertical name at the desk, a rung its long name climbed on
  *   both page passes and the last rung on the phone, and a line read under
- *   its own clip on both (the 8g1 critic's P2-3); the runner owes its
+ *   its own clip on both (the 8g1 critic's P2-3); since step 8i, on both
+ *   page passes, a node below the goods read on a short stall and at the
+ *   long one's end, and a box below the goods that names a file; the runner owes its
  *   art-off frames, pending and failed, on the contrast pass, and a
  *   mark-hide and pending frame for any carried look with marks or file art.
  * - **`a-cjk-name-is-set-in-a-cjk-face`** (8f2): a pass that measured
@@ -550,6 +552,16 @@ export function probeCoverageGaps(
         if (PAGE_PASSES.has(pass) && !(((report.nameOwnClipByClass ?? {})[fx] ?? 0) > 0)) {
             gaps.push(`the-sellers-name-stands-whole read no ${fx} line under its own clip`);
         }
+        // Its two node rows stand below the goods and share one still tile
+        // (step 8i), so the billboard's rule for them and the tile's rule
+        // have a subject on both page passes.
+        const below = (report.belowGoodsByClass ?? {})[fx];
+        if (PAGE_PASSES.has(pass) && !((below?.short ?? 0) > 0 && (below?.end ?? 0) > 0)) {
+            gaps.push(`a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall read no ${fx} node below the goods on a short stall and at the long one's end`);
+        }
+        if (PAGE_PASSES.has(pass) && !(((report.stillPainterByClass ?? {})[fx] ?? 0) > 0)) {
+            gaps.push(`a-file-below-the-goods-is-painted-once-on-a-still-box read no ${fx} box below the goods that names a file`);
+        }
     }
     // A staged screen (`STAGED` in `layout/fixtures.ts`, the 8g1 critic's
     // P1-1) owes, on every look a pass painted it on, a node it pressed: a
@@ -893,7 +905,10 @@ export function probeCoverageLine(pass, report) {
         (Object.keys(report.stickyByClass ?? {}).length === 0 ? '' : ` · sticky signs (paints/scrolled/stops): ${perClass(report.stickyByClass)}`) +
         (Object.keys(report.tryOnNamesByClass ?? {}).length === 0 ? '' : ` · stress names tried on: ${perClass(report.tryOnNamesByClass)}`) +
         (Object.keys(report.nameVerticalByClass ?? {}).length === 0 ? '' : ` · vertical sign lines: ${perClass(report.nameVerticalByClass)}`) +
-        ((report.cjkFaces ?? []).length === 0 ? '' : ` · CJK advance: ${report.cjkFaces.join(', ')}`);
+        ((report.cjkFaces ?? []).length === 0 ? '' : ` · CJK advance: ${report.cjkFaces.join(', ')}`) +
+        // 8i: the nodes below the goods, read on a short stall and at the long one's end, and the boxes there naming a file.
+        (Object.keys(report.belowGoodsByClass ?? {}).length === 0 ? '' : ` · nodes below the goods (short/end): ${perClass(report.belowGoodsByClass)}`) +
+        (Object.keys(report.stillPainterByClass ?? {}).length === 0 ? '' : ` · boxes below the goods naming a file: ${perClass(report.stillPainterByClass)}`);
     // The card figures read, summed over the looks, per place and step (`a-card-figure-stands-inside-its-row`).
     const cardSums = {};
     for (const read of Object.values(report.cardFigureByClass ?? {})) {

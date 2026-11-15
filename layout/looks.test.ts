@@ -368,17 +368,24 @@ describe('no-harness-look-is-a-private-look', () => {
         expect([...HARNESS_LOOK_CLASSES].sort()).toEqual([WORKSHOP_SHEET_CLASS, SKELETON_SHEET_CLASS, FIXTURE_SHEET_CLASS].sort());
     });
 
-    it('carries a tracked private fixture whose look.json is the kit’s shape plus the tokens a private row may name', () => {
+    it('carries a tracked private fixture whose look.json is the kit’s shape plus the fields a private row may name', () => {
         // The fixture's look.json is written in the kit's shape, widened by
-        // one field: a private look's row may name the token that entitles
-        // it (8b2, `mintable`). The kit refuses exactly that field and
-        // nothing else, so the fixture is a kit look once its tokens go.
+        // what a first-party row may name and a kit row may not: the token
+        // that entitles it (8b2, `mintable`), and since step 8i two node rows
+        // standing below the goods (a `mount`, in slots of the look's own).
+        // The kit refuses exactly those and nothing else, so the fixture is a
+        // kit look once its tokens and those two rows go.
         const source = readFileSync(join(LAYOUT, 'fixture-private-looks', 'fixture', 'look.json'), 'utf8');
         expect(workshopLookProblems(source)).toEqual([
             'moods[0].tokenId: unknown field — a kit row is never minted (allowed: bit, slot, label, place, cls, paint, palette, motion)',
             'decorations[0].tokenId: unknown field — a kit row is never minted (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+            'decorations[2].mount: unknown field — a kit row stands where its slot puts it (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+            'decorations[2].slot: must be one of crest, fringe, yard, badge, trim (a mood goes under "moods")',
+            'decorations[3].mount: unknown field — a kit row stands where its slot puts it (allowed: bit, slot, label, place, cls, paint, palette, motion)',
+            'decorations[3].slot: must be one of crest, fringe, yard, badge, trim (a mood goes under "moods")',
         ]);
-        const json = JSON.parse(source) as { moods: { tokenId?: string }[]; decorations: { tokenId?: string }[] };
+        const json = JSON.parse(source) as { moods: { tokenId?: string }[]; decorations: { tokenId?: string; mount?: string }[] };
+        json.decorations = json.decorations.filter((row) => row.mount === undefined);
         for (const row of [...json.moods, ...json.decorations]) {
             delete row.tokenId;
         }

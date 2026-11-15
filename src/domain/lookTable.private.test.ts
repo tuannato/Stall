@@ -57,11 +57,13 @@ describe('every-merged-view-answers-the-fixture-look', () => {
                 [FIXTURE_ID, 0, 'trim', TRIM_TOKEN],
                 [FIXTURE_ID, 1, 'mood', DUSK_TOKEN],
                 [FIXTURE_ID, 2, 'crest', undefined],
+                [FIXTURE_ID, 3, 'low', undefined],
+                [FIXTURE_ID, 4, 'turn', undefined],
             ]);
         },
         attachmentsForLook: () => {
             const rows = table.attachmentsForLook(FIXTURE_ID);
-            expect(rows).toHaveLength(3);
+            expect(rows).toHaveLength(5);
             rows.forEach((row, i) => expect(row).toBe(FIXTURE_ROWS()[i]));
             for (const { id } of SHIPPED_THEMES) {
                 expect(table.attachmentsForLook(id)).toEqual(attachmentsForTheme(id));
@@ -77,10 +79,12 @@ describe('every-merged-view-answers-the-fixture-look', () => {
             table.wornForLook(FIXTURE_ID, 0b111).forEach((row) => expect(FIXTURE_ROWS()).toContain(row));
         },
         publishableLookFlags: () => {
-            // The crest (bit 2) has no token, so a record never names it; a
-            // bit naming no row passes through.
+            // The crest (bit 2) and the two rows below the goods (bits 3 and
+            // 4, step 8i) have no token, so a record never names them; a bit
+            // naming no row passes through.
             expect(table.publishableLookFlags(FIXTURE_ID, 0b111)).toBe(0b011);
-            expect(table.publishableLookFlags(FIXTURE_ID, 0b1000)).toBe(0b1000);
+            expect(table.publishableLookFlags(FIXTURE_ID, 0b11000)).toBe(0);
+            expect(table.publishableLookFlags(FIXTURE_ID, 0b100000)).toBe(0b100000);
         },
         mintedLookTokens: () => {
             const tokens = table.mintedLookTokens();
@@ -327,6 +331,8 @@ describe('a-private-row-class-is-its-looks-own', () => {
         look.decorations[0]!.tokenId = 'e1'.repeat(32);
         look.decorations[0]!.cls = second.trim;
         look.decorations[1]!.cls = 'att-other-crest';
+        look.decorations[2]!.cls = 'att-other-low';
+        look.decorations[3]!.cls = 'att-other-turn';
         look.moods[0]!.tokenId = 'e2'.repeat(32);
         look.moods[0]!.cls = 'att-other-dusk';
         vi.resetModules();

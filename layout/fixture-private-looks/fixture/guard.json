@@ -1,0 +1,22 @@
+{
+    "rows": {
+        "att-fixture-trim": { "follows": "palette" },
+        "att-fixture-crest": { "follows": "palette" },
+        "att-fixture-low": {
+            "follows": "art",
+            "underMood": "it carries the shared tile below the goods, the fixture's own drawn file, which no mood recolours; no line of text stands on it, and the probe reads every line on the page as it does elsewhere"
+        },
+        "att-fixture-turn": {
+            "follows": "art",
+            "underMood": "worn alone it carries the shared tile below the goods on its own ::after, the fixture's own drawn file, which no mood recolours; no line of text stands on it",
+            "moving": {
+                "reason": "a node below the goods, where no line of text stands, turning its own box by one degree about its foot; the geometry passes keep every decoration box off every protected box, frame by frame over time (checkOverTime)"
+            }
+        }
+    },
+    "art": {
+        ".stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low::before | background-image": "the row's own art on its own node's ::before, below the goods: an aria-hidden box no line of text stands in",
+        ".stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-turn | background-color": "the row's own node, below the goods: an aria-hidden box that paints its own ground and holds no text",
+        ".stall.t-fixture-private:not(.shop-window) > .stall-scroll > :is(.att-fixture-low, .att-fixture-turn):not(:is(.att-fixture-low, .att-fixture-turn) ~ *)::after | background-image": "the tile the two rows share, painted once on the first of them worn and never on a box that moves: no line of text stands in it"
+    }
+}

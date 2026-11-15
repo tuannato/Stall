@@ -36,6 +36,26 @@
             "cls": "att-fixture-crest",
             "paint": "root",
             "motion": false
+        },
+        {
+            "bit": 3,
+            "slot": "low",
+            "label": "Fixture low",
+            "place": "Below the goods",
+            "cls": "att-fixture-low",
+            "paint": "node",
+            "mount": "below-goods",
+            "motion": false
+        },
+        {
+            "bit": 4,
+            "slot": "turn",
+            "label": "Fixture turn",
+            "place": "Below the goods, turning",
+            "cls": "att-fixture-turn",
+            "paint": "node",
+            "mount": "below-goods",
+            "motion": true
         }
     ]
 }

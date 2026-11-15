@@ -55,6 +55,8 @@ describe('the-served-sheets-are-the-role-table-and-the-private-looks-a-run-reads
         assert.deepEqual(row.ownArt, { dir: 'art', files: ['ground.svg', 'under-name.svg'] });
         assert.equal(row.artDir, `${FIXTURE}/fixture/art`);
         assert.equal(row.look.fontsText, undefined);
+        // Its guard file (step 8i), read beside the faces' as git holds it.
+        assert.equal(row.look.guardText, atHead(`${FIXTURE}/fixture/guard.json`));
         assert.deepEqual(lookRows([row]), [row]);
     });
 
