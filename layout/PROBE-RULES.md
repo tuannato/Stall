@@ -16130,3 +16130,208 @@ narrow wall's `shop-window-quotes`), that screen alone again 48 of 48
 identical. With no selection looks:diff shoots the shipped looks alone, and
 under one it reads one private commit on both sides, so the fixture's own
 change is never in its comparison.
+
+## Step 8i, B: a mood's page art at its worst (2026-11-16; D-2026-11-15-06)
+
+`a-mood-art-layer-is-read-at-its-worst`. Page art stands still while the
+content scrolls over it, so a line on the bare ground passes over every
+patch of it, as a drop of Neo's rain crosses every line in time; the
+contrast pass read it at one scroll position (PLAN § Open's at-rest entry,
+the mood-hooks critic's P3-3). This closes it for every job that wears a
+mood (D-2026-11-14-01's open item). The model is `layout/moodArt.ts`, pure
+and unit-tested (`moodArt.test.ts`); the page's half is `moodArtAtItsWorst`
+in `probe.ts`; the runner holds it in `contrastPrepare` and `moodEcho`.
+
+**What it flattens.** In every pass-4 contrast job that wears a mood
+(`wearsMood`), every `background-image` layer on the stall's root, on an
+open `.sheet` under it and on the scroll region (`.stall-scroll`): the
+mood's own art, the layers it shares with the bare look, and the page art
+of the decorations worn with it. A bare job is left alone and reports so;
+the transparency pass does not ask. Each element's background is read
+whole and rewritten, important (so no animation moves it), as flat
+rectangles of the worst ground the stack of layers can put under a line
+there (`worstCells`); its background colour stays.
+
+- **A gradient** (`linear`, `radial`, `conic`, repeating or not) by every
+  colour on every segment between two consecutive stops, `SEGMENT_SAMPLES`
+  (32) steps each in premultiplied sRGB: its strongest stop is among them,
+  and so is a point between two stops of different hue, which can be darker
+  than either (a composite's luminance along a segment is convex, so its
+  maximum is a stop and its minimum may lie between). A transition hint
+  moves where the colours fall, not which, and is passed over.
+- **A file** rasterised in the page at its painted size (a canvas, the
+  file's URL; read once a page for each URL and size) and read back, every
+  distinct pixel.
+- **The stack, not one layer at a time** (`worstStack`): bottom to top, each
+  layer's colours over every composite kept so far, the `BEAM` (12) worst
+  kept. One layer at a time, an opaque scrap on top would hide a darker one
+  on the layer below that shows wherever the top is transparent — Rural's
+  confetti is three such tiles. A search is reused across jobs by the
+  layers' ids and what the judge reads.
+
+**(a) Toward which ink.** The worst ground is chosen for the mood's own
+`--s-text` (`judgeFor`): of every colour the stack can paint at a point,
+composited over the element's background colour on the mood's `--s-bg`, the
+one that reads least against it — the darkest on a light mood, the lightest
+on a dark one. That is the worst for every ink on the text's side of the
+ground while the art stays on the ground's side of that ink; where a ground
+reaches past an ink toward the text, the text reads at most a third of its
+own contrast with that ink, under 3:1 for every ink within 9:1 of the text,
+so the text fails first. **Not read at its worst, stated:** a line whose
+ink is on the other side of the ground (a light line on a light mood's
+ground), or further than 9:1 from the text.
+
+**(b) What area.** A layer that repeats along an axis covers its clip area
+along it. Along an axis it does not repeat, its tile stands still while the
+content of a scroller scrolls over it. The capture stands every scroller at
+its start, so a line reaches the tile only from below (or the right), and
+only as far as the scroller's range carries it: for every scroller
+(`overflow` `auto`, `scroll` or `overlay`) along that axis whose box the tile
+reaches, the tile is widened to the band from its part inside the scroller
+to that part's end plus the range, cut to the scroller's box, across the
+span the tile covers on the other axis — not the whole page, and not only
+the tile. In the band, and in the tile of a layer so widened, the layer may
+also be absent (the line has scrolled off it), so a transparent colour is
+among its own. The range is the scroller's own overflow, or, for the boxes
+the capture grows to show everything (the region, an open sheet), at most
+how far the capture grew the page past the job's height, which the runner
+hands over: an upper bound. A scroller that cannot move widens nothing, a
+tile that meets no scroller is read where it is, and `local` attachment is
+read where it is. A layer the element animates the position or size of
+covers its whole clip area, and may be absent.
+
+*Why the range* (the build's own first run): widened over the scroller's
+whole box, Modern's empty stall under After hours read 2.20:1 at both
+widths — the awning's accent spill under the empty shelf's second line, a
+line on a screen too short to scroll at all. A line no scroll carries
+there is no reader of it.
+
+**(c) Size, position and clip.** Each layer's own computed size, position
+(`background-position-x`/`-y`, `calc()` of a percentage and a length read),
+repeat, origin box and clip box, cycled over the layers as CSS cycles them,
+give its tiles in the element's border box. Every cut is rounded to a whole
+pixel, so two rectangles meet and never overlap (an overlap of two
+translucent rectangles would composite twice, a false red), and each is
+written in px from the border box, `no-repeat`, border-box origin and
+clip.
+
+**(d) What cannot be read** is a sentence the runner refuses the job on,
+never a skip: an image that is neither a file nor a gradient this models
+(`image-set()`, a prefixed gradient, `cross-fade()`), a gradient interpolated
+in another space or with a stop outside sRGB (`oklch()`, `lab()`,
+`color(display-p3 …)`), a size, position or repeat it does not parse, a file
+layer at `auto`, `cover` or `contain` (its intrinsic size is not read), a
+`fixed` attachment, a `text` clip; and, on the page, a file that does not
+load or cannot be read back, a transform on the element or above it, a
+blend mode other than `normal`, and a stall whose `--s-text` or `--s-bg`
+does not resolve to an opaque colour.
+
+**Owed.** Every full prepare of a pass-4 job reports what it flattened
+(`moodArt`: whether it wears a mood, the elements read by kind, the layers
+by kind, the rectangles; zero layers is a report, and a paint that wears no
+mood says so). The runner refuses a job whose prepare reports nothing, read
+no stall root, or flattened without a mood; and the page publishes the jobs
+that wear a mood (`__contrastOwed().mood`, `moodOwed`, derived at run time
+from its plan and the looks' own rows, never a tracked table), and the walk
+is held to it at its end, both ways. The dump's job record carries what was
+flattened (never the time). A failing line in such a job says the job read
+its mood's page art at its worst, and the runner prints, per look and
+variant, the jobs, the layers by kind, the rectangles, the least read, the
+least line read and the flatten's own tab time. The plan's mood keys on the
+shipped run are pinned by count (162: Modern's 80 all-worn jobs and Rural's
+82, its two stilled `unbuyable` jobs among them), 242 with the tracked
+fixture.
+
+### The fixture's subject
+
+The tracked fixture's mood `att-fixture-dusk` lays root art of its own,
+`dusk.svg` — a faint haze, 160×96, that does not repeat, at 24px 24px —
+beside the ground tile it shares with the bare look, listed in
+`PRIVATE_DECORATION_ART` for its sheet alone. At rest it stands behind the
+sign at every width, so no line reads it; flattened, it is widened under
+its columns (x 24–184) down the region at the phone, and under the sign's
+own sticky column, where no line stands, at the desk. Re-pinned for it:
+`served-sheets.test.mjs` (the fixture's art files), the decor gate's
+planted copies of the fixture (three expectations gain the copied mood art,
+which no entry names under the planted class) and the fixture read as
+another sheet (one ground more).
+
+### Red proofs (the look run over the fixture; each plant a throwaway commit, then reset)
+
+- **r1, the committed light mood, its art darkened** (`fill-opacity` .06 →
+  .45, toward the dark ink): exit 1, 26 lines under 3:1, every one at the
+  phone and every one in a mood job (the least, the item face's back
+  control at 2.12:1; the muted section titles at 2.37:1).
+- **r1, read at rest** (the same plant, the page's write of the flat layers
+  taken out, scratch): green — the darkened haze behind the sign is read by
+  no line at one scroll position, which is the gap this closes.
+- **r2, the mood made dark (light ink), its art light** (the brief's own
+  shape: `#f4f6fa` at .45 over a dark palette whose accent reads on its
+  own): exit 1, 35 lines under 3:1, every one at the phone (a muted section
+  title at 1.12:1, the back control at 1.03:1); **read at rest**, green.
+- **g2, the same dark mood, its art darkened** (`#000000` at .45): green
+  (the least read 3.27:1): a layer that only moves the ground away from the
+  ink drops out of the flattening.
+- **Owed**: the page answering no report on a mood job — 84 jobs refused
+  ("the prepare reported no mood flattening"), and the walk's end names
+  them; the page saying a mood job wears none — "flattened 0 job(s) and not
+  84 the page owes"; the fixture's mood art at `background-attachment:
+  fixed` — 80 jobs refused with the page's sentence ("layer 1 of 2 (url(…
+  dusk….svg)): background-attachment fixed, which this read does not
+  model"), the four public witness jobs flattened as ever.
+
+The model's own red cases are `moodArt.test.ts`'s: a darkest point between
+two stops, the refusals, the stack that a top layer's own extreme would
+under-read, the band and its range, a scroller that cannot move.
+
+### What moved
+
+The default run against main (1bf6462, the same machine, the same hour):
+the plan the same 796 jobs (634 public, pinned); the dump 13,698 boxes
+identical, **1,130 moved, every one down and every one on a job that wears
+a mood** (Modern 226, Rural 431, the fixture 473), none crossing 3:1, and 0
+outside a mood job. The least each reads now: Modern under After hours
+3.03:1 (the empty shelf's second line at the phone, 3.28 before: Modern's
+backdrop at its strongest stop under it), Rural under Sun-faded 3.05:1 (the
+wall's status line, 3.46 before: under the darkest confetti fold), the
+fixture 3.09:1 (the item face's back control, 3.36 before; the same line
+reads 3.05 bare, at rest). The added boxes (198) are the transparency
+pass's: main's run was stopped by the watchdog during that pass, so its
+dump has none.
+
+- **Modern under After hours**: the awning's stripes and hem stand in the
+  root's padding above the region and are widened nowhere; its spill meets
+  the region and is widened down by the region's range; the backdrop's
+  radial gradient covers the box and is read at its 6% stop everywhere.
+- **Rural under Sun-faded**: one rectangle a job, the darkest confetti fold
+  (`#b0bca2`, opaque) under every line on the bare ground: the scraps fall,
+  so any line can be under any fold. It holds because the confetti was drawn
+  to clear 3:1 against every Rural ink
+  (`every-confetti-scrap-clears-three-to-one-under-every-ground-ink`).
+
+### Under the private look at 0x04's selection
+
+The look run reads both its moods flattened and is green; its numbers are
+in the private log, not here.
+
+### Not read, stated
+
+- A bare look's own root art (its bare jobs), a decoration's page art in a
+  job that wears no mood (Neo's rows, a solo or tide job), and any surface
+  but the root, an open sheet and the scroll region (a card, a wall plate,
+  the overlay): read at rest, as before.
+- A line whose ink is on the other side of the ground from the mood's text,
+  or further than 9:1 from it (a).
+- **Conservative, stated**: a layer's colours are taken everywhere its tile
+  covers, though a line reaches only the part of a large tile its scroller
+  can carry it over (Modern's backdrop, a wash across the box, is read at
+  its strongest stop under every line of an After hours page); every layer
+  is taken to meet every phase of every other; the range of a grown box is
+  the growth, an upper bound.
+- A tile placed by a percentage is read where the grown capture puts it,
+  not where the job's own height would.
+- A gradient's colours between two samples of a segment (32 a segment).
+- Two separate elements' stacks are searched apart: the root's worst and
+  the region's worst are each chosen alone, though a translucent region
+  shows the root under it. No shipped look and not the fixture paints art
+  on the region today.
