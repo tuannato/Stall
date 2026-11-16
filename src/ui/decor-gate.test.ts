@@ -1476,6 +1476,8 @@ const PRIVATE_DECORATION_ART: Readonly<Record<string, Readonly<Record<string, st
     't-fixture-private': {
         '.stall.t-fixture-private.att-fixture-dusk | background-image':
             'a mood’s own root art beside the ground tile it shares with the bare look: the stall’s own background, behind every card, read at its worst by the probe',
+        '.stall.t-fixture-private.att-fixture-dusk .sheet | background-image':
+            'a mood’s own art on an open sheet’s surface, in its corner under the head: the sheet’s own ground, read at its worst by the probe',
     },
     // The private look at 0x04.
     't-inkwash': {
@@ -1486,8 +1488,11 @@ const PRIVATE_DECORATION_ART: Readonly<Record<string, Readonly<Record<string, st
     },
 };
 
-/** The tracked fixture's own mood art, as the gate prints it in a copy planted under `PLANTED_CLASS`: no entry names that class. */
-const PLANTED_MOOD_ART = `.stall.${PLANTED_CLASS}.att-planted-dusk { background-image: url(./art/dusk.svg), url(./art/ground.svg) }`;
+/** The tracked fixture's own mood art, as the gate prints it in a copy planted under `PLANTED_CLASS` (the root's, then the open sheet's): no entry names that class. */
+const PLANTED_MOOD_ART = [
+    `.stall.${PLANTED_CLASS}.att-planted-dusk { background-image: url(./art/dusk.svg), url(./art/ground.svg) }`,
+    `.stall.${PLANTED_CLASS}.att-planted-dusk .sheet { background-image: url(./art/dusk.svg) }`,
+];
 
 /**
  * The art a sheet's decoration-scoped rules may lay: `DECORATION_ART`, and in
@@ -1978,7 +1983,7 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d; }`);
         const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
         expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toEqual([
-            PLANTED_MOOD_ART,
+            ...PLANTED_MOOD_ART,
             `.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`,
         ]);
     });
@@ -2386,7 +2391,7 @@ describe('a-private-decoration-art-key-names-its-own-box', () => {
         ).find((row) => row.lookClass === PLANTED_CLASS)!;
         expect(guardArtProblems(named).join()).toMatch(/no node row of t-planted-look/);
         expect(groundsUnderText(named.css, undefined, undefined, artFor(named))).toEqual([
-            PLANTED_MOOD_ART,
+            ...PLANTED_MOOD_ART,
             `.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`,
         ]);
     }, PLANTS_TIMEOUT_MS);
@@ -2397,7 +2402,7 @@ describe('a-private-decoration-art-key-names-its-own-box', () => {
         // The same rules read as any other sheet: refused — and the fixture's own mood art with
         // them wherever its class's entry in `PRIVATE_DECORATION_ART` does not reach.
         const moodArt = Object.keys(PRIVATE_DECORATION_ART['t-fixture-private']!).length;
-        expect(moodArt).toBe(1);
+        expect(moodArt).toBe(2);
         for (const other of [{ role: 'look', lookClass: 't-modern' }, { role: 'kit', lookClass: 't-workshop' }, { role: 'private', lookClass: 't-fixture-private' }]) {
             expect(groundsUnderText(fx.css, undefined, undefined, artFor(other)).length, other.role).toBe(
                 Object.keys(guardOf(fx)!.art).length + (other.role === 'private' ? 0 : moodArt),

@@ -46,6 +46,35 @@
 }
 
 /*
+ * And on an open sheet, so the rule's sheet path has a subject in public CI
+ * (the critic's P2-4): the same haze, small, in the sheet's top corner,
+ * where its head stands over it at rest. The sheet scrolls its own content
+ * over it, so the probe reads it under every line in its columns. Listed in
+ * `PRIVATE_DECORATION_ART` beside the root's.
+ */
+.stall.t-fixture-private.att-fixture-dusk .sheet {
+    background-image: url(./art/dusk.svg);
+    background-size: 160px 36px;
+    background-repeat: no-repeat;
+    background-position: 24px 16px;
+}
+
+/*
+ * The bare look's own art on the scroll region, which every mood job reads
+ * with it (the rule reads every layer the bare look shares with a mood), so
+ * the region path has a subject in public CI too: the haze again, behind the
+ * sign at rest. Written on the bare look and not under the mood, because the
+ * decor gate's key for a mood's private art names the root or an open sheet
+ * alone (`PRIVATE_DECORATION_ART`); a look's own rule needs no key.
+ */
+.t-fixture-private .stall-scroll {
+    background-image: url(./art/dusk.svg);
+    background-size: 140px 80px;
+    background-repeat: no-repeat;
+    background-position: 200px 24px;
+}
+
+/*
  * Its decorations: one paint of their own each, in the tokens, so the decor
  * gate's rules for a private row (a rule of its own that paints, colours
  * that follow the palette, no art, no motion) judge them rather than refuse
