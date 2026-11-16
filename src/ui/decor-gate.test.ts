@@ -2042,8 +2042,8 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         const served = await plantedServed(rules);
         const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
         // No entry for the planted look: its mood's art is a ground under text, both rules, and the
-        // copy of the tracked fixture's own mood art beside them.
-        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toHaveLength(3);
+        // copy of the tracked fixture's own mood art beside them (its root's and its sheet's).
+        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toHaveLength(2 + PLANTED_MOOD_ART.length);
         // An entry for the planted look: its two rules pass in its own sheet.
         const table = {
             [PLANTED_CLASS]: {
