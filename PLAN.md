@@ -2219,16 +2219,48 @@ money path this app can have, because nothing on it is derived.
   removal-mode `describe` fixture, sampled bare and under each mood, would
   close the warning and cost a few contrast jobs a look and variant; not
   built.
-- **A look's root art is read at rest, not at its worst** (the mood-hooks
-  critic's P3-3, 2026-11-11). A mood's own root art (`PRIVATE_DECORATION_ART`,
-  the private look at 0x04's first) and any look's own root art stand still
-  while the content scrolls over them, so a line passes over every patch of
-  the picture, as the rain's drops cross it in time. The rain is flattened to
-  its brightest drop in every job that wears it; nothing does the same for a
-  look's or a mood's art (the contrast pass reads it at one scroll position,
-  the dress rule names a `url()` picture and does not judge it). The fix
-  would flatten each listed art layer to its extreme over the ground in the
-  jobs that wear it; not built.
+- **A bare look's own root art, and a decoration's page art worn with no
+  mood, are read at rest, not at their worst** (the mood-hooks critic's P3-3,
+  2026-11-11; narrowed by step 8i, B, D-2026-11-15-06). Page art stands still
+  while the content scrolls over it, so a line passes over every patch of
+  it, as the rain's drops cross it in time. Since
+  `a-mood-art-layer-is-read-at-its-worst` (`layout/moodArt.ts`), every
+  contrast job that wears a mood reads every `background-image` layer on the
+  stall's root, an open sheet and the scroll region at its worst — the
+  mood's own art, the layers it shares with the bare look, and the page art
+  of the decorations worn with it (Modern's Awning and Rural's Sunburst and
+  Confetti in their all-worn jobs). Still read at one scroll position: a bare
+  look's own root art (its bare jobs), and a decoration's page art in a job
+  that wears no mood (a look with no mood, Neo's; a solo or tide job). The
+  same flattening there would re-judge approved pixels on thin margins (the
+  private look at 0x04's bare root art among them); not built. The flattening's
+  own limits, stated in `moodArt.ts`: a line whose ink is on the other side
+  of the ground from the mood's text, or further than 9:1 from it, is not
+  read at its worst; a tile placed by a percentage is read where the grown
+  capture puts it; every layer is taken to meet every phase of every other,
+  and a still tile is widened over a scroller's whole box, both conservative;
+  a surface other than the root, an open sheet and the scroll region (a
+  card, a wall plate) is read at rest.
+- **A row that no all-worn variant wears is sampled by no contrast job; no
+  shipped or private row is so excluded today** (D-2026-11-15-06).
+- **The name ladder cannot see WebKit's letter-spacing gap at a text-node
+  boundary** (D-2026-11-16-01, the critics of a carried look's slice). The
+  sign's name is split into text · `span.sign-lamp` · text (`signName`,
+  `src/ui/render.ts`). In WebKit (measured with the system `wkf`), a name
+  with letter-spacing takes about 5px more advance at that boundary; Chrome
+  does not, and `inkFits` and the probe measure Chrome alone. So in Safari a
+  name within about 5px of its cap may lose a pixel or two to an
+  `overflow: clip`. Not built: a WebKit read of the ladder, or a split that
+  adds no boundary.
+- **Decorations worn without a mood are never sampled for contrast on a look
+  with moods** (D-2026-11-16-01). Every all-worn variant (`wornAllFlags`)
+  carries a mood, so on such a look its decorations on the plain palette are
+  read by no contrast job — the shipped looks with a mood included. The state
+  screens' geometry runs only bare and the all-worn variants, so a row worn
+  alone is never measured on the sign stress screens. Closing it would add a
+  "decorations, no mood" variant per look with moods; that costs contrast
+  jobs on the default run as well as on the look run, and the cost is not
+  measured.
 - **No fixture paints the quote face's borrowed-token warning** (the private
   look at 0x04's 8g4 critic, 2026-11-11; D-2026-11-11-07). Every quote-face
   fixture uses a token the stall minted, so `div.pay-sub.warn` (the "token
