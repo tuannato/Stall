@@ -31,6 +31,21 @@
 }
 
 /*
+ * Its mood's own root art (step 8i, B), beside the ground tile it shares with
+ * the bare look, so the probe's `a-mood-art-layer-is-read-at-its-worst` has a
+ * subject in public CI: a faint haze that does not repeat, behind the sign at
+ * rest at every width. It stands still while the region scrolls over it, so
+ * the probe reads it, at its worst, under every line in its columns; listed
+ * in `PRIVATE_DECORATION_ART` (`decor-gate.test.ts`) for this sheet alone.
+ */
+.stall.t-fixture-private.att-fixture-dusk {
+    background-image: url(./art/dusk.svg), url(./art/ground.svg);
+    background-size: 160px 96px, 24px 24px;
+    background-repeat: no-repeat, repeat;
+    background-position: 24px 24px, 0 0;
+}
+
+/*
  * Its decorations: one paint of their own each, in the tokens, so the decor
  * gate's rules for a private row (a rule of its own that paints, colours
  * that follow the palette, no art, no motion) judge them rather than refuse

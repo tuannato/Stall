@@ -59,7 +59,8 @@ import {
     wornOf,
     type Look,
 } from './looks';
-import { COPIED_JOBS, STEP_JOBS, carriedContrastPlan, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { COPIED_JOBS, STEP_JOBS, carriedContrastPlan, contrastOwed, contrastPlan, contrastScreens, moodOwed, type ContrastJob } from './contrastPlan';
+import { CLEAR, cssOf, judgeFor, layerCoverage, overRgba, parseColour, rasterColours, readLayer, splitTop, worstCells, type ElementBoxes, type LayerPaint, type LayerStyle, type Rgba, type Scroller } from './moodArt';
 import { CARRIED_SCREEN_SET } from './carriedScreens';
 import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
@@ -13474,7 +13475,9 @@ declare global {
         /** The screens the plan samples for those looks (`STEP_JOBS`). */
         __stepScreens: string[];
         /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
-        __contrastOwed: () => { rain: string[]; horizon: string[] };
+        __contrastOwed: () => { rain: string[]; horizon: string[]; mood: string[] };
+        /** `a-mood-art-layer-is-read-at-its-worst`: flatten the last prepare's mood art to its worst; what it read. */
+        __moodArtAtItsWorst: () => Promise<MoodArtReport>;
         /** The honest-display roles each sampled sheet screen owes, per viewport (`layout/honestDisplay.ts`). */
         __honestOwed: () => typeof HONEST_OWED;
         /** The overlay screens, so the driver can skip their `wornAll` half. */
@@ -13573,7 +13576,7 @@ window.__stepScreens = [...STEP_JOBS];
  * (`contrastOwed`): Neo's on the ordinary probe, the kit's when it starts
  * from Neo.
  */
-window.__contrastOwed = () => contrastOwed(measuredLooks());
+window.__contrastOwed = () => ({ ...contrastOwed(measuredLooks()), mood: moodOwed(window.__contrastPlan(), paintedLooks()) });
 window.__honestOwed = () => ({ ...HONEST_OWED, ...HONEST_STEP_OWED });
 window.__noDecorScreens = [...NO_DECOR_SCREENS];
 window.__canvasScreens = [...CANVAS_SCREENS];
@@ -15464,6 +15467,237 @@ function horizonAtItsWorst(): { worn: number; flattened: number } {
     return { worn, flattened };
 }
 
+/*
+ * **A mood's page art is read at its worst** (step 8i, B;
+ * `a-mood-art-layer-is-read-at-its-worst`, `PROBE-RULES.md`; the model is
+ * `layout/moodArt.ts`). A mood's art and every layer the bare look shares
+ * with it stand still on the stall's root, an open sheet and the scroll
+ * region while the content scrolls over them, so a line on the bare ground
+ * passes over every patch of them; the pass read them at one scroll
+ * position. In every contrast job that wears a mood, each of those
+ * elements' `background-image` layers is read — a gradient by its stops, a
+ * file rasterised here at its painted size — and the element's background
+ * is rewritten as flat rectangles of the worst ground the stack can put
+ * under a line there (`worstCells`), toward the mood's own `--s-text`,
+ * important, so no animation moves them; its background colour is kept.
+ * A job that wears no mood is left alone, and says so. What cannot be read
+ * is a sentence the runner refuses the job on, never a skip.
+ */
+let preparedMood: string[] = [];
+
+type MoodArtReport = {
+    /** Whether the last prepare's paint wears a mood. */
+    worn: boolean;
+    /** The moods it wears, by class (or bit, for a mood with no class). */
+    moods: string[];
+    /** The elements read, by kind: zero layers on them is a report too. */
+    elements: { root: number; sheet: number; region: number };
+    /** The layers flattened, and by kind. */
+    layers: number;
+    kinds: { file: number; gradient: number };
+    /** The flat rectangles painted in their place. */
+    cells: number;
+    /** What could not be read, each a sentence: the runner refuses the job. */
+    refused: string[];
+};
+
+const rasters = new Map<string, Promise<HTMLImageElement>>();
+
+/** A file's colours at its painted size, read back from a canvas in this page. */
+async function fileColours(url: string, w: number, h: number): Promise<Rgba[] | string> {
+    if (w * h > 16_000_000) return `a ${Math.round(w)}x${Math.round(h)} tile, too large to rasterise here`;
+    let image = rasters.get(url);
+    if (image === undefined) {
+        image = (async () => {
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            return img;
+        })();
+        rasters.set(url, image);
+    }
+    try {
+        const img = await image;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.ceil(w));
+        canvas.height = Math.max(1, Math.ceil(h));
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (ctx === null) return 'no canvas to rasterise it on';
+        ctx.drawImage(img, 0, 0, w, h);
+        return rasterColours(ctx.getImageData(0, 0, canvas.width, canvas.height).data);
+    } catch (err) {
+        return `the file did not load or could not be read back (${String(err).slice(0, 80)})`;
+    }
+}
+
+/** Whether `el` animates its background's position or size (`Coverage`'s `moving`). */
+function movesBackground(el: HTMLElement): boolean {
+    return el.getAnimations().some((a) => {
+        const effect = a.effect as KeyframeEffect | null;
+        return (effect?.getKeyframes() ?? []).some((frame) =>
+            Object.keys(frame).some((k) => k === 'background' || k === 'backgroundPosition' || k === 'backgroundPositionX' || k === 'backgroundPositionY' || k === 'backgroundSize'),
+        );
+    });
+}
+
+/** A colour the stall resolves, through a probe span (a custom property computes to its tokens). */
+function resolvedOn(stall: HTMLElement, value: string): [number, number, number] | undefined {
+    const span = document.createElement('span');
+    span.style.color = value;
+    stall.append(span);
+    const c = parseColour(getComputedStyle(span).color);
+    span.remove();
+    return c === undefined || c[3] < 1 ? undefined : [c[0], c[1], c[2]];
+}
+
+/** One element's layers read and written flat; its counts added to `report`, its refusals too. */
+async function flattenMoodArt(el: HTMLElement, kind: 'root' | 'sheet' | 'region', text: [number, number, number], ground: [number, number, number], report: MoodArtReport): Promise<void> {
+    report.elements[kind] += 1;
+    const cs = getComputedStyle(el);
+    if (cs.backgroundImage === 'none') return;
+    const layers = splitTop(cs.backgroundImage);
+    const name = `${kind} (${describe(el)})`;
+    const refuse = (why: string): void => {
+        report.refused.push(`${name}: ${why}`);
+    };
+    for (let at: HTMLElement | null = el; at !== null && at.id !== 'app'; at = at.parentElement) {
+        if (getComputedStyle(at).transform !== 'none') {
+            refuse(`${at === el ? 'it' : describe(at)} is transformed, and its art is not read in a turned or scaled box`);
+            return;
+        }
+    }
+    if (splitTop(cs.backgroundBlendMode).some((m) => m !== 'normal')) {
+        refuse(`background-blend-mode ${cs.backgroundBlendMode}, which this read does not composite`);
+        return;
+    }
+    const rect = el.getBoundingClientRect();
+    const px = (v: string): number => Number.parseFloat(v) || 0;
+    const [bt, br, bb, bl] = [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth].map(px) as [number, number, number, number];
+    const [pt, pr, pb, pl] = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(px) as [number, number, number, number];
+    const boxes: ElementBoxes = {
+        'border-box': { x0: 0, y0: 0, x1: rect.width, y1: rect.height },
+        'padding-box': { x0: bl, y0: bt, x1: rect.width - br, y1: rect.height - bb },
+        'content-box': { x0: bl + pl, y0: bt + pt, x1: rect.width - br - pr, y1: rect.height - bb - pb },
+    };
+    // Every box that scrolls its content, this one and those inside it: its showing part, in this border box.
+    const scrolls = (v: string): boolean => v === 'auto' || v === 'scroll' || v === 'overlay';
+    const scrollers: Scroller[] = [];
+    for (const node of [el, ...el.querySelectorAll<HTMLElement>('*')]) {
+        const ns = node === el ? cs : getComputedStyle(node);
+        const [x, y] = [scrolls(ns.overflowX), scrolls(ns.overflowY)];
+        if (!x && !y) continue;
+        const r = node.getBoundingClientRect();
+        if (node.clientWidth <= 0 || node.clientHeight <= 0) continue;
+        const left = r.left - rect.left + node.clientLeft;
+        const top = r.top - rect.top + node.clientTop;
+        scrollers.push({ box: { x0: left, y0: top, x1: left + node.clientWidth, y1: top + node.clientHeight }, x, y });
+    }
+    const list = (v: string): string[] => splitTop(v);
+    const [sizes, posX, posY, repeats, origins, clips, attachments] = [
+        list(cs.backgroundSize),
+        list(cs.backgroundPositionX),
+        list(cs.backgroundPositionY),
+        list(cs.backgroundRepeat),
+        list(cs.backgroundOrigin),
+        list(cs.backgroundClip),
+        list(cs.backgroundAttachment),
+    ];
+    const pick = (xs: string[], i: number): string => xs[i % Math.max(1, xs.length)] ?? '';
+    const moving = movesBackground(el);
+    const painted: LayerPaint[] = [];
+    let files = 0;
+    let gradients = 0;
+    const before = report.refused.length;
+    for (const [i, layer] of layers.entries()) {
+        const at = `layer ${i + 1} of ${layers.length} (${layer.slice(0, 72)}${layer.length > 72 ? '…' : ''})`;
+        if (layer === 'none') continue;
+        const read = readLayer(layer);
+        if ('refused' in read) {
+            refuse(`${at}: ${read.refused}`);
+            continue;
+        }
+        const style: LayerStyle = {
+            size: pick(sizes, i),
+            posX: pick(posX, i),
+            posY: pick(posY, i),
+            repeat: pick(repeats, i),
+            origin: pick(origins, i),
+            clip: pick(clips, i),
+            attachment: pick(attachments, i),
+        };
+        const cover = layerCoverage(style, boxes, read.kind === 'file', scrollers, moving);
+        if ('refused' in cover) {
+            refuse(`${at}: ${cover.refused}`);
+            continue;
+        }
+        let colours: readonly Rgba[];
+        if (read.kind === 'file') {
+            files += 1;
+            if (cover.tiles.length === 0) {
+                colours = [CLEAR];
+            } else {
+                const got = await fileColours(read.url, cover.tile.w, cover.tile.h);
+                if (typeof got === 'string') {
+                    refuse(`${at}: ${got}`);
+                    continue;
+                }
+                colours = got;
+            }
+        } else {
+            gradients += 1;
+            colours = read.colours;
+        }
+        // Bottom first: CSS lists the top layer first.
+        painted.unshift({ tiles: cover.tiles, bands: cover.bands, colours, absent: cover.absent });
+    }
+    if (report.refused.length > before) return;
+    const bg = parseColour(cs.backgroundColor) ?? CLEAR;
+    const base = overRgba(bg, [ground[0], ground[1], ground[2], 1]);
+    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]));
+    const set = (prop: string, value: string): void => el.style.setProperty(prop, value, 'important');
+    set('background-image', cells.length === 0 ? 'none' : cells.map((c) => `linear-gradient(${cssOf(c.colour)}, ${cssOf(c.colour)})`).join(', '));
+    set('background-size', cells.length === 0 ? 'auto' : cells.map((c) => `${c.x1 - c.x0}px ${c.y1 - c.y0}px`).join(', '));
+    set('background-position', cells.length === 0 ? '0 0' : cells.map((c) => `${c.x0}px ${c.y0}px`).join(', '));
+    set('background-repeat', 'no-repeat');
+    set('background-origin', 'border-box');
+    set('background-clip', 'border-box');
+    set('background-attachment', 'scroll');
+    report.layers += files + gradients;
+    report.kinds.file += files;
+    report.kinds.gradient += gradients;
+    report.cells += cells.length;
+}
+
+/** Every stall's mood art read at its worst, on the last prepare's paint; what was read (`MoodArtReport`). */
+async function moodArtAtItsWorst(): Promise<MoodArtReport> {
+    const report: MoodArtReport = {
+        worn: preparedMood.length > 0,
+        moods: [...preparedMood],
+        elements: { root: 0, sheet: 0, region: 0 },
+        layers: 0,
+        kinds: { file: 0, gradient: 0 },
+        cells: 0,
+        refused: [],
+    };
+    if (!report.worn) return report;
+    for (const stall of document.querySelectorAll<HTMLElement>('#app .stall:not(.deck-stall)')) {
+        const text = resolvedOn(stall, 'var(--s-text)');
+        const ground = resolvedOn(stall, 'var(--s-bg)');
+        if (text === undefined || ground === undefined) {
+            report.refused.push(`${describe(stall)}: its --s-text or --s-bg did not resolve to an opaque colour`);
+            continue;
+        }
+        await flattenMoodArt(stall, 'root', text, ground, report);
+        for (const sheet of stall.querySelectorAll<HTMLElement>('.sheet')) await flattenMoodArt(sheet, 'sheet', text, ground, report);
+        for (const region of stall.querySelectorAll<HTMLElement>('.stall-scroll')) await flattenMoodArt(region, 'region', text, ground, report);
+    }
+    if (report.elements.root === 0) report.refused.push('the paint wears a mood and no stall root was found to read');
+    // The new layers painted before the runner's own frames.
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    return report;
+}
+window.__moodArtAtItsWorst = moodArtAtItsWorst;
+
 const FLATTENED = ['background-image', 'background-size', 'background-repeat', 'background-position'];
 
 window.__horizonAtItsWorst = async (on: boolean) => {
@@ -15888,7 +16122,12 @@ window.__contrastPrepare = (screen, themeId, flags, neutral, nonce, heightOnly =
     // An id this page cannot paint throws rather than falling back: a
     // fallback look is the measurement the class echo exists to refuse.
     const look = lookById(themeId);
+    // The moods this paint wears, for `__moodArtAtItsWorst`.
+    preparedMood = wornOf(look, flags)
+        .filter((row) => row.slot === 'mood')
+        .map((row) => row.cls ?? `bit ${row.bit}`);
     if (!looksFor(screen).includes(look)) {
+        preparedMood = [];
         // The apex can only wear the default look — see `looksFor`. The plan
         // never asks for this; the runner refuses a job with no targets.
         preparedNodes = [];

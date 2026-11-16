@@ -1472,6 +1472,11 @@ const DECORATION_ART: Readonly<Record<string, string>> = {
  * declare every entry and name each class as one of its moods.
  */
 const PRIVATE_DECORATION_ART: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+    // The tracked fixture (step 8i, B): the public subject of `a-mood-art-layer-is-read-at-its-worst`.
+    't-fixture-private': {
+        '.stall.t-fixture-private.att-fixture-dusk | background-image':
+            'a mood’s own root art beside the ground tile it shares with the bare look: the stall’s own background, behind every card, read at its worst by the probe',
+    },
     // The private look at 0x04.
     't-inkwash': {
         '.stall.t-inkwash.att-rubbing | background-image':
@@ -1480,6 +1485,9 @@ const PRIVATE_DECORATION_ART: Readonly<Record<string, Readonly<Record<string, st
             'a mood’s own art on an open sheet’s surface: the sheet’s own ground, behind every line on it, never a slab under one',
     },
 };
+
+/** The tracked fixture's own mood art, as the gate prints it in a copy planted under `PLANTED_CLASS`: no entry names that class. */
+const PLANTED_MOOD_ART = `.stall.${PLANTED_CLASS}.att-planted-dusk { background-image: url(./art/dusk.svg), url(./art/ground.svg) }`;
 
 /**
  * The art a sheet's decoration-scoped rules may lay: `DECORATION_ART`, and in
@@ -1965,10 +1973,14 @@ describe('a-decoration-lays-no-ground-under-text', () => {
             const css = sheet.css;
             expect(groundsUnderText(css, undefined, undefined, artFor(sheet)), sheet.path).toEqual([]);
         }
-        // A planted private look whose decoration lays a ground under a line: red.
+        // A planted private look whose decoration lays a ground under a line: red. The copy of the
+        // tracked fixture's own mood art comes with it, and the planted class has no entry: red too.
         const served = await plantedServed(`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d; }`);
         const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
-        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toEqual([`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`]);
+        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toEqual([
+            PLANTED_MOOD_ART,
+            `.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`,
+        ]);
     });
 
     it('names only art a served sheet still declares', () => {
@@ -2024,8 +2036,9 @@ describe('a-decoration-lays-no-ground-under-text', () => {
         ].join('\n');
         const served = await plantedServed(rules);
         const planted = privateRows(served).find((sheet) => sheet.lookClass === PLANTED_CLASS)!;
-        // No entry for the planted look: its mood's art is a ground under text, both rules.
-        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toHaveLength(2);
+        // No entry for the planted look: its mood's art is a ground under text, both rules, and the
+        // copy of the tracked fixture's own mood art beside them.
+        expect(groundsUnderText(planted.css, undefined, undefined, artFor(planted))).toHaveLength(3);
         // An entry for the planted look: its two rules pass in its own sheet.
         const table = {
             [PLANTED_CLASS]: {
@@ -2372,20 +2385,28 @@ describe('a-private-decoration-art-key-names-its-own-box', () => {
             await plantedServed(nameRule, undefined, { editGuard: (json) => json.replace('"art": {', `"art": { ${JSON.stringify(nameKey)}: "a planted key on a name node, for the red proof alone",`) }),
         ).find((row) => row.lookClass === PLANTED_CLASS)!;
         expect(guardArtProblems(named).join()).toMatch(/no node row of t-planted-look/);
-        expect(groundsUnderText(named.css, undefined, undefined, artFor(named))).toEqual([`.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`]);
+        expect(groundsUnderText(named.css, undefined, undefined, artFor(named))).toEqual([
+            PLANTED_MOOD_ART,
+            `.${PLANTED_CLASS}.att-planted-trim .item-n { background-color: #05060d }`,
+        ]);
     }, PLANTS_TIMEOUT_MS);
 
     it('exempts a guard\'s key in its own look\'s sheet alone', async () => {
         const fx = PRIVATE.find((row) => row.lookClass === 't-fixture-private')!;
         expect(groundsUnderText(fx.css, undefined, undefined, artFor(fx))).toEqual([]);
-        // The same rules read as any other sheet: refused.
+        // The same rules read as any other sheet: refused — and the fixture's own mood art with
+        // them wherever its class's entry in `PRIVATE_DECORATION_ART` does not reach.
+        const moodArt = Object.keys(PRIVATE_DECORATION_ART['t-fixture-private']!).length;
+        expect(moodArt).toBe(1);
         for (const other of [{ role: 'look', lookClass: 't-modern' }, { role: 'kit', lookClass: 't-workshop' }, { role: 'private', lookClass: 't-fixture-private' }]) {
-            expect(groundsUnderText(fx.css, undefined, undefined, artFor(other)).length, other.role).toBe(Object.keys(guardOf(fx)!.art).length);
+            expect(groundsUnderText(fx.css, undefined, undefined, artFor(other)).length, other.role).toBe(
+                Object.keys(guardOf(fx)!.art).length + (other.role === 'private' ? 0 : moodArt),
+            );
         }
         // Another private look's guard reaches no sheet but its own.
         const served = await plantedServed('');
         const planted = privateRows(served).find((row) => row.lookClass === PLANTED_CLASS)!;
-        expect(groundsUnderText(fx.css, undefined, undefined, artFor(planted)).length).toBe(Object.keys(guardOf(fx)!.art).length);
+        expect(groundsUnderText(fx.css, undefined, undefined, artFor(planted)).length).toBe(Object.keys(guardOf(fx)!.art).length + moodArt);
     }, PLANTS_TIMEOUT_MS);
 });
 

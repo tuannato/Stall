@@ -1289,7 +1289,7 @@ function alphaOutside(img, opaque) {
  * re-prepare at the grown size repaints the same screen, as a live update
  * would), so no job is measured after whichever job ran before it.
  */
-async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false, tide = undefined) {
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false, tide = undefined, mood = false) {
     const args = `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}`;
     const tideArg = tide === undefined ? 'undefined' : String(tide);
     if (heightOnly) {
@@ -1303,6 +1303,10 @@ async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, no
             expression:
                 `(async () => { ` +
                 `const out = window.__contrastPrepare(${args}, false, ${tideArg}); ` +
+                // `a-mood-art-layer-is-read-at-its-worst` (pass 4 alone): the
+                // paint's mood art flattened to its worst before the font
+                // wait and the frames, and what was read, zero included.
+                (mood ? 'out.moodArt = await window.__moodArtAtItsWorst(); ' : '') +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
@@ -1379,6 +1383,43 @@ function paintEcho(job, out, nonce, width, height) {
         why.push(`the paint wore ${classes.join(', ') || 'no look class'} where the job's look is ${job.sheetClass}`);
     }
     return why;
+}
+
+/**
+ * `a-mood-art-layer-is-read-at-its-worst` (step 8i, B; `layout/moodArt.ts`):
+ * a full prepare's report of its mood flattening (`__moodArtAtItsWorst`),
+ * held. A report is owed on every job — a paint that wears no mood says so,
+ * and one whose mood lays no art reports zero layers — so a prepare that
+ * reports nothing is refused, a layer the page could not read refuses the
+ * job with the page's own sentence (never a skip), a mood job that read no
+ * stall root is refused, and a job that wears no mood and flattened anything
+ * is refused. Which jobs wear a mood is the page's to say, from the plan and
+ * the looks' rows (`moodOwed`), and the walk is held to it at its end.
+ */
+function moodEcho(out) {
+    const art = out.moodArt;
+    if (art === undefined || art === null || typeof art.worn !== 'boolean') {
+        return ['the prepare reported no mood flattening (a-mood-art-layer-is-read-at-its-worst) — every job owes a report, zero layers included'];
+    }
+    const why = (art.refused ?? []).map((r) => `a-mood-art-layer-is-read-at-its-worst could not read ${r}`);
+    if (art.worn && (art.elements?.root ?? 0) < 1) {
+        why.push('the paint wears a mood and its flattening read no stall root (a-mood-art-layer-is-read-at-its-worst)');
+    }
+    if (!art.worn && ((art.layers ?? 0) > 0 || (art.cells ?? 0) > 0)) {
+        why.push(`the paint wears no mood and ${art.layers} layer(s) were flattened (a-mood-art-layer-is-read-at-its-worst)`);
+    }
+    return why;
+}
+
+/** The least worst value among a job's dumped reads, with what read it; undefined when none read a number. */
+function leastRead(entries) {
+    let least;
+    for (const e of entries) {
+        if (typeof e.worst === 'number' && (least === undefined || e.worst < least.worst)) {
+            least = { worst: e.worst, sel: e.sel, read: e.read ?? (e.ring === undefined ? 'box' : 'ring') };
+        }
+    }
+    return least;
 }
 
 function liveEcho(live, nonce, width, height) {
@@ -1469,6 +1510,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
     let tideJobs = 0;
     let rainJobs = 0;
     const rainKeys = new Set();
+    // `a-mood-art-layer-is-read-at-its-worst`: this job's flattening, when it wears a mood.
+    let moodJob;
     const uncoveredKinds = new Map();
     const skipTotals = new Map();
     const lineSkips = {};
@@ -1604,7 +1647,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             let nonce;
             const prepare = (neutral, heightOnly = false) => {
                 nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
-                return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide);
+                return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide, true);
             };
             // First paint tells us how tall the page is — the document,
             // and the viewport it takes for the shell's region and an
@@ -1678,6 +1721,28 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                 if ((prep.rain?.flattened ?? 0) > 0) {
                     rainJobs += 1;
                     rainKeys.add(plannedJob.key);
+                }
+                // `a-mood-art-layer-is-read-at-its-worst`: the prepare says
+                // what it flattened, a job that wears no mood and one whose
+                // mood carries no art included; one that says nothing, or
+                // could not read a layer, is refused.
+                const moodWhy = moodEcho(prep);
+                if (moodWhy.length > 0) {
+                    refuse(moodWhy);
+                    return;
+                }
+                if (prep.moodArt.worn) {
+                    moodJob = {
+                        key: plannedJob.key,
+                        cls: plannedJob.sheetClass,
+                        variant: skipVariantOf(plannedJob.flags),
+                        viewport: vp.name,
+                        layers: prep.moodArt.layers,
+                        kinds: prep.moodArt.kinds,
+                        cells: prep.moodArt.cells,
+                        elements: prep.moodArt.elements,
+                    };
+                    record.moodArt = { layers: prep.moodArt.layers, kinds: prep.moodArt.kinds, cells: prep.moodArt.cells, elements: prep.moodArt.elements };
                 }
                 record.prepared = prep.targets.length;
                 record.nodes = prep.nodes;
@@ -1863,6 +1928,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         dim.push(
                             `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
                                 `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
+                                ((prep.moodArt?.layers ?? 0) > 0 ? ' with its mood\'s art at its worst (a-mood-art-layer-is-read-at-its-worst)' : '') +
                                 (kind === 'line' && read.at !== undefined
                                     ? ` (line read: the worst of ${read.px} px at ${read.at.x},${read.at.y}, ground rgb(${read.at.ground.join(',')}), ink ${read.at.ink})`
                                     : '') +
@@ -2906,6 +2972,8 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             tideJobs,
             rainJobs,
             rainKeys,
+            // The least any read of a mood job found, and the least a line read found, with what read it.
+            moodJob: moodJob === undefined ? undefined : { ...moodJob, least: leastRead(dumpBoxes), leastLine: leastRead(dumpBoxes.filter((b) => b.read === 'line')) },
             uncoveredKinds,
             skipTotals,
             lineSkips,
@@ -4856,6 +4924,8 @@ try {
         // owes the screens whose lines stand on the ground (`RAIN_REQUIRED`).
         let rainJobs = 0;
         const rainKeys = new Set();
+        // The jobs that wore a mood, each with what its flattening read (`moodEcho`), in plan order.
+        const moodJobs = [];
         // Jobs whose Grid horizon was flattened to its brightest paint, by key
         // (`HORIZON_REQUIRED`).
         const horizonKeys = new Set();
@@ -4957,6 +5027,7 @@ try {
             tideJobs += out.tideJobs;
             rainJobs += out.rainJobs;
             for (const key of out.rainKeys) rainKeys.add(key);
+            if (out.moodJob !== undefined) moodJobs.push(out.moodJob);
             countInto(uncoveredKinds, out.uncoveredKinds);
             countInto(skipTotals, out.skipTotals);
             const skipsInto = (into, from) => {
@@ -5479,6 +5550,53 @@ try {
             verdicts.push(
                 `a-line-on-the-ground-reads-wherever-a-drop-falls had the rain at its brightest on ${rainJobs} job(s) but not on ${RAIN_REQUIRED.filter((key) => !rainKeys.has(key)).join(', ')}`,
             );
+        }
+        /*
+         * `a-mood-art-layer-is-read-at-its-worst`: every job the page owes
+         * a mood flattening (`moodOwed`, from its plan and the looks' rows)
+         * was flattened, and no other — a job refused for its report never
+         * reaches the list, so it is named here too.
+         */
+        if (!Array.isArray(owed?.mood)) {
+            verdicts.push('the page answered no mood list (__contrastOwed) — a-mood-art-layer-is-read-at-its-worst owes every job that wears a mood');
+        } else {
+            const flattened = new Set(moodJobs.map((j) => j.key));
+            const owedMood = new Set(owed.mood);
+            const missing = owed.mood.filter((key) => !flattened.has(key));
+            const extra = [...flattened].filter((key) => !owedMood.has(key));
+            const some = (keys) => `${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', …' : ''}`;
+            if (missing.length > 0) {
+                verdicts.push(`a-mood-art-layer-is-read-at-its-worst flattened ${flattened.size} job(s) and not ${missing.length} the page owes: ${some(missing)}`);
+            }
+            if (extra.length > 0) {
+                verdicts.push(`a-mood-art-layer-is-read-at-its-worst flattened ${extra.length} job(s) the page owes no mood on: ${some(extra)}`);
+            }
+        }
+        if (moodJobs.length === 0) {
+            console.log('  a-mood-art-layer-is-read-at-its-worst: no job wears a mood');
+        } else {
+            const byLook = new Map();
+            const lower = (a, b, key) => (b === undefined ? a : a === undefined || b.worst < a.worst ? { ...b, key } : a);
+            for (const j of moodJobs) {
+                const at = `${j.cls} ${j.variant}`;
+                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, least: undefined, leastLine: undefined };
+                t.jobs += 1;
+                t.layers += j.layers;
+                t.file += j.kinds.file;
+                t.gradient += j.kinds.gradient;
+                t.cells += j.cells;
+                t.least = lower(t.least, j.least, j.key);
+                t.leastLine = lower(t.leastLine, j.leastLine, j.key);
+                byLook.set(at, t);
+            }
+            const said = (r) => (r === undefined ? 'none' : `${r.worst.toFixed(2)}:1 (${r.read}, ${r.sel} on ${r.key})`);
+            console.log(`  a-mood-art-layer-is-read-at-its-worst: ${moodJobs.length} job(s) wear a mood, each read with its page art at its worst; by look and variant:`);
+            for (const [at, t] of [...byLook].sort((a, b) => a[0].localeCompare(b[0]))) {
+                console.log(
+                    `    ${at}: ${t.jobs} job(s), ${t.layers} layer(s) flattened (file ${t.file}, gradient ${t.gradient}) into ${t.cells} rectangle(s); ` +
+                        `least read ${said(t.least)}; least line read ${said(t.leastLine)}`,
+                );
+            }
         }
         if (horizonUnread.length > 0) {
             verdicts.push(`${horizonUnread.length} sign line(s) at Grid horizon's worst gave no sample: ${horizonUnread.join(', ')}`);

@@ -57,7 +57,7 @@
  * `the-staged-address-screens-are-sampled-for-the-looks-that-name-them`.
  */
 import { GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, paintsBareOnly } from './fixtures';
-import { canWear, wornAllFlags, type Look } from './looks';
+import { canWear, wornAllFlags, wornOf, type Look } from './looks';
 import { screensAt } from './screenSplit';
 
 export type ContrastViewport = {
@@ -268,6 +268,29 @@ export function contrastOwed(looks: readonly Look[]): { rain: string[]; horizon:
             : HORIZON_OWED.map(({ viewport, screen, alone }) => `${viewport}/${screen}/${look.id}/${alone ? 1 << row.bit : WORN_ALL}`);
     });
     return { rain, horizon };
+}
+
+/** Whether `flags` wear one of `look`'s moods: the jobs whose page art is read at its worst. */
+export function wearsMood(look: Look, flags: number): boolean {
+    return wornOf(look, flags).some((row) => row.slot === 'mood');
+}
+
+/**
+ * The jobs the runner holds to having read their mood's page art at its
+ * worst (`a-mood-art-layer-is-read-at-its-worst`, `layout/moodArt.ts`), by
+ * key: every job of `plan` whose flags wear one of its look's moods, derived
+ * from the plan and the looks' own rows at run time and never listed. A job
+ * that wears a mood and whose prepare reports no flattening — zero layers is
+ * a report — is refused, and so is one that does not wear one and
+ * flattened. The page publishes it beside `contrastOwed`
+ * (`window.__contrastOwed()`).
+ */
+export function moodOwed(plan: readonly ContrastJob[], looks: readonly Look[]): string[] {
+    const byId = new Map(looks.map((look) => [look.id, look]));
+    return plan.filter((job) => {
+        const look = byId.get(job.look);
+        return look !== undefined && wearsMood(look, job.flags);
+    }).map((job) => job.key);
 }
 
 /**
