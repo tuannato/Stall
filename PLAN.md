@@ -2232,15 +2232,24 @@ money path this app can have, because nothing on it is derived.
   Confetti in their all-worn jobs). Still read at one scroll position: a bare
   look's own root art (its bare jobs), and a decoration's page art in a job
   that wears no mood (a look with no mood, Neo's; a solo or tide job). The
-  same flattening there would re-judge approved pixels on thin margins (the
-  private look at 0x04's bare root art among them); not built. The flattening's
-  own limits, stated in `moodArt.ts`: a line whose ink is on the other side
-  of the ground from the mood's text, or further than 9:1 from it, is not
-  read at its worst; a tile placed by a percentage is read where the grown
-  capture puts it; every layer is taken to meet every phase of every other,
-  and a still tile is widened over a scroller's whole box, both conservative;
-  a surface other than the root, an open sheet and the scroll region (a
-  card, a wall plate) is read at rest.
+  same flattening there would re-judge approved pixels on thin margins; not
+  built. The flattening's own limits, stated in `moodArt.ts`: an ink is read
+  at its worst only where a line in the mood's text ink shares its cell, and
+  one on the other side of the ground from that text, or further than 9:1
+  from it, is not; past 200,000 combinations a stack is searched by a beam,
+  which can miss its worst (the runner prints how many stacks each read
+  searched that way); every layer is taken to meet every phase of every
+  other, conservative; a still tile is widened over the band a scroller can
+  carry a line through — from its part inside the scroller down (or across)
+  by that scroller's range, cut to the scroller's box — with the range at
+  most how far the capture grew past the job's own height, read at the
+  contrast pass's 844, 900 and 1080 alone (a shorter screen sweeps a wider
+  band); a surface other than the root, an open sheet and the scroll region
+  (a card, a wall plate) is read at rest. Refused rather than read, each with
+  a sentence: a `color(srgb …)` gradient segment Chrome interpolates in
+  OKLab, `local` off its own scroller, a percentage along a grown axis, a
+  tile under scrollers on two axes, a turned or scaled box, an unreadable
+  background colour, and a scroller not at its start.
 - **A row that no all-worn variant wears is sampled by no contrast job; no
   shipped or private row is so excluded today** (D-2026-11-15-06).
 - **The name ladder cannot see WebKit's letter-spacing gap at a text-node
@@ -2261,6 +2270,21 @@ money path this app can have, because nothing on it is derived.
   "decorations, no mood" variant per look with moods; that costs contrast
   jobs on the default run as well as on the look run, and the cost is not
   measured.
+- **`pnpm test` can exit 1 with every test green, on a loaded machine**
+  (found in step 8i, B; on `main` already). `src/ui/decor-gate.test.ts`
+  runs one long test file — 46.7s alone on a quiet machine, 61–83s under
+  load — past vitest's 60-second window for a worker's report to the main
+  process, which then prints `Timeout calling "onTaskUpdate"` as an
+  unhandled error and exits 1. Every test still passes, and the file run
+  alone exits 0. Closing it would split the file, or widen vitest's
+  `teardownTimeout`/RPC window if vitest offers one; not built.
+- **Modern's empty-shop second line does not follow After hours**
+  (`.t-modern .sparse-empty-s`, found in step 8i, B). Modern's sheet
+  writes a literal grey, `#5f6975`, for that line, so under After hours it
+  keeps the day's ink on the night's ground: 3.28:1 at rest and 3.03:1 at
+  its worst, the least of any line the mood's jobs read. It passes, on a
+  thin margin; a token (`--s-muted`) would follow the mood. Not changed:
+  it is a shipped look's sheet, and moving its ink is the owner's call.
 - **No fixture paints the quote face's borrowed-token warning** (the private
   look at 0x04's 8g4 critic, 2026-11-11; D-2026-11-11-07). Every quote-face
   fixture uses a token the stall minted, so `div.pay-sub.warn` (the "token
