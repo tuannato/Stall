@@ -20,16 +20,24 @@
  * (`judgeFor`). On a light mood that is the darkest ground, on a dark mood
  * the lightest. It is the worst for every ink on the text's side of the
  * ground (the muted, the accent, the red, the text itself) while the art
- * stays on the ground's side of that ink. **The condition, stated:** where a
- * ground reaches past an ink toward the text, the text reads at most a
- * third of its own contrast with that ink there, so the text fails first —
- * but only where a line in the text's own ink stands on that same cell, and
- * only for an ink that still clears 3:1 on the ground just past it (for any
- * ink within 9:1 of the text). **The gap:** a line whose ink is on the other
- * side of the ground (a light line on a light mood's ground, a dark one on a
- * dark mood's), one further than 9:1 from the text, or one whose cell no
- * line in the text's ink shares, is not read at its worst — its worst is
- * another colour, which this flattening does not paint.
+ * stays on the ground's side of that ink. Where the art can reach past an
+ * ink toward the text, the painted ground is past it too, and that ink's
+ * own worst — a ground near its own luminance — is not painted. **The
+ * condition, stated (the critic's P3-6):** if the ink still clears 3:1 on
+ * the painted ground, the text there reads at most a third of its own
+ * contrast with that ink (on a light mood, `(Lg + .05) ≤ (Li + .05) / 3`, so
+ * the text's `(Lg + .05) / (Lt + .05)` is at most a third of `(Li + .05) /
+ * (Lt + .05)`), which is under 3:1 for any ink within 9:1 of the text — so
+ * a line in the text's own ink on that same cell fails, and the job with
+ * it; if the ink does not clear 3:1 on the painted ground, it fails itself.
+ * **The gap:** an ink that clears 3:1 on the painted ground on a cell where
+ * no line in the text's ink stands; an ink further than 9:1 from the text;
+ * and a line whose ink is on the other side of the ground (a light line on a
+ * light mood's ground, a dark one on a dark mood's). Each is not read at its
+ * worst. None of the shipped moods' inks or the fixture's falls in it today:
+ * every ink After hours paints on its bare page is lighter than its ground,
+ * every ink Sun-faded paints darker than its paper (the critic's survey,
+ * 2026-11-16).
  *
  * **What a layer can paint.** A gradient (`linear`, `radial`, `conic`,
  * repeating or not): every colour on every segment between two consecutive
@@ -49,9 +57,11 @@
  * (`beamStack`), which keeps at each layer the `BEAM` composites the judge
  * reads lowest and, beside them, the composites at each extreme of every
  * premultiplied channel and of alpha, since a later layer can carry a
- * composite far from the text toward it. A beam is a search, not a proof: it
- * can miss a combination (the beam6 case of `moodArt.test.ts`, which a beam
- * of the lowest twelve alone misses and this beam finds). Every layer is
+ * composite far from the text toward it. A beam is a search, not a proof: on
+ * seeded small stacks it misses the whole search on some (`moodArt.test.ts`;
+ * the critic's beam6 case, which a beam of the lowest twelve alone missed,
+ * both read right), so the probe counts the stacks it searched each way and
+ * the runner prints them. Every layer is
  * taken to reach any phase of every other — two tiles whose periods share
  * nothing meet in every combination somewhere on a long page — which is
  * conservative where layers are drawn to avoid each other. The root's, an
