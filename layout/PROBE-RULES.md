@@ -14336,6 +14336,30 @@ fails, `a-money-figure-never-clips-itself`, 76 at 390) and **PGc** (the plant's
 ground colour lies under Rural's gradient, whose card colour is opaque: the ground
 is the card, and the plant fails 368 geometry checks on the box it collapsed).
 
+### Cost
+
+The flatten's own clock (the page's, the last prepare's of each job): 0.65s
+of tab time over a default run's 242 mood jobs (the fixture 0.08s, Modern
+0.15s, Rural 0.42s). Two costs came off during the build, both measured: a
+file's colours and a stack's search are read once a page (on a look run
+of a carried look with large tiles, most of the flatten's time was those
+reads, repeated on every job), and the flatten no longer waits two animation frames of its own (the
+runner's evaluate waits two after it anyway): with them the prepare phase
+read 61.7s of tab time over 802 prepares against main's 49.7s; without
+them, 43.7s.
+
+**The runtime pair could not be read cleanly, stated.** The machine was
+shared with other agents' Chrome and test runs all afternoon (one-minute
+load 2–22 at the starts and ends). Main's own default run went past the
+300s watchdog four times out of four (300.2s, cut in the transparency
+pass; then three times cut in the contrast pass), and the branch's ran
+295.3s and 298.4s green, 300.1s cut in the transparency pass (its contrast
+pass done, no failure) and a fourth cut in the contrast pass at a load of
+20; every geometry pass, which this step does not touch, ran 10–25% slower
+in the slower runs. So the step's cost is read off its own clock and the
+prepare phase, not the pair; a pair on a quiet machine is owed before the
+merge.
+
 ### Under the private look at 0x04's selection
 
 The whole runner, exit 1, 235.7s, load 2.44, with `t-inkwash` carried: 0 failures of the
@@ -16295,9 +16319,11 @@ outside a mood job. The least each reads now: Modern under After hours
 backdrop at its strongest stop under it), Rural under Sun-faded 3.05:1 (the
 wall's status line, 3.46 before: under the darkest confetti fold), the
 fixture 3.09:1 (the item face's back control, 3.36 before; the same line
-reads 3.05 bare, at rest). The added boxes (198) are the transparency
-pass's: main's run was stopped by the watchdog during that pass, so its
-dump has none.
+reads 3.05 bare, at rest). The added boxes are the transparency pass's:
+main's run was stopped by the watchdog during that pass, so its dump has
+none. The same comparison on the final code (after the cache and the frame
+below) moves the same 1,130 boxes, and the two branch dumps are identical
+box for box.
 
 - **Modern under After hours**: the awning's stripes and hem stand in the
   root's padding above the region and are widened nowhere; its spill meets
