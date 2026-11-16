@@ -1289,7 +1289,7 @@ function alphaOutside(img, opaque) {
  * re-prepare at the grown size repaints the same screen, as a live update
  * would), so no job is measured after whichever job ran before it.
  */
-async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false, tide = undefined, mood = false) {
+async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly = false, tide = undefined, moodHeight = undefined) {
     const args = `${JSON.stringify(screen)}, ${theme}, ${flags}, ${neutral}, ${JSON.stringify(nonce)}`;
     const tideArg = tide === undefined ? 'undefined' : String(tide);
     if (heightOnly) {
@@ -1305,8 +1305,10 @@ async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, no
                 `const out = window.__contrastPrepare(${args}, false, ${tideArg}); ` +
                 // `a-mood-art-layer-is-read-at-its-worst` (pass 4 alone): the
                 // paint's mood art flattened to its worst before the font
-                // wait and the frames, and what was read, zero included.
-                (mood ? 'out.moodArt = await window.__moodArtAtItsWorst(); ' : '') +
+                // wait and the frames, and what was read, zero included;
+                // handed the job's own height, which bounds a grown
+                // scroller's range.
+                (moodHeight === undefined ? '' : `out.moodArt = await window.__moodArtAtItsWorst(${Number(moodHeight)}); `) +
                 // The self-hosted face swaps metrics when it lands and the
                 // fit-content dock re-centres with it — boxes taken before the
                 // swap sample a neighbour's ground.
@@ -1647,7 +1649,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
             let nonce;
             const prepare = (neutral, heightOnly = false) => {
                 nonce = `${plannedJob.key}#${(prepareSerial += 1)}`;
-                return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide, true);
+                return contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, nonce, heightOnly, plannedJob.tide, vp.height);
             };
             // First paint tells us how tall the page is — the document,
             // and the viewport it takes for the shell's region and an
@@ -1741,6 +1743,7 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         kinds: prep.moodArt.kinds,
                         cells: prep.moodArt.cells,
                         elements: prep.moodArt.elements,
+                        ms: prep.moodArt.ms ?? 0,
                     };
                     record.moodArt = { layers: prep.moodArt.layers, kinds: prep.moodArt.kinds, cells: prep.moodArt.cells, elements: prep.moodArt.elements };
                 }
@@ -5579,8 +5582,9 @@ try {
             const lower = (a, b, key) => (b === undefined ? a : a === undefined || b.worst < a.worst ? { ...b, key } : a);
             for (const j of moodJobs) {
                 const at = `${j.cls} ${j.variant}`;
-                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, least: undefined, leastLine: undefined };
+                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, ms: 0, least: undefined, leastLine: undefined };
                 t.jobs += 1;
+                t.ms += j.ms;
                 t.layers += j.layers;
                 t.file += j.kinds.file;
                 t.gradient += j.kinds.gradient;
@@ -5594,7 +5598,7 @@ try {
             for (const [at, t] of [...byLook].sort((a, b) => a[0].localeCompare(b[0]))) {
                 console.log(
                     `    ${at}: ${t.jobs} job(s), ${t.layers} layer(s) flattened (file ${t.file}, gradient ${t.gradient}) into ${t.cells} rectangle(s); ` +
-                        `least read ${said(t.least)}; least line read ${said(t.leastLine)}`,
+                        `least read ${said(t.least)}; least line read ${said(t.leastLine)} · ${(t.ms / 1000).toFixed(2)}s of tab time (the last prepare's)`,
                 );
             }
         }

@@ -50,13 +50,20 @@
  * **(b) What area.** A layer that repeats along an axis covers its clip area
  * along it. Along an axis it does not repeat, its tile stands where its size
  * and position put it, and stands still while the content of any scroller
- * scrolls over it: so for every scroller (`overflow` `auto` or `scroll`) that
- * scrolls along that axis and whose box the tile meets, the tile is widened
- * along the axis to the scroller's whole box, across the band its tile spans
- * on the other axis (cut to the scroller) — not the whole page, and not only
- * the tile. A line in that band can be scrolled over every part of the tile.
- * A tile that meets no scroller is read where it is: the lines over it do
- * not move. A line that can be scrolled over a tile can also be scrolled
+ * scrolls over it. The capture stands every scroller at its start, so a
+ * line reaches the tile only from below (or from the right), and only from
+ * as far as the scroller's range can carry it: for every scroller
+ * (`overflow` `auto` or `scroll`) along that axis whose box the tile
+ * reaches, the tile is widened to the band from the start of its part
+ * inside the scroller to the end of that part plus the scroller's range,
+ * cut to the scroller's box, across the span the tile covers on the other
+ * axis — not the whole page, and not only the tile. A scroller that cannot
+ * move widens nothing, and a tile that meets no scroller is read where it
+ * is: the lines over it do not move. The range is the probe's
+ * (`Scroller.range`): the scroller's own overflow, or, for the boxes the
+ * capture grows to show everything (the scroll region, an open sheet), at
+ * most how far the capture grew the page past the job's height — an upper
+ * bound. A line that can be scrolled over a tile can also be scrolled
  * off it, so a layer that is widened may not be under a line at all, in its
  * tile as in the band: a transparent colour is among its own there.
  * `background-attachment: local` moves with the content, so it is read where
@@ -330,8 +337,12 @@ export type LayerStyle = {
 /** The element's three boxes, in its own border box. */
 export type ElementBoxes = { 'border-box': Box; 'padding-box': Box; 'content-box': Box };
 
-/** A box that scrolls its content: its showing part in the element's border box, and the axes it scrolls along. */
-export type Scroller = { box: Box; x: boolean; y: boolean };
+/**
+ * A box that scrolls its content: its showing part in the element's border
+ * box, the axes it scrolls along, and how far along each its content can
+ * move (`range`, px).
+ */
+export type Scroller = { box: Box; x: boolean; y: boolean; range: { x: number; y: number } };
 
 /**
  * Where a layer paints: its tiles, the band (b) widens them to, the tile's
@@ -423,11 +434,14 @@ export function layerCoverage(
         for (const axis of ['x', 'y'] as const) {
             if (covers[axis]) continue;
             for (const s of scrollers) {
-                if (!s[axis] || !meets(t, s.box)) continue;
+                const range = s.range[axis];
+                if (!s[axis] || !(range > 0) || !meets(t, s.box)) continue;
+                // The tile's part inside the scroller, and as far past it as the range carries a line.
+                const inside = cut(t, s.box)!;
                 const band =
                     axis === 'y'
-                        ? cut({ x0: t.x0, x1: t.x1, y0: s.box.y0, y1: s.box.y1 }, s.box)
-                        : cut({ x0: s.box.x0, x1: s.box.x1, y0: t.y0, y1: t.y1 }, s.box);
+                        ? cut({ x0: inside.x0, x1: inside.x1, y0: inside.y0, y1: inside.y1 + range }, s.box)
+                        : cut({ x0: inside.x0, x1: inside.x1 + range, y0: inside.y0, y1: inside.y1 }, s.box);
                 const clipped = band === undefined ? undefined : cut(band, clip);
                 if (clipped !== undefined) bands.push(clipped);
             }

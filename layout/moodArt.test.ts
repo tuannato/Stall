@@ -42,7 +42,7 @@ const BOXES: ElementBoxes = {
     'padding-box': box(1, 1, 389, 843),
     'content-box': box(17, 21, 373, 823),
 };
-const REGION: Scroller = { box: box(0, 54, 390, 762), x: false, y: true };
+const REGION: Scroller = { box: box(0, 54, 390, 762), x: false, y: true, range: { x: 0, y: 500 } };
 const style = (over: Partial<LayerStyle>): LayerStyle => ({
     size: 'auto',
     posX: '0%',
@@ -150,16 +150,23 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
         // Stripes across the top that the region never scrolls under: the tile alone.
         const stripes = layerCoverage(style({ size: '100% 46px', repeat: 'repeat-x', posY: '0px', origin: 'border-box' }), BOXES, false, scrollers, false);
         expect(stripes).toEqual({ tiles: [box(0, 0, 390, 46)], bands: [], tile: { w: 390, h: 46 }, absent: false });
-        // A spill that meets the region: its band is the region's whole height, across the tile's span.
+        // A spill that meets the region: its band runs from its part inside the region down by the
+        // region's range (a line below it scrolls up over it), across the tile's span.
         const spill = layerCoverage(style({ size: '100% 74px', repeat: 'no-repeat', posY: '46px', origin: 'border-box' }), BOXES, false, scrollers, false);
-        expect(spill).toEqual({ tiles: [box(0, 46, 390, 120)], bands: [box(0, 54, 390, 762)], tile: { w: 390, h: 74 }, absent: true });
-        // A small tile behind the sign: the band is its own columns, the region's height — not the whole page.
+        expect(spill).toEqual({ tiles: [box(0, 46, 390, 120)], bands: [box(0, 54, 390, 620)], tile: { w: 390, h: 74 }, absent: true });
+        // A small tile behind the sign: the band is its own columns — not the whole page, not only the tile.
         const patch = layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '24px', origin: 'border-box' }), BOXES, true, scrollers, false);
-        expect(patch).toEqual({ tiles: [box(24, 24, 184, 120)], bands: [box(24, 54, 184, 762)], tile: { w: 160, h: 96 }, absent: true });
-        // A row that scrolls sideways widens a tile along x alone, inside the row.
-        const row: Scroller = { box: box(0, 300, 390, 360), x: true, y: false };
+        expect(patch).toEqual({ tiles: [box(24, 24, 184, 120)], bands: [box(24, 54, 184, 620)], tile: { w: 160, h: 96 }, absent: true });
+        // The band stops at the scroller's box, however far the range.
+        const far = layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '24px', origin: 'border-box' }), BOXES, true, [{ ...REGION, range: { x: 0, y: 5000 } }], false);
+        expect('bands' in far && far.bands).toEqual([box(24, 54, 184, 762)]);
+        // A scroller that cannot move — a short screen — widens nothing: the lines over the tile do not move.
+        const still = layerCoverage(style({ size: '100% 74px', repeat: 'no-repeat', posY: '46px', origin: 'border-box' }), BOXES, false, [{ ...REGION, range: { x: 0, y: 0 } }], false);
+        expect(still).toEqual({ tiles: [box(0, 46, 390, 120)], bands: [], tile: { w: 390, h: 74 }, absent: false });
+        // A row that scrolls sideways widens a tile along x alone, inside the row, by its range.
+        const row: Scroller = { box: box(0, 300, 390, 360), x: true, y: false, range: { x: 200, y: 0 } };
         const across = layerCoverage(style({ size: '40px 40px', repeat: 'no-repeat', posX: '100px', posY: '310px', origin: 'border-box' }), BOXES, true, [row], false);
-        expect('bands' in across && across.bands).toEqual([box(0, 310, 390, 350)]);
+        expect('bands' in across && across.bands).toEqual([box(100, 310, 340, 350)]);
         // `local` moves with the content: read where it is.
         const local = layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '24px', origin: 'border-box', attachment: 'local' }), BOXES, true, scrollers, false);
         expect(local).toEqual({ tiles: [box(24, 24, 184, 120)], bands: [], tile: { w: 160, h: 96 }, absent: false });

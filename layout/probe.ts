@@ -13476,8 +13476,8 @@ declare global {
         __stepScreens: string[];
         /** The jobs that owe a decoration at its worst, by key (`contrastOwed`). */
         __contrastOwed: () => { rain: string[]; horizon: string[]; mood: string[] };
-        /** `a-mood-art-layer-is-read-at-its-worst`: flatten the last prepare's mood art to its worst; what it read. */
-        __moodArtAtItsWorst: () => Promise<MoodArtReport>;
+        /** `a-mood-art-layer-is-read-at-its-worst`: flatten the last prepare's mood art to its worst, the job's own height given; what it read. */
+        __moodArtAtItsWorst: (jobHeight: number) => Promise<MoodArtReport>;
         /** The honest-display roles each sampled sheet screen owes, per viewport (`layout/honestDisplay.ts`). */
         __honestOwed: () => typeof HONEST_OWED;
         /** The overlay screens, so the driver can skip their `wornAll` half. */
@@ -15499,6 +15499,8 @@ type MoodArtReport = {
     cells: number;
     /** What could not be read, each a sentence: the runner refuses the job. */
     refused: string[];
+    /** The page's own time for it, ms: a cost, never in the dump's record. */
+    ms: number;
 };
 
 const rasters = new Map<string, Promise<HTMLImageElement>>();
@@ -15551,7 +15553,46 @@ function resolvedOn(stall: HTMLElement, value: string): [number, number, number]
 }
 
 /** One element's layers read and written flat; its counts added to `report`, its refusals too. */
-async function flattenMoodArt(el: HTMLElement, kind: 'root' | 'sheet' | 'region', text: [number, number, number], ground: [number, number, number], report: MoodArtReport): Promise<void> {
+/** A box that scrolls its content: which axes, and how far its content can move along each (`Scroller.range`). */
+type Scrolling = { node: HTMLElement; x: boolean; y: boolean; range: { x: number; y: number } };
+
+/**
+ * Every box under `stall`, and `stall`, that scrolls its content
+ * (`overflow` `auto`, `scroll` or `overlay`), with its range: its own
+ * overflow, or how far the capture grew the page past the job's height
+ * (`grew`), whichever is more — the scroll region and an open sheet are grown
+ * to show everything, so their own overflow is gone at the capture's size,
+ * and the growth bounds what it was at the job's.
+ */
+function scrollingUnder(stall: HTMLElement, grew: number): Scrolling[] {
+    const scrolls = (v: string): boolean => v === 'auto' || v === 'scroll' || v === 'overlay';
+    const out: Scrolling[] = [];
+    for (const node of [stall, ...stall.querySelectorAll<HTMLElement>('*')]) {
+        const ns = getComputedStyle(node);
+        const [x, y] = [scrolls(ns.overflowX), scrolls(ns.overflowY)];
+        if (!x && !y) continue;
+        if (node.clientWidth <= 0 || node.clientHeight <= 0) continue;
+        out.push({
+            node,
+            x,
+            y,
+            range: {
+                x: x ? Math.max(0, node.scrollWidth - node.clientWidth) : 0,
+                y: y ? Math.max(0, node.scrollHeight - node.clientHeight, grew) : 0,
+            },
+        });
+    }
+    return out;
+}
+
+async function flattenMoodArt(
+    el: HTMLElement,
+    kind: 'root' | 'sheet' | 'region',
+    text: [number, number, number],
+    ground: [number, number, number],
+    scrolling: readonly Scrolling[],
+    report: MoodArtReport,
+): Promise<void> {
     report.elements[kind] += 1;
     const cs = getComputedStyle(el);
     if (cs.backgroundImage === 'none') return;
@@ -15579,19 +15620,15 @@ async function flattenMoodArt(el: HTMLElement, kind: 'root' | 'sheet' | 'region'
         'padding-box': { x0: bl, y0: bt, x1: rect.width - br, y1: rect.height - bb },
         'content-box': { x0: bl + pl, y0: bt + pt, x1: rect.width - br - pr, y1: rect.height - bb - pb },
     };
-    // Every box that scrolls its content, this one and those inside it: its showing part, in this border box.
-    const scrolls = (v: string): boolean => v === 'auto' || v === 'scroll' || v === 'overlay';
-    const scrollers: Scroller[] = [];
-    for (const node of [el, ...el.querySelectorAll<HTMLElement>('*')]) {
-        const ns = node === el ? cs : getComputedStyle(node);
-        const [x, y] = [scrolls(ns.overflowX), scrolls(ns.overflowY)];
-        if (!x && !y) continue;
-        const r = node.getBoundingClientRect();
-        if (node.clientWidth <= 0 || node.clientHeight <= 0) continue;
-        const left = r.left - rect.left + node.clientLeft;
-        const top = r.top - rect.top + node.clientTop;
-        scrollers.push({ box: { x0: left, y0: top, x1: left + node.clientWidth, y1: top + node.clientHeight }, x, y });
-    }
+    // Every box that scrolls its content, this one and those inside it, in this border box.
+    const scrollers: Scroller[] = scrolling
+        .filter((s) => s.node === el || el.contains(s.node))
+        .map((s) => {
+            const r = s.node.getBoundingClientRect();
+            const left = r.left - rect.left + s.node.clientLeft;
+            const top = r.top - rect.top + s.node.clientTop;
+            return { box: { x0: left, y0: top, x1: left + s.node.clientWidth, y1: top + s.node.clientHeight }, x: s.x, y: s.y, range: s.range };
+        });
     const list = (v: string): string[] => splitTop(v);
     const [sizes, posX, posY, repeats, origins, clips, attachments] = [
         list(cs.backgroundSize),
@@ -15668,8 +15705,13 @@ async function flattenMoodArt(el: HTMLElement, kind: 'root' | 'sheet' | 'region'
     report.cells += cells.length;
 }
 
-/** Every stall's mood art read at its worst, on the last prepare's paint; what was read (`MoodArtReport`). */
-async function moodArtAtItsWorst(): Promise<MoodArtReport> {
+/**
+ * Every stall's mood art read at its worst, on the last prepare's paint;
+ * what was read (`MoodArtReport`). `jobHeight` is the job's own viewport
+ * height, before the capture grew it (`Scroller.range`).
+ */
+async function moodArtAtItsWorst(jobHeight: number): Promise<MoodArtReport> {
+    const started = performance.now();
     const report: MoodArtReport = {
         worn: preparedMood.length > 0,
         moods: [...preparedMood],
@@ -15678,6 +15720,7 @@ async function moodArtAtItsWorst(): Promise<MoodArtReport> {
         kinds: { file: 0, gradient: 0 },
         cells: 0,
         refused: [],
+        ms: 0,
     };
     if (!report.worn) return report;
     for (const stall of document.querySelectorAll<HTMLElement>('#app .stall:not(.deck-stall)')) {
@@ -15687,11 +15730,17 @@ async function moodArtAtItsWorst(): Promise<MoodArtReport> {
             report.refused.push(`${describe(stall)}: its --s-text or --s-bg did not resolve to an opaque colour`);
             continue;
         }
-        await flattenMoodArt(stall, 'root', text, ground, report);
-        for (const sheet of stall.querySelectorAll<HTMLElement>('.sheet')) await flattenMoodArt(sheet, 'sheet', text, ground, report);
-        for (const region of stall.querySelectorAll<HTMLElement>('.stall-scroll')) await flattenMoodArt(region, 'region', text, ground, report);
+        if (!(jobHeight > 0)) {
+            report.refused.push(`the job's own height was not handed over (${String(jobHeight)}), so no scroller's range can be bounded`);
+            continue;
+        }
+        const scrolling = scrollingUnder(stall, Math.max(0, window.innerHeight - jobHeight));
+        await flattenMoodArt(stall, 'root', text, ground, scrolling, report);
+        for (const sheet of stall.querySelectorAll<HTMLElement>('.sheet')) await flattenMoodArt(sheet, 'sheet', text, ground, scrolling, report);
+        for (const region of stall.querySelectorAll<HTMLElement>('.stall-scroll')) await flattenMoodArt(region, 'region', text, ground, scrolling, report);
     }
     if (report.elements.root === 0) report.refused.push('the paint wears a mood and no stall root was found to read');
+    report.ms = performance.now() - started;
     // The new layers painted before the runner's own frames.
     await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
     return report;
