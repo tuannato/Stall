@@ -15756,8 +15756,8 @@ async function moodArtAtItsWorst(jobHeight: number): Promise<MoodArtReport> {
     }
     if (report.elements.root === 0) report.refused.push('the paint wears a mood and no stall root was found to read');
     report.ms = performance.now() - started;
-    // The new layers painted before the runner's own frames.
-    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    // No frames waited here: the runner's evaluate waits for the faces and
+    // two animation frames after this, before anything is captured.
     return report;
 }
 window.__moodArtAtItsWorst = moodArtAtItsWorst;
