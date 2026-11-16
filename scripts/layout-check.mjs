@@ -1931,7 +1931,10 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         dim.push(
                             `${screen} @${vp.name} / theme ${theme}${wornLabel}: ` +
                                 `${t.sel} at ${Math.round(t.x)},${Math.round(t.y)} sits on paint at ${worst.toFixed(2)}:1` +
-                                ((prep.moodArt?.layers ?? 0) > 0 ? ' with its mood\'s art at its worst (a-mood-art-layer-is-read-at-its-worst)' : '') +
+                                // A condition, not a cause: the job read its
+                                // mood's page art at its worst, and the ground
+                                // in the parenthesis says what the line was on.
+                                ((prep.moodArt?.layers ?? 0) > 0 ? ' in a job that read its mood\'s page art at its worst (a-mood-art-layer-is-read-at-its-worst)' : '') +
                                 (kind === 'line' && read.at !== undefined
                                     ? ` (line read: the worst of ${read.px} px at ${read.at.x},${read.at.y}, ground rgb(${read.at.ground.join(',')}), ink ${read.at.ink})`
                                     : '') +
