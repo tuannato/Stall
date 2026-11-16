@@ -9,24 +9,27 @@
  * time. The contrast pass read it at one scroll position. So in every
  * contrast job that wears a mood, the probe (`moodArtAtItsWorst` in
  * `probe.ts`) reads each of those elements' `background-image` layers here
- * and paints, in their place, flat rectangles of the worst ground the
- * layers can put under a line there. This module is the model, and it
- * touches no document.
+ * and paints, in their place, flat rectangles of the worst ground its search
+ * finds the layers can put under a line there. This module is the model, and
+ * it touches no document.
  *
- * **(a) Toward which ink.** A page holds several inks. The worst ground is
- * chosen for the mood's own `--s-text`: of every colour the stack of layers
- * can paint at a point, composited over the element's own background colour
- * on the mood's `--s-bg`, the one that reads least against `--s-text`
+ * **(a) Toward which ink.** A page holds several inks. The ground is chosen
+ * for the mood's own `--s-text`: of every colour the stack of layers can
+ * paint at a point, composited over the element's own background colour on
+ * the mood's `--s-bg`, the one that reads least against `--s-text`
  * (`judgeFor`). On a light mood that is the darkest ground, on a dark mood
  * the lightest. It is the worst for every ink on the text's side of the
  * ground (the muted, the accent, the red, the text itself) while the art
- * stays on the ground's side of that ink. Where a ground reaches past an ink
- * toward the text, the text reads at most a third of its own contrast with
- * that ink there, under 3:1 for every ink within 9:1 of the text, so the
- * text fails first. **The gap, stated:** a line whose ink is on the other
+ * stays on the ground's side of that ink. **The condition, stated:** where a
+ * ground reaches past an ink toward the text, the text reads at most a
+ * third of its own contrast with that ink there, so the text fails first —
+ * but only where a line in the text's own ink stands on that same cell, and
+ * only for an ink that still clears 3:1 on the ground just past it (for any
+ * ink within 9:1 of the text). **The gap:** a line whose ink is on the other
  * side of the ground (a light line on a light mood's ground, a dark one on a
- * dark mood's), or one further than 9:1 from the text, is not read at its
- * worst — its worst is another colour, which this flattening does not paint.
+ * dark mood's), one further than 9:1 from the text, or one whose cell no
+ * line in the text's ink shares, is not read at its worst — its worst is
+ * another colour, which this flattening does not paint.
  *
  * **What a layer can paint.** A gradient (`linear`, `radial`, `conic`,
  * repeating or not): every colour on every segment between two consecutive
@@ -39,53 +42,76 @@
  *
  * **The stack.** Layers are not taken one at a time: a scrap of opaque paper
  * on top, flattened alone, would hide a darker scrap on the layer below that
- * shows wherever the top one is transparent. So the worst ground at a point
- * is searched over the stack, bottom to top (`worstStack`): each layer adds
- * every colour it can paint there over every composite kept so far, and the
- * `BEAM` worst composites are kept for the next. Every layer is taken to
- * reach any phase of every other — two tiles whose periods share nothing
- * meet in every combination somewhere on a long page — which is
- * conservative where layers are drawn to avoid each other.
+ * shows wherever the top one is transparent. So the ground at a point is
+ * searched over the stack, bottom to top (`worstStack`): **whole**, every
+ * combination of one colour a layer, where there are at most
+ * `EXHAUSTIVE_LIMIT` of them (`exhaustiveStack`); otherwise by a **beam**
+ * (`beamStack`), which keeps at each layer the `BEAM` composites the judge
+ * reads lowest and, beside them, the composites at each extreme of every
+ * premultiplied channel and of alpha, since a later layer can carry a
+ * composite far from the text toward it. A beam is a search, not a proof: it
+ * can miss a combination (the beam6 case of `moodArt.test.ts`, which a beam
+ * of the lowest twelve alone misses and this beam finds). Every layer is
+ * taken to reach any phase of every other — two tiles whose periods share
+ * nothing meet in every combination somewhere on a long page — which is
+ * conservative where layers are drawn to avoid each other. The root's, an
+ * open sheet's and the region's stacks are searched apart, each over its
+ * own background colour.
  *
  * **(b) What area.** A layer that repeats along an axis covers its clip area
  * along it. Along an axis it does not repeat, its tile stands where its size
  * and position put it, and stands still while the content of any scroller
- * scrolls over it. The capture stands every scroller at its start, so a
- * line reaches the tile only from below (or from the right), and only from
- * as far as the scroller's range can carry it: for every scroller
- * (`overflow` `auto` or `scroll`) along that axis whose box the tile
- * reaches, the tile is widened to the band from the start of its part
- * inside the scroller to the end of that part plus the scroller's range,
- * cut to the scroller's box, across the span the tile covers on the other
- * axis — not the whole page, and not only the tile. A scroller that cannot
- * move widens nothing, and a tile that meets no scroller is read where it
- * is: the lines over it do not move. The range is the probe's
- * (`Scroller.range`): the scroller's own overflow, or, for the boxes the
- * capture grows to show everything (the scroll region, an open sheet), at
- * most how far the capture grew the page past the job's height — an upper
- * bound. A line that can be scrolled over a tile can also be scrolled
- * off it, so a layer that is widened may not be under a line at all, in its
- * tile as in the band: a transparent colour is among its own there.
- * `background-attachment: local` moves with the content, so it is read where
- * it is. A layer the element animates the position or size of is taken to
- * cover its whole clip area.
+ * scrolls over it. The capture stands every scroller at its start (the probe
+ * checks it, and refuses a page where one is not), so a line reaches the
+ * tile only from below (or from the right), and only from as far as the
+ * scroller's range can carry it: for every scroller (`overflow` `auto`,
+ * `scroll` or `overlay`) along that axis whose box the tile reaches, the
+ * tile is widened to the band from the start of its part inside the
+ * scroller to the end of that part plus the scroller's range, cut to the
+ * scroller's box, across the span the tile covers on the other axis — not
+ * the whole page, and not only the tile. A scroller that cannot move widens
+ * nothing, and a tile that meets no scroller is read where it is: the lines
+ * over it do not move. The range is the probe's (`Scroller.range`): the
+ * scroller's own overflow, or, for the boxes the capture grows to show
+ * everything (the scroll region, an open sheet), at most how far the
+ * capture grew the page past the job's own height — an upper bound, read at
+ * the contrast pass's own heights (844, 900 and 1080) and no other: a
+ * shorter screen sweeps a wider band. A line that can be scrolled over a
+ * tile can also be scrolled off it, so a layer that is widened may not be
+ * under a line at all, in its tile as in the band: a transparent colour is
+ * among its own there. `background-attachment: local` moves with the
+ * element's own content, so on a box that scrolls itself it is read where
+ * it is against that box and widened for the scrollers inside it. A layer
+ * the element animates the position or size of is taken to cover its whole
+ * clip area.
  *
  * **(c) Size, position and clip.** Each layer's own computed size, position,
  * repeat, origin box and clip box (cycled over the layers as CSS cycles
  * them) give its tiles in the element's border box; the probe writes the
  * element's background as the flat rectangles of `worstCells`, each in px
- * from the border box, `no-repeat`, important, so no animation moves them.
- * Every cut is rounded to a whole pixel, so two rectangles meet and never
- * overlap.
+ * from the border box, `no-repeat`, important, so no animation moves them,
+ * and reads them back once every animation is frozen. Every cut is rounded
+ * to a whole pixel, so two rectangles meet and never overlap.
  *
  * **(d) What cannot be read** answers a sentence, never a skip (`refused`):
  * an image that is neither a file nor a gradient this module models (an
- * `image-set()`, a prefixed gradient, a gradient interpolated in another
- * colour space or with a colour outside sRGB), a size, a position or a
- * repeat it does not parse, a file layer at `auto`, `cover` or `contain`, a
- * `fixed` attachment, a `text` clip. The probe adds a file that does not
- * load or cannot be read back, a transform on the element or above it, and a
- * blend mode other than `normal`. The runner refuses the job.
+ * `image-set()`, a prefixed gradient, `cross-fade()`); a gradient
+ * interpolated in a space written other than sRGB, or with a stop outside
+ * sRGB (`oklch()`, `lab()`, `color(display-p3 …)`); a gradient with a
+ * `color(srgb …)` stop and no space written — Chrome interpolates it in
+ * OKLab — wherever two of its stops are distinct, both visible and apart (a
+ * segment to transparent, or a hard stop, paints the same in either space
+ * and is read); a size, a position or a repeat it does not parse; a file
+ * layer at `auto`, `cover` or `contain`; a `fixed` attachment, and a `local`
+ * one on a box that does not scroll itself; a `text` clip; on a box the
+ * capture grew, a tile placed or sized along the grown axis by a non-zero
+ * percentage (the grown capture puts it elsewhere than the job's own
+ * height would); a still tile under scrollers on two axes (the corner both
+ * reach is not modelled). The probe adds a file that does not load or cannot
+ * be read back, a background colour it cannot read, a transform, `rotate`,
+ * `scale`, `translate` or `zoom` on the element or above it, a blend mode
+ * other than `normal`, a scroller not at its start, and a mood whose
+ * `--s-text` or `--s-bg` does not resolve. The runner refuses the job.
  *
  * Tests: `a-mood-art-layer-is-read-at-its-worst` (`moodArt.test.ts`).
  */
@@ -98,8 +124,11 @@ export const CLEAR: Rgba = [0, 0, 0, 0];
 /** Steps on every segment between two stops of a gradient. */
 export const SEGMENT_SAMPLES = 32;
 
-/** The composites kept at each layer of the stack search. */
+/** The composites the beam keeps at each layer, the judge's lowest (`beamStack`; pinned by value in the tests). */
 export const BEAM = 12;
+
+/** Up to this many combinations of one colour a layer, a stack is searched whole (`exhaustiveStack`; pinned by value). */
+export const EXHAUSTIVE_LIMIT = 200_000;
 
 /** `src` over `dst`, straight alpha, source-over in sRGB, as a browser composites background layers. */
 export function overRgba(src: Rgba, dst: Rgba): Rgba {
@@ -225,6 +254,10 @@ export function gradientColours(layer: string): { colours: Rgba[] } | { refused:
     if (m === null) return { refused: 'not a gradient this read models' };
     const items = splitTop(m[3]!);
     const stops: Rgba[] = [];
+    // Each stop's colour as written, and its positions: where two stops meet at one position the
+    // colour changes in a hard step and nothing is interpolated between them.
+    const written: { colour: string; positions: string[] }[] = [];
+    let spaceWritten = false;
     for (const [i, item] of items.entries()) {
         if (POSITION.test(item)) continue;
         const lead = leadingColour(item);
@@ -237,11 +270,36 @@ export function gradientColours(layer: string): { colours: Rgba[] } | { refused:
                 if (space !== null && space[1]!.toLowerCase() !== 'srgb') {
                     return { refused: `a gradient interpolated in ${space[1]}, which this read does not model` };
                 }
+                spaceWritten = space !== null;
                 continue;
             }
             return { refused: `a gradient stop whose colour this read cannot model: ${item.slice(0, 60)}` };
         }
         stops.push(colour);
+        written.push({ colour: lead.colour, positions: splitSpaces(lead.rest) });
+    }
+    /*
+     * A stop that is not a legacy colour — `color(srgb …)`, which every
+     * `color-mix()` computes to — makes Chrome interpolate the gradient in
+     * OKLab when no space is written (the critic's grad.html: blue to yellow
+     * paints (108,172,198) at the midpoint where sRGB paints (128,128,127)),
+     * and this read samples sRGB. A segment to or from transparent, or a
+     * hard stop, paints the same in either space; any other segment between
+     * two distinct colours is refused.
+     */
+    if (!spaceWritten && written.some((w) => /^color\(/i.test(w.colour))) {
+        for (let k = 1; k < stops.length; k += 1) {
+            const [a, b] = [stops[k - 1]!, stops[k]!];
+            const same = a.every((v, c) => Math.abs(v - b[c]!) < 1e-9);
+            const hard = written[k - 1]!.positions.length > 0 && written[k]!.positions.length > 0 && written[k - 1]!.positions.at(-1) === written[k]!.positions[0];
+            if (a[3] > 0 && b[3] > 0 && !same && !hard) {
+                return {
+                    refused:
+                        `a gradient with a color(srgb …) stop and no interpolation space written, which Chrome interpolates in OKLab, ` +
+                        `between ${written[k - 1]!.colour} and ${written[k]!.colour}: this read samples sRGB`,
+                };
+            }
+        }
     }
     if (stops.length === 0) return { refused: 'a gradient with no colour stop this read can find' };
     const colours: Rgba[] = [stops[0]!];
@@ -339,10 +397,18 @@ export type ElementBoxes = { 'border-box': Box; 'padding-box': Box; 'content-box
 
 /**
  * A box that scrolls its content: its showing part in the element's border
- * box, the axes it scrolls along, and how far along each its content can
- * move (`range`, px).
+ * box, the axes it scrolls along, how far along each its content can move
+ * (`range`, px), and whether it is the element whose layers are read
+ * (`self`: a `local` layer moves with this one's content).
  */
-export type Scroller = { box: Box; x: boolean; y: boolean; range: { x: number; y: number } };
+export type Scroller = { box: Box; x: boolean; y: boolean; range: { x: number; y: number }; self?: boolean };
+
+/** The sum of a length's percentage terms (`50%`, `calc(95% - 10px)`), or 0. */
+export function percentOf(token: string): number {
+    let sum = 0;
+    for (const m of token.matchAll(/([-+]?\s*(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)%/gi)) sum += Number(m[1]!.replace(/\s+/g, ''));
+    return sum;
+}
 
 /**
  * Where a layer paints: its tiles, the band (b) widens them to, the tile's
@@ -384,6 +450,7 @@ export function layerCoverage(
     file: boolean,
     scrollers: readonly Scroller[],
     moving: boolean,
+    grew = 0,
 ): Coverage | { refused: string } {
     const origin = boxes[style.origin as keyof ElementBoxes];
     const clip = boxes[style.clip as keyof ElementBoxes];
@@ -391,6 +458,11 @@ export function layerCoverage(
     if (clip === undefined) return { refused: `background-clip ${style.clip}, which this read does not model` };
     if (style.attachment !== 'scroll' && style.attachment !== 'local') {
         return { refused: `background-attachment ${style.attachment}, which this read does not model` };
+    }
+    // `local` follows the element's own scrolling alone: on a box that does not scroll itself, the
+    // layer stands still while a scroller inside it moves, which `scroll`'s reading would need.
+    if (style.attachment === 'local' && !scrollers.some((s) => s.self === true)) {
+        return { refused: 'background-attachment local on a box that does not scroll its own content: it stands still while a scroller inside it moves' };
     }
     const ow = origin.x1 - origin.x0;
     const oh = origin.y1 - origin.y0;
@@ -418,6 +490,17 @@ export function layerCoverage(
     const tile = { w, h };
     if (w <= 0 || h <= 0) return { tiles: [], bands: [], tile, absent: false };
     const covers = { x: repeats.x || moving, y: repeats.y || moving };
+    // On a box the capture grew (down only), a percentage along y resolves against the grown height,
+    // not the job's own: the tile would be read where the grown capture puts it, or at its size.
+    if (grew > 0) {
+        const sizeY = sizes.length === 2 ? sizes[1]! : '';
+        if (!covers.y && percentOf(style.posY) !== 0) {
+            return { refused: `background-position-y ${style.posY} on a box the capture grew by ${Math.round(grew)}px: its tile is read where the grown box puts it, not the job's own` };
+        }
+        if ((file || !covers.y) && percentOf(sizeY) !== 0) {
+            return { refused: `background-size ${style.size} on a box the capture grew by ${Math.round(grew)}px: its tile is sized against the grown box, not the job's own` };
+        }
+    }
     const span = (axis: 'x' | 'y'): [number, number] => {
         const [c0, c1] = axis === 'x' ? [clip.x0, clip.x1] : [clip.y0, clip.y1];
         if (covers[axis]) return [c0, c1];
@@ -430,12 +513,16 @@ export function layerCoverage(
     if (!(x0 < x1 && y0 < y1)) return { tiles: [], bands: [], tile, absent: false };
     const t: Box = { x0, y0, x1, y1 };
     const bands: Box[] = [];
-    if (style.attachment === 'scroll') {
+    const bandAxes = new Set<'x' | 'y'>();
+    {
         for (const axis of ['x', 'y'] as const) {
             if (covers[axis]) continue;
             for (const s of scrollers) {
+                // A `local` layer moves with its own box's content: that one scroller does not widen it.
+                if (style.attachment === 'local' && s.self === true) continue;
                 const range = s.range[axis];
                 if (!s[axis] || !(range > 0) || !meets(t, s.box)) continue;
+                bandAxes.add(axis);
                 // The tile's part inside the scroller, and as far past it as the range carries a line.
                 const inside = cut(t, s.box)!;
                 const band =
@@ -447,34 +534,99 @@ export function layerCoverage(
             }
         }
     }
+    // Scrolled along both axes, a line reaches the tile from the corner too, which the bands of
+    // one axis at a time do not cover.
+    if (bandAxes.size > 1) {
+        return { refused: 'a still tile under scrollers on two axes: the corner reached by scrolling both is not modelled' };
+    }
     // A layer that moves and does not tile both ways may be anywhere, or not under a line at all.
     const absent = bands.length > 0 || (moving && !(repeats.x && repeats.y));
     return { tiles: [t], bands, tile, absent };
 }
 
+/** A composite's key: its channels to a tenth and its alpha to a thousandth. */
+const keyOf = (c: Rgba): string => (c[3] <= 0 ? 'clear' : `${c[0].toFixed(1)},${c[1].toFixed(1)},${c[2].toFixed(1)},${c[3].toFixed(3)}`);
+
 /**
- * The worst composite a stack of layers can put down, bottom layer first:
- * each layer's colours over every composite kept so far, the `BEAM` that
- * `judge` reads lowest kept for the next layer.
+ * The ground a stack of layers can put down (bottom layer first) that
+ * `judge` reads lowest: searched whole where the stack has at most
+ * `EXHAUSTIVE_LIMIT` combinations of one colour a layer, otherwise by the
+ * beam — a search, not a proof (the module's docblock).
  */
-export function worstStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba) => number): Rgba {
+/** How many distinct stacks a read searched whole, and how many by the beam. */
+export type SearchTally = { whole: number; beam: number };
+
+export function worstStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba) => number, tally?: SearchTally): Rgba {
+    let combinations = 1;
+    for (const colours of stack) combinations *= Math.max(1, colours.length);
+    const whole = combinations <= EXHAUSTIVE_LIMIT;
+    if (tally !== undefined) tally[whole ? 'whole' : 'beam'] += 1;
+    return whole ? exhaustiveStack(stack, judge) : beamStack(stack, judge);
+}
+
+/** Every combination of one colour a layer, composited bottom to top; the one `judge` reads lowest. */
+export function exhaustiveStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba) => number): Rgba {
+    let level = new Map<string, Rgba>([['clear', CLEAR]]);
+    for (const colours of stack) {
+        const next = new Map<string, Rgba>();
+        for (const below of level.values()) {
+            for (const p of colours) {
+                const c = overRgba(p, below);
+                next.set(keyOf(c), c);
+            }
+        }
+        level = next;
+    }
+    let best: Rgba = CLEAR;
+    let least = Infinity;
+    for (const c of level.values()) {
+        const v = judge(c);
+        if (v < least) [best, least] = [c, v];
+    }
+    return best;
+}
+
+/**
+ * The beam: at each layer, every colour it can paint over every composite
+ * kept so far; kept for the next layer, the `width` the judge reads lowest
+ * and, beside them, the composite at each extreme (least and most) of every
+ * premultiplied channel and of alpha — a layer above can carry a composite
+ * far from the text toward it, and source-over keeps each premultiplied
+ * channel's order (`out = src + (1 − srcα) × below`).
+ */
+export function beamStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba) => number, width = BEAM): Rgba {
     let beam: Rgba[] = [CLEAR];
     for (const colours of stack) {
-        const next: { c: Rgba; v: number }[] = [];
-        const seen = new Set<string>();
+        const next = new Map<string, { c: Rgba; v: number }>();
         for (const below of beam) {
             for (const p of colours) {
                 const c = overRgba(p, below);
-                const key = `${c[0].toFixed(1)},${c[1].toFixed(1)},${c[2].toFixed(1)},${c[3].toFixed(3)}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                next.push({ c, v: judge(c) });
+                const key = keyOf(c);
+                if (!next.has(key)) next.set(key, { c, v: judge(c) });
             }
         }
-        next.sort((a, b) => a.v - b.v);
-        beam = next.slice(0, BEAM).map((n) => n.c);
+        const all = [...next.values()];
+        const kept = new Set(all.slice().sort((a, b) => a.v - b.v).slice(0, width));
+        const channels = [(c: Rgba) => c[0] * c[3], (c: Rgba) => c[1] * c[3], (c: Rgba) => c[2] * c[3], (c: Rgba) => c[3]];
+        for (const channel of channels) {
+            let lo = all[0]!;
+            let hi = all[0]!;
+            for (const n of all) {
+                if (channel(n.c) < channel(lo.c)) lo = n;
+                if (channel(n.c) > channel(hi.c)) hi = n;
+            }
+            kept.add(lo);
+            kept.add(hi);
+        }
+        beam = [...kept].sort((a, b) => a.v - b.v).map((n) => n.c);
     }
-    return beam[0] ?? CLEAR;
+    let best: Rgba = CLEAR;
+    let least = Infinity;
+    for (const c of beam) {
+        const v = judge(c);
+        if (v < least) [best, least] = [c, v];
+    }
+    return best;
 }
 
 /**
@@ -502,6 +654,7 @@ export function worstCells(
     judge: (c: Rgba) => number,
     memo: Map<string, Rgba> = new Map(),
     judgeKey = '',
+    tally?: SearchTally,
 ): Cell[] {
     const xs = new Set<number>();
     const ys = new Set<number>();
@@ -537,7 +690,7 @@ export function worstCells(
             const key = `${judgeKey}\n${sign.join('\n')}`;
             let colour = memo.get(key);
             if (colour === undefined) {
-                colour = worstStack(stack, judge);
+                colour = worstStack(stack, judge, tally);
                 memo.set(key, colour);
             }
             if (colour[3] > 0) cells.push({ x0, x1, y0, y1, colour });

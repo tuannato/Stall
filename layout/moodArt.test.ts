@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     BEAM,
+    beamStack,
+    EXHAUSTIVE_LIMIT,
+    exhaustiveStack,
     CLEAR,
     cssOf,
     gradientColours,
@@ -10,6 +13,7 @@ import {
     onGround,
     overRgba,
     parseColour,
+    percentOf,
     rasterColours,
     readLayer,
     repeatsOf,
@@ -91,6 +95,12 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
             'repeating-linear-gradient(45deg, color(srgb 0.5 0.5 0.5 / 0.05) 0px, color(srgb 0.5 0.5 0.5 / 0.05) 1px, rgba(0, 0, 0, 0) 1px, rgba(0, 0, 0, 0) 6px)',
             'linear-gradient(90deg in srgb, rgb(255, 0, 0), rgb(0, 0, 255))',
             'linear-gradient(calc(10deg + 1turn), rgb(255, 0, 0) calc(10% + 4px), rgb(0, 0, 255))',
+            // A color(srgb …) stop where OKLab and sRGB paint alike: to or from transparent, a hard stop,
+            // one colour held, or a space written.
+            'linear-gradient(color(srgb 0.356863 0.576471 1 / 0.2), rgba(0, 0, 0, 0) 100%)',
+            'linear-gradient(color(srgb 1 0 0) 0px, color(srgb 1 0 0) 10px, rgb(0, 0, 255) 10px, rgb(0, 0, 255) 20px)',
+            'linear-gradient(color(srgb 1 0 0) 0px 10px, rgb(0, 0, 255) 10px)',
+            'linear-gradient(to right in srgb, color(srgb 0 0 1), rgb(255, 255, 0))',
         ]) {
             expect('colours' in gradientColours(ok), ok).toBe(true);
         }
@@ -100,6 +110,11 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
             ['linear-gradient(oklch(0.7 0.1 200), rgb(255, 0, 0))', /cannot model/],
             ['radial-gradient(color(display-p3 1 0 0), rgba(64, 191, 64, 0.5))', /cannot model/],
             ['linear-gradient(rgb(10, 20, 30), lab(50 20 30))', /cannot model/],
+            // A color(srgb …) stop with no space written: Chrome interpolates in OKLab (blue to yellow
+            // paints (108, 172, 198) at its midpoint, sRGB (128, 128, 127)), so a segment between two
+            // distinct visible colours is refused.
+            ['linear-gradient(to right, color(srgb 0 0 1), rgb(255, 255, 0))', /interpolates in OKLab, between color\(srgb 0 0 1\) and rgb\(255, 255, 0\)/],
+            ['linear-gradient(color(srgb 0.2 0.3 0.4 / 0.5) 0px, color(srgb 0.5 0.3 0.4 / 0.5) 20px)', /OKLab/],
         ] as const) {
             const out = gradientColours(refused);
             expect('refused' in out && out.refused, refused).toMatch(why);
@@ -139,7 +154,60 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
         const ray: Rgba = [118, 104, 84, 0.17];
         const both = worstStack([[tint, CLEAR], [ray, CLEAR]], judge);
         expect(both).toEqual(overRgba(ray, tint));
-        expect(BEAM).toBeGreaterThan(1);
+    });
+
+    it('searches a stack whole up to its limit, and past it by a beam that is not exact', () => {
+        expect(BEAM).toBe(12);
+        expect(EXHAUSTIVE_LIMIT).toBe(200_000);
+        // The critic's counter-example: on a light mood, opaque greys and one dark blue below, one
+        // translucent yellow above. The old beam (the twelve lowest alone) kept greys and read 3.34:1;
+        // the worst is the blue under the yellow, 2.47:1. Thirteen combinations: searched whole.
+        const judge = judgeFor([96, 84, 66], [255, 254, 250]);
+        const bottom: Rgba[] = [[0, 2, 32, 1]];
+        for (let g = 100; g <= 144; g += 4) bottom.push([g, g, g, 1]);
+        const top: Rgba[] = [[202, 208, 83, 0.74]];
+        const tally = { whole: 0, beam: 0 };
+        const worst = worstStack([bottom, top], judge, tally);
+        expect(worst).toEqual(overRgba(top[0]!, bottom[0]!));
+        expect(judge(worst)).toBeCloseTo(2.47, 2);
+        expect(tally).toEqual({ whole: 1, beam: 0 });
+        // The beam keeps each premultiplied channel's extremes beside the twelve lowest, so it reads
+        // this one right as well, at any width.
+        expect(beamStack([bottom, top], judge)).toEqual(worst);
+        expect(beamStack([bottom, top], judge, 1)).toEqual(worst);
+        // On small random stacks the dispatch is exact, and the beam never reads below the whole search
+        // (it tries a subset of the combinations) but misses it on some: a search, not a proof. The
+        // probe prints how many stacks each read searched by the beam.
+        let seed = 7;
+        const rnd = (): number => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+        let misses = 0;
+        for (const [ink, ground] of [
+            [[96, 84, 66], [255, 254, 250]],
+            [[230, 235, 240], [20, 24, 32]],
+        ] as const) {
+            const j = judgeFor(ink, ground);
+            for (let t = 0; t < 500; t += 1) {
+                const stack: Rgba[][] = [];
+                for (let l = 0, layers = 2 + Math.floor(rnd() * 3); l < layers; l += 1) {
+                    const colours: Rgba[] = [CLEAR];
+                    for (let i = 0, k = 2 + Math.floor(rnd() * 14); i < k; i += 1) {
+                        colours.push([Math.floor(rnd() * 256), Math.floor(rnd() * 256), Math.floor(rnd() * 256), rnd() < 0.3 ? 1 : Math.round(rnd() * 100) / 100]);
+                    }
+                    stack.push(colours);
+                }
+                const whole = j(exhaustiveStack(stack, j));
+                expect(j(worstStack(stack, j))).toBe(whole);
+                const beam = j(beamStack(stack, j));
+                expect(beam).toBeGreaterThanOrEqual(whole - 1e-12);
+                if (beam > whole + 1e-9) misses += 1;
+            }
+        }
+        expect(misses).toBeGreaterThan(0);
+        // Past the limit, the beam: counted.
+        const wide: Rgba[] = Array.from({ length: 450 }, (_, i) => [i % 256, (i * 7) % 256, (i * 13) % 256, 0.5]);
+        const past = { whole: 0, beam: 0 };
+        worstStack([wide, wide], judge, past);
+        expect(past).toEqual({ whole: 0, beam: 1 });
     });
 
     it('covers a repeating layer’s clip area, and widens a still tile over the band its scroller sweeps (b)', () => {
@@ -167,12 +235,48 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
         const row: Scroller = { box: box(0, 300, 390, 360), x: true, y: false, range: { x: 200, y: 0 } };
         const across = layerCoverage(style({ size: '40px 40px', repeat: 'no-repeat', posX: '100px', posY: '310px', origin: 'border-box' }), BOXES, true, [row], false);
         expect('bands' in across && across.bands).toEqual([box(100, 310, 340, 350)]);
-        // `local` moves with the content: read where it is.
-        const local = layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '24px', origin: 'border-box', attachment: 'local' }), BOXES, true, scrollers, false);
-        expect(local).toEqual({ tiles: [box(24, 24, 184, 120)], bands: [], tile: { w: 160, h: 96 }, absent: false });
+        // `local` follows the element's own scrolling alone. On a box that scrolls itself it moves with
+        // the content, and is read where it is; on the root, which does not, it stands still while
+        // the region scrolls over it, which `scroll`'s bands would need: refused, with a sentence.
+        const localLayer = style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '24px', origin: 'border-box', attachment: 'local' });
+        const self: Scroller = { box: box(0, 0, 390, 844), x: false, y: true, range: { x: 0, y: 900 }, self: true };
+        expect(layerCoverage(localLayer, BOXES, true, [self], false)).toEqual({ tiles: [box(24, 24, 184, 120)], bands: [], tile: { w: 160, h: 96 }, absent: false });
+        expect(layerCoverage(localLayer, BOXES, true, scrollers, false)).toEqual({
+            refused: 'background-attachment local on a box that does not scroll its own content: it stands still while a scroller inside it moves',
+        });
+        // A still tile under a sideways row inside the region: the corner reached by scrolling both is
+        // not modelled, so it is refused rather than read one axis at a time.
+        const inside: Scroller = { box: box(0, 300, 390, 360), x: true, y: false, range: { x: 200, y: 0 } };
+        const both = layerCoverage(style({ size: '40px 40px', repeat: 'no-repeat', posX: '100px', posY: '310px', origin: 'border-box' }), BOXES, true, [REGION, inside], false);
+        expect(both).toEqual({ refused: 'a still tile under scrollers on two axes: the corner reached by scrolling both is not modelled' });
         // Animated position or size: anywhere in the clip area, or not there at all.
         const falling = layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '24px' }), BOXES, true, scrollers, true);
         expect(falling).toEqual({ tiles: [box(0, 0, 390, 844)], bands: [], tile: { w: 160, h: 96 }, absent: true });
+    });
+
+    it('refuses a percentage along y on a box the capture grew, and reads it on one it did not (b)', () => {
+        // A bottom-anchored tile on a grown capture is placed against the grown height: refused.
+        const bottom = style({ size: '160px 96px', repeat: 'no-repeat', posX: '24px', posY: '100%', origin: 'border-box' });
+        expect(layerCoverage(bottom, BOXES, true, [], false, 313)).toEqual({
+            refused: "background-position-y 100% on a box the capture grew by 313px: its tile is read where the grown box puts it, not the job's own",
+        });
+        expect(layerCoverage(bottom, BOXES, true, [], false, 0)).toMatchObject({ tiles: [box(24, 748, 184, 844)] });
+        // `calc(95% - 10px)` carries a percentage too; `0%` and px do not.
+        expect(layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posY: 'calc(95% - 10px)' }), BOXES, true, [], false, 50)).toHaveProperty('refused');
+        expect(layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posY: '0%' }), BOXES, true, [], false, 50)).not.toHaveProperty('refused');
+        expect(layerCoverage(style({ size: '160px 96px', repeat: 'no-repeat', posY: '24px' }), BOXES, true, [], false, 50)).not.toHaveProperty('refused');
+        // A size along y by a percentage: a file's tile, or a gradient's that does not repeat down.
+        expect(layerCoverage(style({ size: '100% 50%', repeat: 'no-repeat', posY: '0px' }), BOXES, false, [], false, 50)).toEqual({
+            refused: "background-size 100% 50% on a box the capture grew by 50px: its tile is sized against the grown box, not the job's own",
+        });
+        expect(layerCoverage(style({ size: '100px 50%', repeat: 'repeat' }), BOXES, true, [], false, 50)).toHaveProperty('refused');
+        // A gradient repeating down covers the clip area whatever its height: nothing to refuse.
+        expect(layerCoverage(style({ size: '100% 50%', repeat: 'repeat' }), BOXES, false, [], false, 50)).not.toHaveProperty('refused');
+        // A percentage along x is read against a width the capture does not change.
+        expect(layerCoverage(style({ size: '50% 40px', repeat: 'no-repeat', posX: '100%', posY: '0px' }), BOXES, false, [], false, 50)).not.toHaveProperty('refused');
+        expect(percentOf('calc(95% - 10px)')).toBe(95);
+        expect(percentOf('0%')).toBe(0);
+        expect(percentOf('24px')).toBe(0);
     });
 
     it('keeps each layer’s own size, position, origin and clip (c)', () => {
