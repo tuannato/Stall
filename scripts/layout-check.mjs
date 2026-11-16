@@ -539,6 +539,59 @@ async function evalJson(cdp, sessionId, expression) {
     return JSON.parse(r.result.value);
 }
 
+/** `evalJson` for an expression that answers a promise: awaited in the page, then serialised. */
+async function evalAwaitJson(cdp, sessionId, expression) {
+    const r = await cdp.send(
+        'Runtime.evaluate',
+        { expression: `(async () => JSON.stringify(await (${expression})))()`, awaitPromise: true, returnByValue: true },
+        sessionId,
+    );
+    if (r.exceptionDetails) {
+        throw new Error(`page threw: ${JSON.stringify(r.exceptionDetails)}`);
+    }
+    return JSON.parse(r.result.value);
+}
+
+/**
+ * **`the-mood-flatten-paints-a-planted-ground`** (step 8i, B; the critic's
+ * P2-1): the capture of a contrast page with `__moodSelfCheck`'s plant on it,
+ * read where the planted line stands. Every pixel of the line's box must be
+ * the flattened ground (`plant.expect`, black) within two levels: at rest it
+ * stands on white, so a flatten that wrote nothing, wrote where nothing
+ * paints, or measured the scroller's band wrong reads white there. The
+ * plant's own refusals and read-back count as faults too.
+ */
+function moodSelfCheckFaults(img, plant) {
+    if (plant === null || plant === undefined || typeof plant !== 'object') return ['the page planted nothing'];
+    const faults = [];
+    for (const r of plant.refused ?? []) faults.push(`the flatten refused the plant: ${r}`);
+    for (const h of plant.held ?? []) faults.push(`the planted write did not hold: ${h}`);
+    if (!(plant.layers > 0) || !(plant.cells > 0)) faults.push(`the flatten read ${plant.layers} layer(s) and painted ${plant.cells} cell(s) on the plant`);
+    const { x, y, w, h } = plant.line ?? {};
+    if (!(w > 0 && h > 0) || !(x >= 0) || !(y >= 0) || x + w > img.width || y + h > img.height) {
+        faults.push(`the planted line ${x},${y} ${w}x${h} is not inside the ${img.width}x${img.height} capture`);
+        return faults;
+    }
+    const near = (i, c) => Math.abs(img.data[i] - c[0]) <= 2 && Math.abs(img.data[i + 1] - c[1]) <= 2 && Math.abs(img.data[i + 2] - c[2]) <= 2;
+    let right = 0;
+    let atRest = 0;
+    for (let yy = y; yy < y + h; yy += 1) {
+        for (let xx = x; xx < x + w; xx += 1) {
+            const i = (yy * img.width + xx) * img.bpp;
+            if (near(i, plant.expect)) right += 1;
+            else if (near(i, plant.atRest)) atRest += 1;
+        }
+    }
+    const total = w * h;
+    if (right !== total) {
+        faults.push(
+            `${total - right} of the planted line's ${total} pixels do not read the flattened ground rgb(${plant.expect.join(', ')}), ` +
+                `${atRest} of them the ground at rest rgb(${plant.atRest.join(', ')}) — the flatten did not reach the capture`,
+        );
+    }
+    return faults;
+}
+
 async function waitForFlag(cdp, sessionId, flag) {
     for (let i = 0; i < 150; i += 1) {
         const r = await cdp.send(
@@ -1318,6 +1371,11 @@ async function contrastPrepare(cdp, sessionId, screen, theme, flags, neutral, no
                 `window.__contrastFreeze(); ` +
                 `await new Promise((res) => ` +
                 `requestAnimationFrame(() => requestAnimationFrame(res))); ` +
+                // `a-mood-art-layer-is-read-at-its-worst`: the flatten's
+                // writes read back after the freeze, just before the capture
+                // (`moodWritesHeld`) — a transition or a dropped value leaves
+                // the art at rest under a report that says flattened.
+                (moodHeight === undefined ? '' : `if (out.moodArt !== undefined && out.moodArt !== null) out.moodArt.held = window.__moodArtHeld(); `) +
                 `return JSON.stringify(out); })()`,
             awaitPromise: true,
             returnByValue: true,
@@ -1406,6 +1464,23 @@ function moodEcho(out) {
     const why = (art.refused ?? []).map((r) => `a-mood-art-layer-is-read-at-its-worst could not read ${r}`);
     if (art.worn && (art.elements?.root ?? 0) < 1) {
         why.push('the paint wears a mood and its flattening read no stall root (a-mood-art-layer-is-read-at-its-worst)');
+    }
+    if (art.worn) {
+        // Every open sheet and scroll region the page counted by another road was read.
+        for (const kind of ['sheet', 'region']) {
+            const [present, read] = [art.present?.[kind], art.elements?.[kind] ?? 0];
+            if (typeof present !== 'number') {
+                why.push(`the flattening reported no count of the ${kind}s on the paint (a-mood-art-layer-is-read-at-its-worst)`);
+            } else if (read < present) {
+                why.push(`the paint holds ${present} ${kind}(s) and the flattening read ${read} (a-mood-art-layer-is-read-at-its-worst)`);
+            }
+        }
+        // The writes held, read back after the freeze (`moodWritesHeld`).
+        if (!Array.isArray(art.held)) {
+            why.push('the flattening was not read back after the freeze (a-mood-art-layer-is-read-at-its-worst) — a write that did not hold would read the art at rest');
+        } else {
+            for (const h of art.held) why.push(`a-mood-art-layer-is-read-at-its-worst's write did not hold: ${h}`);
+        }
     }
     if (!art.worn && ((art.layers ?? 0) > 0 || (art.cells ?? 0) > 0)) {
         why.push(`the paint wears no mood and ${art.layers} layer(s) were flattened (a-mood-art-layer-is-read-at-its-worst)`);
@@ -1743,6 +1818,9 @@ async function contrastJob(tab, vp, plannedJob, honestOwed, out) {
                         kinds: prep.moodArt.kinds,
                         cells: prep.moodArt.cells,
                         elements: prep.moodArt.elements,
+                        present: prep.moodArt.present,
+                        byKind: prep.moodArt.byKind,
+                        searches: prep.moodArt.searches ?? { whole: 0, beam: 0 },
                         ms: prep.moodArt.ms ?? 0,
                     };
                     record.moodArt = { layers: prep.moodArt.layers, kinds: prep.moodArt.kinds, cells: prep.moodArt.cells, elements: prep.moodArt.elements };
@@ -4762,7 +4840,7 @@ try {
      * reads or paints is another tab's.
      */
     for (const tab of tabs) {
-        Object.assign(tab, { vp: undefined, loadedAt: 0, reducedNow: false, faces: [], refusals: [], jobs: 0, busyMs: 0, step: undefined });
+        Object.assign(tab, { vp: undefined, loadedAt: 0, reducedNow: false, faces: [], refusals: [], jobs: 0, busyMs: 0, step: undefined, pages: 0, moodChecks: [] });
         await readyTab(tab.sessionId);
     }
     watchedTabs = tabs;
@@ -4830,6 +4908,31 @@ try {
             }
         });
         tab.faces.push(facesLine(echo));
+        /*
+         * `the-mood-flatten-paints-a-planted-ground`: on every contrast page,
+         * before its first job, the real flatten run on a plant and the
+         * capture read where it should have painted (`moodSelfCheckFaults`);
+         * the plant taken away again whatever happened. The verdict holds one
+         * record to every page loaded.
+         */
+        tab.pages += 1;
+        await timed('mood self-check', async () => {
+            const faults = [];
+            let plant;
+            try {
+                plant = await evalAwaitJson(cdp, tab.sessionId, 'window.__moodSelfCheck(true)');
+                faults.push(...moodSelfCheckFaults(await captureShot(cdp, tab.sessionId), plant));
+            } catch (err) {
+                faults.push(`the page threw: ${String(err?.message ?? err).slice(0, 200)}`);
+            } finally {
+                try {
+                    await evalAwaitJson(cdp, tab.sessionId, 'window.__moodSelfCheck(false)');
+                } catch (err) {
+                    faults.push(`the page threw taking the plant away: ${String(err?.message ?? err).slice(0, 200)}`);
+                }
+            }
+            tab.moodChecks.push({ vp: vp.name, faults });
+        });
     };
     /*
      * A tab's page at a viewport, held to the plan: the screens the plan
@@ -5578,6 +5681,44 @@ try {
                 verdicts.push(`a-mood-art-layer-is-read-at-its-worst flattened ${extra.length} job(s) the page owes no mood on: ${some(extra)}`);
             }
         }
+        /*
+         * The tracked fixture's mood is the rule's public subject (P2-1, P2-4
+         * of the critic): on every job of it, file layers and painted cells,
+         * and art read on every open sheet and every scroll region the paint
+         * holds; and over its jobs, at least one sheet and one region read
+         * with art. A flatten that stopped reading — zero layers — passes
+         * every other check.
+         */
+        {
+            const checks = tabs.flatMap((t) => t.moodChecks);
+            const short = tabs.filter((t) => t.moodChecks.length !== t.pages).map((t) => `tab ${t.index} (${t.pages} page(s), ${t.moodChecks.length} read)`);
+            if (short.length > 0) verdicts.push(`the-mood-flatten-paints-a-planted-ground: a contrast page with no planted read, on ${short.join(', ')}`);
+            for (const c of checks) for (const f of c.faults) verdicts.push(`the-mood-flatten-paints-a-planted-ground (${c.vp} page): ${f}`);
+            console.log(
+                `  the mood flatten held to a planted ground (the-mood-flatten-paints-a-planted-ground): ${checks.length} contrast page(s), ` +
+                    `${checks.filter((c) => c.faults.length === 0).length} read its band at the flattened ground`,
+            );
+        }
+        const fixtureMood = moodJobs.filter((j) => j.cls === TRACKED_FIXTURE_CLASS);
+        if (PRIVATE_SHEET_CLASSES.includes(TRACKED_FIXTURE_CLASS) && owed?.mood?.some((key) => plan.find((job) => job.key === key)?.sheetClass === TRACKED_FIXTURE_CLASS)) {
+            const short = [];
+            for (const j of fixtureMood) {
+                const lack = [];
+                if (!((j.kinds?.file ?? 0) > 0)) lack.push('no file layer');
+                if (!((j.cells ?? 0) > 0)) lack.push('no cell painted');
+                if ((j.present?.sheet ?? 0) > 0 && !((j.byKind?.sheet?.layers ?? 0) > 0)) lack.push(`${j.present.sheet} open sheet(s) and no sheet layer`);
+                if ((j.present?.region ?? 0) > 0 && !((j.byKind?.region?.layers ?? 0) > 0)) lack.push(`${j.present.region} scroll region(s) and no region layer`);
+                if (lack.length > 0) short.push(`${j.key} (${lack.join(', ')})`);
+            }
+            if (short.length > 0) {
+                verdicts.push(`a-mood-art-layer-is-read-at-its-worst read too little of ${TRACKED_FIXTURE_CLASS}'s mood art on ${short.length} job(s): ${short.slice(0, 6).join('; ')}${short.length > 6 ? '; …' : ''}`);
+            }
+            for (const kind of ['sheet', 'region']) {
+                if (!fixtureMood.some((j) => (j.byKind?.[kind]?.layers ?? 0) > 0)) {
+                    verdicts.push(`a-mood-art-layer-is-read-at-its-worst read no ${kind} layer on any ${TRACKED_FIXTURE_CLASS} mood job — the ${kind} path's public subject`);
+                }
+            }
+        }
         if (moodJobs.length === 0) {
             console.log('  a-mood-art-layer-is-read-at-its-worst: no job wears a mood');
         } else {
@@ -5585,8 +5726,12 @@ try {
             const lower = (a, b, key) => (b === undefined ? a : a === undefined || b.worst < a.worst ? { ...b, key } : a);
             for (const j of moodJobs) {
                 const at = `${j.cls} ${j.variant}`;
-                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, ms: 0, least: undefined, leastLine: undefined };
+                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, ms: 0, sheet: 0, region: 0, whole: 0, beam: 0, least: undefined, leastLine: undefined };
                 t.jobs += 1;
+                t.sheet += j.byKind?.sheet?.layers ?? 0;
+                t.region += j.byKind?.region?.layers ?? 0;
+                t.whole += j.searches?.whole ?? 0;
+                t.beam += j.searches?.beam ?? 0;
                 t.ms += j.ms;
                 t.layers += j.layers;
                 t.file += j.kinds.file;
@@ -5600,7 +5745,8 @@ try {
             console.log(`  a-mood-art-layer-is-read-at-its-worst: ${moodJobs.length} job(s) wear a mood, each read with its page art at its worst; by look and variant:`);
             for (const [at, t] of [...byLook].sort((a, b) => a[0].localeCompare(b[0]))) {
                 console.log(
-                    `    ${at}: ${t.jobs} job(s), ${t.layers} layer(s) flattened (file ${t.file}, gradient ${t.gradient}) into ${t.cells} rectangle(s); ` +
+                    `    ${at}: ${t.jobs} job(s), ${t.layers} layer(s) flattened (file ${t.file}, gradient ${t.gradient}; on a sheet ${t.sheet}, on a region ${t.region}) into ${t.cells} rectangle(s); ` +
+                        `stacks searched whole ${t.whole}, by the beam ${t.beam} (new to the page's cache); ` +
                         `least read ${said(t.least)}; least line read ${said(t.leastLine)} · ${(t.ms / 1000).toFixed(2)}s of tab time (the last prepare's)`,
                 );
             }
