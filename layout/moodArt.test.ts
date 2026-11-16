@@ -202,8 +202,8 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
         const grey: Rgba = [120, 130, 140, 0.3];
         const cells = worstCells(
             [
-                { tiles: [box(0, 0, 390, 844)], bands: [], colours: [[200, 200, 200, 0.1], CLEAR], absent: false },
-                { tiles: [box(24.4, 24.4, 184.4, 120.4)], bands: [box(24.4, 54, 184.4, 762)], colours: [grey, CLEAR], absent: true },
+                { tiles: [box(0, 0, 390, 844)], bands: [], colours: [[200, 200, 200, 0.1], CLEAR], absent: false, id: 'ground' },
+                { tiles: [box(24.4, 24.4, 184.4, 120.4)], bands: [box(24.4, 54, 184.4, 762)], colours: [grey, CLEAR], absent: true, id: 'patch' },
             ],
             judge,
         );
@@ -222,6 +222,20 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
         const outside = cells.find((c) => c.x0 <= 300 && c.x1 > 300 && c.y0 <= 400 && c.y1 > 400)!;
         expect(outside.colour).toEqual([200, 200, 200, 0.1]);
         expect(cssOf([1.23456, 2, 3, 0.5])).toBe('rgba(1.235, 2, 3, 0.5)');
+        // A search is reused across calls by the layers' ids and the judge's key, and only by them.
+        const memo = new Map<string, Rgba>();
+        let judged = 0;
+        const counting = (c: Rgba): number => {
+            judged += 1;
+            return judge(c);
+        };
+        const layers = [{ tiles: [box(0, 0, 390, 844)], bands: [], colours: [grey, CLEAR], absent: false, id: 'grey' }];
+        const first = worstCells(layers, counting, memo, 'dark on light');
+        const afterFirst = judged;
+        expect(worstCells(layers, counting, memo, 'dark on light')).toEqual(first);
+        expect(judged).toBe(afterFirst);
+        worstCells(layers, counting, memo, 'light on dark');
+        expect(judged).toBeGreaterThan(afterFirst);
     });
 
     it('answers a sentence for what it cannot read, never a skip (d)', () => {

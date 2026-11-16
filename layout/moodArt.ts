@@ -477,8 +477,12 @@ export function worstStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba)
     return beam[0] ?? CLEAR;
 }
 
-/** One layer to flatten: where it paints, every colour it can paint there, and whether a line can be moved off it (`Coverage.absent`). */
-export type LayerPaint = { tiles: readonly Box[]; bands: readonly Box[]; colours: readonly Rgba[]; absent: boolean };
+/**
+ * One layer to flatten: where it paints, every colour it can paint there,
+ * whether a line can be moved off it (`Coverage.absent`), and a name for its
+ * colours (`id`: the same id, the same list) by which a search is reused.
+ */
+export type LayerPaint = { tiles: readonly Box[]; bands: readonly Box[]; colours: readonly Rgba[]; absent: boolean; id: string };
 
 /** A flat rectangle the probe paints: a whole-pixel box and the worst ground under it. */
 export type Cell = Box & { colour: Rgba };
@@ -490,9 +494,15 @@ export type Cell = Box & { colour: Rgba };
  * layer's own colours inside its tiles, and its colours or nothing at all in
  * the band it is widened to (b) and in the tiles of a layer that is widened
  * or moves. A cell no layer covers, or whose worst is
- * clear, is not painted.
+ * clear, is not painted. `memo` reuses a search across calls, keyed by
+ * `judgeKey` (what the judge reads) and the layers' ids.
  */
-export function worstCells(layers: readonly LayerPaint[], judge: (c: Rgba) => number): Cell[] {
+export function worstCells(
+    layers: readonly LayerPaint[],
+    judge: (c: Rgba) => number,
+    memo: Map<string, Rgba> = new Map(),
+    judgeKey = '',
+): Cell[] {
     const xs = new Set<number>();
     const ys = new Set<number>();
     for (const layer of layers) {
@@ -506,7 +516,6 @@ export function worstCells(layers: readonly LayerPaint[], judge: (c: Rgba) => nu
     const xcuts = [...xs].sort((a, b) => a - b);
     const ycuts = [...ys].sort((a, b) => a - b);
     const inside = (b: Box, x: number, y: number): boolean => x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1;
-    const memo = new Map<string, Rgba>();
     const cells: Cell[] = [];
     for (let i = 0; i + 1 < xcuts.length; i += 1) {
         for (let j = 0; j + 1 < ycuts.length; j += 1) {
@@ -514,17 +523,18 @@ export function worstCells(layers: readonly LayerPaint[], judge: (c: Rgba) => nu
             const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
             const stack: (readonly Rgba[])[] = [];
             const sign: string[] = [];
-            for (const [k, layer] of layers.entries()) {
+            for (const layer of layers) {
                 if (layer.tiles.some((b) => inside(b, cx, cy))) {
                     stack.push(layer.absent ? [...layer.colours, CLEAR] : layer.colours);
-                    sign.push(`${k}t`);
+                    sign.push(`${layer.id}${layer.absent ? '|or none' : ''}`);
                 } else if (layer.bands.some((b) => inside(b, cx, cy))) {
                     stack.push([...layer.colours, CLEAR]);
-                    sign.push(`${k}b`);
+                    sign.push(`${layer.id}|or none`);
                 }
             }
             if (stack.length === 0) continue;
-            const key = sign.join(',');
+            // The search depends on the colours each layer can paint here, bottom first, and on the judge.
+            const key = `${judgeKey}\n${sign.join('\n')}`;
             let colour = memo.get(key);
             if (colour === undefined) {
                 colour = worstStack(stack, judge);

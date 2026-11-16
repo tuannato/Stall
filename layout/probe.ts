@@ -15504,9 +15504,23 @@ type MoodArtReport = {
 };
 
 const rasters = new Map<string, Promise<HTMLImageElement>>();
+/** A file's colours by its URL and painted size, read once a page (the same file at the same size is the same raster). */
+const rasterColourCache = new Map<string, Promise<Rgba[] | string>>();
+/** The stack searches this page made, reused by `worstCells` across jobs. */
+const stackSearches = new Map<string, Rgba>();
 
-/** A file's colours at its painted size, read back from a canvas in this page. */
-async function fileColours(url: string, w: number, h: number): Promise<Rgba[] | string> {
+/** A file's colours at its painted size, read back from a canvas in this page; once for each file and size. */
+function fileColours(url: string, w: number, h: number): Promise<Rgba[] | string> {
+    const key = `${url}|${w}|${h}`;
+    let got = rasterColourCache.get(key);
+    if (got === undefined) {
+        got = rasteriseColours(url, w, h);
+        rasterColourCache.set(key, got);
+    }
+    return got;
+}
+
+async function rasteriseColours(url: string, w: number, h: number): Promise<Rgba[] | string> {
     if (w * h > 16_000_000) return `a ${Math.round(w)}x${Math.round(h)} tile, too large to rasterise here`;
     let image = rasters.get(url);
     if (image === undefined) {
@@ -15668,6 +15682,7 @@ async function flattenMoodArt(
             continue;
         }
         let colours: readonly Rgba[];
+        const id = read.kind === 'file' ? `${read.url}|${cover.tile.w}|${cover.tile.h}` : layer;
         if (read.kind === 'file') {
             files += 1;
             if (cover.tiles.length === 0) {
@@ -15685,12 +15700,12 @@ async function flattenMoodArt(
             colours = read.colours;
         }
         // Bottom first: CSS lists the top layer first.
-        painted.unshift({ tiles: cover.tiles, bands: cover.bands, colours, absent: cover.absent });
+        painted.unshift({ tiles: cover.tiles, bands: cover.bands, colours, absent: cover.absent, id });
     }
     if (report.refused.length > before) return;
     const bg = parseColour(cs.backgroundColor) ?? CLEAR;
     const base = overRgba(bg, [ground[0], ground[1], ground[2], 1]);
-    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]));
+    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]), stackSearches, `${text.join(',')}|${base.join(',')}`);
     const set = (prop: string, value: string): void => el.style.setProperty(prop, value, 'important');
     set('background-image', cells.length === 0 ? 'none' : cells.map((c) => `linear-gradient(${cssOf(c.colour)}, ${cssOf(c.colour)})`).join(', '));
     set('background-size', cells.length === 0 ? 'auto' : cells.map((c) => `${c.x1 - c.x0}px ${c.y1 - c.y0}px`).join(', '));
