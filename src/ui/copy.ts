@@ -139,7 +139,11 @@ export const decorRowNotWorn = (beside: string): string => `On, but not worn wit
  * drift into two different sentences.
  */
 export const WEARING_LEAD = 'Wearing:';
-export const WEARING_SEP = ' \u00b7 ';
+/**
+ * A no-break space before the dot, so the dot stays with the name before it
+ * and a wrapped line never starts with it.
+ */
+export const WEARING_SEP = '\u00a0\u00b7 ';
 export const wearing = (labels: readonly string[]): string =>
     `${WEARING_LEAD} ${labels.join(WEARING_SEP)}`;
 /**

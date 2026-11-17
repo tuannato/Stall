@@ -1108,6 +1108,16 @@ money path this app can have, because nothing on it is derived.
 
 ## Open — ask before assuming
 
+- **Decoration motion and the probe's reads of it (generic, from the 8i3
+  reviews).** (1) Decoration clocks restart on every repaint, so a slow drift,
+  a crawling mover or a rain jump begins again; keeping the clocks across
+  repaints, as the marquee does, is the owner's call. (2) The sweep's instants
+  follow the longest animation, so a shorter mover's peak may fall between
+  them and be unread. (3) No rule reads a scroll range that changes over time
+  (a turned node near a scroller's end). (4) 1b's keyframe seeks fell when a
+  look's measuring took longer, possibly because the marquee times its runs by
+  `Date.now()` after load under the fixed clock; not measured.
+
 - **P1, narrowed: off every pass, the wall still runs past its status line
   at 1280x720 and on tall narrow portraits, cuts an eight-byte figure's unit
   and the figures of the 35-item payment's rows (from below) at 864x1536, and
