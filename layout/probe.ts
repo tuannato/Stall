@@ -128,6 +128,7 @@ import { lookSheetFault, lookSheetReads, wornSheetsOf, LOOK_SHEET_PROPERTY } fro
 import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { keyframeLonghands, meetsLines, moverKinds, type AnimationFacts } from './digitTrigger';
+import { KEYFRAME_META, keyframeProperty, keyframeValue } from './keyframeKeys';
 import { HONEST_OWED, HONEST_SELECTOR, HONEST_STEP_OWED } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
@@ -3191,10 +3192,7 @@ function reachKeyframes(
     const inheriting: Element[] = props.has('text-shadow') ? textShadowHeirs(target, (el) => reachOwner(el) !== undefined).filter((el) => scope.contains(el)) : [];
     let reads = 0;
     for (const frame of frames) {
-        const value = (prop: string): string | undefined => {
-            const v = (frame as Record<string, unknown>)[prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())];
-            return typeof v === 'string' ? v : undefined;
-        };
+        const value = (prop: string): string | undefined => keyframeValue(frame as Record<string, unknown>, prop);
         const set = { boxShadow: value('box-shadow'), textShadow: value('text-shadow'), filter: value('filter') ?? value('-webkit-filter'), color: value('color') };
         if (Object.values(set).every((v) => v === undefined)) continue;
         const at = `with ${name} on ${where} at its keyframe at ${Math.round((frame.computedOffset ?? 0) * 100)}% (read from the keyframe's values)`;
@@ -8306,8 +8304,8 @@ function outlineAboveFault(node: HTMLElement, stall: Element, inks: () => readon
     return undefined;
 }
 
-/** A keyframe's camel-cased key as the longhand it names. */
-const kebab = (key: string): string => (key === 'cssFloat' ? 'float' : key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`));
+/** A keyframe's camel-cased key as the longhand it names, a vendor prefix's dash included (`keyframeKeys.ts`). */
+const kebab = keyframeProperty;
 
 /**
  * The element a keyframe's value is resolved on: one per page, a block in a
@@ -8373,7 +8371,7 @@ function animationFaults(el: Element, wants: (prop: string) => boolean, judge: (
         const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'a transition';
         for (const frame of effect.getKeyframes()) {
             for (const [key, raw] of Object.entries(frame)) {
-                if (['offset', 'computedOffset', 'easing', 'composite'].includes(key) || typeof raw !== 'string') continue;
+                if (KEYFRAME_META.has(key) || typeof raw !== 'string') continue;
                 const prop = kebab(key);
                 if (!wants(prop)) continue;
                 const why = judge(prop, resolveKeyframe(el, prop, raw));
@@ -9394,7 +9392,7 @@ function keyframeProps(anim: Animation, effect: KeyframeEffect): ReadonlySet<str
     const props = new Set<string>();
     for (const frame of effect.getKeyframes()) {
         for (const key of Object.keys(frame)) {
-            if (!['offset', 'computedOffset', 'easing', 'composite'].includes(key)) props.add(kebab(key));
+            if (!KEYFRAME_META.has(key)) props.add(kebab(key));
         }
     }
     if (anim instanceof CSSAnimation) {
