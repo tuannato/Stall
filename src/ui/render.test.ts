@@ -4834,6 +4834,13 @@ describe('a-worn-decoration-says-where-it-came-from', () => {
      * the one surface where a stranger sees a decoration in situ, so it is
      * where the want is made — and until now it was inert text.
      */
+    it('the wearing separator never lets a line start with the dot', () => {
+        // A no-break space before the dot keeps it with the name before it.
+        expect(copy.WEARING_SEP.startsWith('\u00a0')).toBe(true);
+        expect(copy.WEARING_SEP).not.toMatch(/^ /);
+        expect(copy.wearing(['a', 'b'])).toBe('Wearing: a\u00a0\u00b7 b');
+    });
+
     it('links each worn row to its own page in the shop, in a new tab', () => {
         const { root } = paint(
             idlePubkey({
