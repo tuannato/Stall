@@ -16432,10 +16432,14 @@ was those reads, repeated on every job), and the flatten no longer waits
 two animation frames of its own (the runner's evaluate waits two after it
 anyway).
 
-**The pair** (pair 3 above): main 241.0s, the tip 238.0s; the contrast pass
-104.2s and 99.5s; the prepare phase 42.6s and 37.3s of tab time over 802
-prepares. The tip's run started at a load of 6.03, after main's, so the
-pair is clean at its start only, and the 3s is within the machine's noise.
+**Two pairs, both orders** (`runs/fix/`): pair 3, main first, main 241.0s
+(started at a load of 3.74) and the tip 238.0s (6.03); pair 4, the tip
+first, the tip 250.4s (3.72) and main 270.7s (6.06). The contrast pass
+104.2s and 99.5s, then 101.3s and 115.1s; the prepare phase 42.6s and 37.3s
+of tab time over 802 prepares, then 39.2s and 45.0s. Each pair is clean at
+its start only (the second run starts on the load the first left), and the
+second run is the slower in both: the step's cost is within the machine's
+noise. Each run's dump is bitwise its twin's in the other pair.
 The first build's pairs could not be read at all: the machine was shared
 with other agents' Chrome and test runs (a load of 2–22), and every run of
 main and of the branch but two was cut by the 300s watchdog.
