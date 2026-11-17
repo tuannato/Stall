@@ -14,7 +14,7 @@ const box = (row: string, who: string, files: string[], moves?: 'own' | 'node'):
 const TILE = 'http://localhost/assets/tile-abc.svg';
 const MARK = 'http://localhost/assets/mark-def.svg';
 
-describe('a file below the goods is painted once, on a still box, where rows share it (judgeStillPainters)', () => {
+describe('a-file-below-the-goods-is-painted-once-on-a-still-box (judgeStillPainters)', () => {
     // Two rows that share a tile carried by the first worn, the second with a mark of its own.
     const rows = new Set(['att-a', 'att-b']);
     const alone = new Set(['att-a', 'att-b']);

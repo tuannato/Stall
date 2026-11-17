@@ -47,7 +47,7 @@ const CHROME_PREFIXED: readonly (readonly [string, string])[] = [
     ['webkitUserModify', '-webkit-user-modify'],
 ];
 
-describe('a keyframe’s key as the longhand it names (keyframeProperty)', () => {
+describe('keyframe-keys-are-the-longhands-chrome-names', () => {
     it('gives every prefixed key Chrome reports its leading dash', () => {
         for (const [key, prop] of CHROME_PREFIXED) expect(keyframeProperty(key), key).toBe(prop);
     });
@@ -80,7 +80,7 @@ describe('a keyframe’s key as the longhand it names (keyframeProperty)', () =>
     });
 });
 
-describe('a keyframe’s value for a longhand (keyframeValue)', () => {
+describe('keyframe-keys-are-the-longhands-chrome-names: a value read by its longhand (keyframeValue)', () => {
     it('finds a prefixed longhand under the key Chrome gives it, and nothing a keyframe does not set', () => {
         const frame = { offset: 0.5, easing: 'linear', webkitTextFillColor: 'transparent', boxShadow: 'none', webkitMaskPositionX: '3px' };
         expect(keyframeValue(frame, '-webkit-text-fill-color')).toBe('transparent');
