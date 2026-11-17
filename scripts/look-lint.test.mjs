@@ -5373,7 +5373,7 @@ describe('a-look-face-never-hides-a-figure-while-it-loads', () => {
         const planted = `${css.slice(0, reduce)}@font-face { font-family: t-fixture-private-serif; src: url(./art/serif.woff2) format("woff2"); }\n\n${css.slice(reduce)}`;
         const problems = lintLookSheet(planted, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['ground.svg', 'serif.woff2'] } });
         assert.deepEqual(problems.filter((p) => /font-display/.test(p)).length, 1, problems.join('\n'));
-        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['dusk.svg', 'ground.svg', 'under-name.svg'] } }), []);
+        assert.deepEqual(lintLookSheet(css, { lookClass: 't-fixture-private', load: 'worn', ownArt: { dir: 'art', files: ['dusk.svg', 'ground.svg', 'turn.svg', 'under-name.svg'] } }), []);
     });
 });
 

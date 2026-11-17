@@ -238,6 +238,10 @@
  *   standing nowhere it can name, and fails it where it paints), and only
  *   where it stands after the first, which then carries the painter; worn
  *   alone it carries the painter and stands still.
+ * - **Its own mark turns with it**: a small file of its own on its
+ *   `::before`, which no other row names, so the rule's other half — a
+ *   row's own art may move, and is read by 1a, 1b and the keyframe reads —
+ *   has a subject too (the still-painter step).
  * - Nothing of either paints on the wall.
  */
 .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low {
@@ -261,6 +265,14 @@
     pointer-events: none;
     background-color: color-mix(in srgb, var(--s-accent) 30%, transparent);
     transform-origin: 0 100%;
+}
+
+.stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-turn::before {
+    content: '';
+    grid-area: 1 / 1;
+    background-image: url(./art/turn.svg);
+    background-size: 28px 28px;
+    background-repeat: no-repeat;
 }
 
 .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low ~ .att-fixture-turn {

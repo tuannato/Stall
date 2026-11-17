@@ -139,7 +139,7 @@ const full = {
     nameOwnClipByClass: { 't-fixture-private': 30 },
     // 8i: the fixture's node rows below the goods, read on a short stall and at the long one's end, and their shared tile.
     belowGoodsByClass: { 't-fixture-private': { short: 4, end: 2 } },
-    stillPainterByClass: { 't-fixture-private': 40 },
+    stillPainterByClass: { 't-fixture-private': { read: 40, shared: 1, sharedBoxes: 30, movingOwn: 10 } },
     marksShownByClass: { 't-fixture-private': 30 },
     stickyByClass: { 't-fixture-private': { paints: 20, scrolled: 18, stops: 90 } },
     tryOnNamesByClass: { 't-fixture-private': 2 },
@@ -412,7 +412,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         );
         assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24 · status line asked: 50');
         // 8i: the nodes below the goods and their files, per look, where the page read any.
-        assert.match(probeCoverageLine('desktop', { ...quiet, belowGoodsByClass, stillPainterByClass }), / · nodes below the goods \(short\/end\): t-fixture-private short:4\/end:2 · boxes below the goods naming a file: t-fixture-private 40$/);
+        assert.match(probeCoverageLine('desktop', { ...quiet, belowGoodsByClass, stillPainterByClass }), / · nodes below the goods \(short\/end\): t-fixture-private short:4\/end:2 · boxes below the goods naming a file \(read\/shared files\/boxes painting them\/moving, own art\): t-fixture-private read:40\/shared:1\/sharedBoxes:30\/movingOwn:10$/);
         // STEP-WALL-CONTAINER: the wall codes held to their floor, per look, where the page read any.
         assert.match(probeCoverageLine('tablet', { ...quiet, wallCodeFloorByClass: { 't-neo': 3 } }), / · wall codes held to their floor: t-neo 3$/);
         assert.equal(
@@ -500,6 +500,8 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
         const below = [
             'a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall read no t-fixture-private node below the goods on a short stall and at the long one\'s end',
             'a-file-below-the-goods-is-painted-once-on-a-still-box read no t-fixture-private box below the goods that names a file',
+            'a-file-below-the-goods-is-painted-once-on-a-still-box found no t-fixture-private art its rows below the goods share',
+            "a-file-below-the-goods-is-painted-once-on-a-still-box read no t-fixture-private box below the goods that moves and names its row's own art",
         ];
         assert.deepEqual(probeCoverageGaps('desktop', bare, options), [
             'a-sticky-sign-covers-nothing-as-the-region-scrolls scrolled no region under the t-fixture-private sign',
@@ -518,6 +520,9 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
         // Read on a short stall and never at the long one's end, or the other way round: still owed.
         assert.deepEqual(probeCoverageGaps('mobile', { ...read, belowGoodsByClass: { 't-fixture-private': { short: 4, end: 0 } } }, options), [below[0]]);
         assert.deepEqual(probeCoverageGaps('desktop', { ...read, belowGoodsByClass: { 't-fixture-private': { short: 0, end: 2 } } }, options), [below[0]]);
+        // Its files read and none shared, or a shared tile and no row's own art moving: still owed (the still-painter step).
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, stillPainterByClass: { 't-fixture-private': { read: 40, shared: 0, sharedBoxes: 0, movingOwn: 10 } } }, options), [below[2]]);
+        assert.deepEqual(probeCoverageGaps('desktop', { ...read, stillPainterByClass: { 't-fixture-private': { read: 40, shared: 1, sharedBoxes: 30, movingOwn: 0 } } }, options), [below[3]]);
         assert.deepEqual(probeCoverageGaps('canvas', bare, options).filter((gap) => below.includes(gap)), []);
         assert.deepEqual(probeCoverageGaps('mobile', { ...read, nameTiersByClass: { 't-fixture-private': { 1: 4 } } }, options), [
             'the-sellers-name-stands-whole read no t-fixture-private name on the last rung of its ladder',

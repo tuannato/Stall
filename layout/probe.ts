@@ -129,6 +129,7 @@ import { FIXTURE_SHEET_URL } from './fixtureLook';
 import { MONEY, MONEY_OUTSIDE_PROTECTED } from './moneySet';
 import { keyframeLonghands, meetsLines, moverKinds, type AnimationFacts } from './digitTrigger';
 import { KEYFRAME_META, keyframeProperty, keyframeValue } from './keyframeKeys';
+import { judgeStillPainters, type StillBox } from './stillPainter';
 import { HONEST_OWED, HONEST_SELECTOR, HONEST_STEP_OWED } from './honestDisplay';
 import { loadEveryFace, type FaceEcho } from './faces';
 import { screensAt } from './screenSplit';
@@ -12581,29 +12582,43 @@ const qrByScreen: Record<string, Record<string, Record<string, { min: number; ma
  */
 const wornClassesPainted = new Set<string>();
 /**
- * **A file below the goods is painted once, on a still box**
- * (`a-file-below-the-goods-is-painted-once-on-a-still-box`; step 8i, A item
- * 7, the 8i plan critic's P1-2 and its spike (a)). Rows that stand below the
- * goods may share one piece of art — the first of them worn carries it, so it
- * is painted once however many are worn — and a shared piece that rode a
- * moving box would move under every row beside it. So on every paint, among
- * the below-the-goods decoration nodes the paint wears and their
- * `::before` and `::after`: **a file is named by one box at most** (by any
- * property that draws a file: a background or border image, a mask or mask
- * border, a list marker, a pseudo's `content`), and **a box that names a
- * file runs no animation, nor does the node it hangs on** (an animation on
- * the node carries its pseudo-elements with it). Read from the computed
- * style, every `url()` it names, and the document's running animations; a
- * box with no box (`display: none`, a pseudo with no `content`) names
- * nothing. Counted per look (`stillPainterByClass`: the boxes naming a file
- * that were read), and the tracked fixture, whose two below-the-goods rows
- * share one tile on the first worn's `::after`, owes reads on both page
- * passes (`probe-coverage.mjs`).
+ * **A file below the goods is painted once, on a still box, where rows
+ * share it** (`a-file-below-the-goods-is-painted-once-on-a-still-box`; step
+ * 8i, A item 7, the 8i plan critic's P1-2 and its spike (a); narrowed by the
+ * still-painter step, D-2026-11-17-02, after the 8i-2 critic's P1-1). Rows
+ * that stand below the goods may share one piece of art — the first of them
+ * worn carries it, so it is painted once however many are worn — and a
+ * shared piece that rode a moving box would move under every row beside it.
+ * So on every paint, among the below-the-goods decoration nodes the paint
+ * wears and their `::before` and `::after`: **a file is named by one box at
+ * most** (by any property that draws a file: a background or border image, a
+ * mask or mask border, a list marker, a pseudo's `content`). And, judged at
+ * the end of the page run per look (`judgeStillPainters`,
+ * `layout/stillPainter.ts`): **a box that paints shared art runs no
+ * animation, nor does the node it hangs on** (an animation on the node
+ * carries its pseudo-elements with it), where shared art is a file the boxes
+ * of more than one row named on that run — the probe paints each row alone
+ * on every screen that is not a state screen, and every row worn together. A
+ * box that moves and names only its own row's art passes and is counted; its
+ * motion is read by 1a, 1b, 1c and the keyframe reads. Where the run did not
+ * paint every other below-the-goods row alone, a moving box naming a file
+ * fails closed. Read from the computed style, every `url()` it names, and
+ * the document's running animations; a box with no box (`display: none`, a
+ * pseudo with no `content`) names nothing. Counted per look
+ * (`stillPainterByClass`: the boxes naming a file read, the files shared, the
+ * box reads painting them, and the moving box reads that paint their row's
+ * own art), and the tracked fixture, whose two below-the-goods rows share one
+ * tile on the first worn's `::after` and whose second turns its node, with a
+ * mark of its own on its `::before`, where it stands after the first, owes
+ * all four on both page passes (`probe-coverage.mjs`).
  */
 const STILL_PAINTER_CHECK = 'a-file-below-the-goods-is-painted-once-on-a-still-box';
 
-/** Per look class, the below-the-goods boxes naming a file that were read. */
-const stillPainterByClass: Record<string, number> = {};
+/** Per look class: the below-the-goods boxes naming a file read, the files shared, the box reads painting them, and the moving box reads naming their row's own art. */
+const stillPainterByClass: Record<string, { read: number; shared: number; sharedBoxes: number; movingOwn: number }> = {};
+
+/** Per look class, what this page run's paints showed (`judgeStillPainters`). */
+const stillSeen: Record<string, { rows: Set<string>; alone: Set<string>; boxes: StillBox[] }> = {};
 
 /** The computed properties that draw a file. */
 const FILE_PROPS = ['background-image', 'mask-image', '-webkit-mask-image', 'mask-border-source', '-webkit-mask-box-image-source', 'border-image-source', 'list-style-image', 'content'];
@@ -12630,12 +12645,17 @@ function runsAnAnimation(el: Element, pseudo: '::before' | '::after' | null): bo
     });
 }
 
-function stillPainterFaults(screen: string, label: string, worn: readonly ShippedAttachment[]): Failure[] {
-    const below = worn.filter((row) => row.paint === 'node' && row.cls !== undefined && attachmentMount(row) === 'below-goods');
+/** Whether a row stands below the goods on its own node. */
+const belowTheGoods = (row: ShippedAttachment): boolean => row.paint === 'node' && row.cls !== undefined && attachmentMount(row) === 'below-goods';
+
+function stillPainterFaults(screen: string, label: string, look: Look, worn: readonly ShippedAttachment[]): Failure[] {
+    const below = worn.filter(belowTheGoods);
     if (below.length === 0) return [];
+    const seen = (stillSeen[measuringClass] ??= { rows: new Set(look.rows.filter(belowTheGoods).map((row) => row.cls!)), alone: new Set(), boxes: [] });
+    const at = `${window.innerWidth}x${window.innerHeight}`;
     const out: Failure[] = [];
     const fail = (detail: string): void => {
-        out.push({ screen, theme: label, check: STILL_PAINTER_CHECK, detail: `${detail} at ${window.innerWidth}x${window.innerHeight}` });
+        out.push({ screen, theme: label, check: STILL_PAINTER_CHECK, detail: `${detail} at ${at}` });
     };
     const byFile = new Map<string, string[]>();
     for (const stall of document.querySelectorAll('#app .stall:not(.deck-stall)')) {
@@ -12643,23 +12663,40 @@ function stillPainterFaults(screen: string, label: string, worn: readonly Shippe
         if (scroller === undefined) continue;
         for (const row of below) {
             for (const node of scroller.querySelectorAll(`:scope > .${row.cls}`)) {
+                // A row this paint wears alone, its node mounted: what it names alone is known.
+                if (worn.length === 1) seen.alone.add(row.cls!);
                 for (const pseudo of [null, '::before', '::after'] as const) {
                     const cs = getComputedStyle(node, pseudo);
                     if (cs.display === 'none' || (pseudo !== null && (cs.content === 'none' || cs.content === 'normal'))) continue;
                     const files = filesNamed(cs);
                     if (files.size === 0) continue;
-                    stillPainterByClass[measuringClass] = (stillPainterByClass[measuringClass] ?? 0) + 1;
+                    const tally = (stillPainterByClass[measuringClass] ??= { read: 0, shared: 0, sharedBoxes: 0, movingOwn: 0 });
+                    tally.read += 1;
                     const who = `.${row.cls}${pseudo ?? ''}`;
                     for (const file of files) byFile.set(file, [...(byFile.get(file) ?? []), who]);
-                    if (runsAnAnimation(node, pseudo) || (pseudo !== null && runsAnAnimation(node, null))) {
-                        fail(`${who} names ${[...files].map((f) => f.slice(f.lastIndexOf('/') + 1)).join(', ')} and ${pseudo !== null && !runsAnAnimation(node, pseudo) ? 'hangs on a node that runs' : 'runs'} an animation`);
-                    }
+                    const own = runsAnAnimation(node, pseudo);
+                    const moves = own ? 'own' : pseudo !== null && runsAnAnimation(node, null) ? 'node' : undefined;
+                    seen.boxes.push({ row: row.cls!, who, files: [...files], moves, screen, label, at });
                 }
             }
         }
     }
     for (const [file, boxes] of byFile) {
         if (boxes.length > 1) fail(`${file.slice(file.lastIndexOf('/') + 1)} is named by ${boxes.length} boxes below the goods (${boxes.join(', ')}), where it is painted once`);
+    }
+    return out;
+}
+
+/** The page run's judgement, per look (`judgeStillPainters`): a box that paints shared art and moves, or one whose art the run cannot tell its row's own. */
+function stillPainterJudged(): Failure[] {
+    const out: Failure[] = [];
+    for (const [cls, seen] of Object.entries(stillSeen)) {
+        const verdict = judgeStillPainters(seen);
+        const tally = (stillPainterByClass[cls] ??= { read: 0, shared: 0, sharedBoxes: 0, movingOwn: 0 });
+        tally.shared = verdict.shared.length;
+        tally.sharedBoxes = verdict.sharedBoxes;
+        tally.movingOwn = verdict.movingOwn;
+        for (const f of verdict.faults) out.push({ screen: f.screen, theme: f.label, check: STILL_PAINTER_CHECK, detail: f.detail });
     }
     return out;
 }
@@ -12704,7 +12741,7 @@ for (const screen of measured) {
                 continue;
             }
             failures.push(...checkOverTime(screen, look, label, worn));
-            failures.push(...stillPainterFaults(screen, label, worn));
+            failures.push(...stillPainterFaults(screen, label, look, worn));
             failures.push(...lookSheetFaults(screen, label));
             failures.push(...kitAnchorFaults(screen, label, look));
             failures.push(...fileClipFaults(screen, label));
@@ -12793,6 +12830,7 @@ for (const screen of measured) {
     }
 }
 
+failures.push(...stillPainterJudged());
 failures.push(...doorMiniFaults());
 failures.push(...cardLadderFaults());
 failures.push(...cardStepLadderFaults());
