@@ -16360,6 +16360,12 @@ Each through the fixture look run, at `235a73b`:
   read-back ("background-position computes to 19.2px 19.2px, … where the
   flatten wrote 0px 0px, …"), the frozen transition 400ms into its run;
   and the fixture's sheet and region owes fail with them.
+- **A flatten that passes over every file layer** (scratch, the probe's
+  read of a file skipped): exit 1 — the fixture's owes fail on all 80 of
+  its mood jobs ("no file layer, no cell painted, 1 scroll region(s) and no
+  region layer", and the open sheet's on a sheet screen), and no sheet or
+  region layer is read on any; the planted read, a gradient, still passes,
+  so each guard is shown on its own.
 - **The sheet path**: the fixture's sheet art made a dark tile
   (`rgba(40, 50, 70, .75)`) under the sheet's head — exit 1, 49 lines under
   3:1, every one on a sheet screen (`describe`, `publish-name`, …, 1.08:1);
