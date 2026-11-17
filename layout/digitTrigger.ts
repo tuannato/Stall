@@ -78,22 +78,8 @@ export const PAINT_ONLY_ANIMATION: ReadonlySet<string> = new Set([
     'opacity',
 ]);
 
-/** A keyframe property as `getKeyframes()` names it (camel case), in the computed style's kebab case. */
-export function kebab(prop: string): string {
-    if (prop.startsWith('--')) return prop;
-    const k = prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
-    return k.startsWith('webkit-') ? `-${k}` : k;
-}
-
-/** The keys of a keyframe that are not properties. */
-const KEYFRAME_META: ReadonlySet<string> = new Set(['offset', 'computedOffset', 'easing', 'composite']);
-
-/** The properties a run of keyframes sets (`getKeyframes()`), in kebab case. */
-export function keyframeLonghands(frames: readonly Record<string, unknown>[]): string[] {
-    const out = new Set<string>();
-    for (const frame of frames) for (const key of Object.keys(frame)) if (!KEYFRAME_META.has(key)) out.add(kebab(key));
-    return [...out];
-}
+/** A keyframe's key as the property it names, and a run of keyframes' properties: the one mapping (`keyframeKeys.ts`). */
+export { keyframeLonghands, keyframeProperty as kebab } from './keyframeKeys';
 
 /**
  * Why a box moves, each reason in words, or none: the reasons the module's

@@ -713,6 +713,18 @@ working accept, and there is no accept.
   and a fix was built on it). A foreign-signed record is refused before the
   count on both records and is said on Activity alone. Reader rule,
   mirrored at the edge; no wire change.
+- **Art below the goods may move where only its own row paints it
+  (D-2026-11-17-02 and D-2026-11-17-04, decided by recommendation under the
+  owner's standing instruction of 2026-11-10).** The probe's still-box rule
+  (`a-file-below-the-goods-is-painted-once-on-a-still-box`) protects what
+  D-2026-11-15-05's Q2 asked for: a file more than one row paints is painted
+  once, on a box that does not move and does not hang on a node that moves. A
+  row's own art may move; what reads that motion is the decoration sweep over
+  time, 1a at rest and the contrast pass's look-pseudo frame. Shared means the
+  same resolved URL (two copies, or a ground one row draws under the others,
+  read as own art: stated). Where a stack of a mood's page art goes to the
+  beam, the probe searches it again with a beam of 256 and paints the lower
+  read, printed and never failed (D-2026-11-17-04).
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 
@@ -2402,6 +2414,27 @@ money path this app can have, because nothing on it is derived.
   tile, or names its own proof`) reads `background-position` keyframes alone,
   so a mask that travels in a loop that does not wrap a whole tile snaps
   unchecked, shipped rows included (a mover that alternates never wraps).
+- **The first-fold rule for nodes below the goods is measured at the page
+  passes' heights only** (the 8i-2 critic's P2-1, D-2026-11-17-02; general,
+  true of every look). The billboard
+  (`a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall`) paints
+  on the page passes, 844 and 900 tall and the other page sizes; the short
+  passes (375x667, 1280x720) never run it. Not built: the billboard on the
+  short passes, which is a public change.
+- **On 667- and 640-tall phones a look's nodes below the goods can fall below
+  the fold on the empty screen** (the same critic, read on one carried look
+  in Chrome; its numbers are in that look's private log). The empty stall's
+  body and its footer stand above a node below the goods, and on a short
+  phone a node of fixed height worn alone ended a pixel or more past the
+  region's showing part at 375x667 and more at 360x640; `sparse` stayed in the
+  fold. Whether the rule binds below 844px of height is the owner's call
+  (a look can cap its node's height on short frames, which the lint allows).
+- **The probe paints rows a look hides on the wall on every wall pass** (the
+  8i-2 critic's P3-3). Every non-state screen paints each row alone
+  (`wornVariants`), and the nine wall passes paint every row of a carried look
+  that hides its nodes below the goods on the wall (`display: none`): about
+  15s of those passes in one carried look's run. Skipping rows a look hides on
+  the wall would be a trim of the probe's work, and is the owner's call.
 - **A keyed decoration box is not held off text that is not money** (the
   decor-guard critic's P3, 2026-11-15, D-2026-11-15-09). A private guard's art
   key ties a ground's exemption to a node row's own box

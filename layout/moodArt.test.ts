@@ -18,6 +18,7 @@ import {
     readLayer,
     repeatsOf,
     splitTop,
+    WIDE_BEAM,
     worstCells,
     worstStack,
     type Box,
@@ -25,6 +26,8 @@ import {
     type LayerStyle,
     type Rgba,
     type Scroller,
+    type SearchTally,
+    type BeamMiss,
 } from './moodArt';
 import { contrastOf, relLum, type Rgb } from './rainDrop';
 
@@ -208,6 +211,75 @@ describe('a-mood-art-layer-is-read-at-its-worst', () => {
         const past = { whole: 0, beam: 0 };
         worstStack([wide, wide], judge, past);
         expect(past).toEqual({ whole: 0, beam: 1 });
+    });
+
+    it('searches a beam stack again with the wide beam where asked, paints the lower, and counts each miss (the re-check’s P3-1)', () => {
+        expect(WIDE_BEAM).toBe(256);
+        // A seeded small stack the beam of 12 misses, made to go to the beam by a top layer of
+        // transparent colours (each leaves every composite as it is, and multiplies the combinations).
+        let seed = 7;
+        const rnd = (): number => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+        const j = judgeFor([96, 84, 66], [255, 254, 250]);
+        const none: Rgba[] = Array.from({ length: 1000 }, (_, i) => [i % 256, 0, 0, 0]);
+        let found: Rgba[][] | undefined;
+        for (let t = 0; t < 2000 && found === undefined; t += 1) {
+            const stack: Rgba[][] = [];
+            for (let l = 0; l < 4; l += 1) {
+                const colours: Rgba[] = [CLEAR];
+                for (let i = 0, k = 6 + Math.floor(rnd() * 10); i < k; i += 1) {
+                    colours.push([Math.floor(rnd() * 256), Math.floor(rnd() * 256), Math.floor(rnd() * 256), rnd() < 0.3 ? 1 : Math.round(rnd() * 100) / 100]);
+                }
+                stack.push(colours);
+            }
+            const whole = j(exhaustiveStack(stack, j));
+            if (j(beamStack(stack, j)) > whole + 1e-9 && j(beamStack(stack, j, WIDE_BEAM)) < j(beamStack(stack, j)) - 1e-9) found = stack;
+        }
+        expect(found).toBeDefined();
+        const past = [...found!, none];
+        const narrow = j(beamStack(past, j));
+        const lower = j(beamStack(past, j, WIDE_BEAM));
+        expect(lower).toBeLessThan(narrow);
+        // Not asked: the narrow beam alone, as before.
+        const plain = { whole: 0, beam: 0 };
+        expect(j(worstStack(past, j, plain))).toBe(narrow);
+        expect(plain).toEqual({ whole: 0, beam: 1 });
+        // Asked: the lower of the two, and the miss said with both reads.
+        const asked: SearchTally = { whole: 0, beam: 0 };
+        expect(j(worstStack(past, j, asked, true))).toBe(lower);
+        expect(asked.beam).toBe(1);
+        expect(asked.wide?.checked).toBe(1);
+        expect(asked.wide?.lower).toHaveLength(1);
+        expect(asked.wide!.lower[0]).toMatchObject({ layers: 5, narrow, wide: lower });
+        expect(asked.wide!.lower[0]!.combinations).toBeGreaterThan(EXHAUSTIVE_LIMIT);
+        // A stack the two beams read alike: checked, no miss, the narrow one kept.
+        const same: SearchTally = { whole: 0, beam: 0 };
+        const one = worstStack([[[40, 60, 80, 1]], none, none], j, same, true);
+        expect(one).toEqual([40, 60, 80, 1]);
+        expect(same).toMatchObject({ whole: 0, beam: 1, wide: { checked: 1, lower: [] } });
+        expect(same.wide!.ms).toBeGreaterThanOrEqual(0);
+        // A stack searched whole is never searched again.
+        const small = { whole: 0, beam: 0 };
+        worstStack(found!, j, small, true);
+        expect(small).toEqual({ whole: 1, beam: 0 });
+        // And `worstCells` hands the request down, a cached stack searched once a page.
+        const memo = new Map<string, Rgba>();
+        const misses = new Map<string, BeamMiss>();
+        const layer = (id: string, colours: readonly Rgba[]) => ({ tiles: [box(0, 0, 10, 10)], bands: [], colours, absent: false, id });
+        const cellsTally: SearchTally = { whole: 0, beam: 0 };
+        const layers = [...found!.map((c, i) => layer(`l${i}`, c)), layer('none', none)];
+        const first = worstCells(layers, j, memo, 'k', cellsTally, true, misses);
+        expect(j(first[0]!.colour)).toBe(lower);
+        expect(cellsTally.wide).toMatchObject({ checked: 1 });
+        expect(cellsTally.wide!.lower).toHaveLength(1);
+        expect(cellsTally.wide!.used).toEqual(cellsTally.wide!.lower);
+        // A later read on the same page reuses the search, searches nothing again, and still names the
+        // miss its cell came from (what a job's record carries: the same whichever job searched first).
+        const later: SearchTally = { whole: 0, beam: 0 };
+        const again = worstCells(layers, j, memo, 'k', later, true, misses);
+        expect(again).toEqual(first);
+        expect(later.beam).toBe(0);
+        expect(later.wide?.lower ?? []).toEqual([]);
+        expect(later.wide!.used).toEqual(cellsTally.wide!.lower);
     });
 
     it('covers a repeating layer’s clip area, and widens a still tile over the band its scroller sweeps (b)', () => {
