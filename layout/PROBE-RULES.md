@@ -16558,7 +16558,12 @@ Read on the fixture's look run at the tip (both page passes): 203 boxes
 naming a file, 1 shared file (the tile), 107 box reads painting it, and 85
 moving box reads painting their row's own art (the mark on the turning
 node, in every all-worn paint); 0 on every wall pass, where the fixture hides
-both rows.
+both rows. Which reads see that motion, stated: 1b leaves the turning node
+out as a move of a box that holds nothing 1b reads (the mark is an in-flow
+pseudo-element with no paint that reaches), with the same seek counts as on
+`main` (1,315 at 390, 1,702 at 1280 on the default run, both); the geometry
+passes' decoration sweep holds its box off every protected box over time,
+as before.
 
 ### A keyframe key keeps its prefix (`keyframeKeys.ts`)
 
