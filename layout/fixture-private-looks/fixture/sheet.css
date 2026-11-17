@@ -238,10 +238,17 @@
  *   standing nowhere it can name, and fails it where it paints), and only
  *   where it stands after the first, which then carries the painter; worn
  *   alone it carries the painter and stands still.
- * - **Its own mark turns with it**: a small file of its own on its
- *   `::before`, which no other row names, so the rule's other half — a
- *   row's own art may move, and is read by 1a, 1b and the keyframe reads —
- *   has a subject too (the still-painter step).
+ * - **Its own mark moves**: a small file of its own on its `::before`,
+ *   which no other row names, turning with the node and moving its own mask
+ *   by `mask-position` wherever it is worn — so the rule's other half, a
+ *   row's own art may move, has a subject (the still-painter step), and so
+ *   has the probe's key mapping (Chrome names `mask-position`'s longhands
+ *   with a prefix: `a-keyframe-key-is-read-as-a-longhand-css-knows`). What
+ *   reads that motion: the decoration sweep over time, 1a at rest, and the
+ *   contrast pass's look-pseudo frame; 1b leaves both animations alone (one
+ *   reaches nothing, the other moves a box that holds nothing it reads), the
+ *   keyframe-offset reads leave what is on no figure's walk and moves no
+ *   other box, and 1c fires only near money.
  * - Nothing of either paints on the wall.
  */
 .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low {
@@ -273,6 +280,20 @@
     background-image: url(./art/turn.svg);
     background-size: 28px 28px;
     background-repeat: no-repeat;
+    -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent);
+    mask-image: linear-gradient(90deg, #000 60%, transparent);
+    -webkit-mask-size: 200% 100%;
+    mask-size: 200% 100%;
+    animation: t-fixture-private-shine 6s ease-in-out infinite alternate;
+}
+
+@keyframes t-fixture-private-shine {
+    from {
+        mask-position: 0 0;
+    }
+    to {
+        mask-position: 100% 0;
+    }
 }
 
 .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low ~ .att-fixture-turn {
@@ -300,7 +321,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low ~ .att-fixture-turn {
+    .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-low ~ .att-fixture-turn,
+    .stall.t-fixture-private:not(.shop-window) > .stall-scroll > .att-fixture-turn::before {
         animation: none;
     }
 }

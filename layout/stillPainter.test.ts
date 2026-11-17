@@ -45,24 +45,40 @@ describe('a-file-below-the-goods-is-painted-once-on-a-still-box (judgeStillPaint
         expect(v.faults[0]!.detail).toMatch(/names tile-abc\.svg, art \.att-a and \.att-b share/);
     });
 
-    it('fails closed where another row below the goods was never painted alone on the run', () => {
+    it('fails closed where a row below the goods was never painted alone on the run, the moving box’s own included', () => {
         const v = judgeStillPainters({ rows, alone: new Set(['att-b']), boxes: [box('att-b', '.att-b::before', [MARK], 'node')] });
         expect(v.faults.map((f) => f.detail)).toEqual([
             ".att-b::before names mark-def.svg and hangs on a node that runs an animation at 390x844, and whether that art is its row's own cannot be told on this pass: .att-a was never painted alone here, and alone it might name the same file",
         ]);
         expect(v.movingOwn).toBe(0);
-        // Its own row unread alone is no matter: only another row could share its file.
-        expect(judgeStillPainters({ rows, alone: new Set(['att-a']), boxes: [box('att-b', '.att-b::before', [MARK], 'node')] }).faults).toEqual([]);
-        // A run that painted no row alone, with two others unread, names both.
+        // Its own row unread alone fails too (the critic's P3-2): the critic's case, R2's shape — the
+        // second row turning wherever it stands — on a run that never painted that row alone, where alone
+        // it would be first, carry the shared tile, and turn.
+        const r2 = judgeStillPainters({
+            rows,
+            alone: new Set(['att-a']),
+            boxes: [box('att-a', '.att-a::after', [TILE]), box('att-a', '.att-a::after', [TILE]), box('att-b', '.att-b::before', [MARK], 'node')],
+        });
+        expect(r2.faults.map((f) => f.detail)).toEqual([
+            ".att-b::before names mark-def.svg and hangs on a node that runs an animation at 390x844, and whether that art is its row's own cannot be told on this pass: .att-b was never painted alone here, and alone it might name the same file",
+        ]);
+        expect(r2.movingOwn).toBe(0);
+        // A run that painted no row alone names them all, its own row among them.
         const three = judgeStillPainters({ rows: new Set(['att-a', 'att-b', 'att-c']), alone: new Set(), boxes: [box('att-c', '.att-c::before', [MARK], 'own')] });
-        expect(three.faults[0]!.detail).toMatch(/\.att-a and \.att-b were never painted alone here, and alone they might/);
+        expect(three.faults[0]!.detail).toMatch(/\.att-a, \.att-b and \.att-c were never painted alone here, and alone they might/);
     });
 
-    it('asks nothing of a still box, whatever it names, and nothing of a look with one row below the goods', () => {
+    it('asks nothing of a still box, whatever it names, and nothing of a look with one row below the goods, which shares nothing', () => {
         expect(judgeStillPainters({ rows, alone: new Set(), boxes: [box('att-a', '.att-a::after', [TILE]), box('att-b', '.att-b::after', [TILE])] }).faults).toEqual([]);
         const one = judgeStillPainters({ rows: new Set(['att-a']), alone: new Set(), boxes: [box('att-a', '.att-a::before', [MARK], 'own')] });
         expect(one.faults).toEqual([]);
         expect(one.movingOwn).toBe(1);
+    });
+
+    it('reads shared as the same resolved URL: two copies of one ground, and a ground one row draws that another stands on, pass (stated, the critic’s P3-1)', () => {
+        const COPY = 'http://localhost/assets/tile-copy.svg';
+        expect(judgeStillPainters({ rows, alone, boxes: [box('att-a', '.att-a::after', [TILE], 'own'), box('att-b', '.att-b::after', [COPY], 'own')] }).faults).toEqual([]);
+        expect(judgeStillPainters({ rows, alone, boxes: [box('att-a', '.att-a', [TILE], 'own')] }).faults).toEqual([]);
     });
 
     it('reads which rows paint a file from every paint, so a file a second row names only worn together is shared', () => {

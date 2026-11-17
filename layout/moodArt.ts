@@ -579,9 +579,12 @@ export type BeamMiss = { layers: number; combinations: number; narrow: number; w
 /**
  * How many distinct stacks a read searched whole, and how many by the beam;
  * with `checkWide`, how many of the beam's it searched again with the wide
- * beam, and each the wide one read lower (`BeamMiss`).
+ * beam, each the wide one read lower (`BeamMiss`, on the search that found
+ * it), the wide searches' own time (`ms`, a cost), and every miss a cell this
+ * read painted came from (`used`, whether this read or an earlier one on the
+ * page searched it: what the job record carries, the same on every tab).
  */
-export type SearchTally = { whole: number; beam: number; wide?: { checked: number; lower: BeamMiss[] } };
+export type SearchTally = { whole: number; beam: number; wide?: { checked: number; lower: BeamMiss[]; ms?: number; used?: BeamMiss[] } };
 
 /** Below this, two reads of the judge are the same read (one composite, two searches). */
 const SAME_READ = 1e-9;
@@ -595,11 +598,14 @@ export function worstStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba)
     const narrow = beamStack(stack, judge);
     if (!checkWide) return narrow;
     // Searched again with the wide beam: the lower of the two is the stack's worst this read found.
+    const started = performance.now();
     const wide = beamStack(stack, judge, WIDE_BEAM);
+    const ms = performance.now() - started;
     const [n, w] = [judge(narrow), judge(wide)];
     if (tally !== undefined) {
         const t = (tally.wide ??= { checked: 0, lower: [] });
         t.checked += 1;
+        t.ms = (t.ms ?? 0) + ms;
         if (w < n - SAME_READ) t.lower.push({ layers: stack.length, combinations, narrow: n, wide: w });
     }
     return w < n ? wide : narrow;
@@ -697,6 +703,7 @@ export function worstCells(
     judgeKey = '',
     tally?: SearchTally,
     checkWide = false,
+    misses: Map<string, BeamMiss> = new Map(),
 ): Cell[] {
     const xs = new Set<number>();
     const ys = new Set<number>();
@@ -732,8 +739,18 @@ export function worstCells(
             const key = `${judgeKey}\n${sign.join('\n')}`;
             let colour = memo.get(key);
             if (colour === undefined) {
+                const before = tally?.wide?.lower.length ?? 0;
                 colour = worstStack(stack, judge, tally, checkWide);
                 memo.set(key, colour);
+                // A miss this search found is the stack's, for every later cell that reuses it (`misses`, kept beside `memo`).
+                const found = tally?.wide?.lower[before];
+                if (found !== undefined) misses.set(key, found);
+            }
+            const miss = misses.get(key);
+            if (miss !== undefined && tally !== undefined) {
+                const t = (tally.wide ??= { checked: 0, lower: [] });
+                const used = (t.used ??= []);
+                if (!used.includes(miss)) used.push(miss);
             }
             if (colour[3] > 0) cells.push({ x0, x1, y0, y1, colour });
         }

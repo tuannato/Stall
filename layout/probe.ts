@@ -60,7 +60,7 @@ import {
     type Look,
 } from './looks';
 import { COPIED_JOBS, STEP_JOBS, carriedContrastPlan, contrastOwed, contrastPlan, contrastScreens, moodOwed, type ContrastJob } from './contrastPlan';
-import { CLEAR, cssOf, judgeFor, layerCoverage, overRgba, parseColour, rasterColours, readLayer, splitTop, worstCells, type ElementBoxes, type LayerPaint, type LayerStyle, type Rgba, type Scroller, type SearchTally } from './moodArt';
+import { CLEAR, cssOf, judgeFor, layerCoverage, overRgba, parseColour, rasterColours, readLayer, splitTop, worstCells, type BeamMiss, type ElementBoxes, type LayerPaint, type LayerStyle, type Rgba, type Scroller, type SearchTally } from './moodArt';
 import { CARRIED_SCREEN_SET } from './carriedScreens';
 import { loadedSheetNames } from './sheetNaming';
 import { LOOK_BACKDROP, ROOT_TOKENS, colourOf, rootLayerSetAside, surfaceArtSetAside, type Colour, type RootFacts } from './atRest';
@@ -988,11 +988,11 @@ function animatedAway(node: Element): string | undefined {
             const effect = anim.effect;
             if (!(effect instanceof KeyframeEffect)) continue;
             for (const frame of effect.getKeyframes()) {
-                for (const key of ['display', 'contentVisibility'] as const) {
-                    const value = (frame as Record<string, unknown>)[key];
-                    if (typeof value !== 'string') continue;
+                for (const prop of ['display', 'content-visibility'] as const) {
+                    const value = keyframeValue(frame as Record<string, unknown>, prop);
+                    if (value === undefined) continue;
                     const name = 'animationName' in anim ? String((anim as CSSAnimation).animationName) : 'an animation';
-                    return `${at === node ? 'it runs' : `${named(at)} runs`} ${name}, whose keyframes set ${key === 'display' ? 'display' : 'content-visibility'} ${value}`;
+                    return `${at === node ? 'it runs' : `${named(at)} runs`} ${name}, whose keyframes set ${prop} ${value}`;
                 }
             }
         }
@@ -8309,6 +8309,51 @@ function outlineAboveFault(node: HTMLElement, stall: Element, inks: () => readon
 const kebab = keyframeProperty;
 
 /**
+ * **A keyframe key is read as a longhand CSS knows**
+ * (`a-keyframe-key-is-read-as-a-longhand-css-knows`; the still-painter
+ * critic's P3-5). Every key the probe maps (`readKey`: `keyframeProps` and
+ * `animationFaults`, which every keyframe read but 1c's trigger and 1b's
+ * keyframe-values road goes through) is held to `CSS.supports(prop,
+ * 'initial')`, once a page for each name: a key read as a name this page's
+ * CSS does not know is a mapping that every list keyed on that longhand
+ * misses — `webkitMaskPositionX` read as `webkit-mask-position-x`, as the
+ * mapping before `keyframeKeys.ts` read it, left a mask's motion seeked wide
+ * by 1b and for every figure's self-clip read. Measured in Chrome 157: every
+ * one of the 383 keys `getKeyframes()` gives, mapped, is supported; under the
+ * old mapping its 34 prefixed keys are not. Counted per look
+ * (`keyframeKeysByClass`: the distinct keys read, and the prefixed ones), and
+ * the tracked fixture, whose turning row's mark moves by `mask-position`,
+ * owes a prefixed key on both page passes (`probe-coverage.mjs`).
+ */
+const KEY_CHECK = 'a-keyframe-key-is-read-as-a-longhand-css-knows';
+const keyKnown = new Map<string, boolean>();
+/** Each key read as a name CSS does not know, with the name it was read as, the first time. */
+const keyUnknown = new Map<string, string>();
+const keySeenByClass: Record<string, { keys: Set<string>; prefixed: Set<string> }> = {};
+const VENDOR_KEY = /^(?:webkit|Webkit|moz|Moz|ms|Ms)[A-Z]/;
+function readKey(key: string): string {
+    const prop = kebab(key);
+    const seen = (keySeenByClass[measuringClass] ??= { keys: new Set(), prefixed: new Set() });
+    seen.keys.add(key);
+    if (VENDOR_KEY.test(key)) seen.prefixed.add(key);
+    if (!prop.startsWith('--')) {
+        let known = keyKnown.get(prop);
+        if (known === undefined) keyKnown.set(prop, (known = CSS.supports(prop, 'initial')));
+        if (!known && !keyUnknown.has(key)) keyUnknown.set(key, prop);
+    }
+    return prop;
+}
+/** The page's keyframe keys read as names CSS does not know, one failure each. */
+function keyFaults(): Failure[] {
+    return [...keyUnknown].map(([key, prop]) => ({
+        screen: 'probe page',
+        theme: '-',
+        check: KEY_CHECK,
+        detail: `the keyframe key ${key} was read as ${prop}, a name this page's CSS does not know (CSS.supports): the probe's key mapping (keyframeKeys.ts) is wrong, and every list keyed on that longhand misses it`,
+    }));
+}
+
+/**
  * The element a keyframe's value is resolved on: one per page, a block in a
  * fixed, zero-sized, hidden box outside the stall that contains its own
  * layout (`contain: strict`), so setting a value on it lays out that box
@@ -8373,7 +8418,7 @@ function animationFaults(el: Element, wants: (prop: string) => boolean, judge: (
         for (const frame of effect.getKeyframes()) {
             for (const [key, raw] of Object.entries(frame)) {
                 if (KEYFRAME_META.has(key) || typeof raw !== 'string') continue;
-                const prop = kebab(key);
+                const prop = readKey(key);
                 if (!wants(prop)) continue;
                 const why = judge(prop, resolveKeyframe(el, prop, raw));
                 if (why !== undefined) out.push(`${why}, at ${Math.round((frame.computedOffset ?? 0) * 100)}% of ${name}`);
@@ -9393,7 +9438,7 @@ function keyframeProps(anim: Animation, effect: KeyframeEffect): ReadonlySet<str
     const props = new Set<string>();
     for (const frame of effect.getKeyframes()) {
         for (const key of Object.keys(frame)) {
-            if (!KEYFRAME_META.has(key)) props.add(kebab(key));
+            if (!KEYFRAME_META.has(key)) props.add(readKey(key));
         }
     }
     if (anim instanceof CSSAnimation) {
@@ -9452,9 +9497,11 @@ function outerShadowOnly(anim: Animation, effect: KeyframeEffect, target: Elemen
     const props = keyframeProps(anim, effect);
     if (props === undefined || ![...props].every((prop) => prop === 'box-shadow' || prop === '-webkit-box-shadow' || SEEK_NEEDLESS.has(prop))) return false;
     for (const frame of effect.getKeyframes()) {
-        const value = (frame as Record<string, unknown>).boxShadow;
-        if (value === undefined) continue;
-        if (typeof value !== 'string' || value.includes('var(') || /\binset\b/.test(value)) return false;
+        // A keyframe that sets the shadow, by its longhand (`keyframeValue`): one whose value is not a string reads as able to be anything.
+        const set = Object.keys(frame).some((key) => !KEYFRAME_META.has(key) && ['box-shadow', '-webkit-box-shadow'].includes(keyframeProperty(key)));
+        if (!set) continue;
+        const value = keyframeValue(frame as Record<string, unknown>, 'box-shadow') ?? keyframeValue(frame as Record<string, unknown>, '-webkit-box-shadow');
+        if (value === undefined || value.includes('var(') || /\binset\b/.test(value)) return false;
     }
     const box = target.getBoundingClientRect();
     return reads.every((r) => {
@@ -11254,8 +11301,8 @@ function widestTurn(node: Element): number {
         const effect = a.effect;
         if (!(effect instanceof KeyframeEffect)) continue;
         for (const frame of effect.getKeyframes()) {
-            for (const value of [frame['transform'], frame['rotate']]) {
-                if (typeof value !== 'string') continue;
+            for (const value of [keyframeValue(frame as Record<string, unknown>, 'transform'), keyframeValue(frame as Record<string, unknown>, 'rotate')]) {
+                if (value === undefined) continue;
                 for (const m of value.matchAll(/(-?[\d.]+)deg/g)) {
                     widest = Math.max(widest, Math.abs(Number(m[1])));
                 }
@@ -12599,18 +12646,26 @@ const wornClassesPainted = new Set<string>();
  * carries its pseudo-elements with it), where shared art is a file the boxes
  * of more than one row named on that run — the probe paints each row alone
  * on every screen that is not a state screen, and every row worn together. A
- * box that moves and names only its own row's art passes and is counted; its
- * motion is read by 1a, 1b, 1c and the keyframe reads. Where the run did not
- * paint every other below-the-goods row alone, a moving box naming a file
- * fails closed. Read from the computed style, every `url()` it names, and
+ * box that moves and names only its own row's art passes and is counted.
+ * What reads that motion (the critic's P2-1): the decoration sweep over time
+ * (`checkOverTime`), 1a at rest, and the contrast pass's look-pseudo frame;
+ * 1b leaves an animation alone that reaches nothing (`reachNeedless`, a mask's
+ * position among them) or moves a box holding nothing it reads (`unmoved`),
+ * the keyframe-offset reads seek only an animation on a figure's walk or one
+ * that moves other boxes, and 1c fires only near money. Where the run did not
+ * paint every below-the-goods row alone, the moving box's own included, a
+ * moving box naming a file fails closed; a look with one such row shares
+ * nothing. Shared means the same resolved URL: two copies of one ground, and
+ * a ground one row draws that the others stand on, read as own art. Read from the computed style, every `url()` it names, and
  * the document's running animations; a box with no box (`display: none`, a
  * pseudo with no `content`) names nothing. Counted per look
  * (`stillPainterByClass`: the boxes naming a file read, the files shared, the
  * box reads painting them, and the moving box reads that paint their row's
  * own art), and the tracked fixture, whose two below-the-goods rows share one
- * tile on the first worn's `::after` and whose second turns its node, with a
- * mark of its own on its `::before`, where it stands after the first, owes
- * all four on both page passes (`probe-coverage.mjs`).
+ * tile on the first worn's `::after` and whose second turns its node where it
+ * stands after the first, with a mark of its own on its `::before` that moves
+ * its mask by `mask-position`, owes all four on both page passes
+ * (`probe-coverage.mjs`).
  */
 const STILL_PAINTER_CHECK = 'a-file-below-the-goods-is-painted-once-on-a-still-box';
 
@@ -15574,7 +15629,7 @@ const emptyMoodReport = (worn: boolean, moods: string[]): MoodArtReport => ({
     layers: 0,
     kinds: { file: 0, gradient: 0 },
     cells: 0,
-    searches: { whole: 0, beam: 0, wide: { checked: 0, lower: [] } },
+    searches: { whole: 0, beam: 0, wide: { checked: 0, lower: [], ms: 0, used: [] } },
     refused: [],
     ms: 0,
 });
@@ -15638,6 +15693,8 @@ const rasters = new Map<string, Promise<HTMLImageElement>>();
 const rasterColourCache = new Map<string, Promise<Rgba[] | string>>();
 /** The stack searches this page made, reused by `worstCells` across jobs. */
 const stackSearches = new Map<string, Rgba>();
+/** The stacks the wide beam read lower than the beam of 12 on this page, by the same keys (a job's record names each one its cells came from). */
+const stackMisses = new Map<string, BeamMiss>();
 
 /** A file's colours at its painted size, read back from a canvas in this page; once for each file and size. */
 function fileColours(url: string, w: number, h: number): Promise<Rgba[] | string> {
@@ -15681,7 +15738,9 @@ function movesBackground(el: HTMLElement): boolean {
     return el.getAnimations().some((a) => {
         const effect = a.effect as KeyframeEffect | null;
         return (effect?.getKeyframes() ?? []).some((frame) =>
-            Object.keys(frame).some((k) => k === 'background' || k === 'backgroundPosition' || k === 'backgroundPositionX' || k === 'backgroundPositionY' || k === 'backgroundSize'),
+            Object.keys(frame).some(
+                (k) => !KEYFRAME_META.has(k) && ['background', 'background-position', 'background-position-x', 'background-position-y', 'background-size'].includes(keyframeProperty(k)),
+            ),
         );
     });
 }
@@ -15859,7 +15918,7 @@ async function flattenMoodArt(
     if (report.refused.length > before) return;
     const base = overRgba(bg, [ground[0], ground[1], ground[2], 1]);
     // Every stack that goes to the beam is searched again with the wide beam, once a page (the cache keeps the lower).
-    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]), stackSearches, `${text.join(',')}|${base.join(',')}`, report.searches, true);
+    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]), stackSearches, `${text.join(',')}|${base.join(',')}`, report.searches, true, stackMisses);
     const written: [string, string][] = [
         ['background-image', cells.length === 0 ? 'none' : cells.map((c) => `linear-gradient(${cssOf(c.colour)}, ${cssOf(c.colour)})`).join(', ')],
         ['background-size', cells.length === 0 ? 'auto' : cells.map((c) => `${c.x1 - c.x0}px ${c.y1 - c.y0}px`).join(', ')],
@@ -16768,6 +16827,8 @@ const triggerCheck = triggerSelfCheck();
 if (triggerCheck.problem !== undefined) failures.push({ screen: 'probe page', theme: '-', check: 'the-trigger-fires-on-a-planted-mover', detail: triggerCheck.problem });
 const groundCheck = groundSelfCheck();
 for (const detail of groundCheck.problems) failures.push({ screen: 'probe page', theme: '-', check: 'the-ground-read-fails-a-planted-ground', detail });
+// Every keyframe key the page read, held last, after every read that maps one (`readKey`).
+failures.push(...keyFaults());
 const verdict = {
     viewport: window.innerWidth,
     reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -16851,6 +16912,8 @@ const verdict = {
     belowGoodsByClass,
     /* Below-the-goods boxes naming a file that were read, per class (`a-file-below-the-goods-is-painted-once-on-a-still-box`, 8i). */
     stillPainterByClass,
+    /* The distinct keyframe keys read, and the vendor-prefixed ones, per class (`a-keyframe-key-is-read-as-a-longhand-css-knows`). */
+    keyframeKeysByClass: Object.fromEntries(Object.entries(keySeenByClass).map(([cls, k]) => [cls, { keys: k.keys.size, prefixed: k.prefixed.size }])),
     /* The short pass's looks as the page read them, and its paints measured and set aside (`?sticky=`). */
     stickyOnly: STICKY_ONLY === undefined ? null : [...STICKY_ONLY].sort(),
     /* The look run's listed screens as this page read them (`?looks=carried`), or null on every other run. */

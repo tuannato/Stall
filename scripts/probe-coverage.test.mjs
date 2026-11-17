@@ -140,6 +140,7 @@ const full = {
     // 8i: the fixture's node rows below the goods, read on a short stall and at the long one's end, and their shared tile.
     belowGoodsByClass: { 't-fixture-private': { short: 4, end: 2 } },
     stillPainterByClass: { 't-fixture-private': { read: 40, shared: 1, sharedBoxes: 30, movingOwn: 10 } },
+    keyframeKeysByClass: { 't-fixture-private': { keys: 20, prefixed: 2 } },
     marksShownByClass: { 't-fixture-private': 30 },
     stickyByClass: { 't-fixture-private': { paints: 20, scrolled: 18, stops: 90 } },
     tryOnNamesByClass: { 't-fixture-private': 2 },
@@ -400,7 +401,7 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
 
     it('says what a pass read in one line, and nothing for a pass that owes nothing', () => {
         // The lines before 8f2's tallies and the Cycle card's steps, which have cases of their own.
-        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, qrColourByClass, wallCodeFloorByClass, belowGoodsByClass, stillPainterByClass, ...before } = full;
+        const { nameLinesByClass, nameTiersByClass, nameVerticalByClass, marksShownByClass, stickyByClass, tryOnNamesByClass, cycleFigureByClass, figureInkByClass, selfClipByClass, dressByClass, dressClipByClass, streamTierByClass, qrColourByClass, wallCodeFloorByClass, belowGoodsByClass, stillPainterByClass, keyframeKeysByClass, ...before } = full;
         assert.equal(
             probeCoverageLine('desktop', before),
             'unbuyable labels read: face 8, row 8, wall-browse 6 · skips seen: stream-card 4, stream-ticker 4, wall-cycle 7 · rows read: t-modern, t-neo, t-rural · door minis: t-modern, t-neo, t-rural · small text read: 900 (under 11px, aria-hidden: t-neo span.sm-cap 9.5px (aria-hidden)) · outlined lines read: 400 · money nodes asked: 300 · halos asked: 30 · words asked about a mask from a file: 5000 · at rest, set aside: the backdrop’s scanlines 120, the rain 120 · bunting rows swept: 40 · skeleton ladder: tier 1 2, tier 2 1, tier 3 1',
@@ -412,7 +413,9 @@ describe('a-probe-rule-that-compared-nothing-fails-the-pass', () => {
         );
         assert.equal(probeCoverageLine('tablet', quiet), 'wall controls read: 24 · status line asked: 50');
         // 8i: the nodes below the goods and their files, per look, where the page read any.
-        assert.match(probeCoverageLine('desktop', { ...quiet, belowGoodsByClass, stillPainterByClass }), / · nodes below the goods \(short\/end\): t-fixture-private short:4\/end:2 · boxes below the goods naming a file \(read\/shared files\/boxes painting them\/moving, own art\): t-fixture-private read:40\/shared:1\/sharedBoxes:30\/movingOwn:10$/);
+        assert.match(probeCoverageLine('desktop', { ...quiet, belowGoodsByClass, stillPainterByClass, keyframeKeysByClass }), / · nodes below the goods \(short\/end\): t-fixture-private short:4\/end:2 · boxes below the goods naming a file \(read\/shared files\/boxes painting them\/moving, own art\): t-fixture-private read:40\/shared:1\/sharedBoxes:30\/movingOwn:10 · keyframe keys read \(distinct\/vendor-prefixed\): t-fixture-private keys:20\/prefixed:2$/);
+        // And on the narrow pass, which runs the rule (the critic's P3-9).
+        assert.match(probeCoverageLine('narrow', { ...quiet, stillPainterByClass, keyframeKeysByClass }), / · boxes below the goods naming a file \(read\/shared files\/boxes painting them\/moving, own art\): t-fixture-private read:40\/shared:1\/sharedBoxes:30\/movingOwn:10 · keyframe keys read \(distinct\/vendor-prefixed\): t-fixture-private keys:20\/prefixed:2$/);
         // STEP-WALL-CONTAINER: the wall codes held to their floor, per look, where the page read any.
         assert.match(probeCoverageLine('tablet', { ...quiet, wallCodeFloorByClass: { 't-neo': 3 } }), / · wall codes held to their floor: t-neo 3$/);
         assert.equal(
@@ -496,12 +499,13 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
     });
 
     it('owes the tracked fixture its sticky sign, its mark and its rung, where it is carried', () => {
-        const bare = { ...read, stickyByClass: {}, marksShownByClass: {}, nameTiersByClass: {}, nameVerticalByClass: {}, nameOwnClipByClass: {}, belowGoodsByClass: {}, stillPainterByClass: {} };
+        const bare = { ...read, stickyByClass: {}, marksShownByClass: {}, nameTiersByClass: {}, nameVerticalByClass: {}, nameOwnClipByClass: {}, belowGoodsByClass: {}, stillPainterByClass: {}, keyframeKeysByClass: {} };
         const below = [
             'a-node-below-the-goods-shows-in-the-first-fold-of-a-short-stall read no t-fixture-private node below the goods on a short stall and at the long one\'s end',
             'a-file-below-the-goods-is-painted-once-on-a-still-box read no t-fixture-private box below the goods that names a file',
             'a-file-below-the-goods-is-painted-once-on-a-still-box found no t-fixture-private art its rows below the goods share',
             "a-file-below-the-goods-is-painted-once-on-a-still-box read no t-fixture-private box below the goods that moves and names its row's own art",
+            'a-keyframe-key-is-read-as-a-longhand-css-knows read no vendor-prefixed keyframe key on a t-fixture-private stall',
         ];
         assert.deepEqual(probeCoverageGaps('desktop', bare, options), [
             'a-sticky-sign-covers-nothing-as-the-region-scrolls scrolled no region under the t-fixture-private sign',
@@ -523,6 +527,8 @@ describe('the-step-8f2-rules-owe-their-subjects', () => {
         // Its files read and none shared, or a shared tile and no row's own art moving: still owed (the still-painter step).
         assert.deepEqual(probeCoverageGaps('mobile', { ...read, stillPainterByClass: { 't-fixture-private': { read: 40, shared: 0, sharedBoxes: 0, movingOwn: 10 } } }, options), [below[2]]);
         assert.deepEqual(probeCoverageGaps('desktop', { ...read, stillPainterByClass: { 't-fixture-private': { read: 40, shared: 1, sharedBoxes: 30, movingOwn: 0 } } }, options), [below[3]]);
+        // Every key read unprefixed: the key mapping's check has no subject (the critic's P3-5).
+        assert.deepEqual(probeCoverageGaps('mobile', { ...read, keyframeKeysByClass: { 't-fixture-private': { keys: 20, prefixed: 0 } } }, options), [below[4]]);
         assert.deepEqual(probeCoverageGaps('canvas', bare, options).filter((gap) => below.includes(gap)), []);
         assert.deepEqual(probeCoverageGaps('mobile', { ...read, nameTiersByClass: { 't-fixture-private': { 1: 4 } } }, options), [
             'the-sellers-name-stands-whole read no t-fixture-private name on the last rung of its ladder',

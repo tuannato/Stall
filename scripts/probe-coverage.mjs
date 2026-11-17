@@ -573,6 +573,11 @@ export function probeCoverageGaps(
         if (PAGE_PASSES.has(pass) && !((still?.movingOwn ?? 0) > 0)) {
             gaps.push(`a-file-below-the-goods-is-painted-once-on-a-still-box read no ${fx} box below the goods that moves and names its row's own art`);
         }
+        // Its turning row's mark moves by mask-position, whose longhands Chrome
+        // names with a vendor prefix: the key mapping's check has a subject.
+        if (PAGE_PASSES.has(pass) && !(((report.keyframeKeysByClass ?? {})[fx]?.prefixed ?? 0) > 0)) {
+            gaps.push(`a-keyframe-key-is-read-as-a-longhand-css-knows read no vendor-prefixed keyframe key on a ${fx} stall`);
+        }
     }
     // A staged screen (`STAGED` in `layout/fixtures.ts`, the 8g1 critic's
     // P1-1) owes, on every look a pass painted it on, a node it pressed: a
@@ -907,6 +912,12 @@ export function probeCoverageLine(pass, report) {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([cls, n]) => `${cls} ${typeof n === 'number' ? n : Object.entries(n).map(([k, v]) => `${k}:${v}`).join('/')}`)
             .join(', ') || 'none';
+    // The still-painter step: the boxes below the goods naming a file, and the
+    // keyframe keys read, per look — on every pass that reads them, the narrow
+    // one included (the critic's P3-9).
+    const still =
+        (Object.keys(report.stillPainterByClass ?? {}).length === 0 ? '' : ` · boxes below the goods naming a file (read/shared files/boxes painting them/moving, own art): ${perClass(report.stillPainterByClass)}`) +
+        (Object.keys(report.keyframeKeysByClass ?? {}).length === 0 ? '' : ` · keyframe keys read (distinct/vendor-prefixed): ${perClass(report.keyframeKeysByClass)}`);
     // 8f2: the sign's lines read whole, the rungs a name climbed, the marks a
     // carried look showed and the sticky signs scrolled under, per look.
     const signs =
@@ -919,7 +930,7 @@ export function probeCoverageLine(pass, report) {
         ((report.cjkFaces ?? []).length === 0 ? '' : ` · CJK advance: ${report.cjkFaces.join(', ')}`) +
         // 8i: the nodes below the goods, read on a short stall and at the long one's end, and the boxes there naming a file.
         (Object.keys(report.belowGoodsByClass ?? {}).length === 0 ? '' : ` · nodes below the goods (short/end): ${perClass(report.belowGoodsByClass)}`) +
-        (Object.keys(report.stillPainterByClass ?? {}).length === 0 ? '' : ` · boxes below the goods naming a file (read/shared files/boxes painting them/moving, own art): ${perClass(report.stillPainterByClass)}`);
+        still;
     // The card figures read, summed over the looks, per place and step (`a-card-figure-stands-inside-its-row`).
     const cardSums = {};
     for (const read of Object.values(report.cardFigureByClass ?? {})) {
@@ -962,7 +973,7 @@ export function probeCoverageLine(pass, report) {
             ? ''
             : ` · wall codes held to their floor: ${perClass(report.wallCodeFloorByClass)}`);
     if (pass === 'narrow') {
-        return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}`;
+        return `${cards.replace(/^ · /, '')}${money}${hiddenSmall}${marks}${still}`;
     }
     const cycleSums = {};
     for (const read of Object.values(report.cycleFigureByClass ?? {})) {

@@ -6,13 +6,18 @@
  * unprefixed `mask-position` comes back as `webkitMaskPositionX` and
  * `webkitMaskPositionY`, because Chrome's longhands of that shorthand are
  * `-webkit-mask-position-x` and `-webkit-mask-position-y` (measured in
- * Chrome 156, `layout/PROBE-RULES.md`, "The still painter"). A camel-to-kebab
+ * Chrome 157, `layout/PROBE-RULES.md`, "The still painter"). A camel-to-kebab
  * mapping that only puts a dash before each capital turns that into
  * `webkit-mask-position-x`, with no leading dash: a name no computed style
  * and no list of longhands holds, so every list the probe keys on a
  * prefixed longhand missed it. This is the one mapping every keyframe read in
- * the probe goes through (1a's end read, 1b's seek, the keyframe-offset
- * reads, `movesOtherBoxes`, 1c's trigger).
+ * the probe goes through: 1a's end read, 1b's seek and its keyframe-values
+ * road, the keyframe-offset reads, `movesOtherBoxes`, `groundOnly`, the dress
+ * rule's `animationFaults`, 1c's trigger, and the four reads that look up a
+ * longhand by name (`animatedAway`, `outerShadowOnly`, `widestTurn`,
+ * `movesBackground`, routed through it after the still-painter critic's
+ * P3-3); and the probe holds every name it maps to one CSS knows
+ * (`a-keyframe-key-is-read-as-a-longhand-css-knows`).
  *
  * - a custom property (`--x`) stands as it is;
  * - `cssFloat` is `float` and `cssOffset` is `offset` (the Web Animations
