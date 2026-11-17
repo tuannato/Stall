@@ -713,6 +713,18 @@ working accept, and there is no accept.
   and a fix was built on it). A foreign-signed record is refused before the
   count on both records and is said on Activity alone. Reader rule,
   mirrored at the edge; no wire change.
+- **Art below the goods may move where only its own row paints it
+  (D-2026-11-17-02 and D-2026-11-17-04, decided by recommendation under the
+  owner's standing instruction of 2026-11-10).** The probe's still-box rule
+  (`a-file-below-the-goods-is-painted-once-on-a-still-box`) protects what
+  D-2026-11-15-05's Q2 asked for: a file more than one row paints is painted
+  once, on a box that does not move and does not hang on a node that moves. A
+  row's own art may move; what reads that motion is the decoration sweep over
+  time, 1a at rest and the contrast pass's look-pseudo frame. Shared means the
+  same resolved URL (two copies, or a ground one row draws under the others,
+  read as own art: stated). Where a stack of a mood's page art goes to the
+  beam, the probe searches it again with a beam of 256 and paints the lower
+  read, printed and never failed (D-2026-11-17-04).
 - **Market size is a closed topic.** This is groundwork built to try
   something. Do not reopen it.
 

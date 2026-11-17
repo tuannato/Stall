@@ -16524,12 +16524,21 @@ after its main loop):
   named by each row's node when that row is alone.
 - **A box that paints shared art runs no animation, nor does the node it
   hangs on.** A box that moves and names only its own row's art passes and is
-  counted; its motion is read by 1a, 1b, 1c and the keyframe reads, as any
-  motion is.
-- **Fail closed**: a moving box naming a file, on a run where some other
-  below-the-goods row of the look was never painted alone with a node
-  mounted, cannot be told own art (that row alone might carry the same file),
-  and fails, naming the rows never painted alone.
+  counted. **What reads that motion** (corrected in the fix round, the
+  critic's P2-1; this said "1a, 1b, 1c and the keyframe reads"): the geometry
+  passes' decoration sweep, which holds the node's box off every protected
+  box over time (`checkOverTime`); 1a, at rest; and the contrast pass's
+  look-pseudo frame, where a look's pseudo-element paints. The rest leave it
+  alone by design: 1b an animation that reaches nothing (`reachNeedless`, a
+  mask's position among them) or moves a box holding nothing it reads
+  (`unmoved`), the keyframe-offset reads one on no figure's walk that moves no
+  other box, and 1c a mover near no money.
+- **Fail closed**: a moving box naming a file, on a run where some
+  below-the-goods row of the look — the box's own among them since the fix
+  round (the critic's P3-2: alone, its row might carry the shared piece on the
+  box that moves) — was never painted alone with a node mounted, cannot be
+  told own art, and fails, naming the rows never painted alone. A look with
+  one row below the goods shares nothing and is always decided.
 - **Counted per look**, on every pass's coverage line
   (`stillPainterByClass`): the boxes naming a file read, the files shared,
   the box reads painting them, and the moving box reads that paint their
@@ -16557,7 +16566,8 @@ default run's contrast plan does not move.
 Read on the fixture's look run at the tip (both page passes): 203 boxes
 naming a file, 1 shared file (the tile), 107 box reads painting it, and 85
 moving box reads painting their row's own art (the mark on the turning
-node, in every all-worn paint); 0 on every wall pass, where the fixture hides
+node, in every all-worn paint), 96 since the fix round, where the mark also
+moves its own mask (below); 0 on every wall pass, where the fixture hides
 both rows. Which reads see that motion, stated: 1b leaves the turning node
 out as a move of a box that holds nothing 1b reads (the mark is an in-flow
 pseudo-element with no paint that reaches), with the same seek counts as on
@@ -16601,8 +16611,12 @@ less:
   lays out a box (a text stroke paints over its glyphs; a mask clips paint),
   so no box but the animated one can move, and that one is still read where
   it paints. 1b reads no text stroke at all, so a stroke read "wide" or
-  "still" reads the same; the first-party lint refuses a text stroke and fill
-  outright.
+  "still" reads the same; both lints refuse a text stroke and fill outright,
+  the kit's as well as the first-party one (`REFUSED_PROPERTIES` in
+  `workshop-css.mjs` is not gated on first party; corrected in the fix round,
+  the critic's P3-6). Older than this step, stated: 1b reads no text stroke,
+  and the contrast pass blanks a stroke drawn in the element's own colour, so
+  only the lints stop a stroke laid over a figure beside it.
 - `DRESS_HELD` through `animationFaults` (a money node's own keyframes, by
   their values, at rest): now holds `-webkit-text-fill-color`,
   `-webkit-text-stroke-width`, `-webkit-text-security`,
@@ -16735,8 +16749,62 @@ animated (G1-old against G1, and the private look's scratch movers: 1,448
 wide 1b seeks a pass and 179 self-clip seeks gone). The fixture's look run
 48.0s at the tip.
 
+### The fix round (`CRITIC-STILL-PAINTER.md`, D-2026-11-17-04)
+
+- **P2-1**: what reads a row's own moving art is said as it is (above), in
+  `stillPainter.ts`, the probe's docblock, the fixture sheet and CLAUDE.md.
+- **P3-1**: the same-URL limit is stated (below).
+- **P3-2**: fail closed names the moving box's own row when it was never
+  painted alone; the critic's case — R2's shape with the turning row never
+  painted alone, 0 faults before — is a red unit case in
+  `stillPainter.test.ts`, and the assertion that the own row is no matter is
+  gone. A look with one row below the goods is decided (it shares nothing).
+- **P3-3**: `animatedAway`, `outerShadowOnly`, `widestTurn` and
+  `movesBackground` look a keyframe's longhand up through `keyframeProperty`
+  and `keyframeValue`, so "one mapping" is literal. **P3-4**: Chrome 157.
+- **P3-5, `a-keyframe-key-is-read-as-a-longhand-css-knows`.** Every key the
+  probe maps (`readKey`, under `keyframeProps` and `animationFaults`) is held
+  to `CSS.supports(name, 'initial')`, once a page for each name, after every
+  read that maps one; a name CSS does not know fails once, naming the key.
+  Measured in Chrome 157 first: every one of the 383 keys `getKeyframes()`
+  gave is supported under the mapping, and the 34 prefixed ones are not under
+  the old one. The fixture's turning mark now also moves its own mask by
+  `mask-position` (a gradient mask, 6s, alternate, stilled in the reduce
+  block, its `moving` reason saying so), in every paint that wears its row;
+  the probe counts the distinct keys read and the prefixed ones per look
+  (`keyframeKeysByClass`, printed on every pass), and the fixture owes a
+  prefixed key on both page passes. **Red**: `const kebab = keyframeProperty`
+  put back to the old expression, the fixture's look run exit 1 with 6
+  failures, all this rule's (2 at 390, 2 at 1280, 2 at 360): "the keyframe key
+  webkitMaskPositionX was read as webkit-mask-position-x, a name this page's
+  CSS does not know …", and its Y twin. At the tip the same run is green:
+  203 boxes read, 1 shared, 107 painting it, 96 moving with their row's own
+  art, and 2 prefixed keys, on both page passes.
+- **P3-6**: both lints refuse a text fill and stroke (above).
+- **P3-7**: a mood job's record carries `moodArt.searches.lower`, every beam
+  miss its cells came from (a page-level map beside the search cache, so the
+  same whichever job searched the stack first, on any tab; no time), and the
+  runner prints the wide search's own tab time: Rural's twelve beam stacks
+  1.99s of the flatten's 2.43s on the default run at the tip, no miss.
+- **P3-8**: PLAN § Decided gains a line for the narrowing.
+- **P3-9**: the narrow pass prints the still-painter and key tallies (115
+  read, 1 shared, 60 painting it, 55 moving own at 360); it owes nothing.
+
+**The default run at the fix tip** (`c0a8789`, started at a one-minute load
+of 2.07): green, 250.6s; its dump against the last tip dump (`245f2ae`):
+15,026 boxes identical, 0 moved, 0 added, 0 removed. The job records: 242
+mood jobs gained `moodArt.searches` (`lower` empty on every one), and no
+other field moved: the mark's mask motion moves no box and no record (its
+look-pseudo frame counts are those of the last tip, where it already stood).
+
 ### Not read, stated
 
+- **Shared means the same resolved URL** (the critic's P3-1): two rows that
+  each carry their own copy of one ground, under two names, and a ground one
+  row alone draws that the other rows stand on, both read as own art, and may
+  move (the rule before this step refused both). The private look at 0x04
+  reads 1 shared file on its look run today; its next slice checks that the
+  look run's line still reads shared ≥ 1.
 - Rows worn together in other combinations than all at once: a file a row
   names only beside one other row, short of all of them, is not seen shared.
 - Each page run is judged on its own paints: a file shared on one pass and
