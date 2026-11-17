@@ -16437,9 +16437,10 @@ anyway).
 first, the tip 250.4s (3.72) and main 270.7s (6.06). The contrast pass
 104.2s and 99.5s, then 101.3s and 115.1s; the prepare phase 42.6s and 37.3s
 of tab time over 802 prepares, then 39.2s and 45.0s. Each pair is clean at
-its start only (the second run starts on the load the first left), and the
-second run is the slower in both: the step's cost is within the machine's
-noise. Each run's dump is bitwise its twin's in the other pair.
+its start only (the second run starts on the load the first left). Main is
+the slower in both, by 3s and by 20s, so no cost of the step shows through
+the machine's noise. Each run's dump is bitwise its twin's in the other
+pair.
 The first build's pairs could not be read at all: the machine was shared
 with other agents' Chrome and test runs (a load of 2–22), and every run of
 main and of the branch but two was cut by the 300s watchdog.
