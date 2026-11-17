@@ -2272,9 +2272,9 @@ money path this app can have, because nothing on it is derived.
   measured.
 - **`pnpm test` can exit 1 with every test green, on a loaded machine**
   (found in step 8i, B; on `main` already). `src/ui/decor-gate.test.ts`
-  runs one long test file — 46.7s alone on a quiet machine, 61–83s under
-  load — past vitest's 60-second window for a worker's report to the main
-  process, which then prints `Timeout calling "onTaskUpdate"` as an
+  runs one long test file — 24–47s alone, 51–83s inside the whole run —
+  and past vitest's 60-second window for a worker's report to the main
+  process, the main process prints `Timeout calling "onTaskUpdate"` as an
   unhandled error and exits 1. Every test still passes, and the file run
   alone exits 0. Closing it would split the file, or widen vitest's
   `teardownTimeout`/RPC window if vitest offers one; not built.
