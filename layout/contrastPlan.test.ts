@@ -2,12 +2,15 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME_ID, NEO_CITY_THEME_ID } from '../src/domain/theme';
 import { WINDOW_MIN_PX } from '../src/ui/render';
-import { CONTRAST_VIEWPORTS, COPIED_JOBS, RAIN_JOBS, STEP_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, contrastScreens, type ContrastJob } from './contrastPlan';
+import { CONTRAST_VIEWPORTS, COPIED_JOBS, RAIN_JOBS, STEP_JOBS, TIDE_SCREENS, WORN_ALL, contrastOwed, contrastPlan, contrastScreens, moodOwed, wearsMood, type ContrastJob } from './contrastPlan';
 import { CANVAS_SCREENS, GEOMETRY_ONLY_SCREENS, NO_DECOR_SCREENS, SCREENS } from './fixtures';
 import { SKELETON_LOOK_ID, measuredLooks, shippedLooks, wornAllFlags, wornOf, type Look } from './looks';
 import { lookFromJson } from './workshopLook';
 import { KIT_SKELETON } from './workshopStarter';
 import { CANVAS, CONTRAST_PASS } from '../scripts/probe-passes.mjs';
+
+/** The shipped run's jobs that wear a mood, pinned by value: Modern's 80 all-worn jobs and Rural's 82 (its two stilled `unbuyable` jobs among them). */
+const MOOD_JOBS = 162;
 
 function count(jobs: readonly ContrastJob[], viewport: string): number {
     return jobs.filter((job) => job.viewport === viewport).length;
@@ -88,6 +91,19 @@ describe('the-contrast-plan-is-every-job-the-pass-owes', () => {
         // Every owed job is a job the plan does.
         const keys = new Set(jobs.map((job) => job.key));
         expect([...owed.rain, ...owed.horizon].filter((key) => !keys.has(key))).toEqual([]);
+    });
+
+    it('owes every job that wears a mood its page art read at its worst, derived from the plan and the rows (a-mood-art-layer-is-read-at-its-worst)', () => {
+        // `moodOwed`, which the page publishes as `__contrastOwed().mood`:
+        // on the shipped run, Modern's and Rural's all-worn jobs, where each
+        // wears its one mood — Neo has none, and the skeleton no rows. Read
+        // here from the looks' own rows, not from the function.
+        const owed = moodOwed(jobs, looks);
+        const withMood = new Set(looks.filter((look) => look.rows.some((row) => row.slot === 'mood')).map((look) => look.id));
+        expect([...withMood]).toEqual([1, 3]);
+        expect(owed).toEqual(jobs.filter((job) => withMood.has(job.look) && job.flags === WORN_ALL).map((job) => job.key));
+        expect(owed.length).toBe(MOOD_JOBS);
+        expect(jobs.filter((job) => job.tide !== undefined || job.flags === 0).some((job) => wearsMood(looks.find((l) => l.id === job.look)!, job.flags))).toBe(false);
     });
 
     it('walks the runner’s own viewports', () => {

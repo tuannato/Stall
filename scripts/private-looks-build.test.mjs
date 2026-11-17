@@ -416,8 +416,8 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
         assert.match(read.looks[0].sheet, /24px 24px/);
         assert.doesNotMatch(read.looks[0].sheet, /25px/);
         // The art is the re-serialisation.
-        assert.equal(read.looks[0].art[0].name, 'ground.svg');
-        assert.equal(read.looks[0].art[0].bytes.toString('utf8'), sanitizeSvg(readFileSync(join(repo.dir, 'fixture/art/ground.svg'), 'utf8')).svg);
+        const ground = read.looks[0].art.find((file) => file.name === 'ground.svg');
+        assert.equal(ground?.bytes.toString('utf8'), sanitizeSvg(readFileSync(join(repo.dir, 'fixture/art/ground.svg'), 'utf8')).svg);
         repo.git('commit', '-q', '-am', 'second');
         assert.match(readPlanted(repo).looks[0].sheet, /25px 25px/);
         assert.match(readPlanted(repo, { commit: first }).looks[0].sheet, /24px 24px/);

@@ -2219,16 +2219,72 @@ money path this app can have, because nothing on it is derived.
   removal-mode `describe` fixture, sampled bare and under each mood, would
   close the warning and cost a few contrast jobs a look and variant; not
   built.
-- **A look's root art is read at rest, not at its worst** (the mood-hooks
-  critic's P3-3, 2026-11-11). A mood's own root art (`PRIVATE_DECORATION_ART`,
-  the private look at 0x04's first) and any look's own root art stand still
-  while the content scrolls over them, so a line passes over every patch of
-  the picture, as the rain's drops cross it in time. The rain is flattened to
-  its brightest drop in every job that wears it; nothing does the same for a
-  look's or a mood's art (the contrast pass reads it at one scroll position,
-  the dress rule names a `url()` picture and does not judge it). The fix
-  would flatten each listed art layer to its extreme over the ground in the
-  jobs that wear it; not built.
+- **A bare look's own root art, and a decoration's page art worn with no
+  mood, are read at rest, not at their worst** (the mood-hooks critic's P3-3,
+  2026-11-11; narrowed by step 8i, B, D-2026-11-15-06). Page art stands still
+  while the content scrolls over it, so a line passes over every patch of
+  it, as the rain's drops cross it in time. Since
+  `a-mood-art-layer-is-read-at-its-worst` (`layout/moodArt.ts`), every
+  contrast job that wears a mood reads every `background-image` layer on the
+  stall's root, an open sheet and the scroll region at its worst — the
+  mood's own art, the layers it shares with the bare look, and the page art
+  of the decorations worn with it (Modern's Awning and Rural's Sunburst and
+  Confetti in their all-worn jobs). Still read at one scroll position: a bare
+  look's own root art (its bare jobs), and a decoration's page art in a job
+  that wears no mood (a look with no mood, Neo's; a solo or tide job). The
+  same flattening there would re-judge approved pixels on thin margins; not
+  built. The flattening's own limits, stated in `moodArt.ts`: an ink is read
+  at its worst only where a line in the mood's text ink shares its cell, and
+  one on the other side of the ground from that text, or further than 9:1
+  from it, is not; past 200,000 combinations a stack is searched by a beam,
+  which can miss its worst (the runner prints how many stacks each read
+  searched that way); every layer is taken to meet every phase of every
+  other, conservative; a still tile is widened over the band a scroller can
+  carry a line through — from its part inside the scroller down (or across)
+  by that scroller's range, cut to the scroller's box — with the range at
+  most how far the capture grew past the job's own height, read at the
+  contrast pass's 844, 900 and 1080 alone (a shorter screen sweeps a wider
+  band); a surface other than the root, an open sheet and the scroll region
+  (a card, a wall plate) is read at rest. Refused rather than read, each with
+  a sentence: a `color(srgb …)` gradient segment Chrome interpolates in
+  OKLab, `local` off its own scroller, a percentage along a grown axis, a
+  tile under scrollers on two axes, a turned or scaled box, an unreadable
+  background colour, and a scroller not at its start.
+- **A row that no all-worn variant wears is sampled by no contrast job; no
+  shipped or private row is so excluded today** (D-2026-11-15-06).
+- **The name ladder cannot see WebKit's letter-spacing gap at a text-node
+  boundary** (D-2026-11-16-01, the critics of a carried look's slice). The
+  sign's name is split into text · `span.sign-lamp` · text (`signName`,
+  `src/ui/render.ts`). In WebKit (measured with the system `wkf`), a name
+  with letter-spacing takes about 5px more advance at that boundary; Chrome
+  does not, and `inkFits` and the probe measure Chrome alone. So in Safari a
+  name within about 5px of its cap may lose a pixel or two to an
+  `overflow: clip`. Not built: a WebKit read of the ladder, or a split that
+  adds no boundary.
+- **Decorations worn without a mood are never sampled for contrast on a look
+  with moods** (D-2026-11-16-01). Every all-worn variant (`wornAllFlags`)
+  carries a mood, so on such a look its decorations on the plain palette are
+  read by no contrast job — the shipped looks with a mood included. The state
+  screens' geometry runs only bare and the all-worn variants, so a row worn
+  alone is never measured on the sign stress screens. Closing it would add a
+  "decorations, no mood" variant per look with moods; that costs contrast
+  jobs on the default run as well as on the look run, and the cost is not
+  measured.
+- **`pnpm test` can exit 1 with every test green, on a loaded machine**
+  (found in step 8i, B; on `main` already). `src/ui/decor-gate.test.ts`
+  runs one long test file — 24–47s alone, 51–83s inside the whole run —
+  and past vitest's 60-second window for a worker's report to the main
+  process, the main process prints `Timeout calling "onTaskUpdate"` as an
+  unhandled error and exits 1. Every test still passes, and the file run
+  alone exits 0. Closing it would split the file, or widen vitest's
+  `teardownTimeout`/RPC window if vitest offers one; not built.
+- **Modern's empty-shop second line does not follow After hours**
+  (`.t-modern .sparse-empty-s`, found in step 8i, B). Modern's sheet
+  writes a literal grey, `#5f6975`, for that line, so under After hours it
+  keeps the day's ink on the night's ground: 3.28:1 at rest and 3.03:1 at
+  its worst, the least of any line the mood's jobs read. It passes, on a
+  thin margin; a token (`--s-muted`) would follow the mood. Not changed:
+  it is a shipped look's sheet, and moving its ink is the owner's call.
 - **No fixture paints the quote face's borrowed-token warning** (the private
   look at 0x04's 8g4 critic, 2026-11-11; D-2026-11-11-07). Every quote-face
   fixture uses a token the stall minted, so `div.pay-sub.warn` (the "token
