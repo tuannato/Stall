@@ -15551,7 +15551,7 @@ type MoodArtReport = {
     kinds: { file: number; gradient: number };
     /** The flat rectangles painted in their place. */
     cells: number;
-    /** The distinct stacks this read searched, whole and by the beam (`worstStack`). */
+    /** The distinct stacks this read searched, whole and by the beam (`worstStack`), and the beam's searched again with the wide beam and each it read lower. */
     searches: SearchTally;
     /** What could not be read, each a sentence: the runner refuses the job. */
     refused: string[];
@@ -15574,7 +15574,7 @@ const emptyMoodReport = (worn: boolean, moods: string[]): MoodArtReport => ({
     layers: 0,
     kinds: { file: 0, gradient: 0 },
     cells: 0,
-    searches: { whole: 0, beam: 0 },
+    searches: { whole: 0, beam: 0, wide: { checked: 0, lower: [] } },
     refused: [],
     ms: 0,
 });
@@ -15858,7 +15858,8 @@ async function flattenMoodArt(
     }
     if (report.refused.length > before) return;
     const base = overRgba(bg, [ground[0], ground[1], ground[2], 1]);
-    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]), stackSearches, `${text.join(',')}|${base.join(',')}`, report.searches);
+    // Every stack that goes to the beam is searched again with the wide beam, once a page (the cache keeps the lower).
+    const cells = worstCells(painted, judgeFor(text, [base[0], base[1], base[2]]), stackSearches, `${text.join(',')}|${base.join(',')}`, report.searches, true);
     const written: [string, string][] = [
         ['background-image', cells.length === 0 ? 'none' : cells.map((c) => `linear-gradient(${cssOf(c.colour)}, ${cssOf(c.colour)})`).join(', ')],
         ['background-size', cells.length === 0 ? 'auto' : cells.map((c) => `${c.x1 - c.x0}px ${c.y1 - c.y0}px`).join(', ')],
@@ -15889,8 +15890,11 @@ async function moodArtAtItsWorst(jobHeight: number): Promise<MoodArtReport> {
     const report = emptyMoodReport(preparedMood.length > 0, [...preparedMood]);
     if (!report.worn) return report;
     const stalls = [...document.querySelectorAll<HTMLElement>('#app .stall:not(.deck-stall)')];
-    // Counted apart from the read, by another road: every open sheet and every scroll region on the
-    // painted app, whatever stall holds it, is owed a read (the runner holds `elements` to these).
+    // Counted apart from the read: every open sheet and every scroll region on the painted app,
+    // whatever stall holds it, is owed a read (the runner holds `elements` to these). Not a second
+    // road: the same `.sheet` and `.stall-scroll` class queries as the read, only scoped to `#app`
+    // rather than to each stall, so a sheet or a region outside every stall is caught here and a
+    // class renamed is not; the tracked fixture's owes are what catch that (the re-check's P3-2).
     report.present.sheet = [...document.querySelectorAll('#app .sheet')].filter((n) => n.closest('.deck-stall') === null).length;
     report.present.region = [...document.querySelectorAll('#app .stall-scroll')].filter((n) => n.closest('.deck-stall') === null).length;
     const grew = Math.max(0, window.innerHeight - jobHeight);
@@ -15931,6 +15935,17 @@ window.__moodArtHeld = () => moodWritesHeld(moodWrites);
  * it black, or the run fails. A flatten that writes nothing, writes where
  * no pixel shows, or reads the band wrong, reads white there; and the
  * planted write is read back like a job's (`moodWritesHeld`).
+ *
+ * **What it covers, stated** (the re-check's P3-3): one kind of layer on one
+ * kind of element — a gradient on a stall-root-like box, its band along y —
+ * so it shows the flatten writes, writes where it read, and widens a still
+ * tile down its scroller's range. It does not cover a file rasterised and
+ * read back, the sheet's and the scroll region's roads, a band along x, the
+ * stack search, or that the cells line up with what the page paints: those
+ * rest on the tracked fixture's owes (its mood jobs owe file layers, painted
+ * cells, a layer read on every open sheet and every region, and a sheet and a
+ * region read with a layer, `moodEcho`) and on the plants made once and
+ * written down (`layout/PROBE-RULES.md`, "Step 8i, B").
  */
 let moodPlant: HTMLElement | undefined;
 window.__moodSelfCheck = async (on: boolean) => {

@@ -61,7 +61,14 @@
  * seeded small stacks it misses the whole search on some (`moodArt.test.ts`;
  * the critic's beam6 case, which a beam of the lowest twelve alone missed,
  * both read right), so the probe counts the stacks it searched each way and
- * the runner prints them. Every layer is
+ * the runner prints them. **And the probe searches every stack that went to
+ * the beam again, once a page, with a beam of `WIDE_BEAM`** (the mood-flatten
+ * re-check's P3-1, the still-painter step): where the wide beam reads lower,
+ * the narrow one missed that stack's worst, so the lower of the two is the
+ * one painted, and the miss is counted and printed (`SearchTally.wide`). It
+ * is not a failure: a miss says the search was short, not that a line fails,
+ * and a line on the lower ground is read like any other. The wide beam is a
+ * search too. Every layer is
  * taken to reach any phase of every other — two tiles whose periods share
  * nothing meet in every combination somewhere on a long page — which is
  * conservative where layers are drawn to avoid each other. The root's, an
@@ -139,6 +146,9 @@ export const BEAM = 12;
 
 /** Up to this many combinations of one colour a layer, a stack is searched whole (`exhaustiveStack`; pinned by value). */
 export const EXHAUSTIVE_LIMIT = 200_000;
+
+/** The beam every stack that went to the beam is searched again with, once a page (`worstStack`'s `checkWide`; pinned by value). */
+export const WIDE_BEAM = 256;
 
 /** `src` over `dst`, straight alpha, source-over in sRGB, as a browser composites background layers. */
 export function overRgba(src: Rgba, dst: Rgba): Rgba {
@@ -563,15 +573,36 @@ const keyOf = (c: Rgba): string => (c[3] <= 0 ? 'clear' : `${c[0].toFixed(1)},${
  * `EXHAUSTIVE_LIMIT` combinations of one colour a layer, otherwise by the
  * beam — a search, not a proof (the module's docblock).
  */
-/** How many distinct stacks a read searched whole, and how many by the beam. */
-export type SearchTally = { whole: number; beam: number };
+/** One stack the beam of `BEAM` read higher than the beam of `WIDE_BEAM`: its layers, its combinations, and what the judge read on each. */
+export type BeamMiss = { layers: number; combinations: number; narrow: number; wide: number };
 
-export function worstStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba) => number, tally?: SearchTally): Rgba {
+/**
+ * How many distinct stacks a read searched whole, and how many by the beam;
+ * with `checkWide`, how many of the beam's it searched again with the wide
+ * beam, and each the wide one read lower (`BeamMiss`).
+ */
+export type SearchTally = { whole: number; beam: number; wide?: { checked: number; lower: BeamMiss[] } };
+
+/** Below this, two reads of the judge are the same read (one composite, two searches). */
+const SAME_READ = 1e-9;
+
+export function worstStack(stack: readonly (readonly Rgba[])[], judge: (c: Rgba) => number, tally?: SearchTally, checkWide = false): Rgba {
     let combinations = 1;
     for (const colours of stack) combinations *= Math.max(1, colours.length);
     const whole = combinations <= EXHAUSTIVE_LIMIT;
     if (tally !== undefined) tally[whole ? 'whole' : 'beam'] += 1;
-    return whole ? exhaustiveStack(stack, judge) : beamStack(stack, judge);
+    if (whole) return exhaustiveStack(stack, judge);
+    const narrow = beamStack(stack, judge);
+    if (!checkWide) return narrow;
+    // Searched again with the wide beam: the lower of the two is the stack's worst this read found.
+    const wide = beamStack(stack, judge, WIDE_BEAM);
+    const [n, w] = [judge(narrow), judge(wide)];
+    if (tally !== undefined) {
+        const t = (tally.wide ??= { checked: 0, lower: [] });
+        t.checked += 1;
+        if (w < n - SAME_READ) t.lower.push({ layers: stack.length, combinations, narrow: n, wide: w });
+    }
+    return w < n ? wide : narrow;
 }
 
 /** Every combination of one colour a layer, composited bottom to top; the one `judge` reads lowest. */
@@ -665,6 +696,7 @@ export function worstCells(
     memo: Map<string, Rgba> = new Map(),
     judgeKey = '',
     tally?: SearchTally,
+    checkWide = false,
 ): Cell[] {
     const xs = new Set<number>();
     const ys = new Set<number>();
@@ -700,7 +732,7 @@ export function worstCells(
             const key = `${judgeKey}\n${sign.join('\n')}`;
             let colour = memo.get(key);
             if (colour === undefined) {
-                colour = worstStack(stack, judge, tally);
+                colour = worstStack(stack, judge, tally, checkWide);
                 memo.set(key, colour);
             }
             if (colour[3] > 0) cells.push({ x0, x1, y0, y1, colour });

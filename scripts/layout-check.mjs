@@ -1466,7 +1466,8 @@ function moodEcho(out) {
         why.push('the paint wears a mood and its flattening read no stall root (a-mood-art-layer-is-read-at-its-worst)');
     }
     if (art.worn) {
-        // Every open sheet and scroll region the page counted by another road was read.
+        // Every open sheet and scroll region the page counted was read (the same class queries as
+        // the read, scoped to the whole app: a renamed class is the fixture owes' to catch).
         for (const kind of ['sheet', 'region']) {
             const [present, read] = [art.present?.[kind], art.elements?.[kind] ?? 0];
             if (typeof present !== 'number') {
@@ -5726,12 +5727,14 @@ try {
             const lower = (a, b, key) => (b === undefined ? a : a === undefined || b.worst < a.worst ? { ...b, key } : a);
             for (const j of moodJobs) {
                 const at = `${j.cls} ${j.variant}`;
-                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, ms: 0, sheet: 0, region: 0, whole: 0, beam: 0, least: undefined, leastLine: undefined };
+                const t = byLook.get(at) ?? { jobs: 0, layers: 0, file: 0, gradient: 0, cells: 0, ms: 0, sheet: 0, region: 0, whole: 0, beam: 0, wideChecked: 0, wideLower: [], least: undefined, leastLine: undefined };
                 t.jobs += 1;
                 t.sheet += j.byKind?.sheet?.layers ?? 0;
                 t.region += j.byKind?.region?.layers ?? 0;
                 t.whole += j.searches?.whole ?? 0;
                 t.beam += j.searches?.beam ?? 0;
+                t.wideChecked += j.searches?.wide?.checked ?? 0;
+                for (const miss of j.searches?.wide?.lower ?? []) t.wideLower.push({ ...miss, key: j.key });
                 t.ms += j.ms;
                 t.layers += j.layers;
                 t.file += j.kinds.file;
@@ -5746,9 +5749,20 @@ try {
             for (const [at, t] of [...byLook].sort((a, b) => a[0].localeCompare(b[0]))) {
                 console.log(
                     `    ${at}: ${t.jobs} job(s), ${t.layers} layer(s) flattened (file ${t.file}, gradient ${t.gradient}; on a sheet ${t.sheet}, on a region ${t.region}) into ${t.cells} rectangle(s); ` +
-                        `stacks searched whole ${t.whole}, by the beam ${t.beam} (new to the page's cache); ` +
+                        `stacks searched whole ${t.whole}, by the beam ${t.beam} (new to the page's cache), of them searched again with a beam of 256 ${t.wideChecked}, read lower by it ${t.wideLower.length}; ` +
                         `least read ${said(t.least)}; least line read ${said(t.leastLine)} · ${(t.ms / 1000).toFixed(2)}s of tab time (the last prepare's)`,
                 );
+            }
+            // A beam stack the wide beam read lower: the narrow beam missed its worst, and the
+            // lower was painted (`worstStack`); said, never failed — a miss is a short search,
+            // and the job's lines are read on the lower ground like any other.
+            const misses = [...byLook.values()].flatMap((t) => t.wideLower);
+            if (misses.length > 0) {
+                console.log(`  a-mood-art-layer-is-read-at-its-worst: ${misses.length} stack(s) the beam of 12 read higher than the beam of 256, each painted at the lower:`);
+                for (const m of misses.slice(0, 12)) {
+                    console.log(`    ${m.key}: ${m.layers} layer(s), ${m.combinations} combination(s), the beam of 12 read ${m.narrow.toFixed(3)}:1 and the beam of 256 ${m.wide.toFixed(3)}:1`);
+                }
+                if (misses.length > 12) console.log(`    … and ${misses.length - 12} more`);
             }
         }
         if (horizonUnread.length > 0) {
