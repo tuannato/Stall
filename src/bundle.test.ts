@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build, type PluginOption } from 'vite';
@@ -7,6 +7,10 @@ import { loadKitLook } from '../layout/workshopKit';
 import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
 import { guardSheets, privateLookReads, privateRows, type PrivateLookRead } from '../scripts/served-sheets.mjs';
+import { OG_CARD_MAX_BYTES, ogCardPath, ogCardProblems } from '../scripts/og-card.mjs';
+import { deflateSync } from 'node:zlib';
+import { ogImageFor } from '../functions/lib/unfurl';
+import { embedImagePath } from './domain/embed';
 import { gitCommitOf, gitFilesAt, gitTextAt, publicLookFacts, type PublicLookFacts } from '../scripts/private-looks.mjs';
 import { wornSheets } from '../scripts/sheet-roles.mjs';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV, selectionFromEnv, withoutSelection } from '../scripts/looks-selection.mjs';
@@ -25,7 +29,7 @@ import {
     type WeightBuckets,
 } from '../scripts/weight-buckets.mjs';
 import { attachmentsForTheme } from './domain/attachments';
-import { OVER_TARGET_LOOK_IDS, SHIPPED_THEMES, decodeTheme } from './domain/theme';
+import { OVER_TARGET_LOOK_IDS, PRIVATE_LOOK_IDS, SHIPPED_THEMES, decodeTheme } from './domain/theme';
 
 /** This checkout's root. */
 const ROOT = join(import.meta.dirname, '..');
@@ -375,7 +379,7 @@ describe('on-demand-weight-has-a-ceiling', () => {
         expect(buckets.onDemand.files.filter((name) => name.endsWith('.woff2')).length, 'the faces are on demand').toBe(8);
         expect(buckets.onDemand.bytes, 'nothing was measured').toBeGreaterThan(100_000);
         const worn = Object.values(buckets.worn).reduce((sum, bucket) => sum + bucket.bytes, 0);
-        expect(buckets.everyVisitor.bytes + buckets.onDemand.bytes + worn, 'a file fell out of every bucket').toBe(
+        expect(buckets.everyVisitor.bytes + buckets.onDemand.bytes + buckets.cards.bytes + worn, 'a file fell out of every bucket').toBe(
             parts.reduce((sum, part) => sum + bytesOf(part), 0),
         );
         console.log(
@@ -429,6 +433,7 @@ describe('every-emitted-file-is-in-one-weight-bucket', () => {
             const all = [
                 ...buckets.everyVisitor.files,
                 ...buckets.onDemand.files,
+                ...buckets.cards.files,
                 ...Object.values(buckets.worn).flatMap((bucket) => bucket.files),
             ];
             expect(new Set(all).size, 'a file is in two buckets').toBe(all.length);
@@ -1007,6 +1012,8 @@ describe('each-look-keeps-its-art-budget', () => {
         const fixture = gitFilesAt({ dir: ROOT, commit: head, prefix: FIXTURE_LOOKS_DIR }).filter((file) => file.path.startsWith('fixture/'));
         const other: Record<string, string> = {};
         for (const { path } of fixture) {
+            // The other look holds no og.png (8j): it emits no card.
+            if (path.endsWith('.png')) continue;
             const text = gitTextAt({ dir: ROOT, commit: head, prefix: FIXTURE_LOOKS_DIR, path })
                 .replaceAll('t-fixture-private', 't-other-look')
                 .replaceAll('att-fixture-', 'att-other-')
@@ -1034,6 +1041,7 @@ describe('each-look-keeps-its-art-budget', () => {
             expect(buckets.worn[look.entry.cls], `${look.entry.cls} has no worn bucket`).toBeDefined();
         }
         expect(buckets.onDemand).toEqual(publicOnDemand);
+        expect(buckets.cards.files, 'one look holds a card and one does not: one card is emitted').toEqual(['og/look-04.png']);
 
         const one = weightBuckets(parts, { worn: [...WORN, ...wornOf(carried.filter((look) => look.entry.cls === PLANTED_CLASS))] });
         expect(one.onDemand.files, 'the other look was not on demand under the old worn list').toContain(buckets.worn['t-other-look']!.sheet);
@@ -1093,6 +1101,158 @@ describe('each-look-keeps-its-art-budget', () => {
         const heavy = lookArtBudget({ sheet, sheetFile: 'assets/look.css', files, rows });
         expect(heavy.total, 'a 600 KB look is under the cap').toBeGreaterThan(LOOK_ART_CAP_GZIP);
         expect(lookBudgetVerdict({ look: 't-x', total: heavy.total, reason: REASON }).state).toBe('over-cap');
+    });
+});
+
+/** Every file under `dir`. */
+function walk(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name);
+        return statSync(path).isDirectory() ? walk(path) : [path];
+    });
+}
+
+describe('each-private-look-card-has-a-ceiling', () => {
+    /*
+     * A private look's og card (step 8j; STEP-8-PLAN §4.9): `<slug>/og.png`,
+     * emitted by a build that carries the look at `og/look-<id>.png`, byte for
+     * byte. The ceiling is `OG_CARD_MAX_BYTES`, 250,000: the owner's approval
+     * of about 250 KB for a card on 2026-09-26, re-homed to that constant by
+     * §4.9. No visitor's page loads a card (only an unfurler fetches it), so
+     * it is filed in neither the every-visitor nor the on-demand bucket
+     * (`buckets.cards`) and spends neither ceiling. Every private look a run
+     * reads that holds an `og.png` is held to the ceiling, to a 1200x630 PNG,
+     * and — on a deploy build of its selection — the emitted card is those
+     * same bytes. The tracked fixture holds a flat card (1,606 bytes,
+     * `scripts/fixture-og-card.mjs`) so the test has a public subject; a
+     * selected look with no card is said, not skipped in silence.
+     */
+    it('holds every card a run reads to the ceiling, and the emitted card to the same bytes', async () => {
+        const rows = privateRows(await guardSheets());
+        const reads = [...new Map(rows.map((row) => [row.look.entry.cls, row.look])).values()];
+        expect(reads.some((look) => look.source === 'fixture' && look.og !== undefined), 'the fixture holds a card').toBe(true);
+        const selected = selectionFromEnv(process.env);
+        const built = new Set<string>();
+        for (const look of reads) {
+            if (look.og === undefined) {
+                console.log(`og card · ${look.entry.cls}: no og.png read for it`);
+                continue;
+            }
+            expect(ogCardProblems(look.og), `${look.entry.cls}: its og.png`).toEqual([]);
+            expect(look.og.length, `${look.entry.cls}: its og.png is ${look.og.length} bytes`).toBeLessThanOrEqual(OG_CARD_MAX_BYTES);
+            const selection =
+                look.source === 'fixture' || selected === undefined
+                    ? { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR, [SELECTION_ENV.commit]: look.commit }
+                    : { [SELECTION_ENV.target]: selected.target, [SELECTION_ENV.dir]: selected.dir, [SELECTION_ENV.commit]: look.commit };
+            const key = JSON.stringify(selection);
+            const parts = await deployParts(selection);
+            const card = parts.find((part) => part.fileName === ogCardPath(look.entry.id));
+            expect(card, `${look.entry.cls}: the deploy build emitted no ${ogCardPath(look.entry.id)}`).toBeDefined();
+            expect(Buffer.from(card!.source as Uint8Array).equals(look.og), `${look.entry.cls}: the emitted card is not the og.png git holds`).toBe(true);
+            expect(card!.source!.length).toBeLessThanOrEqual(OG_CARD_MAX_BYTES);
+            // Its bucket: the cards', and no other; the two public ceilings stay true.
+            const buckets = weightBuckets(parts, { worn: [...WORN, ...wornOf(await carriedLooks(selection))] });
+            expect(buckets.problems, key).toEqual([]);
+            expect(buckets.cards.files, key).toContain(card!.fileName);
+            expect(buckets.onDemand.files, key).not.toContain(card!.fileName);
+            expect(buckets.everyVisitor.files, key).not.toContain(card!.fileName);
+            expect(buckets.everyVisitor.bytes).toBeLessThan(EVERY_VISITOR_CEILING_BYTES);
+            expect(onDemandFaults(buckets)).toEqual([]);
+            console.log(`og card · ${look.entry.cls}: ${figure(look.og.length)} bytes against ${figure(OG_CARD_MAX_BYTES)}, emitted at ${card!.fileName}`);
+            built.add(key);
+        }
+        expect(built.size, 'no deploy build was made').toBeGreaterThan(0);
+    }, 180_000);
+
+    it('refuses a card over the ceiling, a card of the wrong size and a file that is no PNG', () => {
+        const flat = readFileSync(join(FIXTURE_LOOKS_DIR, 'fixture/og.png'));
+        expect(ogCardProblems(flat)).toEqual([]);
+        expect(ogCardProblems(Buffer.concat([flat, Buffer.alloc(OG_CARD_MAX_BYTES)]))).toEqual(expect.arrayContaining([expect.stringMatching(/over the 250000-byte ceiling/)]));
+        const wrong = Buffer.from(flat);
+        wrong.writeUInt32BE(1199, 16);
+        expect(ogCardProblems(wrong)).toEqual(expect.arrayContaining([expect.stringMatching(/1199x630/)]));
+        expect(ogCardProblems(Buffer.from('<svg/>'.repeat(10)))).toEqual([expect.stringMatching(/not a PNG/)]);
+        expect(OG_CARD_MAX_BYTES, 'the owner\'s ~250 KB').toBe(250_000);
+    });
+
+    it('the-edge-never-names-a-look-card: ogImageFor and embedImagePath answer Modern\'s card for every reserved id, and no edge file names og/look-', () => {
+        for (const id of PRIVATE_LOOK_IDS) {
+            expect(ogImageFor(id), `ogImageFor(${id})`).toBe('/og/stall-modern.png');
+            expect(embedImagePath(id), `embedImagePath(${id})`).toBe('/og/stall-modern.png');
+        }
+        const sources = [...walk(join(__dirname, '..', 'functions')), join(__dirname, 'ui', 'render.ts'), join(__dirname, 'domain', 'theme.ts'), join(__dirname, 'domain', 'embed.ts')];
+        for (const file of sources.filter((path) => /\.(ts|mjs|js)$/.test(path) && !/\.test\./.test(path))) {
+            const text = readFileSync(file, 'utf8');
+            expect(text, `${file} names og/look-: step 9 makes that change on purpose, and decides the card's weight bucket then (the embed sheet will fetch it; on demand has 8,614 bytes of room)`).not.toMatch(/og\/look-/);
+            expect(text, `${file} imports the card's path helper`).not.toMatch(/og-card/);
+        }
+    });
+
+    it('an-og-card-carries-pixels-and-nothing-else', async () => {
+        const flat = readFileSync(join(FIXTURE_LOOKS_DIR, 'fixture/og.png'));
+        expect(ogCardProblems(flat), 'the fixture card').toEqual([]);
+        // Every private look a run reads that holds a card: green, and said.
+        for (const look of new Map(privateRows(await guardSheets()).map((row) => [row.look.entry.cls, row.look])).values()) {
+            if (look.og === undefined) continue;
+            expect(ogCardProblems(look.og), `${look.entry.cls}: its og.png`).toEqual([]);
+            console.log(`og card pixels · ${look.entry.cls} (${look.source}): chunks walked, CRCs and ${1200 * 630} pixels' worth of inflated rows checked`);
+        }
+        // Crafted files, each red.
+        const crc = (buf: Buffer) => {
+            let c = 0xffffffff;
+            for (const b of buf) {
+                c ^= b;
+                for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+            }
+            return (c ^ 0xffffffff) >>> 0;
+        };
+        const chunk = (type: string, data: Buffer, badCrc = false) => {
+            const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+            const out = Buffer.alloc(12 + data.length);
+            out.writeUInt32BE(data.length, 0);
+            body.copy(out, 4);
+            out.writeUInt32BE(badCrc ? 0 : crc(body), 8 + data.length);
+            return out;
+        };
+        const sig = flat.subarray(0, 8);
+        const ihdr = (depth = 8, colour = 0, w = 1200, h = 630) => {
+            const d = Buffer.alloc(13);
+            d.writeUInt32BE(w, 0);
+            d.writeUInt32BE(h, 4);
+            d[8] = depth;
+            d[9] = colour;
+            return chunk('IHDR', d);
+        };
+        const rows = () => {
+            const r = Buffer.alloc(630 * 1201, 0x80);
+            for (let y = 0; y < 630; y++) r[y * 1201] = 0;
+            return r;
+        };
+        const idat = chunk('IDAT', deflateSync(rows()));
+        const iend = chunk('IEND', Buffer.alloc(0));
+        const good = Buffer.concat([sig, ihdr(), idat, iend]);
+        expect(ogCardProblems(good), 'the crafted base is a card').toEqual([]);
+        const red = (name: string, bytes: Buffer, pattern: RegExp) => expect(ogCardProblems(bytes), name).toEqual(expect.arrayContaining([expect.stringMatching(pattern)]));
+        red('header only', flat.subarray(0, 33), /no IDAT|cut short|no IEND/);
+        red('junk with no IDAT or IEND', Buffer.concat([flat.subarray(0, 33), Buffer.alloc(200_000, 0x41)]).subarray(0, 240_000), /cut short|running past|CRC|IDAT|IEND/);
+        red('data after IEND', Buffer.concat([good, Buffer.from('<html>x</html>')]), /bytes after its IEND/);
+        red('a tEXt chunk with a bad CRC', Buffer.concat([sig, ihdr(), chunk('tEXt', Buffer.from('Author\0someone /Users/x'), true), idat, iend]), /bad CRC/);
+        red('a tEXt chunk', Buffer.concat([sig, ihdr(), chunk('tEXt', Buffer.from('Author\0someone')), idat, iend]), /"tEXt" chunk/);
+        red('an APNG acTL chunk', Buffer.concat([sig, ihdr(), chunk('acTL', Buffer.alloc(8)), idat, iend]), /"acTL" chunk/);
+        red('depth 7 with colour type 9', Buffer.concat([sig, ihdr(7, 9), idat, iend]), /bit depth 7 with colour type 9/);
+        red('pixels missing', Buffer.concat([sig, ihdr(), chunk('IDAT', deflateSync(Buffer.alloc(100))), iend]), /inflates to 100 bytes/);
+        red('IDAT that is no zlib', Buffer.concat([sig, ihdr(), chunk('IDAT', Buffer.from('not zlib')), iend]), /does not inflate/);
+        const raw = rows();
+        red('5,000 bytes after the zlib stream', Buffer.concat([sig, ihdr(), chunk('IDAT', Buffer.concat([deflateSync(raw), Buffer.alloc(5000, 0x41)])), iend]), /5000 bytes after its zlib stream/);
+        const badFilter = Buffer.from(raw);
+        for (let y = 0; y < 630; y++) badFilter[y * 1201] = 9;
+        red('filter byte 9 on every row', Buffer.concat([sig, ihdr(), chunk('IDAT', deflateSync(badFilter)), iend]), /filter byte 9 on row 0/);
+        red('pHYs after the IDAT', Buffer.concat([sig, ihdr(), idat, chunk('pHYs', Buffer.alloc(9)), iend]), /pHYs chunk after its IDAT/);
+        red('sRGB twice', Buffer.concat([sig, ihdr(), chunk('sRGB', Buffer.alloc(1)), chunk('sRGB', Buffer.alloc(1)), idat, iend]), /more than one sRGB chunk/);
+        expect(ogCardProblems(Buffer.concat([sig, ihdr(), chunk('pHYs', Buffer.alloc(9)), chunk('sRGB', Buffer.alloc(1)), idat, iend])), 'ancillary chunks in place are fine').toEqual([]);
+        red('no IEND', Buffer.concat([sig, ihdr(), idat]), /no IEND/);
+        red('a second IHDR', Buffer.concat([sig, ihdr(), ihdr(), idat, iend]), /more than one IHDR/);
+        red('interlaced', Buffer.concat([sig, (() => { const c = Buffer.from(ihdr()); c[8 + 12] = 1; c.writeUInt32BE(crc(c.subarray(4, 21)), 21); return c; })(), idat, iend]), /interlaced/);
     });
 });
 
@@ -1244,8 +1404,19 @@ describe('public-weight-has-a-ceiling', () => {
      * `/guide` lines beside it), against 1,107,823 before. Emitting the file from the build instead was weighed and
      * refused: it would move the weight onto the build's ceilings
      * and take every licence change out of the diffs a reviewer reads.
+     *
+     * **Lowered to 1,150,000 with the og card's step (8j, 2026-11-21).** The
+     * 20,000 raised for `licenses.txt` stays: `public/` still holds the file.
+     * What left is 210,000 of the 220,000 raised on 2026-09-22 for the fourth
+     * look's card, which the card never uses: a private look's card lives in
+     * its own repository, is emitted by the build at `og/look-<id>.png` and has
+     * its own ceiling, `OG_CARD_MAX_BYTES` (250,000; STEP-8-PLAN §4.9 re-homed
+     * the approval). `public/` measures 1,137,771 bytes, so 12,229 bytes of
+     * margin stay: deliberately tight again, so the next image is noticed the
+     * day it lands. The paragraphs above are the history of the numbers they
+     * name.
      */
-    const PUBLIC_CEILING_BYTES = 1_360_000;
+    const PUBLIC_CEILING_BYTES = 1_150_000;
 
     function sizeOf(dir: string): number {
         let total = 0;

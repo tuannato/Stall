@@ -24,6 +24,8 @@ export type WeightBuckets = {
     readonly everyVisitor: Bucket;
     readonly worn: Readonly<Record<string, WornBucket>>;
     readonly onDemand: Bucket;
+    /** Private looks' og cards (`og/look-<id>.png`): fetched by an unfurler, in no visitor's bucket. */
+    readonly cards: Bucket;
     readonly problems: readonly string[];
 };
 

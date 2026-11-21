@@ -472,7 +472,8 @@ describe('private-files-are-read-from-git-at-a-commit', () => {
             '"fixture/sheet.css": listed twice in the tree (one name, two entries), which no checkout holds',
         ]);
         // A second `fixture` holding a file the first does not: the file list shows nothing twice.
-        const og = twice('fixture', `100644 blob ${blob('png\n')}\tog.png\n`);
+        // (A file the fixture does not hold: it holds an og.png since 8j, and no fonts.json.)
+        const og = twice('fixture', `100644 blob ${blob('{}\n')}\tfonts.json\n`);
         assert.deepEqual(privateFileProblems(gitFilesAt({ dir: repo.dir, commit: og, env: repo.env })), [], 'the plant: the file list alone sees nothing');
         assert.deepEqual(read(og).problems, ['"fixture": listed twice in the tree (one name, two entries), which no checkout holds']);
         // Two spellings of one name, which a case-insensitive disk holds as one.

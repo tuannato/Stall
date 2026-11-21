@@ -99,6 +99,8 @@ function readLooks({ root, selection, facts, source, git, gitEnv }) {
             lookText,
             look,
             art,
+            // Its og card (8j), when it holds one: the bytes git holds.
+            og: plain.some((file) => file.path === at('og.png')) ? gitBlobAt({ ...read, path: at('og.png') }) : undefined,
             fontsText: plain.some((file) => file.path === at(LOOK_FONTS_FILE)) ? text(at(LOOK_FONTS_FILE)) : undefined,
             // Its guard file (step 8i): the reasons the decor gate reads for
             // its decorations, read beside the faces' and by tests alone

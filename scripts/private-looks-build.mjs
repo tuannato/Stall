@@ -91,7 +91,7 @@
  * (`scripts/looks-artifact.mjs`), which leaves a repository whose one
  * commit carries the pinned tree, never the pinned commit itself — and a
  * harness run says whether the commit it measured is the pinned pair's. A
- * look's og card is 8j's. Node built-ins and one pure `src/domain` module
+ * look's og card is emitted at `og/look-<id>.png` (`scripts/og-card.mjs`, 8j). Node built-ins and one pure `src/domain` module
  * (`moodClass.ts`'s `sameOwner`, loaded by Node's type stripping and by the
  * config bundler); a `.d.mts` beside it. Tests:
  * `scripts/private-looks-build.test.mjs`.
@@ -104,6 +104,7 @@ import { LOOK_FONTS_FILE, lookFaceProblems, lookFontNotices } from './look-faces
 import { packedTreeOf } from './looks-pin.mjs';
 import { FIXTURE_LOOKS_DIR, LOOKS_TARGETS, REQUIRED_ENV, selectionFromEnv, selectionRequired } from './looks-selection.mjs';
 import { noticesWithLookFonts } from './notices-lib.mjs';
+import { ogCardPath, ogCardProblems } from './og-card.mjs';
 import {
     LOOK_COPYRIGHT_LINE,
     PRIVATE_FACE_LICENCE,
@@ -250,6 +251,16 @@ export function readSelectedLooks({ root, selection, facts, validateLook, vars, 
                 art.push({ name, bytes: gitBlobAt({ ...read, path: at(`art/${name}`) }) });
             }
         }
+        // Its og card (8j), when it holds one: a plain blob that is a PNG of
+        // the card's size and weight, emitted by this plugin's
+        // `generateBundle` at `og/look-<id>.png`, byte for byte.
+        let og;
+        if (files.some((file) => file.path === at('og.png') && file.mode === PRIVATE_FILE_MODE)) {
+            og = gitBlobAt({ ...read, path: at('og.png') });
+            for (const why of ogCardProblems(og)) {
+                problems.push(`${at('og.png')}: ${why}`);
+            }
+        }
         // Its faces: each named in fonts.json with the OFL text beside it,
         // served, and presenting no name its licence reserves
         // (`scripts/look-faces.mjs`) — what the deploy build's notices say.
@@ -301,7 +312,7 @@ export function readSelectedLooks({ root, selection, facts, validateLook, vars, 
                 problems.push(`${entry.slug}: its art budget could not be read (${error.message})`);
             }
         }
-        looks.push({ entry, lookText, sheet, art, fonts });
+        looks.push({ entry, lookText, sheet, art, fonts, og });
     }
     problems.push(...sharedRowClasses(looks));
     problems.push(...crossSheetProblems({ root, looks, vars }));
@@ -524,6 +535,7 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
     let selection;
     let entries = [];
     let carried = [];
+    let cards = [];
     let publicDir;
     let written;
     const cleanup = () => {
@@ -554,6 +566,7 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
             wrote = false;
             entries = [];
             carried = [];
+            cards = [];
             selection = undefined;
             if (env.VITEST !== undefined) {
                 return;
@@ -576,6 +589,7 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
             written = mkdtempSync(join(tmpdir(), MATERIALISED_PREFIX));
             entries = materialise(looks, written);
             carried = looks.map((look) => ({ fonts: look.fonts }));
+            cards = looks.filter((look) => look.og !== undefined).map((look) => ({ fileName: ogCardPath(look.entry.id), source: look.og }));
             process.stderr.write(
                 `private looks: this ${selection.target} build carries ${looks.map((look) => look.entry.slug).join(', ')} (private commit ${commit.slice(0, 12)}, tree ${packedTree.slice(0, 12)})\n`,
             );
@@ -602,6 +616,11 @@ export function privateLooksPlugin({ facts, validateLook, vars, env = process.en
             order: 'post',
             handler(_options, bundle) {
                 stampCarriedSheets(bundle, entries);
+                // A carried look's og card (8j): the bytes git holds, at a
+                // name of their own. A build that carries no card emits none.
+                for (const card of cards) {
+                    this.emitFile({ type: 'asset', fileName: card.fileName, source: card.source });
+                }
             },
         },
         writeBundle() {

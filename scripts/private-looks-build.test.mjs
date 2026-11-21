@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { artNamedBy, checkDist, copyrightLines, distFiles, distLooksProblems, entryCss, lookSheetNames } from './check-dist-looks.mjs';
+import { OG_CARD_MAX_BYTES, ogCardPath } from './og-card.mjs';
 import { HARNESS_LOOK_CLASSES, LOOK_COPYRIGHT_LINE, publicLookFacts } from './private-looks.mjs';
 import {
     FIXTURE_LOOKS_DIR,
@@ -128,6 +129,10 @@ function plantRepo(edit = (_path, text) => text) {
     for (const path of trackedFixturePaths()) {
         mkdirSync(join(dir, dirname(path)), { recursive: true });
         // As HEAD holds it: the commit the build and the guards read the fixture at.
+        if (path.endsWith('.png')) {
+            writeFileSync(join(dir, path), execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT }));
+            continue;
+        }
         const text = execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT, encoding: 'utf8' }).replaceAll('t-fixture-private', 't-planted-look');
         writeFileSync(join(dir, path), edit(path, text));
     }
@@ -156,6 +161,8 @@ function build(outDir, selection = {}) {
 }
 
 const FIXTURE = { [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR };
+/** The tracked fixture's og card, as git holds it. */
+const FIXTURE_OG = readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/og.png'));
 /**
  * What the build's stderr line names for the fixture at HEAD: its commit and
  * its packed tree — the fixture's subtree, read here by git itself (the
@@ -441,6 +448,25 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
         }
     });
 
+    it('fails on an og.png that is no PNG, is the wrong size or is over the ceiling, and carries a good one as git holds it', () => {
+        const withCard = (bytes) => {
+            const repo = plantRepo();
+            writeFileSync(join(repo.dir, 'fixture/og.png'), bytes);
+            repo.git('commit', '-q', '-am', 'card');
+            return repo;
+        };
+        assert.throws(() => readPlanted(withCard(Buffer.from('not a png'))), /fixture\/og\.png: is not a PNG/);
+        const small = Buffer.from(FIXTURE_OG);
+        small.writeUInt32BE(630, 16);
+        assert.throws(() => readPlanted(withCard(small)), /fixture\/og\.png: is 630x630, where a card is 1200x630/);
+        assert.throws(() => readPlanted(withCard(Buffer.concat([FIXTURE_OG, Buffer.alloc(OG_CARD_MAX_BYTES)]))), /fixture\/og\.png: is \d+ bytes, over the 250000-byte ceiling/);
+        assert.ok(readPlanted(plantRepo()).looks[0].og.equals(FIXTURE_OG), 'the card is the bytes git holds');
+        const none = plantRepo();
+        none.git('rm', '-q', 'fixture/og.png');
+        none.git('commit', '-q', '-m', 'no card');
+        assert.equal(readPlanted(none).looks[0].og, undefined, 'a look with no og.png reads none');
+    });
+
     it('reads this checkout’s tracked fixture at HEAD, as a build and public CI do', () => {
         const read = readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts, validateLook, vars });
         assert.deepEqual(read.looks.map((look) => look.entry.cls), ['t-fixture-private']);
@@ -572,7 +598,8 @@ describe('a-private-row-class-is-its-looks-own', () => {
                   )
                 : text,
         );
-        for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/'))) {
+        // The other look holds no og.png (8j): it emits no card.
+        for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/') && !p.endsWith('.png'))) {
             const to = join(repo.dir, path.replace(/^fixture\//, 'other/'));
             mkdirSync(dirname(to), { recursive: true });
             let text = execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT, encoding: 'utf8' })
@@ -905,6 +932,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             const look = {
                 cls: 't-fixture-private',
                 slug: 'fixture',
+                id: 4,
+                og: FIXTURE_OG,
                 art: fixtureArt(),
                 named: new Set(fixtureArt().map((file) => file.name)),
             };
@@ -921,6 +950,53 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             assert.ok(problems.some((p) => /its sheet names .* which is not in the dist/.test(p)), problems.join('\n'));
             assert.ok(problems.some((p) => /art\/ground\.svg is named by its sheet and is not in the dist/.test(p)), problems.join('\n'));
             assert.ok(sheetPath.startsWith('assets/'));
+        });
+
+        /**
+         * The og card (8j, `scripts/og-card.mjs`): a carried look holding
+         * `og.png` has exactly one `og/look-<id>.png`, byte for byte, and a
+         * look the build does not carry has none. Red: missing, doubled, a
+         * byte changed, a card for a look not carried, over the ceiling, the
+         * wrong size.
+         */
+        it('an-og-card-is-where-it-belongs-and-nowhere-else', () => {
+            const base = distFiles(previewDist);
+            const at = ogCardPath(4);
+            assert.equal(at, 'og/look-04.png');
+            assert.ok(base.get(at)?.equals(FIXTURE_OG), 'a preview build of the fixture emits its card, byte for byte');
+            assert.ok(![...distFiles(publicDist).keys()].some((path) => path.startsWith('og/look-')), 'the public build emits no look card');
+            const look = { cls: 't-fixture-private', slug: 'fixture', id: 4, og: FIXTURE_OG, art: fixtureArt(), named: new Set(fixtureArt().map((file) => file.name)) };
+            const check = (files, over = {}) => distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [look], excluded: [], ...over });
+            assert.deepEqual(check(base), []);
+            const without = new Map(base);
+            without.delete(at);
+            assert.ok(check(without).some((p) => /its og card og\/look-04\.png is not in the dist/.test(p)), 'missing');
+            const doubled = new Map(base).set('og/look-04-copy.png', FIXTURE_OG).set('assets/card.png', FIXTURE_OG);
+            assert.ok(check(doubled).some((p) => /assets\/card\.png holds its og card again/.test(p)), 'doubled');
+            const flipped = Buffer.from(FIXTURE_OG);
+            flipped[flipped.length - 20] ^= 1;
+            const changed = new Map(base).set(at, flipped);
+            assert.ok(check(changed).some((p) => /is not the og\.png git holds, byte for byte/.test(p)), 'a byte changed');
+            const other = new Map(base).set('og/look-05.png', FIXTURE_OG);
+            assert.ok(check(other).some((p) => /^og\/look-05\.png: an og card for a look this build carries no card for/.test(p)), 'a card for an unknown look');
+            const notCarried = { cls: 't-other', slug: 'other', id: 5, og: undefined, art: [], named: new Set() };
+            const asExcluded = check(other, { excluded: [notCarried] });
+            assert.ok(asExcluded.some((p) => /^other: og\/look-05\.png is in the dist, and this build does not carry the look/.test(p)), asExcluded.join('\n'));
+            // An excluded look's card by bytes, standing under another name (production's guard at step 9).
+            const byBytes = check(new Map(base).set('assets/some-card.png', FIXTURE_OG), { included: [], excluded: [{ cls: 't-other', slug: 'other', id: 5, og: FIXTURE_OG, art: [], named: new Set() }] });
+            assert.ok(byBytes.some((p) => /^other: assets\/some-card\.png is its og card, and this build does not carry the look/.test(p)), byBytes.join('\n'));
+            // A look with no id is refused outright, not skipped.
+            assert.throws(() => check(base, { excluded: [{ cls: 't-other', slug: 'other', art: [], named: new Set() }] }), /other has no id/);
+            const noCard = check(base, { included: [{ ...look, og: undefined }] });
+            assert.ok(noCard.some((p) => /fixture: og\/look-04\.png is in the dist, and the look holds no og\.png/.test(p)), 'a card for a look with none');
+            // The ceiling and the size, on the built file as well as at the read.
+            const fat = Buffer.concat([FIXTURE_OG, Buffer.alloc(OG_CARD_MAX_BYTES)]);
+            const heavy = check(new Map(base).set(at, fat), { included: [{ ...look, og: fat }] });
+            assert.ok(heavy.some((p) => /over the 250000-byte ceiling/.test(p)), heavy.join('\n'));
+            const small = Buffer.from(FIXTURE_OG);
+            small.writeUInt32BE(600, 20);
+            const wrong = check(new Map(base).set(at, small), { included: [{ ...look, og: small }] });
+            assert.ok(wrong.some((p) => /is 1200x600, where a card is 1200x630/.test(p)), wrong.join('\n'));
         });
 
         /**
@@ -942,6 +1018,8 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             const look = {
                 cls: 't-fixture-private',
                 slug: 'fixture',
+                id: 4,
+                og: FIXTURE_OG,
                 art: fixtureArt(),
                 named: new Set(fixtureArt().map((file) => file.name)),
             };
@@ -989,7 +1067,7 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
                 ([path, bytes]) => path.endsWith('.css') && lookSheetNames(bytes.toString('utf8')).includes('t-fixture-private'),
             );
             const ground = Buffer.from(sanitizeSvg(readFileSync(join(ROOT, FIXTURE_LOOKS_DIR, 'fixture/art/ground.svg'), 'utf8')).svg);
-            const look = { cls: 't-fixture-private', slug: 'fixture', art: [{ name: 'ground.svg', bytes: ground }], named: new Set(['ground.svg']) };
+            const look = { cls: 't-fixture-private', slug: 'fixture', id: 4, og: FIXTURE_OG, art: [{ name: 'ground.svg', bytes: ground }], named: new Set(['ground.svg']) };
             const check = (files, over = {}) => distLooksProblems({ files, shippedClasses: shipped, included: [look], excluded: [], ...over });
             const decor = [...base.keys()].find((path) => /^assets\/rain-near-.*\.svg$/.test(path));
             assert.ok(decor !== undefined, 'a shipped decoration is in the build to stray to');
@@ -1195,7 +1273,7 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
         it('the-dist-check-holds-the-copyright-line', () => {
             const base = distFiles(previewDist);
             const [[sheetPath, sheetBytes]] = carriedSheets(previewDist);
-            const look = { cls: 't-fixture-private', slug: 'fixture', art: [], named: new Set() };
+            const look = { cls: 't-fixture-private', slug: 'fixture', id: 4, og: FIXTURE_OG, art: [], named: new Set() };
             // Art held aside: what this case reads is the line alone.
             const check = (files) =>
                 distLooksProblems({ files, shippedClasses: facts.shippedClasses, included: [look], excluded: [] }).filter((p) => /copyright line/.test(p));
