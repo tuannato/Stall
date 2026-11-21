@@ -144,13 +144,14 @@ function fixtureAtHead() {
  * that answers `undefined` for a path leaves that file out (a look with no
  * `guard.json`, step 8i).
  */
-export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fixture' } = {}) {
+export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fixture', withoutCard = false } = {}) {
     const files = {};
     for (const file of fixtureAtHead()) {
         const path = file.path.startsWith('fixture/') ? `${slug}/${file.path.slice('fixture/'.length)}` : file.path;
         if (file.bytes !== undefined) {
-            const edited = edit(path, file.bytes);
-            if (edited !== undefined) files[path] = edited;
+            // Bytes are no text for an `edit` written for text: kept as git
+            // holds them, or left out with `withoutCard`.
+            if (!withoutCard) files[path] = file.bytes;
             continue;
         }
         let text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
