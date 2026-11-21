@@ -147,6 +147,16 @@ working accept, and there is no accept.
 
 ## Decided — do not re-argue
 
+- **The first-fold rule for nodes below the goods binds at the page passes'
+  heights, not below them (owner, 2026-11-21, by recommendation).** It is
+  measured where the billboard paints (844 and 900 tall); on a shorter phone a
+  look's nodes below the goods may fall below the fold on the empty screen,
+  and that is accepted. A look need not cap a node's height on short frames.
+- **A look may keep its nodes below the goods off the wall (owner, 2026-11-21,
+  by recommendation).** The 2026-09-18 ruling that a seller's decorations
+  paint on the wall in full holds otherwise; a look whose rows stand below the
+  goods may hide them under `.shop-window`, until painting them there is
+  designed and measured on every wall pass.
 - **Look files that are not MIT live in a private repository, joined at
   build (owner, 2026-09-28, "option 4"; reaffirmed 2026-10-06).** The public
   repository never tracks them (`src/looks/` and `looks/` are guarded in the
@@ -1111,7 +1121,7 @@ money path this app can have, because nothing on it is derived.
 - **Decoration motion and the probe's reads of it (generic, from the 8i3
   reviews).** (1) Decoration clocks restart on every repaint, so a slow drift,
   a crawling mover or a rain jump begins again; keeping the clocks across
-  repaints, as the marquee does, is the owner's call. (2) The sweep's instants
+  repaints, as the marquee does, was left as is (owner, 2026-11-21). (2) The sweep's instants
   follow the longest animation, so a shorter mover's peak may fall between
   them and be unread. (3) No rule reads a scroll range that changes over time
   (a turned node near a scroller's end). (4) 1b's keyframe seeks fell when a
@@ -2437,8 +2447,8 @@ money path this app can have, because nothing on it is derived.
   body and its footer stand above a node below the goods, and on a short
   phone a node of fixed height worn alone ended a pixel or more past the
   region's showing part at 375x667 and more at 360x640; `sparse` stayed in the
-  fold. Whether the rule binds below 844px of height is the owner's call
-  (a look can cap its node's height on short frames, which the lint allows).
+  fold. Decided 2026-11-21: the rule does not bind below the page
+  passes' heights (§ Decided).
 - **The probe paints rows a look hides on the wall on every wall pass** (the
   8i-2 critic's P3-3). Every non-state screen paints each row alone
   (`wornVariants`), and the nine wall passes paint every row of a carried look
