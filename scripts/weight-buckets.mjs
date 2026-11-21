@@ -24,6 +24,11 @@
  *   not measured in a browser; the weight-buckets critic's item 6). Faces
  *   stay here all the same: `font-display: swap`, so not "before anything
  *   is painted".
+ * - **og cards** (8j) — `og/look-<id>.png`, a carried private look's card
+ *   (`scripts/og-card.mjs`). No page loads it; only an unfurler does, so it
+ *   is neither every-visitor nor on demand (it would spend the on-demand
+ *   ceiling's few thousand bytes of room several times over). Its own
+ *   ceiling is `OG_CARD_MAX_BYTES`, held per card, never summed in.
  *
  * **Never classified by `viteMetadata.importedAssets`** (the step-6 critic):
  * a chunk that imports a sheet as `?url` lists that sheet AND its art among
@@ -64,6 +69,7 @@
  */
 import { gzipSync } from 'node:zlib';
 import { sanitizeSvg } from './svg-allow.mjs';
+import { OG_CARD_PATH } from './og-card.mjs';
 import { budgetReasonProblem } from './private-looks.mjs';
 import { parseSheet, splitTopLevel, urlTargets } from './workshop-css.mjs';
 
@@ -265,6 +271,11 @@ export function weightBuckets(parts, { entryHtml = 'index.html', worn = [] } = {
             }
         }
     }
+    // A look's og card (8j) is fetched by an unfurler and by no visitor's
+    // page, so it is in no visitor's bucket and in none of the on-demand
+    // ceiling: its own, held by `OG_CARD_MAX_BYTES` and the dist check.
+    const cardNames = parts.map((part) => part.fileName).filter((name) => OG_CARD_PATH.test(name));
+    for (const name of cardNames) claim(name, 'og-card');
     for (const [file, owners] of claimedBy) {
         if (owners.size > 1) {
             problems.push(`${file} is in more than one weight bucket: ${[...owners].sort().join(', ')}`);
@@ -282,6 +293,7 @@ export function weightBuckets(parts, { entryHtml = 'index.html', worn = [] } = {
         everyVisitor: { files: ev, bytes: sum(ev) },
         worn: worn_,
         onDemand: { files: onDemand.sort(), bytes: sum(onDemand) },
+        cards: { files: cardNames.sort(), bytes: sum(cardNames) },
         problems,
     };
 }

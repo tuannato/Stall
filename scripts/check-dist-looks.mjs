@@ -42,11 +42,18 @@
  *   same `--look-sheet` this check reads), since Vite's minifier drops every
  *   `/*!` comment.
  *
+ * - **a look's og card is where it belongs and nowhere else** (step 8j):
+ *   a carried look whose repository holds `og.png` has exactly one
+ *   `og/look-<id>.png` in `dist`, byte for byte the card git holds, a PNG of
+ *   the card's size and under its ceiling (`scripts/og-card.mjs`), and no
+ *   other file holds those bytes; a carried look with none has no such file;
+ *   and no `og/look-*.png` stands for a look the build does not carry.
+ *
  * No selection: the build carried no private look, and `dist` may hold no
  * look sheet but the shipped ones. Run by the build itself whenever it
  * selected anything and wrote to the disk (`privateLooksPlugin`'s
  * `closeBundle`), and by hand with the selection the build had. Not checked
- * yet, stated: a look's og card (8j). Pure core
+ * yet, stated: nothing names a card yet (the edge still answers Modern's). Pure core
  * (`distLooksProblems`) over a map of files, so the test plants on it; the
  * CLI reads the disk and git. Test: `the-dist-holds-what-the-index-names`
  * (`scripts/private-looks-build.test.mjs`).
@@ -58,6 +65,7 @@ import { runAsScript } from './run-as-script.mjs';
 import { LOOK_FONTS_FILE, lookFontNotices } from './look-faces.mjs';
 import { selectionFromEnv } from './looks-selection.mjs';
 import { noticedLicence } from './notices-lib.mjs';
+import { OG_CARD_PATH, ogCardPath, ogCardProblems } from './og-card.mjs';
 import { LOOK_COPYRIGHT_LINE, PRIVATE_FACE_LICENCE, PRIVATE_FILE_MODE, gitBlobAt, gitTextAt, publicLookFacts } from './private-looks.mjs';
 import { sanitizeSvg } from './svg-allow.mjs';
 
@@ -277,6 +285,55 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
             }
         }
     }
+    // Og cards (8j): a carried look's card is at its own path, byte for
+    // byte, and the only file with those bytes; no other card stands in dist.
+    const wantedCards = new Map();
+    for (const look of included) {
+        if (look.id === undefined) {
+            continue;
+        }
+        const at = ogCardPath(look.id);
+        if (look.og === undefined) {
+            if (files.has(at)) {
+                problems.push(`${look.slug}: ${at} is in the dist, and the look holds no og.png`);
+            }
+            continue;
+        }
+        wantedCards.set(at, look);
+        const built = files.get(at);
+        if (built === undefined) {
+            problems.push(`${look.slug}: its og card ${at} is not in the dist`);
+            continue;
+        }
+        if (!sameBytes(built, look.og)) {
+            problems.push(`${look.slug}: ${at} is not the og.png git holds, byte for byte`);
+        }
+        for (const why of ogCardProblems(built)) {
+            problems.push(`${look.slug}: ${at} ${why}`);
+        }
+        for (const [path, bytes] of files) {
+            if (path !== at && sameBytes(bytes, look.og)) {
+                problems.push(`${look.slug}: ${path} holds its og card again, where one file does`);
+            }
+        }
+    }
+    for (const look of excluded) {
+        if (look.id !== undefined && files.has(ogCardPath(look.id))) {
+            problems.push(`${look.slug}: ${ogCardPath(look.id)} is in the dist, and this build does not carry the look`);
+        }
+        if (look.og !== undefined) {
+            for (const [path, bytes] of files) {
+                if (sameBytes(bytes, look.og)) {
+                    problems.push(`${look.slug}: ${path} is its og card, and this build does not carry the look`);
+                }
+            }
+        }
+    }
+    for (const path of files.keys()) {
+        if (OG_CARD_PATH.test(path) && !wantedCards.has(path) && !excluded.some((look) => look.id !== undefined && ogCardPath(look.id) === path)) {
+            problems.push(`${path}: an og card for a look this build carries no card for`);
+        }
+    }
     for (const [path, bytes] of files) {
         // The copyright line is a carried look's sheet's alone: no other
         // stylesheet a build emits or copies carries it.
@@ -349,7 +406,9 @@ export function lookFilesOf(read, files, entry) {
     } catch {
         // A fonts.json the build refused never reached a dist; nothing to hold it to.
     }
-    return { cls: entry.cls, slug: entry.slug, art, named, fonts };
+    const ogFile = files.find((file) => file.path === at('og.png') && file.mode === PRIVATE_FILE_MODE);
+    const og = ogFile === undefined ? undefined : gitBlobAt({ ...read, path: ogFile.path });
+    return { cls: entry.cls, slug: entry.slug, id: entry.id, og, art, named, fonts };
 }
 
 /**

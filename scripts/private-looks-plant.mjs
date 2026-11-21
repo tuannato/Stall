@@ -130,10 +130,12 @@ export function removePlants() {
  */
 function fixtureAtHead() {
     const commit = gitCommitOf({ dir: ROOT });
-    return gitFilesAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR }).map(({ path }) => ({
-        path,
-        text: gitTextAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR, path }),
-    }));
+    return gitFilesAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR }).map(({ path }) =>
+        // A PNG (the og card, 8j) is bytes: read as text it is not the file.
+        path.endsWith('.png')
+            ? { path, bytes: gitBlobAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR, path }) }
+            : { path, text: gitTextAt({ dir: ROOT, commit, prefix: FIXTURE_LOOKS_DIR, path }) },
+    );
 }
 
 /**
@@ -146,6 +148,11 @@ export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fix
     const files = {};
     for (const file of fixtureAtHead()) {
         const path = file.path.startsWith('fixture/') ? `${slug}/${file.path.slice('fixture/'.length)}` : file.path;
+        if (file.bytes !== undefined) {
+            const edited = edit(path, file.bytes);
+            if (edited !== undefined) files[path] = edited;
+            continue;
+        }
         let text = file.text.replaceAll('t-fixture-private', PLANTED_CLASS).replaceAll('att-fixture-', PLANTED_ROW_PREFIX);
         if (path === 'index.json') {
             text = text.replace('"slug": "fixture"', `"slug": "${slug}"`);
