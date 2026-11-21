@@ -288,10 +288,12 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
     // Og cards (8j): a carried look's card is at its own path, byte for
     // byte, and the only file with those bytes; no other card stands in dist.
     const wantedCards = new Map();
-    for (const look of included) {
-        if (look.id === undefined) {
-            continue;
+    for (const look of [...included, ...excluded]) {
+        if (!Number.isInteger(look.id)) {
+            throw new TypeError(`distLooksProblems: ${look.slug} has no id, and its og card cannot be placed (a look without one would be skipped, which fails open)`);
         }
+    }
+    for (const look of included) {
         const at = ogCardPath(look.id);
         if (look.og === undefined) {
             if (files.has(at)) {
@@ -318,7 +320,7 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
         }
     }
     for (const look of excluded) {
-        if (look.id !== undefined && files.has(ogCardPath(look.id))) {
+        if (files.has(ogCardPath(look.id))) {
             problems.push(`${look.slug}: ${ogCardPath(look.id)} is in the dist, and this build does not carry the look`);
         }
         if (look.og !== undefined) {
@@ -330,7 +332,7 @@ export function distLooksProblems({ files, shippedClasses, included, excluded, h
         }
     }
     for (const path of files.keys()) {
-        if (OG_CARD_PATH.test(path) && !wantedCards.has(path) && !excluded.some((look) => look.id !== undefined && ogCardPath(look.id) === path)) {
+        if (OG_CARD_PATH.test(path) && !wantedCards.has(path) && !excluded.some((look) => ogCardPath(look.id) === path)) {
             problems.push(`${path}: an og card for a look this build carries no card for`);
         }
     }

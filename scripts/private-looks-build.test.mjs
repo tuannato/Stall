@@ -982,6 +982,11 @@ describe('a-build-with-no-released-look-is-the-public-build', () => {
             const notCarried = { cls: 't-other', slug: 'other', id: 5, og: undefined, art: [], named: new Set() };
             const asExcluded = check(other, { excluded: [notCarried] });
             assert.ok(asExcluded.some((p) => /^other: og\/look-05\.png is in the dist, and this build does not carry the look/.test(p)), asExcluded.join('\n'));
+            // An excluded look's card by bytes, standing under another name (production's guard at step 9).
+            const byBytes = check(new Map(base).set('assets/some-card.png', FIXTURE_OG), { included: [], excluded: [{ cls: 't-other', slug: 'other', id: 5, og: FIXTURE_OG, art: [], named: new Set() }] });
+            assert.ok(byBytes.some((p) => /^other: assets\/some-card\.png is its og card, and this build does not carry the look/.test(p)), byBytes.join('\n'));
+            // A look with no id is refused outright, not skipped.
+            assert.throws(() => check(base, { excluded: [{ cls: 't-other', slug: 'other', art: [], named: new Set() }] }), /other has no id/);
             const noCard = check(base, { included: [{ ...look, og: undefined }] });
             assert.ok(noCard.some((p) => /fixture: og\/look-04\.png is in the dist, and the look holds no og\.png/.test(p)), 'a card for a look with none');
             // The ceiling and the size, on the built file as well as at the read.

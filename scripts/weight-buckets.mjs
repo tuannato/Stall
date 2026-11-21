@@ -25,10 +25,15 @@
  *   stay here all the same: `font-display: swap`, so not "before anything
  *   is painted".
  * - **og cards** (8j) — `og/look-<id>.png`, a carried private look's card
- *   (`scripts/og-card.mjs`). No page loads it; only an unfurler does, so it
- *   is neither every-visitor nor on demand (it would spend the on-demand
+ *   (`scripts/og-card.mjs`). In step 8 no page loads it; only an unfurler
+ *   would, so it is neither every-visitor nor on demand (it would spend the on-demand
  *   ceiling's few thousand bytes of room several times over). Its own
  *   ceiling is `OG_CARD_MAX_BYTES`, held per card, never summed in.
+ *   **This holds in step 8 only**: once `embedImagePath` names a look's card
+ *   (step 9) the Studio's embed sheet and every pasted widget fetch it, as
+ *   they fetch the shipped cards counted in `public/`, and step 9 must decide
+ *   which bucket it belongs in — on demand has 8,614 bytes of room, so
+ *   moving it there is not free.
  *
  * **Never classified by `viteMetadata.importedAssets`** (the step-6 critic):
  * a chunk that imports a sheet as `?url` lists that sheet AND its art among

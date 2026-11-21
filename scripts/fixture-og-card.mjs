@@ -1,6 +1,6 @@
 /**
  * Makes the tracked fixture's og card: a flat 1200x630 PNG (8-bit grey,
- * one colour, deflated), a few hundred bytes. Deterministic: run it again
+ * one colour, deflated), 1,606 bytes. Deterministic: run it again
  * and the bytes are the same.
  *
  *     node scripts/fixture-og-card.mjs
@@ -12,6 +12,7 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runAsScript } from './run-as-script.mjs';
 import { deflateSync } from 'node:zlib';
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -49,7 +50,7 @@ export function flatCard(width = 1200, height = 630, grey = 0x80) {
     ]);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (runAsScript(import.meta.url)) {
     const here = dirname(fileURLToPath(import.meta.url));
     const png = flatCard();
     writeFileSync(join(here, '..', 'layout', 'fixture-private-looks', 'fixture', 'og.png'), png);
