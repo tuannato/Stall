@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build, type PluginOption } from 'vite';
@@ -7,6 +7,7 @@ import { loadKitLook } from '../layout/workshopKit';
 import { KIT_SKELETON } from '../layout/workshopStarter';
 import { PLANTED_CLASS, beforeReduce, plantLooks, removePlants } from '../scripts/private-looks-plant.mjs';
 import { guardSheets, privateLookReads, privateRows, type PrivateLookRead } from '../scripts/served-sheets.mjs';
+import { OG_CARD_MAX_BYTES, ogCardPath, ogCardProblems } from '../scripts/og-card.mjs';
 import { gitCommitOf, gitFilesAt, gitTextAt, publicLookFacts, type PublicLookFacts } from '../scripts/private-looks.mjs';
 import { wornSheets } from '../scripts/sheet-roles.mjs';
 import { FIXTURE_LOOKS_DIR, SELECTION_ENV, selectionFromEnv, withoutSelection } from '../scripts/looks-selection.mjs';
@@ -375,7 +376,7 @@ describe('on-demand-weight-has-a-ceiling', () => {
         expect(buckets.onDemand.files.filter((name) => name.endsWith('.woff2')).length, 'the faces are on demand').toBe(8);
         expect(buckets.onDemand.bytes, 'nothing was measured').toBeGreaterThan(100_000);
         const worn = Object.values(buckets.worn).reduce((sum, bucket) => sum + bucket.bytes, 0);
-        expect(buckets.everyVisitor.bytes + buckets.onDemand.bytes + worn, 'a file fell out of every bucket').toBe(
+        expect(buckets.everyVisitor.bytes + buckets.onDemand.bytes + buckets.cards.bytes + worn, 'a file fell out of every bucket').toBe(
             parts.reduce((sum, part) => sum + bytesOf(part), 0),
         );
         console.log(
@@ -429,6 +430,7 @@ describe('every-emitted-file-is-in-one-weight-bucket', () => {
             const all = [
                 ...buckets.everyVisitor.files,
                 ...buckets.onDemand.files,
+                ...buckets.cards.files,
                 ...Object.values(buckets.worn).flatMap((bucket) => bucket.files),
             ];
             expect(new Set(all).size, 'a file is in two buckets').toBe(all.length);
@@ -1007,6 +1009,8 @@ describe('each-look-keeps-its-art-budget', () => {
         const fixture = gitFilesAt({ dir: ROOT, commit: head, prefix: FIXTURE_LOOKS_DIR }).filter((file) => file.path.startsWith('fixture/'));
         const other: Record<string, string> = {};
         for (const { path } of fixture) {
+            // The other look holds no og.png (8j): it emits no card.
+            if (path.endsWith('.png')) continue;
             const text = gitTextAt({ dir: ROOT, commit: head, prefix: FIXTURE_LOOKS_DIR, path })
                 .replaceAll('t-fixture-private', 't-other-look')
                 .replaceAll('att-fixture-', 'att-other-')
@@ -1034,6 +1038,7 @@ describe('each-look-keeps-its-art-budget', () => {
             expect(buckets.worn[look.entry.cls], `${look.entry.cls} has no worn bucket`).toBeDefined();
         }
         expect(buckets.onDemand).toEqual(publicOnDemand);
+        expect(buckets.cards.files, 'one look holds a card and one does not: one card is emitted').toEqual(['og/look-04.png']);
 
         const one = weightBuckets(parts, { worn: [...WORN, ...wornOf(carried.filter((look) => look.entry.cls === PLANTED_CLASS))] });
         expect(one.onDemand.files, 'the other look was not on demand under the old worn list').toContain(buckets.worn['t-other-look']!.sheet);
@@ -1106,6 +1111,85 @@ describe('each-look-keeps-its-art-budget', () => {
  * gallery is excluded by construction; this reads the emitted output so that a
  * future second entry cannot bring it in silently.
  */
+/** Every file under `dir`. */
+function walk(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name);
+        return statSync(path).isDirectory() ? walk(path) : [path];
+    });
+}
+
+describe('each-private-look-card-has-a-ceiling', () => {
+    /*
+     * A private look's og card (step 8j; STEP-8-PLAN §4.9): `<slug>/og.png`,
+     * emitted by a build that carries the look at `og/look-<id>.png`, byte for
+     * byte. The ceiling is `OG_CARD_MAX_BYTES`, 250,000: the owner's approval
+     * of about 250 KB for a card on 2026-09-26, re-homed to that constant by
+     * §4.9. No visitor's page loads a card (only an unfurler fetches it), so
+     * it is filed in neither the every-visitor nor the on-demand bucket
+     * (`buckets.cards`) and spends neither ceiling. Every private look a run
+     * reads that holds an `og.png` is held to the ceiling, to a 1200x630 PNG,
+     * and — on a deploy build of its selection — the emitted card is those
+     * same bytes. The tracked fixture holds a flat card (a few hundred bytes,
+     * `scripts/fixture-og-card.mjs`) so the test has a public subject; a
+     * selected look with no card is said, not skipped in silence.
+     */
+    it('holds every card a run reads to the ceiling, and the emitted card to the same bytes', async () => {
+        const rows = privateRows(await guardSheets());
+        const reads = [...new Map(rows.map((row) => [row.look.entry.cls, row.look])).values()];
+        expect(reads.some((look) => look.source === 'fixture' && look.og !== undefined), 'the fixture holds a card').toBe(true);
+        const selected = selectionFromEnv(process.env);
+        const built = new Set<string>();
+        for (const look of reads) {
+            if (look.og === undefined) {
+                console.log(`og card · ${look.entry.cls}: no og.png read for it`);
+                continue;
+            }
+            expect(ogCardProblems(look.og), `${look.entry.cls}: its og.png`).toEqual([]);
+            expect(look.og.length, `${look.entry.cls}: its og.png is ${look.og.length} bytes`).toBeLessThanOrEqual(OG_CARD_MAX_BYTES);
+            const selection =
+                look.source === 'fixture' || selected === undefined
+                    ? { [SELECTION_ENV.target]: 'preview', [SELECTION_ENV.dir]: FIXTURE_LOOKS_DIR, [SELECTION_ENV.commit]: look.commit }
+                    : { [SELECTION_ENV.target]: selected.target, [SELECTION_ENV.dir]: selected.dir, [SELECTION_ENV.commit]: look.commit };
+            const key = JSON.stringify(selection);
+            const parts = await deployParts(selection);
+            const card = parts.find((part) => part.fileName === ogCardPath(look.entry.id));
+            expect(card, `${look.entry.cls}: the deploy build emitted no ${ogCardPath(look.entry.id)}`).toBeDefined();
+            expect(Buffer.from(card!.source as Uint8Array).equals(look.og), `${look.entry.cls}: the emitted card is not the og.png git holds`).toBe(true);
+            expect(card!.source!.length).toBeLessThanOrEqual(OG_CARD_MAX_BYTES);
+            // Its bucket: the cards', and no other; the two public ceilings stay true.
+            const buckets = weightBuckets(parts, { worn: [...WORN, ...wornOf(await carriedLooks(selection))] });
+            expect(buckets.problems, key).toEqual([]);
+            expect(buckets.cards.files, key).toContain(card!.fileName);
+            expect(buckets.onDemand.files, key).not.toContain(card!.fileName);
+            expect(buckets.everyVisitor.files, key).not.toContain(card!.fileName);
+            expect(buckets.everyVisitor.bytes).toBeLessThan(EVERY_VISITOR_CEILING_BYTES);
+            expect(onDemandFaults(buckets)).toEqual([]);
+            console.log(`og card · ${look.entry.cls}: ${figure(look.og.length)} bytes against ${figure(OG_CARD_MAX_BYTES)}, emitted at ${card!.fileName}`);
+            built.add(key);
+        }
+        expect(built.size, 'no deploy build was made').toBeGreaterThan(0);
+    }, 180_000);
+
+    it('refuses a card over the ceiling, a card of the wrong size and a file that is no PNG', () => {
+        const flat = readFileSync(join(FIXTURE_LOOKS_DIR, 'fixture/og.png'));
+        expect(ogCardProblems(flat)).toEqual([]);
+        expect(ogCardProblems(Buffer.concat([flat, Buffer.alloc(OG_CARD_MAX_BYTES)]))).toEqual([expect.stringMatching(/over the 250000-byte ceiling/)]);
+        const wrong = Buffer.from(flat);
+        wrong.writeUInt32BE(1199, 16);
+        expect(ogCardProblems(wrong)).toEqual([expect.stringMatching(/1199x630/)]);
+        expect(ogCardProblems(Buffer.from('<svg/>'.repeat(10)))).toEqual([expect.stringMatching(/not a PNG/)]);
+        expect(OG_CARD_MAX_BYTES, 'the owner\'s ~250 KB').toBe(250_000);
+    });
+
+    it('is never named by the edge in step 8: ogImageFor and embedImagePath stay Modern\'s card', () => {
+        const sources = [...walk(join(__dirname, '..', 'functions')), join(__dirname, 'ui', 'render.ts'), join(__dirname, 'domain', 'theme.ts'), join(__dirname, 'domain', 'embed.ts')];
+        for (const file of sources.filter((path) => /\.(ts|mjs|js)$/.test(path) && !/\.test\./.test(path))) {
+            expect(readFileSync(file, 'utf8'), `${file} names og/look-: step 9 makes that change on purpose`).not.toMatch(/og\/look-/);
+        }
+    });
+});
+
 describe('gallery-is-not-served', () => {
     /**
      * The showroom and the workshop kit are dev-only: `vite.workshop.config.ts`

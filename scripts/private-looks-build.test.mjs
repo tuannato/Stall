@@ -448,6 +448,25 @@ describe('a-private-look-is-read-from-git-and-checked-before-vite-reads-it', () 
         }
     });
 
+    it('fails on an og.png that is no PNG, is the wrong size or is over the ceiling, and carries a good one as git holds it', () => {
+        const withCard = (bytes) => {
+            const repo = plantRepo();
+            writeFileSync(join(repo.dir, 'fixture/og.png'), bytes);
+            repo.git('commit', '-q', '-am', 'card');
+            return repo;
+        };
+        assert.throws(() => readPlanted(withCard(Buffer.from('not a png'))), /fixture\/og\.png: is not a PNG/);
+        const small = Buffer.from(FIXTURE_OG);
+        small.writeUInt32BE(630, 16);
+        assert.throws(() => readPlanted(withCard(small)), /fixture\/og\.png: is 630x630, where a card is 1200x630/);
+        assert.throws(() => readPlanted(withCard(Buffer.concat([FIXTURE_OG, Buffer.alloc(OG_CARD_MAX_BYTES)]))), /fixture\/og\.png: is \d+ bytes, over the 250000-byte ceiling/);
+        assert.ok(readPlanted(plantRepo()).looks[0].og.equals(FIXTURE_OG), 'the card is the bytes git holds');
+        const none = plantRepo();
+        none.git('rm', '-q', 'fixture/og.png');
+        none.git('commit', '-q', '-m', 'no card');
+        assert.equal(readPlanted(none).looks[0].og, undefined, 'a look with no og.png reads none');
+    });
+
     it('reads this checkout’s tracked fixture at HEAD, as a build and public CI do', () => {
         const read = readSelectedLooks({ root: ROOT, selection: { target: 'preview', dir: FIXTURE_LOOKS_DIR }, facts, validateLook, vars });
         assert.deepEqual(read.looks.map((look) => look.entry.cls), ['t-fixture-private']);
@@ -579,7 +598,8 @@ describe('a-private-row-class-is-its-looks-own', () => {
                   )
                 : text,
         );
-        for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/'))) {
+        // The other look holds no og.png (8j): it emits no card.
+        for (const path of trackedFixturePaths().filter((p) => p.startsWith('fixture/') && !p.endsWith('.png'))) {
             const to = join(repo.dir, path.replace(/^fixture\//, 'other/'));
             mkdirSync(dirname(to), { recursive: true });
             let text = execFileSync('git', ['show', `HEAD:${FIXTURE_LOOKS_DIR}/${path}`], { cwd: ROOT, encoding: 'utf8' })

@@ -21,6 +21,8 @@ export type PrivateLookRead = {
     readonly look: unknown;
     /** Every plain file of the look's `art/`, as git holds it. */
     readonly art: readonly { readonly name: string; readonly bytes: Buffer }[];
+    /** Its og card, `<slug>/og.png` (8j, `scripts/og-card.mjs`), or undefined when it holds none. */
+    readonly og: Buffer | undefined;
     /** Its `fonts.json` (the faces it serves, `scripts/look-faces.mjs`), or undefined when it has none. */
     readonly fontsText: string | undefined;
     /** Its `guard.json` (the decor gate's reasons for its decorations, `scripts/private-guard.mjs`), or undefined when it has none. */
