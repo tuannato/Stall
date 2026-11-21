@@ -149,9 +149,10 @@ export function plantLooks(edit = (_path, text) => text, add = {}, { slug = 'fix
     for (const file of fixtureAtHead()) {
         const path = file.path.startsWith('fixture/') ? `${slug}/${file.path.slice('fixture/'.length)}` : file.path;
         if (file.bytes !== undefined) {
-            // Bytes are no text for an `edit` written for text: kept as git
-            // holds them (a test that wants none leaves the path out of `add`'s
-            // way by planting a repository of its own).
+            // A PNG is bytes, and an `edit` is written for text: the file is
+            // kept exactly as git holds it and `edit` never sees it. A test
+            // that wants the card changed or gone passes the new bytes in
+            // `add` (which replaces the path) or plants a repository of its own.
             files[path] = file.bytes;
             continue;
         }

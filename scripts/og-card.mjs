@@ -23,8 +23,12 @@
  * - IHDR first and once, IEND last with nothing after it, the IDATs in one
  *   run, PLTE where the colour type wants one; a valid depth and colour
  *   pair, no interlace;
- * - the IDAT data inflated: exactly height x (1 + bytes per row) bytes
- *   (the pixels are all there; they are not decoded or judged);
+ * - ancillary chunks (tRNS, sRGB, gAMA, pHYs) before the first IDAT, each at
+ *   most once;
+ * - the IDAT data inflated, the whole of it consumed by the zlib stream (no
+ *   bytes trailing it): exactly height x (1 + bytes per row) bytes, each
+ *   row's filter byte 0 to 4 (the rows are all there; the pixels are not
+ *   decoded or judged);
  * - 1200 x 630 from that IHDR (`OG_CARD_WIDTH`, `OG_CARD_HEIGHT`, the size
  *   the shipped cards under `public/og/` are);
  * - at most `OG_CARD_MAX_BYTES` (250,000). **Figure and source**: the owner's
@@ -132,14 +136,32 @@ export function ogCardProblems(bytes) {
     if (chunks[0].data[10] !== 0 || chunks[0].data[11] !== 0) problems.push('has a compression or filter method PNG does not define');
     if (chunks[0].data[12] !== 0) problems.push('is interlaced, where a card is not');
     const plte = chunks.filter((c) => c.type === 'PLTE').length;
+    const ancillary = ['tRNS', 'sRGB', 'gAMA', 'pHYs'];
+    const firstIdat = idat.length > 0 ? idat[0] : chunks.length;
+    for (const type of ancillary) {
+        const at = chunks.map((c, i) => (c.type === type ? i : -1)).filter((i) => i >= 0);
+        if (at.length > 1) problems.push(`holds more than one ${type} chunk`);
+        if (at.some((i) => i > firstIdat)) problems.push(`has a ${type} chunk after its IDAT`);
+    }
     if (colour === 3 && plte !== 1) problems.push('is paletted and holds no single PLTE chunk');
     if ((colour === 0 || colour === 4) && plte > 0) problems.push('holds a PLTE chunk its colour type forbids');
     if (idat.length > 0 && problems.every((p) => !/bad CRC|IDAT/.test(p))) {
         const rowBytes = Math.ceil((width * CHANNELS[colour] * depth) / 8);
         const want = height * (1 + rowBytes);
         try {
-            const raw = inflateSync(Buffer.concat(idat.map((i) => chunks[i].data)), { maxOutputLength: want + 1 });
-            if (raw.length !== want) problems.push(`inflates to ${raw.length} bytes of pixels, where ${width}x${height} is ${want}`);
+            const data = Buffer.concat(idat.map((i) => chunks[i].data));
+            const { buffer: raw, engine } = inflateSync(data, { maxOutputLength: want + 1, info: true });
+            if (raw.length !== want) {
+                problems.push(`inflates to ${raw.length} bytes of pixels, where ${width}x${height} is ${want}`);
+            } else {
+                if (engine.bytesWritten !== data.length) problems.push(`has ${data.length - engine.bytesWritten} bytes after its zlib stream in the IDAT data`);
+                for (let y = 0; y < height; y++) {
+                    if (raw[y * (1 + rowBytes)] > 4) {
+                        problems.push(`has filter byte ${raw[y * (1 + rowBytes)]} on row ${y}, where PNG defines 0 to 4`);
+                        break;
+                    }
+                }
+            }
         } catch {
             problems.push('has IDAT data that does not inflate to its pixels');
         }

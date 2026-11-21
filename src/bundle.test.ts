@@ -1223,7 +1223,12 @@ describe('each-private-look-card-has-a-ceiling', () => {
             d[9] = colour;
             return chunk('IHDR', d);
         };
-        const idat = chunk('IDAT', deflateSync(Buffer.alloc(630 * 1201, 0x80)));
+        const rows = () => {
+            const r = Buffer.alloc(630 * 1201, 0x80);
+            for (let y = 0; y < 630; y++) r[y * 1201] = 0;
+            return r;
+        };
+        const idat = chunk('IDAT', deflateSync(rows()));
         const iend = chunk('IEND', Buffer.alloc(0));
         const good = Buffer.concat([sig, ihdr(), idat, iend]);
         expect(ogCardProblems(good), 'the crafted base is a card').toEqual([]);
@@ -1237,6 +1242,14 @@ describe('each-private-look-card-has-a-ceiling', () => {
         red('depth 7 with colour type 9', Buffer.concat([sig, ihdr(7, 9), idat, iend]), /bit depth 7 with colour type 9/);
         red('pixels missing', Buffer.concat([sig, ihdr(), chunk('IDAT', deflateSync(Buffer.alloc(100))), iend]), /inflates to 100 bytes/);
         red('IDAT that is no zlib', Buffer.concat([sig, ihdr(), chunk('IDAT', Buffer.from('not zlib')), iend]), /does not inflate/);
+        const raw = rows();
+        red('5,000 bytes after the zlib stream', Buffer.concat([sig, ihdr(), chunk('IDAT', Buffer.concat([deflateSync(raw), Buffer.alloc(5000, 0x41)])), iend]), /5000 bytes after its zlib stream/);
+        const badFilter = Buffer.from(raw);
+        for (let y = 0; y < 630; y++) badFilter[y * 1201] = 9;
+        red('filter byte 9 on every row', Buffer.concat([sig, ihdr(), chunk('IDAT', deflateSync(badFilter)), iend]), /filter byte 9 on row 0/);
+        red('pHYs after the IDAT', Buffer.concat([sig, ihdr(), idat, chunk('pHYs', Buffer.alloc(9)), iend]), /pHYs chunk after its IDAT/);
+        red('sRGB twice', Buffer.concat([sig, ihdr(), chunk('sRGB', Buffer.alloc(1)), chunk('sRGB', Buffer.alloc(1)), idat, iend]), /more than one sRGB chunk/);
+        expect(ogCardProblems(Buffer.concat([sig, ihdr(), chunk('pHYs', Buffer.alloc(9)), chunk('sRGB', Buffer.alloc(1)), idat, iend])), 'ancillary chunks in place are fine').toEqual([]);
         red('no IEND', Buffer.concat([sig, ihdr(), idat]), /no IEND/);
         red('a second IHDR', Buffer.concat([sig, ihdr(), ihdr(), idat, iend]), /more than one IHDR/);
         red('interlaced', Buffer.concat([sig, (() => { const c = Buffer.from(ihdr()); c[8 + 12] = 1; c.writeUInt32BE(crc(c.subarray(4, 21)), 21); return c; })(), idat, iend]), /interlaced/);
@@ -1384,15 +1397,6 @@ describe('public-weight-has-a-ceiling', () => {
      * a quarter of a megabyte each are what `public/` should be for, or
      * whether the cards should be generated smaller.
      *
-     * **Lowered to 1,150,000 with the og card's step (8j, 2026-11-21).** The
-     * 2026-09-22 room for the fourth look's card, and the 20,000 beside it, were
-     * ceiling the card never uses: a private look's card lives in its own
-     * repository, is emitted by the build at `og/look-<id>.png` and has its
-     * own ceiling, `OG_CARD_MAX_BYTES` (250,000; STEP-8-PLAN §4.9 re-homed the
-     * approval). `public/` measures 1,137,771 bytes, so 12,229 bytes of margin
-     * stay: deliberately tight again, so the next image is noticed the day it
-     * lands. The paragraphs above are the history of the numbers they name.
-     *
      * **Raised by 20,000 to 1,360,000 on 2026-09-23 for `licenses.txt`**
      * (20,274 bytes: the third-party notices, `scripts/notices.mjs`) — the
      * deliberate diff, so the file does not eat the room the fourth look's
@@ -1400,6 +1404,17 @@ describe('public-weight-has-a-ceiling', () => {
      * `/guide` lines beside it), against 1,107,823 before. Emitting the file from the build instead was weighed and
      * refused: it would move the weight onto the build's ceilings
      * and take every licence change out of the diffs a reviewer reads.
+     *
+     * **Lowered to 1,150,000 with the og card's step (8j, 2026-11-21).** The
+     * 20,000 raised for `licenses.txt` stays: `public/` still holds the file.
+     * What left is 210,000 of the 220,000 raised on 2026-09-22 for the fourth
+     * look's card, which the card never uses: a private look's card lives in
+     * its own repository, is emitted by the build at `og/look-<id>.png` and has
+     * its own ceiling, `OG_CARD_MAX_BYTES` (250,000; STEP-8-PLAN §4.9 re-homed
+     * the approval). `public/` measures 1,137,771 bytes, so 12,229 bytes of
+     * margin stay: deliberately tight again, so the next image is noticed the
+     * day it lands. The paragraphs above are the history of the numbers they
+     * name.
      */
     const PUBLIC_CEILING_BYTES = 1_150_000;
 
